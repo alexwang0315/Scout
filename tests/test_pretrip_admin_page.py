@@ -2,7 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from pretrip_admin_view import build_pretrip_admin_view
+from pretrip_admin_view import build_pretrip_admin_view, load_pretrip_debug_projection_view
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +45,18 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert ".list-controls .control-group-header { display: none; }" in html
     assert "overflow-y: auto;" in html
     assert "overscroll-behavior: contain;" in html
+
+
+def test_pretrip_admin_latest_ui_surfaces_reference_segment_timing():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "Reference Segment Timing" in html
+    assert "view.reference_segment_timing?.segments" in html
+    assert "route_timing" in html
+    assert '["Route Timing", `${view.reference_segment_timing?.counts?.usable_segment_count || 0} segments / ${view.reference_segment_timing?.counts?.measurement_count || 0} samples`]' in html
+    assert 'type.includes("reference_segment_timing")' in html
+    assert 'item?.evidence_type === "pretrip_reference_segment_timing_segment"' in html
+    assert "preserveZoom: false" in html
     assert "scrollbar-gutter: stable;" in html
     assert "min-height: 0;" in html
     assistant_drawer_open_css = html.split(".assistant-drawer[open]", 1)[1].split(".assistant-drawer summary", 1)[0]
@@ -91,6 +103,9 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "riskRibbonClass" in html
     assert "is-stale" in html
     assert "map-highlight" in html
+    assert "drop-shadow(0 0 7px rgba(15, 74, 84, .74))" in html
+    assert "stroke: #0f4a54 !important;" in html
+    assert "Math.max(base, 4.4)" in html
     assert "mapTargetsFor" in html
     assert "map_target_ids" in html
     assert "selectEvidence" in html
@@ -194,7 +209,8 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "let treeClickFocusTimer = null;" in html
     assert "function scheduleTreeClickFocus(item)" in html
     assert "window.clearTimeout(treeClickFocusTimer);" in html
-    assert "focusMapFor(item, {label: false});\n        treeClickFocusTimer = null;" in html
+    assert 'item?.evidence_type === "pretrip_reference_segment_timing_segment"' in html
+    assert "focusMapFor(item, focusOptions);" in html
     assert "function focusTreeItemImmediately(item, options = {})" in html
     assert 'button.addEventListener("click", () => scheduleTreeClickFocus(item));' in html
     assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        focusTreeItemImmediately(item, {label: true});' in html
@@ -1379,6 +1395,63 @@ def test_pretrip_admin_view_exposes_fixture_fields_used_by_readiness_strip():
     runtime_boundary = view["tabs"]["post_analysis"]["runtime_handoff"]["boundary"]
     assert runtime_boundary["safety_api_calls_allowed"] is False
     assert runtime_boundary["final_runtime_write_allowed"] is False
+
+
+def test_pretrip_admin_page_exposes_reference_segment_timing_in_latest_ui_model():
+    view = build_pretrip_admin_view("chilai_nanhua_day1", root=ROOT)
+    timing = view["reference_segment_timing"]
+    planning_sections = {
+        section["id"]: section
+        for section in view["tabs"]["pre_trip_planning"]["sections"]
+    }
+    timeline_categories = {
+        category["category_id"]: category
+        for category in view["evidence_timeline"]["categories"]
+    }
+
+    assert timing["status"] == "ready"
+    assert timing["counts"]["usable_segment_count"] == 8
+    assert timing["counts"]["measurement_count"] == 48
+    assert timing["privacy"]["raw_gpx_embedded_in_json"] is False
+    assert timing["privacy"]["coordinates_embedded"] is False
+    assert timing["privacy"]["precise_timestamps_embedded"] is False
+    assert timing["boundary"]["phase1_runtime_safety_truth"] is False
+    assert timing["segments"][0]["duration_minutes"]["p50"] is not None
+    assert timing["segments"][0]["route_guide_comparison"]["guide_duration_minutes"] == 120
+    assert timing["segments"][0]["map_focus_basis"] == "route_segment_distance_projection"
+    assert timing["segments"][0]["map_target_ids"]
+    assert all(
+        target.startswith("seg.") for target in timing["segments"][0]["map_target_ids"]
+    )
+    assert "reference_segment_timing" in planning_sections
+    assert planning_sections["reference_segment_timing"]["counts"][
+        "usable_segment_count"
+    ] == 8
+    assert timeline_categories["route_timing"]["available"] is True
+    assert timeline_categories["route_timing"]["count"] == 8
+
+
+def test_pretrip_debug_projection_includes_reference_segment_timing_events():
+    projection = load_pretrip_debug_projection_view("chilai_nanhua_day1", root=ROOT)
+    events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "reference_segment_timing_projected"
+    ]
+
+    assert projection["counts"]["reference_segment_timing_segment_count"] == 8
+    assert projection["counts"]["reference_segment_timing_measurement_count"] == 48
+    assert len(events) == 8
+    first_payload = events[0]["payload"]
+    assert first_payload["projection_event_type"] == "reference_segment_timing"
+    assert first_payload["duration_minutes"]["p50"] is not None
+    assert first_payload["distance_filter_km"]["min"] is not None
+    assert first_payload["route_guide_comparison"]["guide_duration_minutes"] == 120
+    assert first_payload["map_target_ids"]
+    assert all(target.startswith("seg.") for target in first_payload["map_target_ids"])
+    assert first_payload["raw_gpx_embedded_in_json"] is False
+    assert first_payload["coordinates_embedded"] is False
+    assert first_payload["precise_timestamps_embedded"] is False
 
 
 def test_pretrip_admin_page_fixture_sections_include_decision_log_and_import_queue():

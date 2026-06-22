@@ -115,6 +115,7 @@ COPY \
     pretrip_layer_preparation.py \
     pretrip_artifact_manifest.py \
     pretrip_p0_p1_source_collection.py \
+    pretrip_reference_segment_timing.py \
     pretrip_route_briefing_compose.py \
     pretrip_route_context_collection.py \
     pretrip_mcp_models.py \

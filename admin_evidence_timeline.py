@@ -16,6 +16,7 @@ EVIDENCE_TIMELINE_CATEGORY_ORDER = (
     "route",
     "checkpoints",
     "segments",
+    "route_timing",
     "capability_timeline",
     "rest_intervals",
     "mcp",
@@ -32,6 +33,7 @@ EVIDENCE_TIMELINE_CATEGORY_LABELS = {
     "route": "Route",
     "checkpoints": "Checkpoints",
     "segments": "Segments",
+    "route_timing": "Route Timing",
     "capability_timeline": "Capability Timeline",
     "rest_intervals": "Rest Intervals",
     "mcp": "Major Critical Points",
@@ -56,10 +58,15 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     overpass = view.get("overpass_evidence") or {}
     route = view.get("route") or {}
     mileage = view.get("mileage_tag_alignment") or {}
+    reference_segment_timing = view.get("reference_segment_timing") or {}
     counts = {
         "route": 1 if route else 0,
         "checkpoints": _len(view.get("checkpoints")),
         "segments": _len(view.get("segments")),
+        "route_timing": int(
+            (reference_segment_timing.get("counts") or {}).get("usable_segment_count")
+            or _len(reference_segment_timing.get("segments"))
+        ),
         "capability_timeline": _len(capability.get("edges")),
         "rest_intervals": int(
             (capability.get("counts") or {}).get("rest_interval_count")
@@ -104,10 +111,15 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     overpass = view.get("overpass_evidence") or {}
     map_candidates = view.get("map_candidates") or {}
     mileage = view.get("mileage_tag_alignment") or {}
+    reference_segment_timing = view.get("reference_segment_timing") or {}
     counts = {
         "route": 1 if view.get("route") else 0,
         "checkpoints": _len((view.get("mission") or {}).get("checkpoints")),
         "segments": _len((view.get("mission") or {}).get("segments")),
+        "route_timing": int(
+            (reference_segment_timing.get("counts") or {}).get("usable_segment_count")
+            or _len(reference_segment_timing.get("segments"))
+        ),
         "capability_timeline": int(capability.get("edge_count") or _len(capability.get("edges"))),
         "rest_intervals": int(
             (capability.get("summary") or {}).get("rest_interval_count")

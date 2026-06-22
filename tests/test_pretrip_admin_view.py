@@ -350,6 +350,7 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "route",
         "checkpoints",
         "segments",
+        "route_timing",
         "capability_timeline",
         "rest_intervals",
         "mcp",
@@ -362,9 +363,9 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "runtime_handoff",
     ]
     assert view["evidence_timeline"]["counts"] == {
-        "category_count": 13,
-        "available_category_count": 12,
-        "total_evidence_count": 6268,
+        "category_count": 14,
+        "available_category_count": 13,
+        "total_evidence_count": 6276,
     }
     assert view["scout_agent_skills"]["artifact_kind"] == "scout_agent_skill_registry_summary"
     assert view["scout_agent_skills"]["counts"]["tool_count"] >= 45
@@ -1643,6 +1644,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("route_notes", "Route Notes"),
         ("route_note_ln_proposals", "Route Note Ln Proposals"),
         ("reference_tracks", "Reference Tracks"),
+        ("reference_segment_timing", "Reference Segment Timing"),
         ("checkpoint_events", "Checkpoint Events"),
         ("departure_bundle", "Departure Bundle"),
     ]

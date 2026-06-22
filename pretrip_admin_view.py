@@ -37,6 +37,7 @@ EXPERT_CONTRIBUTION_WORKSPACE_APPLY_RESULT_REF = (
 ROUTE_NOTE_REVIEWED_ASSUMPTIONS_REF = "outputs/route_note_reviewed_assumptions.json"
 DEPARTURE_REVIEWED_CANDIDATES_REF = "outputs/departure_reviewed_candidates.json"
 COMPANION_MATCH_REVIEW_REF = "outputs/companion_match_review.json"
+REFERENCE_SEGMENT_TIMING_REF = "outputs/reference_segment_timing.json"
 GIS_PERCEPTION_AGGREGATION_RADIUS_M = 80.0
 GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M = 80.0
 GIS_PERCEPTION_LABEL_MAX_CHARS = 64
@@ -619,6 +620,9 @@ def build_pretrip_admin_view(
         route_summary=route_summary,
     )
     reference_tracks = _load_optional_json(artifacts.get("reference_tracks"))
+    reference_segment_timing = _load_optional_json(
+        artifacts.get("reference_segment_timing")
+    )
     checkpoint_events = _load_optional_json(artifacts.get("checkpoint_events"))
     risk_score_points = _load_optional_json(artifacts.get("risk_score_points"))
     risk_score_points_metadata = _load_optional_json(
@@ -822,6 +826,12 @@ def build_pretrip_admin_view(
         )
         if reference_tracks is not None
         else None,
+        "reference_segment_timing": _reference_segment_timing_summary(
+            reference_segment_timing,
+            source_refs.get("reference_segment_timing", ""),
+            project_id=project_id,
+            route_segments=mission_segments,
+        ),
         "checkpoint_events": _checkpoint_events_summary(
             checkpoint_events,
             source_refs.get("checkpoint_events", ""),
@@ -1209,6 +1219,7 @@ def build_pretrip_admin_view(
         "eta": planning_tab["eta"],
         "route_notes": planning_tab["route_notes"],
         "reference_tracks": planning_tab["reference_tracks"],
+        "reference_segment_timing": planning_tab["reference_segment_timing"],
         "checkpoint_events": planning_tab["checkpoint_events"],
         "layer_preparation": planning_tab["layer_preparation"],
         "terrain_visualization": planning_tab["terrain_visualization"],
@@ -1375,6 +1386,7 @@ def resolve_pretrip_project_artifacts(
         "planning_skill_audit": "planning_skill_audit_ref",
         "planning_skill_manifest_catalog": "planning_skill_manifest_catalog_ref",
         "reference_tracks": "reference_tracks_ref",
+        "reference_segment_timing": "reference_segment_timing_ref",
         "reference_track_display_geometry": "reference_track_display_geometry_ref",
         "checkpoint_events": "checkpoint_events_ref",
         "segment_display_geometry": "overpass_aligned_segment_display_geometry_ref",
@@ -1445,6 +1457,7 @@ def resolve_pretrip_project_artifacts(
         "energy_projection": DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
         "companion_match_review": COMPANION_MATCH_REVIEW_REF,
         "post_analysis_energy_feedback": POST_ANALYSIS_ENERGY_FEEDBACK_REF,
+        "reference_segment_timing": REFERENCE_SEGMENT_TIMING_REF,
     }.items():
         artifacts.setdefault(artifact_key, resolved_project_root / default_ref)
     return artifacts
@@ -1591,6 +1604,10 @@ def load_pretrip_debug_projection_view(
     reference_tracks_raw = _load_optional_json(
         optional_project_path("reference_tracks_ref")
     )
+    reference_segment_timing_raw = _load_optional_json(
+        optional_project_path("reference_segment_timing_ref")
+        or (resolved_project_root / REFERENCE_SEGMENT_TIMING_REF)
+    )
     reference_track_display_geometry = _load_optional_json(
         optional_project_path("reference_track_display_geometry_ref")
     )
@@ -1712,6 +1729,10 @@ def load_pretrip_debug_projection_view(
         ),
         "map_candidates": project["map_candidates_ref"],
         "reference_tracks": project.get("reference_tracks_ref", ""),
+        "reference_segment_timing": project.get(
+            "reference_segment_timing_ref",
+            REFERENCE_SEGMENT_TIMING_REF,
+        ),
         "reference_track_display_geometry": project.get(
             "reference_track_display_geometry_ref",
             "",
@@ -1851,6 +1872,12 @@ def load_pretrip_debug_projection_view(
         )
         if reference_tracks_raw is not None
         else _empty_reference_tracks(project_id, source_refs["reference_tracks"]),
+        "reference_segment_timing": _reference_segment_timing_summary(
+            reference_segment_timing_raw,
+            source_refs["reference_segment_timing"],
+            project_id=project_id,
+            route_segments=segments,
+        ),
         "checkpoint_events": _checkpoint_events_summary(
             checkpoint_events_raw,
             source_refs["checkpoint_events"],
@@ -2020,6 +2047,7 @@ def load_pretrip_debug_projection_view(
         "gis_perception": view["gis_perception"],
         "gis_perception_timeline": view["gis_perception_timeline"],
         "reference_tracks": view["reference_tracks"],
+        "reference_segment_timing": view["reference_segment_timing"],
         "checkpoint_events": view["checkpoint_events"],
         "risk_score": view["risk_score"],
         "terrain_visualization": view["terrain_visualization"],
@@ -2047,6 +2075,12 @@ def load_pretrip_debug_projection_view(
                 "reference_track_count",
                 0,
             ),
+            "reference_segment_timing_segment_count": view[
+                "reference_segment_timing"
+            ]["counts"].get("usable_segment_count", 0),
+            "reference_segment_timing_measurement_count": view[
+                "reference_segment_timing"
+            ]["counts"].get("measurement_count", 0),
             "gis_perception_checkpoint_candidate_count": view[
                 "gis_perception"
             ]["counts"].get("checkpoint_candidate_count", 0),
@@ -4063,6 +4097,35 @@ def _debug_projection_timeline_events(
             .get("candidates", 0),
         },
     )
+
+    for segment in view.get("reference_segment_timing", {}).get("segments", []):
+        append_event(
+            "reference_segment_timing_projected",
+            (
+                f"Reference timing range for {segment.get('label')} is "
+                "available as aggregate historical GPX evidence."
+            ),
+            {
+                "subject_ref": segment.get("segment_id"),
+                "map_target_ids": segment.get("map_target_ids", []),
+                "segment_id": segment.get("segment_id"),
+                "segment_label": segment.get("label"),
+                "from_node_name": segment.get("from_node_name"),
+                "to_node_name": segment.get("to_node_name"),
+                "sample_count": segment.get("sample_count"),
+                "source_count": segment.get("source_count"),
+                "duration_minutes": segment.get("duration_minutes"),
+                "track_distance_km": segment.get("track_distance_km"),
+                "distance_filter_km": segment.get("distance_filter_km"),
+                "route_guide_comparison": segment.get("route_guide_comparison"),
+                "rejected_summary": segment.get("rejected_summary"),
+                "safety_level": "L0_PRETRIP_PROJECTION",
+                "projection_event_type": "reference_segment_timing",
+                "raw_gpx_embedded_in_json": False,
+                "coordinates_embedded": False,
+                "precise_timestamps_embedded": False,
+            },
+        )
 
     segment_by_from_checkpoint = {
         segment.get("from_candidate_id"): segment for segment in segments
@@ -8503,6 +8566,252 @@ def _reference_tracks_summary(
     }
 
 
+def _reference_segment_timing_summary(
+    payload: dict[str, Any] | None,
+    source_path: str,
+    *,
+    project_id: str,
+    route_segments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {
+            "source_id": f"reference_segment_timing.{project_id}.missing",
+            "source_provider": "historical_gpx_source_index",
+            "source_path": source_path,
+            "sha256": None,
+            "evidence_type": "pretrip_reference_segment_timing",
+            "status": "missing_source",
+            "counts": {
+                "source_file_count": 0,
+                "existing_source_file_count": 0,
+                "timed_source_file_count": 0,
+                "segment_count": 0,
+                "usable_segment_count": 0,
+                "measurement_count": 0,
+            },
+            "method": {},
+            "segments": [],
+            "data_quality": {
+                "source_file_count": 0,
+                "usable_segment_count": 0,
+                "measurement_count": 0,
+                "live_network_calls_made": False,
+            },
+            "privacy": {
+                "aggregate_only": True,
+                "raw_gpx_embedded_in_json": False,
+                "raw_gpx_xml_embedded": False,
+                "coordinates_embedded": False,
+                "precise_timestamps_embedded": False,
+                "source_original_paths_embedded": False,
+            },
+            "boundary": {
+                "candidate_only": True,
+                "pretrip_candidate_evidence_only": True,
+                "medical_diagnosis": False,
+                "phase1_runtime_safety_truth": False,
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+                "phase2_brain_writeback_allowed": False,
+                "safety_api_called": False,
+                "historical_gpx_is_actual_user_track": False,
+            },
+            "notes": ["Reference segment timing artifact is not present."],
+        }
+
+    source_id = f"reference_segment_timing.{payload.get('project_id', project_id)}"
+    segments = [
+        segment for segment in payload.get("segments", []) if isinstance(segment, dict)
+    ]
+    focus_targets = _reference_segment_timing_focus_targets(
+        segments,
+        route_segments or [],
+    )
+    return {
+        "source_id": source_id,
+        "source_provider": payload.get("source_provider", "historical_gpx_source_index"),
+        "source_path": source_path,
+        "sha256": payload.get("sha256"),
+        "route_guide_timing_source_path": payload.get("route_guide_timing_source_path"),
+        "route_guide_timing_sha256": payload.get("route_guide_timing_sha256"),
+        "evidence_type": "pretrip_reference_segment_timing",
+        "status": payload.get("status", "unknown"),
+        "counts": payload.get("counts", {}),
+        "method": payload.get("method", {}),
+        "segments": [
+            _reference_segment_timing_item(
+                segment,
+                source_path,
+                source_id,
+                map_target_ids=focus_targets.get(str(segment.get("segment_id") or "")),
+            )
+            for segment in segments
+        ],
+        "data_quality": payload.get("data_quality", {}),
+        "privacy": payload.get("privacy", {}),
+        "boundary": payload.get("boundary", {}),
+        "notes": payload.get("notes", []),
+        **_projection_record_metadata(
+            {
+                "source_id": source_id,
+                "source_refs": [
+                    source_path,
+                    payload.get("source_path"),
+                    payload.get("route_guide_timing_source_path"),
+                    payload.get("sha256"),
+                ],
+                "counts": payload.get("counts", {}),
+            },
+            source_path=source_path,
+            evidence_type="pretrip_reference_segment_timing",
+            source_kind="reference_segment_timing_aggregate",
+            identity_keys=("source_id", "source_refs", "counts"),
+            review_state="projection_only",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version="pretrip_reference_segment_timing.projection.v1",
+            prompt_version="not_applicable_deterministic_reference_segment_timing.v1",
+            summary=(
+                "Reference segment timing aggregate for pretrip comparison; "
+                "derived from historical GPX source metadata and route-guide "
+                "timing, not runtime safety truth."
+            ),
+        ),
+    }
+
+
+def _reference_segment_timing_item(
+    segment: dict[str, Any],
+    source_path: str,
+    parent_source_id: str,
+    *,
+    map_target_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    segment_id = str(segment.get("segment_id") or "unknown_segment")
+    return {
+        **segment,
+        "candidate_id": segment_id,
+        "source_id": segment_id,
+        "source_path": source_path,
+        "evidence_type": "pretrip_reference_segment_timing_segment",
+        "map_target_ids": _unique_limited(
+            [
+                *(map_target_ids or []),
+                "route" if not map_target_ids else "",
+            ],
+            limit=36,
+        ),
+        "map_focus_basis": (
+            "route_segment_distance_projection"
+            if map_target_ids
+            else "route_fallback_no_segment_distance_projection"
+        ),
+        "source_refs": _unique_limited(
+            [
+                source_path,
+                parent_source_id,
+                segment_id,
+                *[
+                    measurement.get("source_path")
+                    for measurement in segment.get("measurements", [])
+                    if isinstance(measurement, dict)
+                ],
+            ],
+            limit=20,
+        ),
+        **_projection_record_metadata(
+            {
+                "segment_id": segment_id,
+                "duration_minutes": segment.get("duration_minutes"),
+                "sample_count": segment.get("sample_count"),
+                "route_guide_comparison": segment.get("route_guide_comparison"),
+            },
+            source_path=source_path,
+            evidence_type="pretrip_reference_segment_timing_segment",
+            source_kind="reference_segment_timing_segment",
+            identity_keys=(
+                "segment_id",
+                "duration_minutes",
+                "sample_count",
+                "route_guide_comparison",
+            ),
+            review_state="projection_only",
+            confidence="medium" if segment.get("sample_count") else "low",
+            stale_risk="medium",
+            extractor_version="pretrip_reference_segment_timing.projection.v1",
+            prompt_version="not_applicable_deterministic_reference_segment_timing.v1",
+            summary=(
+                "Per-segment reference timing range for admin/debug review; "
+                "aggregate-only historical GPX evidence, not runtime safety truth."
+            ),
+        ),
+    }
+
+
+def _reference_segment_timing_focus_targets(
+    timing_segments: list[dict[str, Any]],
+    route_segments: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    route_intervals: list[dict[str, Any]] = []
+    cursor_m = 0.0
+    for segment in route_segments:
+        segment_id = str(segment.get("candidate_id") or segment.get("source_id") or "")
+        distance_m = _coerce_float(segment.get("distance_m")) or 0.0
+        if not segment_id or distance_m <= 0:
+            continue
+        start_m = cursor_m
+        cursor_m += distance_m
+        route_intervals.append(
+            {
+                "segment_id": segment_id,
+                "start_m": start_m,
+                "end_m": cursor_m,
+            }
+        )
+    if not route_intervals:
+        return {}
+
+    total_route_m = route_intervals[-1]["end_m"]
+    timing_cursor_m = 0.0
+    targets_by_timing_id: dict[str, list[str]] = {}
+    for segment in timing_segments:
+        segment_id = str(segment.get("segment_id") or "")
+        distance_m = _reference_segment_timing_distance_m(segment)
+        if not segment_id or distance_m <= 0:
+            continue
+        start_m = min(timing_cursor_m, total_route_m)
+        end_m = min(max(start_m + distance_m, start_m + 1.0), total_route_m)
+        matching_ids = [
+            item["segment_id"]
+            for item in route_intervals
+            if item["end_m"] >= start_m and item["start_m"] <= end_m
+        ]
+        targets_by_timing_id[segment_id] = _unique_limited(matching_ids, limit=36)
+        timing_cursor_m = end_m
+    return targets_by_timing_id
+
+
+def _reference_segment_timing_distance_m(segment: dict[str, Any]) -> float:
+    track_distance = segment.get("track_distance_km")
+    if isinstance(track_distance, dict):
+        values = [
+            _coerce_float(track_distance.get(key))
+            for key in ("p50", "median", "mean", "min", "max")
+        ]
+        numeric = [value for value in values if value is not None and value > 0]
+        if len(numeric) >= 2:
+            return ((numeric[0] + numeric[-1]) / 2.0) * 1000.0
+        if numeric:
+            return numeric[0] * 1000.0
+    distance_filter = segment.get("distance_filter_km")
+    if isinstance(distance_filter, dict):
+        minimum = _coerce_float(distance_filter.get("min"))
+        maximum = _coerce_float(distance_filter.get("max"))
+        if minimum is not None and maximum is not None and maximum > 0:
+            return ((minimum + maximum) / 2.0) * 1000.0
+    return 0.0
+
+
 def _reference_track_item(
     track: dict[str, Any],
     source_path: str,
@@ -9521,6 +9830,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     mileage_tag_alignment = planning_tab.get("mileage_tag_alignment")
     route_notes = planning_tab["route_notes"]
     reference_tracks = planning_tab.get("reference_tracks")
+    reference_segment_timing = planning_tab.get("reference_segment_timing")
     checkpoint_events = planning_tab.get("checkpoint_events")
     route_note_ln_proposals = planning_tab["route_note_ln_proposals"]
     spatial_imprints = planning_tab.get("spatial_imprints")
@@ -10136,6 +10446,44 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                     "raw_gpx_copied_to_repo": reference_tracks["boundary"].get("raw_gpx_copied_to_repo"),
                 },
                 boundary=reference_tracks["boundary"],
+            )
+        )
+    if reference_segment_timing is not None:
+        sections.append(
+            _section(
+                "reference_segment_timing",
+                "Reference Segment Timing",
+                reference_segment_timing,
+                status=reference_segment_timing["status"],
+                counts=reference_segment_timing["counts"],
+                summary={
+                    "usable_segment_count": reference_segment_timing["counts"].get(
+                        "usable_segment_count",
+                        0,
+                    ),
+                    "measurement_count": reference_segment_timing["counts"].get(
+                        "measurement_count",
+                        0,
+                    ),
+                    "distance_rejected_measurement_count": reference_segment_timing[
+                        "counts"
+                    ].get("distance_rejected_measurement_count", 0),
+                    "method": reference_segment_timing.get("method", {}),
+                    "segments": [
+                        {
+                            "segment_id": segment.get("segment_id"),
+                            "label": segment.get("label"),
+                            "sample_count": segment.get("sample_count"),
+                            "duration_minutes": segment.get("duration_minutes"),
+                            "distance_filter_km": segment.get("distance_filter_km"),
+                            "route_guide_comparison": segment.get(
+                                "route_guide_comparison"
+                            ),
+                        }
+                        for segment in reference_segment_timing.get("segments", [])[:12]
+                    ],
+                },
+                boundary=reference_segment_timing["boundary"],
             )
         )
     if checkpoint_events is not None:
