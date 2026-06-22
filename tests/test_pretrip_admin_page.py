@@ -385,6 +385,11 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert ".environment-extent" in html
     assert "function renderEnvironmentExtent" in html
     assert "function environmentEvidenceSummary" in html
+    assert "function environmentRiskDerivativeItemSummary" in html
+    assert "function environmentRiskCandidateTreeSummary" in html
+    assert "function renderEnvironmentRiskDerivativeCandidates" in html
+    assert 'evidenceType.includes("environment_risk_derivative")' in html
+    assert "route_revalidation_status" in html
     assert "SMAP L4 route bbox mean" in html
     assert "candidate-only context; not runtime safety truth" in html
     assert "SMAP surface" in html
@@ -840,8 +845,21 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "renderEnvironmentExtent(soilMoistureGroup" in html
     assert "renderEnvironmentExtent(antecedentRainGroup" in html
     assert "renderEnvironmentExtent(cwaWeatherGroup" in html
+    assert "const environmentRiskDerivativeItems" in html
+    assert "const environmentRiskDerivativeLayers" in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Environmental Risk Derivatives"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Wetness / Flash Flood Candidates"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Practical Darkness Candidates"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Environment Values"' in html
+    assert "baseEnvironmentValueItems" in html
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Soil Moisture"' in html
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Antecedent Rain"' in html
+    assert "function environmentValueTreeSummary" in html
+    assert 'type.includes("environment_risk_derivative")' in html
+    assert "new_landslide_candidate_count" in html
+    assert "environment_risk_derivative_layers" in html
+    assert "environment-risk-derivative" in html
+    assert 'type.includes("environment") || type.includes("gee_") || type.includes("cwa_")' in html
 
 
 def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():

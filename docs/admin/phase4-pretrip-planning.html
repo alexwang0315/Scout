@@ -546,6 +546,16 @@
     .risk-delta-aligned_high { stroke: #7f1d1d; }
     .risk-delta-minor_shift { stroke: #64748b; }
     .risk-delta-aligned { stroke: #94a3b8; opacity: .28; }
+    .environment-risk-derivative { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; opacity: .78; vector-effect: non-scaling-stroke; stroke-dasharray: 4 3; pointer-events: visiblePainted; }
+    .environment-risk-derivative.new_landslide_candidate { stroke: #991b1b; }
+    .environment-risk-derivative.wetness_flash_flood_susceptibility { stroke: #0f766e; }
+    .environment-risk-derivative.trail_obscurity_risk { stroke: #4d7c0f; }
+    .environment-risk-derivative.practical_darkness_time { stroke: #7c3aed; }
+    .environment-risk-derivative-point { stroke: white; stroke-width: 1.5; opacity: .94; vector-effect: non-scaling-stroke; }
+    .environment-risk-derivative-point.new_landslide_candidate { fill: #991b1b; }
+    .environment-risk-derivative-point.wetness_flash_flood_susceptibility { fill: #0f766e; }
+    .environment-risk-derivative-point.trail_obscurity_risk { fill: #4d7c0f; }
+    .environment-risk-derivative-point.practical_darkness_time { fill: #7c3aed; }
     .soil-moisture-point { fill: #2563eb; stroke: #eff6ff; stroke-width: 1.5; opacity: .82; vector-effect: non-scaling-stroke; }
     .antecedent-rain-point { fill: #0f766e; stroke: #ecfeff; stroke-width: 1.5; opacity: .82; vector-effect: non-scaling-stroke; }
     .antecedent-rain-point.rain-high { fill: #d6a800; stroke: #fff7ed; }
@@ -2884,6 +2894,7 @@
       if (type.includes("risk_ribbon")) return "risk";
       if (type.includes("risk_heatmap")) return "risk";
       if (type.includes("risk_delta")) return "risk";
+      if (type.includes("environment") || type.includes("gee_") || type.includes("cwa_")) return "risk";
       if (type.includes("mileage")) return "mileage";
       if (type.includes("boss_point") || item?.boss_point_id) return "mcp";
       if (type.includes("major_critical_point") || type.includes("mcp_")) return "mcp";
@@ -2909,6 +2920,9 @@
         || type.includes("soil")
         || type.includes("rain")
         || type.includes("weather")
+        || type.includes("environment")
+        || type.includes("gee")
+        || type.includes("cwa")
       ) return "map_risk";
       if (category === "route" && (type.includes("section") || type.includes("summary"))) return "info";
       return "default";
@@ -2928,6 +2942,7 @@
       if (type.includes("gis") || sourceId.includes("gis_cp") || item?.nearby_group_id) return "gis_cp";
       if (category === "reference") return type.includes("capability") || sourceId.includes("capability") ? "capability_timeline" : "reference_tracks";
       if (type.includes("runtime") || sourceId.includes("runtime_handoff")) return "runtime_handoff";
+      if (type.includes("environment") || type.includes("gee") || type.includes("cwa") || type.includes("weather") || type.includes("rain") || type.includes("soil")) return "map_context";
       if (["overpass", "poi", "hazard", "retreat"].includes(category) || sourceId.startsWith("map.")) return "map_context";
       return "route";
     }
@@ -3010,16 +3025,30 @@
     }
     function environmentEvidenceSummary(item = {}) {
       const layerId = String(item?.layer_id || item?.evidence_type || "").toLowerCase();
+      const evidenceType = String(item?.evidence_type || "").toLowerCase();
       const candidateNote = "candidate-only context; not runtime safety truth";
+      if (evidenceType.includes("environment_risk_derivative")) {
+        const values = item?.value_summary || {};
+        return `${values.headline || "Derived environmental risk candidates"} | revalidation ${values.route_revalidation_status || "needs_review"}; ${candidateNote}`;
+      }
+      if (evidenceType.includes("gee_route_environment_feature_package")) {
+        const counts = item?.counts || {};
+        const values = item?.value_summary || {};
+        const confidence = values.confidence_summary?.mean_confidence ?? values.confidence_summary?.min_confidence;
+        return `GEE route feature package: ${counts.segment_count ?? "-"} segments, stale ${counts.stale_warning_count ?? 0}, confidence ${environmentNumber(confidence, 2)} | server-side export only; ${candidateNote}`;
+      }
       if (layerId.includes("soil-moisture") || layerId.includes("soil_moisture")) {
-        return `SMAP L4 route bbox mean: surface ${environmentNumber(item?.sm_surface_wetness, 2)}, root ${environmentNumber(item?.sm_rootzone_wetness, 2)} | no-cache GEE evidence; ${candidateNote}`;
+        const values = item?.value_summary || {};
+        return `SMAP L4 route bbox mean: surface ${environmentNumber(item?.sm_surface_wetness ?? values.sm_surface_wetness, 2)}, root ${environmentNumber(item?.sm_rootzone_wetness ?? values.sm_rootzone_wetness, 2)} | no-cache GEE evidence; ${candidateNote}`;
       }
       if (layerId.includes("antecedent-rain") || layerId.includes("antecedent_rain")) {
-        return `GPM IMERG route bbox 72h rain: ${environmentNumber(item?.last_72h_mm, 1, "mm")} | no-cache GEE evidence; ${candidateNote}`;
+        const values = item?.value_summary || {};
+        return `GPM IMERG route bbox 72h rain: ${environmentNumber(item?.last_72h_mm ?? values.last_72h_mm, 1, "mm")} | no-cache GEE evidence; ${candidateNote}`;
       }
       if (layerId.includes("cwa-qpf")) {
-        const pop = item?.rain_probability ?? item?.rainProbability;
-        const rain = item?.rainfall_mm ?? item?.rainfallMm;
+        const values = item?.value_summary || {};
+        const pop = item?.rain_probability ?? item?.rainProbability ?? values.max_rain_probability;
+        const rain = item?.rainfall_mm ?? item?.rainfallMm ?? values.max_rainfall_mm;
         const weather = item?.weather_text || item?.weatherText || item?.status || "forecast";
         return `CWA forecast-derived QPF: PoP ${environmentNumber(pop, 0, "%")}, rain ${environmentNumber(rain, 1, "mm")} | ${weather}; ${candidateNote}`;
       }
@@ -3031,6 +3060,47 @@
         return `CWA observation station: ${station} | 24h rain ${environmentNumber(item?.last_24h_mm, 1, "mm")} | ${candidateNote}`;
       }
       return "";
+    }
+    function environmentValueTreeSummary(item = {}) {
+      const type = String(item?.evidence_type || "").toLowerCase();
+      const layerId = String(item?.layer_id || "").toLowerCase();
+      const values = item?.value_summary || {};
+      if (type.includes("environment_risk_derivative")) {
+        return `${item.status || "candidate"} | landslide ${values.new_landslide_candidate_count ?? 0} | wet ${values.wetness_flash_flood_candidate_count ?? 0} | obscure ${values.trail_obscurity_candidate_count ?? 0} | dark ${values.practical_darkness_candidate_count ?? 0}`;
+      }
+      if (type.includes("gee_route_environment_feature_package")) {
+        return `${item.status || "candidate"} | ${item.counts?.segment_count ?? 0} segments | stale ${item.counts?.stale_warning_count ?? 0} | datasets ${(item.dataset_ids || []).length}`;
+      }
+      if (layerId === "cwa-qpf") {
+        return `${item.status || "candidate"} | PoP ${environmentNumber(values.max_rain_probability, 0, "%")} | rain ${environmentNumber(values.max_rainfall_mm, 1, "mm")}`;
+      }
+      if (layerId === "cwa-weather") {
+        return `${item.status || "candidate"} | warnings ${values.warning_point_count ?? 0} | stations ${values.observation_point_count ?? 0} | max 24h ${environmentNumber(values.max_last_24h_mm, 1, "mm")}`;
+      }
+      if (layerId === "soil-moisture") {
+        return `${item.status || "candidate"} | surface ${environmentNumber(values.sm_surface_wetness, 2)} | root ${environmentNumber(values.sm_rootzone_wetness, 2)} | no-cache`;
+      }
+      if (layerId === "antecedent-rain") {
+        return `${item.status || "candidate"} | 72h ${environmentNumber(values.last_72h_mm, 1, "mm")} | 3h ${environmentNumber(values.last_3h_mm, 1, "mm")} | no-cache`;
+      }
+      return `${item.status || "candidate"} | ${item.source_path || item.layer_id || "environment value"}`;
+    }
+    function environmentRiskDerivativeItemSummary(item = {}) {
+      const values = item?.value_summary || {};
+      const count = item?.candidate_count ?? item?.counts?.candidate_count ?? values.candidate_count;
+      const first = values.first_candidate_label ? ` | first ${values.first_candidate_label}` : "";
+      const report = values.route_revalidation_status ? ` | ${values.route_revalidation_status}` : "";
+      return `${item.status || "candidate"} | ${count ?? 0} candidates${report}${first}`;
+    }
+    function environmentRiskCandidateTreeSummary(item = {}) {
+      const score = Number(item?.score);
+      const distance = Number(item?.mid_distance_m);
+      const lat = Number(item?.lat);
+      const lon = Number(item?.lon);
+      const scoreText = Number.isFinite(score) ? `score ${score.toFixed(2)}` : "score n/a";
+      const distanceText = Number.isFinite(distance) ? `${Math.round(distance)}m` : "distance n/a";
+      const coordinateText = Number.isFinite(lat) && Number.isFinite(lon) ? `${lat.toFixed(6)}, ${lon.toFixed(6)}` : "no coordinate";
+      return `${item.severity || item.status || "candidate"} | ${scoreText} | ${distanceText} | ${coordinateText}`;
     }
     function environmentLayerBounds(layer) {
       const bbox = layer?.bbox_wgs84 || layer?.summary?.bbox_wgs84 || {};
@@ -3106,6 +3176,42 @@
         class: `environment-value-label ${layerId}`,
       }, item.label);
       group.appendChild(label);
+    }
+    function renderEnvironmentRiskDerivativeCandidates(group, bounds, layers = {}) {
+      const collections = [
+        layers?.new_landslide_candidates,
+        layers?.wetness_flash_flood_susceptibility,
+        layers?.trail_obscurity_risk,
+        layers?.practical_darkness_time,
+      ];
+      collections.forEach(collection => {
+        (collection?.candidates || []).forEach(item => {
+          const kind = String(item?.candidate_kind || "environment-risk").replaceAll(".", "-");
+          const coords = Array.isArray(item?.coordinates) ? item.coordinates : [];
+          if (coords.length >= 2) {
+            const path = el("path", {
+              d: pathFromCoords(bounds, coords),
+              class: `environment-risk-derivative ${kind}`,
+              "data-risk-layer": "environment-derivative"
+            });
+            attachEvidence(path, item);
+            group.appendChild(path);
+            return;
+          }
+          const lat = Number(item?.lat);
+          const lon = Number(item?.lon);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+          const [x, y] = project(bounds, lat, lon);
+          const circle = el("circle", {
+            cx: x,
+            cy: y,
+            r: 4.3,
+            class: `environment-risk-derivative-point ${kind}`
+          });
+          attachEvidence(circle, item);
+          group.appendChild(circle);
+        });
+      });
     }
     function riskRibbonClass(bucket, score) {
       const normalizedBucket = String(bucket || "").toLowerCase();
@@ -3444,6 +3550,7 @@
       if (node.classList.contains("risk-ribbon")) base = 3.35;
       if (node.classList.contains("risk-heatmap")) base = 4.1;
       if (node.classList.contains("risk-delta")) base = 2.9;
+      if (node.classList.contains("environment-risk-derivative")) base = 2.05;
       if (node.classList.contains("map-highlight")) {
         const tag = (node.tagName || "").toLowerCase();
         base = tag === "circle" ? Math.max(base, 2.6) : Math.max(base, 4.4);
@@ -3456,6 +3563,7 @@
       if (circle.classList.contains("risk-score-point")) radius = Math.min(radius, 2.8);
       if (circle.classList.contains("checkpoint")) radius = Math.min(radius, 4.8);
       if (circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")) radius = Math.min(radius, 5.4);
+      if (circle.classList.contains("environment-risk-derivative-point")) radius = Math.min(radius, 4.3);
       if (circle.classList.contains("map-highlight")) radius = Math.max(radius, 5.0);
       if (scale >= 128) radius = Math.min(radius, 2.8);
       else if (scale >= 64) radius = Math.min(radius, 3.4);
@@ -3692,7 +3800,11 @@
         ...(view?.map_candidates?.poi_candidates || []),
         ...(view?.overpass_evidence?.poi_candidates || []),
         ...(view?.route_notes?.candidates || []),
-        ...(view?.risk_score?.points || [])
+        ...(view?.risk_score?.points || []),
+        ...(view?.environment_risk_derivative_layers?.new_landslide_candidates?.candidates || []),
+        ...(view?.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.candidates || []),
+        ...(view?.environment_risk_derivative_layers?.trail_obscurity_risk?.candidates || []),
+        ...(view?.environment_risk_derivative_layers?.practical_darkness_time?.candidates || [])
       ];
     }
     function findPointFocusEvidenceByRef(ref, view = state.view) {
@@ -5671,6 +5783,11 @@
         attachEvidence(path, segment);
         riskDeltaGroup.appendChild(path);
       });
+      renderEnvironmentRiskDerivativeCandidates(
+        riskDeltaGroup,
+        bounds,
+        view.environment_risk_derivative_layers
+      );
       svg.appendChild(riskDeltaGroup);
 
       const cwaQpfGroup = el("g", {"data-layer-group": "cwa-qpf"});
@@ -6180,6 +6297,34 @@
       appendEvidenceTreeGroup(tree, "map_risk", "Risk Delta", view.risk_delta?.segments || [], item => ({
         label: `${item.delta_bucket || "delta"} ${Number(item.delta_score || 0).toFixed(1)}`,
         sublabel: `baseline ${Number(item.baseline_pretrip_risk || 0).toFixed(1)} | calibrated ${Number(item.calibrated_risk_candidate || 0).toFixed(1)}`
+      }), false, "risk");
+      const environmentValueItems = view.environment_values?.items || [];
+      const environmentRiskDerivativeLayers = view.environment_risk_derivative_layers || {};
+      const environmentRiskDerivativeItems = environmentRiskDerivativeLayers.category_items || environmentValueItems.filter(item => String(item?.evidence_type || "").includes("environment_risk_derivative"));
+      const baseEnvironmentValueItems = environmentValueItems.filter(item => !String(item?.evidence_type || "").includes("environment_risk_derivative"));
+      appendEvidenceTreeGroup(tree, "map_risk", "Environmental Risk Derivatives", environmentRiskDerivativeItems, item => ({
+        label: item.label || "Environmental risk derivatives",
+        sublabel: environmentRiskDerivativeItemSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "New Landslide Candidates", environmentRiskDerivativeLayers.new_landslide_candidates?.candidates || [], item => ({
+        label: item.label || "New landslide candidate",
+        sublabel: environmentRiskCandidateTreeSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Wetness / Flash Flood Candidates", environmentRiskDerivativeLayers.wetness_flash_flood_susceptibility?.candidates || [], item => ({
+        label: item.label || "Wetness / flash-flood candidate",
+        sublabel: environmentRiskCandidateTreeSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Trail Obscurity Candidates", environmentRiskDerivativeLayers.trail_obscurity_risk?.candidates || [], item => ({
+        label: item.label || "Trail obscurity candidate",
+        sublabel: environmentRiskCandidateTreeSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Practical Darkness Candidates", environmentRiskDerivativeLayers.practical_darkness_time?.candidates || [], item => ({
+        label: item.label || "Practical darkness candidate",
+        sublabel: environmentRiskCandidateTreeSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Environment Values", baseEnvironmentValueItems, item => ({
+        label: item.label || item.source_id || "Environment value evidence",
+        sublabel: environmentValueTreeSummary(item)
       }), false, "risk");
       appendEvidenceTreeGroup(tree, "map_risk", "CWA QPF", view.cwa_qpf?.points || [], item => ({
         label: item.label || "CWA QPF",

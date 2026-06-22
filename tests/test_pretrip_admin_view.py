@@ -988,10 +988,25 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
     env_root = project_root / "outputs" / "environment"
     cwa_root = env_root / "cwa"
     gee_root = env_root / "gee"
+    derived_root = env_root / "derived"
     cwa_root.mkdir(parents=True)
     gee_root.mkdir(parents=True)
+    derived_root.mkdir(parents=True)
 
     def write_geojson(path: Path, layer_id: str, source_id: str, label: str) -> None:
+        layer_props = {}
+        if layer_id == "cwa-qpf":
+            layer_props = {"rain_probability": 70, "rainfall_mm": 12.5}
+        elif layer_id == "cwa-weather":
+            layer_props = {"last_24h_mm": 36.0, "station_name": "CWA sample"}
+        elif layer_id == "soil-moisture":
+            layer_props = {
+                "sm_surface_wetness": 0.37,
+                "sm_rootzone_wetness": 0.44,
+                "raw_summary_sha256": "a" * 64,
+            }
+        elif layer_id == "antecedent-rain":
+            layer_props = {"last_72h_mm": 22.5, "last_3h_mm": 4.0}
         path.write_text(
             json.dumps(
                 {
@@ -1016,10 +1031,72 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
                                 "label": label,
                                 "candidate_only": True,
                                 "runtime_safety_truth": False,
+                                **layer_props,
                             },
                         }
                     ],
                 },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    def write_derived_geojson(
+        path: Path,
+        *,
+        candidate_kind: str,
+        candidate_id: str,
+        label: str,
+        severity: str,
+        score: float,
+        center_lat: float,
+        center_lon: float,
+    ) -> None:
+        path.write_text(
+            json.dumps(
+                {
+                    "type": "FeatureCollection",
+                    "bbox_wgs84": {
+                        "west": 121.2,
+                        "south": 23.8,
+                        "east": 121.3,
+                        "north": 23.9,
+                    },
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "LineString",
+                                "coordinates": [
+                                    [121.2195, 23.8895],
+                                    [121.2205, 23.8905],
+                                ],
+                            },
+                            "properties": {
+                                "candidate_id": candidate_id,
+                                "candidate_kind": candidate_kind,
+                                "source_segment_id": "segment.001",
+                                "label": label,
+                                "severity": severity,
+                                "score": score,
+                                "confidence": "medium",
+                                "center_lat": center_lat,
+                                "center_lon": center_lon,
+                                "start_distance_m": 0.0,
+                                "mid_distance_m": 75.0,
+                                "end_distance_m": 150.0,
+                                "supporting_metrics": {
+                                    "slope_deg": 40.9,
+                                    "flow_accumulation_proxy": 447.0,
+                                },
+                                "missing_metrics": ["gpm_1h_mm"],
+                                "candidate_only": True,
+                                "runtime_safety_truth": False,
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
                 sort_keys=True,
             ),
             encoding="utf-8",
@@ -1081,6 +1158,142 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
         json.dumps({"status": "source_status_only"}, sort_keys=True),
         encoding="utf-8",
     )
+    (gee_root / "scout_gee_feature_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_gee_feature_package",
+                "schema_version": "scout_gee_feature_package.v0.1",
+                "project_id": PROJECT_ID,
+                "status": "ready",
+                "provider": "google_earth_engine",
+                "server_side_only": True,
+                "mobile_runtime_dependency": False,
+                "raspberry_pi_runtime_dependency": False,
+                "route": {
+                    "buffer": {
+                        "properties": {
+                            "bbox_wgs84": {
+                                "west": 121.2,
+                                "south": 23.8,
+                                "east": 121.3,
+                                "north": 23.9,
+                            }
+                        }
+                    }
+                },
+                "counts": {
+                    "segment_count": 2,
+                    "raw_segment_feature_count": 2,
+                    "stale_warning_count": 1,
+                },
+                "source_datasets": [
+                    {"dataset_id": "NASA/NASADEM_HGT/001"},
+                    {"dataset_id": "NASA/GPM_L3/IMERG_V07"},
+                ],
+                "confidence_summary": {"mean_confidence": 0.73},
+                "cloud_filtering_thresholds": {
+                    "sentinel2_cloud_score_plus_min_cs": 0.6
+                },
+                "date_ranges": {"gpm_imerg": {"start": "2026-05-19"}},
+                "stale_data_warnings": ["sentinel2_no_cloud_free_imagery"],
+                "raw_response_sha256": "b" * 64,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "external_api_calls_made": True,
+                    "raspberry_pi_runtime_gee_dependency": False,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    (derived_root / "environment_risk_derivatives.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_environment_risk_derivatives",
+                "schema_version": "scout_environment_risk_derivatives.v0.1",
+                "project_id": PROJECT_ID,
+                "status": "ready_with_data_gaps",
+                "headline": "這條路線 500m buffer 內目前產生 1 處新崩塌候選。",
+                "source_raw_response_sha256": "b" * 64,
+                "source_datasets": [
+                    {"dataset_id": "NASA/NASADEM_HGT/001"},
+                    {"dataset_id": "COPERNICUS/S2_SR_HARMONIZED"},
+                ],
+                "source_metric_gaps": [
+                    {"metric_family": "sentinel1", "missing_ratio": 0.5}
+                ],
+                "counts": {
+                    "segment_count": 2,
+                    "new_landslide_candidate_count": 1,
+                    "wetness_flash_flood_candidate_count": 2,
+                    "trail_obscurity_candidate_count": 1,
+                    "practical_darkness_candidate_count": 1,
+                },
+                "route_revalidation_report": {
+                    "status": "needs_event_date",
+                    "event_date": None,
+                },
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    write_derived_geojson(
+        derived_root / "wetness_flash_flood_susceptibility.geojson",
+        candidate_kind="wetness_flash_flood_susceptibility",
+        candidate_id="wetness.001",
+        label="濕滑/溪溝暴漲候選 0.1K",
+        severity="medium",
+        score=0.65,
+        center_lat=23.8901,
+        center_lon=121.2201,
+    )
+    write_derived_geojson(
+        derived_root / "practical_darkness_time.geojson",
+        candidate_kind="practical_darkness_time",
+        candidate_id="darkness.001",
+        label="日落地形遮蔽候選 0.1K",
+        severity="high",
+        score=0.72,
+        center_lat=23.8911,
+        center_lon=121.2211,
+    )
+    for empty_name in ("new_landslide_candidates.geojson", "trail_obscurity_risk.geojson"):
+        (derived_root / empty_name).write_text(
+            json.dumps(
+                {
+                    "type": "FeatureCollection",
+                    "bbox_wgs84": {
+                        "west": 121.2,
+                        "south": 23.8,
+                        "east": 121.3,
+                        "north": 23.9,
+                    },
+                    "features": [],
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+    (derived_root / "route_revalidation_report.json").write_text(
+        json.dumps(
+            {
+                "status": "needs_event_date",
+                "event_date": None,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
 
     project.update(
         {
@@ -1106,6 +1319,27 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
             ),
             "gpm_imerg_corridor_summary_ref": (
                 "outputs/environment/gee/gpm_imerg_corridor_summary.json"
+            ),
+            "gee_feature_package_ref": (
+                "outputs/environment/gee/scout_gee_feature_package.json"
+            ),
+            "environment_risk_derivatives_ref": (
+                "outputs/environment/derived/environment_risk_derivatives.json"
+            ),
+            "new_landslide_candidates_ref": (
+                "outputs/environment/derived/new_landslide_candidates.geojson"
+            ),
+            "wetness_flash_flood_susceptibility_ref": (
+                "outputs/environment/derived/wetness_flash_flood_susceptibility.geojson"
+            ),
+            "trail_obscurity_risk_ref": (
+                "outputs/environment/derived/trail_obscurity_risk.geojson"
+            ),
+            "practical_darkness_time_ref": (
+                "outputs/environment/derived/practical_darkness_time.geojson"
+            ),
+            "route_revalidation_report_ref": (
+                "outputs/environment/derived/route_revalidation_report.json"
             ),
         }
     )
@@ -1138,6 +1372,77 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
     assert debug["counts"]["cwa_weather_point_count"] == 1
     assert debug["counts"]["soil_moisture_point_count"] == 1
     assert debug["counts"]["antecedent_rain_point_count"] == 1
+    assert view["environment_values"]["status"] == "ready"
+    assert view["environment_values"]["counts"]["item_count"] == 6
+    labels = {item["label"] for item in view["environment_values"]["items"]}
+    assert {
+        "CWA QPF values",
+        "CWA weather values",
+        "GEE soil moisture values",
+        "GEE antecedent rain values",
+        "GEE route feature package",
+        "Environmental risk derivatives",
+    } <= labels
+    soil_item = next(
+        item
+        for item in view["environment_values"]["items"]
+        if item["layer_id"] == "soil-moisture"
+        and item["evidence_type"] == "pretrip_environment_value_evidence"
+    )
+    assert soil_item["value_summary"]["sm_surface_wetness"] == 0.37
+    assert soil_item["cache_policy"]["cacheable"] is False
+    assert soil_item["runtime_safety_truth"] is False
+    package_item = next(
+        item
+        for item in view["environment_values"]["items"]
+        if item["evidence_type"] == "pretrip_gee_route_environment_feature_package"
+    )
+    assert package_item["value_summary"]["segment_count"] == 2
+    assert package_item["boundary"]["raspberry_pi_runtime_gee_dependency"] is False
+    derivatives_item = next(
+        item
+        for item in view["environment_values"]["items"]
+        if item["evidence_type"] == "pretrip_environment_risk_derivative_database"
+    )
+    assert derivatives_item["value_summary"]["new_landslide_candidate_count"] == 1
+    assert derivatives_item["value_summary"]["wetness_flash_flood_candidate_count"] == 2
+    assert derivatives_item["value_summary"]["route_revalidation_status"] == (
+        "needs_event_date"
+    )
+    assert derivatives_item["boundary"]["runtime_safety_truth"] is False
+    derivative_layers = view["environment_risk_derivative_layers"]
+    assert derivative_layers["counts"]["wetness_flash_flood_candidate_count"] == 1
+    assert derivative_layers["counts"]["practical_darkness_candidate_count"] == 1
+    assert derivative_layers["counts"]["total_candidate_count"] == 2
+    assert len(derivative_layers["category_items"]) == 5
+    wetness = derivative_layers["wetness_flash_flood_susceptibility"][
+        "candidates"
+    ][0]
+    assert wetness["label"] == "濕滑/溪溝暴漲候選 0.1K"
+    assert wetness["evidence_type"] == (
+        "pretrip_environment_wetness_flash_flood_candidate"
+    )
+    assert wetness["lat"] == 23.8901
+    assert wetness["lon"] == 121.2201
+    assert len(wetness["coordinates"]) == 2
+    assert wetness["supporting_metrics"]["flow_accumulation_proxy"] == 447.0
+    assert wetness["runtime_safety_truth"] is False
+    assert wetness["boundary"]["runtime_safety_truth"] is False
+    darkness = derivative_layers["practical_darkness_time"]["candidates"][0]
+    assert darkness["label"] == "日落地形遮蔽候選 0.1K"
+    assert darkness["lat"] == 23.8911
+    assert {
+        "新崩塌候選：0",
+        "濕滑/溪溝暴漲候選：1",
+        "路跡不明候選：0",
+        "日落地形遮蔽候選：1",
+        "災後路線重評估",
+    } <= {item["label"] for item in derivative_layers["category_items"]}
+    assert debug["environment_values"]["counts"]["item_count"] == 6
+    assert debug["environment_risk_derivative_layers"]["counts"][
+        "total_candidate_count"
+    ] == 2
+    assert debug["counts"]["environment_risk_derivative_candidate_count"] == 2
 
 
 def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
