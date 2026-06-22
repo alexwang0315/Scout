@@ -649,6 +649,25 @@ def build_pretrip_admin_view(
     cwa_qpf_corridor_summary = _load_optional_json(
         artifacts.get("cwa_qpf_corridor_summary")
     )
+    gee_feature_package = _load_optional_json(artifacts.get("gee_feature_package"))
+    environment_risk_derivatives = _load_optional_json(
+        artifacts.get("environment_risk_derivatives")
+    )
+    new_landslide_candidates = _load_optional_json(
+        artifacts.get("new_landslide_candidates")
+    )
+    wetness_flash_flood_susceptibility = _load_optional_json(
+        artifacts.get("wetness_flash_flood_susceptibility")
+    )
+    trail_obscurity_risk = _load_optional_json(
+        artifacts.get("trail_obscurity_risk")
+    )
+    practical_darkness_time = _load_optional_json(
+        artifacts.get("practical_darkness_time")
+    )
+    route_revalidation_report = _load_optional_json(
+        artifacts.get("route_revalidation_report")
+    )
     soil_moisture_grid = _load_optional_json(artifacts.get("soil_moisture_grid"))
     smap_l4_corridor_summary = _load_optional_json(
         artifacts.get("smap_l4_corridor_summary")
@@ -967,6 +986,28 @@ def build_pretrip_admin_view(
         "contours": _contour_summary(contour, source_refs["contour"]),
         "remote_contacts": _remote_summary(remote_summary, source_refs["remote_summary"]),
     }
+    planning_tab["environment_values"] = _environment_values_summary(
+        project_id,
+        source_refs=source_refs,
+        cwa_qpf=planning_tab["cwa_qpf"],
+        cwa_weather=planning_tab["cwa_weather"],
+        soil_moisture=planning_tab["soil_moisture"],
+        antecedent_rain=planning_tab["antecedent_rain"],
+        gee_feature_package=gee_feature_package,
+        environment_risk_derivatives=environment_risk_derivatives,
+    )
+    planning_tab["environment_risk_derivative_layers"] = (
+        _environment_risk_derivative_layers_summary(
+            project_id,
+            source_refs=source_refs,
+            environment_risk_derivatives=environment_risk_derivatives,
+            new_landslide_candidates=new_landslide_candidates,
+            wetness_flash_flood_susceptibility=wetness_flash_flood_susceptibility,
+            trail_obscurity_risk=trail_obscurity_risk,
+            practical_darkness_time=practical_darkness_time,
+            route_revalidation_report=route_revalidation_report,
+        )
+    )
     planning_tab["risk_delta"] = _risk_delta_summary(
         project_id,
         planning_tab["risk_ribbon"],
@@ -1263,6 +1304,10 @@ def build_pretrip_admin_view(
         "cwa_weather": planning_tab["cwa_weather"],
         "soil_moisture": planning_tab["soil_moisture"],
         "antecedent_rain": planning_tab["antecedent_rain"],
+        "environment_values": planning_tab["environment_values"],
+        "environment_risk_derivative_layers": planning_tab[
+            "environment_risk_derivative_layers"
+        ],
         "contours": planning_tab["contours"],
         "map_layers": planning_tab["map_layers"],
         "import_manifest": post_analysis_tab.get("import_manifest"),
@@ -1413,6 +1458,15 @@ def resolve_pretrip_project_artifacts(
         "cwa_qpf_grid": "cwa_qpf_grid_ref",
         "cwa_qpf_route_timeline": "cwa_qpf_route_timeline_ref",
         "cwa_qpf_corridor_summary": "cwa_qpf_corridor_summary_ref",
+        "gee_feature_package": "gee_feature_package_ref",
+        "environment_risk_derivatives": "environment_risk_derivatives_ref",
+        "new_landslide_candidates": "new_landslide_candidates_ref",
+        "wetness_flash_flood_susceptibility": (
+            "wetness_flash_flood_susceptibility_ref"
+        ),
+        "trail_obscurity_risk": "trail_obscurity_risk_ref",
+        "practical_darkness_time": "practical_darkness_time_ref",
+        "route_revalidation_report": "route_revalidation_report_ref",
         "soil_moisture_grid": "soil_moisture_grid_ref",
         "smap_l4_timeseries": "smap_l4_timeseries_ref",
         "smap_l4_corridor_summary": "smap_l4_corridor_summary_ref",
@@ -1675,6 +1729,27 @@ def load_pretrip_debug_projection_view(
     cwa_qpf_corridor_summary_raw = _load_optional_json(
         optional_project_path("cwa_qpf_corridor_summary_ref")
     )
+    gee_feature_package_raw = _load_optional_json(
+        optional_project_path("gee_feature_package_ref")
+    )
+    environment_risk_derivatives_raw = _load_optional_json(
+        optional_project_path("environment_risk_derivatives_ref")
+    )
+    new_landslide_candidates_raw = _load_optional_json(
+        optional_project_path("new_landslide_candidates_ref")
+    )
+    wetness_flash_flood_susceptibility_raw = _load_optional_json(
+        optional_project_path("wetness_flash_flood_susceptibility_ref")
+    )
+    trail_obscurity_risk_raw = _load_optional_json(
+        optional_project_path("trail_obscurity_risk_ref")
+    )
+    practical_darkness_time_raw = _load_optional_json(
+        optional_project_path("practical_darkness_time_ref")
+    )
+    route_revalidation_report_raw = _load_optional_json(
+        optional_project_path("route_revalidation_report_ref")
+    )
     soil_moisture_grid_raw = _load_optional_json(
         optional_project_path("soil_moisture_grid_ref")
     )
@@ -1789,6 +1864,19 @@ def load_pretrip_debug_projection_view(
         "cwa_observations_geojson": project.get("cwa_observations_geojson_ref", ""),
         "cwa_qpf_grid": project.get("cwa_qpf_grid_ref", ""),
         "cwa_qpf_corridor_summary": project.get("cwa_qpf_corridor_summary_ref", ""),
+        "gee_feature_package": project.get("gee_feature_package_ref", ""),
+        "environment_risk_derivatives": project.get(
+            "environment_risk_derivatives_ref",
+            "",
+        ),
+        "new_landslide_candidates": project.get("new_landslide_candidates_ref", ""),
+        "wetness_flash_flood_susceptibility": project.get(
+            "wetness_flash_flood_susceptibility_ref",
+            "",
+        ),
+        "trail_obscurity_risk": project.get("trail_obscurity_risk_ref", ""),
+        "practical_darkness_time": project.get("practical_darkness_time_ref", ""),
+        "route_revalidation_report": project.get("route_revalidation_report_ref", ""),
         "soil_moisture_grid": project.get("soil_moisture_grid_ref", ""),
         "smap_l4_corridor_summary": project.get("smap_l4_corridor_summary_ref", ""),
         "antecedent_rain_grid": project.get("antecedent_rain_grid_ref", ""),
@@ -1968,6 +2056,28 @@ def load_pretrip_debug_projection_view(
             include_keys=("status", "findings"),
         ),
     }
+    view["environment_values"] = _environment_values_summary(
+        project_id,
+        source_refs=source_refs,
+        cwa_qpf=view["cwa_qpf"],
+        cwa_weather=view["cwa_weather"],
+        soil_moisture=view["soil_moisture"],
+        antecedent_rain=view["antecedent_rain"],
+        gee_feature_package=gee_feature_package_raw,
+        environment_risk_derivatives=environment_risk_derivatives_raw,
+    )
+    view["environment_risk_derivative_layers"] = (
+        _environment_risk_derivative_layers_summary(
+            project_id,
+            source_refs=source_refs,
+            environment_risk_derivatives=environment_risk_derivatives_raw,
+            new_landslide_candidates=new_landslide_candidates_raw,
+            wetness_flash_flood_susceptibility=wetness_flash_flood_susceptibility_raw,
+            trail_obscurity_risk=trail_obscurity_risk_raw,
+            practical_darkness_time=practical_darkness_time_raw,
+            route_revalidation_report=route_revalidation_report_raw,
+        )
+    )
     view["map_layers"] = _map_layers_with_local_raster_metadata(
         view["map_layers"],
         project=project,
@@ -2059,6 +2169,10 @@ def load_pretrip_debug_projection_view(
         "cwa_weather": view["cwa_weather"],
         "soil_moisture": view["soil_moisture"],
         "antecedent_rain": view["antecedent_rain"],
+        "environment_values": view["environment_values"],
+        "environment_risk_derivative_layers": view[
+            "environment_risk_derivative_layers"
+        ],
         "major_critical_points": view.get("major_critical_points"),
         "boss_points": view.get("boss_points"),
         "mileage_tag_alignment": view.get("mileage_tag_alignment"),
@@ -2113,6 +2227,22 @@ def load_pretrip_debug_projection_view(
             ),
             "antecedent_rain_point_count": view["antecedent_rain"]["counts"].get(
                 "point_count",
+                0,
+            ),
+            "environment_value_item_count": view["environment_values"]["counts"].get(
+                "item_count",
+                0,
+            ),
+            "environment_risk_derivative_candidate_count": view[
+                "environment_risk_derivative_layers"
+            ]["counts"].get(
+                "total_candidate_count",
+                0,
+            ),
+            "gee_feature_package_segment_count": view["environment_values"][
+                "counts"
+            ].get(
+                "gee_segment_count",
                 0,
             ),
             "terrain_bitmap_overlay_count": view["terrain_visualization"]["counts"].get(
@@ -8394,6 +8524,1167 @@ def _cwa_weather_environment_summary(
             )
         ),
     }
+
+
+ENVIRONMENT_RISK_DERIVATIVE_SPECS: dict[str, dict[str, str]] = {
+    "new_landslide_candidates": {
+        "label": "新崩塌候選",
+        "source_ref_key": "new_landslide_candidates",
+        "candidate_kind": "new_landslide_candidate",
+        "count_key": "new_landslide_candidate_count",
+        "evidence_type": "pretrip_environment_new_landslide_candidate",
+    },
+    "wetness_flash_flood_susceptibility": {
+        "label": "濕滑/溪溝暴漲候選",
+        "source_ref_key": "wetness_flash_flood_susceptibility",
+        "candidate_kind": "wetness_flash_flood_susceptibility",
+        "count_key": "wetness_flash_flood_candidate_count",
+        "evidence_type": "pretrip_environment_wetness_flash_flood_candidate",
+    },
+    "trail_obscurity_risk": {
+        "label": "路跡不明候選",
+        "source_ref_key": "trail_obscurity_risk",
+        "candidate_kind": "trail_obscurity_risk",
+        "count_key": "trail_obscurity_candidate_count",
+        "evidence_type": "pretrip_environment_trail_obscurity_candidate",
+    },
+    "practical_darkness_time": {
+        "label": "日落地形遮蔽候選",
+        "source_ref_key": "practical_darkness_time",
+        "candidate_kind": "practical_darkness_time",
+        "count_key": "practical_darkness_candidate_count",
+        "evidence_type": "pretrip_environment_practical_darkness_candidate",
+    },
+}
+
+
+def _environment_risk_derivative_layers_summary(
+    project_id: str,
+    *,
+    source_refs: dict[str, str],
+    environment_risk_derivatives: dict[str, Any] | None,
+    new_landslide_candidates: dict[str, Any] | None,
+    wetness_flash_flood_susceptibility: dict[str, Any] | None,
+    trail_obscurity_risk: dict[str, Any] | None,
+    practical_darkness_time: dict[str, Any] | None,
+    route_revalidation_report: dict[str, Any] | None,
+) -> dict[str, Any]:
+    payloads = {
+        "new_landslide_candidates": new_landslide_candidates,
+        "wetness_flash_flood_susceptibility": wetness_flash_flood_susceptibility,
+        "trail_obscurity_risk": trail_obscurity_risk,
+        "practical_darkness_time": practical_darkness_time,
+    }
+    summary_counts = (
+        dict(environment_risk_derivatives.get("counts") or {})
+        if isinstance(environment_risk_derivatives, dict)
+        else {}
+    )
+    collections = {
+        key: _environment_risk_candidate_collection_summary(
+            project_id,
+            key=key,
+            spec=spec,
+            payload=payloads[key],
+            source_path=source_refs.get(spec["source_ref_key"], ""),
+            summary_counts=summary_counts,
+            derivatives_source_path=source_refs.get(
+                "environment_risk_derivatives",
+                "",
+            ),
+        )
+        for key, spec in ENVIRONMENT_RISK_DERIVATIVE_SPECS.items()
+    }
+    report_source_path = source_refs.get("route_revalidation_report", "")
+    report_status = (
+        route_revalidation_report.get("status")
+        if isinstance(route_revalidation_report, dict)
+        else None
+    ) or (
+        (environment_risk_derivatives.get("route_revalidation_report") or {}).get(
+            "status"
+        )
+        if isinstance(environment_risk_derivatives, dict)
+        and isinstance(environment_risk_derivatives.get("route_revalidation_report"), dict)
+        else None
+    )
+    total_candidate_count = sum(
+        int(collection["counts"].get("candidate_count") or 0)
+        for collection in collections.values()
+    )
+    source_ref_values = _unique_limited(
+        [
+            source_refs.get("project", "project.json"),
+            source_refs.get("environment_risk_derivatives", ""),
+            *(collection.get("source_path") for collection in collections.values()),
+            report_source_path,
+        ],
+        limit=64,
+    )
+    counts = {
+        "total_candidate_count": total_candidate_count,
+        "category_count": len(collections),
+        "new_landslide_candidate_count": collections["new_landslide_candidates"][
+            "counts"
+        ].get("candidate_count", 0),
+        "wetness_flash_flood_candidate_count": collections[
+            "wetness_flash_flood_susceptibility"
+        ]["counts"].get("candidate_count", 0),
+        "trail_obscurity_candidate_count": collections["trail_obscurity_risk"][
+            "counts"
+        ].get("candidate_count", 0),
+        "practical_darkness_candidate_count": collections["practical_darkness_time"][
+            "counts"
+        ].get("candidate_count", 0),
+    }
+    return {
+        "source_id": f"{project_id}.environment-risk-derivative-layers",
+        "source_path": source_refs.get("environment_risk_derivatives", ""),
+        "source_refs": source_ref_values,
+        "evidence_type": "pretrip_environment_risk_derivative_layers",
+        "artifact_kind": "pretrip_environment_risk_derivative_layers",
+        "layer_id": "risk-delta",
+        "status": (
+            "ready"
+            if total_candidate_count
+            else (
+                environment_risk_derivatives.get("status")
+                if isinstance(environment_risk_derivatives, dict)
+                else "missing_source"
+            )
+        ),
+        "counts": counts,
+        "category_items": _environment_risk_derivative_category_items(
+            project_id,
+            collections=collections,
+            source_refs=source_refs,
+            route_revalidation_report=route_revalidation_report,
+            report_status=report_status,
+        ),
+        "route_revalidation_report": {
+            "source_id": f"{project_id}.route-revalidation-report",
+            "source_path": report_source_path,
+            "evidence_type": "pretrip_environment_route_revalidation_report",
+            "layer_id": "risk-delta",
+            "label": "災後路線重評估",
+            "status": report_status or "missing_event_date",
+            "report": route_revalidation_report
+            if isinstance(route_revalidation_report, dict)
+            else {},
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            **_projection_record_metadata(
+                {
+                    "candidate_id": f"{project_id}.route-revalidation-report",
+                    "source_refs": source_ref_values,
+                    "target_ids": ["risk-delta"],
+                },
+                source_path=report_source_path,
+                evidence_type="pretrip_environment_route_revalidation_report",
+                source_kind="environment_route_revalidation_report",
+                identity_keys=("candidate_id", "source_refs", "target_ids"),
+                review_state="needs_event_date",
+                confidence="low",
+                stale_risk="high",
+                extractor_version="pretrip_environment_risk_derivatives.projection.v1",
+                prompt_version=(
+                    "not_applicable_deterministic_environment_risk_derivatives.v1"
+                ),
+                summary=(
+                    "Route revalidation planning report projected from derived "
+                    "environment evidence. Candidate-only review context, not "
+                    "runtime safety truth."
+                ),
+            ),
+        },
+        **collections,
+        "boundary": {
+            "candidate_only": True,
+            "pretrip_candidate_evidence_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+            "server_side_only": True,
+            "mobile_runtime_dependency": False,
+            "raspberry_pi_runtime_dependency": False,
+        },
+    }
+
+
+def _environment_risk_candidate_collection_summary(
+    project_id: str,
+    *,
+    key: str,
+    spec: dict[str, str],
+    payload: dict[str, Any] | None,
+    source_path: str,
+    summary_counts: dict[str, Any],
+    derivatives_source_path: str,
+) -> dict[str, Any]:
+    features = (
+        [feature for feature in payload.get("features", []) if isinstance(feature, dict)]
+        if isinstance(payload, dict)
+        else []
+    )
+    candidates = [
+        candidate
+        for index, feature in enumerate(features)
+        if (
+            candidate := _environment_risk_candidate_from_feature(
+                project_id,
+                key=key,
+                spec=spec,
+                feature=feature,
+                index=index,
+                source_path=source_path,
+                derivatives_source_path=derivatives_source_path,
+            )
+        )
+        is not None
+    ]
+    candidate_count = len(candidates)
+    declared_count = _coerce_int(summary_counts.get(spec["count_key"]), 0)
+    severity_counts: dict[str, int] = {}
+    confidence_counts: dict[str, int] = {}
+    for candidate in candidates:
+        severity = str(candidate.get("severity") or candidate.get("status") or "unknown")
+        confidence = str(candidate.get("confidence") or "unknown")
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+        confidence_counts[confidence] = confidence_counts.get(confidence, 0) + 1
+    return {
+        "source_id": f"{project_id}.{key}",
+        "source_path": source_path,
+        "source_refs": _unique_limited(
+            [source_path, derivatives_source_path],
+            limit=16,
+        ),
+        "evidence_type": f"{spec['evidence_type']}_collection",
+        "artifact_kind": "pretrip_environment_risk_derivative_candidate_collection",
+        "layer_id": "risk-delta",
+        "label": spec["label"],
+        "status": (
+            "ready"
+            if candidate_count
+            else (
+                "ready_empty"
+                if isinstance(payload, dict)
+                else (
+                    "missing_detail_source"
+                    if declared_count
+                    else "missing_or_empty_source"
+                )
+            )
+        ),
+        "counts": {
+            "candidate_count": candidate_count,
+            "feature_count": len(features),
+            "declared_candidate_count": declared_count,
+            "skipped_feature_count": max(len(features) - candidate_count, 0),
+            "severity_counts": severity_counts,
+            "confidence_counts": confidence_counts,
+        },
+        "bbox_wgs84": _environment_bbox(payload or {}, {}),
+        "candidates": candidates,
+        "features": candidates,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _environment_risk_candidate_from_feature(
+    project_id: str,
+    *,
+    key: str,
+    spec: dict[str, str],
+    feature: dict[str, Any],
+    index: int,
+    source_path: str,
+    derivatives_source_path: str,
+) -> dict[str, Any] | None:
+    geometry = feature.get("geometry") if isinstance(feature.get("geometry"), dict) else {}
+    props = feature.get("properties") if isinstance(feature.get("properties"), dict) else {}
+    center = _environment_risk_candidate_center(props, geometry)
+    if center is None:
+        return None
+    coordinates = _environment_risk_candidate_coordinates(geometry)
+    source_segment_id = str(
+        props.get("source_segment_id")
+        or props.get("segment_id")
+        or props.get("source_id")
+        or ""
+    )
+    mid_distance = _coerce_float(props.get("mid_distance_m"))
+    distance_label = (
+        f"{mid_distance / 1000:.1f}K" if mid_distance is not None else f"{index + 1}"
+    )
+    fallback_id = source_segment_id or f"{index:03d}"
+    candidate_id = str(
+        props.get("candidate_id")
+        or feature.get("id")
+        or f"{project_id}.{key}.{fallback_id}"
+    ).strip()
+    label = str(props.get("label") or f"{spec['label']} {distance_label}")
+    score = _coerce_float(props.get("score"))
+    severity = str(props.get("severity") or "candidate")
+    confidence = str(props.get("confidence") or "low")
+    source_refs = _unique_limited(
+        [
+            source_path,
+            derivatives_source_path,
+            source_segment_id,
+            props.get("source_raw_response_sha256"),
+        ],
+        limit=24,
+    )
+    item = {
+        **props,
+        "source_id": candidate_id,
+        "candidate_id": candidate_id,
+        "source_path": source_path,
+        "source_refs": source_refs,
+        "evidence_type": spec["evidence_type"],
+        "layer_id": "risk-delta",
+        "label": label,
+        "candidate_kind": props.get("candidate_kind") or spec["candidate_kind"],
+        "status": severity,
+        "severity": severity,
+        "confidence": confidence,
+        "score": score,
+        "lat": center["lat"],
+        "lon": center["lon"],
+        "coordinates": coordinates,
+        "geometry_type": geometry.get("type"),
+        "mid_distance_m": mid_distance,
+        "start_distance_m": _coerce_float(props.get("start_distance_m")),
+        "end_distance_m": _coerce_float(props.get("end_distance_m")),
+        "supporting_metrics": props.get("supporting_metrics")
+        if isinstance(props.get("supporting_metrics"), dict)
+        else {},
+        "missing_metrics": props.get("missing_metrics")
+        if isinstance(props.get("missing_metrics"), list)
+        else [],
+        "rationale": props.get("rationale") or props.get("reason"),
+        "source_segment_id": source_segment_id,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "map_target_ids": _unique_limited(
+            [
+                candidate_id,
+                source_segment_id,
+                props.get("segment_ref"),
+                "risk-delta",
+            ],
+            limit=12,
+        ),
+        "boundary": {
+            "candidate_only": True,
+            "pretrip_candidate_evidence_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+        },
+    }
+    return {
+        **item,
+        **_projection_record_metadata(
+            {
+                **item,
+                "source_refs": source_refs,
+                "target_ids": item["map_target_ids"],
+            },
+            source_path=source_path,
+            evidence_type=spec["evidence_type"],
+            source_kind="environment_risk_derivative_candidate",
+            identity_keys=("candidate_id", "source_refs", "target_ids"),
+            review_state="candidate_review_pending",
+            confidence=confidence,
+            stale_risk=str(props.get("stale_risk") or "high"),
+            extractor_version="pretrip_environment_risk_derivatives.projection.v1",
+            prompt_version=(
+                "not_applicable_deterministic_environment_risk_derivatives.v1"
+            ),
+            summary=(
+                f"{spec['label']} projected from GEE/CWA/DEM route segment "
+                "derivative evidence. Candidate-only planning evidence, not "
+                "runtime safety truth."
+            ),
+        ),
+    }
+
+
+def _environment_risk_candidate_center(
+    props: dict[str, Any],
+    geometry: dict[str, Any],
+) -> dict[str, float] | None:
+    lat = _coerce_float(props.get("center_lat") or props.get("lat"))
+    lon = _coerce_float(props.get("center_lon") or props.get("lon"))
+    if lat is not None and lon is not None:
+        return {"lat": lat, "lon": lon}
+    geometry_type = geometry.get("type")
+    try:
+        if geometry_type == "Point":
+            return _geojson_point_coordinate(geometry)
+        if geometry_type == "LineString":
+            coordinates = _geojson_line_coordinates(geometry)
+            if coordinates:
+                return coordinates[len(coordinates) // 2]
+        if geometry_type == "MultiLineString":
+            lines = geometry.get("coordinates", [])
+            flattened = [
+                {"lon": float(lon), "lat": float(lat)}
+                for line in lines
+                for lon, lat, *_ in line
+            ]
+            if flattened:
+                return flattened[len(flattened) // 2]
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
+def _environment_risk_candidate_coordinates(
+    geometry: dict[str, Any],
+) -> list[dict[str, float]]:
+    try:
+        if geometry.get("type") == "LineString":
+            return _geojson_line_coordinates(geometry)
+        if geometry.get("type") == "MultiLineString":
+            return [
+                {"lon": float(lon), "lat": float(lat)}
+                for line in geometry.get("coordinates", [])
+                for lon, lat, *_ in line
+            ]
+    except (TypeError, ValueError):
+        return []
+    return []
+
+
+def _environment_risk_derivative_category_items(
+    project_id: str,
+    *,
+    collections: dict[str, dict[str, Any]],
+    source_refs: dict[str, str],
+    route_revalidation_report: dict[str, Any] | None,
+    report_status: str | None,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for key, spec in ENVIRONMENT_RISK_DERIVATIVE_SPECS.items():
+        collection = collections[key]
+        count = int(collection["counts"].get("candidate_count") or 0)
+        first_candidate = (
+            collection["candidates"][0] if collection.get("candidates") else {}
+        )
+        item = {
+            "candidate_id": f"{project_id}.{key}.summary",
+            "source_id": f"{project_id}.{key}.summary",
+            "source_path": collection.get("source_path", ""),
+            "source_refs": collection.get("source_refs", []),
+            "evidence_type": "pretrip_environment_risk_derivative_category",
+            "layer_id": "risk-delta",
+            "label": f"{spec['label']}：{count}",
+            "category_key": key,
+            "candidate_kind": spec["candidate_kind"],
+            "status": collection.get("status", "unknown"),
+            "counts": collection.get("counts", {}),
+            "candidate_count": count,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "map_target_ids": [key, "risk-delta"],
+            "value_summary": {
+                "candidate_count": count,
+                "source_path": collection.get("source_path", ""),
+                "first_candidate_label": first_candidate.get("label"),
+            },
+        }
+        if first_candidate.get("lat") is not None and first_candidate.get("lon") is not None:
+            item["lat"] = first_candidate["lat"]
+            item["lon"] = first_candidate["lon"]
+        items.append(
+            {
+                **item,
+                **_projection_record_metadata(
+                    {
+                        **item,
+                        "source_refs": item["source_refs"],
+                        "target_ids": item["map_target_ids"],
+                    },
+                    source_path=item["source_path"],
+                    evidence_type="pretrip_environment_risk_derivative_category",
+                    source_kind="environment_risk_derivative_category",
+                    identity_keys=("candidate_id", "source_refs", "target_ids"),
+                    review_state="candidate_review_pending",
+                    confidence=first_candidate.get("confidence") or "low",
+                    stale_risk=first_candidate.get("stale_risk") or "high",
+                    extractor_version=(
+                        "pretrip_environment_risk_derivatives.projection.v1"
+                    ),
+                    prompt_version=(
+                        "not_applicable_deterministic_environment_risk_derivatives.v1"
+                    ),
+                    summary=(
+                        f"{spec['label']} category summary projected from "
+                        "environment derivative candidate features. "
+                        "Candidate-only planning evidence, not runtime safety truth."
+                    ),
+                ),
+            }
+        )
+    report = route_revalidation_report if isinstance(route_revalidation_report, dict) else {}
+    route_revalidation_item = {
+        "candidate_id": f"{project_id}.route-revalidation-report.summary",
+        "source_id": f"{project_id}.route-revalidation-report.summary",
+        "source_path": source_refs.get("route_revalidation_report", ""),
+        "source_refs": _unique_limited(
+            [
+                source_refs.get("route_revalidation_report", ""),
+                source_refs.get("environment_risk_derivatives", ""),
+            ]
+        ),
+        "evidence_type": "pretrip_environment_route_revalidation_report",
+        "layer_id": "risk-delta",
+        "label": "災後路線重評估",
+        "category_key": "route_revalidation_report",
+        "status": report_status or "missing_event_date",
+        "counts": {},
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "map_target_ids": ["risk-delta"],
+        "value_summary": {
+            "route_revalidation_status": report_status,
+            "event_date": report.get("event_date"),
+            "headline": report.get("headline"),
+        },
+    }
+    items.append(
+        {
+            **route_revalidation_item,
+            **_projection_record_metadata(
+                {
+                    **route_revalidation_item,
+                    "source_refs": route_revalidation_item["source_refs"],
+                    "target_ids": route_revalidation_item["map_target_ids"],
+                },
+                source_path=route_revalidation_item["source_path"],
+                evidence_type="pretrip_environment_route_revalidation_report",
+                source_kind="environment_route_revalidation_report",
+                identity_keys=("candidate_id", "source_refs", "target_ids"),
+                review_state="needs_event_date",
+                confidence="low",
+                stale_risk="high",
+                extractor_version="pretrip_environment_risk_derivatives.projection.v1",
+                prompt_version=(
+                    "not_applicable_deterministic_environment_risk_derivatives.v1"
+                ),
+                summary=(
+                    "Route revalidation category summary projected from "
+                    "environment derivative evidence. Candidate-only planning "
+                    "evidence, not runtime safety truth."
+                ),
+            ),
+        }
+    )
+    return items
+
+
+def _environment_values_summary(
+    project_id: str,
+    *,
+    source_refs: dict[str, str],
+    cwa_qpf: dict[str, Any],
+    cwa_weather: dict[str, Any],
+    soil_moisture: dict[str, Any],
+    antecedent_rain: dict[str, Any],
+    gee_feature_package: dict[str, Any] | None,
+    environment_risk_derivatives: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    items = [
+        item
+        for item in (
+            _environment_layer_value_item(
+                project_id,
+                layer_id="cwa-qpf",
+                label="CWA QPF values",
+                summary=cwa_qpf,
+                source_kind="cwa_qpf_numeric_database",
+                confidence="medium",
+                stale_risk="medium",
+            ),
+            _environment_layer_value_item(
+                project_id,
+                layer_id="cwa-weather",
+                label="CWA weather values",
+                summary=cwa_weather,
+                source_kind="cwa_weather_numeric_database",
+                confidence="medium",
+                stale_risk="medium",
+            ),
+            _environment_layer_value_item(
+                project_id,
+                layer_id="soil-moisture",
+                label="GEE soil moisture values",
+                summary=soil_moisture,
+                source_kind="gee_soil_moisture_numeric_database",
+                confidence="medium",
+                stale_risk="high",
+            ),
+            _environment_layer_value_item(
+                project_id,
+                layer_id="antecedent-rain",
+                label="GEE antecedent rain values",
+                summary=antecedent_rain,
+                source_kind="gee_antecedent_rain_numeric_database",
+                confidence="medium",
+                stale_risk="high",
+            ),
+            _gee_feature_package_value_item(
+                project_id,
+                gee_feature_package,
+                source_path=source_refs.get("gee_feature_package", ""),
+            ),
+            _environment_risk_derivatives_value_item(
+                project_id,
+                environment_risk_derivatives,
+                source_path=source_refs.get("environment_risk_derivatives", ""),
+            ),
+        )
+        if item is not None
+    ]
+    source_path = source_refs.get("project", "project.json")
+    source_ref_values = _unique_limited(
+        [
+            source_path,
+            *(item.get("source_path") for item in items),
+            *(ref for item in items for ref in item.get("source_refs", [])),
+        ]
+    )
+    boundary = {
+        "candidate_only": True,
+        "pretrip_candidate_evidence_only": True,
+        "runtime_safety_truth": False,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "external_api_calls_made": any(
+            bool((item.get("boundary") or {}).get("external_api_calls_made"))
+            for item in items
+        ),
+    }
+    counts = {
+        "item_count": len(items),
+        "point_count": sum(
+            int((item.get("counts") or {}).get("point_count") or 0) for item in items
+        ),
+        "dataset_count": len(
+            {
+                dataset_id
+                for item in items
+                for dataset_id in item.get("dataset_ids", [])
+            }
+        ),
+        "gee_segment_count": sum(
+            int((item.get("counts") or {}).get("segment_count") or 0)
+            for item in items
+        ),
+    }
+    return {
+        "source_id": f"{project_id}.environment-values",
+        "source_path": source_path,
+        "source_refs": source_ref_values,
+        "evidence_type": "pretrip_environment_value_database",
+        "artifact_kind": "pretrip_environment_value_database",
+        "status": "ready" if items else "missing_source",
+        "counts": counts,
+        "items": items,
+        "boundary": boundary,
+        **_projection_record_metadata(
+            {
+                "candidate_id": f"{project_id}.environment-values",
+                "source_refs": source_ref_values,
+                "counts": counts,
+            },
+            source_path=source_path,
+            evidence_type="pretrip_environment_value_database",
+            source_kind="environment_value_database",
+            identity_keys=("candidate_id", "source_refs", "counts"),
+            review_state="projection_only" if items else "missing_source",
+            confidence="medium" if items else "low",
+            stale_risk="high",
+            extractor_version="pretrip_environment_values.projection.v1",
+            prompt_version="not_applicable_deterministic_environment_values.v1",
+            summary=(
+                "CWA/GEE numeric evidence database projected into Map/Risk "
+                "timeline review. Candidate-only planning context, not runtime "
+                "safety truth."
+            ),
+        ),
+    }
+
+
+def _environment_layer_value_item(
+    project_id: str,
+    *,
+    layer_id: str,
+    label: str,
+    summary: dict[str, Any],
+    source_kind: str,
+    confidence: str,
+    stale_risk: str,
+) -> dict[str, Any] | None:
+    if not _environment_summary_has_values(summary):
+        return None
+    source_path = str(
+        summary.get("summary_source_path") or summary.get("source_path") or ""
+    )
+    source_refs = _unique_limited(
+        [
+            source_path,
+            summary.get("source_path"),
+            summary.get("summary_source_path"),
+            summary.get("source_id"),
+        ]
+    )
+    center = _environment_summary_center(summary)
+    points = [point for point in summary.get("points", []) if isinstance(point, dict)]
+    value_summary = _environment_layer_value_payload(layer_id, summary)
+    candidate_id = f"{project_id}.{layer_id}.environment-values"
+    item = {
+        "candidate_id": candidate_id,
+        "source_id": candidate_id,
+        "source_path": source_path,
+        "evidence_type": "pretrip_environment_value_evidence",
+        "layer_id": layer_id,
+        "label": label,
+        "status": summary.get("status", "unknown"),
+        "counts": dict(summary.get("counts") or {}),
+        "bbox_wgs84": summary.get("bbox_wgs84") or {},
+        "cache_policy": summary.get("cache_policy"),
+        "dataset_ids": _environment_dataset_ids(summary),
+        "value_summary": value_summary,
+        "raw_response_sha256": _first_point_value(points, "raw_summary_sha256"),
+        "map_target_ids": _unique_limited(
+            [point.get("source_id") for point in points if point.get("source_id")]
+        ),
+        "boundary": _environment_item_boundary(summary),
+    }
+    if center is not None:
+        item.update(center)
+    return {
+        **item,
+        **_projection_record_metadata(
+            {
+                **item,
+                "source_refs": source_refs,
+                "value_summary": value_summary,
+            },
+            source_path=source_path,
+            evidence_type="pretrip_environment_value_evidence",
+            source_kind=source_kind,
+            identity_keys=("candidate_id", "source_refs", "value_summary"),
+            review_state=(
+                "projection_only"
+                if summary.get("status") in {"ready", "fetched", "source_status_only"}
+                else "needs_review"
+            ),
+            confidence=confidence,
+            stale_risk=stale_risk,
+            extractor_version="pretrip_environment_values.projection.v1",
+            prompt_version="not_applicable_deterministic_environment_values.v1",
+            summary=(
+                f"{label} projected into pretrip Map/Risk timeline evidence; "
+                "candidate-only numeric context, not runtime safety truth."
+            ),
+        ),
+    }
+
+
+def _gee_feature_package_value_item(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    *,
+    source_path: str,
+) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    if not source_path and not payload:
+        return None
+    route = payload.get("route") if isinstance(payload.get("route"), dict) else {}
+    route_buffer = route.get("buffer") if isinstance(route.get("buffer"), dict) else {}
+    props = route_buffer.get("properties") if isinstance(route_buffer.get("properties"), dict) else {}
+    bbox = props.get("bbox_wgs84") if isinstance(props.get("bbox_wgs84"), dict) else {}
+    center = _bbox_center(bbox)
+    counts = dict(payload.get("counts") or {})
+    source_datasets = [
+        dataset
+        for dataset in payload.get("source_datasets", [])
+        if isinstance(dataset, dict)
+    ]
+    dataset_ids = [
+        str(dataset.get("dataset_id"))
+        for dataset in source_datasets
+        if dataset.get("dataset_id")
+    ]
+    candidate_id = f"{project_id}.gee-feature-package.values"
+    value_summary = {
+        "status": payload.get("status"),
+        "segment_count": counts.get("segment_count"),
+        "raw_segment_feature_count": counts.get("raw_segment_feature_count"),
+        "stale_warning_count": counts.get("stale_warning_count"),
+        "confidence_summary": payload.get("confidence_summary") or {},
+        "cloud_filtering_thresholds": payload.get("cloud_filtering_thresholds") or {},
+        "date_ranges": payload.get("date_ranges") or {},
+    }
+    boundary = {
+        **_summary_boundary(payload.get("boundary", {})),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "server_side_only": bool(payload.get("server_side_only", True)),
+        "mobile_runtime_dependency": bool(
+            payload.get("mobile_runtime_dependency", False)
+        ),
+        "raspberry_pi_runtime_dependency": bool(
+            payload.get("raspberry_pi_runtime_dependency", False)
+        ),
+    }
+    item = {
+        "candidate_id": candidate_id,
+        "source_id": candidate_id,
+        "source_path": source_path,
+        "evidence_type": "pretrip_gee_route_environment_feature_package",
+        "layer_id": "soil-moisture",
+        "label": "GEE route feature package",
+        "status": payload.get("status", "unknown"),
+        "counts": counts,
+        "bbox_wgs84": bbox,
+        "dataset_ids": dataset_ids,
+        "source_datasets": source_datasets,
+        "value_summary": value_summary,
+        "raw_response_sha256": payload.get("raw_response_sha256"),
+        "stale_data_warnings": payload.get("stale_data_warnings", []),
+        "cache_policy": {
+            "cacheable": False,
+            "ttl_seconds": 0,
+            "must_refetch_on_prepare": True,
+        },
+        "boundary": boundary,
+        "map_target_ids": ["risk-ribbon", "risk-score"],
+    }
+    if center is not None:
+        item.update(center)
+    source_refs = _unique_limited(
+        [
+            source_path,
+            payload.get("raw_response_sha256"),
+            *(dataset_ids[:16]),
+        ]
+    )
+    return {
+        **item,
+        **_projection_record_metadata(
+            {
+                **item,
+                "source_refs": source_refs,
+                "value_summary": value_summary,
+            },
+            source_path=source_path,
+            evidence_type="pretrip_gee_route_environment_feature_package",
+            source_kind="gee_route_environment_feature_package",
+            identity_keys=("candidate_id", "source_refs", "value_summary"),
+            review_state=(
+                "projection_only" if payload.get("status") == "ready" else "needs_review"
+            ),
+            confidence="medium" if payload.get("status") == "ready" else "low",
+            stale_risk="high"
+            if payload.get("stale_data_warnings")
+            else "medium",
+            extractor_version="pretrip_environment_values.projection.v1",
+            prompt_version="not_applicable_deterministic_environment_values.v1",
+            summary=(
+                "Compact GEE route feature package projected into pretrip Map/Risk "
+                "timeline evidence. Server-side export only; no mobile or Pi GEE "
+                "runtime dependency."
+            ),
+        ),
+    }
+
+
+def _environment_risk_derivatives_value_item(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    *,
+    source_path: str,
+) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    counts = dict(payload.get("counts") or {})
+    if not source_path and not counts:
+        return None
+    candidate_id = f"{project_id}.environment-risk-derivatives.values"
+    report = (
+        payload.get("route_revalidation_report")
+        if isinstance(payload.get("route_revalidation_report"), dict)
+        else {}
+    )
+    value_summary = {
+        "status": payload.get("status"),
+        "headline": payload.get("headline"),
+        "new_landslide_candidate_count": counts.get(
+            "new_landslide_candidate_count"
+        ),
+        "wetness_flash_flood_candidate_count": counts.get(
+            "wetness_flash_flood_candidate_count"
+        ),
+        "trail_obscurity_candidate_count": counts.get(
+            "trail_obscurity_candidate_count"
+        ),
+        "practical_darkness_candidate_count": counts.get(
+            "practical_darkness_candidate_count"
+        ),
+        "route_revalidation_status": report.get("status"),
+        "event_date": report.get("event_date"),
+    }
+    source_refs = _unique_limited(
+        [
+            source_path,
+            payload.get("source_raw_response_sha256"),
+            "outputs/environment/derived/new_landslide_candidates.geojson",
+            "outputs/environment/derived/wetness_flash_flood_susceptibility.geojson",
+            "outputs/environment/derived/trail_obscurity_risk.geojson",
+            "outputs/environment/derived/practical_darkness_time.geojson",
+            "outputs/environment/derived/route_revalidation_report.json",
+        ]
+    )
+    source_datasets = [
+        dataset
+        for dataset in payload.get("source_datasets", [])
+        if isinstance(dataset, dict)
+    ]
+    dataset_ids = [
+        str(dataset.get("dataset_id"))
+        for dataset in source_datasets
+        if dataset.get("dataset_id")
+    ]
+    boundary = {
+        **_summary_boundary(payload.get("boundary", {})),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "server_side_only": True,
+        "mobile_runtime_dependency": False,
+        "raspberry_pi_runtime_dependency": False,
+    }
+    item = {
+        "candidate_id": candidate_id,
+        "source_id": candidate_id,
+        "source_path": source_path,
+        "source_refs": source_refs,
+        "evidence_type": "pretrip_environment_risk_derivative_database",
+        "layer_id": "risk-delta",
+        "label": "Environmental risk derivatives",
+        "status": payload.get("status", "unknown"),
+        "counts": counts,
+        "dataset_ids": dataset_ids,
+        "source_datasets": source_datasets,
+        "value_summary": value_summary,
+        "raw_response_sha256": payload.get("source_raw_response_sha256"),
+        "source_metric_gaps": payload.get("source_metric_gaps", []),
+        "cache_policy": {
+            "cacheable": False,
+            "ttl_seconds": 0,
+            "must_refetch_on_prepare": True,
+        },
+        "boundary": boundary,
+        "map_target_ids": [
+            "risk-delta",
+            "hazards",
+            "soil-moisture",
+            "antecedent-rain",
+        ],
+    }
+    return {
+        **item,
+        **_projection_record_metadata(
+            {
+                **item,
+                "source_refs": source_refs,
+                "value_summary": value_summary,
+            },
+            source_path=source_path,
+            evidence_type="pretrip_environment_risk_derivative_database",
+            source_kind="environment_risk_derivatives",
+            identity_keys=("candidate_id", "source_refs", "value_summary"),
+            review_state=(
+                "projection_only"
+                if str(payload.get("status") or "").startswith("ready")
+                else "needs_review"
+            ),
+            confidence=(
+                "medium"
+                if str(payload.get("status") or "").startswith("ready")
+                else "low"
+            ),
+            stale_risk="high",
+            extractor_version="pretrip_environment_values.projection.v1",
+            prompt_version="not_applicable_deterministic_environment_values.v1",
+            summary=(
+                "Derived environmental risk candidates from GEE route segment "
+                "features: landslide, wetness/flash flood, trail obscurity, "
+                "practical darkness, and route revalidation. Candidate-only."
+            ),
+        ),
+    }
+
+
+def _environment_summary_has_values(summary: dict[str, Any]) -> bool:
+    if not isinstance(summary, dict):
+        return False
+    if summary.get("source_path") or summary.get("summary_source_path"):
+        return True
+    if summary.get("points"):
+        return True
+    status = str(summary.get("status") or "")
+    return status not in {"", "missing_source"}
+
+
+def _environment_item_boundary(summary: dict[str, Any]) -> dict[str, Any]:
+    boundary = dict(summary.get("boundary") or {})
+    boundary.setdefault("candidate_only", True)
+    boundary.setdefault("pretrip_candidate_evidence_only", True)
+    boundary.setdefault("runtime_safety_truth", False)
+    boundary.setdefault("phase1_runtime_mutation_allowed", False)
+    return _summary_boundary(boundary)
+
+
+def _environment_summary_center(summary: dict[str, Any]) -> dict[str, float] | None:
+    bbox_center = _bbox_center(summary.get("bbox_wgs84"))
+    if bbox_center is not None:
+        return bbox_center
+    for point in summary.get("points", []):
+        if not isinstance(point, dict):
+            continue
+        lat = _coerce_float(point.get("lat"))
+        lon = _coerce_float(point.get("lon"))
+        if lat is not None and lon is not None:
+            return {"lat": lat, "lon": lon}
+    return None
+
+
+def _bbox_center(raw: Any) -> dict[str, float] | None:
+    if not isinstance(raw, dict):
+        return None
+    west = _first_mapping_float(raw, ("west", "min_lon", "minLon"))
+    east = _first_mapping_float(raw, ("east", "max_lon", "maxLon"))
+    south = _first_mapping_float(raw, ("south", "min_lat", "minLat"))
+    north = _first_mapping_float(raw, ("north", "max_lat", "maxLat"))
+    if None in (west, east, south, north):
+        return None
+    return {"lat": (south + north) / 2.0, "lon": (west + east) / 2.0}
+
+
+def _environment_dataset_ids(summary: dict[str, Any]) -> list[str]:
+    datasets = summary.get("datasets") or (summary.get("summary") or {}).get("datasets")
+    if isinstance(datasets, list):
+        return [str(item) for item in datasets if item]
+    points = [point for point in summary.get("points", []) if isinstance(point, dict)]
+    return _unique_limited(
+        [
+            point.get("collection_id") or point.get("dataset_id") or point.get("provider")
+            for point in points
+        ]
+    )
+
+
+def _environment_layer_value_payload(
+    layer_id: str,
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    points = [point for point in summary.get("points", []) if isinstance(point, dict)]
+    values = summary.get("summary", {}).get("values", {})
+    if not isinstance(values, dict):
+        values = {}
+    if layer_id == "cwa-qpf":
+        return {
+            "max_rain_probability": _max_numeric(
+                points,
+                ("rain_probability", "rainProbability"),
+            ),
+            "max_rainfall_mm": _max_numeric(points, ("rainfall_mm", "rainfallMm")),
+            "valid_from": _first_point_value(points, "valid_from", "start_time"),
+            "valid_to": _first_point_value(points, "valid_to", "end_time"),
+        }
+    if layer_id == "cwa-weather":
+        return {
+            "warning_point_count": (summary.get("counts") or {}).get(
+                "warning_point_count"
+            ),
+            "observation_point_count": (summary.get("counts") or {}).get(
+                "observation_point_count"
+            ),
+            "max_last_24h_mm": _max_numeric(points, ("last_24h_mm", "rain_24h_mm")),
+            "datasets": summary.get("datasets", []),
+        }
+    if layer_id == "soil-moisture":
+        surface = _first_numeric(points, ("sm_surface_wetness", "sm_surface"))
+        if surface is None:
+            surface = _coerce_float(values.get("sm_surface_wetness"))
+        rootzone = _first_numeric(points, ("sm_rootzone_wetness", "sm_rootzone"))
+        if rootzone is None:
+            rootzone = _coerce_float(values.get("sm_rootzone_wetness"))
+        return {
+            "sm_surface_wetness": surface,
+            "sm_rootzone_wetness": rootzone,
+            "antecedent_wetness_percentile": _first_numeric(
+                points,
+                ("antecedent_wetness_percentile",),
+            ),
+            "sample_count": (summary.get("summary") or {}).get("sample_count"),
+        }
+    if layer_id == "antecedent-rain":
+        last_72h = _first_numeric(points, ("last_72h_mm",))
+        if last_72h is None:
+            last_72h = _coerce_float(values.get("last_72h_mm"))
+        return {
+            "last_72h_mm": last_72h,
+            "last_24h_mm": _first_numeric(points, ("last_24h_mm",)),
+            "last_3h_mm": _first_numeric(
+                points,
+                ("last_3h_mm", "precipitation_mm", "precipitation"),
+            ),
+            "sample_count": (summary.get("summary") or {}).get("sample_count"),
+        }
+    return {}
+
+
+def _first_point_value(points: list[dict[str, Any]], *keys: str) -> Any:
+    for point in points:
+        for key in keys:
+            value = point.get(key)
+            if value not in (None, ""):
+                return value
+    return None
+
+
+def _first_numeric(points: list[dict[str, Any]], keys: tuple[str, ...]) -> float | None:
+    for point in points:
+        for key in keys:
+            value = _coerce_float(point.get(key))
+            if value is not None:
+                return value
+    return None
+
+
+def _first_mapping_float(raw: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = _coerce_float(raw.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _max_numeric(points: list[dict[str, Any]], keys: tuple[str, ...]) -> float | None:
+    values = [
+        value
+        for point in points
+        for key in keys
+        if (value := _coerce_float(point.get(key))) is not None
+    ]
+    return max(values) if values else None
 
 
 def _environment_bbox(

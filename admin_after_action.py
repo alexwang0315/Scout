@@ -438,6 +438,7 @@ def _build_pretrip_admin_case_view(
         "retreat_routes": pretrip_view["retreat_routes"],
         "route_notes": pretrip_view["route_notes"],
         "reference_tracks": pretrip_view["reference_tracks"],
+        "reference_segment_timing": pretrip_view["reference_segment_timing"],
         "terrain_visualization": pretrip_view["terrain_visualization"],
         "segment_terrain": (
             pretrip_view.get("tabs", {})
@@ -460,6 +461,14 @@ def _build_pretrip_admin_case_view(
         "risk_ribbon": pretrip_view["risk_ribbon"],
         "risk_heatmap": pretrip_view["risk_heatmap"],
         "risk_delta": pretrip_view["risk_delta"],
+        "cwa_qpf": pretrip_view.get("cwa_qpf"),
+        "cwa_weather": pretrip_view.get("cwa_weather"),
+        "soil_moisture": pretrip_view.get("soil_moisture"),
+        "antecedent_rain": pretrip_view.get("antecedent_rain"),
+        "environment_values": pretrip_view.get("environment_values"),
+        "environment_risk_derivative_layers": pretrip_view.get(
+            "environment_risk_derivative_layers"
+        ),
         "risk_rules": [],
         "replay": replay,
         "safety_timeline": _pretrip_safety_timeline(
