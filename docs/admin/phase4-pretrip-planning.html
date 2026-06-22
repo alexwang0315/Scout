@@ -635,13 +635,14 @@
       font: 500 11px/14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     .map-highlight {
-      filter: drop-shadow(0 0 5px rgba(40, 102, 110, .55));
+      filter: drop-shadow(0 0 7px rgba(15, 74, 84, .74));
       opacity: 1;
-      stroke-width: 4 !important;
+      stroke: #0f4a54 !important;
+      stroke-width: 4.8px !important;
       vector-effect: non-scaling-stroke;
     }
     circle.map-highlight {
-      stroke-width: 2 !important;
+      stroke-width: 2.6px !important;
     }
     [data-layer-hidden="true"] { display: none; }
     .route-pane {
@@ -2877,6 +2878,7 @@
     }
     function evidenceCategory(item) {
       const type = item?.evidence_type || "";
+      if (type.includes("reference_segment_timing")) return "segment";
       if (type.includes("capability")) return "reference";
       if (type.includes("risk_score")) return "risk";
       if (type.includes("risk_ribbon")) return "risk";
@@ -2916,6 +2918,7 @@
       const sourceId = String(evidenceSourceId(item) || "").toLowerCase();
       const category = evidenceCategory(item);
       if (item?.category_id) return item.category_id;
+      if (type.includes("reference_segment_timing") || sourceId.includes("reference_segment_timing")) return "route_timing";
       if (category === "checkpoint") return "checkpoints";
       if (category === "segment") return "segments";
       if (category === "mcp") return "mcp";
@@ -2963,6 +2966,14 @@
       }
       if (item?.evidence_type === "post_analysis_capability_segment") {
         return `${Math.round(item.moving_time_s || 0)}s moving | ${Math.round(item.rest_time_s || 0)}s rest`;
+      }
+      if (item?.evidence_type === "pretrip_reference_segment_timing_segment") {
+        const minutes = item.duration_minutes || {};
+        const guide = item.route_guide_comparison || {};
+        return `${item.sample_count || 0} samples | min ${minutes.min ?? "-"} / p50 ${minutes.p50 ?? "-"} / p75 ${minutes.p75 ?? "-"} / max ${minutes.max ?? "-"} min | guide ${guide.guide_duration_minutes ?? "-"} min`;
+      }
+      if (item?.evidence_type === "pretrip_reference_segment_timing") {
+        return `${item.counts?.usable_segment_count || 0} segments | ${item.counts?.measurement_count || 0} samples | aggregate only`;
       }
       if (item?.distance_m) return `${Math.round(item.distance_m)}m | ${item.review_state || item.status || "candidate"}`;
       return item?.source_path || item?.status || "candidate evidence";
@@ -3433,7 +3444,10 @@
       if (node.classList.contains("risk-ribbon")) base = 3.35;
       if (node.classList.contains("risk-heatmap")) base = 4.1;
       if (node.classList.contains("risk-delta")) base = 2.9;
-      if (node.classList.contains("map-highlight")) base = Math.min(base, 2.8);
+      if (node.classList.contains("map-highlight")) {
+        const tag = (node.tagName || "").toLowerCase();
+        base = tag === "circle" ? Math.max(base, 2.6) : Math.max(base, 4.4);
+      }
       const factor = scale >= 128 ? 0.46 : scale >= 64 ? 0.6 : scale >= 32 ? 0.74 : 1;
       return Math.max(1.0, base * factor);
     }
@@ -5831,7 +5845,10 @@
       window.clearTimeout(treeClickFocusTimer);
       selectEvidence(item);
       treeClickFocusTimer = window.setTimeout(() => {
-        focusMapFor(item, {label: false});
+        const focusOptions = item?.evidence_type === "pretrip_reference_segment_timing_segment"
+          ? {label: false, preserveZoom: false}
+          : {label: false};
+        focusMapFor(item, focusOptions);
         treeClickFocusTimer = null;
       }, 180);
     }
@@ -6120,6 +6137,10 @@
         label: item.label || item.category_id,
         sublabel: `${item.count || 0} evidence | ${item.available ? "available" : "empty"}`
       }), false, "timeline");
+      appendEvidenceTreeGroup(tree, "default", "Reference Segment Timing", view.reference_segment_timing?.segments || [], item => ({
+        label: item.label || item.segment_id,
+        sublabel: `${item.sample_count || 0} samples | min ${item.duration_minutes?.min ?? "-"} / p50 ${item.duration_minutes?.p50 ?? "-"} / p75 ${item.duration_minutes?.p75 ?? "-"} / max ${item.duration_minutes?.max ?? "-"} min | guide ${item.route_guide_comparison?.guide_duration_minutes ?? "-"} min`
+      }), false, "timeline");
       appendEvidenceTreeGroup(tree, "default", "Checkpoints", view.checkpoints, item => ({
         label: item.label || item.candidate_id,
         sublabel: `${item.checkpoint_type} | ${item.review_state}`
@@ -6258,6 +6279,7 @@
             ["GIS CP Areas", `${view.gis_perception_timeline?.counts?.nearby_group_count || 0} groups`],
             ["MCP", `${view.major_critical_points?.counts?.mcp_candidate_count || 0} critical / ${view.major_critical_points?.counts?.dense_checkpoint_count || 0} dense CP`],
             ["Reference GPX", `${view.reference_tracks?.reference_track_count || 0} tracks`],
+            ["Route Timing", `${view.reference_segment_timing?.counts?.usable_segment_count || 0} segments / ${view.reference_segment_timing?.counts?.measurement_count || 0} samples`],
             ["Weather", view.weather.status],
             ["Raw samples", "summary only"]
           ]

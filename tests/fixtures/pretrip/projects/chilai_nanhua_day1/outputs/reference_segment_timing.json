@@ -1,0 +1,2959 @@
+{
+  "artifact_kind": "pretrip_reference_segment_timing",
+  "boundary": {
+    "candidate_only": true,
+    "guide_time_is_authoritative_truth": false,
+    "historical_gpx_is_actual_user_track": false,
+    "medical_diagnosis": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase1_runtime_safety_truth": false,
+    "phase2_brain_writeback_allowed": false,
+    "pretrip_candidate_evidence_only": true,
+    "runtime_safety_truth": false,
+    "safety_api_called": false
+  },
+  "checkpoint_match_quality": {
+    "junction": {
+      "classified_waypoint_count": 14,
+      "cluster_count": 2,
+      "coordinates_embedded": false,
+      "label": "天池岔路",
+      "main_cluster_source_count": 13,
+      "main_cluster_waypoint_count": 13
+    },
+    "lodge": {
+      "classified_waypoint_count": 26,
+      "cluster_count": 3,
+      "coordinates_embedded": false,
+      "label": "天池山莊",
+      "main_cluster_source_count": 21,
+      "main_cluster_waypoint_count": 24
+    },
+    "nanhua": {
+      "classified_waypoint_count": 14,
+      "cluster_count": 1,
+      "coordinates_embedded": false,
+      "label": "南華山",
+      "main_cluster_source_count": 14,
+      "main_cluster_waypoint_count": 14
+    },
+    "qilai_south": {
+      "classified_waypoint_count": 17,
+      "cluster_count": 2,
+      "coordinates_embedded": false,
+      "label": "奇萊南峰",
+      "main_cluster_source_count": 16,
+      "main_cluster_waypoint_count": 16
+    },
+    "trailhead": {
+      "classified_waypoint_count": 22,
+      "cluster_count": 2,
+      "coordinates_embedded": false,
+      "label": "屯原登山口",
+      "main_cluster_source_count": 19,
+      "main_cluster_waypoint_count": 19
+    },
+    "yunhai": {
+      "classified_waypoint_count": 25,
+      "cluster_count": 2,
+      "coordinates_embedded": false,
+      "label": "雲海保線所",
+      "main_cluster_source_count": 20,
+      "main_cluster_waypoint_count": 21
+    }
+  },
+  "counts": {
+    "checkpoint_count": 6,
+    "distance_rejected_measurement_count": 5,
+    "existing_source_file_count": 24,
+    "measurement_count": 48,
+    "segment_count": 8,
+    "source_file_count": 24,
+    "timed_source_file_count": 23,
+    "track_boundary_crossed_measurement_count": 13,
+    "usable_segment_count": 8
+  },
+  "data_quality": {
+    "distance_filter_applied": true,
+    "existing_source_file_count": 24,
+    "live_network_calls_made": false,
+    "measurement_count": 48,
+    "outlier_policy": "reject_measurements_outside_segment_distance_filter",
+    "source_file_count": 24,
+    "timed_source_file_count": 23,
+    "usable_segment_count": 8
+  },
+  "evidence_type": "pretrip_reference_segment_timing",
+  "method": {
+    "checkpoint_cluster_radius_m": 350.0,
+    "checkpoint_match_radius_m": 200.0,
+    "checkpoint_source": "gpx_waypoint_name_cluster",
+    "distance_basis": "trackline_distance_between_checkpoint_passages",
+    "distance_filter_applied": true,
+    "duration_basis": "nearest_trackpoint_to_checkpoint_centroid",
+    "guide_time_basis": "route_guide_timing_shortest_path",
+    "track_segment_boundary_crossing_allowed": true,
+    "track_segment_boundary_crossing_is_timing_only": true,
+    "visit_split_gap_minutes": 45
+  },
+  "notes": [
+    "Reference segment timing is derived from historical GPX trackpoint times and route-guide candidates.",
+    "Durations are aggregate pretrip evidence for comparison only; raw GPX, coordinates, and precise timestamps are not embedded."
+  ],
+  "privacy": {
+    "aggregate_only": true,
+    "coordinates_embedded": false,
+    "precise_timestamps_embedded": false,
+    "raw_gpx_embedded_in_json": false,
+    "raw_gpx_xml_embedded": false,
+    "source_filenames_embedded": true,
+    "source_original_paths_embedded": false
+  },
+  "project_id": "chilai_nanhua_day1",
+  "route_guide_timing_sha256": "0d418dcc2d236236749bb9ef84a8d6a97ecedec454ce9f8e4cb8b3cdf2bf32c4",
+  "route_guide_timing_source_path": "candidates/route_guide_timing.json",
+  "schema_version": "pretrip_reference_segment_timing.v1",
+  "segments": [
+    {
+      "boundary": {
+        "candidate_only": true,
+        "historical_gpx_is_actual_user_track": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false
+      },
+      "distance_filter_km": {
+        "max": 6.2,
+        "min": 3.5
+      },
+      "duration_minutes": {
+        "max": 153.7,
+        "min": 88.2,
+        "p50": 106.4,
+        "p75": 135.5
+      },
+      "from_node_name": "屯原登山口",
+      "label": "屯原登山口 -> 雲海保線所",
+      "max_duration_filter_minutes": 360.0,
+      "measurements": [
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 88.2,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.trailhead_to_yunhai.gpx.source.chilai_nanhua_day1.reference.005",
+          "model_output_sha256": "75aec2f4dbc21175fc50505d17ab8d7229ca0a79c873a2860777c57ed05d3cb2",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.005",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+              "source_role": "reference_track",
+              "source_sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "C_UsersltcDesktop20141010奇萊南峰.gdb.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.005",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+            "gpx.source.chilai_nanhua_day1.reference.005",
+            "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 4.65,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 94.5,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.trailhead_to_yunhai.gpx.source.chilai_nanhua_day1.reference.009",
+          "model_output_sha256": "ab33228ccbc22361c4d0acdfc2328a12c233f928aee7ae5158032de3d1a97cb5",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "99e7ed44d7f9d7179cbb5dd9d5360afa9da98df37de045c18ec3bfd81ad2cc66",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.009",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.009",
+              "source_role": "reference_track",
+              "source_sha256": "99e7ed44d7f9d7179cbb5dd9d5360afa9da98df37de045c18ec3bfd81ad2cc66",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "一日廬山3寶(金牌).gdb.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.009",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.009",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.009",
+            "gpx.source.chilai_nanhua_day1.reference.009",
+            "99e7ed44d7f9d7179cbb5dd9d5360afa9da98df37de045c18ec3bfd81ad2cc66"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 4.02,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 106.4,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.trailhead_to_yunhai.gpx.source.chilai_nanhua_day1.reference.018",
+          "model_output_sha256": "050b187846dc6b824997e37ed5d72f68a4c14d604f90d1670acdcc2998e5ad89",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "fb5fbfe72150d9998ae2ca22394011fdc26826d0607d3b1a96978dbcb71213e8",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.018",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.018",
+              "source_role": "reference_track",
+              "source_sha256": "fb5fbfe72150d9998ae2ca22394011fdc26826d0607d3b1a96978dbcb71213e8",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.018",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.018",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.018",
+            "gpx.source.chilai_nanhua_day1.reference.018",
+            "fb5fbfe72150d9998ae2ca22394011fdc26826d0607d3b1a96978dbcb71213e8"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 4.68,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 106.4,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.trailhead_to_yunhai.gpx.source.chilai_nanhua_day1.reference.020",
+          "model_output_sha256": "ec4dbb660c8a66a814a0fb3c4761230653232789e8713193294d1e5dfa275ca9",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.020",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+              "source_role": "reference_track",
+              "source_sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.020",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+            "gpx.source.chilai_nanhua_day1.reference.020",
+            "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 4.68,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 120.3,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.trailhead_to_yunhai.gpx.source.chilai_nanhua_day1.reference.014",
+          "model_output_sha256": "8a0a5c3b7390e78d34107eb33b264d43df7e0e41986956786997b8ee6667653a",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.014",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+              "source_role": "reference_track",
+              "source_sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰南華山(金牌).gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.014",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+            "gpx.source.chilai_nanhua_day1.reference.014",
+            "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 5.11,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 150.7,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.trailhead_to_yunhai.gpx.source.chilai_nanhua_day1.primary",
+          "model_output_sha256": "b41097d2a9436668e98bbb9cef1a5ca5dfe7d7ebbb48b5b9cf1729ee25bd3be8",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.primary",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.primary",
+              "source_role": "golden_route_reference",
+              "source_sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍縱走.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.primary",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.primary",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.primary",
+            "gpx.source.chilai_nanhua_day1.primary",
+            "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7"
+          ],
+          "source_role": "golden_route_reference",
+          "stale_risk": "medium",
+          "track_distance_km": 4.52,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 153.7,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.trailhead_to_yunhai.gpx.source.chilai_nanhua_day1.reference.007",
+          "model_output_sha256": "ab6f9f098e0d9cc23cb3c7bfb6c508b5b352d5e937e7b7e3ee15e85b2e0283ad",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.007",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+              "source_role": "reference_track",
+              "source_sha256": "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "Lucky／200226 卡賀爾山。深堀山_p.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.007",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+            "gpx.source.chilai_nanhua_day1.reference.007",
+            "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 4.77,
+          "track_segment_boundary_crossed": false
+        }
+      ],
+      "rejected_summary": {
+        "distance_rejected_count": 0,
+        "distance_rejected_samples": [],
+        "track_boundary_crossed_count": 0
+      },
+      "route_guide_comparison": {
+        "delta_minutes": {
+          "max_minus_guide": 33.7,
+          "min_minus_guide": -31.8,
+          "p50_minus_guide": -13.6,
+          "p75_minus_guide": 15.5
+        },
+        "guide_duration_minutes": 120,
+        "guide_path_candidate_ids": [
+          "timing.g11_nenggao.003"
+        ],
+        "status": "available"
+      },
+      "sample_count": 7,
+      "segment_id": "ref_segment_timing.chilai_nanhua.trailhead_to_yunhai",
+      "source_count": 7,
+      "to_node_name": "雲海保線所",
+      "track_distance_km": {
+        "max": 5.11,
+        "min": 4.02
+      }
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "historical_gpx_is_actual_user_track": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false
+      },
+      "distance_filter_km": {
+        "max": 11.8,
+        "min": 7.0
+      },
+      "duration_minutes": {
+        "max": 287.4,
+        "min": 215.3,
+        "p50": 237.3,
+        "p75": 251.9
+      },
+      "from_node_name": "雲海保線所",
+      "label": "雲海保線所 -> 天池山莊",
+      "max_duration_filter_minutes": 540.0,
+      "measurements": [
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 215.3,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.005",
+          "model_output_sha256": "6fbb112d4c7f434af37b3c8f13e60dd03e1f031dd95ccc58faf46510d68c1ce7",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.005",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+              "source_role": "reference_track",
+              "source_sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "C_UsersltcDesktop20141010奇萊南峰.gdb.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.005",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+            "gpx.source.chilai_nanhua_day1.reference.005",
+            "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 8.9,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 216.3,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.018",
+          "model_output_sha256": "f89ad59d9e973612c097266ec007fbf886c1f1805b9449b19182501cb53a6401",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "fb5fbfe72150d9998ae2ca22394011fdc26826d0607d3b1a96978dbcb71213e8",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.018",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.018",
+              "source_role": "reference_track",
+              "source_sha256": "fb5fbfe72150d9998ae2ca22394011fdc26826d0607d3b1a96978dbcb71213e8",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.018",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.018",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.018",
+            "gpx.source.chilai_nanhua_day1.reference.018",
+            "fb5fbfe72150d9998ae2ca22394011fdc26826d0607d3b1a96978dbcb71213e8"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 8.89,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 216.3,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.020",
+          "model_output_sha256": "746ad84510c7a587f5211c518baba3a626478207b66bcb516829bbc6427c13a9",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.020",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+              "source_role": "reference_track",
+              "source_sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.020",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+            "gpx.source.chilai_nanhua_day1.reference.020",
+            "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 8.89,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 232.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.003",
+          "model_output_sha256": "d99095d7314782606c8c9b1c9baabc3d707e1b7355ba5365c3969db80e789f8f",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.003",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+              "source_role": "reference_track",
+              "source_sha256": "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "990418能高安東軍GDB檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.003",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+            "gpx.source.chilai_nanhua_day1.reference.003",
+            "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 8.09,
+          "track_segment_boundary_crossed": true
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 241.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.007",
+          "model_output_sha256": "09663b7bc642d945d0b912e52623799e934b6ced70d57e4a3d00df38e8c56211",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.007",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+              "source_role": "reference_track",
+              "source_sha256": "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "Lucky／200226 卡賀爾山。深堀山_p.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.007",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+            "gpx.source.chilai_nanhua_day1.reference.007",
+            "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 8.81,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 243.9,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.014",
+          "model_output_sha256": "1d288feb395d668e2f6e410bcc13a34ed176c93947b56a92b6e212ba7988c4aa",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.014",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+              "source_role": "reference_track",
+              "source_sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰南華山(金牌).gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.014",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+            "gpx.source.chilai_nanhua_day1.reference.014",
+            "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 9.61,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 275.9,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.006",
+          "model_output_sha256": "892fdf8627ee6cb9af5c3deb95b4c5fa738febf6570d3703067838135f84c05f",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "2d57a1d949547b9f17a1c2a5470795d9d8fd0fff1de09924e40b2f5bd7bfbbaf",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.006",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.006",
+              "source_role": "reference_track",
+              "source_sha256": "2d57a1d949547b9f17a1c2a5470795d9d8fd0fff1de09924e40b2f5bd7bfbbaf",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "GoLife_Run_gpx_2016-11-12.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.006",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.006",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.006",
+            "gpx.source.chilai_nanhua_day1.reference.006",
+            "2d57a1d949547b9f17a1c2a5470795d9d8fd0fff1de09924e40b2f5bd7bfbbaf"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 9.82,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 287.4,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.primary",
+          "model_output_sha256": "16885e1b60ce6ac07292c782a4372a7c8ae61d6cf08b5f1fad43c54463dd4979",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.primary",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.primary",
+              "source_role": "golden_route_reference",
+              "source_sha256": "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍縱走.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.primary",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.primary",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.primary",
+            "gpx.source.chilai_nanhua_day1.primary",
+            "a270bbc769c9c521c4bb839a6230fb3760c37478c5b3ebe57f36f5d8755f6ee7"
+          ],
+          "source_role": "golden_route_reference",
+          "stale_risk": "medium",
+          "track_distance_km": 8.75,
+          "track_segment_boundary_crossed": false
+        }
+      ],
+      "rejected_summary": {
+        "distance_rejected_count": 2,
+        "distance_rejected_samples": [
+          {
+            "candidate_only": true,
+            "confidence": "medium",
+            "duration_minutes": 250.1,
+            "extractor_version": "pretrip_reference_segment_timing.v1",
+            "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.013",
+            "model_output_sha256": "49b4668e46194ed40eefa91f7b6a57683d800af8e2388cff524f1129649e391b",
+            "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+            "privacy": {
+              "coordinates_embedded": false,
+              "precise_timestamps_embedded": false,
+              "raw_gpx_embedded_in_json": false,
+              "source_original_path_embedded": false
+            },
+            "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+            "reject_reason": "outside_segment_distance_filter",
+            "review_state": "projection_only",
+            "runtime_safety_truth": false,
+            "sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+            "source_attribution": [
+              {
+                "candidate_only": true,
+                "confidence": "medium",
+                "runtime_safety_truth": false,
+                "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.013",
+                "source_kind": "historical_gpx_reference_segment_timing",
+                "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+                "source_role": "reference_track",
+                "source_sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+                "stale_risk": "medium"
+              }
+            ],
+            "source_filename": "奇萊南峰、南華山、光被八表碑.gpx",
+            "source_id": "gpx.source.chilai_nanhua_day1.reference.013",
+            "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+            "source_provider": "operator_supplied_local_file",
+            "source_refs": [
+              "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+              "gpx.source.chilai_nanhua_day1.reference.013",
+              "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab"
+            ],
+            "source_role": "reference_track",
+            "stale_risk": "medium",
+            "track_distance_km": 22.76,
+            "track_segment_boundary_crossed": true
+          },
+          {
+            "candidate_only": true,
+            "confidence": "medium",
+            "duration_minutes": 250.1,
+            "extractor_version": "pretrip_reference_segment_timing.v1",
+            "measurement_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge.gpx.source.chilai_nanhua_day1.reference.015",
+            "model_output_sha256": "ccf8648a87ea3b0f54f4e803ab630e32fae1bdd4a4ac77c2aa90d85baf49dd93",
+            "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+            "privacy": {
+              "coordinates_embedded": false,
+              "precise_timestamps_embedded": false,
+              "raw_gpx_embedded_in_json": false,
+              "source_original_path_embedded": false
+            },
+            "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+            "reject_reason": "outside_segment_distance_filter",
+            "review_state": "projection_only",
+            "runtime_safety_truth": false,
+            "sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+            "source_attribution": [
+              {
+                "candidate_only": true,
+                "confidence": "medium",
+                "runtime_safety_truth": false,
+                "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.015",
+                "source_kind": "historical_gpx_reference_segment_timing",
+                "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+                "source_role": "reference_track",
+                "source_sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+                "stale_risk": "medium"
+              }
+            ],
+            "source_filename": "奇萊南華.gpx.gpx",
+            "source_id": "gpx.source.chilai_nanhua_day1.reference.015",
+            "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+            "source_provider": "operator_supplied_local_file",
+            "source_refs": [
+              "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+              "gpx.source.chilai_nanhua_day1.reference.015",
+              "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703"
+            ],
+            "source_role": "reference_track",
+            "stale_risk": "medium",
+            "track_distance_km": 22.72,
+            "track_segment_boundary_crossed": true
+          }
+        ],
+        "track_boundary_crossed_count": 3
+      },
+      "route_guide_comparison": {
+        "delta_minutes": {
+          "max_minus_guide": 77.4,
+          "min_minus_guide": 5.3,
+          "p50_minus_guide": 27.3,
+          "p75_minus_guide": 41.9
+        },
+        "guide_duration_minutes": 210,
+        "guide_path_candidate_ids": [
+          "timing.g11_nenggao.004"
+        ],
+        "status": "available"
+      },
+      "sample_count": 8,
+      "segment_id": "ref_segment_timing.chilai_nanhua.yunhai_to_lodge",
+      "source_count": 8,
+      "to_node_name": "天池山莊",
+      "track_distance_km": {
+        "max": 9.82,
+        "min": 8.09
+      }
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "historical_gpx_is_actual_user_track": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false
+      },
+      "distance_filter_km": {
+        "max": 2.1,
+        "min": 0.5
+      },
+      "duration_minutes": {
+        "max": 117.0,
+        "min": 26.4,
+        "p50": 46.2,
+        "p75": 93.8
+      },
+      "from_node_name": "天池山莊",
+      "label": "天池山莊 -> 天池岔路",
+      "max_duration_filter_minutes": 180.0,
+      "measurements": [
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 26.4,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction.gpx.source.chilai_nanhua_day1.reference.013",
+          "model_output_sha256": "a426846106523567e5bcc3b67059003ca24982376c8bebaa67819c0e78f77eca",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.013",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+              "source_role": "reference_track",
+              "source_sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰、南華山、光被八表碑.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.013",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+            "gpx.source.chilai_nanhua_day1.reference.013",
+            "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 0.86,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 26.4,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction.gpx.source.chilai_nanhua_day1.reference.015",
+          "model_output_sha256": "140c286e3a319002212684c970b62b2db49c47236ac140d41e1ad45c76c3ea67",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.015",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+              "source_role": "reference_track",
+              "source_sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南華.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.015",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+            "gpx.source.chilai_nanhua_day1.reference.015",
+            "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 0.86,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 38.5,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction.gpx.source.chilai_nanhua_day1.reference.019",
+          "model_output_sha256": "69fbcc5700af742c0779904058fc1af07d091e268d0697e6953540cfae688a38",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.019",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+              "source_role": "reference_track",
+              "source_sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.019",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+            "gpx.source.chilai_nanhua_day1.reference.019",
+            "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 0.9,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 41.4,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction.gpx.source.chilai_nanhua_day1.reference.007",
+          "model_output_sha256": "9589e50d0c470da5bb469a4e62a9449a5179daa870bfe0b101c1e451822b4b82",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.007",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+              "source_role": "reference_track",
+              "source_sha256": "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "Lucky／200226 卡賀爾山。深堀山_p.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.007",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.007",
+            "gpx.source.chilai_nanhua_day1.reference.007",
+            "25bb956166fc75b870f8b5df3090f30d67eb57080883b03d67989628c3b4edf5"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.14,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 51.0,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction.gpx.source.chilai_nanhua_day1.reference.014",
+          "model_output_sha256": "2ab09d5a4cc8015d18a40c47d4495fe8f65a04d2ab657e040fac76635c6ab2cc",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.014",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+              "source_role": "reference_track",
+              "source_sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰南華山(金牌).gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.014",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+            "gpx.source.chilai_nanhua_day1.reference.014",
+            "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.45,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 87.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction.gpx.source.chilai_nanhua_day1.reference.003",
+          "model_output_sha256": "91110db1ccb00bd0621052207bfdf1eb03cf61cb4bc5dcdb4dc0da5c4cb7b485",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.003",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+              "source_role": "reference_track",
+              "source_sha256": "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "990418能高安東軍GDB檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.003",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+            "gpx.source.chilai_nanhua_day1.reference.003",
+            "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.24,
+          "track_segment_boundary_crossed": true
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 112.0,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction.gpx.source.chilai_nanhua_day1.reference.005",
+          "model_output_sha256": "0080841005d0fbbb44aa153451b45d3b6d50dd489c88f66d65babbf5ac3545cb",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.005",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+              "source_role": "reference_track",
+              "source_sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "C_UsersltcDesktop20141010奇萊南峰.gdb.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.005",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+            "gpx.source.chilai_nanhua_day1.reference.005",
+            "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.14,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 117.0,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction.gpx.source.chilai_nanhua_day1.reference.020",
+          "model_output_sha256": "d2f397348142781a83e8790595824b415f35428fceaaf1827464e43f5a6b656e",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.020",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+              "source_role": "reference_track",
+              "source_sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.020",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+            "gpx.source.chilai_nanhua_day1.reference.020",
+            "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.13,
+          "track_segment_boundary_crossed": false
+        }
+      ],
+      "rejected_summary": {
+        "distance_rejected_count": 0,
+        "distance_rejected_samples": [],
+        "track_boundary_crossed_count": 1
+      },
+      "route_guide_comparison": {
+        "delta_minutes": {
+          "max_minus_guide": 57.0,
+          "min_minus_guide": -33.6,
+          "p50_minus_guide": -13.8,
+          "p75_minus_guide": 33.8
+        },
+        "guide_duration_minutes": 60,
+        "guide_path_candidate_ids": [
+          "timing.g11_nenggao.013"
+        ],
+        "status": "available"
+      },
+      "sample_count": 8,
+      "segment_id": "ref_segment_timing.chilai_nanhua.lodge_to_junction",
+      "source_count": 8,
+      "to_node_name": "天池岔路",
+      "track_distance_km": {
+        "max": 1.45,
+        "min": 0.86
+      }
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "historical_gpx_is_actual_user_track": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false
+      },
+      "distance_filter_km": {
+        "max": 3.0,
+        "min": 1.2
+      },
+      "duration_minutes": {
+        "max": 82.0,
+        "min": 59.5,
+        "p50": 64.3,
+        "p75": 75.5
+      },
+      "from_node_name": "天池岔路",
+      "label": "天池岔路 -> 奇萊南峰",
+      "max_duration_filter_minutes": 240.0,
+      "measurements": [
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 59.5,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_qilai_south.gpx.source.chilai_nanhua_day1.reference.020",
+          "model_output_sha256": "81b33e505b5eb1a9af1f2235ab4af325af1427fe9dba82f313340e28d6fb00e2",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.020",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+              "source_role": "reference_track",
+              "source_sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.020",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+            "gpx.source.chilai_nanhua_day1.reference.020",
+            "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.84,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 61.9,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_qilai_south.gpx.source.chilai_nanhua_day1.reference.013",
+          "model_output_sha256": "11b59a303bd6ee52560b235f64dd5903a2891cd9488c1299eae46c64d3872991",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.013",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+              "source_role": "reference_track",
+              "source_sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰、南華山、光被八表碑.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.013",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+            "gpx.source.chilai_nanhua_day1.reference.013",
+            "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.94,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 61.9,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_qilai_south.gpx.source.chilai_nanhua_day1.reference.015",
+          "model_output_sha256": "833224d2c4b274a805e6c10af504c3b8c517489947672542323d5007d6b986e2",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.015",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+              "source_role": "reference_track",
+              "source_sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南華.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.015",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+            "gpx.source.chilai_nanhua_day1.reference.015",
+            "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.94,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 64.3,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_qilai_south.gpx.source.chilai_nanhua_day1.reference.019",
+          "model_output_sha256": "92d9abab4c3f536d95d134a9dce5d6fc0120768f627c36a8b4a376bcc38ed155",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.019",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+              "source_role": "reference_track",
+              "source_sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.019",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+            "gpx.source.chilai_nanhua_day1.reference.019",
+            "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.63,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 71.7,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_qilai_south.gpx.source.chilai_nanhua_day1.reference.014",
+          "model_output_sha256": "2550178401b566e37e51ef36e00120a1009215a7b3702e497dcf59e496fedf88",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.014",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+              "source_role": "reference_track",
+              "source_sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰南華山(金牌).gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.014",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+            "gpx.source.chilai_nanhua_day1.reference.014",
+            "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 2.08,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 79.2,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_qilai_south.gpx.source.chilai_nanhua_day1.reference.003",
+          "model_output_sha256": "a1d24922b70501d9ccfdad746689ff37a2d2a26982f34be385cd42ac653cddba",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.003",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+              "source_role": "reference_track",
+              "source_sha256": "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "990418能高安東軍GDB檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.003",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.003",
+            "gpx.source.chilai_nanhua_day1.reference.003",
+            "969284361f45ac9f2859a12bbab8f767ecdf1d65d76103c4a195feb4e0ed523c"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.86,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 82.0,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_qilai_south.gpx.source.chilai_nanhua_day1.reference.005",
+          "model_output_sha256": "91e6c87a01abe1271009d2284525fc309cfa62b62316ecffe7f7a12771142945",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.005",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+              "source_role": "reference_track",
+              "source_sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "C_UsersltcDesktop20141010奇萊南峰.gdb.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.005",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+            "gpx.source.chilai_nanhua_day1.reference.005",
+            "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 2.03,
+          "track_segment_boundary_crossed": false
+        }
+      ],
+      "rejected_summary": {
+        "distance_rejected_count": 0,
+        "distance_rejected_samples": [],
+        "track_boundary_crossed_count": 0
+      },
+      "route_guide_comparison": {
+        "delta_minutes": {
+          "max_minus_guide": 22.0,
+          "min_minus_guide": -0.5,
+          "p50_minus_guide": 4.3,
+          "p75_minus_guide": 15.5
+        },
+        "guide_duration_minutes": 60,
+        "guide_path_candidate_ids": [
+          "timing.g11_nenggao.014",
+          "timing.g11_nenggao.015"
+        ],
+        "status": "available"
+      },
+      "sample_count": 7,
+      "segment_id": "ref_segment_timing.chilai_nanhua.junction_to_qilai_south",
+      "source_count": 7,
+      "to_node_name": "奇萊南峰",
+      "track_distance_km": {
+        "max": 2.08,
+        "min": 1.63
+      }
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "historical_gpx_is_actual_user_track": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false
+      },
+      "distance_filter_km": {
+        "max": 3.0,
+        "min": 1.2
+      },
+      "duration_minutes": {
+        "max": 131.6,
+        "min": 51.3,
+        "p50": 84.9,
+        "p75": 90.7
+      },
+      "from_node_name": "奇萊南峰",
+      "label": "奇萊南峰 -> 天池岔路",
+      "max_duration_filter_minutes": 180.0,
+      "measurements": [
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 51.3,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.qilai_south_to_junction.gpx.source.chilai_nanhua_day1.reference.020",
+          "model_output_sha256": "5c249b33c1376ff2cd9e7a8b4edd9317bf99e29a01c7f836cb03f2ee54e3d93b",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.020",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+              "source_role": "reference_track",
+              "source_sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.020",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+            "gpx.source.chilai_nanhua_day1.reference.020",
+            "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.74,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 64.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.qilai_south_to_junction.gpx.source.chilai_nanhua_day1.reference.005",
+          "model_output_sha256": "9e2d7cb770401d02060778994730139b9f2ff87291419e8dacd889fadbad681e",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.005",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+              "source_role": "reference_track",
+              "source_sha256": "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "C_UsersltcDesktop20141010奇萊南峰.gdb.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.005",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.005",
+            "gpx.source.chilai_nanhua_day1.reference.005",
+            "88dba87e66279cca6351e88d5348c4ecd59407de4d53ff2a79fda576014fadac"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.78,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 84.9,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.qilai_south_to_junction.gpx.source.chilai_nanhua_day1.reference.019",
+          "model_output_sha256": "2d86baf80a53f02677d07ffec636216769b33e49cbca6a47dc9cf0770fa17f08",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.019",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+              "source_role": "reference_track",
+              "source_sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.019",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+            "gpx.source.chilai_nanhua_day1.reference.019",
+            "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.29,
+          "track_segment_boundary_crossed": true
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 90.7,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.qilai_south_to_junction.gpx.source.chilai_nanhua_day1.reference.014",
+          "model_output_sha256": "cd1fc9b09647c9d10a8caf0c7990917b1db6cd24af60914da6b583632827fab5",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.014",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+              "source_role": "reference_track",
+              "source_sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰南華山(金牌).gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.014",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+            "gpx.source.chilai_nanhua_day1.reference.014",
+            "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 2.33,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 131.6,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.qilai_south_to_junction.gpx.source.chilai_nanhua_day1.reference.012",
+          "model_output_sha256": "61dd5f191bf1afa7030356c324c0c9268f10dc1aa1c855ce060863b142c079f4",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.012",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+              "source_role": "reference_track",
+              "source_sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊北壁下屏風山.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.012",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+            "gpx.source.chilai_nanhua_day1.reference.012",
+            "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 2.34,
+          "track_segment_boundary_crossed": true
+        }
+      ],
+      "rejected_summary": {
+        "distance_rejected_count": 1,
+        "distance_rejected_samples": [
+          {
+            "candidate_only": true,
+            "confidence": "medium",
+            "duration_minutes": 111.3,
+            "extractor_version": "pretrip_reference_segment_timing.v1",
+            "measurement_id": "ref_segment_timing.chilai_nanhua.qilai_south_to_junction.gpx.source.chilai_nanhua_day1.reference.004",
+            "model_output_sha256": "b2bb4c44f9730e9daca24897775c4060b99ffa51bd6ea41c3b1db9e351bc4382",
+            "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+            "privacy": {
+              "coordinates_embedded": false,
+              "precise_timestamps_embedded": false,
+              "raw_gpx_embedded_in_json": false,
+              "source_original_path_embedded": false
+            },
+            "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+            "reject_reason": "outside_segment_distance_filter",
+            "review_state": "projection_only",
+            "runtime_safety_truth": false,
+            "sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+            "source_attribution": [
+              {
+                "candidate_only": true,
+                "confidence": "medium",
+                "runtime_safety_truth": false,
+                "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.004",
+                "source_kind": "historical_gpx_reference_segment_timing",
+                "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+                "source_role": "reference_track",
+                "source_sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+                "stale_risk": "medium"
+              }
+            ],
+            "source_filename": "C_Documents and Settings_Administrator_桌面_20111127-29.gdb-GPX自動轉檔.gpx",
+            "source_id": "gpx.source.chilai_nanhua_day1.reference.004",
+            "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+            "source_provider": "operator_supplied_local_file",
+            "source_refs": [
+              "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+              "gpx.source.chilai_nanhua_day1.reference.004",
+              "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef"
+            ],
+            "source_role": "reference_track",
+            "stale_risk": "medium",
+            "track_distance_km": 17.85,
+            "track_segment_boundary_crossed": true
+          }
+        ],
+        "track_boundary_crossed_count": 3
+      },
+      "route_guide_comparison": {
+        "delta_minutes": {
+          "max_minus_guide": 56.6,
+          "min_minus_guide": -23.7,
+          "p50_minus_guide": 9.9,
+          "p75_minus_guide": 15.7
+        },
+        "guide_duration_minutes": 75,
+        "guide_path_candidate_ids": [
+          "timing.g11_nenggao.015",
+          "timing.g11_nenggao.014"
+        ],
+        "status": "available"
+      },
+      "sample_count": 5,
+      "segment_id": "ref_segment_timing.chilai_nanhua.qilai_south_to_junction",
+      "source_count": 5,
+      "to_node_name": "天池岔路",
+      "track_distance_km": {
+        "max": 2.34,
+        "min": 1.29
+      }
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "historical_gpx_is_actual_user_track": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false
+      },
+      "distance_filter_km": {
+        "max": 2.6,
+        "min": 1.0
+      },
+      "duration_minutes": {
+        "max": 57.7,
+        "min": 34.6,
+        "p50": 40.0,
+        "p75": 48.0
+      },
+      "from_node_name": "天池岔路",
+      "label": "天池岔路 -> 南華山",
+      "max_duration_filter_minutes": 180.0,
+      "measurements": [
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 34.6,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_nanhua.gpx.source.chilai_nanhua_day1.reference.012",
+          "model_output_sha256": "8b46491e5ad8a5ffa283c5c26e590531251086fbd24be70da0fcbf6ff50eb8ec",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.012",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+              "source_role": "reference_track",
+              "source_sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊北壁下屏風山.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.012",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+            "gpx.source.chilai_nanhua_day1.reference.012",
+            "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.65,
+          "track_segment_boundary_crossed": true
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 34.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_nanhua.gpx.source.chilai_nanhua_day1.reference.013",
+          "model_output_sha256": "936e08a90400402777a63afab2f3a9aa550493fe4402e41da19619db6f013f81",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.013",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+              "source_role": "reference_track",
+              "source_sha256": "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰、南華山、光被八表碑.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.013",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.013",
+            "gpx.source.chilai_nanhua_day1.reference.013",
+            "2fcace002e33dc0601e49f17a326d0ae886c667bdab31f082397a6e6ae006cab"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.45,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 34.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_nanhua.gpx.source.chilai_nanhua_day1.reference.015",
+          "model_output_sha256": "bc24bbbb36d305c398e1fbc73d7e2c1d8563f7fb8959db81dd70a4fa5c1eb7b3",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.015",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+              "source_role": "reference_track",
+              "source_sha256": "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南華.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.015",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.015",
+            "gpx.source.chilai_nanhua_day1.reference.015",
+            "27530b99b34ba1e73b8befaa47a1831641988c6307136c10f58f743d5af02703"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.45,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 40.0,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_nanhua.gpx.source.chilai_nanhua_day1.reference.020",
+          "model_output_sha256": "35395cf2830295fdfa770f62f2ca7595689f375be09ee83f49cdf7da9962c405",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.020",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+              "source_role": "reference_track",
+              "source_sha256": "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍.gpx.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.020",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.020",
+            "gpx.source.chilai_nanhua_day1.reference.020",
+            "5b07ce65357be6e77c425747ff5a23f78aef011a63fe82b2b337fe0c6e0e2b88"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.47,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 46.2,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_nanhua.gpx.source.chilai_nanhua_day1.reference.019",
+          "model_output_sha256": "4464eeba5b5a8146951150974e11555edb0f165dae24391fd1a9708096cb538f",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.019",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+              "source_role": "reference_track",
+              "source_sha256": "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "能高安東軍-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.019",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.019",
+            "gpx.source.chilai_nanhua_day1.reference.019",
+            "b6573a054c59981cfe8066a54976974c682fbbeebfb76ef9ed35a5c68ff1534a"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.39,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 49.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_nanhua.gpx.source.chilai_nanhua_day1.reference.014",
+          "model_output_sha256": "dc8bc16dd572d1cb040ffff0978e9de7621cc978f2488679c549ba1b038a7a5c",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.014",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+              "source_role": "reference_track",
+              "source_sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰南華山(金牌).gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.014",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+            "gpx.source.chilai_nanhua_day1.reference.014",
+            "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.66,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 57.7,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.junction_to_nanhua.gpx.source.chilai_nanhua_day1.reference.004",
+          "model_output_sha256": "d60fd36120437f0ea86d5c61dd8fcc07d30384ed9b8d520db2092b393b83484d",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.004",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+              "source_role": "reference_track",
+              "source_sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "C_Documents and Settings_Administrator_桌面_20111127-29.gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.004",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+            "gpx.source.chilai_nanhua_day1.reference.004",
+            "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 1.51,
+          "track_segment_boundary_crossed": false
+        }
+      ],
+      "rejected_summary": {
+        "distance_rejected_count": 0,
+        "distance_rejected_samples": [],
+        "track_boundary_crossed_count": 1
+      },
+      "route_guide_comparison": {
+        "delta_minutes": {
+          "max_minus_guide": 17.7,
+          "min_minus_guide": -5.4,
+          "p50_minus_guide": 0.0,
+          "p75_minus_guide": 8.0
+        },
+        "guide_duration_minutes": 40,
+        "guide_path_candidate_ids": [
+          "timing.g11_nenggao.016"
+        ],
+        "status": "available"
+      },
+      "sample_count": 7,
+      "segment_id": "ref_segment_timing.chilai_nanhua.junction_to_nanhua",
+      "source_count": 7,
+      "to_node_name": "南華山",
+      "track_distance_km": {
+        "max": 1.66,
+        "min": 1.39
+      }
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "historical_gpx_is_actual_user_track": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false
+      },
+      "distance_filter_km": {
+        "max": 4.0,
+        "min": 1.8
+      },
+      "duration_minutes": {
+        "max": 92.8,
+        "min": 82.2,
+        "p50": 88.8,
+        "p75": 90.8
+      },
+      "from_node_name": "南華山",
+      "label": "南華山 -> 天池山莊",
+      "max_duration_filter_minutes": 300.0,
+      "measurements": [
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 82.2,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.nanhua_to_lodge.gpx.source.chilai_nanhua_day1.reference.014",
+          "model_output_sha256": "5309b43a67773ea9b89db0a5a2e198053a9251984710fd9f743c26cc33e317f1",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.014",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+              "source_role": "reference_track",
+              "source_sha256": "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊南峰南華山(金牌).gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.014",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.014",
+            "gpx.source.chilai_nanhua_day1.reference.014",
+            "53fbaefac94b7755226cf15dfef66bb8d2b5c0f3a55016bd930b6d1a499ad14f"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 2.85,
+          "track_segment_boundary_crossed": false
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 88.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.nanhua_to_lodge.gpx.source.chilai_nanhua_day1.reference.012",
+          "model_output_sha256": "3f4c746e75baf845a67e941f67e98cd337d1c2c987c53d9c972cb0b6990f79ff",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.012",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+              "source_role": "reference_track",
+              "source_sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊北壁下屏風山.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.012",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+            "gpx.source.chilai_nanhua_day1.reference.012",
+            "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 2.59,
+          "track_segment_boundary_crossed": true
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 92.8,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.nanhua_to_lodge.gpx.source.chilai_nanhua_day1.reference.004",
+          "model_output_sha256": "e8a363ccd1e1206463bea5267ecd2cba3581055b41eda66c827c976bfc6e362b",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.004",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+              "source_role": "reference_track",
+              "source_sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "C_Documents and Settings_Administrator_桌面_20111127-29.gdb-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.004",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+            "gpx.source.chilai_nanhua_day1.reference.004",
+            "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 2.55,
+          "track_segment_boundary_crossed": false
+        }
+      ],
+      "rejected_summary": {
+        "distance_rejected_count": 0,
+        "distance_rejected_samples": [],
+        "track_boundary_crossed_count": 1
+      },
+      "route_guide_comparison": {
+        "delta_minutes": {
+          "max_minus_guide": 22.8,
+          "min_minus_guide": 12.2,
+          "p50_minus_guide": 18.8,
+          "p75_minus_guide": 20.8
+        },
+        "guide_duration_minutes": 70,
+        "guide_path_candidate_ids": [
+          "timing.g11_nenggao.016",
+          "timing.g11_nenggao.013"
+        ],
+        "status": "available"
+      },
+      "sample_count": 3,
+      "segment_id": "ref_segment_timing.chilai_nanhua.nanhua_to_lodge",
+      "source_count": 3,
+      "to_node_name": "天池山莊",
+      "track_distance_km": {
+        "max": 2.85,
+        "min": 2.55
+      }
+    },
+    {
+      "boundary": {
+        "candidate_only": true,
+        "historical_gpx_is_actual_user_track": false,
+        "phase1_runtime_mutation_allowed": false,
+        "runtime_safety_truth": false
+      },
+      "distance_filter_km": {
+        "max": 17.0,
+        "min": 10.0
+      },
+      "duration_minutes": {
+        "max": 298.2,
+        "min": 272.1,
+        "p50": 287.9,
+        "p75": 293.0
+      },
+      "from_node_name": "天池山莊",
+      "label": "天池山莊 -> 屯原登山口",
+      "max_duration_filter_minutes": 600.0,
+      "measurements": [
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 272.1,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_trailhead.gpx.source.chilai_nanhua_day1.reference.012",
+          "model_output_sha256": "2f9d4c2216b0e1fa4bcb9203476ec05804bd98c274ccc4667e44e9c79a418bc2",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.012",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+              "source_role": "reference_track",
+              "source_sha256": "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "奇萊北壁下屏風山.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.012",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.012",
+            "gpx.source.chilai_nanhua_day1.reference.012",
+            "739711660f95cae9c4f9c03a527f86741885bf951c8f1e74c664f4cc074297fc"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 15.33,
+          "track_segment_boundary_crossed": true
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 287.9,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_trailhead.gpx.source.chilai_nanhua_day1.reference.001",
+          "model_output_sha256": "799ab830c364419193999049c19673a1222d76060c41a5ea14cfcbf5a4b2a115",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "2e1bd1d887ae7e684b387b5c489053b4029ac81d1d1c569d333118e49d3a4d5c",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.001",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.001",
+              "source_role": "reference_track",
+              "source_sha256": "2e1bd1d887ae7e684b387b5c489053b4029ac81d1d1c569d333118e49d3a4d5c",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "20161119_20奇萊連峰.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.001",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.001",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.001",
+            "gpx.source.chilai_nanhua_day1.reference.001",
+            "2e1bd1d887ae7e684b387b5c489053b4029ac81d1d1c569d333118e49d3a4d5c"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 13.66,
+          "track_segment_boundary_crossed": true
+        },
+        {
+          "candidate_only": true,
+          "confidence": "medium",
+          "duration_minutes": 298.2,
+          "extractor_version": "pretrip_reference_segment_timing.v1",
+          "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_trailhead.gpx.source.chilai_nanhua_day1.reference.022",
+          "model_output_sha256": "044b4bbb33567809f4c1a61b0a090cf3965fba2cd374b0c10bcdec8e34825a6c",
+          "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+          "privacy": {
+            "coordinates_embedded": false,
+            "precise_timestamps_embedded": false,
+            "raw_gpx_embedded_in_json": false,
+            "source_original_path_embedded": false
+          },
+          "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+          "reject_reason": null,
+          "review_state": "projection_only",
+          "runtime_safety_truth": false,
+          "sha256": "b20d70861a50b38a8a142f1e2ff2ea0dddeada64e29186c1f60e9531db749f16",
+          "source_attribution": [
+            {
+              "candidate_only": true,
+              "confidence": "medium",
+              "runtime_safety_truth": false,
+              "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.022",
+              "source_kind": "historical_gpx_reference_segment_timing",
+              "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.022",
+              "source_role": "reference_track",
+              "source_sha256": "b20d70861a50b38a8a142f1e2ff2ea0dddeada64e29186c1f60e9531db749f16",
+              "stale_risk": "medium"
+            }
+          ],
+          "source_filename": "航跡檔給想去人參考-GPX自動轉檔.gpx",
+          "source_id": "gpx.source.chilai_nanhua_day1.reference.022",
+          "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.022",
+          "source_provider": "operator_supplied_local_file",
+          "source_refs": [
+            "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.022",
+            "gpx.source.chilai_nanhua_day1.reference.022",
+            "b20d70861a50b38a8a142f1e2ff2ea0dddeada64e29186c1f60e9531db749f16"
+          ],
+          "source_role": "reference_track",
+          "stale_risk": "medium",
+          "track_distance_km": 14.43,
+          "track_segment_boundary_crossed": false
+        }
+      ],
+      "rejected_summary": {
+        "distance_rejected_count": 2,
+        "distance_rejected_samples": [
+          {
+            "candidate_only": true,
+            "confidence": "medium",
+            "duration_minutes": 264.7,
+            "extractor_version": "pretrip_reference_segment_timing.v1",
+            "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_trailhead.gpx.source.chilai_nanhua_day1.reference.021",
+            "model_output_sha256": "c392ccc326a240eeba06155a5817a86ba5368222ac8ed5fd65fd5e2e60b881f4",
+            "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+            "privacy": {
+              "coordinates_embedded": false,
+              "precise_timestamps_embedded": false,
+              "raw_gpx_embedded_in_json": false,
+              "source_original_path_embedded": false
+            },
+            "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+            "reject_reason": "outside_segment_distance_filter",
+            "review_state": "projection_only",
+            "runtime_safety_truth": false,
+            "sha256": "a202f75d4e371051ae8b36634dee7b8214edff8573c76223076340ae64d104f7",
+            "source_attribution": [
+              {
+                "candidate_only": true,
+                "confidence": "medium",
+                "runtime_safety_truth": false,
+                "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.021",
+                "source_kind": "historical_gpx_reference_segment_timing",
+                "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.021",
+                "source_role": "reference_track",
+                "source_sha256": "a202f75d4e371051ae8b36634dee7b8214edff8573c76223076340ae64d104f7",
+                "stale_risk": "medium"
+              }
+            ],
+            "source_filename": "能高安東軍金杏真路.gpx",
+            "source_id": "gpx.source.chilai_nanhua_day1.reference.021",
+            "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.021",
+            "source_provider": "operator_supplied_local_file",
+            "source_refs": [
+              "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.021",
+              "gpx.source.chilai_nanhua_day1.reference.021",
+              "a202f75d4e371051ae8b36634dee7b8214edff8573c76223076340ae64d104f7"
+            ],
+            "source_role": "reference_track",
+            "stale_risk": "medium",
+            "track_distance_km": 41.6,
+            "track_segment_boundary_crossed": true
+          },
+          {
+            "candidate_only": true,
+            "confidence": "medium",
+            "duration_minutes": 308.2,
+            "extractor_version": "pretrip_reference_segment_timing.v1",
+            "measurement_id": "ref_segment_timing.chilai_nanhua.lodge_to_trailhead.gpx.source.chilai_nanhua_day1.reference.004",
+            "model_output_sha256": "fb98d14ecc7eb66bcd88c5d470067ce8060e78b1aba5f35b2cd722ffdfd293c5",
+            "model_output_summary": "Aggregate historical GPX segment timing sample; source path/hash metadata only, not runtime safety truth.",
+            "privacy": {
+              "coordinates_embedded": false,
+              "precise_timestamps_embedded": false,
+              "raw_gpx_embedded_in_json": false,
+              "source_original_path_embedded": false
+            },
+            "pydantic_ai_prompt_version": "not_applicable_deterministic_reference_segment_timing.v1",
+            "reject_reason": "outside_segment_distance_filter",
+            "review_state": "projection_only",
+            "runtime_safety_truth": false,
+            "sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+            "source_attribution": [
+              {
+                "candidate_only": true,
+                "confidence": "medium",
+                "runtime_safety_truth": false,
+                "source_candidate_id": "gpx.source.chilai_nanhua_day1.reference.004",
+                "source_kind": "historical_gpx_reference_segment_timing",
+                "source_ref": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+                "source_role": "reference_track",
+                "source_sha256": "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef",
+                "stale_risk": "medium"
+              }
+            ],
+            "source_filename": "C_Documents and Settings_Administrator_桌面_20111127-29.gdb-GPX自動轉檔.gpx",
+            "source_id": "gpx.source.chilai_nanhua_day1.reference.004",
+            "source_path": "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+            "source_provider": "operator_supplied_local_file",
+            "source_refs": [
+              "sources/historical_gpx_source_index.json#gpx.source.chilai_nanhua_day1.reference.004",
+              "gpx.source.chilai_nanhua_day1.reference.004",
+              "6c4a4922039702ff6277a476f258579962a8b81801fd6729252ad46b481cf6ef"
+            ],
+            "source_role": "reference_track",
+            "stale_risk": "medium",
+            "track_distance_km": 56.41,
+            "track_segment_boundary_crossed": true
+          }
+        ],
+        "track_boundary_crossed_count": 4
+      },
+      "route_guide_comparison": {
+        "delta_minutes": {
+          "max_minus_guide": 18.2,
+          "min_minus_guide": -7.9,
+          "p50_minus_guide": 7.9,
+          "p75_minus_guide": 13.0
+        },
+        "guide_duration_minutes": 280,
+        "guide_path_candidate_ids": [
+          "timing.g11_nenggao.004",
+          "timing.g11_nenggao.003"
+        ],
+        "status": "available"
+      },
+      "sample_count": 3,
+      "segment_id": "ref_segment_timing.chilai_nanhua.lodge_to_trailhead",
+      "source_count": 3,
+      "to_node_name": "屯原登山口",
+      "track_distance_km": {
+        "max": 15.33,
+        "min": 13.66
+      }
+    }
+  ],
+  "sha256": "f0225d1f9d22764cddd71f526ac2f022af27180f5de226ba917861abf5bebdff",
+  "source_path": "sources/historical_gpx_source_index.json",
+  "source_provider": "historical_gpx_source_index",
+  "status": "ready"
+}

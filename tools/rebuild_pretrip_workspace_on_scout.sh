@@ -150,6 +150,12 @@ PY
     echo "No prior durable admin evidence source found."
   fi
 
+  echo "Building reference segment timing evidence..."
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" \
+    -m pretrip_reference_segment_timing \
+    --project-root "${PROJECT_ROOT}" \
+    --project-id "${PROJECT_ID}"
+
   echo "Running pretrip layer preparation..."
   LAYER_ARGS=(
     -m pretrip_layer_preparation
