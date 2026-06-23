@@ -306,9 +306,28 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "workoutEffortScore" in standard_text
     assert "Apple Watch `Effort`" in standard_text
     assert "provider 值只能作為" in standard_text
+    assert "runtime safety gate input" in standard_text
+    assert "SafetyGateEvent -> Safety Arbiter / State Reducer -> L_n transition" in standard_text
+    assert "SafetyGateEvent" in standard_text
+    assert "Safety Arbiter / State Reducer" in standard_text
+    assert "L_n transition" in standard_text
     assert "stop_and_rest" in standard_text
     assert "retreat_suggested" in standard_text
     assert "alert_candidate" in standard_text
+    assert "flowchart LR" in physiologic_spec
+    assert "Implemented Artifact Integration Overview" in physiologic_spec
+    assert "Batch / Admin Review" in physiologic_spec
+    assert "scout_health_auto_export_physio_analysis" in physiologic_spec
+    assert "scout_health_auto_export_physio_analysis_delta" in physiologic_spec
+    assert "scout_physio_review_capsule" in physiologic_spec
+    assert "sensorlogger-mqtt resident observer" in physiologic_spec
+    assert "gnss-hardware resident observer" in physiologic_spec
+    assert "15min physiologic window assembler" in physiologic_spec
+    assert "future SafetyGateEvent / reducer handoff" in physiologic_spec
+    assert "No direct Phase 1 mutation" in physiologic_spec
+    assert "six primary runtime safety gates" in physiologic_spec
+    assert "scout_runtime_safety_gate_event" in physiologic_spec
+    assert "requires_safety_reducer_for_ln_transition" in physiologic_spec
 
     for required in (
         "source_provider=apple_healthkit",
@@ -316,8 +335,9 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
         "scout_truth=false",
         '"state": "warmup|normal|watch|stop_and_rest|retreat_suggested|alert_candidate"',
         "No medical diagnosis.",
-        "No `/safety/*` calls.",
-        "No Phase 1 L0-L4 safety state mutation.",
+        "does not directly\ncall `/safety/*`",
+        "does not directly write Phase 1 L0-L4 state",
+        "future reviewed reducer handoff",
         "No automatic outbound alert without explicit policy",
     ):
         assert required in physiologic_spec

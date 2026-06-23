@@ -205,3 +205,78 @@ def test_supervisor_passes_gnss_hardware_oled_and_led_options(tmp_path: Path) ->
     assert "/safety/" not in " ".join(command)
 
     supervisor.stop()
+
+
+def test_supervisor_autostarts_physiologic_gate_observer_when_explicit(tmp_path: Path) -> None:
+    vitals_jsonl = tmp_path / "sensorlogger_mqtt_sensor_vitals_records.jsonl"
+    baseline_json = tmp_path / "baseline.json"
+    route_context_json = tmp_path / "route-context.json"
+    vitals_jsonl.write_text("{}\n", encoding="utf-8")
+    baseline_json.write_text('{"personal_envelope_available": false}\n', encoding="utf-8")
+    route_context_json.write_text(
+        "\n".join(
+            [
+                "{",
+                '  "route_id": "fixture.route",',
+                '  "segment_id": "fixture.segment",',
+                '  "distance_to_next_checkpoint_m": 500,',
+                '  "estimated_minutes_to_next_checkpoint": 25,',
+                '  "estimated_minutes_to_planned_camp": 90,',
+                '  "daylight_buffer_minutes": 80',
+                "}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    started: list[FakeProcess] = []
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(list(command), **kwargs)
+        started.append(process)
+        return process
+
+    supervisor = IngressObserverSupervisor.from_env(
+        {
+            "SCOUT_SENSORLOGGER_MQTT_AUTOSTART": "false",
+            "SCOUT_GNSS_HARDWARE_AUTOSTART": "false",
+            "SCOUT_PHYSIOLOGIC_GATE_AUTOSTART": "true",
+            "SCOUT_PHYSIOLOGIC_GATE_SENSORLOGGER_VITALS_JSONL": str(vitals_jsonl),
+            "SCOUT_PHYSIOLOGIC_GATE_BASELINE_JSON": str(baseline_json),
+            "SCOUT_PHYSIOLOGIC_GATE_ROUTE_CONTEXT_JSON": str(route_context_json),
+            "SCOUT_PHYSIOLOGIC_GATE_EVIDENCE_DIR": str(tmp_path / "physio-evidence"),
+            "SCOUT_PHYSIOLOGIC_GATE_LOG_PATH": str(tmp_path / "physio-observer.log"),
+            "SCOUT_PHYSIOLOGIC_GATE_POLL_SECONDS": "5",
+            "SCOUT_PHYSIOLOGIC_GATE_WINDOW_MINUTES": "15",
+        },
+        app_root=tmp_path,
+        popen_factory=fake_popen,
+    )
+
+    supervisor.start()
+    status = supervisor.status()
+    command = started[0].command
+    command_text = " ".join(command)
+
+    assert len(started) == 1
+    assert "scout_physiologic_gate_observer.py" in command_text
+    assert "--sensorlogger-vitals-jsonl" in command
+    assert str(vitals_jsonl) in command
+    assert "--baseline-json" in command
+    assert str(baseline_json) in command
+    assert "--route-context-json" in command
+    assert str(route_context_json) in command
+    assert "--window-minutes" in command
+    assert "15" in command
+    assert "/safety/" not in command_text
+    assert status["observer_count"] == 1
+    assert status["running_count"] == 1
+    assert status["configured_observer_names"] == ["physiologic-gate"]
+    assert status["observers"][0]["name"] == "physiologic-gate"
+    assert status["observers"][0]["reason"] == "explicit_autostart"
+    assert status["observers"][0]["phase1_l0_l4_state_mutated"] is False
+    assert status["observers"][0]["safety_api_called"] is False
+    assert status["boundary"]["phase1_l0_l4_state_mutated"] is False
+
+    supervisor.stop()
+
+    assert started[0].terminated is True

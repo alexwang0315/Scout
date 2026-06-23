@@ -16,6 +16,11 @@ DEFAULT_GNSS_HARDWARE_EVIDENCE_DIR = Path("/data/scout/admin/ingress/gnss_hardwa
 DEFAULT_GNSS_HARDWARE_LOG_PATH = Path("/data/scout/admin/ingress/gnss-hardware-observer.log")
 DEFAULT_GNSS_HARDWARE_GATEWAY_JSONL = Path("/data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl")
 DEFAULT_GNSS_HARDWARE_GROVE_JSONL = Path("/data/scout/providers/gnss/manual-smoke.jsonl")
+DEFAULT_PHYSIOLOGIC_GATE_EVIDENCE_DIR = Path("/data/scout/admin/ingress/physiologic_gate")
+DEFAULT_PHYSIOLOGIC_GATE_LOG_PATH = Path("/data/scout/admin/ingress/physiologic-gate-observer.log")
+DEFAULT_PHYSIOLOGIC_GATE_SENSORLOGGER_VITALS_JSONL = (
+    DEFAULT_SENSORLOGGER_EVIDENCE_DIR / "sensorlogger_mqtt_sensor_vitals_records.jsonl"
+)
 
 
 PopenFactory = Callable[..., subprocess.Popen[Any]]
@@ -69,6 +74,9 @@ class IngressObserverSupervisor:
         gnss_hardware = _gnss_hardware_spec(resolved_env, app_root=app_root)
         if gnss_hardware is not None:
             specs.append(gnss_hardware)
+        physiologic_gate = _physiologic_gate_spec(resolved_env, app_root=app_root)
+        if physiologic_gate is not None:
+            specs.append(physiologic_gate)
         return cls(
             specs=specs,
             app_root=app_root,
@@ -306,6 +314,71 @@ def _append_gnss_hardware_display_args(command: list[str], env: Mapping[str, str
         _append_arg_from_env(command, "--led-blink-seconds", env, "SCOUT_GNSS_HARDWARE_LED_BLINK_SECONDS")
     if _is_true_like(env.get("SCOUT_GNSS_HARDWARE_LED_DRY_RUN")):
         command.append("--led-dry-run")
+
+
+def _physiologic_gate_spec(
+    env: Mapping[str, str],
+    *,
+    app_root: Path | str | None,
+) -> ObserverProcessSpec | None:
+    explicit_autostart = "SCOUT_PHYSIOLOGIC_GATE_AUTOSTART" in env
+    autostart_requested = _is_true_like(env.get("SCOUT_PHYSIOLOGIC_GATE_AUTOSTART", "false"))
+    explicit_source_config = any(
+        key in env
+        for key in (
+            "SCOUT_PHYSIOLOGIC_GATE_SENSORLOGGER_VITALS_JSONL",
+            "SCOUT_PHYSIOLOGIC_GATE_BASELINE_JSON",
+            "SCOUT_PHYSIOLOGIC_GATE_ROUTE_CONTEXT_JSON",
+            "SCOUT_PHYSIOLOGIC_GATE_EVIDENCE_DIR",
+        )
+    )
+    if not autostart_requested and not explicit_source_config:
+        return None
+
+    sensorlogger_vitals_jsonl = Path(
+        env.get(
+            "SCOUT_PHYSIOLOGIC_GATE_SENSORLOGGER_VITALS_JSONL",
+            str(DEFAULT_PHYSIOLOGIC_GATE_SENSORLOGGER_VITALS_JSONL),
+        )
+    ).expanduser()
+    root = Path(app_root or Path(__file__).resolve().parent)
+    observer_script = root / "scout_physiologic_gate_observer.py"
+    evidence_dir = Path(
+        env.get("SCOUT_PHYSIOLOGIC_GATE_EVIDENCE_DIR", str(DEFAULT_PHYSIOLOGIC_GATE_EVIDENCE_DIR))
+    ).expanduser()
+    log_path = Path(
+        env.get("SCOUT_PHYSIOLOGIC_GATE_LOG_PATH", str(DEFAULT_PHYSIOLOGIC_GATE_LOG_PATH))
+    ).expanduser()
+    poll_seconds = env.get("SCOUT_PHYSIOLOGIC_GATE_POLL_SECONDS", "30.0")
+    window_minutes = env.get("SCOUT_PHYSIOLOGIC_GATE_WINDOW_MINUTES", "15")
+    max_records = env.get("SCOUT_PHYSIOLOGIC_GATE_MAX_RECORDS", "1000")
+    command = [
+        sys.executable,
+        str(observer_script),
+        "--sensorlogger-vitals-jsonl",
+        str(sensorlogger_vitals_jsonl),
+        "--evidence-dir",
+        str(evidence_dir),
+        "--poll-seconds",
+        str(poll_seconds),
+        "--window-minutes",
+        str(window_minutes),
+        "--max-records",
+        str(max_records),
+        "--print-ready",
+    ]
+    _append_arg_from_env(command, "--baseline-json", env, "SCOUT_PHYSIOLOGIC_GATE_BASELINE_JSON")
+    _append_arg_from_env(command, "--route-context-json", env, "SCOUT_PHYSIOLOGIC_GATE_ROUTE_CONTEXT_JSON")
+    _append_arg_from_env(command, "--activity-type", env, "SCOUT_PHYSIOLOGIC_GATE_ACTIVITY_TYPE")
+    reason = "explicit_autostart" if explicit_autostart and autostart_requested else "explicit_source_config"
+    return ObserverProcessSpec(
+        name="physiologic-gate",
+        command=command,
+        evidence_dir=evidence_dir,
+        status_path=evidence_dir / "physiologic_gate_status.json",
+        log_path=log_path,
+        reason=reason,
+    )
 
 
 def _append_arg_from_env(command: list[str], option: str, env: Mapping[str, str], env_key: str) -> None:

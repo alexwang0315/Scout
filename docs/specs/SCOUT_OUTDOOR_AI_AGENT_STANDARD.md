@@ -229,16 +229,19 @@ Scout 的自信力是：
 
 > 使用者對自己與隊伍的體能、腳程、經驗、休息節奏與路線需求，是否有資料支持的準確估計。
 
-自信力也不是 Scout 唯一的撤退依據。Scout 的撤退與停止前進判斷必須由多個
-runtime gate 組成：`pace_gate`（配速過慢）、`delay_gate`（時程超時）、
+自信力也不是 Scout 唯一的撤退依據。Scout 的撤退與停止前進判斷必須由六個
+runtime safety gate 組成：`pace_gate`（配速過慢）、`delay_gate`（時程超時）、
 `physiologic_gate`（生理壓力）、`weather_gate`（天氣惡化）、
 `darkness_gate`（黑暗風險）與 `environment_threat_gate`（落石、崩塌、路基消失、
-蜂蛇或其他現地威脅）。任何一個 gate 都可以要求更保守的行動；
-`physiologic_gate` 正常不代表可以忽略天氣、黑暗、地形或環境威脅。
+蜂蛇或其他現地威脅）。任何一個 gate 都可以產生 safety-relevant event 並要求
+更保守的行動；`physiologic_gate` 正常不代表可以忽略天氣、黑暗、地形或環境威脅。
 
 `Physiologic gate` 的詳細契約另見
 `docs/specs/scout-runtime-physiologic-gate.md`。它只處理 baseline-relative
-生理壓力與運動負荷，不負責完整撤退決策。
+生理壓力與運動負荷，不負責完整撤退決策；但它是 runtime safety gate input，
+可以透過 `SafetyGateEvent -> Safety Arbiter / State Reducer -> L_n transition`
+影響 Phase 1 safety state。它不能私自覆寫 Phase 1、不能繞過 reducer 直接呼叫
+`/safety/*`，也不能自行送出 SOS / SMS / satellite / LoRaWAN 等 outbound alert。
 
 ### 7.2 Scout Pace Coefficient
 
@@ -338,8 +341,9 @@ evidence，不是醫療診斷。
 `source_provider` value。Apple 的 effort 公式不是 Scout 的公開可重現 truth；
 Scout 可以保存或引用 provider value，也可以產生自己的
 `scout_exertion_snapshot`，但兩者必須分離。Scout 不得把 provider 值當成
-醫療診斷、不得推論疾病、不得呼叫 `/safety/*`，也不得讓模型輸出改寫 Phase 1
-runtime safety truth。
+醫療診斷、不得推論疾病；若要影響 Phase 1，必須先轉成受控的 gate evidence，
+再交由 `Safety Arbiter / State Reducer` 決定 `L_n`，不得由模型輸出或 provider
+值直接改寫 Phase 1 runtime safety truth。
 
 `Physiologic gate` 的 runtime 輸出應至少可表達
 `warmup`、`normal`、`watch`、`stop_and_rest`、`retreat_suggested` 與
@@ -347,6 +351,27 @@ runtime safety truth。
 ETA delay 必須交給 `pace_gate`、`delay_gate`、`darkness_gate` 與 camp/retreat
 評估共同決定是否改行程、撤退或尋找緊急紮營候選點。`alert_candidate` 只能準備
 通報候選；實際對外通報仍需 explicit outbound policy 或人工核准。
+
+```mermaid
+flowchart LR
+  Wearable["Wearable / SensorLogger<br/>HR, pace, cadence, energy, motion"] --> Physio["physiologic_gate"]
+  Route["Route Runtime<br/>ETA, checkpoints"] --> Pace["pace_gate"]
+  Route --> Delay["delay_gate"]
+  Weather["Weather Evidence"] --> WeatherGate["weather_gate"]
+  GNSS["GNSS / map progress"] --> Darkness["darkness_gate"]
+  Env["Environment Threat"] --> Threat["environment_threat_gate"]
+
+  Physio --> Event["SafetyGateEvent"]
+  Pace --> Event
+  Delay --> Event
+  WeatherGate --> Event
+  Darkness --> Event
+  Threat --> Event
+
+  Event --> Reducer["Safety Arbiter / State Reducer"]
+  Reducer --> Ln["L_n transition"]
+  Ln --> Phase1["Phase 1 Safety State"]
+```
 
 `Challenge Fit` 是把路線魔王需求乘上 pace/energy vulnerability 後的
 規劃適配度。高分不代表「必然危險」，而是代表需要更保守的 buffer、拆日、
