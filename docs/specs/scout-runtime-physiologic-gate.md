@@ -3,9 +3,15 @@
 ## Status
 
 Deterministic primitives implemented through route-segment timing context for
-fixture-backed runtime physiologic gate behavior. The layer remains local
-advisory evidence only and does not implement live safety truth, medical
-diagnosis, or outbound escalation.
+fixture-backed runtime physiologic gate behavior. The currently implemented
+artifacts remain local evidence and do not directly mutate live safety truth,
+perform medical diagnosis, or send outbound escalation.
+
+The product role is broader than "advisory wellness." `physiologic_gate` is one
+of Scout's runtime safety gates. It may emit safety-relevant gate events that
+can influence `L_n` only through a reviewed Safety Arbiter / State Reducer. The
+gate itself must not privately overwrite Phase 1 state, bypass the reducer, or
+send outbound alerts.
 
 ## Scope
 
@@ -16,7 +22,7 @@ for a trained user, so Scout must not treat heart-rate elevation alone as
 fatigue, low oxygen uptake, medical danger, or retreat truth.
 
 It is not the full retreat decision. A retreat, hold, emergency bivy, or alert
-candidate can also be triggered by other gates:
+candidate can also be triggered by other runtime safety gates:
 
 | Gate | Trigger family |
 | --- | --- |
@@ -31,6 +37,190 @@ candidate can also be triggered by other gates:
 `Physiologic gate` must never suppress another gate. If `physiologic_gate` is
 normal but `darkness_gate` or `environment_threat_gate` fails, Scout must still
 recommend the conservative action for the failing gate.
+
+## Implemented Artifact Integration Overview
+
+The completed physiologic gate artifacts sit in the current Scout data flow as
+two related paths:
+
+- a batch/admin path that turns HealthAutoExport archives into sanitized
+  analysis, delta, and review capsules;
+- a live-runtime path that consumes sanitized SensorLogger vitals evidence
+  through a 15-minute window assembler before emitting physiologic gate outputs,
+  a `SafetyGateEvent`, and a reducer dry-run artifact.
+
+```mermaid
+flowchart LR
+  subgraph Batch["Batch / Admin Review"]
+    HAE["HealthAutoExport ZIP<br/>pre-trip / admin batch source"]
+    Analysis["scout_health_auto_export_physio_analysis<br/>15min windows + baseline summary"]
+    Delta["scout_health_auto_export_physio_analysis_delta<br/>previous vs current trend"]
+    Capsule["scout_physio_review_capsule<br/>review priority only"]
+    HAE --> Analysis --> Delta --> Capsule
+  end
+
+  subgraph Live["Live Device Stream"]
+    Watch["Apple Watch / iPhone<br/>SensorLog / Sensor Logger"]
+    MQTT["sensorlogger-mqtt resident observer<br/>evidence JSONL"]
+    GNSS["gnss-hardware resident observer<br/>live_navigation_snapshot"]
+    Watch --> MQTT
+  end
+
+  subgraph Adapter["Implemented Integration Slice"]
+    Index["physiologic_artifact_index.json<br/>schema + provenance references"]
+    Window["15min physiologic window assembler<br/>HR + pace + cadence + energy"]
+    GateInput["PhysiologicGateInput<br/>route + baseline + window signals"]
+    Gate["scout_runtime_physiologic_gate<br/>warmup / normal / watch / stop_and_rest / retreat_suggested"]
+    Handoff["physiologic_safety_gate_event.json<br/>ETA delay + reducer candidate"]
+    DryRun["physiologic_reducer_dry_run.json<br/>no direct L_n mutation"]
+  end
+
+  subgraph Consumers["Scout Consumers"]
+    AdminDebug["/admin/debug<br/>timeline evidence"]
+    Pretrip["/admin/pretrip<br/>read-only evidence"]
+    Mobile["mobile handoff<br/>Daily/Home + companion context"]
+    Composer["future route-pressure composer<br/>pace / delay / darkness / weather / environment gates"]
+    Reducer["future SafetyGateEvent / reducer handoff<br/>reviewed path to L_n"]
+  end
+
+  subgraph Boundary["Boundary"]
+    DirectBlock["No direct Phase 1 mutation<br/>No direct /safety/* call<br/>No medical diagnosis<br/>No direct outbound alert"]
+  end
+
+  Capsule --> AdminDebug
+  Capsule --> Pretrip
+  Capsule --> Mobile
+
+  MQTT --> Window
+  GNSS --> GateInput
+  Analysis --> GateInput
+  Window --> GateInput --> Gate --> Handoff --> DryRun
+  Analysis --> Index
+  Capsule --> Index
+  GateInput --> Index
+  Handoff --> Index
+
+  Gate --> AdminDebug
+  Handoff --> Composer
+  Handoff --> Reducer
+
+  Gate -. protected by .-> DirectBlock
+  Handoff -. protected by .-> DirectBlock
+  Capsule -. protected by .-> DirectBlock
+```
+
+HealthAutoExport remains a batch/admin source. It can calibrate and review the
+gate, but it is not the Phase 4.6 live stream. Live Scout use enters through
+SensorLog/Sensor Logger or another admitted stream source, assembles
+privacy-preserving 15-minute windows, then builds `PhysiologicGateInput`.
+
+Implemented task 1-8 integration points:
+
+| Task | Implemented surface | Artifact/output |
+| --- | --- | --- |
+| 1. Physio artifact index | `index_physio_artifacts()` | `physiologic_artifact_index.json` |
+| 2. Admin batch endpoint / CLI | `POST /admin/wearables/physio-review`; `python -m scout_runtime_physiologic_integration health-auto-export-review` | `health_auto_export_physio_analysis.json`, optional delta, `physio_review_capsule.json` |
+| 3. SensorLogger physio adapter | `load_sensorlogger_frames()` | elapsed-offset frames only |
+| 4. 15-minute window assembler | `build_windowed_replay_from_sensorlogger_jsonl()` | `sensorlogger_physio_windowed_replay.json` |
+| 5. Physiologic gate runner | `run_physio_integration_replay()` | `physiologic_gate_evidence.jsonl` |
+| 6. SafetyGateEvent handoff | `build_safety_gate_event_from_physio_gate()` | `physiologic_safety_gate_event.json` |
+| 7. Route-pressure / reducer dry run | `dry_run_physio_reducer()` | `physiologic_reducer_dry_run.json` |
+| 8. Resident observer promotion | `scout_physiologic_gate_observer.py`; `IngressObserverSupervisor` `physiologic-gate` spec | `physiologic_gate_status.json` |
+
+`physiologic-gate` resident startup is explicit. It is enabled with
+`SCOUT_PHYSIOLOGIC_GATE_AUTOSTART=true` or explicit physiologic source config,
+and it reads `sensorlogger_mqtt_sensor_vitals_records.jsonl` by default.
+
+## Safety Gate Role And Reducer Boundary
+
+The six primary runtime safety gates are `pace_gate`, `delay_gate`,
+`physiologic_gate`, `weather_gate`, `darkness_gate`, and
+`environment_threat_gate`. `companion_match_gate` is a supporting pressure gate
+that can feed pace, delay, and physiologic interpretation.
+
+`physiologic_gate` is allowed to influence safety state only by emitting a
+bounded `SafetyGateEvent` into the common reducer path:
+
+```text
+physiologic evidence
+  -> physiologic_gate
+  -> SafetyGateEvent(gate_id="physiologic_gate", severity, evidence_refs)
+  -> Safety Arbiter / State Reducer
+  -> L_n transition candidate
+  -> Phase 1 Safety State
+```
+
+The gate must preserve three boundaries:
+
+1. It can produce safety-relevant state candidates such as `stop_and_rest`,
+   `retreat_suggested`, or `alert_candidate`.
+2. It cannot own final safety truth by itself. The reducer must combine it with
+   pace, delay, weather, darkness, environment threat, route context, and
+   operator policy before changing `L_n`.
+3. It cannot execute external notification by itself. `alert_candidate` can
+   become an alert review input, but SOS, SMS, satellite, LoRaWAN, or other
+   outbound transport remains owned by explicit outbound policy and a transport
+   service.
+
+```mermaid
+flowchart LR
+  subgraph Evidence["Evidence Inputs"]
+    Wearable["Wearable / SensorLogger<br/>HR, pace, cadence, energy, motion"]
+    Route["Route Runtime<br/>ETA, checkpoints, camp target"]
+    Weather["Weather Evidence<br/>forecast, warnings, wind, rain"]
+    GNSS["GNSS / Map Evidence<br/>position and route progress"]
+    Env["Environment Threat<br/>rockfall, washout, animals, bees, snakes"]
+  end
+
+  subgraph Gates["Runtime Safety Gates"]
+    Pace["pace_gate<br/>配速過慢"]
+    Delay["delay_gate<br/>時程超時"]
+    Physio["physiologic_gate<br/>生理壓力"]
+    WeatherGate["weather_gate<br/>天氣惡化"]
+    Darkness["darkness_gate<br/>黑暗風險"]
+    Threat["environment_threat_gate<br/>環境威脅"]
+  end
+
+  subgraph Reducer["Controlled Safety Transition"]
+    Event["SafetyGateEvent<br/>gate, severity, evidence, confidence"]
+    Arbiter["Safety Arbiter / State Reducer<br/>merge gates and apply policy"]
+    Ln["L_n transition candidate"]
+    Phase1["Phase 1 Safety State<br/>single runtime safety truth"]
+  end
+
+  subgraph Actions["Downstream Effects"]
+    Rest["Rest / slow-down directive"]
+    Retreat["Retreat / hold / emergency bivy recommendation"]
+    AlertCandidate["Alert candidate<br/>explicit policy still required"]
+    Status["Admin / Mobile / Voice surfaces"]
+  end
+
+  Wearable --> Physio
+  Route --> Pace
+  Route --> Delay
+  Weather --> WeatherGate
+  GNSS --> Darkness
+  Env --> Threat
+
+  Pace --> Event
+  Delay --> Event
+  Physio --> Event
+  WeatherGate --> Event
+  Darkness --> Event
+  Threat --> Event
+
+  Event --> Arbiter --> Ln --> Phase1
+  Phase1 --> Rest
+  Phase1 --> Retreat
+  Phase1 --> AlertCandidate
+  Phase1 --> Status
+```
+
+This distinction is required because the current fixture-backed artifacts still
+record `phase1_runtime_safety_truth=false` and
+`phase1_runtime_mutation_allowed=false`. Those flags mean the artifact did not
+perform the reducer handoff or mutate Phase 1 directly. They do not mean the
+product concept is merely a wellness advisory forever.
 
 ## Objective
 
@@ -112,9 +302,11 @@ more safely later. `Exertion overdraft` means the user's signals suggest they
 should already be reducing output or resting, but external pressure is forcing
 continued forward progress. Typical external pressure includes darkness, being
 off route, deteriorating weather, environmental threat, or needing to reach
-shelter. In that case the physiologic gate should raise an advisory danger
-flag for the route-pressure composer. The flag is not Phase 1 safety truth and
-does not call `/safety/*`.
+shelter. In that case the physiologic gate should raise a safety-relevant gate
+event for the route-pressure composer and Safety Arbiter / State Reducer. In
+the current fixture-backed artifact this remains
+`phase1_runtime_safety_truth=false`; a future reviewed reducer handoff is the
+only allowed path that may convert it into an `L_n` transition.
 
 ## Workspace-Calibrated Threshold Policy
 
@@ -280,8 +472,10 @@ Required envelope:
 
 ## Output Contract
 
-The gate produces advisory state and evidence. It does not call `/safety/*` and
-does not write Phase 1 L0-L4 state.
+The current artifact produces gate state and evidence. It does not directly
+call `/safety/*` and does not directly write Phase 1 L0-L4 state. Future live
+runtime integration must wrap the output in a reviewed `SafetyGateEvent` before
+any `L_n` transition can occur.
 
 ```json
 {
@@ -364,8 +558,40 @@ does not write Phase 1 L0-L4 state.
     "medical_diagnosis": false,
     "phase1_runtime_safety_truth": false,
     "phase1_runtime_mutation_allowed": false,
+    "requires_safety_reducer_for_ln_transition": true,
+    "direct_safety_api_call_allowed": false,
     "safety_api_called": false,
     "outbound_alert_sent": false
+  }
+}
+```
+
+### SafetyGateEvent Handoff Sketch
+
+A future reducer integration should wrap the physiologic output without raw
+health samples:
+
+```json
+{
+  "artifact_kind": "scout_runtime_safety_gate_event",
+  "artifact_version": "runtime_safety_gate_event.v0",
+  "gate_id": "physiologic_gate",
+  "source_gate_artifact_kind": "scout_runtime_physiologic_gate",
+  "source_gate_sha256": "sha256",
+  "state_candidate": "stop_and_rest|retreat_suggested|alert_candidate",
+  "severity": "watch|rest|retreat|alert_review",
+  "ln_transition_candidate": "L_n candidate decided by reducer policy",
+  "evidence_refs": [],
+  "confidence": "low|medium|high",
+  "reducer_required": true,
+  "direct_phase1_mutation_performed": false,
+  "direct_safety_api_call_performed": false,
+  "outbound_alert_sent": false,
+  "boundary": {
+    "medical_diagnosis": false,
+    "raw_health_payload_shared": false,
+    "phase1_runtime_safety_truth": false,
+    "requires_safety_reducer_for_ln_transition": true
   }
 }
 ```

@@ -29,10 +29,11 @@ Current repo source of truth:
 - `docker-compose.pi.admin.yml` enables the admin-side observer supervisor with
   `SCOUT_INGRESS_OBSERVER_SUPERVISOR_ENABLED`.
 
-As of this registry draft, the supervisor builds resident specs for exactly:
+As of this registry draft, the supervisor builds resident specs for:
 
 - `sensorlogger-mqtt`
 - `gnss-hardware`
+- `physiologic-gate` when explicitly enabled for SensorLogger vitals replay
 
 Keypad, IMU/PDR, UPS, Wi-Fi OLED status, LoRa diagnostics, and Grove smoke tools
 may have scripts, systemd units, or old evidence. They are not resident Scout
@@ -43,6 +44,11 @@ updated together.
 
 All resident observers in this registry are evidence producers and diagnostic
 projection writers only.
+
+`physiologic-gate` is also a `SafetyGateEvent` producer for the future Safety
+Arbiter / State Reducer. It may recommend a physiologic gate candidate such as
+`candidate_rest` or `candidate_retreat`, but the resident observer itself does
+not own the final L0-L4 transition and does not call live safety mutation APIs.
 
 They must not:
 
@@ -67,6 +73,7 @@ Allowed outputs:
 | --- | --- | --- | --- | --- | --- | --- |
 | `sensorlogger-mqtt` | Phase 4 admin runtime via `IngressObserverSupervisor` | `SCOUT_SENSORLOGGER_MQTT_AUTOSTART=true` and either `/data/scout/secrets/sensorlogger-mqtt.env` exists or inline broker/topic env vars exist | Sensor Logger compatible MQTT topic, usually phone or wearable sensor stream | `/data/scout/admin/ingress/sensorlogger_mqtt/`; status file `sensorlogger_mqtt_status.json`; log file `sensorlogger-mqtt-observer.log` | Optional OLED latency summary when `SCOUT_SENSORLOGGER_MQTT_OLED_STATUS=true`; no LED Bar integration in current resident path | Running inside `scout-pi-phase4-admin`; `/health` reported `running=true` |
 | `gnss-hardware` | Phase 4 admin runtime via `IngressObserverSupervisor` | `SCOUT_GNSS_HARDWARE_AUTOSTART=true` or configured JSONL sources exist or `SCOUT_GNSS_HARDWARE_FORCE_AUTOSTART=true` | SX1303 gateway GPS NMEA JSONL and Grove GPS module JSONL | `/data/scout/admin/ingress/gnss_hardware/`; status file `gnss_hardware_observer_status.json`; snapshot `live_navigation_snapshot.json`; log file `gnss-hardware-observer.log` | Optional OLED status when `SCOUT_GNSS_HARDWARE_OLED_STATUS=true`; optional LED Bar blink when `SCOUT_GNSS_HARDWARE_LED_STATUS=true` | Running inside `scout-pi-phase4-admin`; `/health` reported `running=true`; live evidence updated under `gnss_hardware` |
+| `physiologic-gate` | Phase 4 admin runtime via `IngressObserverSupervisor` | Explicit `SCOUT_PHYSIOLOGIC_GATE_AUTOSTART=true` or explicit physiologic source config | Sanitized `sensorlogger_mqtt_sensor_vitals_records.jsonl`, optional baseline JSON, optional route context JSON | `/data/scout/admin/ingress/physiologic_gate/`; status file `physiologic_gate_status.json`; event `physiologic_safety_gate_event.json`; reducer dry-run `physiologic_reducer_dry_run.json`; log file `physiologic-gate-observer.log` | No OLED or LED Bar integration in this slice | Optional resident candidate; emits `SafetyGateEvent` evidence for reducer handoff only |
 
 ## Observer: `sensorlogger-mqtt`
 
@@ -189,6 +196,62 @@ hardware_control_scope=diagnostic_display_only for OLED records
 hardware_control_scope=diagnostic_indicator_only for LED records
 ```
 
+## Observer: `physiologic-gate`
+
+Purpose:
+
+- Read sanitized SensorLogger vitals records produced by `sensorlogger-mqtt`.
+- Assemble 15-minute physiologic windows to reduce noisy heart-rate, pace, and
+  work-output samples.
+- Run the deterministic Scout physiologic gate from those windows.
+- Write a `SafetyGateEvent` candidate and a reducer dry-run artifact for the
+  future Safety Arbiter / State Reducer.
+
+Default resident paths:
+
+```text
+vitals source: /data/scout/admin/ingress/sensorlogger_mqtt/sensorlogger_mqtt_sensor_vitals_records.jsonl
+evidence dir:  /data/scout/admin/ingress/physiologic_gate
+log file:      /data/scout/admin/ingress/physiologic-gate-observer.log
+status file:   /data/scout/admin/ingress/physiologic_gate/physiologic_gate_status.json
+event file:    /data/scout/admin/ingress/physiologic_gate/physiologic_safety_gate_event.json
+dry-run file:  /data/scout/admin/ingress/physiologic_gate/physiologic_reducer_dry_run.json
+```
+
+Key env:
+
+```text
+SCOUT_PHYSIOLOGIC_GATE_AUTOSTART=true
+SCOUT_PHYSIOLOGIC_GATE_SENSORLOGGER_VITALS_JSONL=...
+SCOUT_PHYSIOLOGIC_GATE_BASELINE_JSON=...
+SCOUT_PHYSIOLOGIC_GATE_ROUTE_CONTEXT_JSON=...
+SCOUT_PHYSIOLOGIC_GATE_WINDOW_MINUTES=15
+SCOUT_PHYSIOLOGIC_GATE_POLL_SECONDS=30.0
+```
+
+Boundary fields:
+
+```text
+medical_diagnosis=false
+runtime_safety_truth=false
+phase1_runtime_safety_truth=false
+phase1_l0_l4_state_mutated=false
+safety_api_called=false
+outbound_send_performed=false
+raw_health_payload_shared=false
+raw_track_shared=false
+exact_timestamps_shared=false
+```
+
+Reducer contract:
+
+- `physiologic_safety_gate_event.json` is a candidate event, not the final
+  safety state.
+- `physiologic_reducer_dry_run.json` describes what the reducer would consider
+  from the physiologic gate alone.
+- A future reducer must combine it with Pace, Delay, Weather, Darkness, and
+  Environment Threat gates before changing L0-L4.
+
 ## Known Non-Resident Hardware Paths
 
 These paths are useful Scout hardware assets, but they are not resident
@@ -257,6 +320,7 @@ Check observer logs:
 ```bash
 tail -n 80 /data/scout/admin/ingress/sensorlogger-mqtt-observer.log
 tail -n 80 /data/scout/admin/ingress/gnss-hardware-observer.log
+tail -n 80 /data/scout/admin/ingress/physiologic-gate-observer.log
 ```
 
 ## Acceptance

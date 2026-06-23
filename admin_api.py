@@ -122,6 +122,10 @@ from scout_energy_reserve import (
 )
 from scout_energy_reserve_monitor import build_energy_reserve_monitor_from_view
 from scout_mobile_handoff import DEFAULT_MOBILE_HANDOFF_FILENAME, build_mobile_energy_companion_handoff
+from scout_runtime_physiologic_integration import (
+    run_physio_integration_replay,
+    write_physio_review_from_health_auto_export,
+)
 from scout_wearable_daily_home import build_daily_home_preview
 from scout_wearable_provider_transport import (
     write_provider_live_connector_reference,
@@ -656,6 +660,30 @@ class WearableProviderLiveEnergyBuildRequest(BaseModel):
     reference_date: str | None = None
 
 
+class WearablePhysioReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_path: str = Field(min_length=1)
+    previous_source_path: str | None = None
+    activity_type: Literal["walking", "hiking"] = "walking"
+    window_minutes: int = Field(default=15, ge=1, le=60)
+    output_dir: str | None = None
+
+
+class WearablePhysioSensorLoggerReplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sensorlogger_vitals_path: str = Field(min_length=1)
+    baseline_path: str | None = None
+    baseline_context: dict[str, Any] | None = None
+    route_context_path: str | None = None
+    route_context: dict[str, Any] | None = None
+    activity_type: Literal["walking", "hiking", "running", "other"] = "hiking"
+    window_minutes: int = Field(default=15, ge=1, le=60)
+    max_records: int = Field(default=1000, ge=1, le=10000)
+    output_dir: str | None = None
+
+
 class CompanionMatchRefreshRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -917,6 +945,55 @@ def create_admin_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except OSError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/physio-review")
+    def wearable_physio_review(request: WearablePhysioReviewRequest) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "physiologic-review",
+            )
+            return write_physio_review_from_health_auto_export(
+                _path_from_admin_request(request.source_path),
+                previous_zip_path=_optional_path_from_admin_request(request.previous_source_path),
+                output_dir=output_dir,
+                activity_type=request.activity_type,
+                window_minutes=request.window_minutes,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/wearables/physio-sensorlogger-replay")
+    def wearable_physio_sensorlogger_replay(
+        request: WearablePhysioSensorLoggerReplayRequest,
+    ) -> dict[str, Any]:
+        try:
+            output_dir = _provider_live_output_dir(
+                request.output_dir,
+                root=resolved_wearable_inventory_root,
+                default=resolved_wearable_inventory_root / "outputs" / "physiologic-sensorlogger-replay",
+            )
+            route_context = request.route_context
+            if route_context is None and request.route_context_path:
+                route_context = _load_admin_json(_path_from_admin_request(request.route_context_path))
+            result = run_physio_integration_replay(
+                _path_from_admin_request(request.sensorlogger_vitals_path),
+                output_dir=output_dir,
+                route_context=route_context,
+                baseline_context=request.baseline_context,
+                baseline_path=_optional_path_from_admin_request(request.baseline_path),
+                activity_type=request.activity_type,
+                window_minutes=request.window_minutes,
+                max_records=request.max_records,
+            )
+            return result.model_dump(mode="json")
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post("/wearables/mobile-handoff")
@@ -4148,6 +4225,13 @@ def _path_from_admin_request(value: str) -> Path:
 
 def _optional_path_from_admin_request(value: str | None) -> Path | None:
     return _path_from_admin_request(value) if value else None
+
+
+def _load_admin_json(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"JSON object expected: {path}")
+    return payload
 
 
 def _provider_live_output_dir(value: str | None, *, root: Path, default: Path) -> Path:

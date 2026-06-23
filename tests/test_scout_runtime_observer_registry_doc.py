@@ -19,6 +19,7 @@ def test_runtime_observer_registry_documents_current_resident_observers() -> Non
         "IngressObserverSupervisor",
         "sensorlogger-mqtt",
         "gnss-hardware",
+        "physiologic-gate",
         "Current Resident Observer Registry",
         "Live Scout state observed 2026-06-17",
         "GET /health",
@@ -42,6 +43,22 @@ def test_runtime_observer_registry_documents_oled_and_led_feedback() -> None:
         "D5",
         "GPIO5",
         "GPIO6",
+    ):
+        assert token in source
+
+
+def test_runtime_observer_registry_documents_physiologic_gate_handoff() -> None:
+    source = read_doc()
+
+    for token in (
+        "SafetyGateEvent",
+        "Safety Arbiter / State Reducer",
+        "SCOUT_PHYSIOLOGIC_GATE_AUTOSTART",
+        "sensorlogger_mqtt_sensor_vitals_records.jsonl",
+        "physiologic_safety_gate_event.json",
+        "physiologic_reducer_dry_run.json",
+        "candidate_retreat",
+        "15-minute physiologic windows",
     ):
         assert token in source
 
