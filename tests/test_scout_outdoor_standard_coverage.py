@@ -283,6 +283,46 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert "不是出發批准或 runtime safety truth" in result.answer
 
 
+def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
+    standard_text = (
+        ROOT / "docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md"
+    ).read_text(encoding="utf-8")
+    physiologic_spec = (
+        ROOT / "docs/specs/scout-runtime-physiologic-gate.md"
+    ).read_text(encoding="utf-8")
+
+    for gate in (
+        "pace_gate",
+        "delay_gate",
+        "physiologic_gate",
+        "weather_gate",
+        "darkness_gate",
+        "environment_threat_gate",
+    ):
+        assert gate in standard_text
+        assert gate in physiologic_spec
+
+    assert "docs/specs/scout-runtime-physiologic-gate.md" in standard_text
+    assert "workoutEffortScore" in standard_text
+    assert "Apple Watch `Effort`" in standard_text
+    assert "provider 值只能作為" in standard_text
+    assert "stop_and_rest" in standard_text
+    assert "retreat_suggested" in standard_text
+    assert "alert_candidate" in standard_text
+
+    for required in (
+        "source_provider=apple_healthkit",
+        "provider_value=true",
+        "scout_truth=false",
+        '"state": "warmup|normal|watch|stop_and_rest|retreat_suggested|alert_candidate"',
+        "No medical diagnosis.",
+        "No `/safety/*` calls.",
+        "No Phase 1 L0-L4 safety state mutation.",
+        "No automatic outbound alert without explicit policy",
+    ):
+        assert required in physiologic_spec
+
+
 def test_tool_registry_marks_all_six_force_tools_ready_current() -> None:
     registry = tool_registry_output(include_not_implemented=True)
     by_id = {tool.tool_id: tool for tool in registry.tools}

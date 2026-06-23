@@ -1,0 +1,77 @@
+{
+  "artifact_kind": "scout_runtime_physiologic_gate_input",
+  "schema_version": "scout_runtime_physiologic_gate_input.v0",
+  "source_provider": "apple_healthkit_local_summary",
+  "observed_at_offset_s": 1214,
+  "route_context": {
+    "route_id": "fixture.chilai_nanhua.day1",
+    "segment_id": "tunyuan_to_yunhai",
+    "distance_to_next_checkpoint_m": 1800,
+    "estimated_minutes_to_next_checkpoint": 42,
+    "estimated_minutes_to_planned_camp": 150,
+    "daylight_buffer_minutes": 40,
+    "altitude_m": 2150
+  },
+  "signals": {
+    "heart_rate_bpm": 154,
+    "heart_rate_zone": "z4",
+    "workout_effort_score": 7,
+    "workout_effort_score_source": "apple_healthkit.workoutEffortScore",
+    "workout_effort_score_provider_value": true,
+    "training_load_classification": "above",
+    "vo2max_estimate_ml_kg_min": 42.1,
+    "estimated_oxygen_uptake_ml_kg_min": 28.5,
+    "oxygen_uptake_ratio_to_personal_baseline": 0.84,
+    "cumulative_work_output_kj": 1000,
+    "work_output_source": "derived_running_power_integral",
+    "work_output_provider_value": true,
+    "pace_mps": 2.04,
+    "power_watts": 182,
+    "cadence_spm": 157
+  },
+  "baseline": {
+    "acute_window_days": 7,
+    "recent_window_days": 28,
+    "stable_window_days": 90,
+    "personal_envelope_available": true,
+    "reserve_band": "watch",
+    "reserve_score": 54,
+    "expected_heart_rate_bpm": 132,
+    "typical_completed_work_output_kj": 800,
+    "work_output_reset_ratio_hint": 1.25,
+    "stable_baseline_activity_count": 38
+  },
+  "data_quality": {
+    "heart_rate_confidence": "medium",
+    "gps_confidence": "medium",
+    "missing_hr_seconds": 0,
+    "missing_hr_intervals": [],
+    "sample_cadence_s": 60,
+    "provider_value_confidence": "medium",
+    "limitations": [
+      "fixture derived from manually entered Apple Fitness summary, not raw HealthKit payload"
+    ]
+  },
+  "privacy": {
+    "local_only": true,
+    "raw_samples_embedded": false,
+    "raw_health_payload_shared": false,
+    "raw_track_shared": false,
+    "exact_timestamps_shared": false,
+    "home_work_trace_shared": false,
+    "shareable_by_default": false
+  },
+  "boundary": {
+    "advisory_only": true,
+    "candidate_only": true,
+    "medical_diagnosis": false,
+    "phase1_runtime_safety_truth": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase1_safety_state_mutation_allowed": false,
+    "safety_api_called": false,
+    "safety_api_calls_allowed": false,
+    "outbound_alert_sent": false,
+    "outbound_alert_allowed": false,
+    "provider_values_are_scout_truth": false
+  }
+}
