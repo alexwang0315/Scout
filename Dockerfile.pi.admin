@@ -238,6 +238,7 @@ COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
 COPY docs/admin/scout-assistant-ui.js ./docs/admin/
 COPY docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md ./docs/specs/
 COPY docs/specs/scout-ai-135-tool-data-workflow-matrix.json ./docs/specs/
+COPY config/gee_datasets.yaml ./config/gee_datasets.yaml
 COPY tests/test_assistant_skill_router.py ./tests/
 COPY tests/test_pretrip_admin_page.py ./tests/
 COPY tests/test_scout_outdoor_standard_coverage.py ./tests/

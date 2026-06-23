@@ -628,6 +628,39 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('document.getElementById("eventCount").textContent = `${events.length} events / ${timelineGroups.length} groups`;', html)
         self.assertIn("debugPageState.timelineGroups = timelineGroups", html)
         self.assertIn("if (group.count > 1) return [group];", html)
+
+    def test_static_debug_page_renders_physio_timeline_projection_contract(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "<title>Scout Phase 3.5 Runtime Debug | 2026-06-23 12:13:54 CST</title>",
+            html,
+        )
+        self.assertIn(
+            '<h1>Runtime Debug <span class="title-timestamp">2026-06-23 12:13:54 CST</span></h1>',
+            html,
+        )
+        self.assertIn(
+            'physiologic_gate_window: ["skill", "route-progress", "segment"]',
+            html,
+        )
+        self.assertIn(
+            'physiologic_gate_safety_event: ["skill", "safety", "route-progress", "segment"]',
+            html,
+        )
+        self.assertIn(
+            'physiologic_gate_window: "生理壓力 gate 的 15 分鐘窗口 projection；不是醫療診斷或 safety truth。"',
+            html,
+        )
+        self.assertIn(
+            'const projectedMapRefs = Array.isArray(event?.map_refs) ? event.map_refs.filter(Boolean) : [];',
+            html,
+        )
+        self.assertIn('projectedMapRefs.forEach(ref => refs.add(ref));', html)
+        self.assertIn('"physiologic_gate_window"', html)
+        self.assertIn('(event.kind || "").startsWith("physiologic_")', html)
+        self.assertIn('id="physiologicGateCount"', html)
+        self.assertIn('document.getElementById("physiologicGateCount").textContent = String(physiologicEvents.length);', html)
         self.assertIn("Show ${escapeHtml(group.count)} events", html)
         self.assertIn("function selectorValue", html)
         self.assertIn("function eventByTimelineNode", html)

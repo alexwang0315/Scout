@@ -976,6 +976,108 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert segment_event["payload"]["map_target_ids"]
 
 
+def test_debug_projection_view_includes_physio_timeline_projection(tmp_path):
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    segment_ref = project.get(
+        "overpass_aligned_segment_candidates_ref",
+        project["segment_candidates_ref"],
+    )
+    first_segment = json.loads((project_root / segment_ref).read_text(encoding="utf-8"))[0]
+    segment_id = first_segment["candidate_id"]
+    physio_dir = project_root / "outputs" / "physio"
+    physio_dir.mkdir(parents=True)
+    physio_projection_ref = "outputs/physio/physiologic_timeline_projection.json"
+    physio_projection = {
+        "artifact_kind": "scout_physiologic_timeline_projection",
+        "artifact_version": "physiologic_timeline_projection.v1",
+        "source_provider": "fixture",
+        "source_path": physio_projection_ref,
+        "sha256": "f" * 64,
+        "session_id": "debug.physio.fixture",
+        "mission_id": PROJECT_ID,
+        "event_count": 1,
+        "events": [
+            {
+                "event_id": "debug_event.physiologic_gate.window.000001",
+                "session_id": "debug.physio.fixture",
+                "mission_id": PROJECT_ID,
+                "timestamp": "offset:+000m-+015m",
+                "sequence": 1,
+                "kind": "physiologic_gate_window",
+                "phase": "phase35",
+                "severity": "warning",
+                "subject_ref": "physiologic_gate.window.001",
+                "source_refs": ["outputs/physio/physiologic_gate_evidence.jsonl"],
+                "map_refs": [segment_id],
+                "summary": "window 1 | state=stop_and_rest | ETA+20m",
+                "payload": {
+                    "projection_event_type": "physiologic_gate_window",
+                    "gate": "physiologic_gate",
+                    "state": "stop_and_rest",
+                    "required_action": "stop_and_rest",
+                    "window_index": 1,
+                    "eta_delay_minutes": 20,
+                    "segment_id": segment_id,
+                    "map_target_ids": [segment_id],
+                    "boundary": {
+                        "medical_diagnosis": False,
+                        "runtime_safety_truth": False,
+                        "phase1_runtime_safety_truth": False,
+                        "safety_api_called": False,
+                    },
+                },
+            }
+        ],
+        "counts": {
+            "event_count": 1,
+            "by_kind": {"physiologic_gate_window": 1},
+            "by_state": {"stop_and_rest": 1},
+            "with_map_ref_count": 1,
+            "without_map_ref_count": 0,
+        },
+    }
+    (project_root / physio_projection_ref).write_text(
+        json.dumps(physio_projection, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    project["physiologic_timeline_projection_ref"] = physio_projection_ref
+    project_path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    projection = load_pretrip_debug_projection_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    physio = projection["physiologic_timeline_projection"]
+    physio_events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "physiologic_gate_window"
+    ]
+    assert physio["status"] == "ready"
+    assert physio["event_count"] == 1
+    assert projection["counts"]["physiologic_timeline_event_count"] == 1
+    assert projection["environment_risk_derivative_layers"]["artifact_kind"] == (
+        "pretrip_environment_risk_derivative_layers"
+    )
+    assert len(physio_events) == 1
+    event = physio_events[0]
+    assert event["payload"]["project_id"] == PROJECT_ID
+    assert event["payload"]["runtime_safety_truth"] is False
+    assert event["payload"]["boundary"]["medical_diagnosis"] is False
+    assert event["payload"]["boundary"]["safety_api_called"] is False
+    assert event["payload"]["segment_id"] == segment_id
+    assert event["payload"]["map_target_ids"] == [segment_id]
+    assert event["map_refs"] == [segment_id]
+
+
 def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp_path):
     fixture_project_root = (
         ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID

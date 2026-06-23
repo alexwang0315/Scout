@@ -107,6 +107,25 @@ OUTPUT_REFS = {
     "gpm_imerg_corridor_summary_ref": (
         "outputs/environment/gee/gpm_imerg_corridor_summary.json"
     ),
+    "gee_feature_package_ref": "outputs/environment/gee/scout_gee_feature_package.json",
+    "environment_risk_derivatives_ref": (
+        "outputs/environment/derived/environment_risk_derivatives.json"
+    ),
+    "new_landslide_candidates_ref": (
+        "outputs/environment/derived/new_landslide_candidates.geojson"
+    ),
+    "wetness_flash_flood_susceptibility_ref": (
+        "outputs/environment/derived/wetness_flash_flood_susceptibility.geojson"
+    ),
+    "trail_obscurity_risk_ref": (
+        "outputs/environment/derived/trail_obscurity_risk.geojson"
+    ),
+    "practical_darkness_time_ref": (
+        "outputs/environment/derived/practical_darkness_time.geojson"
+    ),
+    "route_revalidation_report_ref": (
+        "outputs/environment/derived/route_revalidation_report.json"
+    ),
     "web_case_evidence_ref": "outputs/layers/normalized/web_case_evidence.json",
     "raster_label_evidence_ref": (
         "outputs/layers/normalized/raster_label_evidence.geojson"
@@ -887,6 +906,8 @@ def _prepare_gee_environment_artifacts(
             fetch_gee_environment_evidence,
             gee_environment_dataset_catalog,
             gee_numeric_no_cache_policy,
+            write_environment_risk_derivative_artifacts,
+            write_scout_gee_feature_package,
         )
 
         gee_status = build_gee_runtime_status().to_dict()
@@ -911,6 +932,8 @@ def _prepare_gee_environment_artifacts(
             "artifact_role": "current_run_evidence_snapshot",
             "reason": "GEE values are time-sensitive and must be refetched.",
         }
+        write_scout_gee_feature_package = None
+        write_environment_risk_derivative_artifacts = None
 
     fetch_result: dict[str, Any] | None = None
     external_calls_made = False
@@ -1121,6 +1144,99 @@ def _prepare_gee_environment_artifacts(
     _write_json(gee_dir / "smap_l4_timeseries.json", smap_timeseries)
     _write_json(gee_dir / "gpm_imerg_timeseries.json", gpm_timeseries)
 
+    feature_package_path = gee_dir / "scout_gee_feature_package.json"
+    feature_package_status = "not_written"
+    feature_package_segment_count = 0
+    feature_package_for_derivatives: dict[str, Any] | None = None
+    if write_scout_gee_feature_package is None:
+        feature_package_for_derivatives = _blocked_gee_feature_package(
+            project_id=str(project_id),
+            prepared_at=prepared_at,
+            status="gee_import_failed",
+            blockers=["gee_feature_package_writer_unavailable"],
+        )
+        _write_json(feature_package_path, feature_package_for_derivatives)
+        feature_package_status = "gee_import_failed"
+    else:
+        route_gpx_path = _reference_gpx_path_for_risk_generation(
+            project_root=project_root,
+            project=project,
+        )
+        risk_path = _project_ref_path(project_root, project, "risk_route_profile_ref")
+        if route_gpx_path is None:
+            feature_package_for_derivatives = _blocked_gee_feature_package(
+                project_id=str(project_id),
+                prepared_at=prepared_at,
+                status="missing_route_gpx",
+                blockers=["route_gpx_ref_missing"],
+            )
+            _write_json(feature_package_path, feature_package_for_derivatives)
+            feature_package_status = "missing_route_gpx"
+        else:
+            try:
+                feature_package = write_scout_gee_feature_package(
+                    gpx_path=route_gpx_path,
+                    output_path=feature_package_path,
+                    project_id=str(project_id),
+                    prepared_at=prepared_at,
+                    buffer_m=float(request.route_corridor_m),
+                    route_risk_geojson_path=risk_path,
+                    allow_live_fetch=(
+                        request.network_mode == "explicit-fetch"
+                        and request.allow_network_fetch
+                    ),
+                )
+                feature_package_status = str(feature_package.get("status") or "ready")
+                feature_package_segment_count = int(
+                    feature_package.get("counts", {}).get("segment_count") or 0
+                )
+                feature_package_for_derivatives = feature_package
+            except Exception as exc:  # pragma: no cover - defensive package boundary.
+                feature_package_for_derivatives = _blocked_gee_feature_package(
+                    project_id=str(project_id),
+                    prepared_at=prepared_at,
+                    status="feature_package_failed",
+                    blockers=[f"gee_feature_package_failed:{type(exc).__name__}"],
+                )
+                _write_json(feature_package_path, feature_package_for_derivatives)
+                feature_package_status = "feature_package_failed"
+
+    derivatives_summary: dict[str, Any] = {
+        "status": "not_written",
+        "counts": {},
+        "headline": "",
+    }
+    if (
+        write_environment_risk_derivative_artifacts is not None
+        and isinstance(feature_package_for_derivatives, dict)
+    ):
+        try:
+            derivatives_summary = write_environment_risk_derivative_artifacts(
+                feature_package=feature_package_for_derivatives,
+                output_dir=project_root / "outputs" / "environment" / "derived",
+                project_id=str(project_id),
+                generated_at=prepared_at,
+            )
+        except Exception as exc:  # pragma: no cover - defensive derivative boundary.
+            derivatives_summary = {
+                "artifact_kind": "scout_environment_risk_derivatives",
+                "schema_version": "scout_environment_risk_derivatives.v0.1",
+                "project_id": str(project_id),
+                "generated_at": prepared_at,
+                "status": "derivative_failed",
+                "blocker_reasons": [
+                    f"environment_risk_derivatives_failed:{type(exc).__name__}"
+                ],
+                "counts": {},
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+            _write_json(
+                project_root
+                / OUTPUT_REFS["environment_risk_derivatives_ref"],
+                derivatives_summary,
+            )
+
     return {
         "soil_moisture_grid_ref": OUTPUT_REFS["soil_moisture_grid_ref"],
         "smap_l4_timeseries_ref": OUTPUT_REFS["smap_l4_timeseries_ref"],
@@ -1141,6 +1257,26 @@ def _prepare_gee_environment_artifacts(
         "gee_cache_policy": cache_policy,
         "gee_raw_summary_ref": raw_summary_ref,
         "gee_raw_summary_sha256": raw_summary_hash,
+        "gee_feature_package_ref": OUTPUT_REFS["gee_feature_package_ref"],
+        "gee_feature_package_status": feature_package_status,
+        "gee_feature_package_segment_count": feature_package_segment_count,
+        "environment_risk_derivatives_ref": OUTPUT_REFS[
+            "environment_risk_derivatives_ref"
+        ],
+        "new_landslide_candidates_ref": OUTPUT_REFS[
+            "new_landslide_candidates_ref"
+        ],
+        "wetness_flash_flood_susceptibility_ref": OUTPUT_REFS[
+            "wetness_flash_flood_susceptibility_ref"
+        ],
+        "trail_obscurity_risk_ref": OUTPUT_REFS["trail_obscurity_risk_ref"],
+        "practical_darkness_time_ref": OUTPUT_REFS["practical_darkness_time_ref"],
+        "route_revalidation_report_ref": OUTPUT_REFS[
+            "route_revalidation_report_ref"
+        ],
+        "environment_risk_derivative_status": derivatives_summary.get("status"),
+        "environment_risk_derivative_counts": derivatives_summary.get("counts", {}),
+        "environment_risk_derivative_headline": derivatives_summary.get("headline", ""),
     }
 
 
@@ -5315,6 +5451,46 @@ def _gee_environment_summary(
         "candidate_only": True,
         "runtime_safety_truth": False,
         "boundary": _environment_boundary(external_calls_made=external_calls_made),
+    }
+
+
+def _blocked_gee_feature_package(
+    *,
+    project_id: str,
+    prepared_at: str,
+    status: str,
+    blockers: list[str],
+) -> dict[str, Any]:
+    return {
+        "artifact_kind": "scout_gee_feature_package",
+        "schema_version": "scout_gee_feature_package.v0.1",
+        "project_id": project_id,
+        "generated_at": prepared_at,
+        "status": status,
+        "provider": "google_earth_engine",
+        "server_side_only": True,
+        "mobile_runtime_dependency": False,
+        "raspberry_pi_runtime_dependency": False,
+        "segments": [],
+        "source_datasets": [],
+        "stale_data_warnings": [],
+        "blocker_reasons": list(blockers),
+        "counts": {
+            "route_point_count": 0,
+            "segment_count": 0,
+            "raw_segment_feature_count": 0,
+            "stale_warning_count": 0,
+        },
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "mobile_runtime_gee_dependency": False,
+            "raspberry_pi_runtime_gee_dependency": False,
+            "external_api_calls_made": False,
+            "server_side_export_required": True,
+            "compact_route_feature_package": True,
+        },
     }
 
 

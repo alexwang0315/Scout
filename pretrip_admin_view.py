@@ -19,6 +19,10 @@ from post_analysis_energy_feedback import POST_ANALYSIS_ENERGY_FEEDBACK_REF
 from pretrip_layer_preparation import build_layer_preparation_not_prepared_view
 from pretrip_energy_projection import DEFAULT_PRETRIP_ENERGY_PROJECTION_REF
 from scout_energy_reserve_monitor import build_energy_reserve_monitor_from_view
+from scout_runtime_physiologic_timeline import (
+    PhysiologicTimelineProjection,
+    build_physio_timeline_projection,
+)
 from pretrip_spatial_imprint_export import (
     DEFAULT_SPATIAL_IMPRINT_CANDIDATES_REF,
     DEFAULT_SPATIAL_IMPRINT_MANIFEST_REF,
@@ -1790,6 +1794,11 @@ def load_pretrip_debug_projection_view(
     mileage_tag_alignment_geojson_raw = _load_optional_json(
         optional_project_path("mileage_tag_alignment_geojson_ref")
     )
+    physiologic_timeline_projection = _physiologic_timeline_projection_summary(
+        project_id,
+        project,
+        project_root=resolved_project_root,
+    )
     source_refs = {
         "project": "project.json",
         "route_summary": project["route_summary_ref"],
@@ -1858,6 +1867,12 @@ def load_pretrip_debug_projection_view(
             "mileage_tag_alignment_geojson_ref",
             "",
         ),
+        "physiologic_timeline_projection": project.get(
+            "physiologic_timeline_projection_ref",
+            "",
+        ),
+        "physiologic_artifact_index": project.get("physiologic_artifact_index_ref", ""),
+        "physiologic_artifact_dir": project.get("physiologic_artifact_dir_ref", ""),
         "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
         "cwa_weather_evidence": project.get("cwa_weather_evidence_ref", ""),
         "cwa_warnings_geojson": project.get("cwa_warnings_geojson_ref", ""),
@@ -2119,6 +2134,7 @@ def load_pretrip_debug_projection_view(
             mileage_tag_alignment_geojson_raw,
             source_refs=source_refs,
         )
+    view["physiologic_timeline_projection"] = physiologic_timeline_projection
     view["gis_perception_timeline"] = _gis_perception_timeline_summary(
         project_id,
         view["gis_perception"],
@@ -2176,6 +2192,9 @@ def load_pretrip_debug_projection_view(
         "major_critical_points": view.get("major_critical_points"),
         "boss_points": view.get("boss_points"),
         "mileage_tag_alignment": view.get("mileage_tag_alignment"),
+        "physiologic_timeline_projection": view[
+            "physiologic_timeline_projection"
+        ],
         "map_layers": view["map_layers"],
         "readiness": view["readiness"],
         "timeline_events": timeline_events,
@@ -2297,6 +2316,9 @@ def load_pretrip_debug_projection_view(
                 .get("counts", {})
                 .get("aligned_tag_count", 0)
             ),
+            "physiologic_timeline_event_count": view[
+                "physiologic_timeline_projection"
+            ].get("event_count", 0),
             "timeline_event_count": len(timeline_events),
             "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),
         },
@@ -4342,6 +4364,17 @@ def _debug_projection_timeline_events(
             },
         )
 
+    for physiologic_event in (
+        view.get("physiologic_timeline_projection", {}).get("events") or []
+    ):
+        events.append(
+            _physiologic_debug_projection_event(
+                physiologic_event,
+                project_id=project_id,
+                sequence=len(events) + 1,
+            )
+        )
+
     append_event(
         "debug_session_completed",
         f"{project_id} debug projection completed without runtime mutation.",
@@ -4356,6 +4389,206 @@ def _debug_projection_timeline_events(
         },
     )
     return events
+
+
+def _physiologic_timeline_projection_summary(
+    project_id: str,
+    project: dict[str, Any],
+    *,
+    project_root: Path,
+) -> dict[str, Any]:
+    boundary = {
+        "projection_only": True,
+        "pretrip_candidate_evidence_only": True,
+        "runtime_safety_truth": False,
+        "phase1_runtime_mutation_allowed": False,
+        "phase1_l0_l4_state_mutated": False,
+        "safety_api_called": False,
+        "medical_diagnosis": False,
+        "raw_health_payload_shared": False,
+        "raw_track_shared": False,
+        "exact_timestamps_shared": False,
+        "home_work_trace_shared": False,
+    }
+    projection_ref = project.get("physiologic_timeline_projection_ref")
+    artifact_index_ref = project.get("physiologic_artifact_index_ref")
+    artifact_dir_ref = project.get("physiologic_artifact_dir_ref")
+    projection_path = _optional_project_ref_path(project_root, projection_ref)
+    artifact_index_path = _optional_project_ref_path(project_root, artifact_index_ref)
+    artifact_dir_path = _optional_project_ref_path(project_root, artifact_dir_ref)
+
+    try:
+        if projection_path is not None and projection_path.exists():
+            projection = PhysiologicTimelineProjection.model_validate(
+                _load_json(projection_path)
+            )
+            source_path = str(projection_ref)
+        elif (
+            artifact_index_path is not None
+            and artifact_index_path.exists()
+        ) or (
+            artifact_dir_path is not None
+            and artifact_dir_path.exists()
+        ):
+            projection = build_physio_timeline_projection(
+                index_path=artifact_index_path
+                if artifact_index_path is not None and artifact_index_path.exists()
+                else None,
+                artifact_dir=artifact_dir_path
+                if artifact_dir_path is not None and artifact_dir_path.exists()
+                else None,
+                root=project_root,
+                session_id=f"pretrip_projection.{project_id}.physiologic",
+                mission_id=project_id,
+            )
+            source_path = str(artifact_index_ref or artifact_dir_ref)
+        else:
+            return {
+                "artifact_kind": "pretrip_physio_timeline_projection_summary",
+                "status": "missing",
+                "project_id": project_id,
+                "source_path": str(projection_ref or artifact_index_ref or artifact_dir_ref or ""),
+                "event_count": 0,
+                "events": [],
+                "counts": {"event_count": 0},
+                "boundary": boundary,
+            }
+    except (OSError, ValueError, TypeError) as exc:
+        return {
+            "artifact_kind": "pretrip_physio_timeline_projection_summary",
+            "status": "error",
+            "project_id": project_id,
+            "source_path": str(projection_ref or artifact_index_ref or artifact_dir_ref or ""),
+            "event_count": 0,
+            "events": [],
+            "counts": {"event_count": 0},
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "boundary": boundary,
+        }
+
+    payload = projection.model_dump(mode="json")
+    return {
+        "artifact_kind": "pretrip_physio_timeline_projection_summary",
+        "status": "ready",
+        "project_id": project_id,
+        "source_path": source_path,
+        "source_provider": payload["source_provider"],
+        "source_sha256": payload["sha256"],
+        "event_count": payload["event_count"],
+        "events": payload["events"],
+        "counts": payload["counts"],
+        "source_artifacts": payload.get("source_artifacts", {}),
+        "data_quality": payload["data_quality"],
+        "privacy": payload["privacy"],
+        "boundary": {
+            **boundary,
+            **payload["boundary"],
+            "projection_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "safety_api_called": False,
+            "medical_diagnosis": False,
+        },
+    }
+
+
+def _physiologic_debug_projection_event(
+    event: dict[str, Any],
+    *,
+    project_id: str,
+    sequence: int,
+) -> dict[str, Any]:
+    payload = {
+        **(event.get("payload") or {}),
+    }
+    map_target_ids = _unique_string_list(
+        [
+            *(event.get("map_refs") or []),
+            *(payload.get("map_target_ids") or []),
+            payload.get("segment_id"),
+            payload.get("checkpoint_id"),
+        ]
+    )
+    source_refs = _unique_string_list(
+        [
+            *(event.get("source_refs") or []),
+            *(payload.get("source_refs") or []),
+        ]
+    )
+    payload_boundary = payload.get("boundary") if isinstance(payload.get("boundary"), dict) else {}
+    payload["boundary"] = {
+        **payload_boundary,
+        "projection_only": True,
+        "pretrip_candidate_evidence_only": True,
+        "runtime_safety_truth": False,
+        "phase1_runtime_mutation_allowed": False,
+        "phase1_l0_l4_state_mutated": False,
+        "safety_api_called": False,
+        "medical_diagnosis": False,
+        "raw_health_payload_shared": False,
+        "raw_track_shared": False,
+        "exact_timestamps_shared": False,
+        "home_work_trace_shared": False,
+    }
+    payload.update(
+        {
+            "project_id": project_id,
+            "profile": "pretrip_debug_projection",
+            "import_stage": "physiologic_timeline_projection",
+            "gate": payload.get("gate") or "physiologic_gate",
+            "projection_only": True,
+            "runtime_safety_truth": False,
+            "map_target_ids": map_target_ids,
+            "source_refs": source_refs,
+        }
+    )
+    return {
+        "event_id": event.get("event_id")
+        or f"debug_event.pretrip_projection.{project_id}.physiologic.{sequence:06d}",
+        "session_id": event.get("session_id")
+        or f"pretrip_projection.{project_id}.physiologic",
+        "mission_id": event.get("mission_id") or project_id,
+        "sequence": sequence,
+        "timestamp": event.get("timestamp") or "offset:physiologic",
+        "phase": event.get("phase") or "phase35",
+        "kind": event.get("kind") or "physiologic_gate_window",
+        "severity": event.get("severity") or "info",
+        "summary": event.get("summary")
+        or "Physiologic gate projection available for debug review.",
+        "subject_ref": event.get("subject_ref") or "physiologic_gate",
+        "correlation_refs": _unique_string_list(
+            [
+                *(event.get("correlation_refs") or []),
+                *source_refs,
+                *map_target_ids,
+            ]
+        ),
+        "source_refs": source_refs,
+        "map_refs": map_target_ids,
+        "payload": payload,
+    }
+
+
+def _optional_project_ref_path(project_root: Path, ref: Any) -> Path | None:
+    if not ref:
+        return None
+    path = Path(str(ref)).expanduser()
+    return path if path.is_absolute() else project_root / path
+
+
+def _unique_string_list(values: list[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value is None or value == "":
+            continue
+        item = str(value)
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
 
 
 def list_pretrip_admin_projects(

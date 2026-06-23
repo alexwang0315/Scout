@@ -73,6 +73,7 @@ flowchart LR
     Gate["scout_runtime_physiologic_gate<br/>warmup / normal / watch / stop_and_rest / retreat_suggested"]
     Handoff["physiologic_safety_gate_event.json<br/>ETA delay + reducer candidate"]
     DryRun["physiologic_reducer_dry_run.json<br/>no direct L_n mutation"]
+    TimelineProjection["scout_physiologic_timeline_projection<br/>[x] UI-ready offset events"]
   end
 
   subgraph Consumers["Scout Consumers"]
@@ -99,8 +100,13 @@ flowchart LR
   Capsule --> Index
   GateInput --> Index
   Handoff --> Index
+  Index --> TimelineProjection
+  Capsule --> TimelineProjection
+  Gate --> TimelineProjection
+  Handoff --> TimelineProjection
+  DryRun --> TimelineProjection
 
-  Gate --> AdminDebug
+  TimelineProjection --> AdminDebug
   Handoff --> Composer
   Handoff --> Reducer
 
@@ -126,6 +132,44 @@ Implemented task 1-8 integration points:
 | 6. SafetyGateEvent handoff | `build_safety_gate_event_from_physio_gate()` | `physiologic_safety_gate_event.json` |
 | 7. Route-pressure / reducer dry run | `dry_run_physio_reducer()` | `physiologic_reducer_dry_run.json` |
 | 8. Resident observer promotion | `scout_physiologic_gate_observer.py`; `IngressObserverSupervisor` `physiologic-gate` spec | `physiologic_gate_status.json` |
+
+Implemented UI timeline rendering slices 1-6:
+
+| UI slice | Implemented surface | Artifact/output |
+| --- | --- | --- |
+| 1. Timeline projection contract | `PhysiologicTimelineProjection`, `PhysiologicTimelineEvent`, `PhysiologicTimelineBoundary` | `[x] scout_physiologic_timeline_projection` |
+| 2. Artifact loader | `load_physio_timeline_artifacts()` | `[x] Reads physiologic index, window replay, gate JSONL, SafetyGateEvent, reducer dry-run, and review capsule when present.` |
+| 3. Event normalizer | `normalize_physio_timeline_events()` and `write_physio_timeline_projection()` | `[x] Emits `physiologic_gate_window`, `physiologic_gate_safety_event`, `physiologic_gate_reducer_dry_run`, and `physiologic_review_capsule` events. |
+| 4. Debug projection view join | `load_pretrip_debug_projection_view()` optional refs: `physiologic_timeline_projection_ref`, `physiologic_artifact_index_ref`, `physiologic_artifact_dir_ref` | `[x] Adds `physiologic_timeline_projection` summary and merges events into `/admin/debug` `timeline_events`. |
+| 5. Runtime debug UI rendering | `docs/admin/phase-3-5-runtime-debug.html` | `[x] Adds physiologic hints, dense grouping for 15-minute windows, skill-pane count, and title timestamp marker. |
+| 6. Map focus contract | `mapRefsForEvent()` | `[x] Uses top-level `event.map_refs` plus payload `map_target_ids`/`segment_id` so selected physiologic timeline items can focus existing map elements. |
+
+```mermaid
+flowchart LR
+  Artifacts["[x] Physiologic artifacts<br/>window replay / gate JSONL / handoff / reducer / capsule"]
+  Projection["[x] Timeline projection<br/>offset timestamps + sanitized payload"]
+  DebugView["[x] /admin/debug projection view<br/>optional physio refs"]
+  TimelineUI["[x] Runtime debug timeline<br/>hints + grouping + skill count"]
+  MapFocus["[x] Timeline item -> map focus<br/>map_refs / segment_id"]
+  SafetyReducer["[ ] Future safety reducer<br/>multi-gate L_n decision"]
+
+  Artifacts --> Projection --> DebugView --> TimelineUI --> MapFocus
+  Projection -. candidate only .-> SafetyReducer
+```
+
+The projection is the admin/debug timeline input contract. It keeps events
+sortable and clickable without exposing raw wearable or route payloads:
+
+- `timestamp` is always an elapsed offset label such as
+  `offset:+000m-+015m`, `offset:+01740s`, or `offset:batch-review`;
+- `sequence` is deterministic and stable for rendering order;
+- `map_refs` and `payload.map_target_ids` carry segment/checkpoint references
+  for later map centering;
+- `source_refs` points at sanitized local artifact paths and artifact hashes;
+- every event payload repeats `boundary`, `privacy`, `projection_only=true`,
+  and `runtime_safety_truth=false`;
+- forbidden raw fields such as exact timestamps, raw health payloads, raw GPX,
+  coordinates, or home/work traces are rejected before projection.
 
 `physiologic-gate` resident startup is explicit. It is enabled with
 `SCOUT_PHYSIOLOGIC_GATE_AUTOSTART=true` or explicit physiologic source config,
