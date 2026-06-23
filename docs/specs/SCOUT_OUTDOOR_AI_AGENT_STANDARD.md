@@ -229,6 +229,17 @@ Scout 的自信力是：
 
 > 使用者對自己與隊伍的體能、腳程、經驗、休息節奏與路線需求，是否有資料支持的準確估計。
 
+自信力也不是 Scout 唯一的撤退依據。Scout 的撤退與停止前進判斷必須由多個
+runtime gate 組成：`pace_gate`（配速過慢）、`delay_gate`（時程超時）、
+`physiologic_gate`（生理壓力）、`weather_gate`（天氣惡化）、
+`darkness_gate`（黑暗風險）與 `environment_threat_gate`（落石、崩塌、路基消失、
+蜂蛇或其他現地威脅）。任何一個 gate 都可以要求更保守的行動；
+`physiologic_gate` 正常不代表可以忽略天氣、黑暗、地形或環境威脅。
+
+`Physiologic gate` 的詳細契約另見
+`docs/specs/scout-runtime-physiologic-gate.md`。它只處理 baseline-relative
+生理壓力與運動負荷，不負責完整撤退決策。
+
 ### 7.2 Scout Pace Coefficient
 
 Scout 應建立使用者的 `Scout Pace Coefficient`，至少包含：
@@ -321,6 +332,21 @@ Boss Point 的中心線，也不得直接把粗略 GPX 幾何當成地形壓力�
 completed trip GPX、capability timeline、地形-時間模型、休息頻率、後段
 速度衰退與歷史活動 baseline 形成保守估計。這些資料是 advisory planning
 evidence，不是醫療診斷。
+
+在 runtime 中，Apple Watch `Effort` / `workoutEffortScore`、Apple
+`Training Load`、Garmin Body Battery / stress 等 provider 值只能作為
+`source_provider` value。Apple 的 effort 公式不是 Scout 的公開可重現 truth；
+Scout 可以保存或引用 provider value，也可以產生自己的
+`scout_exertion_snapshot`，但兩者必須分離。Scout 不得把 provider 值當成
+醫療診斷、不得推論疾病、不得呼叫 `/safety/*`，也不得讓模型輸出改寫 Phase 1
+runtime safety truth。
+
+`Physiologic gate` 的 runtime 輸出應至少可表達
+`warmup`、`normal`、`watch`、`stop_and_rest`、`retreat_suggested` 與
+`alert_candidate`。其中 `stop_and_rest` 會產生休息指示與 ETA delay；
+ETA delay 必須交給 `pace_gate`、`delay_gate`、`darkness_gate` 與 camp/retreat
+評估共同決定是否改行程、撤退或尋找緊急紮營候選點。`alert_candidate` 只能準備
+通報候選；實際對外通報仍需 explicit outbound policy 或人工核准。
 
 `Challenge Fit` 是把路線魔王需求乘上 pace/energy vulnerability 後的
 規劃適配度。高分不代表「必然危險」，而是代表需要更保守的 buffer、拆日、
@@ -1320,7 +1346,7 @@ The validation evidence is intentionally scoped:
 | Standard section | Scout force | Current implementation evidence |
 |---|---|---|
 | 6 | 探索力 / Route Context Intelligence | `scout.ai.route_context.assess.v0` is in the Scout AI evidence and answer path. |
-| 7 | 自信力 / Readiness & Pace Fit | `scout.ai.pace_guardian.assess.v0`, `scout.ai.route_readiness.assess.v0`, Scout Pace Coefficient generation, Route Pressure Profile / Boss synthesis, and `$scout-route-pressure-intelligence` P0/P1 public pressure evidence orchestration are in the pre-trip path. |
+| 7 | 自信力 / Readiness & Pace Fit | `scout.ai.pace_guardian.assess.v0`, `scout.ai.route_readiness.assess.v0`, Scout Pace Coefficient generation, Route Pressure Profile / Boss synthesis, `$scout-route-pressure-intelligence` P0/P1 public pressure evidence orchestration, and `docs/specs/scout-runtime-physiologic-gate.md` are in the pre-trip or next-runtime-slice path. |
 | 8 | 勇氣力 / Contextual Permissioning | `scout.ai.contextual_permission.assess.v0` emits structured permission decisions with limits and residual risk. |
 | 9 | 路線力 / Route Architecture Intelligence | `scout.ai.route_architecture.assess.v0` covers route structure, checkpoint, retreat, and timing reasoning. |
 | 10 | 天氣力 / Weather-to-Decision Intelligence | `scout.ai.weather_window.assess.v0` converts weather into route-specific decision constraints. |
