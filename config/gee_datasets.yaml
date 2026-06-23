@@ -1,0 +1,79 @@
+# Scout GEE route feature datasets v0.1
+# GEE = Google Earth Engine（Google 地球引擎，伺服器端環境資料處理）
+# Feature package（特徵包）= 匯出給 Scout 使用的精簡路線分段環境特徵
+schema_version: scout_gee_datasets.v0.1
+package_version: scout_gee_feature_package.v0.1
+
+cloud_filtering:
+  # Cloud Score Plus thresholds（雲量品質門檻）for Sentinel-2 usable imagery.
+  sentinel2_cloud_score_plus_min_cs: 0.60
+  sentinel2_cloud_score_plus_min_cs_cdf: 0.50
+  sentinel2_max_cloud_probability: 35
+  stale_days_without_cloud_free_imagery: 45
+
+datasets:
+  - key: nasadem
+    dataset_id: NASA/NASADEM_HGT/001
+    role: terrain
+    bands: [elevation]
+    date_range: static
+    confidence: 0.82
+
+  - key: sentinel2_sr
+    dataset_id: COPERNICUS/S2_SR_HARMONIZED
+    role: optical_indices
+    bands: [B2, B3, B4, B8, B11, B12, SCL]
+    date_range: recent_90d
+    confidence: 0.72
+
+  - key: cloud_score_plus
+    dataset_id: GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED
+    role: sentinel2_cloud_filter
+    bands: [cs, cs_cdf]
+    date_range: recent_90d
+    confidence: 0.75
+
+  - key: sentinel1_grd
+    dataset_id: COPERNICUS/S1_GRD
+    role: radar_backscatter_change
+    bands: [VV, VH]
+    date_range: before_after_180d
+    confidence: 0.70
+
+  - key: dynamic_world
+    dataset_id: GOOGLE/DYNAMICWORLD/V1
+    role: landcover_probabilities
+    bands:
+      - water
+      - trees
+      - grass
+      - flooded_vegetation
+      - crops
+      - shrub_and_scrub
+      - built
+      - bare
+      - snow_and_ice
+      - label
+    date_range: recent_365d
+    confidence: 0.68
+
+  - key: gpm_imerg
+    dataset_id: NASA/GPM_L3/IMERG_V07
+    role: recent_rainfall
+    bands: [precipitation]
+    date_range: recent_72h
+    confidence: 0.72
+
+  - key: chirps_daily
+    dataset_id: UCSB-CHG/CHIRPS/DAILY
+    role: rainfall_anomaly
+    bands: [precipitation]
+    date_range: recent_30d_vs_climatology
+    confidence: 0.70
+
+  - key: firms
+    dataset_id: FIRMS
+    role: active_fire_distance
+    bands: [T21, confidence]
+    date_range: recent_7d
+    confidence: 0.62

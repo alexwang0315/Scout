@@ -273,6 +273,7 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
         "cwa_weather_evidence_ref",
         "soil_moisture_grid_ref",
         "antecedent_rain_grid_ref",
+        "gee_feature_package_ref",
     ):
         assert ref_key in project
         assert (project_root / project[ref_key]).is_file()
@@ -288,6 +289,18 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
         "configured_pending_fetcher",
         "configured_pending_explicit_fetch",
     }
+    feature_package = json.loads(
+        (project_root / project["gee_feature_package_ref"]).read_text(encoding="utf-8")
+    )
+    derivatives = json.loads(
+        (project_root / project["environment_risk_derivatives_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert feature_package["artifact_kind"] == "scout_gee_feature_package"
+    assert feature_package["mobile_runtime_dependency"] is False
+    assert feature_package["raspberry_pi_runtime_dependency"] is False
+    assert feature_package["boundary"]["runtime_safety_truth"] is False
 
     view = build_pretrip_admin_view(
         "chilai_nanhua_day1",
@@ -305,6 +318,21 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_root = _copy_fixture_project(tmp_path)
+    route_gpx = _write_gpx(
+        project_root / "sources" / "gee_route.gpx",
+        name="gee route",
+        points=[
+            (23.8700, 121.1700, 1400, "2026-05-22T00:00:00Z"),
+            (23.8710, 121.1710, 1420, "2026-05-22T00:10:00Z"),
+            (23.8720, 121.1720, 1440, "2026-05-22T00:20:00Z"),
+        ],
+    )
+    project_payload = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    project_payload["golden_route_gpx_ref"] = str(route_gpx.relative_to(project_root))
+    (project_root / "project.json").write_text(
+        json.dumps(project_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     class FakeGeeFetchResult:
         def to_dict(self) -> dict[str, object]:
@@ -368,12 +396,49 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
         assert kwargs["bbox_wgs84"]["west"] < kwargs["bbox_wgs84"]["east"]
         return FakeGeeFetchResult()
 
+    class FakeRouteFeatureClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def fetch_route_feature_package(self, **kwargs):
+            assert kwargs["project_id"] == "chilai_nanhua_day1"
+            segment = kwargs["segments"][0]["properties"]["segment_id"]
+            return {
+                "provider": "google_earth_engine",
+                "segment_features": [
+                    {
+                        "segment_id": segment,
+                        "elevation_m": 1500,
+                        "slope_deg": 28,
+                        "aspect_deg": 115,
+                        "terrain_ruggedness": 61,
+                        "curvature_proxy": -0.1,
+                        "flow_accumulation_proxy": 2300,
+                        "dynamic_world_probabilities": {"trees": 0.7, "bare": 0.1},
+                        "sentinel2_indices": {"ndvi": 0.44, "bsi": 0.2, "ndwi": -0.1},
+                        "sentinel2_before_after_change_score": 0.2,
+                        "sentinel1_before_after_backscatter_anomaly_db": -1.5,
+                        "gpm_recent_rainfall_mm": 22.5,
+                        "chirps_rainfall_anomaly": 0.8,
+                        "nearest_firms_active_fire_distance_m": 12000,
+                        "sentinel2_cloud_free_count": 2,
+                    }
+                ],
+                "secret_value_embedded": False,
+                "external_api_call_performed": True,
+                "runtime_safety_truth": False,
+            }
+
     monkeypatch.setenv("SCOUT_GEE_ENABLED", "true")
     monkeypatch.setenv("SCOUT_GEE_PROJECT_ID", "test-project")
     monkeypatch.setenv("EARTHENGINE_TOKEN", "test-token-ref")
     monkeypatch.setattr(
         "scout_gee_integration.fetch_gee_environment_evidence",
         fake_fetcher,
+    )
+    monkeypatch.setattr(
+        "scout_gee_integration.RestGeeRouteFeatureClient",
+        FakeRouteFeatureClient,
     )
 
     manifest = run_layer_preparation(
@@ -396,6 +461,14 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     )
     raw_summary = json.loads(
         (project_root / project["gee_raw_summary_ref"]).read_text(encoding="utf-8")
+    )
+    feature_package = json.loads(
+        (project_root / project["gee_feature_package_ref"]).read_text(encoding="utf-8")
+    )
+    derivatives = json.loads(
+        (project_root / project["environment_risk_derivatives_ref"]).read_text(
+            encoding="utf-8"
+        )
     )
 
     assert project["gee_environment_status"] == "fetched"
@@ -420,6 +493,21 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     assert raw_summary["secret_value_embedded"] is False
     assert soil["boundary"]["external_api_calls_made"] is True
     assert soil["features"][0]["properties"]["runtime_safety_truth"] is False
+    assert project["gee_feature_package_status"] == "ready"
+    assert project["gee_feature_package_segment_count"] > 0
+    assert project["environment_risk_derivative_status"].startswith("ready")
+    assert (project_root / project["new_landslide_candidates_ref"]).is_file()
+    assert (project_root / project["wetness_flash_flood_susceptibility_ref"]).is_file()
+    assert (project_root / project["trail_obscurity_risk_ref"]).is_file()
+    assert (project_root / project["practical_darkness_time_ref"]).is_file()
+    assert (project_root / project["route_revalidation_report_ref"]).is_file()
+    assert derivatives["artifact_kind"] == "scout_environment_risk_derivatives"
+    assert derivatives["counts"]["segment_count"] > 0
+    assert derivatives["boundary"]["runtime_safety_truth"] is False
+    assert feature_package["route"]["buffer_m"] == 500.0
+    assert feature_package["segments"][0]["slope_deg"] == 28
+    assert feature_package["boundary"]["external_api_calls_made"] is True
+    assert feature_package["boundary"]["raspberry_pi_runtime_gee_dependency"] is False
 
 
 def test_layer_preparation_ignores_local_imagery_refs_for_wmts_runtime(

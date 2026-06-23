@@ -56,6 +56,7 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     route_notes = view.get("route_notes") or {}
     map_candidates = view.get("map_candidates") or {}
     overpass = view.get("overpass_evidence") or {}
+    environment_values = view.get("environment_values") or {}
     route = view.get("route") or {}
     mileage = view.get("mileage_tag_alignment") or {}
     reference_segment_timing = view.get("reference_segment_timing") or {}
@@ -86,7 +87,8 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         "map_context": int((overpass.get("counts") or {}).get("candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("corridor_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("hazard_candidates") or 0)
-        + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0),
+        + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0)
+        + int((environment_values.get("counts") or {}).get("item_count") or 0),
         "mileage": int((mileage.get("counts") or {}).get("tag_count") or 0),
         "reference_tracks": int(
             (view.get("reference_tracks") or {}).get("reference_track_count")
@@ -110,6 +112,7 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     map_payload = view.get("map") or {}
     overpass = view.get("overpass_evidence") or {}
     map_candidates = view.get("map_candidates") or {}
+    environment_values = view.get("environment_values") or {}
     mileage = view.get("mileage_tag_alignment") or {}
     reference_segment_timing = view.get("reference_segment_timing") or {}
     counts = {
@@ -141,6 +144,7 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         + int((map_candidates.get("counts") or {}).get("corridor_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("hazard_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0)
+        + int((environment_values.get("counts") or {}).get("item_count") or 0)
         or _len(map_payload.get("corridors"))
         + _len(map_payload.get("hazards"))
         + _len(map_payload.get("pois")),

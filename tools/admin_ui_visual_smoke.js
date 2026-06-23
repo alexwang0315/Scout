@@ -383,7 +383,7 @@ async function collectChecks(surface, page, expectedLayerIds) {
         return rect.width > 0 && rect.height > 0 && (rect.width < 24 || rect.height < 24);
       })
       .map((node) => node.id || node.textContent.trim().slice(0, 32));
-    const titleMatches = document.title === expectedTitle;
+    const titleMatches = document.title === expectedTitle || document.title.startsWith(`${expectedTitle} | `);
     const nonBlank = bodyText.length > 80 && visibleTextBlocks >= 6;
     const noHorizontalOverflow = horizontalOverflowPx <= 24;
     const mapLayout = centeredMapLayout();

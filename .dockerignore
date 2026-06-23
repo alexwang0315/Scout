@@ -6,6 +6,8 @@
 !requirements.pi.txt
 !requirements.pi.admin.txt
 !requirements.pi.live.txt
+!config/
+!config/gee_datasets.yaml
 !scout-risk-engine/
 !scout-risk-engine/scout_codex_package/
 !scout-risk-engine/scout_codex_package/**

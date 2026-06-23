@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Scout Phase 3.5 Runtime Debug</title>
+  <title>Scout Phase 3.5 Runtime Debug | 2026-06-23 12:13:54 CST</title>
   <link rel="icon" href="data:,">
   <style>
     :root {
@@ -78,6 +78,15 @@
       font-size: 18px;
       font-weight: 650;
       letter-spacing: 0;
+    }
+
+    .title-timestamp {
+      display: inline-block;
+      margin-left: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      vertical-align: baseline;
     }
 
     h2 {
@@ -1817,7 +1826,7 @@
   <div class="shell">
     <header>
       <div>
-        <h1>Runtime Debug</h1>
+        <h1>Runtime Debug <span class="title-timestamp">2026-06-23 12:13:54 CST</span></h1>
         <p class="meta">Read-only engineering console aligned to chilai_nanhua_day1 when available.</p>
         <code>/debug/events /debug/state /debug/messages /debug/mobile-wearable/ingress</code>
       </div>
@@ -2071,7 +2080,7 @@
                   <h2>Ln And Skill Runs</h2>
                   <span class="pill" id="skillSummary">none</span>
                 </div>
-                <p class="hint">看 gate 是否放行、skill 是否真的跑過。</p>
+                <p class="hint">看 gate 是否放行、skill 是否真的跑過；physiologic gate 只顯示 projection evidence。</p>
               </div>
               <p class="hint state-context" id="skillSelectionContext">顯示目前 timeline 範圍內的 Ln gate / skill run。</p>
               <div class="grid" style="margin-bottom: 10px;">
@@ -2084,6 +2093,11 @@
                   <span>Spatial imprint events</span>
                   <strong id="spatialImprintCount">0</strong>
                   <p class="hint">從 runtime store / trigger dry-run artifact 只讀投影。</p>
+                </div>
+                <div class="metric">
+                  <span>Physiologic gate</span>
+                  <strong id="physiologicGateCount">0</strong>
+                  <p class="hint">15 分鐘窗口與 reducer dry-run 的只讀 projection。</p>
                 </div>
               </div>
               <div class="list" id="skillList"></div>
@@ -2414,7 +2428,7 @@
     };
     const LEVELS = ["L0", "L1", "L2", "L3", "L4"];
     const STATUS_BAD = new Set(["degraded", "failed", "unavailable", "offline", "error"]);
-    const DENSE_TIMELINE_GROUP_KINDS = new Set(["checkpoint_detected", "route_progress_evaluated", "gis_perception_checkpoint_projected"]);
+    const DENSE_TIMELINE_GROUP_KINDS = new Set(["checkpoint_detected", "route_progress_evaluated", "gis_perception_checkpoint_projected", "physiologic_gate_window"]);
     const DEBUG_TAB_IDS = ["panel-state", "panel-monitor", "panel-provider", "panel-hardware", "panel-ingress", "panel-incident", "panel-skill", "panel-outbound", "panel-boundary", "panel-api"];
     const debugPageState = {
       events: [],
@@ -2490,6 +2504,10 @@
       spatial_imprint_store_updated: ["agent", "skill", "route-progress"],
       spatial_imprint_trigger_event: ["agent", "skill", "route-progress"],
       spatial_imprint_projection_error: ["agent", "skill"],
+      physiologic_gate_window: ["skill", "route-progress", "segment"],
+      physiologic_gate_safety_event: ["skill", "safety", "route-progress", "segment"],
+      physiologic_gate_reducer_dry_run: ["skill", "safety"],
+      physiologic_review_capsule: ["skill"],
       provider_status_recorded: ["provider"],
       outbound_message_queued: ["outbound", "message"],
       outbound_message_state_changed: ["outbound", "message"]
@@ -2513,6 +2531,10 @@
       spatial_imprint_store_updated: "空間印記 runtime store 的人工授權變更被只讀投影。",
       spatial_imprint_trigger_event: "空間印記 trigger dry-run 的判定結果被只讀投影。",
       spatial_imprint_projection_error: "空間印記 debug artifact 無法讀取或驗證。",
+      physiologic_gate_window: "生理壓力 gate 的 15 分鐘窗口 projection；不是醫療診斷或 safety truth。",
+      physiologic_gate_safety_event: "生理壓力 gate 產生的 SafetyGateEvent candidate，仍需 reducer 判定。",
+      physiologic_gate_reducer_dry_run: "生理壓力 reducer dry-run，只顯示可能的 L_n candidate。",
+      physiologic_review_capsule: "HealthAutoExport review capsule 的只讀 projection。",
       provider_status_recorded: "外部或本機 provider 狀態更新了。",
       outbound_message_queued: "Scout 想送出一則訊息，先放進 mock queue。",
       outbound_message_state_changed: "mock outbound 訊息狀態改變了。"
@@ -3855,6 +3877,8 @@
       const refs = new Set(EVENT_MAP_REFS[event?.kind] || ["runtime"]);
       const subject = text(event?.subject_ref, "").toLowerCase();
       const payload = event?.payload || {};
+      const projectedMapRefs = Array.isArray(event?.map_refs) ? event.map_refs.filter(Boolean) : [];
+      projectedMapRefs.forEach(ref => refs.add(ref));
       const specificMapTargets = (payload.map_target_ids || []).filter(Boolean);
       specificMapTargets.forEach(ref => refs.add(ref));
       if (payload.segment_id) refs.add(payload.segment_id);
@@ -4741,16 +4765,19 @@
         event.kind === "agent_tool_invocation" ||
         event.kind === "spatial_imprint_store_updated" ||
         event.kind === "spatial_imprint_trigger_event" ||
-        event.kind === "spatial_imprint_projection_error"
+        event.kind === "spatial_imprint_projection_error" ||
+        (event.kind || "").startsWith("physiologic_")
       );
       const agentToolEvents = skillEvents.filter((event) => event.kind === "agent_tool_invocation");
       const spatialImprintEvents = skillEvents.filter((event) => (event.kind || "").startsWith("spatial_imprint_"));
+      const physiologicEvents = skillEvents.filter((event) => (event.kind || "").startsWith("physiologic_"));
       document.getElementById("skillSummary").textContent = `${skillEvents.length} records`;
       document.getElementById("agentToolCount").textContent = String(agentToolEvents.length);
       document.getElementById("spatialImprintCount").textContent = String(spatialImprintEvents.length);
+      document.getElementById("physiologicGateCount").textContent = String(physiologicEvents.length);
       document.getElementById("skillSelectionContext").textContent = selectedWindowLabel(
         selectedEvent,
-        "顯示目前 timeline 範圍內的 Ln gate / skill run / agent tool action trace。"
+        "顯示目前 timeline 範圍內的 Ln gate / skill run / physiologic gate projection。"
       );
       document.getElementById("skillList").innerHTML = skillEvents.length
         ? skillEvents.slice().reverse().map((event) => {
@@ -4761,12 +4788,12 @@
               <div class="item-line">
                 <h3>${escapeHtml(payload.tool_id || payload.skill_id || payload.gate || payload.imprint_id || event.kind)}</h3>
                 <span class="${pillClass(payload.status || payload.decision || event.severity)}">
-                  ${escapeHtml(payload.status || payload.decision || event.severity)}
+                  ${escapeHtml(payload.state || payload.state_candidate || payload.status || payload.decision || event.severity)}
                 </span>
               </div>
               <p class="hint">${escapeHtml(hintForEvent(event))}</p>
               <p class="summary">${escapeHtml(event.summary)}</p>
-              <p class="summary mono">${escapeHtml(payload.mode || payload.action || "")} ${escapeHtml(payload.action_id || payload.imprint_id || event.subject_ref || event.event_id)}</p>
+              <p class="summary mono">${escapeHtml(payload.mode || payload.action || payload.required_action || "")} ${escapeHtml(payload.action_id || payload.imprint_id || event.subject_ref || event.event_id)}</p>
               <p class="hint">live_safety_api_calls_allowed=${escapeHtml(String(boundary.live_safety_api_calls_allowed ?? false))} phase1_safety_mutation_allowed=${escapeHtml(String(boundary.phase1_safety_mutation_allowed ?? false))}</p>
             </div>
           `;
