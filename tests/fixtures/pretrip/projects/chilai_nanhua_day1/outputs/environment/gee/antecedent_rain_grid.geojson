@@ -1,0 +1,26 @@
+{
+  "type": "FeatureCollection",
+  "artifact_kind": "gee_antecedent_rain_grid",
+  "collection_id": "NASA/GPM_L3/IMERG_V07",
+  "raw_response_hash": "sha256:gee-antecedent-grid-fixture",
+  "stale_risk": "low",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "route corridor rain cell",
+        "rain_24h_mm": 42.0,
+        "rain_72h_mm": 88.0,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.25,
+          24.03
+        ]
+      }
+    }
+  ]
+}

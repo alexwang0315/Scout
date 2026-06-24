@@ -131,6 +131,30 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
             "question": "行後回顧要更新哪些下一次規劃？實際耗時哪裡比預期慢？",
         }
     )
+    decision_fatigue_eval = evaluate_question(
+        {
+            "id": "q-decision-fatigue",
+            "source_set": "test",
+            "category": "body_resource",
+            "question": "我是不是已經進入疲勞決策風險？",
+        }
+    )
+    altitude_self_check_eval = evaluate_question(
+        {
+            "id": "q-altitude-self-check",
+            "source_set": "test",
+            "category": "body_resource",
+            "question": "我該做高山症自評嗎？",
+        }
+    )
+    rescue_wait_eval = evaluate_question(
+        {
+            "id": "q-rescue-wait",
+            "source_set": "test",
+            "category": "lost_mode",
+            "question": "哪裡比較適合等待救援？",
+        }
+    )
 
     assert route_eval.answerability == "answerable_by_current_read_only_tools"
     assert "pydantic_ai.tool.search_scout_route_structure.v0" in route_eval.current_tool_ids
@@ -176,6 +200,19 @@ def test_question_eval_classifies_current_tools_and_missing_live_evidence() -> N
     assert post_trip_eval.answerability == "requires_missing_evidence"
     assert "scout.ai.post_trip_review.assess.v0" in post_trip_eval.current_tool_ids
     assert "completed_journey_or_incident_record" in post_trip_eval.missing_evidence
+    assert decision_fatigue_eval.answerability == "requires_missing_evidence"
+    assert "scout.ai.energy_vitals.assess.v0" in decision_fatigue_eval.current_tool_ids
+    assert (
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+        not in decision_fatigue_eval.current_tool_ids
+    )
+    assert "scout.ai.energy_vitals.assess.v0" in decision_fatigue_eval.recommended_tool_ids
+    assert "wearable_vitals_and_baseline" in decision_fatigue_eval.missing_evidence
+    assert altitude_self_check_eval.answerability == "advisory_only_not_medical_diagnosis"
+    assert "scout.ai.energy_vitals.assess.v0" in altitude_self_check_eval.current_tool_ids
+    assert "wearable_vitals_and_baseline" in altitude_self_check_eval.missing_evidence
+    assert "scout.ai.survival_incident_playbook.explain.v0" in rescue_wait_eval.current_tool_ids
+    assert "incident_context_or_authorization_ref" in rescue_wait_eval.missing_evidence
     assert rescue_eval.answerability == "blocked_for_direct_action_can_only_explain"
     assert rescue_eval.safety_boundary["outbound_send_performed"] is False
 

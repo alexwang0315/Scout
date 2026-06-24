@@ -1,0 +1,9 @@
+{
+  "artifact_kind": "gee_gpm_imerg_raw_summary",
+  "collection_id": "NASA/GPM_L3/IMERG_V07",
+  "raw_response_hash": "sha256:gee-gpm-raw-fixture",
+  "stale_risk": "low",
+  "image_count": 72,
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

@@ -1,0 +1,18 @@
+{
+  "artifact_kind": "cwa_weather_evidence",
+  "schema_version": "scout_cwa_weather_evidence.v0",
+  "dataset_ids": [
+    "W-C0033-001",
+    "O-A0002-001",
+    "F-C0041-001",
+    "F-D0047-093",
+    "A-B0062-001",
+    "F-A0021-001"
+  ],
+  "request_timestamp": "2026-06-24T00:00:00Z",
+  "raw_response_hash": "sha256:cwa-fixture",
+  "stale_risk": "low",
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "human_review_required": true
+}

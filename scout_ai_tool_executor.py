@@ -21,6 +21,8 @@ from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
+from scout_gee_environment_tool import GEE_ENVIRONMENT_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
@@ -262,6 +264,82 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             valid_to=_str_or_none(arguments.get("valid_to")),
             segment=_str_or_none(arguments.get("segment")),
             include_segments=_bool_or_none(arguments.get("include_segments")),
+            stale_after_hours=_float_or_none(arguments.get("stale_after_hours")),
+            limit=limit,
+        )
+
+    if tool_id == CWA_ENVIRONMENT_TOOL_ID:
+        from scout_cwa_environment_tool import assess_scout_cwa_environment
+
+        return assess_scout_cwa_environment(
+            project_root,
+            query=query,
+            environment_package_path=_str_or_none(
+                arguments.get("environment_package_path")
+            ),
+            factor_matrix_path=_str_or_none(arguments.get("factor_matrix_path")),
+            go_no_go_review_path=_str_or_none(arguments.get("go_no_go_review_path")),
+            cwa_weather_evidence_path=_str_or_none(
+                arguments.get("cwa_weather_evidence_path")
+            ),
+            warnings_geojson_path=_str_or_none(
+                arguments.get("warnings_geojson_path")
+            ),
+            observations_geojson_path=_str_or_none(
+                arguments.get("observations_geojson_path")
+            ),
+            qpf_grid_path=_str_or_none(arguments.get("qpf_grid_path")),
+            qpf_route_timeline_path=_str_or_none(
+                arguments.get("qpf_route_timeline_path")
+            ),
+            qpf_corridor_summary_path=_str_or_none(
+                arguments.get("qpf_corridor_summary_path")
+            ),
+            forecast_timeline_path=_str_or_none(
+                arguments.get("forecast_timeline_path")
+            ),
+            astronomy_timeline_path=_str_or_none(
+                arguments.get("astronomy_timeline_path")
+            ),
+            tide_marine_timeline_path=_str_or_none(
+                arguments.get("tide_marine_timeline_path")
+            ),
+            include_features=_bool_or_none(arguments.get("include_features")),
+            include_timeline=_bool_or_none(arguments.get("include_timeline")),
+            stale_after_hours=_float_or_none(arguments.get("stale_after_hours")),
+            limit=limit,
+        )
+
+    if tool_id == GEE_ENVIRONMENT_TOOL_ID:
+        from scout_gee_environment_tool import assess_scout_gee_environment
+
+        return assess_scout_gee_environment(
+            project_root,
+            query=query,
+            environment_package_path=_str_or_none(
+                arguments.get("environment_package_path")
+            ),
+            factor_matrix_path=_str_or_none(arguments.get("factor_matrix_path")),
+            go_no_go_review_path=_str_or_none(arguments.get("go_no_go_review_path")),
+            smap_timeseries_path=_str_or_none(arguments.get("smap_timeseries_path")),
+            smap_corridor_summary_path=_str_or_none(
+                arguments.get("smap_corridor_summary_path")
+            ),
+            soil_moisture_grid_path=_str_or_none(
+                arguments.get("soil_moisture_grid_path")
+            ),
+            gpm_raw_summary_path=_str_or_none(
+                arguments.get("gpm_raw_summary_path")
+            ),
+            gpm_timeseries_path=_str_or_none(arguments.get("gpm_timeseries_path")),
+            gpm_corridor_summary_path=_str_or_none(
+                arguments.get("gpm_corridor_summary_path")
+            ),
+            antecedent_rain_grid_path=_str_or_none(
+                arguments.get("antecedent_rain_grid_path")
+            ),
+            include_grid=_bool_or_none(arguments.get("include_grid")),
+            include_timeseries=_bool_or_none(arguments.get("include_timeseries")),
             stale_after_hours=_float_or_none(arguments.get("stale_after_hours")),
             limit=limit,
         )
@@ -844,6 +922,8 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
     if tool_id not in {
         LIVE_NAVIGATION_STATE_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
         ROUTE_READINESS_TOOL_ID,
         CONTEXTUAL_PERMISSION_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
@@ -870,7 +950,12 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
 
 
 def _completed_warnings(tool_id: str, payload: dict[str, Any]) -> list[str]:
-    if tool_id not in {WEATHER_WINDOW_TOOL_ID, CONTEXTUAL_PERMISSION_TOOL_ID}:
+    if tool_id not in {
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+    }:
         return []
     value = payload.get("warnings")
     if isinstance(value, list):

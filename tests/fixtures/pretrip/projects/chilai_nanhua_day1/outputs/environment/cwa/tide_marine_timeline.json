@@ -1,0 +1,16 @@
+{
+  "artifact_kind": "cwa_tide_marine_timeline",
+  "dataset_ids": [
+    "F-A0021-001",
+    "O-B0075-001"
+  ],
+  "raw_response_hash": "sha256:cwa-tide-fixture",
+  "stale_risk": "low",
+  "events": [
+    {
+      "event": "not_applicable_inland_route",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    }
+  ]
+}

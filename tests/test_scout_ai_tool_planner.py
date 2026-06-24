@@ -16,6 +16,8 @@ from scout_ai_tool_planner import (
     SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
     PACE_GUARDIAN_TOOL_ID,
     EQUIPMENT_RESOURCE_TOOL_ID,
+    CWA_ENVIRONMENT_TOOL_ID,
+    GEE_ENVIRONMENT_TOOL_ID,
     TEAM_STATUS_TOOL_ID,
     POST_TRIP_REVIEW_TOOL_ID,
     REVIEW_GAP_TOOL_ID,
@@ -149,6 +151,48 @@ def test_planner_selects_weather_ready_tool_for_weather_questions() -> None:
     assert item.boundary.live_safety_api_calls_allowed is False
 
 
+def test_planner_adds_cwa_environment_for_natural_weather_questions() -> None:
+    plan = plan_scout_ai_tools(
+        _query("白牆下這段還適合走嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert CWA_ENVIRONMENT_TOOL_ID in tool_ids
+    assert GEE_ENVIRONMENT_TOOL_ID not in tool_ids
+
+
+def test_planner_adds_gee_for_rain_hydrology_weather_compound_questions() -> None:
+    for question in (
+        "溪水暴漲會不會阻斷路線？",
+        "這段下雨後會變成落石區嗎？",
+        "天氣與地形風險是否重疊？",
+    ):
+        plan = plan_scout_ai_tools(
+            _query(question),
+            project_root=PROJECT_ROOT,
+        )
+
+        tool_ids = _tool_ids(plan)
+        assert WEATHER_WINDOW_TOOL_ID in tool_ids
+        assert CWA_ENVIRONMENT_TOOL_ID in tool_ids
+        assert GEE_ENVIRONMENT_TOOL_ID in tool_ids
+
+
+def test_planner_routes_delay_departure_to_readiness_and_environment() -> None:
+    plan = plan_scout_ai_tools(
+        _query("是否需要延後出發？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert ROUTE_READINESS_TOOL_ID in tool_ids
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert CWA_ENVIRONMENT_TOOL_ID in tool_ids
+    assert GEE_ENVIRONMENT_TOOL_ID in tool_ids
+
+
 def test_planner_passes_current_time_to_weather_for_daylight_buffer() -> None:
     plan = plan_scout_ai_tools(
         _query("現在 15:10 日照 buffer 是否下降？"),
@@ -266,6 +310,8 @@ def test_planner_expands_generic_pretrip_departure_to_mvp_support_tools() -> Non
         ROUTE_ARCHITECTURE_TOOL_ID,
         NAVIGATION_TERRAIN_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
         EQUIPMENT_RESOURCE_TOOL_ID,
     }
@@ -662,6 +708,25 @@ def test_planner_selects_survival_playbook_for_lost_position_question() -> None:
     assert item.request["tool_id"] == SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
     assert item.missing_fields == []
     assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_rescue_waiting_and_open_area_questions_to_survival() -> None:
+    for question in (
+        "哪裡比較適合等待救援？",
+        "我現在應該停止移動嗎？",
+        "我該移動到更開闊的地方嗎？",
+    ):
+        plan = plan_scout_ai_tools(
+            _query(question),
+            project_root=PROJECT_ROOT,
+        )
+        tool_ids = _tool_ids(plan)
+
+        assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in tool_ids
+        assert LIVE_NAVIGATION_STATE_TOOL_ID in tool_ids
+        survival = _single_tool(plan, SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID)
+        assert survival.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+        assert survival.boundary.runtime_safety_truth is False
 
 
 def test_planner_selects_contextual_permission_for_micro_decision() -> None:
@@ -1723,6 +1788,17 @@ def test_planner_selects_ready_energy_vitals_for_health_question() -> None:
     assert item.boundary.live_safety_api_calls_allowed is False
 
 
+def test_planner_keeps_fatigue_decision_risk_in_energy_vitals_not_route_risk() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我是不是已經進入疲勞決策風險？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert ENERGY_VITALS_TOOL_ID in tool_ids
+    assert RISK_SCORE_TOOL_ID not in tool_ids
+
+
 def test_planner_selects_safety_boundary_and_live_state_for_candidate_ln_question() -> None:
     plan = plan_scout_ai_tools(
         _query("哪些風險目前只是候選，不能觸發 Ln？"),
@@ -1793,6 +1869,8 @@ def test_planner_routes_standard_six_power_overview_to_all_six_capabilities() ->
         CONTEXTUAL_PERMISSION_TOOL_ID,
         ROUTE_ARCHITECTURE_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
         NAVIGATION_TERRAIN_TOOL_ID,
     }
     for item in plan.selected_tools:
@@ -1879,8 +1957,10 @@ def test_planner_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
     assert CONTEXTUAL_PERMISSION_TOOL_ID in tool_ids
     assert ROUTE_ARCHITECTURE_TOOL_ID in tool_ids
     assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert CWA_ENVIRONMENT_TOOL_ID in tool_ids
+    assert GEE_ENVIRONMENT_TOOL_ID in tool_ids
     assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
-    assert len(tool_ids) == 7
+    assert len(tool_ids) == 9
 
 
 def _query(question: str) -> ScoutAssistantQuery:

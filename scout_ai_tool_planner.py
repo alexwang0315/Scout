@@ -22,6 +22,8 @@ from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
+from scout_gee_environment_tool import GEE_ENVIRONMENT_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
@@ -221,6 +223,21 @@ def plan_scout_ai_tools(
                 "Question asks about weather window, rain, thunderstorm, fog, wind, or whether to camp/shelter.",
             )
         )
+        _append_weather_environment_support_tools(selected, normalized_question)
+    if _looks_like_cwa_environment_question(normalized_question):
+        selected.append(
+            (
+                CWA_ENVIRONMENT_TOOL_ID,
+                "Question asks for prepared CWA official warning, observation, QPF, forecast, daylight/moonlight, tide/marine, or provenance evidence from the workspace.",
+            )
+        )
+    if _looks_like_gee_environment_question(normalized_question):
+        selected.append(
+            (
+                GEE_ENVIRONMENT_TOOL_ID,
+                "Question asks for prepared GEE SMAP/GPM soil moisture, antecedent rain, hydrologic background, grid, timeline, or provenance evidence from the workspace.",
+            )
+        )
     if _looks_like_energy_vitals_question(normalized_question):
         selected.append(
             (
@@ -360,6 +377,14 @@ def _append_pretrip_go_no_go_support_tools(selected: list[tuple[str, str]]) -> N
             "Pre-trip Go/No-Go needs weather, daylight, recent route-condition, and route-specific weather-risk evidence.",
         ),
         (
+            CWA_ENVIRONMENT_TOOL_ID,
+            "Pre-trip Go/No-Go needs CWA warnings, observations, QPF, forecast, daylight/moonlight, and tide/marine candidate evidence when available.",
+        ),
+        (
+            GEE_ENVIRONMENT_TOOL_ID,
+            "Pre-trip Go/No-Go needs GEE SMAP/GPM soil moisture and antecedent-rain hydrologic background when available.",
+        ),
+        (
             PACE_GUARDIAN_TOOL_ID,
             "Pre-trip Go/No-Go needs slowest-member pace and team pace fit evidence.",
         ),
@@ -371,6 +396,29 @@ def _append_pretrip_go_no_go_support_tools(selected: list[tuple[str, str]]) -> N
     for tool_id, reason in support_tools:
         if not _has_tool(selected, tool_id):
             selected.append((tool_id, reason))
+
+
+def _append_weather_environment_support_tools(
+    selected: list[tuple[str, str]],
+    normalized_question: str,
+) -> None:
+    if not _has_tool(selected, CWA_ENVIRONMENT_TOOL_ID):
+        selected.append(
+            (
+                CWA_ENVIRONMENT_TOOL_ID,
+                "Weather questions need CWA official warning, observation, QPF, forecast, daylight/moonlight, and provenance evidence when prepared in the workspace.",
+            )
+        )
+    if _looks_like_gee_weather_background_question(normalized_question) and not _has_tool(
+        selected,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ):
+        selected.append(
+            (
+                GEE_ENVIRONMENT_TOOL_ID,
+                "Rain, stream, rockfall, and weather-terrain compound questions need GEE SMAP/GPM hydrologic background and antecedent-rain workspace evidence when available.",
+            )
+        )
 
 
 def _append_standard_six_power_tools(selected: list[tuple[str, str]]) -> None:
@@ -399,6 +447,14 @@ def _append_standard_six_power_tools(selected: list[tuple[str, str]]) -> None:
         (
             WEATHER_WINDOW_TOOL_ID,
             "Six-power overview needs Weather-to-Decision Intelligence for route-specific weather and daylight decisions.",
+        ),
+        (
+            CWA_ENVIRONMENT_TOOL_ID,
+            "Six-power weather coverage needs CWA warnings, QPF, observation, forecast, daylight/moonlight, and tide/marine workspace evidence.",
+        ),
+        (
+            GEE_ENVIRONMENT_TOOL_ID,
+            "Six-power weather coverage needs GEE SMAP/GPM hydrologic background and antecedent-rain workspace evidence.",
         ),
         (
             NAVIGATION_TERRAIN_TOOL_ID,
@@ -435,6 +491,14 @@ def _append_standard_gap_overview_tools(selected: list[tuple[str, str]]) -> None
         (
             WEATHER_WINDOW_TOOL_ID,
             "Standard gap review needs Weather-to-Decision coverage.",
+        ),
+        (
+            CWA_ENVIRONMENT_TOOL_ID,
+            "Standard gap review needs CWA environment evidence coverage.",
+        ),
+        (
+            GEE_ENVIRONMENT_TOOL_ID,
+            "Standard gap review needs GEE SMAP/GPM hydrologic evidence coverage.",
         ),
         (
             NAVIGATION_TERRAIN_TOOL_ID,
@@ -1998,6 +2062,8 @@ def _looks_like_external_deadline_pressure_question(text: str) -> bool:
 
 
 def _looks_like_risk_question(text: str) -> bool:
+    if _looks_like_body_decision_risk_question(text):
+        return False
     return _has_any(
         text,
         (
@@ -2010,6 +2076,32 @@ def _looks_like_risk_question(text: str) -> bool:
             "墜",
             "碎石",
             "邊緣",
+        ),
+    )
+
+
+def _looks_like_body_decision_risk_question(text: str) -> bool:
+    if not _looks_like_energy_vitals_question(text):
+        return False
+    if not _has_any(text, ("風險", "risk")):
+        return False
+    return not _has_any(
+        text,
+        (
+            "路線",
+            "路段",
+            "地形",
+            "前方",
+            "位置",
+            "cp",
+            "checkpoint",
+            "崩",
+            "墜",
+            "碎石",
+            "落石",
+            "滑墜",
+            "邊緣",
+            "危險地形",
         ),
     )
 
@@ -2227,6 +2319,10 @@ def _looks_like_weather_question(text: str) -> bool:
             "forecastconflict",
             "sourceconflict",
             "霧",
+            "起霧",
+            "白牆",
+            "能見度",
+            "視線不良",
             "天快黑",
             "快天黑",
             "天黑",
@@ -2239,6 +2335,110 @@ def _looks_like_weather_question(text: str) -> bool:
             "紮營",
             "扎營",
             "避雨",
+        ),
+    )
+
+
+def _looks_like_cwa_environment_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "cwa",
+            "cwaopendata",
+            "中央氣象署",
+            "氣象署",
+            "官方天氣",
+            "官方預報",
+            "警特報",
+            "豪大雨",
+            "豪雨",
+            "大雨特報",
+            "颱風警報",
+            "強風特報",
+            "濃霧特報",
+            "低溫特報",
+            "高溫資訊",
+            "雨量站",
+            "逐時氣象",
+            "鄉鎮預報",
+            "qpf",
+            "定量降水",
+            "降水預報",
+            "日出",
+            "日沒",
+            "月出",
+            "月沒",
+            "潮汐",
+            "海象",
+            "tide",
+            "marine",
+        ),
+    )
+
+
+def _looks_like_gee_environment_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "gee",
+            "googleearthengine",
+            "earthengine",
+            "smap",
+            "smapl4",
+            "soilmoisture",
+            "土壤含水",
+            "土壤濕度",
+            "土壤濕潤",
+            "根系層",
+            "rootzone",
+            "hydrologic",
+            "水文背景",
+            "gpm",
+            "imerg",
+            "antecedentrain",
+            "前期雨量",
+            "累積雨量",
+            "衛星降雨",
+            "降雨估計",
+        ),
+    )
+
+
+def _looks_like_gee_weather_background_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "rain",
+            "storm",
+            "下雨",
+            "大雨",
+            "豪雨",
+            "風雨",
+            "雨後",
+            "遇雨",
+            "溪水",
+            "溪谷",
+            "暴漲",
+            "水位",
+            "渡溪",
+            "過溪",
+            "落石",
+            "落石區",
+            "崩塌",
+            "崩壁",
+            "碎石",
+            "土石",
+            "泥濘",
+            "濕滑",
+            "水文",
+            "地形風險",
+            "風險重疊",
+            "重疊",
+            "compound",
+            "smap",
+            "gpm",
+            "前期雨量",
+            "累積雨量",
         ),
     )
 
@@ -2300,6 +2500,8 @@ def _looks_like_route_readiness_question(text: str) -> bool:
             "自己去嗎",
             "要不要出發",
             "是否出發",
+            "延後出發",
+            "延遲出發",
             "出發決策",
             "departure gate",
             "departure readiness",
@@ -2352,6 +2554,8 @@ def _looks_like_pretrip_go_no_go_question(text: str) -> bool:
             "能不能自主出發",
             "要不要出發",
             "是否出發",
+            "延後出發",
+            "延遲出發",
             "出發決策",
             "出發前決策",
             "請做出發前決策",
@@ -2899,6 +3103,14 @@ def _looks_like_live_navigation_state_question(text: str) -> bool:
             "偏離",
             "回主線",
             "主線",
+            "停止移動",
+            "等待救援",
+            "待援",
+            "開闊處",
+            "開闊地方",
+            "開闊的地方",
+            "更開闊",
+            "開闊地",
             "下切",
             "溪谷",
         ),
@@ -2907,6 +3119,15 @@ def _looks_like_live_navigation_state_question(text: str) -> bool:
         (
             "位置",
             "座標",
+            "移動",
+            "停止移動",
+            "等待救援",
+            "待援",
+            "開闊處",
+            "開闊地方",
+            "開闊的地方",
+            "更開闊",
+            "開闊地",
             "路線",
             "走對",
             "岔路",
@@ -3016,6 +3237,14 @@ def _looks_like_survival_incident_playbook_question(text: str) -> bool:
             "不確定自己在哪",
             "迷路",
             "原地等待",
+            "停止移動",
+            "等待救援",
+            "待援",
+            "開闊處",
+            "開闊地方",
+            "開闊的地方",
+            "更開闊",
+            "開闊地",
             "找路",
             "下切溪谷",
             "找訊號",
@@ -3023,6 +3252,7 @@ def _looks_like_survival_incident_playbook_question(text: str) -> bool:
             "保存哪些證據",
             "分享給誰",
             "求救",
+            "救援",
             "報座標",
             "地標",
             "直升機",
@@ -3097,7 +3327,13 @@ def _looks_like_active_survival_incident_question(text: str) -> bool:
             "shortness of breath",
             "迷路",
             "不確定自己在哪",
+            "停止移動",
+            "等待救援",
+            "待援",
+            "開闊處",
+            "開闊地方",
             "求救",
+            "救援",
             "報案",
             "sos",
             "rescue",

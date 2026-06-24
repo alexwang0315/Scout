@@ -1,0 +1,23 @@
+{
+  "artifact_kind": "cwa_qpf_corridor_summary",
+  "dataset_ids": [
+    "F-C0041-001"
+  ],
+  "raw_response_hash": "sha256:cwa-qpf-summary-fixture",
+  "request_timestamp": "2026-06-24T00:00:00Z",
+  "stale_risk": "low",
+  "max_mm": 32.0,
+  "mean_mm": 18.4,
+  "p95_mm": 29.1,
+  "peak_window": "2026-06-24T12:00:00Z/2026-06-24T18:00:00Z",
+  "heavy_rain_event_count": 1,
+  "update_policy": "regular_6h",
+  "qpf_update_cadence": "regular_6h",
+  "qpf_lead_time": "18h",
+  "qpf_accumulation": "6h",
+  "qpf_uncertainty": "mountain_orographic_and_convective_uncertainty",
+  "severe_weather_intensified_operation": false,
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "human_review_required": true
+}

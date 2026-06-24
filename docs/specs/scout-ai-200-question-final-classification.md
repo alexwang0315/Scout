@@ -159,6 +159,34 @@
 | field-038 | field_weather_environment | 現在停下來會不會變冷太快？ | - | `scout.ai.weather_window.assess.v0` (weather window assessment) |
 | field-039 | field_weather_environment | 風寒和濕衣是否已經構成風險？ | - | `scout.ai.weather_window.assess.v0` (weather window assessment) |
 
+2026-06-24 routing update:
+
+- `scout.ai.weather_window.assess.v0` remains the weather decision wrapper for
+  this answerability class.
+- Natural weather questions now expand to
+  `scout.ai.cwa_environment.assess.v0` when prepared CWA evidence exists in the
+  workspace.
+- Rain, stream, wet terrain, rockfall, landslide, and weather-terrain compound
+  questions also expand to `scout.ai.gee_environment.assess.v0`.
+- These environment tools are candidate-only workspace readers. They do not
+  perform live network fetches and cannot write runtime safety truth.
+
+2026-06-24 fixture-backed retest against
+`tests/fixtures/pretrip/projects/chilai_nanhua_day1`:
+
+| ID | 問題 | Selected environment tools | Answerability |
+| --- | --- | --- | --- |
+| field-031 | 白牆下這段還適合走嗎？ | weather_window, CWA | evidence_available |
+| field-032 | 現在風雨是否會放大失溫風險？ | weather_window, CWA, GEE | evidence_available |
+| field-034 | 這段如果起霧會不會容易失向？ | weather_window, CWA | evidence_available |
+| field-035 | 今天的天氣窗口是否足夠？ | weather_window, CWA | evidence_available |
+| field-036 | 溪水暴漲會不會阻斷路線？ | weather_window, CWA, GEE | partial_evidence_with_missing_context |
+| field-037 | 這段下雨後會變成落石區嗎？ | weather_window, CWA, GEE | partial_evidence_with_missing_context |
+| field-039 | 風寒和濕衣是否已經構成風險？ | weather_window, CWA | partial_evidence_with_missing_context |
+| seed-027 | 哪些地方下雨後風險會變高？ | weather_window, CWA, GEE | evidence_available |
+| seed-088 | 天氣與地形風險是否重疊？ | weather_window, CWA, GEE | partial_evidence_with_missing_context |
+| seed-089 | 是否需要延後出發？ | route_readiness, weather_window, CWA, GEE | evidence_available |
+
 #### 個人/隊伍 baseline profile (`user_or_team_baseline_profile`) - 14 題
 
 - 需要補的資料：fitness baseline、expected pace、load、acclimatization、skill level、水/補給計畫、risk tolerance

@@ -1,0 +1,16 @@
+{
+  "artifact_kind": "cwa_astronomy_timeline",
+  "dataset_ids": [
+    "A-B0062-001",
+    "A-B0063-001"
+  ],
+  "raw_response_hash": "sha256:cwa-astronomy-fixture",
+  "stale_risk": "low",
+  "events": [
+    {
+      "event": "sunset",
+      "time": "2026-06-24T10:48:00Z",
+      "local_time": "18:48"
+    }
+  ]
+}

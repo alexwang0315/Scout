@@ -1,0 +1,14 @@
+{
+  "artifact_kind": "go_no_go_review_draft",
+  "schema_version": "scout_go_no_go_review_draft.v0",
+  "project_id": "chilai_nanhua_day1",
+  "review_items": [
+    {
+      "category": "weather_environment",
+      "label": "QPF plus wet soil compound review",
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true
+    }
+  ]
+}

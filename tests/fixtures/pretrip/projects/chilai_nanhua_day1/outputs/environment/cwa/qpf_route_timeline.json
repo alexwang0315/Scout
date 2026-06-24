@@ -1,0 +1,16 @@
+{
+  "artifact_kind": "cwa_qpf_route_timeline_evidence",
+  "dataset_id": "F-C0041-001",
+  "raw_response_hash": "sha256:cwa-qpf-timeline-fixture",
+  "stale_risk": "low",
+  "events": [
+    {
+      "event": "qpf_peak_window",
+      "valid_time": "2026-06-24T12:00:00Z",
+      "segment_id": "SEG-02",
+      "qpf_mm": 32.0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    }
+  ]
+}
