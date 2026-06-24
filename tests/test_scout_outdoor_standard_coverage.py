@@ -290,6 +290,9 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     physiologic_spec = (
         ROOT / "docs/specs/scout-runtime-physiologic-gate.md"
     ).read_text(encoding="utf-8")
+    reducer_spec = (
+        ROOT / "docs/specs/scout-runtime-multi-gate-safety-reducer.md"
+    ).read_text(encoding="utf-8")
 
     for gate in (
         "pace_gate",
@@ -301,8 +304,10 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     ):
         assert gate in standard_text
         assert gate in physiologic_spec
+        assert gate in reducer_spec
 
     assert "docs/specs/scout-runtime-physiologic-gate.md" in standard_text
+    assert "docs/specs/scout-runtime-multi-gate-safety-reducer.md" in standard_text
     assert "workoutEffortScore" in standard_text
     assert "Apple Watch `Effort`" in standard_text
     assert "provider 值只能作為" in standard_text
@@ -327,6 +332,15 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "No direct Phase 1 mutation" in physiologic_spec
     assert "six primary runtime safety gates" in physiologic_spec
     assert "scout_runtime_safety_gate_event" in physiologic_spec
+    assert "scout_runtime_safety_gate_event" in reducer_spec
+    assert "Generic SafetyGateEvent" in reducer_spec
+    assert "runtime_safety_gate_event_from_physiologic()" in reducer_spec
+    assert "scout_runtime_safety_gate_adapters.py" in reducer_spec
+    assert "scout_runtime_safety_reducer_dry_run" in reducer_spec
+    assert "scout_runtime_safety_phase1_adapter_result" in reducer_spec
+    assert "runtime_safety_reducer_dry_run" in physiologic_spec
+    assert "runtime_safety_phase1_adapter_result" in physiologic_spec
+    assert "deterministic slice 7-12" in standard_text
     assert "requires_safety_reducer_for_ln_transition" in physiologic_spec
 
     for required in (

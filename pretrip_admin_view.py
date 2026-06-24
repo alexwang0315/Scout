@@ -23,6 +23,12 @@ from scout_runtime_physiologic_timeline import (
     PhysiologicTimelineProjection,
     build_physio_timeline_projection,
 )
+from scout_runtime_safety_gate_models import ScoutRuntimeSafetyGateEventBatch
+from scout_runtime_safety_reducer import (
+    RuntimeSafetyPhase1AdapterResult,
+    RuntimeSafetyReducerDecision,
+    reduce_runtime_safety_gate_events,
+)
 from pretrip_spatial_imprint_export import (
     DEFAULT_SPATIAL_IMPRINT_CANDIDATES_REF,
     DEFAULT_SPATIAL_IMPRINT_MANIFEST_REF,
@@ -1799,6 +1805,11 @@ def load_pretrip_debug_projection_view(
         project,
         project_root=resolved_project_root,
     )
+    runtime_safety_reducer_projection = _runtime_safety_reducer_projection_summary(
+        project_id,
+        project,
+        project_root=resolved_project_root,
+    )
     source_refs = {
         "project": "project.json",
         "route_summary": project["route_summary_ref"],
@@ -1873,6 +1884,18 @@ def load_pretrip_debug_projection_view(
         ),
         "physiologic_artifact_index": project.get("physiologic_artifact_index_ref", ""),
         "physiologic_artifact_dir": project.get("physiologic_artifact_dir_ref", ""),
+        "runtime_safety_gate_event_batch": project.get(
+            "runtime_safety_gate_event_batch_ref",
+            "",
+        ),
+        "runtime_safety_reducer_dry_run": project.get(
+            "runtime_safety_reducer_dry_run_ref",
+            "",
+        ),
+        "runtime_safety_phase1_adapter": project.get(
+            "runtime_safety_phase1_adapter_ref",
+            "",
+        ),
         "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
         "cwa_weather_evidence": project.get("cwa_weather_evidence_ref", ""),
         "cwa_warnings_geojson": project.get("cwa_warnings_geojson_ref", ""),
@@ -2135,6 +2158,7 @@ def load_pretrip_debug_projection_view(
             source_refs=source_refs,
         )
     view["physiologic_timeline_projection"] = physiologic_timeline_projection
+    view["runtime_safety_reducer_projection"] = runtime_safety_reducer_projection
     view["gis_perception_timeline"] = _gis_perception_timeline_summary(
         project_id,
         view["gis_perception"],
@@ -2194,6 +2218,9 @@ def load_pretrip_debug_projection_view(
         "mileage_tag_alignment": view.get("mileage_tag_alignment"),
         "physiologic_timeline_projection": view[
             "physiologic_timeline_projection"
+        ],
+        "runtime_safety_reducer_projection": view[
+            "runtime_safety_reducer_projection"
         ],
         "map_layers": view["map_layers"],
         "readiness": view["readiness"],
@@ -2318,6 +2345,9 @@ def load_pretrip_debug_projection_view(
             ),
             "physiologic_timeline_event_count": view[
                 "physiologic_timeline_projection"
+            ].get("event_count", 0),
+            "runtime_safety_reducer_event_count": view[
+                "runtime_safety_reducer_projection"
             ].get("event_count", 0),
             "timeline_event_count": len(timeline_events),
             "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),
@@ -4375,6 +4405,13 @@ def _debug_projection_timeline_events(
             )
         )
 
+    for reducer_event in _runtime_safety_reducer_debug_projection_events(
+        view.get("runtime_safety_reducer_projection", {}),
+        project_id=project_id,
+        start_sequence=len(events) + 1,
+    ):
+        events.append(reducer_event)
+
     append_event(
         "debug_session_completed",
         f"{project_id} debug projection completed without runtime mutation.",
@@ -4568,6 +4605,329 @@ def _physiologic_debug_projection_event(
         "map_refs": map_target_ids,
         "payload": payload,
     }
+
+
+def _runtime_safety_reducer_projection_summary(
+    project_id: str,
+    project: dict[str, Any],
+    *,
+    project_root: Path,
+) -> dict[str, Any]:
+    boundary = {
+        "projection_only": True,
+        "pretrip_candidate_evidence_only": True,
+        "runtime_safety_truth": False,
+        "phase1_runtime_safety_truth": False,
+        "phase1_runtime_mutation_allowed": False,
+        "phase1_l0_l4_state_mutated": False,
+        "safety_api_called": False,
+        "outbound_alert_sent": False,
+        "medical_diagnosis": False,
+        "raw_health_payload_shared": False,
+        "raw_track_shared": False,
+        "exact_timestamps_shared": False,
+        "home_work_trace_shared": False,
+    }
+    gate_batch_ref = project.get("runtime_safety_gate_event_batch_ref")
+    reducer_ref = project.get("runtime_safety_reducer_dry_run_ref")
+    phase1_adapter_ref = project.get("runtime_safety_phase1_adapter_ref")
+    gate_batch_path = _optional_project_ref_path(project_root, gate_batch_ref)
+    reducer_path = _optional_project_ref_path(project_root, reducer_ref)
+    phase1_adapter_path = _optional_project_ref_path(project_root, phase1_adapter_ref)
+
+    reducer: RuntimeSafetyReducerDecision | None = None
+    phase1_adapter: RuntimeSafetyPhase1AdapterResult | None = None
+    source_path = str(reducer_ref or gate_batch_ref or phase1_adapter_ref or "")
+    try:
+        if reducer_path is not None and reducer_path.exists():
+            reducer = RuntimeSafetyReducerDecision.model_validate(
+                _load_json(reducer_path)
+            )
+        elif gate_batch_path is not None and gate_batch_path.exists():
+            batch = ScoutRuntimeSafetyGateEventBatch.model_validate(
+                _load_json(gate_batch_path)
+            )
+            reducer = reduce_runtime_safety_gate_events(
+                batch,
+                source_path=str(gate_batch_ref),
+            )
+        if phase1_adapter_path is not None and phase1_adapter_path.exists():
+            phase1_adapter = RuntimeSafetyPhase1AdapterResult.model_validate(
+                _load_json(phase1_adapter_path)
+            )
+    except (OSError, ValueError, TypeError) as exc:
+        return {
+            "artifact_kind": "pretrip_runtime_safety_reducer_projection_summary",
+            "status": "error",
+            "project_id": project_id,
+            "source_path": source_path,
+            "event_count": 0,
+            "events": [],
+            "counts": {"event_count": 0},
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "boundary": boundary,
+        }
+
+    if reducer is None and phase1_adapter is None:
+        return {
+            "artifact_kind": "pretrip_runtime_safety_reducer_projection_summary",
+            "status": "missing",
+            "project_id": project_id,
+            "source_path": source_path,
+            "event_count": 0,
+            "events": [],
+            "counts": {"event_count": 0},
+            "boundary": boundary,
+        }
+
+    reducer_payload = reducer.model_dump(mode="json") if reducer else None
+    phase1_payload = phase1_adapter.model_dump(mode="json") if phase1_adapter else None
+    event_count = int(reducer_payload is not None) + int(phase1_payload is not None)
+    source_refs = _unique_string_list(
+        [
+            gate_batch_ref,
+            reducer_ref,
+            phase1_adapter_ref,
+            reducer_payload.get("source_path") if reducer_payload else None,
+            reducer_payload.get("sha256") if reducer_payload else None,
+            phase1_payload.get("source_path") if phase1_payload else None,
+            phase1_payload.get("sha256") if phase1_payload else None,
+        ]
+    )
+    return {
+        "artifact_kind": "pretrip_runtime_safety_reducer_projection_summary",
+        "status": "ready",
+        "project_id": project_id,
+        "source_path": source_path,
+        "source_refs": source_refs,
+        "event_count": event_count,
+        "reducer_dry_run": reducer_payload,
+        "phase1_adapter_result": phase1_payload,
+        "events": [],
+        "counts": {
+            "event_count": event_count,
+            "gate_event_count": (
+                reducer_payload.get("gate_event_count") if reducer_payload else 0
+            ),
+            "contributing_gate_count": (
+                len(reducer_payload.get("contributing_gate_ids", []))
+                if reducer_payload
+                else 0
+            ),
+            "corroborating_gate_count": (
+                len(reducer_payload.get("corroborating_gate_ids", []))
+                if reducer_payload
+                else 0
+            ),
+            "phase1_adapter_event_count": int(phase1_payload is not None),
+        },
+        "boundary": boundary,
+    }
+
+
+def _runtime_safety_reducer_debug_projection_events(
+    summary: dict[str, Any],
+    *,
+    project_id: str,
+    start_sequence: int,
+) -> list[dict[str, Any]]:
+    if summary.get("status") != "ready":
+        return []
+    source_refs = _unique_string_list(summary.get("source_refs") or [])
+    reducer = summary.get("reducer_dry_run")
+    phase1_adapter = summary.get("phase1_adapter_result")
+    events: list[dict[str, Any]] = []
+    sequence = start_sequence
+    map_target_ids = _runtime_safety_reducer_map_target_ids(reducer)
+
+    if isinstance(reducer, dict):
+        boundary = {
+            **(reducer.get("boundary") or {}),
+            "projection_only": True,
+            "pretrip_candidate_evidence_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "phase1_l0_l4_state_mutated": False,
+            "safety_api_called": False,
+            "outbound_alert_sent": False,
+            "medical_diagnosis": False,
+            "raw_health_payload_shared": False,
+            "raw_track_shared": False,
+            "exact_timestamps_shared": False,
+            "home_work_trace_shared": False,
+        }
+        payload = {
+            "project_id": project_id,
+            "profile": "pretrip_debug_projection",
+            "projection_event_type": "runtime_safety_reducer_dry_run",
+            "import_stage": "runtime_safety_reducer_projection",
+            "gate": "multi_gate_safety_reducer",
+            "projection_only": True,
+            "runtime_safety_truth": False,
+            "selected_gate_id": reducer.get("selected_gate_id"),
+            "selected_event_id": reducer.get("selected_event_id"),
+            "highest_severity": reducer.get("highest_severity"),
+            "state": reducer.get("reducer_state"),
+            "recommendation": reducer.get("recommendation"),
+            "ln_transition_candidate": reducer.get("ln_transition_candidate"),
+            "ln_level_candidate": reducer.get("ln_level_candidate"),
+            "proposed_ln_transition_candidate": reducer.get(
+                "proposed_ln_transition_candidate"
+            ),
+            "proposed_ln_level_candidate": reducer.get(
+                "proposed_ln_level_candidate"
+            ),
+            "contributing_gate_ids": reducer.get("contributing_gate_ids", []),
+            "corroborating_gate_ids": reducer.get("corroborating_gate_ids", []),
+            "suppressed_gate_ids": reducer.get("suppressed_gate_ids", []),
+            "suppressed_reasons": reducer.get("suppressed_reasons", []),
+            "policy_trace": reducer.get("policy_trace", []),
+            "hysteresis": reducer.get("hysteresis", {}),
+            "eta_delay_minutes": reducer.get("eta_delay_minutes"),
+            "source_refs": source_refs,
+            "map_target_ids": map_target_ids,
+            "boundary": boundary,
+        }
+        events.append(
+            {
+                "event_id": (
+                    f"debug_event.runtime_safety_reducer."
+                    f"{project_id}.{sequence:06d}"
+                ),
+                "session_id": f"pretrip_projection.{project_id}.runtime_safety",
+                "mission_id": project_id,
+                "sequence": sequence,
+                "timestamp": "offset:runtime-safety-reducer",
+                "phase": "phase35",
+                "kind": "runtime_safety_reducer_dry_run",
+                "severity": _runtime_safety_event_severity(
+                    reducer.get("ln_level_candidate")
+                ),
+                "summary": (
+                    "Runtime safety reducer dry-run: "
+                    f"{reducer.get('recommendation', 'continue_monitoring')}"
+                ),
+                "subject_ref": "runtime_safety_reducer",
+                "correlation_refs": _unique_string_list(
+                    [
+                        *source_refs,
+                        *map_target_ids,
+                        *(reducer.get("contributing_gate_ids") or []),
+                    ]
+                ),
+                "source_refs": source_refs,
+                "map_refs": map_target_ids,
+                "payload": payload,
+            }
+        )
+        sequence += 1
+
+    if isinstance(phase1_adapter, dict):
+        boundary = {
+            **(phase1_adapter.get("boundary") or {}),
+            "projection_only": True,
+            "pretrip_candidate_evidence_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_safety_truth": False,
+            "phase1_l0_l4_state_mutated": False,
+            "safety_api_called": False,
+            "outbound_alert_sent": False,
+            "medical_diagnosis": False,
+            "raw_health_payload_shared": False,
+            "raw_track_shared": False,
+            "exact_timestamps_shared": False,
+            "home_work_trace_shared": False,
+        }
+        payload = {
+            "project_id": project_id,
+            "profile": "pretrip_debug_projection",
+            "projection_event_type": "runtime_safety_phase1_adapter_result",
+            "import_stage": "runtime_safety_reducer_projection",
+            "gate": "multi_gate_safety_reducer",
+            "projection_only": True,
+            "runtime_safety_truth": False,
+            "status": phase1_adapter.get("status"),
+            "state": phase1_adapter.get("status"),
+            "phase1_adapter_enabled": phase1_adapter.get(
+                "phase1_adapter_enabled"
+            ),
+            "human_review_approved": phase1_adapter.get(
+                "human_review_approved"
+            ),
+            "transition_request_prepared": phase1_adapter.get(
+                "transition_request_prepared"
+            ),
+            "phase1_transition_candidate": phase1_adapter.get(
+                "phase1_transition_candidate"
+            ),
+            "selected_reducer_sha256": phase1_adapter.get(
+                "selected_reducer_sha256"
+            ),
+            "ln_transition_candidate": phase1_adapter.get(
+                "selected_reducer_transition_candidate"
+            ),
+            "ln_level_candidate": phase1_adapter.get(
+                "selected_reducer_level_candidate"
+            ),
+            "source_refs": source_refs,
+            "map_target_ids": map_target_ids,
+            "boundary": boundary,
+        }
+        events.append(
+            {
+                "event_id": (
+                    f"debug_event.runtime_safety_phase1_adapter."
+                    f"{project_id}.{sequence:06d}"
+                ),
+                "session_id": f"pretrip_projection.{project_id}.runtime_safety",
+                "mission_id": project_id,
+                "sequence": sequence,
+                "timestamp": "offset:runtime-safety-phase1-adapter",
+                "phase": "phase35",
+                "kind": "runtime_safety_phase1_adapter_result",
+                "severity": _runtime_safety_event_severity(
+                    phase1_adapter.get("selected_reducer_level_candidate")
+                ),
+                "summary": (
+                    "Runtime safety Phase 1 adapter result: "
+                    f"{phase1_adapter.get('status', 'unknown')}"
+                ),
+                "subject_ref": "runtime_safety_phase1_adapter",
+                "correlation_refs": _unique_string_list([*source_refs, *map_target_ids]),
+                "source_refs": source_refs,
+                "map_refs": map_target_ids,
+                "payload": payload,
+            }
+        )
+    return events
+
+
+def _runtime_safety_reducer_map_target_ids(
+    reducer: dict[str, Any] | None,
+) -> list[str]:
+    if not isinstance(reducer, dict):
+        return []
+    return _unique_string_list(
+        [
+            target
+            for summary in reducer.get("gate_summaries", [])
+            if isinstance(summary, dict)
+            for target in summary.get("map_target_ids", [])
+        ]
+    )
+
+
+def _runtime_safety_event_severity(level: Any) -> str:
+    token = str(level or "")
+    if "L4" in token:
+        return "critical"
+    if "L3" in token:
+        return "warning"
+    if "L2" in token:
+        return "warning"
+    return "info"
 
 
 def _optional_project_ref_path(project_root: Path, ref: Any) -> Path | None:

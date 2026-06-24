@@ -15,6 +15,15 @@ from scout_companion_match_models import (
     write_companion_match_review_artifact,
 )
 from scout_energy_models import load_wearable_activity_summaries
+from scout_runtime_safety_gate_adapters import build_delay_gate_event
+from scout_runtime_safety_gate_models import (
+    build_runtime_safety_gate_event,
+    build_runtime_safety_gate_event_batch,
+)
+from scout_runtime_safety_reducer import (
+    build_phase1_adapter_result,
+    reduce_runtime_safety_gate_events,
+)
 from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
 from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
@@ -1076,6 +1085,116 @@ def test_debug_projection_view_includes_physio_timeline_projection(tmp_path):
     assert event["payload"]["segment_id"] == segment_id
     assert event["payload"]["map_target_ids"] == [segment_id]
     assert event["map_refs"] == [segment_id]
+
+
+def test_debug_projection_view_includes_runtime_safety_reducer_projection(tmp_path):
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    segment_ref = project.get(
+        "overpass_aligned_segment_candidates_ref",
+        project["segment_candidates_ref"],
+    )
+    first_segment = json.loads((project_root / segment_ref).read_text(encoding="utf-8"))[0]
+    segment_id = first_segment["candidate_id"]
+    runtime_dir = project_root / "outputs" / "runtime_safety"
+    runtime_dir.mkdir(parents=True)
+
+    physiologic = build_runtime_safety_gate_event(
+        gate_id="physiologic_gate",
+        event_id="physiologic_gate:stop-and-rest",
+        source_provider="sensorlogger_fixture",
+        source_path="outputs/physio/physiologic_safety_gate_event.json",
+        state_candidate="stop_and_rest",
+        severity="rest",
+        ln_transition_candidate="candidate_rest",
+        required_action="stop_and_rest",
+        confidence="high",
+        route_pressure_review_required=True,
+        eta_delay_minutes=20,
+        route_context={"route_id": PROJECT_ID, "segment_id": segment_id},
+    )
+    delay = build_delay_gate_event(
+        {
+            "event_id": "delay_gate:timeline-watch",
+            "source_path": "outputs/runtime_safety/delay_gate.json",
+            "delay_minutes": 18,
+            "planned_buffer_minutes": 12,
+            "route_context": {"route_id": PROJECT_ID, "segment_id": segment_id},
+        }
+    )
+    batch = build_runtime_safety_gate_event_batch([physiologic, delay])
+    reducer = reduce_runtime_safety_gate_events(
+        batch,
+        source_path="outputs/runtime_safety/runtime_safety_gate_events.json",
+    )
+    phase1_adapter = build_phase1_adapter_result(
+        reducer,
+        source_path="outputs/runtime_safety/phase1_adapter_result.json",
+    )
+    batch_ref = "outputs/runtime_safety/runtime_safety_gate_events.json"
+    reducer_ref = "outputs/runtime_safety/runtime_safety_reducer_dry_run.json"
+    phase1_ref = "outputs/runtime_safety/phase1_adapter_result.json"
+    (project_root / batch_ref).write_text(
+        json.dumps(batch.model_dump(mode="json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (project_root / reducer_ref).write_text(
+        json.dumps(reducer.model_dump(mode="json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (project_root / phase1_ref).write_text(
+        json.dumps(phase1_adapter.model_dump(mode="json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    project["runtime_safety_gate_event_batch_ref"] = batch_ref
+    project["runtime_safety_reducer_dry_run_ref"] = reducer_ref
+    project["runtime_safety_phase1_adapter_ref"] = phase1_ref
+    project_path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    projection = load_pretrip_debug_projection_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    reducer_projection = projection["runtime_safety_reducer_projection"]
+    reducer_events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "runtime_safety_reducer_dry_run"
+    ]
+    adapter_events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "runtime_safety_phase1_adapter_result"
+    ]
+    assert reducer_projection["status"] == "ready"
+    assert reducer_projection["event_count"] == 2
+    assert projection["counts"]["runtime_safety_reducer_event_count"] == 2
+    assert projection["environment_risk_derivative_layers"]["artifact_kind"] == (
+        "pretrip_environment_risk_derivative_layers"
+    )
+    assert len(reducer_events) == 1
+    assert len(adapter_events) == 1
+    reducer_event = reducer_events[0]
+    assert reducer_event["payload"]["ln_level_candidate"] == "L3_RETREAT"
+    assert reducer_event["payload"]["recommendation"] == "retreat_review"
+    assert reducer_event["payload"]["runtime_safety_truth"] is False
+    assert reducer_event["payload"]["boundary"]["phase1_l0_l4_state_mutated"] is False
+    assert reducer_event["payload"]["boundary"]["safety_api_called"] is False
+    assert reducer_event["payload"]["map_target_ids"] == [segment_id]
+    assert reducer_event["map_refs"] == [segment_id]
+    adapter_event = adapter_events[0]
+    assert adapter_event["payload"]["status"] == "blocked_feature_flag_disabled"
+    assert adapter_event["payload"]["transition_request_prepared"] is False
+    assert adapter_event["payload"]["boundary"]["individual_gate_owned"] is False
+    assert adapter_event["payload"]["boundary"]["phase1_l0_l4_state_mutated"] is False
+    assert adapter_event["payload"]["boundary"]["safety_api_called"] is False
 
 
 def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp_path):
