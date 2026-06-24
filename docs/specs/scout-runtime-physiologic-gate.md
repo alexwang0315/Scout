@@ -4,10 +4,15 @@
 
 Deterministic primitives implemented through route-segment timing context for
 fixture-backed runtime physiologic gate behavior, with slices 17-24 implementing
-the physiologic-first safety template and local deterministic Phase 1 writer.
-The gate itself still does not directly mutate live safety truth, perform
-medical diagnosis, or send outbound escalation; it must pass through reducer,
-adapter, transition request, and mutation service.
+the physiologic-first safety template and local deterministic Phase 1 writer,
+and slices 25-32 implementing alert application packet dry-runs. A static
+Emergency Mobile Approval UI v0 now exists, but this is still the first
+complete safety template, not the full production safety system. Other gate
+production paths, hardware transport, real outbound send, authenticated
+approval workflow, and verified delivery evidence remain open. The gate itself
+still does not directly mutate live safety truth, perform medical diagnosis, or
+send outbound escalation; it must pass through reducer, adapter, transition
+request, and mutation service.
 
 The product role is broader than "advisory wellness." `physiologic_gate` is one
 of Scout's runtime safety gates. It may emit safety-relevant gate events that
@@ -232,8 +237,10 @@ Implemented reducer / multi-gate safety slices:
 | 22. Shadow replay mutation opt-in | `scout_runtime_shadow_replay.py` | `[x] optional macOS route/gate/reducer/adapter/request/writer/audit replay |
 | 23. Mutation projection contract | `scout_runtime_phase1_mutation.py` | `[x] `phase1_safety_mutation_result` timeline event for read-only admin/debug evidence |
 | 24. Safety template coverage | `tests/test_scout_runtime_phase1_mutation.py`, `tests/test_scout_runtime_shadow_replay.py`, `tests/test_scout_outdoor_standard_coverage.py` | `[x] regression tests for writer, audit, projection, shadow replay, and docs |
+| 25-32. Alert application packet layer | `scout_alert_application_layer.py` | `[x] transport-neutral alert packet, SMS/LoRa/MQTT drafts, outbound policy decision, macOS dry-run evidence, and timeline projection; no real send |
+| 33. Emergency approval UI v0 | `docs/emergency/scout-emergency-mobile-approval-v0.html` | `[x] independent mobile + desktop approval surface with local approval artifact and offline-map preview; no real send |
 
-The generic reducer contract and slice 7-24 details are specified in
+The generic reducer contract and slice 7-32 details are specified in
 `docs/specs/scout-runtime-multi-gate-safety-reducer.md`.
 
 ## Safety Gate Role And Reducer Boundary
@@ -1034,6 +1041,52 @@ admin/debug timeline projection event. The outbound policy is separate: these
 alert artifacts consume Phase 1 mutation results and never feed back into the
 physiologic gate state semantics.
 
+Production caveat: this means Scout can now demonstrate the physiologic-first
+closed loop in local replay and show a v0 approval UI, but it cannot yet claim
+the whole safety system is production complete. The incomplete pieces are the
+non-physiologic production gate paths, real hardware/mobile transport
+executors, authenticated approval workflow, and delivery confirmation.
+
+That approval surface should be separate from `/admin` and `/admin/debug`.
+Those pages remain review and diagnostic surfaces. In a real field emergency,
+the operator may not be able to read long evidence tables or navigate admin
+panels, so the future emergency surface must provide:
+
+- production path state: selected gate, `SafetyLevel`, packet status, transport
+  readiness, and source freshness, rendered as icon-first color-coded gate
+  cards before long text;
+- one-tap decisions: agree/send, do not send, review again in N minutes,
+  current condition OK / downgrade request, immediate phone call, manual copy,
+  retreat, or emergency camp;
+- emergency callout: message draft and voice call script outputs that remain
+  local until an approved production transport or manual phone call occurs;
+- offline map: cached Rudy+TW tiles, cached imagery tiles, Overpass evidence,
+  reference segments, CP/MCP, route notes, terrain, current route, checkpoint,
+  retreat branches, emergency camp candidates, and the alert packet's map refs.
+
+Until that surface and a verified transport executor exist, physiologic
+`alert_candidate` must be described as `alert_packet_prepared` or
+`pending_approval`, not as "SOS sent" or "rescue contacted".
+
+The v0 surface at `docs/emergency/scout-emergency-mobile-approval-v0.html`
+already provides the mobile and desktop layout, dry-run JSON loader,
+decision buttons, approval artifact preview, iconized physiologic gate status,
+message / voice callout artifact preview, and offline-map preview with cached
+layer toggles. These cached layer toggles are a v0 UI contract, not proof that
+production tile cache preparation is complete. It is not the production
+approval workflow: it does not authenticate an operator, does not call
+transport, does not record verified delivery, and keeps `sent=false`.
+
+The v0 surface reads the standard active pretrip workspace layout from
+`docs/specs/scout-workspace-layout.md`. Its workspace loader uses the same
+read-only resources as `/admin/pretrip`, `/admin/debug`, and `/admin`:
+`/admin/pretrip/projects/{project_id}?compact=1`,
+`/admin/pretrip/projects/{project_id}/admin-projection`,
+`/admin/pretrip/projects/{project_id}/debug-projection`, and
+`/admin/pretrip/projects/{project_id}/debug-projection-events`. Local
+approval/callout artifacts must keep `workspace_project_id`,
+`workspace_kind`, `workspace_source_refs`, and `workspace_endpoint_refs`.
+
 ### Slice 1: Sanitized HealthAutoExport Evidence
 
 `build_feature_set_from_health_auto_export()` accepts a local
@@ -1692,9 +1745,12 @@ raise pressure that causes the route-pressure layer to ask for:
 - No dehydration, arrhythmia, overtraining, heat illness, altitude illness, or
   injury diagnosis.
 - No `/safety/*` calls.
-- No Phase 1 L0-L4 safety state mutation.
+- No direct Phase 1 L0-L4 safety state mutation by the physiologic gate itself.
 - No automatic outbound alert without explicit policy and human-approved
   escalation contract.
+- No claim that the full Scout safety system is production complete while the
+  other gates, hardware transport, and emergency mobile approval production
+  workflow remain open.
 - No raw Apple/Garmin health payload committed to repo fixtures.
 - No precise timestamps, home/work traces, or raw GPX committed as fixtures.
 

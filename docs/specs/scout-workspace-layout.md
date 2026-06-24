@@ -133,7 +133,8 @@ Rules:
 ## Active Pretrip Workspace
 
 The active pretrip workspace is the primary planning unit rendered by
-`/admin/pretrip`, `/admin/debug`, and `/admin`.
+`/admin/pretrip`, `/admin/debug`, `/admin`, and the Emergency Mobile Approval
+UI v0.
 
 ```text
 pretrip/workspaces/{project_id}/
@@ -233,6 +234,49 @@ review status, layer readiness, AI asset status, and boundary metadata such as:
   "phase2_brain_writeback_allowed": false
 }
 ```
+
+### Emergency Approval Workspace Consumption
+
+Emergency Mobile Approval UI v0 reads the same active pretrip workspace
+resources as `/admin/pretrip`, `/admin/debug`, and `/admin`. It is a
+field-oriented approval surface, not a new workspace format.
+
+Workspace resources are engineering/audit evidence in this surface. They should
+be available through bottom evidence frame tabs together with the emergency
+package draft and approval artifact, not placed before production path state,
+decision controls, callout controls, or offline map review.
+
+Required read-only GET resources:
+
+```text
+/admin/pretrip/projects/{project_id}?compact=1
+/admin/pretrip/projects/{project_id}/admin-projection
+/admin/pretrip/projects/{project_id}/debug-projection
+/admin/pretrip/projects/{project_id}/debug-projection-events
+```
+
+The UI must treat `project.json` as the anchor through those projections and
+must preserve these project-relative refs in any local approval/callout
+artifact:
+
+- `project.json`;
+- `outputs/admin_projection.json`;
+- `outputs/debug_projection_events.jsonl`;
+- canonical `outputs/*`, `reviews/*`, `candidates/*`, `normalized/*`, and
+  `sources/*` refs surfaced by the compact project view;
+- layer refs exposed by the shared `map_layers` contract.
+
+Emergency UI resource rules:
+
+- use read-only GET only;
+- do not POST workspace edits, review decisions, or transport approvals;
+- do not call `/safety/*`;
+- do not mutate Phase 1 runtime safety truth;
+- do not mark outbound delivery as successful without verified transport
+  receipts from the production transport layer;
+- keep the offline map layer toggles bound to shared workspace map layers:
+  cached Rudy+TW, cached imagery, Overpass, reference segments, CP/MCP, route
+  notes, and terrain.
 
 ## Outdoor AI Agent Data Placement
 
@@ -688,8 +732,8 @@ A workspace validator should verify:
 - Historical GPX importer writes to the active pretrip workspace and keeps raw
   sources in `inbox/` or the material bundle.
 - Map preparation reads the active workspace and writes only workspace outputs.
-- `/admin`, `/admin/debug`, and `/admin/pretrip` read the same workspace
-  projection refs.
+- `/admin`, `/admin/debug`, `/admin/pretrip`, and Emergency Mobile Approval UI
+  v0 read the same workspace projection refs.
 - Post-analysis reads completed-trip workspaces and exports next-pretrip
   candidates without rewriting the original pretrip candidates.
 - Workspace template export/import can move reviewed planning evidence from one
