@@ -3,9 +3,11 @@
 ## Status
 
 Deterministic primitives implemented through route-segment timing context for
-fixture-backed runtime physiologic gate behavior. The currently implemented
-artifacts remain local evidence and do not directly mutate live safety truth,
-perform medical diagnosis, or send outbound escalation.
+fixture-backed runtime physiologic gate behavior, with slices 17-24 implementing
+the physiologic-first safety template and local deterministic Phase 1 writer.
+The gate itself still does not directly mutate live safety truth, perform
+medical diagnosis, or send outbound escalation; it must pass through reducer,
+adapter, transition request, and mutation service.
 
 The product role is broader than "advisory wellness." `physiologic_gate` is one
 of Scout's runtime safety gates. It may emit safety-relevant gate events that
@@ -160,6 +162,15 @@ flowchart LR
   StoreProjection["[x] State-store replay projection<br/>admin + debug"]
   AdminUI["[x] /admin evidence tree + panel<br/>latest reducer snapshot"]
   Phase1Adapter["[x] Controlled Phase 1 adapter result<br/>feature-flagged request only"]
+  Template["[x] Physiologic-first safety template<br/>slice 17 contract"]
+  Request["[x] Phase1TransitionRequest<br/>slice 18"]
+  Mapping["[x] SafetyEvent mapping<br/>slice 19"]
+  MutationService["[x] Phase1SafetyMutationService<br/>slice 20"]
+  Audit["[x] Mutation audit store<br/>slice 21"]
+  ShadowMutation["[x] Shadow replay mutation opt-in<br/>slice 22"]
+  MutationProjection["[x] Mutation projection event<br/>slice 23"]
+  Phase1Truth["[x] Phase 1 runtime safety truth<br/>SafetyStateMachine"]
+  OutboundPolicy["[ ] Outbound policy + transport<br/>separate service"]
 
   Artifacts --> Projection --> DebugView --> TimelineUI --> MapFocus
   Projection -. candidate only .-> GenericEvent
@@ -175,6 +186,10 @@ flowchart LR
   Phase1Adapter --> StateStore
   SafetyReducer --> TimelineUI
   Phase1Adapter --> TimelineUI
+  Phase1Adapter --> Template --> Request --> Mapping --> MutationService --> Phase1Truth
+  MutationService --> Audit --> MutationProjection
+  ShadowReplay --> ShadowMutation --> Request
+  Phase1Truth --> OutboundPolicy
 ```
 
 The projection is the admin/debug timeline input contract. It keeps events
@@ -209,8 +224,16 @@ Implemented reducer / multi-gate safety slices:
 | 14. Durable reducer state store | `scout_runtime_safety_state_store.py` | `[x] scout_runtime_safety_state_snapshot` and `scout_runtime_safety_state_store_index`, local candidate replay/review store, no Phase 1 mutation |
 | 15. Local shadow runtime replay | `scout_runtime_shadow_replay.py` | `[x] scout_runtime_shadow_replay_result`, macOS-safe route/gate/reducer/adapter/state-store pipeline, no Scout hardware dependency |
 | 16. Admin + debug state-store replay | `scout_runtime_state_store_projection.py`, `load_pretrip_debug_projection_view()`, `build_admin_case_view()`, and admin/debug HTML | `[x] scout_runtime_state_store_replay_projection`, `runtime_safety_state_store_snapshot` debug timeline event, `/admin` evidence tree and panel |
+| 17. Physiologic-first safety template | `docs/specs/scout-runtime-physiologic-gate.md`, `docs/specs/scout-runtime-multi-gate-safety-reducer.md` | `[x] Documents the first full safety template: physiologic gate event, reducer, adapter, future `Phase1TransitionRequest`, future `Phase1SafetyMutationService`, and separate outbound policy. |
+| 18. Phase1TransitionRequest schema | `scout_runtime_phase1_mutation.py` | `[x] reducer-owned `scout_phase1_transition_request`, source refs, hashes, privacy, boundary |
+| 19. Reducer-to-Phase 1 mapping | `scout_runtime_phase1_mutation.py`, `safety_models.py` | `[x] maps `L3_RETREAT -> L3_DISTRESS`, `L4_ALERT_REVIEW -> L4_EMERGENCY`, and gate ids to `SafetyEventType` |
+| 20. Phase1SafetyMutationService | `scout_runtime_phase1_mutation.py` | `[x] calls `SafetyStateMachine.apply_event()` as the local deterministic writer |
+| 21. Mutation audit store | `scout_runtime_phase1_mutation.py` | `[x] `scout_phase1_safety_mutation_result` and `scout_phase1_safety_mutation_audit_index` |
+| 22. Shadow replay mutation opt-in | `scout_runtime_shadow_replay.py` | `[x] optional macOS route/gate/reducer/adapter/request/writer/audit replay |
+| 23. Mutation projection contract | `scout_runtime_phase1_mutation.py` | `[x] `phase1_safety_mutation_result` timeline event for read-only admin/debug evidence |
+| 24. Safety template coverage | `tests/test_scout_runtime_phase1_mutation.py`, `tests/test_scout_runtime_shadow_replay.py`, `tests/test_scout_outdoor_standard_coverage.py` | `[x] regression tests for writer, audit, projection, shadow replay, and docs |
 
-The generic reducer contract and slice 7-16 details are specified in
+The generic reducer contract and slice 7-24 details are specified in
 `docs/specs/scout-runtime-multi-gate-safety-reducer.md`.
 
 ## Safety Gate Role And Reducer Boundary
@@ -303,6 +326,76 @@ record `phase1_runtime_safety_truth=false` and
 `phase1_runtime_mutation_allowed=false`. Those flags mean the artifact did not
 perform the reducer handoff or mutate Phase 1 directly. They do not mean the
 product concept is merely a wellness advisory forever.
+
+## Physiologic-First Safety Template
+
+`physiologic_gate` is the first primary runtime safety gate that Scout uses as a
+complete template for changing safety state. The gate does not write safety
+truth by itself. It becomes safety-state changing only after reducer
+arbitration, adapter preparation, a reducer-owned transition request, and a
+deterministic mutation service.
+
+```mermaid
+flowchart LR
+  Window["[x] 15min physiologic window<br/>local wearable signals"]
+  Gate["[x] physiologic_gate<br/>state semantics"]
+  Event["[x] SafetyGateEvent<br/>gate_id=physiologic_gate"]
+  Reducer["[x] Multi-gate reducer<br/>policy + hysteresis"]
+  Adapter["[x] Phase 1 adapter result<br/>transition candidate"]
+  Store["[x] State-store replay<br/>candidate snapshot"]
+  Template["[x] Slice 17 template<br/>physiologic-first safety path"]
+  Request["[x] Phase1TransitionRequest<br/>write schema"]
+  Mutation["[x] Phase1SafetyMutationService<br/>deterministic writer"]
+  StateMachine["[x] SafetyStateMachine.apply_event()<br/>L0-L4 mutation"]
+  Audit["[x] Mutation audit store<br/>result + index"]
+  Projection["[x] Mutation projection<br/>read-only admin/debug event"]
+  Outbound["[ ] Outbound policy<br/>alert transport remains separate"]
+
+  Window --> Gate --> Event --> Reducer --> Adapter --> Store
+  Adapter --> Template --> Request --> Mutation --> StateMachine
+  Mutation --> Audit --> Projection
+  StateMachine --> Outbound
+```
+
+The future mutation path is:
+
+```text
+PhysiologicGateInput
+  -> physiologic_gate
+  -> SafetyGateEvent(gate_id="physiologic_gate")
+  -> reduce_runtime_safety_gate_events()
+  -> scout_runtime_safety_phase1_adapter_result
+  -> Phase1TransitionRequest
+  -> Phase1SafetyMutationService.apply_transition_request()
+  -> SafetyStateMachine.apply_event()
+  -> Phase 1 L0-L4 runtime safety truth
+```
+
+`Phase1TransitionRequest` is reducer-owned and preserves
+`source_provider`, `source_path`, `sha256`, `data_quality`, `privacy`, and
+`boundary`. It must reject medical diagnosis, raw health payloads, raw GPX,
+precise timestamps, coordinates, home/work traces, and direct outbound alert
+execution.
+
+State semantics map into the existing reducer candidates:
+
+| Physiologic state | Reducer transition candidate | Phase 1 level candidate |
+| --- | --- | --- |
+| `warmup` / `normal` | `none` | `L0_NORMAL` |
+| `watch` | `candidate_watch` | `L1_CAUTION` |
+| `stop_and_rest` | `candidate_rest` | `L2_CONCERN` |
+| `retreat_suggested` | `candidate_retreat` | `L3_RETREAT` |
+| `alert_candidate` | `candidate_alert_review` | `L4_ALERT_REVIEW` |
+
+`Phase1SafetyMutationService` is the single local writer for Phase 1 safety
+truth. It must call `SafetyStateMachine.apply_event()`, write an audit record,
+and persist the resulting state. Individual gates, provider values, LLM output,
+admin/debug pages, replay artifacts, and state-store snapshots must not mutate
+Phase 1 directly.
+
+The outbound policy is separate. `L4_ALERT_REVIEW` prepares a local alert review
+state; SOS, SMS, satellite, LoRaWAN, or other external alert transport requires
+explicit outbound policy and transport service approval.
 
 ## Objective
 

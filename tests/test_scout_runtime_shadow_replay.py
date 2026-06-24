@@ -142,6 +142,42 @@ def test_shadow_replay_can_record_blocked_adapter_candidate(
     assert result.state_store_index.snapshot_count == 1
 
 
+def test_shadow_replay_can_apply_opt_in_phase1_mutation(tmp_path: Path) -> None:
+    result = run_runtime_shadow_replay(
+        {
+            "route_gate_feed": _route_feed_payload(),
+            "phase1_adapter_enabled": True,
+            "human_review_approved": True,
+            "phase1_mutation_enabled": True,
+        },
+        output_dir=tmp_path / "shadow",
+    )
+    serialized = json.dumps(result.model_dump(mode="json"), sort_keys=True)
+
+    assert result.phase1_transition_request is not None
+    assert result.phase1_mutation_result is not None
+    assert result.phase1_mutation_audit_index is not None
+    assert result.phase1_mutation_result.status == "applied_transition"
+    assert result.phase1_mutation_result.resulting_safety_level == "L4_EMERGENCY"
+    assert result.phase1_mutation_result.boundary.phase1_l0_l4_state_mutated is True
+    assert result.phase1_mutation_result.boundary.safety_api_called is False
+    assert result.phase1_mutation_result.boundary.outbound_alert_sent is False
+    assert result.boundary.phase1_mutation_mode == "local_deterministic_writer"
+    assert result.boundary.phase1_l0_l4_state_mutated is True
+    assert result.artifact_refs.phase1_transition_request_path == (
+        "phase1_transition_request.json"
+    )
+    assert result.artifact_refs.phase1_mutation_result_path == (
+        "phase1_safety_mutation_result.json"
+    )
+    assert result.artifact_refs.phase1_mutation_audit_index_path == (
+        "phase1_safety_mutation_audit/phase1_safety_mutation_audit_index.json"
+    )
+    assert "/safety/" not in serialized
+    assert "raw_payload" not in serialized
+    assert "heartRateData" not in serialized
+
+
 def test_shadow_replay_rejects_empty_input() -> None:
     with pytest.raises(ValueError, match="requires route gate feed or gate events"):
         RuntimeShadowReplayInput.model_validate({})
