@@ -24,6 +24,7 @@ from scout_runtime_safety_reducer import (
     build_phase1_adapter_result,
     reduce_runtime_safety_gate_events,
 )
+from scout_runtime_safety_state_store import RuntimeSafetyStateStore
 from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
 from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
@@ -1116,7 +1117,11 @@ def test_debug_projection_view_includes_runtime_safety_reducer_projection(tmp_pa
         confidence="high",
         route_pressure_review_required=True,
         eta_delay_minutes=20,
-        route_context={"route_id": PROJECT_ID, "segment_id": segment_id},
+        route_context={
+            "route_id": PROJECT_ID,
+            "segment_id": segment_id,
+            "map_target_ids": [segment_id],
+        },
     )
     delay = build_delay_gate_event(
         {
@@ -1124,7 +1129,11 @@ def test_debug_projection_view_includes_runtime_safety_reducer_projection(tmp_pa
             "source_path": "outputs/runtime_safety/delay_gate.json",
             "delay_minutes": 18,
             "planned_buffer_minutes": 12,
-            "route_context": {"route_id": PROJECT_ID, "segment_id": segment_id},
+            "route_context": {
+                "route_id": PROJECT_ID,
+                "segment_id": segment_id,
+                "map_target_ids": [segment_id],
+            },
         }
     )
     batch = build_runtime_safety_gate_event_batch([physiologic, delay])
@@ -1151,9 +1160,16 @@ def test_debug_projection_view_includes_runtime_safety_reducer_projection(tmp_pa
         json.dumps(phase1_adapter.model_dump(mode="json"), ensure_ascii=False),
         encoding="utf-8",
     )
+    state_store_ref = "outputs/runtime_safety/state_store"
+    state_store = RuntimeSafetyStateStore(project_root / state_store_ref)
+    state_snapshot = state_store.save_snapshot(
+        reducer,
+        phase1_adapter_result=phase1_adapter,
+    )
     project["runtime_safety_gate_event_batch_ref"] = batch_ref
     project["runtime_safety_reducer_dry_run_ref"] = reducer_ref
     project["runtime_safety_phase1_adapter_ref"] = phase1_ref
+    project["runtime_safety_state_store_dir_ref"] = state_store_ref
     project_path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
 
     projection = load_pretrip_debug_projection_view(
@@ -1173,16 +1189,34 @@ def test_debug_projection_view_includes_runtime_safety_reducer_projection(tmp_pa
         for event in projection["timeline_events"]
         if event["kind"] == "runtime_safety_phase1_adapter_result"
     ]
+    state_store_events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "runtime_safety_state_store_snapshot"
+    ]
     assert reducer_projection["status"] == "ready"
     assert reducer_projection["event_count"] == 2
     assert projection["counts"]["runtime_safety_reducer_event_count"] == 2
+    state_store_projection = projection["runtime_safety_state_store_projection"]
+    assert state_store_projection["status"] == "ready"
+    assert state_store_projection["surface_targets"] == ["/admin/debug", "/admin"]
+    assert state_store_projection["snapshot_count"] == 1
+    assert state_store_projection["latest_snapshot_id"] == state_snapshot.snapshot_id
+    assert state_store_projection["boundary"]["runtime_safety_truth"] is False
+    assert projection["counts"]["runtime_safety_state_store_snapshot_count"] == 1
     assert projection["environment_risk_derivative_layers"]["artifact_kind"] == (
         "pretrip_environment_risk_derivative_layers"
     )
     assert len(reducer_events) == 1
     assert len(adapter_events) == 1
+    assert len(state_store_events) == 1
     reducer_event = reducer_events[0]
     assert reducer_event["payload"]["ln_level_candidate"] == "L3_RETREAT"
+    state_store_event = state_store_events[0]
+    assert state_store_event["payload"]["snapshot_id"] == state_snapshot.snapshot_id
+    assert state_store_event["payload"]["runtime_safety_truth"] is False
+    assert state_store_event["payload"]["boundary"]["safety_api_called"] is False
+    assert state_store_event["payload"]["map_target_ids"] == [segment_id]
     assert reducer_event["payload"]["recommendation"] == "retreat_review"
     assert reducer_event["payload"]["runtime_safety_truth"] is False
     assert reducer_event["payload"]["boundary"]["phase1_l0_l4_state_mutated"] is False

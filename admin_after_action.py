@@ -26,6 +26,7 @@ from risk_rules import load_risk_rules
 from route_matching import load_gpx_route
 from safety_models import IncidentPackage
 from scout_energy_reserve_monitor import build_energy_reserve_monitor_from_view
+from scout_runtime_state_store_projection import build_runtime_safety_state_store_projection
 
 
 ROOT = Path(__file__).resolve().parent
@@ -337,13 +338,31 @@ def _build_pretrip_admin_case_view(
         "debug_projection_events",
         "project.json#synthetic-debug-projection-events",
     )
+    runtime_safety_state_store_projection = (
+        build_runtime_safety_state_store_projection(
+            case_id,
+            project_root=project_root,
+            state_store_index_ref=project.get("runtime_safety_state_store_index_ref"),
+            state_store_dir_ref=project.get("runtime_safety_state_store_dir_ref"),
+            shadow_replay_result_ref=project.get("runtime_shadow_replay_result_ref"),
+            surface_targets=["/admin", "/admin/debug"],
+        ).model_dump(mode="json")
+    )
+    pretrip_summary_source_files = [
+        source_refs["route_summary"],
+        source_refs["reference_tracks"],
+        source_refs["segment_display_geometry"],
+        debug_projection_ref,
+    ]
+    state_store_source_path = runtime_safety_state_store_projection.get("source_path")
+    if state_store_source_path:
+        pretrip_summary_source_files.append(str(state_store_source_path))
 
     route_points = _pretrip_route_points(segment_display_geometry, route_summary, source_refs)
     mission_checkpoints = _pretrip_mission_checkpoints(checkpoints, source_refs)
     mission_segments = _pretrip_mission_segments(segments, source_refs)
     map_payload = _pretrip_map_payload(map_context, source_refs)
     route_bounds = _bounds([(point["lat"], point["lon"]) for point in route_points])
-    map_metadata = map_payload["metadata"]
 
     replay = {
         "observations_processed": route_summary["point_count"],
@@ -379,18 +398,17 @@ def _build_pretrip_admin_case_view(
             "incident_store": None,
             "admin_projection": admin_projection_ref,
             "debug_projection_events": debug_projection_ref,
+            "runtime_safety_state_store": runtime_safety_state_store_projection.get(
+                "source_path",
+                "",
+            ),
         },
         "summary": {
             "description": (
                 f"{case_id} | {route_summary['route_name']} | "
                 f"{reference_tracks['reference_track_count']} reference tracks"
             ),
-            "source_files": [
-                source_refs["route_summary"],
-                source_refs["reference_tracks"],
-                source_refs["segment_display_geometry"],
-                debug_projection_ref,
-            ],
+            "source_files": pretrip_summary_source_files,
             "map_context": project.get("map_context_ref"),
             "bbox": route_summary["bbox_wgs84"],
             "segments": [
@@ -475,6 +493,7 @@ def _build_pretrip_admin_case_view(
             checkpoint_events,
             source_refs,
             debug_projection_ref=debug_projection_ref,
+            runtime_safety_state_store_projection=runtime_safety_state_store_projection,
         ),
         "segment_capsules": _pretrip_segment_capsules(mission_segments, source_refs),
         "capability_timeline": _load_capability_summary_for_case(case_id, root=root),
@@ -491,6 +510,7 @@ def _build_pretrip_admin_case_view(
             "evidence_type": "pretrip_debug_projection_events",
             "event_count": len(debug_projection_events),
         },
+        "runtime_safety_state_store_projection": runtime_safety_state_store_projection,
     }
     view["evidence_timeline"] = build_admin_evidence_timeline(view)
     view["scout_agent_skills"] = build_scout_agent_skill_summary(root=root)
@@ -674,6 +694,7 @@ def _pretrip_safety_timeline(
     source_refs: dict[str, str],
     *,
     debug_projection_ref: str,
+    runtime_safety_state_store_projection: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     timeline = [
         {
@@ -708,6 +729,34 @@ def _pretrip_safety_timeline(
                 "source_id": event.get("checkpoint_candidate_id"),
                 "source_path": source_refs["checkpoint_events"],
                 "evidence_type": "replay_checkpoint",
+            }
+        )
+    projection = runtime_safety_state_store_projection or {}
+    latest = projection.get("latest_snapshot") if isinstance(projection, dict) else None
+    if projection.get("status") == "ready" and isinstance(latest, dict):
+        timeline.append(
+            {
+                "timestamp": None,
+                "label": latest.get("ln_level_candidate") or "runtime_state_store",
+                "reason": (
+                    "Runtime safety state-store replay projection is available "
+                    "for admin review; this is not Phase 1 runtime truth."
+                ),
+                "source_id": latest.get("snapshot_id"),
+                "source_path": projection.get("source_path", ""),
+                "source_refs": projection.get("source_refs", []),
+                "evidence_type": "runtime_safety_state_store_replay",
+                "runtime_safety_truth": False,
+                "phase1_runtime_safety_truth": False,
+                "phase1_l0_l4_state_mutated": False,
+                "safety_api_called": False,
+                "selected_gate_id": latest.get("selected_gate_id"),
+                "reducer_state": latest.get("reducer_state"),
+                "recommendation": latest.get("recommendation"),
+                "route_id": latest.get("route_id"),
+                "segment_id": latest.get("segment_id"),
+                "checkpoint_id": latest.get("checkpoint_id"),
+                "map_target_ids": latest.get("map_target_ids", []),
             }
         )
     return timeline

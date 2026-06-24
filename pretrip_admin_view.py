@@ -29,6 +29,10 @@ from scout_runtime_safety_reducer import (
     RuntimeSafetyReducerDecision,
     reduce_runtime_safety_gate_events,
 )
+from scout_runtime_state_store_projection import (
+    build_runtime_safety_state_store_projection,
+    runtime_safety_state_store_projection_events,
+)
 from pretrip_spatial_imprint_export import (
     DEFAULT_SPATIAL_IMPRINT_CANDIDATES_REF,
     DEFAULT_SPATIAL_IMPRINT_MANIFEST_REF,
@@ -1810,6 +1814,16 @@ def load_pretrip_debug_projection_view(
         project,
         project_root=resolved_project_root,
     )
+    runtime_safety_state_store_projection = (
+        build_runtime_safety_state_store_projection(
+            project_id,
+            project_root=resolved_project_root,
+            state_store_index_ref=project.get("runtime_safety_state_store_index_ref"),
+            state_store_dir_ref=project.get("runtime_safety_state_store_dir_ref"),
+            shadow_replay_result_ref=project.get("runtime_shadow_replay_result_ref"),
+            surface_targets=["/admin/debug", "/admin"],
+        ).model_dump(mode="json")
+    )
     source_refs = {
         "project": "project.json",
         "route_summary": project["route_summary_ref"],
@@ -1894,6 +1908,18 @@ def load_pretrip_debug_projection_view(
         ),
         "runtime_safety_phase1_adapter": project.get(
             "runtime_safety_phase1_adapter_ref",
+            "",
+        ),
+        "runtime_safety_state_store_index": project.get(
+            "runtime_safety_state_store_index_ref",
+            "",
+        ),
+        "runtime_safety_state_store_dir": project.get(
+            "runtime_safety_state_store_dir_ref",
+            "",
+        ),
+        "runtime_shadow_replay_result": project.get(
+            "runtime_shadow_replay_result_ref",
             "",
         ),
         "weather_daylight": project.get("weather_daylight_evidence_ref", ""),
@@ -2159,6 +2185,9 @@ def load_pretrip_debug_projection_view(
         )
     view["physiologic_timeline_projection"] = physiologic_timeline_projection
     view["runtime_safety_reducer_projection"] = runtime_safety_reducer_projection
+    view["runtime_safety_state_store_projection"] = (
+        runtime_safety_state_store_projection
+    )
     view["gis_perception_timeline"] = _gis_perception_timeline_summary(
         project_id,
         view["gis_perception"],
@@ -2221,6 +2250,9 @@ def load_pretrip_debug_projection_view(
         ],
         "runtime_safety_reducer_projection": view[
             "runtime_safety_reducer_projection"
+        ],
+        "runtime_safety_state_store_projection": view[
+            "runtime_safety_state_store_projection"
         ],
         "map_layers": view["map_layers"],
         "readiness": view["readiness"],
@@ -2349,6 +2381,9 @@ def load_pretrip_debug_projection_view(
             "runtime_safety_reducer_event_count": view[
                 "runtime_safety_reducer_projection"
             ].get("event_count", 0),
+            "runtime_safety_state_store_snapshot_count": view[
+                "runtime_safety_state_store_projection"
+            ].get("snapshot_count", 0),
             "timeline_event_count": len(timeline_events),
             "source_lifecycle_event_count": lifecycle_events.get("event_count", 0),
         },
@@ -4411,6 +4446,13 @@ def _debug_projection_timeline_events(
         start_sequence=len(events) + 1,
     ):
         events.append(reducer_event)
+
+    for state_store_event in runtime_safety_state_store_projection_events(
+        view.get("runtime_safety_state_store_projection", {}),
+        project_id=project_id,
+        start_sequence=len(events) + 1,
+    ):
+        events.append(state_store_event)
 
     append_event(
         "debug_session_completed",

@@ -244,9 +244,22 @@ runtime safety gate 組成：`pace_gate`（配速過慢）、`delay_gate`（時�
 `/safety/*`，也不能自行送出 SOS / SMS / satellite / LoRaWAN 等 outbound alert。
 六個 runtime safety gate 的共用 event contract 與後續 reducer roadmap 另見
 `docs/specs/scout-runtime-multi-gate-safety-reducer.md`。目前已完成的
-deterministic slice 7-12 包含非生理 gate adapters、multi-gate reducer
+deterministic slice 7-16 包含非生理 gate adapters、multi-gate reducer
 dry-run、escalation/hysteresis policy、`/admin/debug` reducer timeline
-projection，以及 feature-flagged reducer-owned Phase 1 adapter result。這些
+projection、feature-flagged reducer-owned Phase 1 adapter result，以及
+`scout_runtime_route_gate_feeds.py` 本機 route-progress replay 與
+`scout_runtime_safety_state_store.py` durable reducer candidate store，並透過
+`scout_runtime_shadow_replay.py` 在 macOS 形成完整 shadow runtime replay，且
+透過 `scout_runtime_state_store_projection.py` 把 latest state-store replay
+接進 `/admin/debug` timeline 與 `/admin` evidence tree/panel。當樹莓派 Scout
+裝置無法使用時，local replay 仍可用 planned timeline、reference segment
+timing、route progress frame 與 daylight buffer 產生 `pace_gate`、`delay_gate`
+與 `darkness_gate` event batch，供 reducer 本機測試；state store 則保存
+`scout_runtime_safety_state_snapshot` 與可重建 index，方便 review/replay；
+shadow replay 會把 route feed、gate batch、reducer、Phase 1 adapter candidate
+與 state store 串成一條本機 artifact pipeline；state-store projection 只提供
+admin/debug read-only replay，不呼叫 `/safety/*`，不改 Phase 1 runtime truth。
+這些
 artifact 可產生 `L_n` transition candidate；實際 Phase 1 mutation 仍必須走
 受控 adapter 與後續 runtime service，不能由單一 gate 私自完成。
 
@@ -364,8 +377,11 @@ flowchart LR
   Wearable["Wearable / SensorLogger<br/>HR, pace, cadence, energy, motion"] --> Physio["physiologic_gate"]
   Route["Route Runtime<br/>ETA, checkpoints"] --> Pace["pace_gate"]
   Route --> Delay["delay_gate"]
+  RouteReplay["[x] Local route-progress replay<br/>reference timing + daylight"] --> Pace
+  RouteReplay --> Delay
   Weather["Weather Evidence"] --> WeatherGate["weather_gate"]
   GNSS["GNSS / map progress"] --> Darkness["darkness_gate"]
+  RouteReplay --> Darkness
   Env["Environment Threat"] --> Threat["environment_threat_gate"]
 
   Physio --> Event["SafetyGateEvent"]
@@ -376,6 +392,10 @@ flowchart LR
   Threat --> Event
 
   Event --> Reducer["Safety Arbiter / State Reducer"]
+  Reducer --> Store["[x] Durable reducer state store<br/>candidate snapshot + index"]
+  Store --> Shadow["[x] Local shadow runtime replay<br/>macOS artifact pipeline"]
+  Store --> StoreProjection["[x] State-store replay projection<br/>/admin/debug + /admin"]
+  StoreProjection --> AdminDebug["[x] Debug timeline + Admin evidence tree"]
   Reducer --> Ln["L_n transition"]
   Ln --> Phase1["Phase 1 Safety State"]
 ```

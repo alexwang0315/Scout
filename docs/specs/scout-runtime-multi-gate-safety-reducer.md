@@ -1,6 +1,6 @@
 # Scout Runtime Multi-Gate Safety Reducer
 
-Status: slices 7-12 implemented as deterministic local contracts.
+Status: slices 7-16 implemented as deterministic local contracts.
 
 This spec defines the shared contract between Scout runtime safety gates and the
 Safety Arbiter / State Reducer. It keeps every individual gate as an evidence
@@ -36,6 +36,10 @@ must not directly own Phase 1 safety truth.
 | 10. Escalation policy + hysteresis | `[x]` | Escalate quickly, de-escalate slowly, and record suppressed reasons in `scout_runtime_safety_reducer.py`. |
 | 11. Admin/debug reducer rendering | `[x]` | `/admin/debug` shows reducer contribution, selected candidate, blocked gates, map refs, and evidence refs. |
 | 12. Controlled Phase 1 adapter | `[x]` | Feature-flagged reducer-owned adapter result; prepares a transition request only when enabled and reviewed. |
+| 13. Local route-progress feed wiring | `[x]` | `scout_runtime_route_gate_feeds.py` converts local replay route progress, reference segment timing, planned timeline, and daylight buffer into pace/delay/darkness gate events. |
+| 14. Durable reducer state store | `[x]` | `scout_runtime_safety_state_store.py` persists reducer candidate snapshots and a rebuildable local index without Phase 1 mutation. |
+| 15. Local shadow runtime replay | `[x]` | `scout_runtime_shadow_replay.py` runs the route feed, gate batch, reducer, Phase 1 adapter candidate, and state store end-to-end on macOS without Scout hardware. |
+| 16. Admin + debug state-store replay | `[x]` | `scout_runtime_state_store_projection.py` projects the durable state-store index/latest snapshot into `/admin/debug` timeline evidence and `/admin` evidence tree/panel rendering. |
 
 ```mermaid
 flowchart LR
@@ -46,19 +50,32 @@ flowchart LR
   Weather["[x] weather_gate adapter"]
   Darkness["[x] darkness_gate adapter"]
   Threat["[x] environment_threat_gate adapter"]
+  RouteFeed["[x] Local route-progress feed<br/>planned timeline + daylight"]
   Batch["[x] scout_runtime_safety_gate_event_batch"]
+  Shadow["[x] Local shadow runtime replay<br/>macOS fixture pipeline"]
   Reducer["[x] scout_runtime_safety_reducer_dry_run"]
-  UI["[x] Admin/debug reducer timeline"]
+  StateStore["[x] Durable reducer state store<br/>snapshot + rebuildable index"]
+  StoreProjection["[x] State-store replay projection<br/>admin + debug contract"]
+  DebugUI["[x] /admin/debug timeline<br/>reducer + state-store events"]
+  AdminUI["[x] /admin evidence tree<br/>state-store panel"]
   Phase1["[x] Controlled Phase 1 adapter result"]
 
   Physio --> Event
+  RouteFeed --> Pace
+  RouteFeed --> Delay
+  RouteFeed --> Darkness
   Pace --> Event
   Delay --> Event
   Weather --> Event
   Darkness --> Event
   Threat --> Event
-  Event --> Batch --> Reducer --> UI
-  Reducer --> Phase1 --> UI
+  Event --> Batch --> Shadow --> Reducer --> StateStore
+  StateStore --> StoreProjection
+  StoreProjection --> DebugUI
+  StoreProjection --> AdminUI
+  Reducer --> DebugUI
+  Reducer --> Phase1 --> StateStore
+  Phase1 --> DebugUI
 ```
 
 ## Slice 7 Contract
@@ -209,9 +226,165 @@ Even when a transition request is prepared, this slice records
 `runtime_safety_truth=false`. It prepares a deterministic transition candidate
 for the future controlled Phase 1 service, but does not perform the mutation.
 
+## Slice 13 Local Route-Progress Feed Wiring
+
+`scout_runtime_route_gate_feeds.py` creates a local replay bridge from route
+progress evidence into non-physiologic gate events. It is designed for the
+period when the Raspberry Pi Scout unit is unavailable and development must run
+on a local machine.
+
+Input artifact: `scout_runtime_route_gate_feed_input`.
+
+Required inputs:
+
+- `segment_timings`: segment id, distance, reference P50/P75/max minutes, map
+  target ids, and source refs;
+- `planned_timeline`: checkpoint/camp/safe-objective planned and latest arrival
+  offsets;
+- `progress_frames`: elapsed route minutes, elapsed segment minutes, observed
+  segment distance, target ETA, daylight buffer, minutes to next safe objective,
+  and optional emergency bivy candidate distance.
+
+Output artifact: `scout_runtime_route_gate_feed_result`.
+
+The result contains:
+
+- generated `pace_gate`, `delay_gate`, and `darkness_gate` events;
+- a `ScoutRuntimeSafetyGateEventBatch` suitable for the reducer or the existing
+  `/admin/debug` `runtime_safety_gate_event_batch_ref`;
+- aggregate `data_quality`, `privacy`, and `boundary` fields.
+
+Boundaries:
+
+- local replay only;
+- no Raspberry Pi hardware dependency;
+- no live network call;
+- no medical diagnosis;
+- no safety mutation endpoint call;
+- no Phase 1 L0-L4 mutation;
+- no raw GPX, raw route track, exact timestamps, or home/work trace sharing.
+
+This slice intentionally does not connect real resident observers. A future
+slice should feed the same contract from live route-progress, planned timeline,
+and daylight observers once Scout hardware is available again.
+
+## Slice 14 Durable Reducer State Store
+
+`scout_runtime_safety_state_store.py` persists reviewed reducer candidates as
+local durable artifacts. It is a replay/review store, not Phase 1 safety truth.
+
+Artifacts:
+
+- `scout_runtime_safety_state_snapshot`: one reducer candidate snapshot with
+  optional `scout_runtime_safety_phase1_adapter_result`;
+- `scout_runtime_safety_state_store_index`: rebuildable local index over stored
+  snapshots for latest-state and route-filtered review.
+
+The snapshot stores sanitized reducer fields:
+
+- reducer sha/source path, selected gate, reducer state, recommendation, `L_n`
+  candidate, contributing/corroborating/suppressed gates;
+- route id, segment id, checkpoint id, map target ids, evidence refs, ETA delay,
+  route-pressure review flag, policy trace, and suppressed reasons;
+- the full reducer dry-run artifact and optional controlled Phase 1 adapter
+  result for deterministic replay.
+
+Store rules:
+
+- file-backed local artifacts only;
+- duplicate reducer+adapter hashes are idempotent;
+- index is rebuildable and not semantic source of truth;
+- no Raspberry Pi hardware dependency;
+- no live network call;
+- no medical diagnosis;
+- no safety mutation endpoint call;
+- no Phase 1 L0-L4 mutation;
+- no raw health payload, raw GPX, raw track, coordinates, exact timestamps, or
+  home/work trace sharing.
+
+## Slice 15 Local Shadow Runtime Replay
+
+`scout_runtime_shadow_replay.py` provides the local end-to-end runtime exercise
+path while Scout hardware is unavailable. It is a deterministic orchestrator,
+not a resident observer and not a Phase 1 mutation service.
+
+Input artifact: `scout_runtime_shadow_replay_input`.
+
+Supported inputs:
+
+- `route_gate_feed`: the slice 13 route-progress feed input;
+- `additional_gate_events`: optional prebuilt `ScoutRuntimeSafetyGateEvent`
+  objects such as physiologic, weather, or environment threat fixtures;
+- optional reducer hysteresis input;
+- feature flag and human-review flags for the controlled Phase 1 adapter.
+
+Output artifact: `scout_runtime_shadow_replay_result`.
+
+The orchestrator writes these local artifacts under the provided output
+directory:
+
+- `runtime_route_gate_feed_result.json`;
+- `runtime_safety_gate_event_batch.json`;
+- `runtime_safety_reducer_dry_run.json`;
+- `runtime_safety_phase1_adapter_result.json`;
+- `runtime_safety_state_store/snapshots/*.json`;
+- `runtime_safety_state_store/runtime_safety_state_store_index.json`;
+- `runtime_shadow_replay_result.json`.
+
+This slice is macOS-safe and testable with `tmp_path`. It does not invoke
+hardware drivers, does not require MQTT/GNSS/OLED/LED, makes no live network
+call, does not call `/safety/*`, does not send outbound alerts, and does not
+mutate Phase 1 L0-L4 state.
+
+## Slice 16 Admin + Debug State-Store Replay
+
+`scout_runtime_state_store_projection.py` turns the durable state-store index
+and latest snapshot into a UI-safe replay projection shared by `/admin/debug`
+and `/admin`.
+
+Accepted project refs:
+
+- `runtime_safety_state_store_index_ref`;
+- `runtime_safety_state_store_dir_ref`;
+- `runtime_shadow_replay_result_ref`.
+
+Output artifact: `scout_runtime_state_store_replay_projection`.
+
+Required output fields:
+
+- `source_provider=scout_runtime_safety_state_store`;
+- `source_path`, `sha256`, `source_refs`;
+- `snapshot_count`, `latest_snapshot_id`, latest route/segment/checkpoint and
+  selected gate metadata;
+- `data_quality`, `privacy`, and `boundary`;
+- `surface_targets` containing both `/admin/debug` and `/admin`.
+
+UI contracts:
+
+- `/admin/debug` exposes `runtime_safety_state_store_projection` in the debug
+  projection payload and appends a `runtime_safety_state_store_snapshot`
+  timeline event with map refs and evidence refs.
+- `/admin` exposes the same projection as
+  `runtime_safety_state_store_projection`, renders a Runtime Safety State
+  Store panel, and adds the latest snapshot to the evidence tree / safety
+  timeline when ready.
+
+Boundary:
+
+- read-only projection only;
+- no `/safety/*` call;
+- no Phase 1 L0-L4 mutation;
+- no outbound alert send;
+- no medical diagnosis;
+- no raw health payload, raw GPX, exact timestamps, coordinates, or home/work
+  traces.
+
 ## Non-Goals
 
 - No live network dependency in tests.
+- No Raspberry Pi hardware dependency in local route-gate feed tests.
+- No local shadow replay may invoke hardware drivers.
+- No durable store artifact may be treated as Phase 1 runtime safety truth.
 - No medical diagnosis.
 - No direct `/safety/*` call.
 - No Phase 1 mutation from individual gates.

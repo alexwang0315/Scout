@@ -338,9 +338,37 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "scout_runtime_safety_gate_adapters.py" in reducer_spec
     assert "scout_runtime_safety_reducer_dry_run" in reducer_spec
     assert "scout_runtime_safety_phase1_adapter_result" in reducer_spec
+    assert "scout_runtime_route_gate_feeds.py" in reducer_spec
+    assert "scout_runtime_route_gate_feeds.py" in physiologic_spec
+    assert "Local route-progress feed wiring" in reducer_spec
+    assert "scout_runtime_route_gate_feed_input" in reducer_spec
+    assert "scout_runtime_route_gate_feed_result" in reducer_spec
+    assert "local replay route progress to pace/delay/darkness" in physiologic_spec
+    assert "Local route-progress replay" in standard_text
+    assert "scout_runtime_safety_state_store.py" in reducer_spec
+    assert "scout_runtime_safety_state_store.py" in physiologic_spec
+    assert "Durable reducer state store" in reducer_spec
+    assert "scout_runtime_safety_state_snapshot" in reducer_spec
+    assert "scout_runtime_safety_state_store_index" in reducer_spec
+    assert "Durable reducer state store" in physiologic_spec
+    assert "durable reducer candidate store" in standard_text
+    assert "scout_runtime_shadow_replay.py" in reducer_spec
+    assert "scout_runtime_shadow_replay.py" in physiologic_spec
+    assert "Local shadow runtime replay" in reducer_spec
+    assert "scout_runtime_shadow_replay_result" in reducer_spec
+    assert "macOS-safe route/gate/reducer/adapter/state-store pipeline" in physiologic_spec
+    assert "macOS artifact pipeline" in standard_text
+    assert "scout_runtime_state_store_projection.py" in reducer_spec
+    assert "scout_runtime_state_store_projection.py" in physiologic_spec
+    assert "scout_runtime_state_store_projection.py" in standard_text
+    assert "Admin + debug state-store replay" in reducer_spec
+    assert "scout_runtime_state_store_replay_projection" in reducer_spec
+    assert "runtime_safety_state_store_snapshot" in reducer_spec
+    assert "/admin evidence tree" in physiologic_spec
+    assert "State-store replay projection" in standard_text
     assert "runtime_safety_reducer_dry_run" in physiologic_spec
     assert "runtime_safety_phase1_adapter_result" in physiologic_spec
-    assert "deterministic slice 7-12" in standard_text
+    assert "deterministic slice 7-16" in standard_text
     assert "requires_safety_reducer_for_ln_transition" in physiologic_spec
 
     for required in (
