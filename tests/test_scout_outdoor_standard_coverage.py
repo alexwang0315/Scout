@@ -368,8 +368,36 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "State-store replay projection" in standard_text
     assert "runtime_safety_reducer_dry_run" in physiologic_spec
     assert "runtime_safety_phase1_adapter_result" in physiologic_spec
-    assert "deterministic slice 7-16" in standard_text
+    assert "deterministic slice 7-24" in standard_text
     assert "requires_safety_reducer_for_ln_transition" in physiologic_spec
+    assert "Physiologic-First Safety Template" in physiologic_spec
+    assert "physiologic-first safety template" in standard_text
+    assert "Slice 17 Physiologic-First Safety Template" in reducer_spec
+    assert "Slices 18-24 Phase 1 Mutation Pipeline" in reducer_spec
+    assert "Phase1TransitionRequest" in standard_text
+    assert "Phase1TransitionRequest" in physiologic_spec
+    assert "Phase1TransitionRequest" in reducer_spec
+    assert "Phase1SafetyMutationService" in standard_text
+    assert "Phase1SafetyMutationService" in physiologic_spec
+    assert "Phase1SafetyMutationService" in reducer_spec
+    assert "SafetyStateMachine.apply_event()" in standard_text
+    assert "SafetyStateMachine.apply_event()" in physiologic_spec
+    assert "SafetyStateMachine.apply_event()" in reducer_spec
+    assert "scout_runtime_phase1_mutation.py" in standard_text
+    assert "scout_runtime_phase1_mutation.py" in physiologic_spec
+    assert "scout_phase1_transition_request" in reducer_spec
+    assert "scout_phase1_safety_mutation_result" in reducer_spec
+    assert "scout_phase1_safety_mutation_audit_index" in reducer_spec
+    assert "scout_phase1_safety_mutation_projection" in reducer_spec
+    assert "L3_RETREAT` | `L3_DISTRESS" in reducer_spec
+    assert "L4_ALERT_REVIEW` | `L4_EMERGENCY" in reducer_spec
+    assert "physiologic_pressure" in reducer_spec
+    assert "phase1_mutation_enabled=True" in reducer_spec
+    assert "Mutation projection contract" in physiologic_spec
+    assert "tests/test_scout_runtime_phase1_mutation.py" in physiologic_spec
+    assert "outbound policy is separate" in standard_text
+    assert "The outbound policy is separate" in physiologic_spec
+    assert "The outbound policy is separate" in reducer_spec
 
     for required in (
         "source_provider=apple_healthkit",

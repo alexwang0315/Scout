@@ -244,14 +244,20 @@ runtime safety gate 組成：`pace_gate`（配速過慢）、`delay_gate`（時�
 `/safety/*`，也不能自行送出 SOS / SMS / satellite / LoRaWAN 等 outbound alert。
 六個 runtime safety gate 的共用 event contract 與後續 reducer roadmap 另見
 `docs/specs/scout-runtime-multi-gate-safety-reducer.md`。目前已完成的
-deterministic slice 7-16 包含非生理 gate adapters、multi-gate reducer
+deterministic slice 7-24 包含非生理 gate adapters、multi-gate reducer
 dry-run、escalation/hysteresis policy、`/admin/debug` reducer timeline
 projection、feature-flagged reducer-owned Phase 1 adapter result，以及
 `scout_runtime_route_gate_feeds.py` 本機 route-progress replay 與
 `scout_runtime_safety_state_store.py` durable reducer candidate store，並透過
 `scout_runtime_shadow_replay.py` 在 macOS 形成完整 shadow runtime replay，且
 透過 `scout_runtime_state_store_projection.py` 把 latest state-store replay
-接進 `/admin/debug` timeline 與 `/admin` evidence tree/panel。當樹莓派 Scout
+接進 `/admin/debug` timeline 與 `/admin` evidence tree/panel；slice 17 則把
+`physiologic_gate` 規格化為第一個 physiologic-first safety template，定義
+`SafetyGateEvent -> reducer -> adapter -> Phase1TransitionRequest ->
+Phase1SafetyMutationService -> SafetyStateMachine.apply_event()` 的 writer
+path；slice 18-24 已補上 `scout_runtime_phase1_mutation.py` schema、mapping、
+local deterministic writer、audit store、shadow replay opt-in mutation 與
+mutation projection。當樹莓派 Scout
 裝置無法使用時，local replay 仍可用 planned timeline、reference segment
 timing、route progress frame 與 daylight buffer 產生 `pace_gate`、`delay_gate`
 與 `darkness_gate` event batch，供 reducer 本機測試；state store 則保存
@@ -262,6 +268,16 @@ admin/debug read-only replay，不呼叫 `/safety/*`，不改 Phase 1 runtime tr
 這些
 artifact 可產生 `L_n` transition candidate；實際 Phase 1 mutation 仍必須走
 受控 adapter 與後續 runtime service，不能由單一 gate 私自完成。
+
+體能監控作為第一版 Scout 安全機制 template 時，`physiologic_gate` 可觸發
+`watch`、`stop_and_rest`、`retreat_suggested` 或 `alert_candidate` 的
+`L_n` candidate，但真正寫入 Phase 1 safety truth 的唯一 writer 是
+`Phase1SafetyMutationService`。這個 writer 必須吃 reducer-owned
+`Phase1TransitionRequest`，呼叫 `SafetyStateMachine.apply_event()`，保存
+audit，並保留 `source_provider`、`source_path`、`sha256`、`data_quality`、
+`privacy` 與 `boundary`。outbound policy is separate：L4 alert review 只建立
+本機通報 review state，SOS / SMS / satellite / LoRaWAN 等外部通報仍由
+explicit outbound policy 與 transport service 決定。
 
 ### 7.2 Scout Pace Coefficient
 
@@ -397,7 +413,17 @@ flowchart LR
   Store --> StoreProjection["[x] State-store replay projection<br/>/admin/debug + /admin"]
   StoreProjection --> AdminDebug["[x] Debug timeline + Admin evidence tree"]
   Reducer --> Ln["L_n transition"]
-  Ln --> Phase1["Phase 1 Safety State"]
+  Ln --> Template["[x] Physiologic-first safety template<br/>slice 17"]
+  Template --> Request["[x] Phase1TransitionRequest<br/>slice 18"]
+  Request --> Mapping["[x] SafetyEvent mapping<br/>slice 19"]
+  Mapping --> Mutation["[x] Phase1SafetyMutationService<br/>slice 20"]
+  Mutation --> Audit["[x] Mutation audit store<br/>slice 21"]
+  Shadow --> ShadowMutation["[x] Shadow replay mutation opt-in<br/>slice 22"]
+  ShadowMutation --> Request
+  Audit --> MutationProjection["[x] Mutation projection event<br/>slice 23"]
+  MutationProjection --> AdminDebug
+  Mutation --> Phase1["[x] Phase 1 Safety State<br/>runtime truth"]
+  Phase1 --> Outbound["[ ] Outbound policy<br/>separate transport"]
 ```
 
 `Challenge Fit` 是把路線魔王需求乘上 pace/energy vulnerability 後的
