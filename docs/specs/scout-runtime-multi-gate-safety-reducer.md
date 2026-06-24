@@ -1,14 +1,20 @@
 # Scout Runtime Multi-Gate Safety Reducer
 
-Status: slices 7-24 implemented as deterministic local contracts, including
-the physiologic-first Phase 1 mutation template and local deterministic writer.
+Status: slices 7-32 implement the deterministic local safety template from
+runtime gate evidence through Phase 1 mutation and alert application packet
+dry-run. This is not the full production safety system yet: hardware transport,
+resident production paths for every gate, real outbound send, authenticated
+emergency approval workflow, and verified delivery evidence are still open
+work. A static Emergency Mobile Approval UI v0 exists for local review and
+artifact validation only.
 
 This spec defines the shared contract between Scout runtime safety gates and the
 Safety Arbiter / State Reducer. It keeps every individual gate as an evidence
 producer. Only the reducer-owned Phase 1 adapter may prepare a controlled
-transition request, and this slice still does not perform a Phase 1 mutation,
-call a safety mutation endpoint, send outbound alerts, or claim runtime safety
-truth.
+transition request, and only the deterministic Phase 1 writer may mutate the
+local `SafetyStateMachine`. The alert application layer may prepare SMS, LoRa,
+and MQTT drafts from that state, but it still must not send outbound messages
+without a future approved production transport and operator approval path.
 
 ## Gate Set
 
@@ -57,6 +63,7 @@ must not directly own Phase 1 safety truth.
 | 30. Outbound policy decision | `[x]` | `decide_outbound_policy()` blocks live send, requires explicit operator approval for manual copy, and keeps external send disabled. |
 | 31. macOS dry-run evidence writer | `[x]` | `run_alert_application_dry_run()` writes local packet, SMS, LoRa, MQTT, policy, evidence, and result artifacts. |
 | 32. Admin/debug timeline projection event | `[x]` | `alert_application_projection_events()` emits read-only timeline evidence with map refs and `sent=false`. |
+| 33. Emergency Mobile Approval UI v0 | `[x]` | `docs/emergency/scout-emergency-mobile-approval-v0.html` provides side-by-side mobile and desktop approval surfaces, icon-first production path status, local approval/callout artifact preview, and offline-map layer toggles; no production send. |
 
 ```mermaid
 flowchart LR
@@ -91,6 +98,11 @@ flowchart LR
   OutboundPolicy["[x] Outbound policy decision<br/>slice 30"]
   DryRun["[x] macOS dry-run evidence<br/>slice 31"]
   AlertProjection["[x] Alert timeline projection<br/>slice 32"]
+  EmergencyMobile["[x] Emergency approval UI v0<br/>mobile + desktop static surface"]
+  ApprovalArtifact["[x] Local approval artifact preview<br/>sent=false"]
+  OfflineMap["[x] Emergency offline map preview<br/>cached layer toggles"]
+  ProductionApproval["[ ] Production approval workflow<br/>authenticated + delivery evidence"]
+  ProductionPaths["[ ] Production gate residency<br/>all six gates"]
   HardwareTransport["[ ] Approved transport executors<br/>SMS / LoRa / MQTT publish"]
 
   Physio --> Event
@@ -120,6 +132,12 @@ flowchart LR
   LoraDraft --> OutboundPolicy
   MqttDraft --> OutboundPolicy
   OutboundPolicy --> DryRun --> AlertProjection
+  AlertProjection --> EmergencyMobile
+  EmergencyMobile --> ApprovalArtifact
+  EmergencyMobile --> OfflineMap
+  ApprovalArtifact --> ProductionApproval
+  ProductionPaths --> Reducer
+  ProductionApproval --> HardwareTransport
   OutboundPolicy --> HardwareTransport
 ```
 
@@ -591,6 +609,150 @@ It writes local evidence files:
 contract. The event can carry map refs from the Phase 1 mutation result and can
 show that packet drafts exist, but it must always mark `sent=false`.
 
+## Production Readiness Gaps
+
+The completed slices should be treated as the first safety template, not as the
+complete Scout safety system. The current production gaps are intentional:
+
+- `physiologic_gate` has the most complete end-to-end path; the other five
+  primary gates still need production parity for resident evidence, source
+  freshness, route context joins, and field validation.
+- `weather_gate` and `environment_threat_gate` need stronger live evidence
+  contracts before they can be trusted as production safety inputs.
+- SMS, LoRa, satellite, and MQTT are only application-layer drafts today. No
+  hardware radio, broker publish, phone bridge, or satellite bridge is invoked.
+- The Raspberry Pi Scout hardware path is not validated while the device is
+  unavailable; macOS shadow replay is evidence for deterministic logic only.
+- `/admin` and `/admin/debug` are review and diagnostic surfaces, not the
+  operator approval surface for emergency field use.
+- The system still needs a fast emergency approval flow for moments when the
+  user cannot afford to navigate a full admin/debug interface. The static v0 UI
+  exists, but the authenticated production workflow and verified delivery
+  evidence are not implemented.
+
+Until these gaps close, production language must say:
+
+- "Scout prepared an alert packet draft";
+- "Scout recommends review / retreat / emergency contact";
+- "Scout has not sent an external alert unless a verified transport executor
+  reports success."
+
+It must not say:
+
+- "Scout called rescue";
+- "Scout sent SOS";
+- "Scout safety is fully implemented";
+- "The route is safe."
+
+## Emergency Mobile Approval Surface
+
+The emergency approval UI should be a lightweight phone-oriented web page or app
+separate from `/admin`, `/admin/debug`, and pre-trip planning. It exists because
+the operator may be tired, injured, cold, under time pressure, or unable to
+handle a full diagnostic interface when a production path fires.
+
+The v0 static prototype is:
+
+```text
+docs/emergency/scout-emergency-mobile-approval-v0.html
+```
+
+It intentionally renders mobile and desktop surfaces side by side. It can load
+an `alert_application_dry_run_result.json` file, render production path state,
+show one-tap decisions, preview an approval or callout artifact, and show an
+offline-map preview with simple layer toggles. It does not call `/safety/*`,
+does not mutate Phase 1, does not call a transport executor, does not publish
+MQTT, does not invoke LoRa, does not send SMS, and records `sent=false`.
+
+Engineering evidence that is useful for audit but not for the first emergency
+decision screen must live in bottom evidence frame tabs. In v0 this includes
+Workspace Resources, the emergency package draft, and the approval artifact.
+The default tab should keep the actionable approval artifact visible, while
+Workspace Resources and the package draft remain one tap away for review.
+
+The v0 surface must point at the standard Scout workspace layout defined in
+`docs/specs/scout-workspace-layout.md`. It reads the same active pretrip
+workspace resources as `/admin/pretrip`, `/admin/debug`, and `/admin` through
+read-only GET endpoints:
+
+```text
+/admin/pretrip/projects/{project_id}?compact=1
+/admin/pretrip/projects/{project_id}/admin-projection
+/admin/pretrip/projects/{project_id}/debug-projection
+/admin/pretrip/projects/{project_id}/debug-projection-events
+```
+
+Approval artifacts produced by the UI must preserve `workspace_project_id`,
+`workspace_kind`, `workspace_source_refs`, and `workspace_endpoint_refs` so an
+operator can trace the packet back to `project.json`, the admin projection, the
+debug projection, and shared map layers.
+
+The surface has four required panes:
+
+1. **Production Path State**
+   - Current `SafetyLevel` and selected gate.
+   - Which production path fired: physiologic, pace, delay, weather, darkness,
+     environment threat, manual help request, or combined reducer escalation.
+   - Icon-first gate status cards with color-coded severity. For example,
+     `physiologic_gate` should render as healthy / strained / danger using
+     icon state and color before long prose.
+   - Alert packet status: prepared, pending approval, manually copied, sent by
+     verified transport, failed, or cancelled.
+   - Transport readiness: SMS bridge, LoRa, MQTT, satellite, or local-only.
+   - Source freshness and major uncertainty notes.
+
+2. **One-Tap Decision Controls**
+   - `Agree / send through approved transport`.
+   - `Do not send`.
+   - `Review again in N minutes`.
+   - `Current condition OK / downgrade request`.
+   - `Immediate phone call`.
+   - `Manual copy emergency packet`.
+   - `Retreat / emergency camp instead`.
+
+   These controls must produce deterministic approval artifacts. A downgrade
+   request is not allowed to erase evidence; it must become a reviewed
+   counter-signal for the reducer or Phase 1 writer.
+
+3. **Emergency Call Out**
+   - `Message`: produce a local emergency message draft for manual review or
+     future approved transport.
+   - `Voice`: produce a short manual phone-call script for 119 / 112 style
+     escalation.
+   - Neither action is verified delivery. Both must keep
+     `external_send_performed=false`, `outbound_transport_invoked=false`, and
+     `sent=false` until a production transport reports success.
+
+4. **Offline Map**
+   - Cached Rudy+TW tile layer.
+   - Cached imagery tile layer.
+   - Overpass evidence layer.
+   - Reference segment layer.
+   - CP/MCP layer.
+   - Route note layer.
+   - Terrain layer.
+   - A simple toggle for each layer or combined layer family.
+   - Current route, planned camp, checkpoints, retreat branches, and emergency
+     camp candidates.
+   - Last known location reference and map target ids from the alert packet.
+   - No raw track sharing by default; privacy-safe location refs are preferred
+     unless the user explicitly chooses to include precise coordinates in an
+     emergency packet.
+
+Safety and privacy rules:
+
+- The surface can approve a future verified transport executor, but it must not
+  fake success. It needs positive delivery evidence from the transport layer.
+- A single tap may authorize an already-prepared packet, but it must show the
+  packet summary and target transport before the action.
+- If communication is degraded, the UI must preserve a local audit artifact and
+  show manual copy / phone call alternatives.
+- The approval UI must be usable offline for map review and pending decisions.
+- It must not require `/admin` or `/admin/debug` to function in the field.
+- It must not ask the user to read long evidence tables during an emergency.
+- It must preserve source refs, sha256, data quality, privacy, and boundary
+  fields for every approval or rejection action.
+
 ## Non-Goals
 
 - No live network dependency in tests.
@@ -603,3 +765,5 @@ show that packet drafts exist, but it must always mark `sent=false`.
 - No outbound SOS/SMS/satellite/LoRaWAN send from the reducer dry-run.
 - No raw health payload, raw GPX, precise timestamps, or home/work traces in
   reducer artifacts.
+- No claim that the full production safety system is complete while hardware
+  transport, gate production parity, and emergency mobile approval remain open.
