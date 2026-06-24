@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -13,6 +12,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from scout.agents import PydanticScoutAgentProvider, resolve_model_policy
+from scout.agents.pydantic_ai_compat import pydantic_ai_runtime_version
 from scout.api.routes import create_app
 
 
@@ -93,7 +93,7 @@ def run_smoke(
     if model_policy.missing_credential_env:
         return {
             "provider": "PydanticScoutAgentProvider",
-            "pydantic_ai_version": version("pydantic-ai"),
+            "pydantic_ai_version": pydantic_ai_runtime_version(),
             "model": model_policy.display_name,
             "model_policy": model_policy.model_dump(mode="json"),
             "env_file_loaded": loaded_env_file,
@@ -155,7 +155,7 @@ def run_smoke(
         return {
             "app_title": app.title,
             "provider": "PydanticScoutAgentProvider",
-            "pydantic_ai_version": version("pydantic-ai"),
+            "pydantic_ai_version": pydantic_ai_runtime_version(),
             "model": model_policy.display_name,
             "model_policy": model_policy.model_dump(mode="json"),
             "model_sla": (

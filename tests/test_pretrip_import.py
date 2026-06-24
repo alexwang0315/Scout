@@ -131,6 +131,8 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     checkpoint_events = _load(project_root / "outputs" / "checkpoint_events.json")
     segment_display = _load(project_root / "outputs" / "segment_display_geometry.json")
     segment_policy = _load(project_root / "outputs" / "segment_policy_candidates.json")
+    skill_config_manifest = _load(project_root / "candidates" / "skill_config_manifest.json")
+    readiness_report = _load(project_root / "outputs" / "readiness_report.json")
     source_inbox = _load(project_root / "inbox" / "source_manifest.json")
     source_index = _load(project_root / "sources" / "historical_gpx_source_index.json")
     gis_perception = _load(project_root / "outputs" / "gis_perception_candidates.json")
@@ -199,6 +201,10 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert project["source_inbox_file_count"] == 3
     assert project["gis_perception_candidates_ref"] == "outputs/gis_perception_candidates.json"
     assert project["route_role"] == "golden_route"
+    assert project["route_days"] == 1
+    assert project["route_kind"] == "out_and_back"
+    assert project["skill_config_manifest_ref"] == "candidates/skill_config_manifest.json"
+    assert project["readiness_report_ref"] == "outputs/readiness_report.json"
     assert project["actual_user_track_available"] is False
     assert project["boss_point_synthesis_status"] == "pending_map_preparation"
     assert project["boss_point_synthesis_trigger"] == "prepare_layers_with_risk"
@@ -396,6 +402,13 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert admin_projection["after_action_surface"]["completed_mission_replay"] is False
     assert admin_projection["debug_surface"]["file_runtime_debug_log_compatible"] is True
     assert admin_projection["boundary"]["projection_only"] is True
+    assert skill_config_manifest["artifact_kind"] == "skill_config_manifest"
+    assert skill_config_manifest["scope"] == "pretrip_readiness"
+    assert skill_config_manifest["project_id"] == "fixture_import"
+    assert readiness_report["status"] == "warning"
+    assert readiness_report["findings"][0]["rule_id"] == (
+        "same_day_short_requires_alternate_route"
+    )
     assert route_notes["counts"]["note_candidate_count"] == 3
     assert gis_ai_judgements["provider_kind"] == "pydantic_ai_test"
     assert gis_ai_judgements["judgement_count"] == 3
@@ -874,6 +887,49 @@ def test_pretrip_import_default_relative_speed_filter_keeps_five_times_spike(
     assert route_summary["point_count"] == 4
     assert route_summary["bbox_wgs84"]["max_lat"] == 24.006
     assert 'lat="24.006"' in primary_filtered_gpx
+
+
+def test_pretrip_import_relative_speed_filter_ignores_near_stationary_previous_leg(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="slow start then normal mountain route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.00001, 121.0, 1001.0, "2026-05-01T00:10:00Z"),
+            (24.005, 121.0, 1010.0, "2026-05-01T00:20:00Z"),
+            (24.01, 121.0, 1020.0, "2026-05-01T00:30:00Z"),
+        ],
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="slow_start_relative_speed_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "slow_start_relative_speed_import"
+    route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+    filter_report = _load(project_root / "outputs" / "gpx_speed_filter_report.json")
+    primary_filtered_gpx = Path(filter_report["primary"]["output_path"]).read_text(
+        encoding="utf-8"
+    )
+
+    assert manifest["counts"]["route_point_count"] == 4
+    assert manifest["counts"]["gpx_speed_filter_removed_point_count"] == 0
+    assert filter_report["primary"]["removed_track_point_count"] == 0
+    assert filter_report["primary"][
+        "min_previous_speed_for_relative_filter_kmh"
+    ] == 0.5
+    assert route_summary["point_count"] == 4
+    assert route_summary["bbox_wgs84"]["max_lat"] == 24.01
+    assert 'lat="24.01"' in primary_filtered_gpx
 
 
 def test_pretrip_import_preserves_gpx_segment_boundaries_in_display_geometry(

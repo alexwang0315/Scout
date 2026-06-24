@@ -289,7 +289,41 @@ def write_reference_segment_timing(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    _update_project_reference_segment_timing(project_root, output_ref, payload)
     return output_path
+
+
+def _update_project_reference_segment_timing(
+    project_root: Path,
+    output_ref: str,
+    payload: dict[str, Any],
+) -> None:
+    project_path = project_root / "project.json"
+    if not project_path.exists():
+        return
+    project = _load_json(project_path)
+    if not isinstance(project, dict):
+        return
+    counts = payload.get("counts", {}) if isinstance(payload.get("counts"), dict) else {}
+    updates = {
+        "reference_segment_timing_ref": output_ref,
+        "reference_segment_timing_segment_count": int(
+            counts.get("usable_segment_count") or counts.get("segment_count") or 0
+        ),
+        "reference_segment_timing_measurement_count": int(
+            counts.get("measurement_count") or 0
+        ),
+    }
+    changed = False
+    for key, value in updates.items():
+        if project.get(key) != value:
+            project[key] = value
+            changed = True
+    if changed:
+        project_path.write_text(
+            json.dumps(project, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
 
 def _measurement_for_source_segment(

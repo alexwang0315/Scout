@@ -42,6 +42,7 @@ from pretrip_spatial_imprint_export import (
 
 
 ROOT = Path(__file__).resolve().parent
+ADMIN_SEGMENT_DISPLAY_MAX_POINTS = 24
 CHILAI_NANHUA_DAY1_PROJECT_ID = "chilai_nanhua_day1"
 PRETRIP_PROJECTS_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects"
 EXPERT_CONTRIBUTION_APPLY_PLAN_REF = "outputs/expert_contribution_apply_plan.json"
@@ -5099,8 +5100,23 @@ def _segment_display_geometry_by_id(
     if not payload:
         return {}
     source_path = payload.get("source_path") or "outputs/segment_display_geometry.json"
-    return {
-        item["segment_candidate_id"]: {
+    geometries: dict[str, dict[str, Any]] = {}
+    for item in payload.get("segments", []):
+        raw_coordinate_segments = _raw_display_geometry_coordinate_segments(item)
+        bounded_coordinate_segments = _bounded_coordinate_segments(
+            raw_coordinate_segments,
+            max_points_per_segment=ADMIN_SEGMENT_DISPLAY_MAX_POINTS,
+        )
+        bounded_coordinates = [
+            point
+            for coordinate_segment in bounded_coordinate_segments
+            for point in coordinate_segment
+        ]
+        source_display_point_count = item.get(
+            "display_point_count",
+            sum(len(segment) for segment in raw_coordinate_segments),
+        )
+        geometries[item["segment_candidate_id"]] = {
             "source_id": item["segment_candidate_id"],
             "source_path": source_path,
             "evidence_type": "pretrip_segment_display_geometry",
@@ -5121,16 +5137,16 @@ def _segment_display_geometry_by_id(
                 ),
             ),
             "source_point_count": item.get("source_point_count"),
-            "display_point_count": item.get(
-                "display_point_count",
-                len(item.get("coordinates", [])),
+            "source_display_point_count": source_display_point_count,
+            "display_point_count": len(bounded_coordinates),
+            "display_segment_count": len(bounded_coordinate_segments),
+            "coordinates": bounded_coordinates,
+            "coordinate_segments": bounded_coordinate_segments,
+            "geometry_simplified_for_admin_payload": (
+                len(bounded_coordinates) < source_display_point_count
             ),
-            "display_segment_count": item.get(
-                "display_segment_count",
-                len(item.get("coordinate_segments", [])),
-            ),
-            "coordinates": item.get("coordinates", []),
-            "coordinate_segments": item.get("coordinate_segments", []),
+            "admin_payload_point_cap": ADMIN_SEGMENT_DISPLAY_MAX_POINTS,
+            "full_geometry_ref": source_path,
             "segment_boundary_preserved": item.get(
                 "segment_boundary_preserved",
                 False,
@@ -5141,8 +5157,55 @@ def _segment_display_geometry_by_id(
             "resume_gaps": item.get("resume_gaps", []),
             "boundary": payload.get("boundary", {}),
         }
-        for item in payload.get("segments", [])
+    return geometries
+
+
+def _raw_display_geometry_coordinate_segments(
+    display_geometry: dict[str, Any],
+) -> list[list[dict[str, Any]]]:
+    coordinate_segments = display_geometry.get("coordinate_segments")
+    if isinstance(coordinate_segments, list):
+        segments = [
+            [dict(point) for point in segment if isinstance(point, dict)]
+            for segment in coordinate_segments
+            if isinstance(segment, list)
+        ]
+        segments = [segment for segment in segments if segment]
+        if segments:
+            return segments
+    coordinates = display_geometry.get("coordinates")
+    if isinstance(coordinates, list):
+        segment = [dict(point) for point in coordinates if isinstance(point, dict)]
+        return [segment] if segment else []
+    return []
+
+
+def _bounded_coordinate_segments(
+    coordinate_segments: list[list[dict[str, Any]]],
+    *,
+    max_points_per_segment: int,
+) -> list[list[dict[str, Any]]]:
+    return [
+        _sample_coordinate_segment(segment, max_points_per_segment)
+        for segment in coordinate_segments
+        if segment
+    ]
+
+
+def _sample_coordinate_segment(
+    segment: list[dict[str, Any]],
+    max_points: int,
+) -> list[dict[str, Any]]:
+    if max_points <= 0 or len(segment) <= max_points:
+        return [dict(point) for point in segment]
+    if max_points == 1:
+        return [dict(segment[0])]
+    last_index = len(segment) - 1
+    sampled_indexes = {
+        round(index * last_index / (max_points - 1))
+        for index in range(max_points)
     }
+    return [dict(segment[index]) for index in sorted(sampled_indexes)]
 
 
 def _display_geometry_coordinate_segments(

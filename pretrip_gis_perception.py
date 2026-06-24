@@ -11,6 +11,11 @@ from typing import Any, Literal, Protocol, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pydantic_ai_runtime_compat import (
+    build_chat_model,
+    pydantic_agent_runtime_kwargs,
+    pydantic_result_output,
+)
 from pretrip_route_note_candidates import (
     RouteNoteBoundary,
     RouteNoteCandidate,
@@ -663,21 +668,23 @@ class PydanticAICloudGisPerceptionProvider:
         api_key: str,
     ) -> "_CloudRouteNoteJudgementBatch":
         from pydantic_ai import Agent
-        from pydantic_ai.models.openai import OpenAIModel
-        from pydantic_ai.providers.openai import OpenAIProvider
 
-        provider = OpenAIProvider(base_url=self.base_url, api_key=api_key)
         agent = Agent(
-            OpenAIModel(self.model_name, provider=provider),
+            build_chat_model(
+                model_name=self.model_name,
+                base_url=self.base_url,
+                api_key=api_key,
+            ),
             output_type=_CloudRouteNoteJudgementBatch,
             system_prompt=_GIS_PERCEPTION_SYSTEM_PROMPT,
-            output_retries=2,
+            retries={"output": 2},
+            **pydantic_agent_runtime_kwargs(),
         )
         result = agent.run_sync(
             json.dumps(prompt_payload, ensure_ascii=False, sort_keys=True),
             model_settings={"max_tokens": 5000, "temperature": 0},
         )
-        output = getattr(result, "output", getattr(result, "data", result))
+        output = pydantic_result_output(result)
         return _CloudRouteNoteJudgementBatch.model_validate(output)
 
 

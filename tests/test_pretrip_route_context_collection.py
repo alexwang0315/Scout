@@ -519,6 +519,7 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
         for source in evidence["source_report"]
         if source["source_kind"] == "named_point_evidence"
     )
+
     assert named_source["loaded_count"] == 8
     heishuitang = next(point for point in points["points"] if point["display_label"] == "黑水塘")
     assert "named_point" in heishuitang["evidence_families"]
@@ -568,6 +569,31 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert route_context_summary["route_point_media_count"] >= 1
     assert route_context_summary["live_fetch_performed"] is False
     assert route_context_summary["runtime_safety_truth"] is False
+
+
+def test_route_context_collection_no_briefing_refresh_preserves_existing_ref(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(FIXTURE_PROJECT, project_root)
+
+    collect_pretrip_route_context(
+        project_root,
+        dry_run=False,
+        limit_route_notes=8,
+        collected_at="2026-06-15T00:00:00Z",
+    )
+    collect_pretrip_route_context(
+        project_root,
+        dry_run=False,
+        limit_route_notes=8,
+        write_briefing=False,
+        collected_at="2026-06-15T01:00:00Z",
+    )
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+
+    assert project["route_context_briefing_ref"] == ROUTE_CONTEXT_BRIEFING_REF
+    assert (project_root / ROUTE_CONTEXT_BRIEFING_REF).is_file()
 
 
 def test_route_context_collection_normalizes_workspace_k_labels_from_ocr_and_raster(

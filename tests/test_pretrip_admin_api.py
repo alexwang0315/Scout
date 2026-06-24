@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from admin_api import create_admin_app
+from admin_api import _compact_pretrip_project_view, create_admin_app
 from admin_local_raster_tiles import raster_tile_cache_path
 
 
@@ -230,15 +230,22 @@ def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
     assert compact_payload["tabs"]["agent_skills"]["sections"]
     assert compact_payload["tabs"]["agent_skills"]["scout_agent_skills"]["counts"][
         "tool_count"
-    ] == 45
+    ] == compact_payload["scout_agent_skills"]["counts"]["tool_count"]
     assert compact_payload["tabs"]["agent_skills"]["evidence_timeline"]["counts"][
         "category_count"
-    ] == 12
+    ] == compact_payload["evidence_timeline"]["counts"]["category_count"]
     assert "route_notes" not in compact_payload["tabs"]["pre_trip_planning"]
     assert compact_payload["tabs"]["post_analysis"]["segment_terrain"]["source_path"]
     assert compact_payload["tabs"]["post_analysis"]["runtime_handoff"]["boundary"][
         "phase1_runtime_mutation_allowed"
     ] is False
+    assert compact_payload["capability_timeline_import"]["edges"]
+    assert len(compact_payload["capability_timeline_import"]["edges"]) == (
+        compact_payload["capability_timeline_import"]["counts"]["edge_count"]
+    )
+    assert compact_payload["tabs"]["post_analysis"]["capability_timeline_import"][
+        "edges"
+    ]
     assert "samples" in compact_payload["terrain_visualization"]
     assert compact_payload["terrain_visualization"]["contours"] == []
     if compact_payload["route_notes"]["candidates"]:
@@ -246,6 +253,238 @@ def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
         assert compact_payload["route_notes"]["candidates"][0]["runtime_safety_truth"] is False
     assert "checkpoint_candidates" not in compact_payload["gis_perception"]
     assert len(compact_response.content) < len(full_response.content)
+
+
+def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
+    route_note_candidates = [
+        {
+            "candidate_id": f"note.{index}",
+            "evidence_type": "gpx_route_note",
+            "lat": 23.9,
+            "lon": 121.1,
+            "normalized_note": "route note",
+            "review_state": "candidate",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "source_path": "heavy/source/path.json",
+        }
+        for index in range(501)
+    ]
+    dense_points = [
+        {
+            "lat": 23.9 + index / 10000,
+            "lon": 121.1 + index / 10000,
+            "route_distance_m": index * 10,
+            "overpass_projection": {"status": "centerline_interpolated"},
+        }
+        for index in range(20)
+    ]
+    compact = _compact_pretrip_project_view(
+        {
+            "project_id": PROJECT_ID,
+            "tabs": {},
+            "route": {
+                "source_id": "route",
+                "distance_m": 1000,
+                "point_count": len(dense_points),
+                "display_geometry": {
+                    "display_point_count": len(dense_points),
+                    "coordinates": dense_points,
+                },
+            },
+            "segments": [
+                {
+                    "candidate_id": "seg.001",
+                    "source_id": "seg.001",
+                    "from_candidate_id": "cp.001",
+                    "to_candidate_id": "cp.002",
+                    "distance_m": 100,
+                    "display_geometry": {
+                        "display_point_count": len(dense_points),
+                        "coordinates": dense_points,
+                    },
+                    "overpass_projection": {"status": "aligned"},
+                }
+            ],
+            "route_notes": {"candidates": route_note_candidates},
+            "overpass_evidence": {
+                "corridor_candidates": [
+                    {
+                        "candidate_id": "overpass.001",
+                        "corridor": {
+                            "coordinates": [
+                                {"lat": 23.9, "lon": 121.1},
+                                {"lat": 23.91, "lon": 121.11},
+                            ]
+                        },
+                    }
+                ],
+                "hazard_candidates": [],
+                "poi_candidates": [],
+            },
+            "reference_tracks": {"reference_tracks": []},
+            "mileage_tag_alignment": {
+                "status": "completed",
+                "counts": {"tag_count": 1},
+                "timeline_items": [
+                    {
+                        "source_id": "mileage.001",
+                        "label": "K1.0 CP 001",
+                        "source_kind": "checkpoint",
+                        "display_mileage_label": "K1.0",
+                        "route_projection_status": "aligned",
+                        "route_distance_m": 1000,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            "environment_risk_derivative_layers": {
+                "status": "ready",
+                "counts": {
+                    "wetness_flash_flood_candidate_count": 1,
+                    "practical_darkness_candidate_count": 1,
+                },
+                "category_items": [
+                    {
+                        "source_id": "env.category.wetness",
+                        "label": "濕滑/溪溝暴漲候選：1",
+                        "candidate_count": 1,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+                "wetness_flash_flood_susceptibility": {
+                    "counts": {"candidate_count": 1},
+                    "candidates": [
+                        {
+                            "source_id": "wetness.001",
+                            "label": "濕滑/溪溝暴漲候選 1.0K",
+                            "candidate_kind": "wetness_flash_flood_susceptibility",
+                            "lat": 23.9,
+                            "lon": 121.1,
+                            "coordinates": [
+                                {"lat": 23.9, "lon": 121.1},
+                                {"lat": 23.91, "lon": 121.11},
+                            ],
+                            "score": 0.8,
+                            "candidate_only": True,
+                            "runtime_safety_truth": False,
+                        }
+                    ],
+                },
+                "practical_darkness_time": {
+                    "counts": {"candidate_count": 1},
+                    "candidates": [
+                        {
+                            "source_id": "dark.001",
+                            "candidate_kind": "practical_darkness_time",
+                            "lat": 23.91,
+                            "lon": 121.11,
+                            "coordinates": [
+                                {"lat": 23.91, "lon": 121.11},
+                                {"lat": 23.92, "lon": 121.12},
+                            ],
+                            "candidate_only": True,
+                            "runtime_safety_truth": False,
+                        }
+                    ],
+                },
+            },
+            "risk_score": {
+                "counts": {"point_count": 1},
+                "points": [
+                    {
+                        "source_id": "risk.point.001",
+                        "lat": 23.9,
+                        "lon": 121.1,
+                        "pretrip_risk": 50,
+                        "risk_level": 3,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            "risk_ribbon": {
+                "counts": {"segment_count": 1},
+                "segments": [
+                    {
+                        "source_id": "risk.ribbon.001",
+                        "coordinates": [
+                            {"lat": 23.9, "lon": 121.1},
+                            {"lat": 23.91, "lon": 121.11},
+                        ],
+                        "pretrip_risk": 50,
+                        "risk_bucket": "moderate",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            "risk_heatmap": {
+                "counts": {"segment_count": 1},
+                "segments": [
+                    {
+                        "source_id": "risk.heat.001",
+                        "coordinates": [
+                            {"lat": 23.9, "lon": 121.1},
+                            {"lat": 23.91, "lon": 121.11},
+                        ],
+                        "pretrip_risk": 55,
+                        "risk_bucket": "moderate",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            "risk_delta": {
+                "counts": {"segment_count": 1},
+                "segments": [
+                    {
+                        "source_id": "risk.delta.001",
+                        "coordinates": [
+                            {"lat": 23.9, "lon": 121.1},
+                            {"lat": 23.91, "lon": 121.11},
+                        ],
+                        "delta_score": 5,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+        }
+    )
+
+    segment_geometry = compact["segments"][0]["display_geometry"]
+    assert segment_geometry["display_point_count"] == 8
+    assert segment_geometry["source_display_point_count"] == len(dense_points)
+    assert "coordinates" not in segment_geometry
+    assert "overpass_projection" not in segment_geometry["coordinate_segments"][0][0]
+    assert compact["segments"][0]["overpass_projection"]["status"] == "aligned"
+    assert len(compact["route_notes"]["candidates"]) == 500
+    assert compact["route_notes"]["source_candidate_count"] == 501
+    assert compact["route_notes"]["admin_payload_truncated"] is True
+    assert compact["overpass_evidence"]["corridor_candidates"][0]["corridor"][
+        "coordinates"
+    ]
+    assert compact["mileage_tag_alignment"]["timeline_items"][0][
+        "display_mileage_label"
+    ] == "K1.0"
+    assert compact["mileage_tag_alignment"]["timeline_items"][0][
+        "route_distance_m"
+    ] == 1000
+    derivative_layers = compact["environment_risk_derivative_layers"]
+    assert len(derivative_layers["category_items"]) == 1
+    assert derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
+        "candidate_kind"
+    ] == "wetness_flash_flood_susceptibility"
+    assert derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
+        "coordinates"
+    ]
+    assert compact["risk_score"]["points"][0]["pretrip_risk"] == 50
+    assert compact["risk_ribbon"]["segments"][0]["coordinates"]
+    assert compact["risk_heatmap"]["segments"][0]["coordinates"]
+    assert compact["risk_delta"]["segments"][0]["coordinates"]
 
 
 def test_pretrip_project_route_context_briefing_api_serves_workspace_html(tmp_path: Path):

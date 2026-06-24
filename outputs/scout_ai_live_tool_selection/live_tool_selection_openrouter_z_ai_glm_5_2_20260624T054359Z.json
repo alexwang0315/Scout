@@ -1,0 +1,718 @@
+{
+  "artifact_kind": "scout_ai_live_tool_selection_eval",
+  "artifact_version": "scout_ai_live_tool_selection_eval.v0",
+  "started_at": "2026-06-24T05:37:43.984896+00:00",
+  "finished_at": "2026-06-24T05:43:59.536769+00:00",
+  "project_id": "chilai_nanhua_day1",
+  "workspace_root": "tests/fixtures/pretrip/projects",
+  "model": "openrouter:z-ai/glm-5.2",
+  "base_url": null,
+  "case_count": 10,
+  "passed_count": 7,
+  "failed_count": 3,
+  "pass_rate": 0.7,
+  "scoring_policy": {
+    "counts_only_model_native_tool_calls": true,
+    "deterministic_planner_used_as_expected_tool_oracle_only": true,
+    "assistant_api_pre_augmentation_used": false,
+    "provider_keyword_auto_augmentation_used": false
+  },
+  "samples": [
+    {
+      "case_id": "field-031",
+      "question": "白牆下這段還適合走嗎？",
+      "notes": "natural weather visibility question should call weather and CWA evidence",
+      "started_at": "2026-06-24T05:37:44.018451+00:00",
+      "finished_at": "2026-06-24T05:38:58.465039+00:00",
+      "latency_ms": 74447.305,
+      "ok": false,
+      "error": {
+        "type": "UnexpectedModelBehavior",
+        "message": "Model token limit (768) exceeded before any response was generated. Increase the `max_tokens` model setting, or simplify the prompt to result in a shorter response that will fit within the limit."
+      },
+      "model_native_tool_call_count": 6,
+      "model_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.route_context.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": false,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.route_context.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+          "status": "completed",
+          "answerability": "terrain_score_missing_evidence",
+          "result_count": 0,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+          "status": "completed",
+          "answerability": "risk_score_decision_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.route_context.assess.v0",
+          "status": "completed",
+          "answerability": "route_context_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        }
+      ],
+      "answer_preview": ""
+    },
+    {
+      "case_id": "field-032",
+      "question": "現在風雨是否會放大失溫風險？",
+      "notes": "wind/rain/cold compound question should include CWA and hydrologic background",
+      "started_at": "2026-06-24T05:38:58.480617+00:00",
+      "finished_at": "2026-06-24T05:39:45.771311+00:00",
+      "latency_ms": 47291.14,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 5,
+      "model_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+          "status": "completed",
+          "answerability": "terrain_score_missing_evidence",
+          "result_count": 0,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+          "status": "completed",
+          "answerability": "risk_score_decision_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "## 風雨是否放大失溫風險 — 證據綜合判斷  **簡短回答：是，目前多源證據一致顯示風雨條件正在放大失溫風險，且已達需要改變計畫的保守門檻。**  ---  ### 1. 天氣窗 (Weather Window) — 決策：DELAY  - **觸發規則**：`query_reported_wind_cold_exposure_review`"
+    },
+    {
+      "case_id": "field-034",
+      "question": "這段如果起霧會不會容易失向？",
+      "notes": "fog navigation uncertainty should at least call weather and CWA evidence",
+      "started_at": "2026-06-24T05:39:45.780915+00:00",
+      "finished_at": "2026-06-24T05:40:18.365732+00:00",
+      "latency_ms": 32585.125,
+      "ok": false,
+      "error": {
+        "type": "UnexpectedModelBehavior",
+        "message": "Model token limit (768) exceeded before any response was generated. Increase the `max_tokens` model setting, or simplify the prompt to result in a shorter response that will fit within the limit."
+      },
+      "model_native_tool_call_count": 4,
+      "model_native_tool_ids": [
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.route_context.assess.v0",
+        "scout.ai.navigation_terrain.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": false,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "scout.ai.route_context.assess.v0",
+        "scout.ai.navigation_terrain.assess.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.route_context.assess.v0",
+          "status": "completed",
+          "answerability": "route_context_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.navigation_terrain.assess.v0",
+          "status": "completed",
+          "answerability": "navigation_terrain_missing_user_readiness",
+          "result_count": 1,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": ""
+    },
+    {
+      "case_id": "field-035",
+      "question": "今天的天氣窗口是否足夠？",
+      "notes": "weather window question should call official weather evidence",
+      "started_at": "2026-06-24T05:40:18.382453+00:00",
+      "finished_at": "2026-06-24T05:40:44.161022+00:00",
+      "latency_ms": 25778.791,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 3,
+      "model_native_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "## 天氣窗口評估：奇萊南華 Day 1（chilai_nanhua_day1）  ### 綜合判斷：⚠️ 天氣窗口**不足夠直接出發**，需人工複核  三個證據來源出現分歧，以下逐層說明：  ---  ### 1. Route Weather Package（search_scout_weather_window） **決策：CONDITIONAL_GO（有條件通過）** — 但非自動放行  | 路段 | 風險等級 | final_risk | 主要因素 | |------|---------|-----------|---------| | approach（0–3.2K） | LOW | 0.22 | 早晨天氣穩定、林道接近 | | yunhai_approach（3.2–7.6K） | MODERATE | 0.54 | 午後雲量增多、稜線風暴露、濕地可能 | | **tianchi_late（7.6–14.55K）** | **ELEVATED** | **0.62** | **"
+    },
+    {
+      "case_id": "field-036",
+      "question": "溪水暴漲會不會阻斷路線？",
+      "notes": "stream surge question should include CWA plus GEE antecedent rain/hydrology",
+      "started_at": "2026-06-24T05:40:44.220574+00:00",
+      "finished_at": "2026-06-24T05:41:19.776821+00:00",
+      "latency_ms": 35556.566,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 5,
+      "model_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.contextual_permission.assess.v0",
+        "scout.ai.live_navigation_state.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
+        "scout.ai.pace_guardian.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+          "status": "completed",
+          "answerability": "terrain_score_missing_evidence",
+          "result_count": 0,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+          "status": "completed",
+          "answerability": "risk_score_decision_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "## 溪水暴漲是否會阻斷路線？— 行前候選證據綜整  以下為五項工具回傳的唯讀候選證據綜整，**均非 runtime safety truth**，需人工複核後方可做最終決策。  ---  ### 1. 降雨與水文背景（多源一致偏高）  | 證據來"
+    },
+    {
+      "case_id": "field-037",
+      "question": "這段下雨後會變成落石區嗎？",
+      "notes": "rain plus rockfall question should include hydrologic background",
+      "started_at": "2026-06-24T05:41:19.796738+00:00",
+      "finished_at": "2026-06-24T05:41:52.572596+00:00",
+      "latency_ms": 32776.146,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 5,
+      "model_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.contextual_permission.assess.v0",
+        "scout.ai.live_navigation_state.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
+        "scout.ai.pace_guardian.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+          "status": "completed",
+          "answerability": "terrain_score_missing_evidence",
+          "result_count": 0,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+          "status": "completed",
+          "answerability": "risk_score_decision_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "## 雨後落石風險評估 — chilai_nanhua_day1  我已同時查詢天氣窗、CWA 官方天氣、GEE 水文背景、風險分數與地形分數五項證據。以下是綜合判讀：  ---  ### 🌧️ 當前降雨與前兆雨量（確有降雨事實）  | 證據來源 | 關鍵數據 | source ref | |---|---|---| | **CWA 警特報** | 南投山區豪雨特報（heavy rain advisory, severity=moderate） | `outputs/environment/cwa/warnings.geojson` | | **CWA 觀測** | 廬山雨量站：1h=8.5mm、"
+    },
+    {
+      "case_id": "field-039",
+      "question": "風寒和濕衣是否已經構成風險？",
+      "notes": "wind chill/wet clothing question should call weather and CWA evidence",
+      "started_at": "2026-06-24T05:41:52.593643+00:00",
+      "finished_at": "2026-06-24T05:42:20.798774+00:00",
+      "latency_ms": 28205.331,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 3,
+      "model_native_tool_ids": [
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.survival_incident_playbook.explain.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "## 風寒與濕衣風險評估 — chilai_nanhua_day1  ### 綜合判斷：是，風寒與濕衣已構成可辨識風險，三項工具均建議延後或變更計畫。  以下依據三項已完成的唯讀工具結果綜合說明：  ---  ### 1. 風寒（Wind Chill / 失溫）風險  **Weather Window** 明確觸發 `WIND` + `COLD` 警示碼，決策為 **DELAY**： - 路線條件包含 `strong wind exposure`（強風曝露）與 `cold stress / hypothermia context`（冷壓力/失溫情境）。 - 中段（yunhai_approach, 3.2–7.6 km）因素含 `ridge wind exposure`（稜線風曝露）。 - 最高風"
+    },
+    {
+      "case_id": "seed-027",
+      "question": "哪些地方下雨後風險會變高？",
+      "notes": "rain risk locations should include risk scores, weather, CWA, and GEE",
+      "started_at": "2026-06-24T05:42:20.902604+00:00",
+      "finished_at": "2026-06-24T05:42:53.337431+00:00",
+      "latency_ms": 32435.109,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 5,
+      "model_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+          "status": "completed",
+          "answerability": "terrain_score_missing_evidence",
+          "result_count": 0,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+          "status": "completed",
+          "answerability": "risk_score_decision_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "## 雨後風險變高地點分析 — chilai_nanhua_day1  以下基於五個 Scout 工具的候選證據綜合，所有證據均為 **candidate-only，非 runtime safety truth**。  ---  ### 🌧️ 降雨背景（CWA + GEE）  | 來源 | 關鍵數據 | 備註 | |------|---------|------| | CWA QPF 走廊摘要 | max=32"
+    },
+    {
+      "case_id": "seed-088",
+      "question": "天氣與地形風險是否重疊？",
+      "notes": "weather terrain overlap should include risk, terrain, weather, CWA, and GEE",
+      "started_at": "2026-06-24T05:42:53.357915+00:00",
+      "finished_at": "2026-06-24T05:43:28.287400+00:00",
+      "latency_ms": 34929.747,
+      "ok": false,
+      "error": {
+        "type": "UnexpectedModelBehavior",
+        "message": "Model token limit (768) exceeded before any response was generated. Increase the `max_tokens` model setting, or simplify the prompt to result in a shorter response that will fit within the limit."
+      },
+      "model_native_tool_call_count": 5,
+      "model_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": false,
+      "planner_expected_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+          "status": "completed",
+          "answerability": "terrain_score_missing_evidence",
+          "result_count": 0,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+          "status": "completed",
+          "answerability": "risk_score_decision_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": ""
+    },
+    {
+      "case_id": "seed-089",
+      "question": "是否需要延後出發？",
+      "notes": "departure delay question should use readiness and environment evidence",
+      "started_at": "2026-06-24T05:43:28.301779+00:00",
+      "finished_at": "2026-06-24T05:43:59.536479+00:00",
+      "latency_ms": 31234.954,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 4,
+      "model_native_tool_ids": [
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.route_readiness.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.route_readiness.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "scout.ai.route_readiness.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
+        "scout.ai.navigation_terrain.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.pace_guardian.assess.v0",
+        "scout.ai.equipment_resource.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.route_readiness.assess.v0",
+          "status": "completed",
+          "answerability": "route_readiness_decision_available",
+          "result_count": 1,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "## 是否需要延後出發？— 綜合判斷  已呼叫完整的 ROUTE_READINESS_ENV_BUNDLE（route_readiness + weather_window + CWA + GEE），以下為四個工具的候選證據綜合：  ---  ### 🚦 各工具決策摘要  | 工具 | 決策 | 信心 | 來源 | |------|------|------|------| | Route Readiness | **CONDITIONAL_GO** | 低 | `outputs/readiness_report.json` | | Weather Window | **DELAY** | 中 | `outputs/route_weather_package.reviewed.json` | | CWA Environment | **CHANGE_PLAN** | — | `outputs/environment/cwa/cwa_weather_evidence.json` | | GEE Environment | **CHANGE_PLAN** | — | `outputs/environment/gee/smap_l4_corridor_summary.json` |  ---  ### 📋 關"
+    }
+  ]
+}

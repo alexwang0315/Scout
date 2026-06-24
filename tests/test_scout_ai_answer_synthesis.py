@@ -186,20 +186,21 @@ def test_answer_synthesis_uses_energy_vitals_decision_output() -> None:
         limit=3,
     )
 
-    assert result.answerability == "partial_evidence_with_missing_context"
+    assert result.answerability == "evidence_available"
     assert result.sources[0].tool_id == ENERGY_VITALS_TOOL_ID
     assert result.sources[0].collection_status == "completed"
-    assert result.sources[0].top_result_summary["decision"] == "DELAY"
+    assert result.sources[0].top_result_summary["decision"] == "CONDITIONAL_GO"
     assert result.sources[0].top_result_summary["decision_output"][
         "decisionObjectSchema"
     ] == "ContextualPermission"
     assert result.decision_output["decisionObjectSchema"] == "ContextualPermission"
     assert result.decision_output["answerSourceToolId"] == ENERGY_VITALS_TOOL_ID
-    assert result.decision_output["decision"] == "DELAY"
-    assert result.decision_output["allowed"] is False
+    assert result.decision_output["decision"] == "CONDITIONAL_GO"
+    assert result.decision_output["allowed"] is True
     assert result.decision_output["firstLayer"]["decision"] == (
-        "建議延後體能/穿戴判斷。"
+        "可有條件繼續，但必須先降低負荷並重新確認。"
     )
+    assert "短休最多 10 分鐘" in result.decision_output["firstLayer"]["nextStep"]
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 
@@ -2583,6 +2584,26 @@ def test_answer_synthesis_uses_survival_playbook_field_answer_without_guessing()
     assert "求生事件 playbook" in result.answer
     assert "發送 SOS" in result.answer
     assert "runtime safety truth" in result.answer
+
+
+def test_answer_synthesis_prioritizes_survival_before_route_context_when_lost() -> None:
+    result = collect_and_synthesize_scout_ai_answer(
+        "我不確定自己在哪，15K在哪，可以下切溪谷找路嗎？",
+        project_root=PROJECT_ROOT,
+        project_id="chilai_nanhua_day1",
+        limit=3,
+    )
+
+    source_ids = [source.tool_id for source in result.sources]
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in source_ids
+    assert ROUTE_CONTEXT_TOOL_ID in source_ids
+    assert result.decision_output["answerSourceToolId"] == (
+        SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
+    )
+    survival_index = result.answer.index("求生事件 playbook")
+    route_context_index = result.answer.index("15K 在本次路徑")
+    assert survival_index < route_context_index
+    assert "不建議繼續移動或下切找路" in result.answer
 
 
 def test_answer_synthesis_escalates_active_altitude_sickness() -> None:

@@ -333,6 +333,85 @@ def test_builds_fixture_backed_pretrip_admin_view():
     _assert_pretrip_candidate_metadata(view["checkpoint_events"]["events"][0])
     _assert_pretrip_candidate_metadata(view["checkpoints"][0])
     _assert_pretrip_candidate_metadata(view["segments"][0])
+
+
+def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
+    tmp_path: Path,
+) -> None:
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    workspace_project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, workspace_project_root)
+    project_path = workspace_project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    segment_candidates = json.loads(
+        (workspace_project_root / project["segment_candidates_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    segment_items = (
+        segment_candidates.get("candidates", [])
+        if isinstance(segment_candidates, dict)
+        else segment_candidates
+    )
+    segment_id = segment_items[0]["candidate_id"]
+    source_points = [
+        {
+            "lat": 24.0 + index * 0.00001,
+            "lon": 121.0 + index * 0.00001,
+            "overpass_projection": {
+                "status": "centerline_interpolated",
+                "route_distance_m": index * 10.0,
+            },
+        }
+        for index in range(250)
+    ]
+    aligned_ref = "outputs/overpass_aligned_segment_display_geometry.json"
+    aligned_display = {
+        "artifact_kind": "pretrip_overpass_aligned_segment_display_geometry",
+        "schema_version": "0.1.0",
+        "source_path": aligned_ref,
+        "segments": [
+            {
+                "segment_candidate_id": segment_id,
+                "display_point_count": len(source_points),
+                "display_segment_count": 1,
+                "coordinates": source_points,
+                "coordinate_segments": [source_points],
+                "segment_boundary_preserved": True,
+            }
+        ],
+        "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+    }
+    aligned_path = workspace_project_root / aligned_ref
+    aligned_path.parent.mkdir(parents=True, exist_ok=True)
+    aligned_path.write_text(
+        json.dumps(aligned_display, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    project["overpass_aligned_segment_display_geometry_ref"] = aligned_ref
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=workspace_project_root,
+    )
+
+    segment = next(item for item in view["segments"] if item["candidate_id"] == segment_id)
+    display_geometry = segment["display_geometry"]
+    assert display_geometry["display_point_count"] == 24
+    assert display_geometry["source_display_point_count"] == len(source_points)
+    assert display_geometry["geometry_simplified_for_admin_payload"] is True
+    assert display_geometry["full_geometry_ref"] == aligned_ref
+    assert display_geometry["coordinates"][0] == source_points[0]
+    assert display_geometry["coordinates"][-1] == source_points[-1]
+    assert all("overpass_projection" in point for point in display_geometry["coordinates"])
+    assert len(json.dumps(display_geometry, ensure_ascii=False)) < 25_000
     _assert_pretrip_candidate_metadata(view["retreat_routes"][0])
     assert view["map_candidates"]["counts"] == {
         "corridor_candidates": 1,
@@ -1913,6 +1992,10 @@ def test_pretrip_view_exposes_energy_reserve_monitor_without_runtime_mutation():
     assert monitor["status"] == "missing_health_data"
     assert monitor["health_data"]["loaded"] is False
     assert monitor["trip_capability"]["loaded"] is True
+    assert monitor["trip_capability"]["completion_status"] == "complete"
+    assert monitor["trip_capability"]["planned_segment_count"] == 73
+    assert monitor["trip_capability"]["completed_segment_count"] == 73
+    assert monitor["display"]["trip_text"] == "complete capability"
     assert monitor["candidate_change"]["applied_to_baseline"] is False
     assert monitor["boundary"]["phase1_runtime_safety_truth"] is False
     assert monitor["boundary"]["safety_api_calls_allowed"] is False

@@ -1,0 +1,568 @@
+{
+  "artifact_kind": "scout_ai_live_tool_selection_eval",
+  "artifact_version": "scout_ai_live_tool_selection_eval.v0",
+  "started_at": "2026-06-24T05:04:47.237578+00:00",
+  "finished_at": "2026-06-24T05:09:02.612572+00:00",
+  "project_id": "chilai_nanhua_day1",
+  "workspace_root": "tests/fixtures/pretrip/projects",
+  "model": "openrouter:openai/gpt-4o-mini",
+  "base_url": null,
+  "case_count": 10,
+  "passed_count": 6,
+  "failed_count": 4,
+  "pass_rate": 0.6,
+  "scoring_policy": {
+    "counts_only_model_native_tool_calls": true,
+    "deterministic_planner_used_as_expected_tool_oracle_only": true,
+    "assistant_api_pre_augmentation_used": false,
+    "provider_keyword_auto_augmentation_used": false
+  },
+  "samples": [
+    {
+      "case_id": "field-031",
+      "question": "白牆下這段還適合走嗎？",
+      "notes": "natural weather visibility question should call weather and CWA evidence",
+      "started_at": "2026-06-24T05:04:47.249117+00:00",
+      "finished_at": "2026-06-24T05:05:16.027043+00:00",
+      "latency_ms": 28778.178,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 1,
+      "model_native_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tools_matched": false,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.route_context.assess.v0",
+          "status": "completed",
+          "answerability": "route_context_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "The area known as \"白牆下\" can be considered as a candidate viewpoint for observation, specifically marked as **稜線啞口觀景點** (Ridge Pass Viewpoint). However, it is essential to note the following details:  1. **Decision**: It may serve as a candidate observation point, but it is not authorized for a stop; any duration for stopping, waiting, or detouring needs separate contextual permission.     2. **Next Steps**: If you plan to stop, take photos, or wait, you must obtain contextual permission again to determine the duration and best timing for your activities.  3. **Reasons**: The **稜線啞口觀景點** is recognized as a viewpoint that is potentially suitable for brief observations or photography, but you m"
+    },
+    {
+      "case_id": "field-032",
+      "question": "現在風雨是否會放大失溫風險？",
+      "notes": "wind/rain/cold compound question should include CWA and hydrologic background",
+      "started_at": "2026-06-24T05:05:16.039791+00:00",
+      "finished_at": "2026-06-24T05:05:45.463817+00:00",
+      "latency_ms": 29424.296,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 2,
+      "model_native_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "required_tools_matched": false,
+      "planner_expected_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "Based on the gathered evidence regarding current weather conditions and their potential impact on hypothermia risk:  1. **Weather Decision**: The route weather assessment indicates a **CONDITIONAL GO** decision. This means passage is allowed under certain conditions, with a significant focus on monitoring weather changes. Specifically, passage through the segment on late-day conditions is permissible only before worsening weather, with the next critical point (CP) requiring a reevaluation of conditions. The relevant factors include an elevated risk assessment (final risk of 0.62) due to concerns like \"late-day fog chance\" and \"wet boardwalk.\" [Source: Scout Weather Window Tool Output]  2. **"
+    },
+    {
+      "case_id": "field-034",
+      "question": "這段如果起霧會不會容易失向？",
+      "notes": "fog navigation uncertainty should at least call weather and CWA evidence",
+      "started_at": "2026-06-24T05:05:45.474563+00:00",
+      "finished_at": "2026-06-24T05:06:07.334372+00:00",
+      "latency_ms": 21860.011,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 2,
+      "model_native_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "Based on the evidence gathered regarding fog conditions, here are the findings:  1. **Weather Decision**: The route conditions indicate a **conditional go** decision, suggesting that travel can proceed under the following conditions:    - The path must ensure a re-evaluation of weather risks at the next checkpoint (CP).    - This judgment is based on a reviewed weather package that indicates no automatic departure approval for segments where visibility and conditions could be compromised, particularly toward the Tianchi area which has an **elevated risk** level of **0.62** due to factors such as late-day fog and wet boardwalk conditions. The specific segment has a weather risk of **0.42**, n"
+    },
+    {
+      "case_id": "field-035",
+      "question": "今天的天氣窗口是否足夠？",
+      "notes": "weather window question should call official weather evidence",
+      "started_at": "2026-06-24T05:06:07.369077+00:00",
+      "finished_at": "2026-06-24T05:06:32.392621+00:00",
+      "latency_ms": 25023.771,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 2,
+      "model_native_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "Based on the gathered evidence regarding today's weather window for the project \"chilai_nanhua_day1,\" the findings are as follows:  ### Weather Window Assessment 1. **Weather Decision**: The recommendation is for a **CONDITIONAL GO**.    - **Conditions**: Passage is only allowed before weather conditions deteriorate, specifically for \"weather.seg.tianchi_late.\" The next CP (critical point) must be re-evaluated.    - **Reasons**:      - A reviewed route weather package shows no automatic departure approval; the late segment requires daylight discipline.      - The segment \"weather.seg.tianchi_late\" presents an **ELEVATED** risk level with a final risk score of **0.62** (weather risk of **0.42"
+    },
+    {
+      "case_id": "field-036",
+      "question": "溪水暴漲會不會阻斷路線？",
+      "notes": "stream surge question should include CWA plus GEE antecedent rain/hydrology",
+      "started_at": "2026-06-24T05:06:32.423459+00:00",
+      "finished_at": "2026-06-24T05:06:47.653485+00:00",
+      "latency_ms": 15230.151,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 3,
+      "model_native_tool_ids": [
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.contextual_permission.assess.v0",
+        "scout.ai.live_navigation_state.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
+        "scout.ai.pace_guardian.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        }
+      ],
+      "answer_preview": "### Summary of Evidence on Stream Surge Risks  1. **Weather Assessment**    - Decision: **Conditional Go**    - The reviewed weather package indicates a late segment towards Tianchi with an **elevated risk level** (final risk of 0.62, weather risk of 0.42). There is a need for stringent daylight discipline as conditions could worsen. The next action includes setting up a CP for rechecking weather conditions.     - **Next Steps**: Reserve a weather buffer for immediate recheck at the next CP and adjust the route if weather risks elevate (Source: Scout Weather Window).  2. **CWA Environment Overview**    - CWA findings show warnings and observations highlighting weather review pressure. Signif"
+    },
+    {
+      "case_id": "field-037",
+      "question": "這段下雨後會變成落石區嗎？",
+      "notes": "rain plus rockfall question should include hydrologic background",
+      "started_at": "2026-06-24T05:06:47.666565+00:00",
+      "finished_at": "2026-06-24T05:07:03.714217+00:00",
+      "latency_ms": 16047.78,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 3,
+      "model_native_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.contextual_permission.assess.v0",
+        "scout.ai.live_navigation_state.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
+        "scout.ai.pace_guardian.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "Based on the gathered evidence regarding the potential for rockfalls in the area after rainfall, here are the findings:  1. **Weather Conditions**:     - The reviewed route weather package indicates a **conditional go** decision, meaning passage is possible but requires ongoing weather checks, especially for the 'late segment' requiring daylight awareness. There is an elevated weather risk associated with this segment, primarily due to a combination of final risk (0.62) and weather risk (0.42) [source_id: scout.ai.weather_window].  2. **CWA Environment Assessment**:    - The CWA workspace reports one warning and several observations indicating that there is a significant amount of rain poten"
+    },
+    {
+      "case_id": "field-039",
+      "question": "風寒和濕衣是否已經構成風險？",
+      "notes": "wind chill/wet clothing question should call weather and CWA evidence",
+      "started_at": "2026-06-24T05:07:03.723727+00:00",
+      "finished_at": "2026-06-24T05:07:22.415062+00:00",
+      "latency_ms": 18691.483,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 3,
+      "model_native_tool_ids": [
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.survival_incident_playbook.explain.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "Based on the evaluations from the weather, CWA, and GEE tools regarding the risks of \"風寒和濕衣,\" here are the findings:  1. **Weather Assessment**:    - Decision: **CONDITIONAL GO**.    - The weather analysis indicates that passage is allowed conditionally but requires rechecking of the weather conditions. Specifically, advancing through the segment \"weather.seg.tianchi_late\" is acceptable only if the weather does not worsen and a reevaluation at the next checkpoint (CP) is planned.    - Notable factors include elevated risks (final risk 0.62, weather risk 0.42) particularly concerning late-day fog and daylight pressure. It is critical to ensure early checks and possibly alter the route if the "
+    },
+    {
+      "case_id": "seed-027",
+      "question": "哪些地方下雨後風險會變高？",
+      "notes": "rain risk locations should include risk scores, weather, CWA, and GEE",
+      "started_at": "2026-06-24T05:07:22.435329+00:00",
+      "finished_at": "2026-06-24T05:08:01.376243+00:00",
+      "latency_ms": 38941.267,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 5,
+      "model_native_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [],
+      "required_tools_matched": true,
+      "planner_expected_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.gee_environment.assess.v0",
+          "status": "completed",
+          "answerability": "gee_environment_available",
+          "result_count": 4,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+          "status": "completed",
+          "answerability": "terrain_score_missing_evidence",
+          "result_count": 0,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+          "status": "completed",
+          "answerability": "risk_score_decision_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "在下雨的情況下，以下是可能面臨的風險和建議調整的地點與情況：  ### 1. 地點與風險分析 - **Tianchi區段 (Segment: weather.seg.tianchi_late)**：   - **風險等級**：ELEVATED (最終風險: 0.62)   - **建議**：僅在天氣惡化前通過，並設立下一個檢查點重新評估。   - **特別注意**：該段需要良好的日光條件。  - **Yunhai接近區段 (Segment: weather.seg.yunhai_approach)**：   - **風險等級**：MODERATE (最終風險: 0.54)   - **建議**：中午升高，需保留檢查的緩衝時間。  - **接近區段 (Segment: weather.seg.approach)**：   - **風險等級**：LOW (最終風險: 0.22)   - **建議**：上午預測的天氣影響風險較低。  ### 2. 氣象和地理數據 - **降雨量**：   - **近雨站觀察**：Lushan雨站過去24小時降雨42.0mm。   - **預測降雨量**：最大32.0mm預測（QPF），95百分位數29.1mm。    - **土壤濕度**：   - **最新SMAP表面濕度**：0.74， GPM過去72小時的降雨量為88.0mm。  ### 3. 風險管理 基於最高的候選風險（79.58，位於14.55公里處），建議改變路線或通過策略，並設立人工確認點。此段的風險已達高標準，不能直接通過。  ### 4. 缺失的數據 - **地形分數與坡度數據**"
+    },
+    {
+      "case_id": "seed-088",
+      "question": "天氣與地形風險是否重疊？",
+      "notes": "weather terrain overlap should include risk, terrain, weather, CWA, and GEE",
+      "started_at": "2026-06-24T05:08:01.403624+00:00",
+      "finished_at": "2026-06-24T05:08:32.521302+00:00",
+      "latency_ms": 31117.909,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 4,
+      "model_native_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "required_tools_matched": false,
+      "planner_expected_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+          "status": "completed",
+          "answerability": "terrain_score_missing_evidence",
+          "result_count": 0,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+          "status": "completed",
+          "answerability": "risk_score_decision_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "Based on the assessments gathered from various tools regarding weather and terrain risks for the project \"chilai_nanhua_day1,\" the following information is available:  ### Weather Conditions 1. **Decision**: **Conditional Go**    - The route can proceed under certain conditions.    - It is essential to reassess the weather before proceeding past the designated point (`weather.seg.tianchi_late`) to ensure no deterioration occurs.    - The risk level for this segment is **ELEVATED** with a final risk score of **0.62** and a weather risk of **0.42**.    - Further evaluations are required at the next checkpoint to monitor weather changes.     Source: Weather window assessment.  ### CWA Environme"
+    },
+    {
+      "case_id": "seed-089",
+      "question": "是否需要延後出發？",
+      "notes": "departure delay question should use readiness and environment evidence",
+      "started_at": "2026-06-24T05:08:32.542297+00:00",
+      "finished_at": "2026-06-24T05:09:02.612062+00:00",
+      "latency_ms": 30070.027,
+      "ok": true,
+      "error": null,
+      "model_native_tool_call_count": 3,
+      "model_native_tool_ids": [
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.route_readiness.assess.v0"
+      ],
+      "required_tool_ids": [
+        "scout.ai.route_readiness.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "missing_required_tool_ids": [
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "required_tools_matched": false,
+      "planner_expected_tool_ids": [
+        "scout.ai.route_readiness.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
+        "scout.ai.navigation_terrain.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.pace_guardian.assess.v0",
+        "scout.ai.equipment_resource.assess.v0"
+      ],
+      "unexpected_native_tool_ids": [],
+      "tool_invocation_statuses": [
+        {
+          "tool_id": "scout.ai.cwa_environment.assess.v0",
+          "status": "completed",
+          "answerability": "cwa_environment_available",
+          "result_count": 6,
+          "source_status": "candidate_only"
+        },
+        {
+          "tool_id": "scout.ai.weather_window.assess.v0",
+          "status": "completed",
+          "answerability": "route_weather_risk_available",
+          "result_count": 3,
+          "source_status": "reviewed_route_weather_package"
+        },
+        {
+          "tool_id": "scout.ai.route_readiness.assess.v0",
+          "status": "completed",
+          "answerability": "route_readiness_decision_available",
+          "result_count": 1,
+          "source_status": "candidate_only"
+        }
+      ],
+      "answer_preview": "Based on the pretrip assessments from Scout, here are the findings regarding your departure question:  1. **Route Readiness**:    - **Decision**: CONDITIONAL GO    - **Conditions**: You must satisfy certain prerequisites and leave or return to a specified checkpoint before the deadline of **October 8, 2013, at 14:58:50**.    - **Reason**: The reviewed planning package does not equal departure approval, and there is still a need for evaluation related to the daylight policy.    - **Next Step**: You can proceed to a manual departure gate but must prepare alternative routes and retreat strategies before conditional departure (Field Reference: readiness assessment).  2. **Weather Assessment**:  "
+    }
+  ]
+}

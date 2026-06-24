@@ -165,15 +165,61 @@ def _capability_summary(payload: dict[str, Any] | None) -> dict[str, Any]:
             "rest_time_s": None,
         }
     summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
-    traversed = int(summary.get("traversed_segment_count") or 0)
-    partial = int(summary.get("partial_segment_count") or 0)
-    planned = int(summary.get("planned_segment_count") or payload.get("edge_count") or len(payload.get("edges", [])))
-    unreached = int(summary.get("unreached_segment_count") or payload.get("unreached_segment_count") or 0)
+    counts = payload.get("counts", {}) if isinstance(payload.get("counts"), dict) else {}
+    edges = payload.get("edges") if isinstance(payload.get("edges"), list) else []
+    observed_edges = (
+        payload.get("observed_edges")
+        if isinstance(payload.get("observed_edges"), list)
+        else []
+    )
+    planned = int(
+        _first_int(
+            summary.get("planned_segment_count"),
+            payload.get("planned_segment_count"),
+            payload.get("edge_count"),
+            counts.get("edge_count"),
+        )
+        or len(edges)
+    )
+    observed = int(
+        _first_int(
+            summary.get("observed_edge_count"),
+            payload.get("observed_edge_count"),
+        )
+        or len(observed_edges)
+    )
+    traversed = int(
+        _first_int(
+            summary.get("traversed_segment_count"),
+            payload.get("traversed_segment_count"),
+        )
+        or observed
+        or 0
+    )
+    partial = int(
+        _first_int(
+            summary.get("partial_segment_count"),
+            payload.get("partial_segment_count"),
+        )
+        or 0
+    )
+    unreached = int(
+        _first_int(
+            summary.get("unreached_segment_count"),
+            payload.get("unreached_segment_count"),
+        )
+        or max(planned - (traversed + partial), 0)
+    )
+    completion_status = (
+        summary.get("completion_status") or payload.get("completion_status")
+    )
+    if not completion_status and planned and observed:
+        completion_status = "complete" if observed >= planned else "partial"
     return {
         "loaded": True,
         "status": payload.get("status") or "loaded",
         "source_path": payload.get("source_path"),
-        "completion_status": summary.get("completion_status") or payload.get("completion_status"),
+        "completion_status": completion_status,
         "planned_segment_count": planned,
         "completed_segment_count": traversed + partial,
         "traversed_segment_count": traversed,
@@ -182,9 +228,21 @@ def _capability_summary(payload: dict[str, Any] | None) -> dict[str, Any]:
         "moving_time_s": summary.get("moving_time_s"),
         "elapsed_time_s": summary.get("elapsed_time_s"),
         "rest_time_s": summary.get("rest_time_s"),
-        "turnaround_edge_id": summary.get("turnaround_edge_id"),
+        "turnaround_edge_id": summary.get("turnaround_edge_id")
+        or payload.get("turnaround_edge_id"),
         "auto_applies_to_eta": False,
     }
+
+
+def _first_int(*values: Any) -> int | None:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def _feedback_summary(payload: dict[str, Any] | None) -> dict[str, Any]:

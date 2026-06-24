@@ -162,6 +162,87 @@ def test_layer_preparation_overpass_no_network_without_source_is_planned(
     assert overpass_layer["lifecycle"]["fetch"]["external_network_calls_made"] is False
 
 
+def test_layer_preparation_run_writes_planned_overpass_refs_and_allows_live_refresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    for key in (
+        "overpass_evidence_ref",
+        "overpass_map_context_ref",
+        "overpass_raw_payload_ref",
+        "overpass_query_ref",
+        "overpass_candidate_count",
+        "overpass_skipped_object_count",
+        "overpass_fetched_at",
+    ):
+        project.pop(key, None)
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("overpass",),
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+    planned_project = _load(project_path)
+    planned_evidence = _load(project_root / planned_project["overpass_evidence_ref"])
+
+    assert planned_project["overpass_evidence_ref"] == "candidates/overpass_evidence.json"
+    assert planned_project["overpass_map_context_ref"] == (
+        "outputs/layers/normalized/overpass_vector_evidence.geojson"
+    )
+    assert planned_project["overpass_query_ref"] == "outputs/layers/plans/overpass_query.ql"
+    assert planned_project["overpass_candidate_count"] == 0
+    assert planned_evidence["status"] == "planned_no_network"
+    assert planned_evidence["source_artifact"]["source_kind"] == "overpass_query_plan"
+    assert planned_evidence["request"]["raw_response_sha256"] is None
+    assert planned_evidence["request"]["conversion_rule_version"] == "planned_no_network"
+    assert planned_evidence["counts"]["candidates"] == 0
+    assert planned_evidence["boundary"]["runtime_safety_truth"] is False
+    assert (project_root / planned_project["overpass_map_context_ref"]).is_file()
+    assert (project_root / planned_project["overpass_query_ref"]).is_file()
+
+    raw_fixture = ROOT / "tests" / "fixtures" / "maps" / "phase_a_overpass_raw.json"
+    fetch_count = 0
+
+    def fixture_fetcher(planned_request: dict) -> tuple[bytes, int]:
+        nonlocal fetch_count
+        fetch_count += 1
+        return raw_fixture.read_bytes(), 200
+
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_fetch_overpass_raw_payload",
+        fixture_fetcher,
+    )
+
+    run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("overpass",),
+            network_mode="explicit-fetch",
+            allow_network_fetch=True,
+            prepared_at="2026-05-22T01:00:00+00:00",
+        )
+    )
+    refreshed_project = _load(project_path)
+    refreshed_evidence = _load(project_root / refreshed_project["overpass_evidence_ref"])
+
+    assert fetch_count == 1
+    assert refreshed_project["overpass_fetched_at"] == "2026-05-22T01:00:00+00:00"
+    assert refreshed_evidence.get("status") != "planned_no_network"
+    assert refreshed_evidence["counts"]["candidates"] == 8
+
+
 def test_layer_preparation_run_writes_workspace_outputs_and_project_refs(
     tmp_path: Path,
 ) -> None:
@@ -291,11 +372,6 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
     }
     feature_package = json.loads(
         (project_root / project["gee_feature_package_ref"]).read_text(encoding="utf-8")
-    )
-    derivatives = json.loads(
-        (project_root / project["environment_risk_derivatives_ref"]).read_text(
-            encoding="utf-8"
-        )
     )
     assert feature_package["artifact_kind"] == "scout_gee_feature_package"
     assert feature_package["mobile_runtime_dependency"] is False
@@ -738,13 +814,38 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     )
     project = _load(project_path)
     raster_pipeline = manifest["raster_label_preparation"]
+    imagery_layer = {layer["layer_id"]: layer for layer in manifest["layers"]}["imagery"]
+    projection = _load(project_root / manifest["outputs"]["layer_map_projection_ref"])
+    projected_imagery = {layer["layer_id"]: layer for layer in projection["layers"]}[
+        "imagery"
+    ]
 
     assert project["imagery_tile_cache_seed_status"] == "seed_complete"
+    assert imagery_layer["raster_bbox_wgs84"] == project["imagery_bbox_wgs84"]
+    assert imagery_layer["raster_coverage_policy"] == "render_intersecting_tiles_only"
+    assert imagery_layer["raster_tile_zoom_range"] == "12-12"
+    assert imagery_layer["raster_tile_count"] == 2
+    assert imagery_layer["output_refs"]["local_raster_tile_url_template"] == (
+        "/admin/tiles/imagery/chilai_nanhua_day1/imagery/{z}/{x}/{y}.png"
+    )
+    assert projected_imagery["raster_bbox_wgs84"] == project["imagery_bbox_wgs84"]
+    assert projected_imagery["raster_coverage_policy"] == (
+        "render_intersecting_tiles_only"
+    )
+    assert projected_imagery["raster_tile_zoom_range"] == "12-12"
+    assert projected_imagery["local_raster_tile_url_template"] == (
+        "/admin/tiles/imagery/chilai_nanhua_day1/imagery/{z}/{x}/{y}.png"
+    )
     assert project["raster_label_ocr_label_count"] == 1
     assert project["raster_label_evidence_count"] == 1
     assert raster_pipeline["status"] == "completed"
     assert raster_pipeline["ocr"]["status"] == "completed"
     assert raster_pipeline["adapter"]["feature_count"] == 1
+    raster_label_evidence = _load(project_root / project["raster_label_evidence_ref"])
+    assert raster_label_evidence["route_scope_ref"] == (
+        "normalized/routes/route_evidence_bundle.json"
+    )
+    assert raster_label_evidence["boundary"]["raw_gpx_embedded_in_json"] is False
     assert raster_pipeline["route_context_collection"]["status"] == "completed"
     assert project["route_mileage_k_anchor_count"] >= 1
     route_mileage_anchors = _load(project_root / project["route_mileage_k_anchors_ref"])

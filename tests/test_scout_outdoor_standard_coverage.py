@@ -420,6 +420,35 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "external_send_allowed=false" in reducer_spec
     assert "sent=false" in standard_text
     assert "sent=false" in reducer_spec
+    assert "not the full production safety system yet" in reducer_spec
+    assert "Production Readiness Gaps" in reducer_spec
+    assert "Emergency Mobile Approval Surface" in reducer_spec
+    assert "Production Path State" in reducer_spec
+    assert "One-Tap Decision Controls" in reducer_spec
+    assert "Offline Map" in reducer_spec
+    assert "Current condition OK / downgrade request" in reducer_spec
+    assert "Immediate phone call" in reducer_spec
+    assert "Manual copy emergency packet" in reducer_spec
+    assert "It must not say:" in reducer_spec
+    assert "Scout called rescue" in reducer_spec
+    assert "Scout sent SOS" in reducer_spec
+    assert "Scout safety is fully implemented" in reducer_spec
+    assert "The route is safe" in reducer_spec
+    assert "not the full production safety system" in physiologic_spec
+    assert "emergency mobile approval production\n  workflow remain open" in physiologic_spec
+    assert "separate from `/admin` and `/admin/debug`" in physiologic_spec
+    assert "icon-first color-coded gate" in physiologic_spec
+    assert "message draft and voice call script" in physiologic_spec
+    assert "cached Rudy+TW tiles" in physiologic_spec
+    assert "cached imagery tiles" in physiologic_spec
+    assert "one-tap decisions" in physiologic_spec
+    assert "offline map" in physiologic_spec
+    assert "pending_approval" in physiologic_spec
+    assert "icon-first production path status" in reducer_spec
+    assert "Emergency Call Out" in reducer_spec
+    assert "Cached Rudy+TW tile layer" in reducer_spec
+    assert "Cached imagery tile layer" in reducer_spec
+    assert "CP/MCP layer" in reducer_spec
 
     for required in (
         "source_provider=apple_healthkit",

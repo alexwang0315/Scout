@@ -7,6 +7,11 @@ historical/public GPX import, route-corridor map preparation, Rudy/Rudy+TW OCR,
 route context and mileage evidence, Boss/pressure synthesis, map-layer testing,
 and Scout agent skills/tool entry points.
 
+For the copy/pasteable no-skip operator sequence, including Spatial Policy
+checks, tile TTL refresh behavior, OCR/K-anchor troubleshooting, Overpass
+segment alignment checks, and completion report template, use
+`docs/specs/scout-pretrip-full-preparation-runbook.md`.
+
 The goal is that a prepared workspace opens in `/admin/pretrip`,
 `/admin/debug`, and `/admin` with route, CP/MCP/Boss, mileage, terrain, risk,
 OCR, context, and raster/vector map layers already materialized. The operator

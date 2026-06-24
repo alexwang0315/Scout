@@ -1,23 +1,20 @@
 import os
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIModel
 from pydantic import BaseModel
 from typing import Literal
 from macos_wifi import MacOSWifiWorld
 from dotenv import load_dotenv
+from pydantic_ai_runtime_compat import build_chat_model, pydantic_agent_runtime_kwargs
 
 # 1. 加載環境變量
 load_dotenv(os.path.expanduser('~/scout-fusion/.env'))
 api_key = os.getenv('OPENROUTER_API_KEY')
 
-# 2. 極限注入：直接修改操作系統環境變數
-# 這會強制所有 OpenAI-compatible 模型自動使用 OpenRouter 端點，無需在代碼中指定 base_url
-os.environ['OPENAI_API_KEY'] = api_key
-os.environ['OPENAI_BASE_URL'] = 'https://openrouter.ai/api/v1'
-
-# 3. 簡潔實例化
-# 此時 pydantic-ai 會自動從 os.environ 讀取 API Key 和 Base URL
-model = OpenAIModel('google/gemma-4-31b-it')
+# 2. 使用 Pydantic AI v2 OpenRouter provider，不修改全域 OpenAI env。
+model = build_chat_model(
+    model_name=os.getenv("SCOUT_WIFI_AGENT_MODEL", "openrouter:google/gemma-4-31b-it"),
+    api_key=api_key,
+)
 
 class SignalAnalysis(BaseModel):
     ssid: str
@@ -36,7 +33,8 @@ sos_agent = Agent(
         "將 -80dBm 描述為 '微弱的脈動'，-40dBm 描述為 '強烈的生存信號'。 "
         "策略：分析目前最強訊號 -> 對比趨勢 -> 給出明確移動方向。 "
         "當最強訊號達到 -30dBm 以上時，宣布救援成功。"
-    )
+    ),
+    **pydantic_agent_runtime_kwargs(),
 )
 
 @sos_agent.tool
