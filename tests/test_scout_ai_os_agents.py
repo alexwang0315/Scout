@@ -126,6 +126,13 @@ def test_model_policy_normalizes_openrouter_alias_and_checks_key() -> None:
     assert with_key.missing_credential_env == []
     assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
 
+    glm = resolve_model_policy(
+        "glm-5.2",
+        env={"OPENROUTER_API_KEY": "sk-test-secret"},
+    )
+    assert glm.model_for_agent == "openrouter:z-ai/glm-5.2"
+    assert glm.missing_credential_env == []
+
 
 def test_model_policy_uses_env_model_when_explicit_model_is_absent() -> None:
     policy = resolve_model_policy(

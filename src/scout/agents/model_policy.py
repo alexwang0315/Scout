@@ -140,6 +140,8 @@ def _normalize_external_model(value: str) -> str:
     aliases = {
         "gpt-4o-mini": "openrouter:openai/gpt-4o-mini",
         "openai/gpt-4o-mini": "openrouter:openai/gpt-4o-mini",
+        "glm-5.2": "openrouter:z-ai/glm-5.2",
+        "z-ai/glm-5.2": "openrouter:z-ai/glm-5.2",
         "gemma-3-27b": "openrouter:google/gemma-3-27b-it",
         "gemma3-27b": "openrouter:google/gemma-3-27b-it",
         "google/gemma-3-27b-it": "openrouter:google/gemma-3-27b-it",

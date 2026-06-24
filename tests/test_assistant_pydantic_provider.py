@@ -14,17 +14,21 @@ from assistant_offline_fallback_contract import (
     OFFLINE_FALLBACK_SCHEMA_VERSION,
 )
 from assistant_pydantic_provider import (
+    CWA_ENVIRONMENT_TOOL_ID,
     EVIDENCE_FULLTEXT_TOOL_ID,
     FallbackPydanticAIRunner,
+    GEE_ENVIRONMENT_TOOL_ID,
     MAJOR_POINT_TOOL_ID,
     MAP_PERCEPTION_TOOL_ID,
     PydanticAIAssistantProvider,
     PydanticAIEnvRunner,
     RISK_SCORE_TOOL_ID,
+    ROUTE_READINESS_TOOL_ID,
     ROUTE_CONTEXT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
     ScoutWorkspaceToolContext,
     TERRAIN_SCORE_TOOL_ID,
+    NAVIGATION_TERRAIN_TOOL_ID,
     WORKSPACE_CATALOG_TOOL_ID,
     WORKSPACE_EVIDENCE_TOOL_ID,
     build_workspace_tool_prompt,
@@ -260,7 +264,34 @@ def test_workspace_tool_prompt_is_generated_from_registry_contracts():
     assert ROUTE_CONTEXT_TOOL_ID in prompt
     assert "media quality gate" in prompt
     assert "website chrome" in prompt
-    assert "scout.ai.weather_window.assess.v0" not in prompt
+    assert "search_scout_weather_window" in prompt
+    assert WEATHER_WINDOW_TOOL_ID in prompt
+    assert "search_scout_cwa_environment" in prompt
+    assert CWA_ENVIRONMENT_TOOL_ID in prompt
+    assert "search_scout_gee_environment" in prompt
+    assert GEE_ENVIRONMENT_TOOL_ID in prompt
+    assert "Scout weather/geography tool bundle policy" in prompt
+    assert "白牆、能見度、起霧" in prompt
+    assert "失溫" in prompt
+    assert "天氣與地形風險是否重疊" in prompt
+    assert "RAIN_RISK_BUNDLE" in prompt
+    assert "WEATHER_TERRAIN_OVERLAP_BUNDLE" in prompt
+    assert "not a\n  route-context-only lookup" in prompt
+    assert (
+        "call both search_scout_weather_window and\n"
+        "  search_scout_cwa_environment"
+    ) in prompt
+    assert (
+        "search_scout_weather_window, search_scout_cwa_environment, and "
+        "search_scout_gee_environment"
+    ) in prompt
+    assert "search_scout_risk_scores and search_scout_terrain_scores" in prompt
+    assert "search_scout_route_context is for cultural" in prompt
+    assert "route-context alone" in prompt
+    assert "search_scout_route_readiness" in prompt
+    assert ROUTE_READINESS_TOOL_ID in prompt
+    assert "search_scout_navigation_terrain" in prompt
+    assert NAVIGATION_TERRAIN_TOOL_ID in prompt
     assert "Never mutate Scout state" in prompt
 
 
@@ -283,6 +314,29 @@ def test_workspace_tool_context_runs_registered_tool_executor(tmp_path: Path, mo
     assert result["status"] == "completed"
     assert result["summaries"]["checkpoint_count"] == 124
     assert context.invocations[0]["artifact_kind"] == "scout_ai_route_structure_tool_output"
+
+
+def test_workspace_tool_context_runs_weather_window_executor(
+    tmp_path: Path,
+    monkeypatch,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    shutil.copytree(PROJECT_ROOT, workspace_root / "chilai_nanhua_day1")
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="白牆下這段還適合走嗎？",
+        context_ref="chilai_nanhua_day1",
+        project_id="chilai_nanhua_day1",
+    )
+    context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
+
+    result = context.search_scout_weather_window(query=query.question, limit=2)
+
+    assert result["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    assert result["status"] == "completed"
+    assert result["boundary"]["runtime_safety_truth"] is False
+    assert context.tool_source_ref(WEATHER_WINDOW_TOOL_ID).source_id == WEATHER_WINDOW_TOOL_ID
 
 
 def test_workspace_tool_context_accepts_direct_project_root_env(monkeypatch):
