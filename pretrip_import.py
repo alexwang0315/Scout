@@ -70,6 +70,7 @@ from pretrip_review_queue import (
     build_chilai_review_queue_manifest,
 )
 from pretrip_route_note_review_options import build_route_note_review_options
+from pretrip_readiness import DEFAULT_SKILL_CONFIG_MANIFEST, evaluate_pretrip_readiness
 from pretrip_segment_policy import build_chilai_segment_policy_candidates
 from pretrip_source_ingest import (
     ingest_source_artifact,
@@ -511,6 +512,8 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         "segment_display_geometry_ref": "outputs/segment_display_geometry.json",
         "segment_policy_candidates_ref": "outputs/segment_policy_candidates.json",
         "weather_daylight_evidence_ref": "outputs/weather_daylight_evidence.json",
+        "skill_config_manifest_ref": "candidates/skill_config_manifest.json",
+        "readiness_report_ref": "outputs/readiness_report.json",
         "human_reviews_ref": "reviews/human_reviews.json",
         "reviewed_package_ref": "outputs/pretrip_package.reviewed.json",
         "compiled_mission_graph_candidate_ref": "outputs/compiled_mission_graph.candidate.json",
@@ -608,6 +611,13 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         gpx_speed_filter=gpx_filter_report,
     )
     manifest["counts"]["debug_projection_event_count"] = len(debug_events)
+    skill_config_manifest = _skill_config_manifest_for_import(request.project_id)
+    readiness_report = _build_readiness_report_for_import(
+        request=request,
+        package=package,
+        retreat_routes=retreat_routes,
+        skill_config_manifest=skill_config_manifest,
+    )
 
     write_json(project_root / output_refs["package_ref"], package.model_dump(mode="json"))
     write_json(project_root / output_refs["route_summary_ref"], route_summary.model_dump(mode="json"))
@@ -671,6 +681,14 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
     write_json(
         project_root / output_refs["weather_daylight_evidence_ref"],
         weather_daylight.model_dump(mode="json"),
+    )
+    write_json(
+        project_root / output_refs["skill_config_manifest_ref"],
+        skill_config_manifest,
+    )
+    write_json(
+        project_root / output_refs["readiness_report_ref"],
+        readiness_report,
     )
     if dtm_coverage_summary is not None:
         write_json(
@@ -3494,6 +3512,59 @@ def _planning_semantics(request: PretripImportRequest) -> dict[str, Any]:
     }
 
 
+def _skill_config_manifest_for_import(project_id: str) -> dict[str, Any]:
+    manifest = json.loads(json.dumps(DEFAULT_SKILL_CONFIG_MANIFEST, ensure_ascii=False))
+    manifest["manifest_id"] = f"skill_config_manifest.{project_id}.pretrip_readiness.v0"
+    manifest["project_id"] = project_id
+    return manifest
+
+
+def _build_readiness_report_for_import(
+    *,
+    request: PretripImportRequest,
+    package: PreTripPackage,
+    retreat_routes: list[PreTripRetreatRouteCandidate],
+    skill_config_manifest: dict[str, Any],
+) -> dict[str, Any]:
+    report = evaluate_pretrip_readiness(
+        {
+            "route_id": package.project_id,
+            "route_days": _route_days_for_import(request.project_id),
+            "route_kind": _route_kind_for_import(request.project_id),
+            "distance_m": package.route_summary.distance_m,
+            "retreat_routes": [
+                candidate.model_dump(mode="json") for candidate in retreat_routes
+            ],
+        },
+        skill_config_manifest=skill_config_manifest,
+    )
+    return {
+        "status": report.status.value,
+        "findings": [
+            {
+                "rule_id": finding.rule_id,
+                "severity": finding.severity.value,
+                "message": finding.message,
+                "missing_any": list(finding.missing_any),
+                "evidence": finding.evidence,
+            }
+            for finding in report.findings
+        ],
+    }
+
+
+def _route_days_for_import(project_id: str) -> int:
+    if project_id == "chilai_nanhua_day1":
+        return 2
+    return 1
+
+
+def _route_kind_for_import(project_id: str) -> str:
+    if project_id == "chilai_nanhua_day1":
+        return "traverse"
+    return "out_and_back"
+
+
 def _project_payload(
     *,
     project_root: Path,
@@ -3538,6 +3609,8 @@ def _project_payload(
             "import_profile": "standalone_pretrip_importer",
             "import_stage": import_stage,
             "route_role": "golden_route",
+            "route_days": _route_days_for_import(project_id),
+            "route_kind": _route_kind_for_import(project_id),
             "actual_user_track_available": import_stage == "post_analysis",
             "importer_version": IMPORTER_VERSION,
             **output_refs,

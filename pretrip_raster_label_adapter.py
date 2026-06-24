@@ -71,6 +71,7 @@ def build_raster_label_evidence(
 
     project = _load_json(root / "project.json")
     project_id = str(project.get("project_id") or project.get("id") or root.name)
+    route_scope_ref = _route_scope_ref(project)
     evidence = {
         "type": "FeatureCollection",
         "artifact_kind": "pretrip_raster_label_evidence",
@@ -81,6 +82,7 @@ def build_raster_label_evidence(
         "source_id": f"{project_id}.raster_label_adapter",
         "status": "normalized_from_explicit_ocr_adapter",
         "evidence_type": "pretrip_raster_label_candidate",
+        "route_scope_ref": route_scope_ref,
         "generated_at": collected_at,
         "features": features,
         "counts": {
@@ -121,6 +123,7 @@ def build_raster_label_evidence(
         "generated_at": collected_at,
         "source_ref": _project_ref_for_path(root, source),
         "source_sha256": source_sha256,
+        "route_scope_ref": route_scope_ref,
         "output_ref": output_ref,
         "feature_count": len(features),
         "skipped_records": skipped,
@@ -442,10 +445,20 @@ def _candidate_boundary() -> dict[str, Any]:
         "phase1_runtime_mutation_allowed": False,
         "phase2_brain_writeback_allowed": False,
         "safety_api_called": False,
+        "raw_gpx_embedded_in_json": False,
         "raw_payloads_embedded": False,
         "raw_tiles_embedded": False,
         "workspace_file_mutation_allowed": True,
     }
+
+
+def _route_scope_ref(project: dict[str, Any]) -> str:
+    value = project.get("route_evidence_bundle_ref")
+    if isinstance(value, dict):
+        value = value.get("source_ref") or value.get("ref")
+    if value is not None and str(value).strip():
+        return str(value).strip()
+    return "normalized/routes/route_evidence_bundle.json"
 
 
 def _resolve_project_path(root: Path, path: Path | str) -> Path:

@@ -2,7 +2,10 @@ import hashlib
 import json
 from pathlib import Path
 
-from pretrip_reference_segment_timing import build_reference_segment_timing
+from pretrip_reference_segment_timing import (
+    build_reference_segment_timing,
+    write_reference_segment_timing,
+)
 
 
 def _gpx(points: list[tuple[str, float, float]], waypoints: list[tuple[str, float, float]]) -> str:
@@ -139,6 +142,18 @@ def test_reference_segment_timing_builder_uses_aggregate_only_contract(tmp_path:
     assert str(source_gpx) not in serialized
     assert "<trkpt" not in serialized
     assert "2026-01-01T" not in serialized
+
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": "synthetic_chilai"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    output_path = write_reference_segment_timing(project_root)
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+
+    assert output_path == project_root / "outputs" / "reference_segment_timing.json"
+    assert project["reference_segment_timing_ref"] == "outputs/reference_segment_timing.json"
+    assert project["reference_segment_timing_segment_count"] == 8
+    assert project["reference_segment_timing_measurement_count"] == 8
 
 
 def test_chilai_reference_segment_timing_fixture_contract() -> None:

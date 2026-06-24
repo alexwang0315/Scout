@@ -9972,7 +9972,8 @@ def _update_project_refs(
     if not project_path.exists():
         return
     current = _load_json_object(project_path)
-    updated = {**project, **current, **updates}
+    non_null_updates = {key: value for key, value in updates.items() if value is not None}
+    updated = {**project, **current, **non_null_updates}
     _write_json(project_path, updated)
 
 

@@ -6369,7 +6369,7 @@
         label: item.label,
         sublabel: `${item.item_count} items | ${item.bulk_eligible_count} bulk | ${item.review_action}`
       }), false, "review_group");
-      appendEvidenceTreeGroup(tree, "review", "Review Queue", view.review_queue.items, item => ({
+      appendEvidenceTreeGroup(tree, "review", "Review Queue", view.review_queue?.items || [], item => ({
         label: item.title,
         sublabel: `${item.severity} | ${item.category}`
       }), false, "review");
@@ -6393,7 +6393,7 @@
         label: item.label,
         sublabel: `${item.item_count} items | ${item.bulk_eligible_count} bulk | ${item.review_action}`
       }), true, "review_group"));
-      tree.appendChild(treeGroup("Review Queue", view.review_queue.items, item => ({
+      tree.appendChild(treeGroup("Review Queue", view.review_queue?.items || [], item => ({
         label: item.title,
         sublabel: `${item.severity} | ${item.category}`
       }), false, "review"));

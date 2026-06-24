@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -419,6 +419,7 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     _write_jsonl(project_root / outputs["layer_debug_projection_events_ref"], debug_events)
     _write_layer_plan_files(project_root, manifest)
     _write_map_preparation_spec_artifacts(project_root, manifest)
+    outputs.update(_write_planned_overpass_evidence(project_root, manifest))
     _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
     overpass_route_alignment = _run_overpass_route_alignment_after_layer_preparation(
         project_root=project_root,
@@ -536,8 +537,13 @@ def _maybe_fetch_overpass_evidence(request: LayerPreparationRequest) -> None:
     _reject_fixture_fetch(project_root)
     project_path = project_root / "project.json"
     project = _load_json(project_path)
-    if project.get("overpass_evidence_ref"):
-        return
+    existing_overpass_ref = project.get("overpass_evidence_ref")
+    if existing_overpass_ref:
+        existing_overpass_path = project_root / str(existing_overpass_ref)
+        if existing_overpass_path.exists():
+            existing_overpass = _load_json(existing_overpass_path)
+            if existing_overpass.get("status") != "planned_no_network":
+                return
     route_summary = _load_project_ref(
         project_root,
         project,
@@ -2292,9 +2298,25 @@ def _imagery_layer_record(
                 "imagery_tile_cache_manifest_ref": str(cache_manifest_ref),
                 "imagery_tile_cache_plan_ref": project.get("imagery_tile_cache_plan_ref"),
                 "imagery_tile_cache_root": plan.get("cache_root"),
+                "local_raster_tile_url_template": (
+                    f"/admin/tiles/imagery/{request.project_id}/imagery/{{z}}/{{x}}/{{y}}.png"
+                ),
                 "tile_delivery": "local_cache_then_wmts_runtime",
             }
         )
+        raster_bbox = _normalized_optional_bbox(plan.get("bbox_wgs84"))
+        if raster_bbox is not None:
+            record["raster_bbox_wgs84"] = raster_bbox
+            record["raster_coverage_policy"] = "render_intersecting_tiles_only"
+        for source_key, target_key in (
+            ("zoom_range", "raster_tile_zoom_range"),
+            ("cache_root", "raster_tile_cache_root"),
+            ("total_tile_count", "raster_tile_count"),
+            ("min_zoom", "raster_tile_min_zoom"),
+            ("max_zoom", "raster_tile_max_zoom"),
+        ):
+            if source_key in plan:
+                record[target_key] = plan[source_key]
         record["counts"].update(
             {
                 "imagery_tile_cache_plan_tile_count": plan.get("total_tile_count", 0),
@@ -6399,6 +6421,98 @@ def _write_layer_plan_files(project_root: Path, manifest: dict[str, Any]) -> Non
             project_root / planned_request["query_body_ref"],
             planned_request["query_body"],
         )
+
+
+def _write_planned_overpass_evidence(
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    overpass_layer = _layer_by_id(manifest, "overpass")
+    layer_status = overpass_layer.get("status")
+    if layer_status != "planned_no_network":
+        source_refs = manifest["inputs"].get("source_refs", {})
+        existing_ref_record = source_refs.get("overpass_evidence_ref", {})
+        existing_ref = (
+            existing_ref_record.get("ref")
+            if isinstance(existing_ref_record, dict)
+            else None
+        )
+        existing_path = project_root / existing_ref if isinstance(existing_ref, str) else None
+        if layer_status != "ready_from_project_ref" or existing_path is None:
+            return {}
+        existing_payload = _load_json(existing_path) if existing_path.exists() else {}
+        if existing_payload.get("status") != "planned_no_network":
+            return {}
+    planned_request = overpass_layer.get("planned_request")
+    if not isinstance(planned_request, dict):
+        return {}
+
+    evidence_ref = "candidates/overpass_evidence.json"
+    normalized_ref = str(
+        overpass_layer.get("output_refs", {}).get("normalized_geojson_ref")
+        or OUTPUT_REFS["overpass_vector_evidence_ref"]
+    )
+    evidence = {
+        "artifact_kind": "pretrip_overpass_evidence",
+        "schema_version": "route_corridor_map_preparation.v1",
+        "project_id": manifest["project_id"],
+        "status": "planned_no_network",
+        "source_artifact": {
+            "artifact_id": f"overpass.planned.{manifest['project_id']}",
+            "artifact_kind": "pretrip_overpass_query_plan",
+            "source_kind": "overpass_query_plan",
+            "source_ref": planned_request["query_body_ref"],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+        "request": {
+            "endpoint": planned_request.get("endpoint"),
+            "query_body_ref": planned_request.get("query_body_ref"),
+            "query_body_sha256": hashlib.sha256(
+                str(planned_request.get("query_body", "")).encode("utf-8")
+            ).hexdigest(),
+            "raw_response_sha256": None,
+            "conversion_rule_version": "planned_no_network",
+            "route_corridor": manifest["route_corridor"],
+            "network_calls_made": False,
+        },
+        "object_evidence": [],
+        "skipped_objects": [],
+        "candidates": [],
+        "counts": {
+            "candidates": 0,
+            "skipped": 0,
+            "feature_count": 0,
+            "network_calls_made": 0,
+        },
+        "normalized_geojson_ref": normalized_ref,
+        "source_refs": [
+            {
+                "ref": planned_request["query_body_ref"],
+                "source_kind": "overpass_query_plan",
+                "external_network_required": False,
+                "network_calls_made": False,
+            }
+        ],
+        "boundary": {
+            "candidate_only": True,
+            "runtime_truth": False,
+            "runtime_safety_truth": False,
+            "live_network_required": False,
+            "network_mode": manifest["network_policy"]["network_mode"],
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+        },
+    }
+    _write_json(project_root / evidence_ref, evidence)
+    return {
+        "overpass_evidence_ref": evidence_ref,
+        "overpass_map_context_ref": normalized_ref,
+        "overpass_query_ref": planned_request["query_body_ref"],
+        "overpass_candidate_count": 0,
+        "overpass_skipped_object_count": 0,
+        "overpass_planned_at": manifest["finished_at"],
+    }
 
 
 def _write_map_preparation_spec_artifacts(

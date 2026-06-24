@@ -21,7 +21,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from assistant_model_config import AssistantModelProfile, load_assistant_model_config
+from assistant_model_config import (  # noqa: E402
+    AssistantModelProfile,
+    load_assistant_model_config,
+)
+from pydantic_ai_runtime_compat import (  # noqa: E402
+    build_chat_model,
+    pydantic_agent_runtime_kwargs,
+    pydantic_result_output,
+)
 
 ARTIFACT_KIND = "scout_pydantic_ai_cloud_latency_benchmark"
 ARTIFACT_VERSION = "pydantic_ai_cloud_latency_benchmark.v0"
@@ -254,22 +262,21 @@ def _call_pydantic_ai(
     max_tokens: int,
 ) -> str:
     from pydantic_ai import Agent
-    try:
-        from pydantic_ai.models.openai import OpenAIChatModel
-    except ImportError:  # pragma: no cover - compatibility with older pydantic-ai.
-        from pydantic_ai.models.openai import OpenAIModel as OpenAIChatModel
-    from pydantic_ai.providers.openai import OpenAIProvider
 
-    provider = OpenAIProvider(base_url=profile.base_url, api_key=api_key)
     agent = Agent(
-        OpenAIChatModel(profile.model_name, provider=provider),
+        build_chat_model(
+            model_name=profile.model_name,
+            base_url=profile.base_url,
+            api_key=api_key,
+        ),
         system_prompt=(
             "You are Scout's Pydantic AI runtime health and latency probe. "
             "Answer briefly and do not request secrets."
         ),
+        **pydantic_agent_runtime_kwargs(),
     )
     result = agent.run_sync(prompt, model_settings={"max_tokens": max_tokens})
-    return str(getattr(result, "output", getattr(result, "data", result)))
+    return str(pydantic_result_output(result))
 
 
 def _base_report(

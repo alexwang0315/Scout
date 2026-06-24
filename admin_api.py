@@ -3695,7 +3695,7 @@ def _compact_pretrip_project_view(view: dict[str, Any]) -> dict[str, Any]:
     terrain_visualization = view.get("terrain_visualization", {})
     compact["tabs"] = {
         "pre_trip_planning": {
-            "sections": pre_trip.get("sections", []),
+            "sections": _compact_sections(pre_trip.get("sections")),
             "energy_reserve_monitor": view.get("energy_reserve_monitor"),
             "terrain_visualization": {
                 "source_path": terrain_visualization.get("source_path", "")
@@ -3707,20 +3707,24 @@ def _compact_pretrip_project_view(view: dict[str, Any]) -> dict[str, Any]:
             },
         },
         "review_workspace": {
-            "sections": review.get("sections", []),
+            "sections": _compact_sections(review.get("sections")),
         },
         "post_analysis": {
-            "sections": post.get("sections", []),
-            "segment_terrain": post.get("segment_terrain", {}),
-            "runtime_handoff": post.get("runtime_handoff", {}),
-            "route_comparison": post.get("route_comparison", {}),
-            "capability_timeline_import": post.get("capability_timeline_import"),
-            "brain_seed": post.get("brain_seed", {}),
+            "sections": _compact_sections(post.get("sections")),
+            "segment_terrain": _compact_summary_payload(post.get("segment_terrain")),
+            "runtime_handoff": _compact_summary_payload(post.get("runtime_handoff")),
+            "route_comparison": _compact_summary_payload(post.get("route_comparison")),
+            "capability_timeline_import": _compact_capability_timeline_import(
+                post.get("capability_timeline_import")
+            ),
+            "brain_seed": _compact_summary_payload(post.get("brain_seed")),
         },
         "agent_skills": {
-            "sections": agent.get("sections", []),
-            "scout_agent_skills": agent.get("scout_agent_skills", {}),
-            "evidence_timeline": agent.get("evidence_timeline", {}),
+            "sections": _compact_sections(agent.get("sections")),
+            "scout_agent_skills": _compact_summary_payload(
+                agent.get("scout_agent_skills")
+            ),
+            "evidence_timeline": _compact_summary_payload(agent.get("evidence_timeline")),
         },
     }
     _compact_pretrip_heavy_layers(compact)
@@ -3858,6 +3862,7 @@ _COMPACT_BOUNDARY_KEYS = (
     "not_departure_approval",
     "human_review_required_before_departure",
 )
+_COMPACT_ROUTE_NOTE_LIMIT = 500
 
 
 def _compact_mapping(payload: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
@@ -3926,23 +3931,202 @@ def _compact_collection_items(
     return compact
 
 
+def _compact_summary_collection_items(
+    payload: Any,
+    item_key: str,
+    *,
+    extra_keys: tuple[str, ...] = (),
+) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = _compact_summary_payload(payload)
+    items = payload.get(item_key)
+    if isinstance(items, list):
+        compact[item_key] = [
+            _compact_evidence_item(item, extra_keys=extra_keys)
+            if isinstance(item, dict)
+            else item
+            for item in items
+        ]
+    for key in ("bbox_wgs84", "cache_policy", "geojson_source_path"):
+        if key in payload:
+            compact[key] = payload[key]
+    return compact
+
+
+def _compact_collection_list(
+    payload: Any,
+    *,
+    extra_keys: tuple[str, ...] = (),
+) -> Any:
+    if not isinstance(payload, list):
+        return payload
+    return [
+        _compact_evidence_item(item, extra_keys=extra_keys)
+        if isinstance(item, dict)
+        else item
+        for item in payload
+    ]
+
+
+def _compact_sections(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        return []
+    return [
+        _compact_summary_payload(section)
+        if isinstance(section, dict)
+        else {"summary": str(section)}
+        for section in payload
+    ]
+
+
+def _compact_summary_payload(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    keep_keys = (
+        "id",
+        "title",
+        "label",
+        "label_zh",
+        "source_id",
+        "source_path",
+        "evidence_type",
+        "artifact_kind",
+        "status",
+        "counts",
+        "summary",
+        "boundary",
+        "source_refs",
+        "confidence",
+        "stale_risk",
+        "review_state",
+        "candidate_only",
+        "runtime_safety_truth",
+    )
+    compact = _compact_mapping(payload, keep_keys)
+    if isinstance(compact.get("summary"), dict):
+        compact["summary"] = _compact_mapping(
+            compact["summary"],
+            (
+                "status",
+                "counts",
+                "decision",
+                "challenge_fit_decision",
+                "top_candidate_profile_ref",
+                "top_match_score",
+            ),
+        )
+    if isinstance(compact.get("boundary"), dict):
+        compact["boundary"] = _compact_boundary(compact["boundary"])
+    source_refs = compact.get("source_refs")
+    if isinstance(source_refs, list):
+        compact["source_refs"] = source_refs[:12]
+    return compact
+
+
 def _compact_overpass_evidence(payload: Any) -> Any:
     if not isinstance(payload, dict):
         return payload
     compact = dict(payload)
     for key, extra_keys in {
-        "corridor_candidates": ("candidate_type", "feature_type", "osm_type", "osm_id", "tags", "corridor"),
-        "hazard_candidates": ("candidate_type", "feature_type", "osm_type", "osm_id", "tags", "hazard"),
-        "poi_candidates": ("candidate_type", "feature_type", "osm_type", "osm_id", "tags", "poi"),
+        "corridor_candidates": (
+            "candidate_type",
+            "feature_type",
+            "osm_type",
+            "osm_id",
+            "lat",
+            "lon",
+            "distance_to_route_m",
+            "corridor",
+        ),
+        "hazard_candidates": (
+            "candidate_type",
+            "feature_type",
+            "osm_type",
+            "osm_id",
+            "lat",
+            "lon",
+            "distance_to_route_m",
+            "hazard",
+        ),
+        "poi_candidates": (
+            "candidate_type",
+            "feature_type",
+            "osm_type",
+            "osm_id",
+            "lat",
+            "lon",
+            "distance_to_route_m",
+            "poi",
+        ),
     }.items():
         items = payload.get(key)
         if isinstance(items, list):
             compact[key] = [
-                _compact_evidence_item(item, extra_keys=extra_keys)
+                _compact_overpass_candidate(item, extra_keys=extra_keys)
                 if isinstance(item, dict)
                 else item
                 for item in items
             ]
+    return compact
+
+
+def _compact_overpass_candidate(
+    item: dict[str, Any],
+    *,
+    extra_keys: tuple[str, ...],
+) -> dict[str, Any]:
+    compact = _compact_evidence_item(
+        item,
+        extra_keys=extra_keys,
+        source_ref_limit=2,
+    )
+    corridor = compact.get("corridor")
+    if isinstance(corridor, dict):
+        compact["corridor"] = _compact_overpass_corridor(corridor)
+    hazard = compact.get("hazard")
+    if isinstance(hazard, dict):
+        compact["hazard"] = _compact_overpass_hazard(hazard)
+    poi = compact.get("poi")
+    if isinstance(poi, dict):
+        compact["poi"] = _compact_overpass_poi(poi)
+    return compact
+
+
+def _compact_overpass_corridor(corridor: dict[str, Any]) -> dict[str, Any]:
+    compact = _compact_mapping(
+        corridor,
+        ("corridor_id", "name", "corridor_half_width_m", "route_level"),
+    )
+    coordinates = corridor.get("coordinates")
+    if isinstance(coordinates, list):
+        compact["coordinates"] = _sample_points(
+            [point for point in coordinates if isinstance(point, dict)],
+            32,
+        )
+        compact["source_coordinate_count"] = len(coordinates)
+        compact["admin_payload_point_cap"] = 32
+    return compact
+
+
+def _compact_overpass_hazard(hazard: dict[str, Any]) -> dict[str, Any]:
+    compact = _compact_mapping(hazard, ("hazard_id", "hazard_type", "name"))
+    polygon = hazard.get("polygon")
+    if isinstance(polygon, list):
+        compact["polygon"] = _sample_points(
+            [point for point in polygon if isinstance(point, dict)],
+            32,
+        )
+        compact["source_polygon_point_count"] = len(polygon)
+        compact["admin_payload_point_cap"] = 32
+    return compact
+
+
+def _compact_overpass_poi(poi: dict[str, Any]) -> dict[str, Any]:
+    compact = _compact_mapping(poi, ("poi_id", "poi_type", "name"))
+    coordinate = poi.get("coordinate")
+    if isinstance(coordinate, dict):
+        compact["coordinate"] = _compact_display_point(coordinate)
     return compact
 
 
@@ -3953,15 +4137,145 @@ def _compact_reference_tracks(payload: Any) -> Any:
     tracks = payload.get("reference_tracks")
     if isinstance(tracks, list):
         compact["reference_tracks"] = [
-            _compact_evidence_item(
-                track,
-                extra_keys=("display_geometry", "route"),
-            )
-            if isinstance(track, dict)
-            else track
+            _compact_reference_track(track) if isinstance(track, dict) else track
             for track in tracks
         ]
     return compact
+
+
+def _compact_reference_track(track: dict[str, Any]) -> dict[str, Any]:
+    compact = _compact_evidence_item(track)
+    route = track.get("route")
+    if isinstance(route, dict):
+        compact["route"] = _compact_mapping(
+            route,
+            ("distance_m", "point_count", "bounds", "display_bounds"),
+        )
+    display_geometry = track.get("display_geometry")
+    if isinstance(display_geometry, dict):
+        compact["display_geometry"] = _compact_display_geometry(
+            display_geometry,
+            max_points_per_segment=24,
+        )
+    return compact
+
+
+def _compact_route(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = _compact_mapping(
+        payload,
+        (
+            "source_id",
+            "source_path",
+            "evidence_type",
+            "route_name",
+            "distance_m",
+            "point_count",
+            "bounds",
+            "display_bounds",
+            "display_bounds_metadata",
+            "elevation_min_m",
+            "elevation_max_m",
+            "review_state",
+            "confidence",
+            "stale_risk",
+            "candidate_only",
+            "runtime_safety_truth",
+        ),
+    )
+    display_geometry = payload.get("display_geometry")
+    if isinstance(display_geometry, dict):
+        compact["display_geometry"] = _compact_display_geometry(
+            display_geometry,
+            max_points_per_segment=300,
+        )
+    elif isinstance(payload.get("polyline"), list):
+        compact["polyline"] = [_compact_display_point(point) for point in payload["polyline"]]
+    return compact
+
+
+def _compact_display_geometry(
+    display_geometry: dict[str, Any],
+    *,
+    max_points_per_segment: int,
+) -> dict[str, Any]:
+    coordinate_segments = _display_coordinate_segments(display_geometry)
+    bounded_segments = [
+        _sample_points(segment, max_points_per_segment)
+        for segment in coordinate_segments
+        if segment
+    ]
+    coordinates = [point for segment in bounded_segments for point in segment]
+    source_point_count = display_geometry.get(
+        "display_point_count",
+        sum(len(segment) for segment in coordinate_segments),
+    )
+    compact = _compact_mapping(
+        display_geometry,
+        (
+            "source_id",
+            "source_path",
+            "evidence_type",
+            "display_segment_count",
+            "segment_boundary_preserved",
+            "boundary",
+        ),
+    )
+    compact.update(
+        {
+            "source_display_point_count": source_point_count,
+            "display_point_count": len(coordinates),
+            "display_segment_count": len(bounded_segments),
+            "coordinate_segments": bounded_segments,
+            "geometry_simplified_for_admin_payload": len(coordinates)
+            < source_point_count,
+            "admin_payload_point_cap": max_points_per_segment,
+        }
+    )
+    return compact
+
+
+def _display_coordinate_segments(display_geometry: dict[str, Any]) -> list[list[dict[str, Any]]]:
+    coordinate_segments = display_geometry.get("coordinate_segments")
+    if isinstance(coordinate_segments, list):
+        segments = [
+            [dict(point) for point in segment if isinstance(point, dict)]
+            for segment in coordinate_segments
+            if isinstance(segment, list)
+        ]
+        segments = [segment for segment in segments if segment]
+        if segments:
+            return segments
+    coordinates = display_geometry.get("coordinates")
+    if isinstance(coordinates, list):
+        segment = [dict(point) for point in coordinates if isinstance(point, dict)]
+        return [segment] if segment else []
+    return []
+
+
+def _sample_points(points: list[dict[str, Any]], max_points: int) -> list[dict[str, Any]]:
+    if max_points <= 0 or len(points) <= max_points:
+        return [_compact_display_point(point) for point in points]
+    if max_points == 1:
+        return [_compact_display_point(points[0])]
+    last_index = len(points) - 1
+    indexes = {round(index * last_index / (max_points - 1)) for index in range(max_points)}
+    return [_compact_display_point(points[index]) for index in sorted(indexes)]
+
+
+def _compact_display_point(point: dict[str, Any]) -> dict[str, Any]:
+    return _compact_mapping(
+        point,
+        (
+            "lat",
+            "lon",
+            "ele_m",
+            "elevation_m",
+            "distance_m",
+            "route_distance_m",
+        ),
+    )
 
 
 def _compact_gis_perception_timeline(payload: Any) -> Any:
@@ -4065,19 +4379,248 @@ def _compact_route_notes(payload: Any) -> Any:
             "candidate_only",
             "runtime_safety_truth",
         )
+        source_count = len(candidates)
+        kept_candidates = candidates[:_COMPACT_ROUTE_NOTE_LIMIT]
         compact["candidates"] = [
             _compact_mapping(item, keep_keys) if isinstance(item, dict) else item
+            for item in kept_candidates
+        ]
+        compact["source_candidate_count"] = source_count
+        compact["admin_payload_candidate_limit"] = _COMPACT_ROUTE_NOTE_LIMIT
+        compact["admin_payload_truncated"] = source_count > len(kept_candidates)
+    return compact
+
+
+def _compact_mileage_tag_alignment(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = _compact_summary_payload(payload)
+    for key in (
+        "geojson_source_path",
+        "source_kind_counts",
+        "display_mileage_status_counts",
+        "route_projection_status_counts",
+        "raw_source_summary",
+        "route_mileage_alignment_summary",
+        "sample_labels",
+        "policy",
+    ):
+        if key in payload:
+            compact[key] = payload[key]
+    timeline_items = payload.get("timeline_items")
+    if isinstance(timeline_items, list):
+        compact["timeline_items"] = [
+            _compact_evidence_item(
+                item,
+                extra_keys=(
+                    "display_mileage_label",
+                    "display_mileage_status",
+                    "source_kind",
+                    "route_projection_status",
+                    "route_distance_m",
+                    "mileage_m",
+                    "map_target_ids",
+                ),
+            )
+            if isinstance(item, dict)
+            else item
+            for item in timeline_items
+        ]
+    return compact
+
+
+def _compact_environment_risk_derivative_candidate(item: dict[str, Any]) -> dict[str, Any]:
+    return _compact_evidence_item(
+        item,
+        extra_keys=(
+            "candidate_kind",
+            "layer_id",
+            "geometry_type",
+            "coordinates",
+            "score",
+            "mid_distance_m",
+            "start_distance_m",
+            "end_distance_m",
+            "supporting_metrics",
+        ),
+    )
+
+
+def _compact_environment_risk_derivative_collection(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = _compact_summary_payload(payload)
+    for key in ("layer_id", "label", "counts", "bbox_wgs84"):
+        if key in payload:
+            compact[key] = payload[key]
+    candidates = payload.get("candidates")
+    if isinstance(candidates, list):
+        compact["candidates"] = [
+            _compact_environment_risk_derivative_candidate(item)
+            if isinstance(item, dict)
+            else item
             for item in candidates
         ]
     return compact
 
 
+def _compact_environment_risk_derivative_layers(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = _compact_summary_payload(payload)
+    for key in ("layer_id", "counts", "category_items"):
+        if key in payload and key != "category_items":
+            compact[key] = payload[key]
+    category_items = payload.get("category_items")
+    if isinstance(category_items, list):
+        compact["category_items"] = [
+            _compact_evidence_item(
+                item,
+                extra_keys=(
+                    "candidate_count",
+                    "value_summary",
+                    "layer_id",
+                ),
+            )
+            if isinstance(item, dict)
+            else item
+            for item in category_items
+        ]
+    for key in (
+        "new_landslide_candidates",
+        "wetness_flash_flood_susceptibility",
+        "trail_obscurity_risk",
+        "practical_darkness_time",
+    ):
+        compact[key] = _compact_environment_risk_derivative_collection(
+            payload.get(key)
+        )
+    if isinstance(payload.get("route_revalidation_report"), dict):
+        compact["route_revalidation_report"] = _compact_summary_payload(
+            payload["route_revalidation_report"]
+        )
+    return compact
+
+
+def _compact_review_workbench(payload: Any) -> Any:
+    compact = _compact_summary_collection_items(
+        payload,
+        "category_groups",
+        extra_keys=(
+            "item_count",
+            "bulk_eligible_count",
+            "review_action",
+            "category",
+        ),
+    )
+    return compact
+
+
+def _compact_route_note_review_options(payload: Any) -> Any:
+    return _compact_summary_collection_items(
+        payload,
+        "options",
+        extra_keys=(
+            "candidate_ref",
+            "candidate_id",
+            "disposition",
+            "recommended_disposition",
+            "route_note_freshness",
+            "stale_route_note",
+            "confidence",
+        ),
+    )
+
+
+def _compact_capability_timeline_import(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = _compact_summary_payload(payload)
+    for key in (
+        "edge_count",
+        "observed_edge_count",
+        "planned_segment_count",
+        "traversed_segment_count",
+        "partial_segment_count",
+        "unreached_segment_count",
+        "completion_status",
+        "planning_use",
+        "privacy",
+    ):
+        if key in payload:
+            compact[key] = payload[key]
+    summary = payload.get("summary")
+    if isinstance(summary, dict):
+        compact["summary"] = _compact_mapping(
+            summary,
+            (
+                "edge_count",
+                "moving_time_s",
+                "rest_time_s",
+                "elapsed_time_s",
+                "distance_m",
+                "ascent_m",
+                "descent_m",
+                "raw_track_shared",
+                "auto_applies_to_eta",
+            ),
+        )
+    edges = payload.get("edges")
+    if isinstance(edges, list):
+        compact["edges"] = [
+            _compact_evidence_item(
+                edge,
+                extra_keys=(
+                    "edge_id",
+                    "segment_id",
+                    "from_node_id",
+                    "to_node_id",
+                    "direction",
+                    "traversal_status",
+                    "elapsed_time_s",
+                    "moving_time_s",
+                    "rest_time_s",
+                    "distance_m",
+                    "ascent_m",
+                    "descent_m",
+                    "guide_time_min",
+                ),
+            )
+            if isinstance(edge, dict)
+            else edge
+            for edge in edges
+        ]
+    return compact
+
+
 def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
-    view["route_notes"] = _compact_route_notes(view.get("route_notes"))
-    view["review_queue"] = _compact_collection_items(
+    view["route"] = _compact_route(view.get("route"))
+    view["segments"] = _compact_segments(view.get("segments"))
+    view["checkpoints"] = _compact_collection_list(
+        view.get("checkpoints"),
+        extra_keys=("lat", "lon", "label", "route_distance_m", "overpass_projection"),
+    )
+    view["environment_risk_derivative_layers"] = (
+        _compact_environment_risk_derivative_layers(
+        view.get("environment_risk_derivative_layers")
+        )
+    )
+    for key in (
+        "admin_surface_projection",
+        "checkpoint_events",
+        "route_note_ln_proposals",
+        "segment_terrain",
+    ):
+        view[key] = _compact_summary_payload(view.get(key))
+    view["capability_timeline_import"] = _compact_capability_timeline_import(
+        view.get("capability_timeline_import")
+    )
+    view["review_queue"] = _compact_summary_collection_items(
         view.get("review_queue"),
         "items",
         extra_keys=(
+            "severity",
+            "category",
             "source_ref",
             "source_ref_key",
             "source_artifact_kind",
@@ -4085,7 +4628,15 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
             "bulk_candidate_refs",
         ),
     )
-    view["risk_score"] = _compact_collection_items(
+    view["review_workbench"] = _compact_review_workbench(view.get("review_workbench"))
+    view["route_note_review_options"] = _compact_route_note_review_options(
+        view.get("route_note_review_options")
+    )
+    view["mileage_tag_alignment"] = _compact_mileage_tag_alignment(
+        view.get("mileage_tag_alignment")
+    )
+    view["route_notes"] = _compact_route_notes(view.get("route_notes"))
+    view["risk_score"] = _compact_summary_collection_items(
         view.get("risk_score"),
         "points",
         extra_keys=(
@@ -4119,17 +4670,17 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
         "from_sample_id",
         "to_sample_id",
     )
-    view["risk_ribbon"] = _compact_collection_items(
+    view["risk_ribbon"] = _compact_summary_collection_items(
         view.get("risk_ribbon"),
         "segments",
         extra_keys=risk_segment_keys,
     )
-    view["risk_heatmap"] = _compact_collection_items(
+    view["risk_heatmap"] = _compact_summary_collection_items(
         view.get("risk_heatmap"),
         "segments",
         extra_keys=risk_segment_keys,
     )
-    view["risk_delta"] = _compact_collection_items(
+    view["risk_delta"] = _compact_summary_collection_items(
         view.get("risk_delta"),
         "segments",
         extra_keys=risk_segment_keys,
@@ -4185,6 +4736,36 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
     )
     view["overpass_evidence"] = _compact_overpass_evidence(view.get("overpass_evidence"))
     view["reference_tracks"] = _compact_reference_tracks(view.get("reference_tracks"))
+
+
+def _compact_segments(payload: Any) -> Any:
+    if not isinstance(payload, list):
+        return payload
+    compact_segments = _compact_collection_list(
+        payload,
+        extra_keys=(
+            "lat",
+            "lon",
+            "label",
+            "distance_m",
+            "gpx_distance_m",
+            "from_candidate_id",
+            "to_candidate_id",
+            "overpass_projection",
+            "overpass_route_distance_m",
+            "route_basis",
+        ),
+    )
+    for compact_segment, original_segment in zip(compact_segments, payload):
+        if not isinstance(compact_segment, dict) or not isinstance(original_segment, dict):
+            continue
+        display_geometry = original_segment.get("display_geometry")
+        if isinstance(display_geometry, dict):
+            compact_segment["display_geometry"] = _compact_display_geometry(
+                display_geometry,
+                max_points_per_segment=8,
+            )
+    return compact_segments
 
 
 def _pretrip_import_reference_paths(

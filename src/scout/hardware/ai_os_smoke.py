@@ -6,7 +6,6 @@ import json
 import os
 from datetime import UTC, datetime
 from importlib import import_module
-from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Literal
@@ -21,6 +20,7 @@ from scout.agents.model_gateway import (
     ModelSlaGateway,
 )
 from scout.agents.model_policy import ModelPolicy
+from scout.agents.pydantic_ai_compat import pydantic_ai_runtime_version
 from scout.api.routes import create_app
 from scout.cli.pydantic_smoke import run_smoke
 from pydantic import Field
@@ -290,7 +290,7 @@ def _check_importability(repo_root: Path) -> HardwareSmokeCheck:
         "Scout AI OS modules are importable.",
         {
             "imported": imported,
-            "pydantic_ai_version": version("pydantic-ai"),
+            "pydantic_ai_version": pydantic_ai_runtime_version(),
         },
     )
 

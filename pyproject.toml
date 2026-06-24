@@ -10,7 +10,8 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi",
     "pydantic>=2",
-    "pydantic-ai",
+    "pydantic-ai-slim[openai,openrouter]>=2,<3",
+    "pydantic-evals>=2,<3",
     "pyyaml",
     "uvicorn",
 ]

@@ -2442,7 +2442,7 @@ def _check_admin_api(
 ) -> dict[str, Any]:
     if not admin_base_url:
         return {"checked": False}
-    url = admin_base_url.rstrip("/") + f"/admin/pretrip/projects/{project_id}"
+    url = admin_base_url.rstrip("/") + f"/admin/pretrip/projects/{project_id}?compact=1"
     try:
         request = urllib.request.Request(url, headers=headers, method="GET")
         with urllib.request.urlopen(request, timeout=10) as response:
