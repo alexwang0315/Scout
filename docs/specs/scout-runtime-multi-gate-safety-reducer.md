@@ -49,6 +49,14 @@ must not directly own Phase 1 safety truth.
 | 22. Shadow replay mutation opt-in | `[x]` | `run_runtime_shadow_replay(... phase1_mutation_enabled=True)` exercises route feed -> reducer -> adapter -> request -> writer -> audit on macOS. |
 | 23. Mutation projection contract | `[x]` | `build_phase1_mutation_projection()` and `phase1_mutation_projection_event()` expose read-only admin/debug timeline evidence. |
 | 24. Safety template coverage | `[x]` | Specs and regression tests cover the physiologic-first mutation path, outbound separation, and privacy boundaries. |
+| 25. Alert application packet schema | `[x]` | `scout_alert_application_layer.py` defines `scout_alert_application_packet` and nested `scout_emergency_packet` from a Phase 1 mutation result. |
+| 26. Phase 1 mutation -> alert packet handoff | `[x]` | `build_alert_packet_from_phase1_mutation()` consumes local Phase 1 truth and emits a transport-neutral alert draft without sending. |
+| 27. SMS text renderer | `[x]` | `render_sms_text()` produces a short manual-copy draft with source refs, privacy, data quality, and `sent=false`. |
+| 28. LoRa compact renderer | `[x]` | `render_lora_compact()` produces bounded JSON bytes plus hex/base64 evidence; no radio uplink is invoked. |
+| 29. MQTT JSON renderer | `[x]` | `render_mqtt_json()` produces an application-layer topic/payload/qos/retain draft; no MQTT publish is performed. |
+| 30. Outbound policy decision | `[x]` | `decide_outbound_policy()` blocks live send, requires explicit operator approval for manual copy, and keeps external send disabled. |
+| 31. macOS dry-run evidence writer | `[x]` | `run_alert_application_dry_run()` writes local packet, SMS, LoRa, MQTT, policy, evidence, and result artifacts. |
+| 32. Admin/debug timeline projection event | `[x]` | `alert_application_projection_events()` emits read-only timeline evidence with map refs and `sent=false`. |
 
 ```mermaid
 flowchart LR
@@ -76,7 +84,14 @@ flowchart LR
   ShadowMutation["[x] Shadow replay mutation opt-in<br/>slice 22"]
   MutationProjection["[x] Mutation projection event<br/>slice 23"]
   Phase1Truth["[x] Phase 1 runtime safety truth<br/>local SafetyStateMachine"]
-  Outbound["[ ] Outbound policy + transport<br/>separate from state mutation"]
+  AlertPacket["[x] Alert application packet<br/>slice 25-26"]
+  SmsDraft["[x] SMS text draft<br/>slice 27"]
+  LoraDraft["[x] LoRa compact draft<br/>slice 28"]
+  MqttDraft["[x] MQTT JSON draft<br/>slice 29"]
+  OutboundPolicy["[x] Outbound policy decision<br/>slice 30"]
+  DryRun["[x] macOS dry-run evidence<br/>slice 31"]
+  AlertProjection["[x] Alert timeline projection<br/>slice 32"]
+  HardwareTransport["[ ] Approved transport executors<br/>SMS / LoRa / MQTT publish"]
 
   Physio --> Event
   RouteFeed --> Pace
@@ -97,7 +112,15 @@ flowchart LR
   Phase1 --> Template --> Request --> Mapping --> MutationService --> Phase1Truth
   MutationService --> Audit --> MutationProjection
   Shadow --> ShadowMutation --> Request
-  Phase1Truth --> Outbound
+  Phase1Truth --> AlertPacket
+  AlertPacket --> SmsDraft
+  AlertPacket --> LoraDraft
+  AlertPacket --> MqttDraft
+  SmsDraft --> OutboundPolicy
+  LoraDraft --> OutboundPolicy
+  MqttDraft --> OutboundPolicy
+  OutboundPolicy --> DryRun --> AlertProjection
+  OutboundPolicy --> HardwareTransport
 ```
 
 ## Slice 7 Contract
@@ -520,6 +543,53 @@ opt-in is true.
 The mutation projection is read-only admin/debug evidence. It may show that
 local Phase 1 truth changed, but external alert transport remains separate and
 is not performed by this pipeline.
+
+## Slices 25-32 Alert Application Packet Layer
+
+`scout_alert_application_layer.py` implements the first application-layer alert
+packet contract above the Phase 1 mutation result. It does not own safety
+decisioning; it consumes local Phase 1 runtime truth after the deterministic
+writer has already applied `SafetyStateMachine.apply_event()`.
+
+Implemented artifacts:
+
+- `scout_alert_application_packet`;
+- `scout_emergency_packet`;
+- `scout_alert_rendered_message`;
+- `scout_outbound_policy_decision`;
+- `scout_outbound_message_evidence`;
+- `scout_alert_application_dry_run_result`.
+
+The application layer currently renders three dry-run transport profiles:
+
+| Profile | Function | Output |
+| --- | --- | --- |
+| SMS text | `render_sms_text()` | Human-readable manual-copy draft, `sent=false`. |
+| LoRa compact | `render_lora_compact()` | Bounded compact JSON bytes with hex/base64 evidence, no radio uplink. |
+| MQTT JSON | `render_mqtt_json()` | Application topic, JSON payload, qos, retain policy, no publish. |
+
+`decide_outbound_policy()` is intentionally conservative. Without the exact
+operator phrase `SEND SCOUT ALERT`, the status is `requires_human_approval` for
+`L3_DISTRESS` / `L4_EMERGENCY` packets or `blocked_dry_run` for weaker levels.
+With the phrase it can return `allowed_manual_copy`, but
+`external_send_allowed=false` remains true for this slice: a future approved
+transport executor is still required for real SMS, LoRa, satellite, or MQTT
+publish behavior.
+
+`run_alert_application_dry_run()` is the macOS hardware-free verification path.
+It writes local evidence files:
+
+- `alert_application_packet.json`;
+- `sms_message.txt`;
+- `lora_payload.json`;
+- `mqtt_payload.json`;
+- `outbound_policy_decision.json`;
+- `outbound_message_evidence.json`;
+- `alert_application_dry_run_result.json`.
+
+`alert_application_projection_events()` provides the admin/debug timeline event
+contract. The event can carry map refs from the Phase 1 mutation result and can
+show that packet drafts exist, but it must always mark `sent=false`.
 
 ## Non-Goals
 

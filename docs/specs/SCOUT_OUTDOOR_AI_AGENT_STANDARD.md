@@ -244,7 +244,7 @@ runtime safety gate 組成：`pace_gate`（配速過慢）、`delay_gate`（時�
 `/safety/*`，也不能自行送出 SOS / SMS / satellite / LoRaWAN 等 outbound alert。
 六個 runtime safety gate 的共用 event contract 與後續 reducer roadmap 另見
 `docs/specs/scout-runtime-multi-gate-safety-reducer.md`。目前已完成的
-deterministic slice 7-24 包含非生理 gate adapters、multi-gate reducer
+deterministic slice 7-32 包含非生理 gate adapters、multi-gate reducer
 dry-run、escalation/hysteresis policy、`/admin/debug` reducer timeline
 projection、feature-flagged reducer-owned Phase 1 adapter result，以及
 `scout_runtime_route_gate_feeds.py` 本機 route-progress replay 與
@@ -257,7 +257,11 @@ projection、feature-flagged reducer-owned Phase 1 adapter result，以及
 Phase1SafetyMutationService -> SafetyStateMachine.apply_event()` 的 writer
 path；slice 18-24 已補上 `scout_runtime_phase1_mutation.py` schema、mapping、
 local deterministic writer、audit store、shadow replay opt-in mutation 與
-mutation projection。當樹莓派 Scout
+mutation projection；slice 25-32 再以 `scout_alert_application_layer.py`
+把 Phase 1 mutation result 轉成 transport-neutral
+`scout_alert_application_packet` / `scout_emergency_packet`，並產生 SMS text、
+LoRa compact bytes、MQTT JSON、outbound policy decision、macOS dry-run evidence
+與 admin/debug timeline projection event。當樹莓派 Scout
 裝置無法使用時，local replay 仍可用 planned timeline、reference segment
 timing、route progress frame 與 daylight buffer 產生 `pace_gate`、`delay_gate`
 與 `darkness_gate` event batch，供 reducer 本機測試；state store 則保存
@@ -276,8 +280,9 @@ artifact 可產生 `L_n` transition candidate；實際 Phase 1 mutation 仍必�
 `Phase1TransitionRequest`，呼叫 `SafetyStateMachine.apply_event()`，保存
 audit，並保留 `source_provider`、`source_path`、`sha256`、`data_quality`、
 `privacy` 與 `boundary`。outbound policy is separate：L4 alert review 只建立
-本機通報 review state，SOS / SMS / satellite / LoRaWAN 等外部通報仍由
-explicit outbound policy 與 transport service 決定。
+本機通報 review state；slice 25-32 只建立 application-layer alert drafts 與
+`sent=false` evidence。SOS / SMS / satellite / LoRaWAN / MQTT publish 等外部通報
+仍由 explicit outbound policy 與已審核 transport service 決定。
 
 ### 7.2 Scout Pace Coefficient
 

@@ -1024,6 +1024,16 @@ L0-L4 safety truth, sends an outbound alert, or embeds raw health samples.
 | 18. HealthAutoExport physio analysis delta | `scout_health_auto_export_physio_analysis_delta` | Compare two sanitized analysis artifacts and mark review-worthy candidate changes without claiming capability truth. |
 | 19. Physio review capsule | `scout_physio_review_capsule` | Compress current analysis plus optional delta into a review-priority capsule for later admin/pretrip consumption. |
 
+The runtime safety path above the physiologic package is documented in
+`docs/specs/scout-runtime-multi-gate-safety-reducer.md`. Slices 18-24 implement
+the reducer-owned Phase 1 mutation writer, and slices 25-32 implement the
+application-layer alert packet drafts in `scout_alert_application_layer.py`:
+`scout_alert_application_packet`, `scout_emergency_packet`, SMS text, LoRa
+compact bytes, MQTT JSON, outbound policy decision, macOS dry-run evidence, and
+admin/debug timeline projection event. The outbound policy is separate: these
+alert artifacts consume Phase 1 mutation results and never feed back into the
+physiologic gate state semantics.
+
 ### Slice 1: Sanitized HealthAutoExport Evidence
 
 `build_feature_set_from_health_auto_export()` accepts a local
