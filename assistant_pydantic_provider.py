@@ -21,12 +21,19 @@ from assistant_offline_fallback_contract import (
     format_offline_fallback_interpretation,
     parse_offline_fallback_interpretation,
 )
+from pydantic_ai_runtime_compat import (
+    build_chat_model,
+    pydantic_agent_runtime_kwargs,
+    pydantic_result_output,
+)
 from scout_ai_tool_contracts import (
     ScoutAiToolImplementationStatus,
     ScoutAiToolStatus,
     tool_registry_output,
 )
 from scout_ai_tool_executor import execute_scout_ai_tool
+from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
+from scout_gee_environment_tool import GEE_ENVIRONMENT_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
@@ -72,6 +79,8 @@ REGISTERED_WORKSPACE_TOOL_NAMES = {
     TERRAIN_SCORE_TOOL_ID: "search_scout_terrain_scores",
     MAP_PERCEPTION_TOOL_ID: "search_scout_map_perception",
     ROUTE_CONTEXT_TOOL_ID: "search_scout_route_context",
+    CWA_ENVIRONMENT_TOOL_ID: "search_scout_cwa_environment",
+    GEE_ENVIRONMENT_TOOL_ID: "search_scout_gee_environment",
 }
 
 
@@ -104,7 +113,8 @@ def build_workspace_tool_prompt(*, include_contract_only: bool = False) -> str:
         "Use these tools to search Scout's local pretrip workspace evidence before "
         "answering questions about route notes, CP/checkpoints, MCP/major critical "
         "points, named places, map evidence, review queue, risk scores, terrain, "
-        "route context, route briefing, observation stops, or planning artifacts. "
+        "route context, route briefing, observation stops, CWA official weather "
+        "environment artifacts, GEE SMAP/GPM hydrologic artifacts, or planning artifacts. "
         "For route briefing or route-context presentation requests, apply Scout's "
         "media quality gate: prefer route-specific photos/maps and reject website "
         "chrome, SVG icons, logos, tracking pixels, social widgets, unrelated brand "
@@ -150,6 +160,16 @@ def _prompt_args_for_tool(tool_id: str) -> str:
             "distance_m_min=None, distance_m_max=None, route_context_path=None, "
             "route_briefing_path=None"
         )
+    if tool_id == CWA_ENVIRONMENT_TOOL_ID:
+        return (
+            "query, limit=6, include_features=True, include_timeline=True, "
+            "stale_after_hours=None"
+        )
+    if tool_id == GEE_ENVIRONMENT_TOOL_ID:
+        return (
+            "query, limit=6, include_grid=True, include_timeseries=True, "
+            "stale_after_hours=None"
+        )
     return "query"
 
 
@@ -173,6 +193,18 @@ def _registered_tool_descriptions() -> dict[str, str]:
                 "use route-specific photos/maps, reject site chrome/icons/logos/"
                 "tracking/social widgets, and report visual evidence gaps instead "
                 "of substituting placeholders."
+            )
+        if contract.tool_id == CWA_ENVIRONMENT_TOOL_ID:
+            descriptions[contract.tool_id] += (
+                " Use this for official CWA warning, observation, QPF, forecast, "
+                "daylight/moonlight, tide/marine, and provenance questions. It reads "
+                "prepared workspace artifacts only; it does not call CWA live."
+            )
+        if contract.tool_id == GEE_ENVIRONMENT_TOOL_ID:
+            descriptions[contract.tool_id] += (
+                " Use this for GEE SMAP L4 soil moisture, GPM IMERG antecedent rain, "
+                "hydrologic background, grid, timeseries, and provenance questions. "
+                "It reads prepared workspace artifacts only; it does not initialize GEE."
             )
     return descriptions
 
@@ -633,6 +665,84 @@ class ScoutWorkspaceToolContext:
         self.invocations.append(result)
         return result
 
+    def search_scout_cwa_environment(
+        self,
+        query: str,
+        limit: int | None = None,
+        include_features: bool = True,
+        include_timeline: bool = True,
+        stale_after_hours: float | None = None,
+    ) -> dict[str, object]:
+        search_text = str(query or "").strip()
+        bounded_limit = _bounded_tool_limit(limit, default_limit=6)
+        project_root = self._project_root()
+        if project_root is None:
+            result = self._tool_error(
+                "pretrip_workspace_unavailable",
+                search_text,
+                bounded_limit,
+                tool_id=CWA_ENVIRONMENT_TOOL_ID,
+            )
+            self.invocations.append(result)
+            return result
+        try:
+            result = self._execute_registered_tool(
+                CWA_ENVIRONMENT_TOOL_ID,
+                query=search_text,
+                limit=bounded_limit,
+                include_features=include_features,
+                include_timeline=include_timeline,
+                stale_after_hours=stale_after_hours,
+            )
+        except Exception as exc:  # Defensive: tool failures must stay read-only.
+            result = self._tool_error(
+                type(exc).__name__,
+                search_text,
+                bounded_limit,
+                tool_id=CWA_ENVIRONMENT_TOOL_ID,
+            )
+        self.invocations.append(result)
+        return result
+
+    def search_scout_gee_environment(
+        self,
+        query: str,
+        limit: int | None = None,
+        include_grid: bool = True,
+        include_timeseries: bool = True,
+        stale_after_hours: float | None = None,
+    ) -> dict[str, object]:
+        search_text = str(query or "").strip()
+        bounded_limit = _bounded_tool_limit(limit, default_limit=6)
+        project_root = self._project_root()
+        if project_root is None:
+            result = self._tool_error(
+                "pretrip_workspace_unavailable",
+                search_text,
+                bounded_limit,
+                tool_id=GEE_ENVIRONMENT_TOOL_ID,
+            )
+            self.invocations.append(result)
+            return result
+        try:
+            result = self._execute_registered_tool(
+                GEE_ENVIRONMENT_TOOL_ID,
+                query=search_text,
+                limit=bounded_limit,
+                include_grid=include_grid,
+                include_timeseries=include_timeseries,
+                stale_after_hours=stale_after_hours,
+            )
+        except Exception as exc:  # Defensive: tool failures must stay read-only.
+            result = self._tool_error(
+                type(exc).__name__,
+                search_text,
+                bounded_limit,
+                tool_id=GEE_ENVIRONMENT_TOOL_ID,
+            )
+        self.invocations.append(result)
+        return result
+
     def _execute_registered_tool(
         self,
         tool_id: str,
@@ -697,6 +807,12 @@ class ScoutWorkspaceToolContext:
         elif latest_tool_id == ROUTE_CONTEXT_TOOL_ID:
             source_path = "assistant_pydantic_provider.search_scout_route_context"
             evidence_type = "assistant_route_context_tool_invocation"
+        elif latest_tool_id == CWA_ENVIRONMENT_TOOL_ID:
+            source_path = "assistant_pydantic_provider.search_scout_cwa_environment"
+            evidence_type = "assistant_cwa_environment_tool_invocation"
+        elif latest_tool_id == GEE_ENVIRONMENT_TOOL_ID:
+            source_path = "assistant_pydantic_provider.search_scout_gee_environment"
+            evidence_type = "assistant_gee_environment_tool_invocation"
         elif latest_tool_id == WORKSPACE_CATALOG_TOOL_ID:
             source_path = "assistant_pydantic_provider.search_scout_workspace_catalog"
             evidence_type = "assistant_workspace_catalog_tool_invocation"
@@ -746,7 +862,12 @@ class ScoutWorkspaceToolContext:
         project_id = self.query.project_id or self.query.context_ref
         if not project_id:
             return None
-        candidate = self.pretrip_workspace_root / project_id
+        root = self.pretrip_workspace_root
+        if (root / "project.json").exists() and (
+            root.name == project_id or _project_json_matches_id(root, project_id)
+        ):
+            return root
+        candidate = root / project_id
         if (candidate / "project.json").exists():
             return candidate
         return None
@@ -766,6 +887,7 @@ class ScoutWorkspaceToolContext:
             "query": query,
             "limit": limit,
             "project_id": self.query.project_id or self.query.context_ref,
+            "workspace_diagnostics": self._workspace_diagnostics(),
             "results": [],
             "boundary": {
                 "read_only": True,
@@ -778,6 +900,29 @@ class ScoutWorkspaceToolContext:
                 "hardware_control_allowed": False,
                 "raw_payloads_embedded": False,
             },
+        }
+
+    def _workspace_diagnostics(self) -> dict[str, object]:
+        project_id = self.query.project_id or self.query.context_ref
+        root = self.pretrip_workspace_root
+        if root is None:
+            return {
+                "pretrip_workspace_root": None,
+                "project_id": project_id,
+                "candidate_paths": [],
+                "hint": "Set SCOUT_PRETRIP_WORKSPACE_ROOT to the pretrip projects directory or the selected project root.",
+            }
+        candidates = [root]
+        if project_id:
+            candidates.append(root / project_id)
+        return {
+            "pretrip_workspace_root": str(root),
+            "project_id": project_id,
+            "candidate_paths": [str(path) for path in candidates],
+            "project_json_exists": {
+                str(path): (path / "project.json").exists() for path in candidates
+            },
+            "hint": "SCOUT_PRETRIP_WORKSPACE_ROOT may point to either the projects parent directory or the selected project root.",
         }
 
 
@@ -894,6 +1039,30 @@ def augment_sources_with_workspace_evidence_tool(
                 ]
                 augmented = [*priority_sources, map_source, *other_sources]
 
+    if _looks_like_cwa_environment_query(query.question) and not any(
+        source.source_id == CWA_ENVIRONMENT_TOOL_ID for source in augmented
+    ):
+        cwa_result = tool_context.search_scout_cwa_environment(
+            query=query.question,
+            limit=limit,
+        )
+        if cwa_result.get("status") == "completed":
+            cwa_source = tool_context.tool_source_ref(tool_id=CWA_ENVIRONMENT_TOOL_ID)
+            if cwa_source is not None:
+                augmented = [cwa_source, *augmented]
+
+    if _looks_like_gee_environment_query(query.question) and not any(
+        source.source_id == GEE_ENVIRONMENT_TOOL_ID for source in augmented
+    ):
+        gee_result = tool_context.search_scout_gee_environment(
+            query=query.question,
+            limit=limit,
+        )
+        if gee_result.get("status") == "completed":
+            gee_source = tool_context.tool_source_ref(tool_id=GEE_ENVIRONMENT_TOOL_ID)
+            if gee_source is not None:
+                augmented = [gee_source, *augmented]
+
     if not any(source.source_id == WORKSPACE_EVIDENCE_TOOL_ID for source in augmented):
         result = tool_context.search_scout_workspace_evidence(
             query=query.question,
@@ -920,6 +1089,8 @@ def augment_sources_with_workspace_evidence_tool(
                         ROUTE_STRUCTURE_TOOL_ID,
                         MAJOR_POINT_TOOL_ID,
                         EVIDENCE_FULLTEXT_TOOL_ID,
+                        CWA_ENVIRONMENT_TOOL_ID,
+                        GEE_ENVIRONMENT_TOOL_ID,
                     }
                 ]
                 other_sources = [
@@ -934,6 +1105,8 @@ def augment_sources_with_workspace_evidence_tool(
                         ROUTE_STRUCTURE_TOOL_ID,
                         MAJOR_POINT_TOOL_ID,
                         EVIDENCE_FULLTEXT_TOOL_ID,
+                        CWA_ENVIRONMENT_TOOL_ID,
+                        GEE_ENVIRONMENT_TOOL_ID,
                     }
                 ]
                 augmented = [
@@ -1782,19 +1955,18 @@ class PydanticAIEnvRunner:
 
     def _run_model(self, prompt: str) -> str:
         from pydantic_ai import Agent
-        try:
-            from pydantic_ai.models.openai import OpenAIChatModel
-        except ImportError:  # pragma: no cover - compatibility with older pydantic-ai.
-            from pydantic_ai.models.openai import OpenAIModel as OpenAIChatModel
-        from pydantic_ai.providers.openai import OpenAIProvider
 
-        provider = OpenAIProvider(base_url=self.base_url, api_key=self.api_key)
         agent = Agent(
-            OpenAIChatModel(self.model_name, provider=provider),
+            build_chat_model(
+                model_name=self.model_name,
+                base_url=self.base_url,
+                api_key=self.api_key,
+            ),
             system_prompt=GLOBAL_ASSISTANT_PROMPT,
+            **pydantic_agent_runtime_kwargs(),
         )
         result = agent.run_sync(prompt, model_settings={"max_tokens": 512})
-        return str(getattr(result, "output", getattr(result, "data", result)))
+        return str(pydantic_result_output(result))
 
     def _run_model_with_workspace_tools(
         self,
@@ -1802,16 +1974,15 @@ class PydanticAIEnvRunner:
         tool_context: ScoutWorkspaceToolContext,
     ) -> str:
         from pydantic_ai import Agent
-        try:
-            from pydantic_ai.models.openai import OpenAIChatModel
-        except ImportError:  # pragma: no cover - compatibility with older pydantic-ai.
-            from pydantic_ai.models.openai import OpenAIModel as OpenAIChatModel
-        from pydantic_ai.providers.openai import OpenAIProvider
 
-        provider = OpenAIProvider(base_url=self.base_url, api_key=self.api_key)
         agent = Agent(
-            OpenAIChatModel(self.model_name, provider=provider),
+            build_chat_model(
+                model_name=self.model_name,
+                base_url=self.base_url,
+                api_key=self.api_key,
+            ),
             system_prompt=f"{GLOBAL_ASSISTANT_PROMPT}\n{WORKSPACE_TOOL_PROMPT}",
+            **pydantic_agent_runtime_kwargs(),
         )
         tool_descriptions = _registered_tool_descriptions()
 
@@ -2015,10 +2186,48 @@ class PydanticAIEnvRunner:
                 route_briefing_path=route_briefing_path,
             )
 
+        @agent.tool_plain(
+            name="search_scout_cwa_environment",
+            description=tool_descriptions[CWA_ENVIRONMENT_TOOL_ID],
+        )
+        def search_scout_cwa_environment(
+            query: str,
+            limit: int = 6,
+            include_features: bool = True,
+            include_timeline: bool = True,
+            stale_after_hours: float | None = None,
+        ) -> dict[str, object]:
+            return tool_context.search_scout_cwa_environment(
+                query=query,
+                limit=limit,
+                include_features=include_features,
+                include_timeline=include_timeline,
+                stale_after_hours=stale_after_hours,
+            )
+
+        @agent.tool_plain(
+            name="search_scout_gee_environment",
+            description=tool_descriptions[GEE_ENVIRONMENT_TOOL_ID],
+        )
+        def search_scout_gee_environment(
+            query: str,
+            limit: int = 6,
+            include_grid: bool = True,
+            include_timeseries: bool = True,
+            stale_after_hours: float | None = None,
+        ) -> dict[str, object]:
+            return tool_context.search_scout_gee_environment(
+                query=query,
+                limit=limit,
+                include_grid=include_grid,
+                include_timeseries=include_timeseries,
+                stale_after_hours=stale_after_hours,
+            )
+
         tool_prompt = f"{WORKSPACE_TOOL_PROMPT}\n{prompt}"
         result = agent.run_sync(tool_prompt, model_settings={"max_tokens": 768})
         self.last_workspace_tool_invocations = list(tool_context.invocations)
-        return str(getattr(result, "output", getattr(result, "data", result)))
+        return str(pydantic_result_output(result))
 
 
 def build_assistant_prompt(
@@ -2342,6 +2551,16 @@ def _without_workspace_tool_sources(
     ]
 
 
+def _project_json_matches_id(project_root: Path, project_id: str) -> bool:
+    try:
+        payload = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    return str(payload.get("project_id") or payload.get("id") or "") == project_id
+
+
 def _bounded_tool_limit(
     value: int | None,
     *,
@@ -2559,6 +2778,60 @@ def _looks_like_map_perception_query(text: str) -> bool:
             "草坡",
             "判讀",
             "辨識",
+        )
+    )
+
+
+def _looks_like_cwa_environment_query(text: str) -> bool:
+    lowered = text.lower().replace(" ", "")
+    return any(
+        fragment in lowered
+        for fragment in (
+            "cwa",
+            "cwaopendata",
+            "中央氣象署",
+            "氣象署",
+            "官方天氣",
+            "官方預報",
+            "警特報",
+            "qpf",
+            "定量降水",
+            "降水預報",
+            "雨量站",
+            "鄉鎮預報",
+            "日出",
+            "日沒",
+            "月出",
+            "月沒",
+            "潮汐",
+            "海象",
+            "tide",
+            "marine",
+        )
+    )
+
+
+def _looks_like_gee_environment_query(text: str) -> bool:
+    lowered = text.lower().replace(" ", "")
+    return any(
+        fragment in lowered
+        for fragment in (
+            "gee",
+            "googleearthengine",
+            "earthengine",
+            "smap",
+            "smapl4",
+            "soilmoisture",
+            "土壤含水",
+            "土壤濕度",
+            "rootzone",
+            "gpm",
+            "imerg",
+            "antecedentrain",
+            "前期雨量",
+            "累積雨量",
+            "水文背景",
+            "衛星降雨",
         )
     )
 

@@ -23,6 +23,8 @@ from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
 from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
+from scout_gee_environment_tool import GEE_ENVIRONMENT_TOOL_ID
 from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
@@ -64,7 +66,7 @@ STANDARD_SIX_POWER_COVERAGE = (
     (
         "天氣力",
         "Weather-to-Decision Intelligence / 天候決策力",
-        (WEATHER_WINDOW_TOOL_ID,),
+        (WEATHER_WINDOW_TOOL_ID, CWA_ENVIRONMENT_TOOL_ID, GEE_ENVIRONMENT_TOOL_ID),
     ),
     (
         "地圖力",
@@ -84,6 +86,8 @@ STANDARD_IMPLEMENTATION_COVERAGE = (
             CONTEXTUAL_PERMISSION_TOOL_ID,
             ROUTE_ARCHITECTURE_TOOL_ID,
             WEATHER_WINDOW_TOOL_ID,
+            CWA_ENVIRONMENT_TOOL_ID,
+            GEE_ENVIRONMENT_TOOL_ID,
             NAVIGATION_TERRAIN_TOOL_ID,
         ),
         "gap": "六力工具路徑已接上；仍需在每次具體出發/現場問題回到對應 decision output，不可平均成總分。",
@@ -430,6 +434,10 @@ def _source_from_record(record: dict[str, Any]) -> ScoutAiAnswerSource:
         "readiness_governance",
         "pretrip_decision_package",
         "weather_daylight_state",
+        "cwa_environment",
+        "cwa_summary",
+        "gee_environment",
+        "gee_summary",
         "route_briefing",
         "route_context",
         "media_literacy",
@@ -594,6 +602,9 @@ def _answer_text(
         route_readiness_answer = _route_readiness_answer(completed_sources)
         if route_readiness_answer:
             parts.append(route_readiness_answer)
+        survival_incident_answer = _survival_incident_playbook_answer(completed_sources)
+        if survival_incident_answer:
+            parts.append(survival_incident_answer)
         route_context_answer = _route_context_answer(completed_sources)
         if route_context_answer:
             parts.append(route_context_answer)
@@ -603,9 +614,6 @@ def _answer_text(
         media_literacy_answer = _media_literacy_answer(completed_sources)
         if media_literacy_answer:
             parts.append(media_literacy_answer)
-        survival_incident_answer = _survival_incident_playbook_answer(completed_sources)
-        if survival_incident_answer:
-            parts.append(survival_incident_answer)
         route_architecture_answer = _route_architecture_answer(completed_sources)
         if route_architecture_answer:
             parts.append(route_architecture_answer)
@@ -630,6 +638,12 @@ def _answer_text(
         weather_decision_answer = _weather_decision_answer(completed_sources)
         if weather_decision_answer:
             parts.append(weather_decision_answer)
+        cwa_environment_answer = _cwa_environment_answer(completed_sources)
+        if cwa_environment_answer:
+            parts.append(cwa_environment_answer)
+        gee_environment_answer = _gee_environment_answer(completed_sources)
+        if gee_environment_answer:
+            parts.append(gee_environment_answer)
     if completed_sources:
         source_text = (
             _completed_source_brief_text
@@ -1236,6 +1250,11 @@ def _decision_source_priority(
         if decision in {"DELAY", "CHANGE_PLAN", "NO_GO", "ESCALATE"}:
             return (5, source.tool_id)
         return (10, source.tool_id)
+    if source.tool_id in {CWA_ENVIRONMENT_TOOL_ID, GEE_ENVIRONMENT_TOOL_ID}:
+        decision = str(source.top_result_summary.get("decision") or "").upper()
+        if decision in {"DELAY", "CHANGE_PLAN", "NO_GO", "ESCALATE"}:
+            return (5, source.tool_id)
+        return (11, source.tool_id)
     if source.tool_id == NAVIGATION_TERRAIN_TOOL_ID:
         decision = str(source.top_result_summary.get("decision") or "").upper()
         if decision in {"GUIDED_ONLY", "CHANGE_PLAN", "NO_GO"}:
@@ -3033,6 +3052,26 @@ def _weather_decision_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
     return None
 
 
+def _cwa_environment_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != CWA_ENVIRONMENT_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
+def _gee_environment_answer(sources: list[ScoutAiAnswerSource]) -> str | None:
+    for source in sources:
+        if source.tool_id != GEE_ENVIRONMENT_TOOL_ID:
+            continue
+        field_answer = source.top_result_summary.get("field_answer")
+        if isinstance(field_answer, str) and field_answer.strip():
+            return field_answer.strip()
+    return None
+
+
 def _top_result_summary(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
@@ -3053,6 +3092,11 @@ def _top_result_summary(value: Any) -> dict[str, Any]:
         "source_status",
         "risk_summary",
         "weather_window",
+        "cwa_environment",
+        "cwa_summary",
+        "gee_environment",
+        "gee_summary",
+        "provenance_summary",
         "daylight_buffer_status",
         "weather_to_decision",
         "decision",

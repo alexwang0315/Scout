@@ -698,6 +698,51 @@ Output:
 
 - `LearningBundle`
 
+### 7.6 Scout AI Weather / Environment Evidence Tools
+
+The Scout AI assistant tool layer may expose deterministic workspace evidence
+tools to the Pydantic AI provider. These tools are capabilities in the Scout AI
+OS sense, but they are not runtime safety authorities.
+
+Current weather/environment tool split:
+
+- `scout.ai.weather_window.assess.v0`: route-local weather/daylight/camp/shelter
+  decision framing.
+- `scout.ai.cwa_environment.assess.v0`: prepared Central Weather Administration
+  warnings, observations, QPF, forecast, astronomy, tide/marine, and provenance
+  summaries from the local workspace.
+- `scout.ai.gee_environment.assess.v0`: prepared GEE SMAP/GPM soil moisture,
+  antecedent-rain, grid/timeline, and corridor hydrologic summaries from the
+  local workspace.
+
+Required rules:
+
+- CWA and GEE credentials remain server-side. They are never exposed to the
+  client, model prompt, artifact body, logs, or eval report.
+- Assistant answering never performs live CWA, GEE, browser, or Earth Engine
+  fetches. Live preparation is an operator-approved pretrip step that writes
+  bounded workspace artifacts.
+- Every CWA/GEE-derived result is candidate-only:
+  `candidate_only=true`, `runtime_safety_truth=false`,
+  `human_review_required=true`.
+- Missing or stale QPF, warning, SMAP, GPM, or antecedent-rain artifacts are
+  evidence gaps. The assistant must not convert missing weather evidence into a
+  low-risk conclusion.
+- QPF is route corridor / bbox evidence, not a single-slope forecast. SMAP/GPM
+  is hydrologic background, not a deterministic landslide or water-level truth.
+- No weather/environment tool may write Phase 1 L0-L4 state, `/safety/*`,
+  Phase 2 Brain facts, ObservedFact, IncidentStore, review decisions, outbound
+  messages, or hardware controls.
+
+Planner rules:
+
+- Natural weather questions select `weather_window` and CWA evidence.
+- Rain, stream, wet terrain, rockfall, landslide, and weather-terrain compound
+  questions additionally select GEE evidence.
+- Pretrip Go/No-Go and delay/departure questions select route readiness plus
+  route architecture, navigation terrain, weather window, CWA, GEE, pace, and
+  equipment evidence when available.
+
 ---
 
 ## 8. Deterministic Services

@@ -547,6 +547,96 @@ Future tools should be registered in the registry before they are executable.
 This lets Scout AI explain missing evidence and implementation gaps without
 inventing tool behavior.
 
+## Weather / Environment Workspace Tools
+
+Scout AI now separates route-weather reasoning into a decision tool plus two
+workspace evidence tools:
+
+| Layer | Tool id | Role |
+| --- | --- | --- |
+| Decision wrapper | `scout.ai.weather_window.assess.v0` | Route-local weather/daylight/camp/shelter decision framing. |
+| Official weather evidence | `scout.ai.cwa_environment.assess.v0` | Prepared Central Weather Administration warnings, observations, QPF, forecast, astronomy, tide/marine, and provenance summaries. |
+| Hydrologic background | `scout.ai.gee_environment.assess.v0` | Prepared GEE SMAP/GPM soil moisture, antecedent rain, grid/timeline, and corridor hydrologic summaries. |
+
+Both environment tools are deterministic, read-only Scout workspace readers.
+They do not call live CWA, GEE, OpenRouter, OpenAI, browser search, or
+Earth Engine during assistant answering. Server-side pretrip preparation may
+create the artifacts with credentials, but Scout AI receives only bounded,
+redacted, candidate-only artifacts from the workspace.
+
+Common request shape:
+
+```json
+{
+  "tool_id": "scout.ai.cwa_environment.assess.v0",
+  "project_root": "tests/fixtures/pretrip/projects/chilai_nanhua_day1",
+  "query": "白牆下這段還適合走嗎？",
+  "limit": 6,
+  "arguments": {
+    "include_features": true,
+    "include_timeline": true,
+    "stale_after_hours": 12
+  }
+}
+```
+
+`scout.ai.cwa_environment.assess.v0` reads these workspace artifacts when
+available:
+
+- `outputs/environment/environment_evidence_package.json`
+- `outputs/environment/environment_factor_matrix.json`
+- `outputs/environment/go_no_go_review_draft.json`
+- `outputs/environment/cwa/cwa_weather_evidence.json`
+- `outputs/environment/cwa/warnings.geojson`
+- `outputs/environment/cwa/observations.geojson`
+- `outputs/environment/cwa/qpf_grid.geojson`
+- `outputs/environment/cwa/qpf_route_timeline.json`
+- `outputs/environment/cwa/qpf_corridor_summary.json`
+- `outputs/environment/cwa/forecast_timeline.json`
+- `outputs/environment/cwa/astronomy_timeline.json`
+- `outputs/environment/cwa/tide_marine_timeline.json`
+
+`scout.ai.gee_environment.assess.v0` reads these workspace artifacts when
+available:
+
+- `outputs/environment/environment_evidence_package.json`
+- `outputs/environment/environment_factor_matrix.json`
+- `outputs/environment/go_no_go_review_draft.json`
+- `outputs/environment/gee/smap_l4_timeseries.json`
+- `outputs/environment/gee/smap_l4_corridor_summary.json`
+- `outputs/environment/gee/soil_moisture_grid.geojson`
+- `outputs/environment/gee/gpm_imerg_raw_summary.json`
+- `outputs/environment/gee/gpm_imerg_timeseries.json`
+- `outputs/environment/gee/gpm_imerg_corridor_summary.json`
+- `outputs/environment/gee/antecedent_rain_grid.geojson`
+
+Both outputs must include:
+
+- `candidate_only: true`
+- `runtime_safety_truth: false`
+- `human_review_required: true`
+- `external_api_calls_made: false`
+- `source_report`, `provenance_summary`, `missing_fields`, and `warnings`
+- a compact `field_answer` suitable for answer synthesis
+
+Planner behavior:
+
+- Natural weather questions select `weather_window` and CWA evidence.
+- Rain, stream, rockfall, landslide, wet terrain, and weather-terrain compound
+  questions also select GEE evidence.
+- Pretrip Go/No-Go questions select route readiness plus weather, CWA, and GEE
+  support evidence when the workspace provides it.
+- Missing or stale CWA/GEE artifacts are reported as evidence gaps; Scout AI
+  must not infer low weather risk from absent environment artifacts.
+
+Boundary:
+
+- These tools are pretrip/admin/debug evidence tools only.
+- They must not write candidate review decisions, ObservedFact, Phase 2 Brain
+  facts, IncidentStore records, runtime safety truth, or `/safety/*`.
+- They must not expose CWA API keys, GEE credentials, raw secrets, or
+  unredacted request URLs to the client, logs, or model prompt.
+
 ## Assistant Workflow Eval Runner
 
 Manifest id:
@@ -616,8 +706,10 @@ Current provider behavior:
   current deterministic tools execute through `execute_scout_ai_tool()`.
 - Legacy `search_scout_workspace_evidence()` remains available for local
   evidence-index fallback, but the newer structured tools should be preferred
-  when the question maps to route, MCP, full-text, risk, terrain, or map
-  perception evidence.
-- Contract-only future tools, such as weather window assessment, are not exposed
-  as Pydantic AI functions until they have an executor. They remain visible
-  through the registry for missing-evidence explanations.
+  when the question maps to route, MCP, full-text, risk, terrain, map
+  perception, weather window, CWA environment, or GEE environment evidence.
+- `weather_window`, `cwa_environment`, and `gee_environment` are executable
+  read-only functions when present in the registry. Contract-only future tools
+  remain visible through the registry for missing-evidence explanations, but
+  are not exposed as executable Pydantic AI functions until they have an
+  executor.

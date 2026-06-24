@@ -285,6 +285,44 @@ def test_workspace_tool_context_runs_registered_tool_executor(tmp_path: Path, mo
     assert context.invocations[0]["artifact_kind"] == "scout_ai_route_structure_tool_output"
 
 
+def test_workspace_tool_context_accepts_direct_project_root_env(monkeypatch):
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(PROJECT_ROOT))
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="有多少個 CP?",
+        context_ref="chilai_nanhua_day1",
+        project_id="chilai_nanhua_day1",
+    )
+    context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
+
+    result = context.search_scout_route_structure(query="有多少個 CP?", limit=2)
+
+    assert result["status"] == "completed"
+    assert result["tool_id"] == ROUTE_STRUCTURE_TOOL_ID
+    assert result["summaries"]["checkpoint_count"] == 124
+
+
+def test_workspace_tool_error_includes_root_diagnostics(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(tmp_path / "missing"))
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="有多少個 CP?",
+        context_ref="chilai_nanhua_day1",
+        project_id="chilai_nanhua_day1",
+    )
+    context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
+
+    result = context.search_scout_route_structure(query="有多少個 CP?", limit=2)
+
+    assert result["status"] == "failed"
+    assert result["error_type"] == "pretrip_workspace_unavailable"
+    diagnostics = result["workspace_diagnostics"]
+    assert diagnostics["project_id"] == "chilai_nanhua_day1"
+    assert "candidate_paths" in diagnostics
+    assert "project_json_exists" in diagnostics
+    assert "SCOUT_PRETRIP_WORKSPACE_ROOT" in diagnostics["hint"]
+
+
 def test_pydantic_ai_provider_is_opt_in_read_only_and_uses_injected_runner():
     runner = FakeRunner("The selected debug event shows L2 after route progress degraded.")
     provider = PydanticAIAssistantProvider(

@@ -120,6 +120,42 @@ This milestone must not:
 | `/admin/pretrip` | project manifest, candidates, source registry, review queue, readiness/departure gate artifacts | planning state, candidate provenance, missing review items, readiness blockers | accept/reject candidates, create reviewed facts, compile runtime handoff, approve departure |
 | hardware readiness | provider health fixture, sample replay timeline, runtime debug log, mock transport queue | provider status, sample replay interpretation, debug readiness checklist | control hardware, change provider state, open real transport, start Pi/Docker deployment |
 
+## Weather / Environment Evidence Across Surfaces
+
+For route-weather and environment questions, the cross-surface assistant must
+route through the Scout AI tool registry instead of prompt-only weather
+reasoning.
+
+Required tool layering:
+
+- `scout.ai.weather_window.assess.v0` frames the weather/daylight/camp/shelter
+  decision.
+- `scout.ai.cwa_environment.assess.v0` reads prepared CWA warning,
+  observation, QPF, forecast, astronomy, tide/marine, and provenance artifacts.
+- `scout.ai.gee_environment.assess.v0` reads prepared GEE SMAP/GPM soil
+  moisture, antecedent-rain, grid/timeline, and hydrologic corridor artifacts.
+
+Surface-specific behavior:
+
+- `/admin/pretrip`: may show CWA/GEE candidate evidence, missing/stale gaps,
+  QPF peak windows, warning layers, SMAP/GPM corridor summaries, and
+  go/no-go review inputs. It must not approve departure or promote those
+  artifacts to runtime truth.
+- `/admin/debug`: may explain which weather/environment evidence was available
+  to the assistant and whether an answer was limited by stale/missing artifacts.
+  It must not call live CWA/GEE or mutate debug/runtime state.
+- `/admin`: may explain after-action provenance for weather/environment
+  evidence used in an incident or post-trip review. It must not rewrite
+  historical evidence or Brain facts.
+- hardware readiness: may only display fixture-backed or operator-recorded
+  weather/environment readiness evidence. It must not initialize Earth Engine,
+  fetch live CWA, or start network research.
+
+All weather/environment assistant answers must label CWA/GEE outputs as
+candidate-only, human-review-required, and not runtime safety truth. If CWA QPF
+or GEE SMAP/GPM evidence is missing or stale, the assistant reports that gap
+and avoids saying conditions are safe.
+
 ## Architecture
 
 The milestone should introduce four concepts.

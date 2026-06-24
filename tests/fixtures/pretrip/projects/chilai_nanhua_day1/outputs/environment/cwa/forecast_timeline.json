@@ -1,0 +1,14 @@
+{
+  "artifact_kind": "cwa_forecast_timeline",
+  "dataset_id": "F-D0047-093",
+  "raw_response_hash": "sha256:cwa-forecast-fixture",
+  "stale_risk": "low",
+  "events": [
+    {
+      "event": "township_forecast",
+      "valid_time": "2026-06-24T12:00:00Z",
+      "rain_probability_percent": 70,
+      "wind": "moderate"
+    }
+  ]
+}

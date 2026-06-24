@@ -1,0 +1,26 @@
+{
+  "type": "FeatureCollection",
+  "artifact_kind": "cwa_qpf_grid_layer",
+  "dataset_id": "F-C0041-001",
+  "raw_response_hash": "sha256:cwa-qpf-grid-fixture",
+  "stale_risk": "low",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "valid_time": "2026-06-24T12:00:00Z",
+        "accumulation_window_h": 6,
+        "qpf_mm": 32.0,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.25,
+          24.03
+        ]
+      }
+    }
+  ]
+}

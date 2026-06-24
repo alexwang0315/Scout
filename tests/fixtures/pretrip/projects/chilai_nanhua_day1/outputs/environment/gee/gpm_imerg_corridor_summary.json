@@ -1,0 +1,40 @@
+{
+  "artifact_kind": "gee_gpm_imerg_corridor_summary",
+  "collection_id": "NASA/GPM_L3/IMERG_V07",
+  "raw_response_hash": "sha256:gee-gpm-summary-fixture",
+  "request_timestamp": "2026-06-24T00:00:00Z",
+  "stale_risk": "low",
+  "metrics": {
+    "rain_1h_mm": {
+      "latest": 4.0,
+      "mean": 1.2,
+      "max": 6.0,
+      "p95": 5.8,
+      "trend": "rising"
+    },
+    "rain_3h_mm": {
+      "latest": 12.0,
+      "mean": 7.4,
+      "max": 15.0,
+      "p95": 14.1,
+      "trend": "rising"
+    },
+    "rain_24h_mm": {
+      "latest": 42.0,
+      "mean": 35.0,
+      "max": 51.0,
+      "p95": 49.2,
+      "trend": "rising"
+    },
+    "rain_72h_mm": {
+      "latest": 88.0,
+      "mean": 74.0,
+      "max": 101.0,
+      "p95": 96.0,
+      "trend": "rising"
+    }
+  },
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "human_review_required": true
+}

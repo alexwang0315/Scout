@@ -1,0 +1,13 @@
+{
+  "artifact_kind": "environment_evidence_package",
+  "schema_version": "scout_environment_evidence_package.v0",
+  "project_id": "chilai_nanhua_day1",
+  "generated_at": "2026-06-24T00:00:00Z",
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "human_review_required": true,
+  "source_refs": [
+    "outputs/environment/cwa/qpf_corridor_summary.json",
+    "outputs/environment/gee/smap_l4_corridor_summary.json"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_kind": "environment_factor_matrix",
+  "schema_version": "scout_environment_factor_matrix.v0",
+  "qpf_accumulation": "0-24h 6h accumulation",
+  "qpf_peak_window": "2026-06-24T12:00:00Z/2026-06-24T18:00:00Z",
+  "qpf_update_cadence": "regular_6h",
+  "qpf_lead_time": "18h",
+  "qpf_uncertainty": "mountain_orographic_and_convective_uncertainty",
+  "severe_weather_intensified_operation": false,
+  "smap_surface_wetness": "elevated",
+  "gpm_antecedent_rain": "moderate",
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}
