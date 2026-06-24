@@ -157,6 +157,21 @@ class AdminAfterActionTests(unittest.TestCase):
             "/admin/debug",
         ])
         self.assertEqual(payload["debug_projection"]["event_count"], 4)
+        state_store_projection = payload["runtime_safety_state_store_projection"]
+        self.assertEqual(
+            state_store_projection["artifact_kind"],
+            "scout_runtime_state_store_replay_projection",
+        )
+        self.assertEqual(state_store_projection["status"], "missing")
+        self.assertEqual(state_store_projection["surface_targets"], [
+            "/admin",
+            "/admin/debug",
+        ])
+        self.assertFalse(state_store_projection["boundary"]["runtime_safety_truth"])
+        self.assertFalse(
+            state_store_projection["boundary"]["phase1_l0_l4_state_mutated"]
+        )
+        self.assertFalse(state_store_projection["boundary"]["safety_api_called"])
         self.assertEqual(payload["capability_timeline"]["evidence_type"], "post_analysis_capability")
         self.assertEqual(payload["capability_timeline"]["route_family"], "nenggao_andongjun")
         self.assertEqual(payload["capability_timeline"]["edge_count"], 73)
@@ -689,6 +704,13 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("/admin/cases/${CASE_ID}", response.text)
         self.assertIn('id="energyReserveMonitor"', response.text)
         self.assertIn("renderEnergyReserveMonitor", response.text)
+        self.assertIn('id="runtimeSafetyStateStorePanel"', response.text)
+        self.assertIn('id="runtimeSafetyStateStoreList"', response.text)
+        self.assertIn("renderRuntimeSafetyStateStorePanel", response.text)
+        self.assertIn('"Runtime State Store"', response.text)
+        self.assertIn("runtime_safety_state_store_projection", response.text)
+        self.assertIn("item.snapshot_id", response.text)
+        self.assertIn("item?.map_target_ids", response.text)
         self.assertIn("hoverHint", response.text)
         self.assertIn("height: 100vh", response.text)
         self.assertIn("max-width: 100vw", response.text)

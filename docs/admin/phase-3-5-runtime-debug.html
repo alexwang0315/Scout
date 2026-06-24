@@ -2104,6 +2104,11 @@
                   <strong id="runtimeSafetyReducerCount">0</strong>
                   <p class="hint">多 gate reducer 與 Phase 1 adapter candidate。</p>
                 </div>
+                <div class="metric">
+                  <span>State store</span>
+                  <strong id="runtimeSafetyStateStoreCount">0</strong>
+                  <p class="hint">admin/debug 共用的 reducer candidate replay snapshot。</p>
+                </div>
               </div>
               <div class="list" id="skillList"></div>
             </section>
@@ -2515,6 +2520,7 @@
       physiologic_review_capsule: ["skill"],
       runtime_safety_reducer_dry_run: ["skill", "safety", "route-progress", "segment"],
       runtime_safety_phase1_adapter_result: ["skill", "safety"],
+      runtime_safety_state_store_snapshot: ["skill", "safety", "route-progress", "segment"],
       provider_status_recorded: ["provider"],
       outbound_message_queued: ["outbound", "message"],
       outbound_message_state_changed: ["outbound", "message"]
@@ -2544,6 +2550,7 @@
       physiologic_review_capsule: "HealthAutoExport review capsule 的只讀 projection。",
       runtime_safety_reducer_dry_run: "多 gate safety reducer dry-run；顯示候選 L_n，不直接改 Phase 1。",
       runtime_safety_phase1_adapter_result: "Phase 1 adapter candidate；需 feature flag 與 review，這裡不呼叫 safety mutation endpoint。",
+      runtime_safety_state_store_snapshot: "State-store replay snapshot；admin/debug 共用只讀 reducer candidate，不是 Phase 1 safety truth。",
       provider_status_recorded: "外部或本機 provider 狀態更新了。",
       outbound_message_queued: "Scout 想送出一則訊息，先放進 mock queue。",
       outbound_message_state_changed: "mock outbound 訊息狀態改變了。"
@@ -4781,15 +4788,20 @@
       const agentToolEvents = skillEvents.filter((event) => event.kind === "agent_tool_invocation");
       const spatialImprintEvents = skillEvents.filter((event) => (event.kind || "").startsWith("spatial_imprint_"));
       const physiologicEvents = skillEvents.filter((event) => (event.kind || "").startsWith("physiologic_"));
-      const runtimeSafetyReducerEvents = skillEvents.filter((event) => (event.kind || "").startsWith("runtime_safety_"));
+      const runtimeSafetyStateStoreEvents = skillEvents.filter((event) => event.kind === "runtime_safety_state_store_snapshot");
+      const runtimeSafetyReducerEvents = skillEvents.filter((event) =>
+        (event.kind || "").startsWith("runtime_safety_") &&
+        event.kind !== "runtime_safety_state_store_snapshot"
+      );
       document.getElementById("skillSummary").textContent = `${skillEvents.length} records`;
       document.getElementById("agentToolCount").textContent = String(agentToolEvents.length);
       document.getElementById("spatialImprintCount").textContent = String(spatialImprintEvents.length);
       document.getElementById("physiologicGateCount").textContent = String(physiologicEvents.length);
       document.getElementById("runtimeSafetyReducerCount").textContent = String(runtimeSafetyReducerEvents.length);
+      document.getElementById("runtimeSafetyStateStoreCount").textContent = String(runtimeSafetyStateStoreEvents.length);
       document.getElementById("skillSelectionContext").textContent = selectedWindowLabel(
         selectedEvent,
-        "顯示目前 timeline 範圍內的 Ln gate / skill run / physiologic gate / safety reducer projection。"
+        "顯示目前 timeline 範圍內的 Ln gate / skill run / physiologic gate / safety reducer / state-store replay projection。"
       );
       document.getElementById("skillList").innerHTML = skillEvents.length
         ? skillEvents.slice().reverse().map((event) => {

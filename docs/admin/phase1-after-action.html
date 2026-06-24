@@ -2016,6 +2016,11 @@
           <p class="read-only-note">Shared category projection aligned with /admin/pretrip. Counts are evidence classes only, not runtime safety truth.</p>
           <div id="evidenceTimelineList" class="evidence-timeline-list"></div>
         </section>
+        <section id="runtimeSafetyStateStorePanel" class="agent-skills-panel" aria-label="Runtime Safety State Store replay projection">
+          <h2>Runtime Safety State Store</h2>
+          <p class="read-only-note">Shared admin/debug read-only replay projection. It shows reducer candidate snapshots only; it does not call /safety/* or write Phase 1 state.</p>
+          <div id="runtimeSafetyStateStoreList" class="agent-skill-list"></div>
+        </section>
         <section id="agentSkillsPanel" class="agent-skills-panel" aria-label="Scout agent skills list">
           <h2>Scout Agent Skills</h2>
           <p class="read-only-note">Read-only registry projection. This admin page lists tools but does not execute skills or call live safety endpoints.</p>
@@ -2938,6 +2943,7 @@
           renderEnergyReserveMonitor(state.view);
           renderMap(state.view);
           renderEvidenceTree(state.view);
+          renderRuntimeSafetyStateStorePanel(state.view);
         }
         setDetail({
           ...(result.capability_timeline || {}),
@@ -3609,6 +3615,36 @@
       }
     }
 
+    function renderRuntimeSafetyStateStorePanel(view) {
+      const list = document.getElementById("runtimeSafetyStateStoreList");
+      if (!list) return;
+      list.replaceChildren();
+      const projection = view?.runtime_safety_state_store_projection || {};
+      const latest = projection.latest_snapshot || null;
+      const header = document.createElement("div");
+      header.className = "agent-skill-item";
+      header.innerHTML = `<strong>${projection.status || "missing"}</strong><small>${formatNumber(projection.snapshot_count || 0)} snapshots | ${projection.source_path || "no source ref"}</small>`;
+      list.appendChild(header);
+      if (latest) {
+        const item = document.createElement("div");
+        item.className = "agent-skill-item";
+        const title = document.createElement("strong");
+        title.textContent = latest.snapshot_id || "latest state snapshot";
+        const meta = document.createElement("small");
+        meta.textContent = `${latest.ln_level_candidate || "-"} | ${latest.reducer_state || "-"} | gate ${latest.selected_gate_id || "-"} | ${latest.recommendation || "-"}`;
+        const refs = document.createElement("small");
+        refs.textContent = `targets ${(latest.map_target_ids || []).join(", ") || "none"} | safety truth ${projection.boundary?.runtime_safety_truth === true}`;
+        item.appendChild(title);
+        item.appendChild(meta);
+        item.appendChild(refs);
+        list.appendChild(item);
+      }
+      const boundary = document.createElement("div");
+      boundary.className = "agent-skill-item";
+      boundary.innerHTML = `<strong>boundary</strong><small>projection_only=${projection.boundary?.projection_only === true} | phase1_l0_l4_state_mutated=${projection.boundary?.phase1_l0_l4_state_mutated === true} | safety_api_called=${projection.boundary?.safety_api_called === true}</small>`;
+      list.appendChild(boundary);
+    }
+
     function renderAgentSkillsPanel(view) {
       const list = document.getElementById("agentSkillsList");
       if (!list) return;
@@ -3919,6 +3955,9 @@
         if (item.source_id === "map_hazards") return Array.from(svg.querySelectorAll('[data-map-kind="hazard"]'));
         if (item.source_id === "map_pois") return Array.from(svg.querySelectorAll('[data-map-kind="poi"]'));
       }
+      if (Array.isArray(item?.map_target_ids) && item.map_target_ids.length) {
+        return item.map_target_ids.flatMap(targetId => Array.from(svg.querySelectorAll(`[data-source-id="${selectorValue(targetId)}"]`)));
+      }
       if (!id) return [];
       return Array.from(svg.querySelectorAll(`[data-source-id="${selectorValue(id)}"]`));
     }
@@ -3938,6 +3977,7 @@
         item.nearby_group_id,
         item.poi_id,
         item.incident_id,
+        item.snapshot_id,
         item.source_ref,
         item.label,
         item.from_node_id,
@@ -3969,6 +4009,9 @@
         ...(view?.overpass_evidence?.poi_candidates || []),
         ...(view?.risk_score?.points || []),
         ...(view?.incident_packages || []),
+        ...(view?.runtime_safety_state_store_projection?.latest_snapshot
+          ? [view.runtime_safety_state_store_projection.latest_snapshot]
+          : []),
         ...(view?.scout_reaction_simulation?.events || [])
       ];
     }
@@ -5297,6 +5340,14 @@
         label: item.safety_level,
         sublabel: `${item.observations_processed.toLocaleString()} observations | ${item.checkpoint_count} checkpoints | ${item.segment_capsule_count} capsules`
       }), false, "replay");
+      if (view.runtime_safety_state_store_projection) {
+        const projection = view.runtime_safety_state_store_projection;
+        const latest = projection.latest_snapshot ? [projection.latest_snapshot] : [];
+        appendEvidenceTreeGroup(tree, "info", "Runtime State Store", latest, item => ({
+          label: item.snapshot_id || projection.latest_snapshot_id || "state-store replay",
+          sublabel: `${item.ln_level_candidate || "-"} | ${item.reducer_state || "-"} | gate ${item.selected_gate_id || "-"} | ${projection.status}`
+        }), false, "timeline");
+      }
       appendEvidenceTreeGroup(tree, "default", "Checkpoints", view.mission.checkpoints, item => ({
         label: item.checkpoint_id,
         sublabel: `${item.checkpoint_type} | ${item.control_zone_after || "no zone"}`
@@ -5926,6 +5977,7 @@
         renderMap(view);
         renderEvidenceTree(view);
         renderEvidenceTimelinePanel(view);
+        renderRuntimeSafetyStateStorePanel(view);
         renderAgentSkillsPanel(view);
         renderCompletedTripRecordingPanel(view.completed_trip_recordings);
         renderScoutReactionSimulationPanel(view.scout_reaction_simulation);

@@ -153,14 +153,26 @@ flowchart LR
   MapFocus["[x] Timeline item -> map focus<br/>map_refs / segment_id"]
   GenericEvent["[x] Generic SafetyGateEvent<br/>multi-gate event contract"]
   Adapters["[x] Other gate adapters<br/>pace / delay / darkness / weather / environment"]
+  RouteFeed["[x] Local route-progress feed<br/>planned timeline + daylight"]
+  ShadowReplay["[x] Local shadow runtime replay<br/>macOS fixture pipeline"]
   SafetyReducer["[x] Multi-gate safety reducer dry-run<br/>candidate L_n decision"]
+  StateStore["[x] Durable reducer state store<br/>snapshot + rebuildable index"]
+  StoreProjection["[x] State-store replay projection<br/>admin + debug"]
+  AdminUI["[x] /admin evidence tree + panel<br/>latest reducer snapshot"]
   Phase1Adapter["[x] Controlled Phase 1 adapter result<br/>feature-flagged request only"]
 
   Artifacts --> Projection --> DebugView --> TimelineUI --> MapFocus
   Projection -. candidate only .-> GenericEvent
-  GenericEvent --> SafetyReducer
-  Adapters --> GenericEvent
+  GenericEvent --> ShadowReplay
+  RouteFeed --> Adapters
+  Adapters --> ShadowReplay
+  ShadowReplay --> SafetyReducer
+  SafetyReducer --> StateStore
+  StateStore --> StoreProjection
+  StoreProjection --> TimelineUI
+  StoreProjection --> AdminUI
   SafetyReducer --> Phase1Adapter
+  Phase1Adapter --> StateStore
   SafetyReducer --> TimelineUI
   Phase1Adapter --> TimelineUI
 ```
@@ -193,8 +205,12 @@ Implemented reducer / multi-gate safety slices:
 | 10. Escalation policy + hysteresis | `reduce_runtime_safety_gate_events()` | `[x]` weak single-gate suppression, hard-gate escalation, two-clear-window de-escalation |
 | 11. Admin/debug reducer rendering | `load_pretrip_debug_projection_view()` and `docs/admin/phase-3-5-runtime-debug.html` | `[x] runtime_safety_reducer_dry_run` and `runtime_safety_phase1_adapter_result` timeline events |
 | 12. Controlled Phase 1 adapter | `build_phase1_adapter_result()` | `[x]` feature-flagged reducer-owned transition request; no safety API call or Phase 1 mutation in this slice |
+| 13. Local route-progress feed wiring | `scout_runtime_route_gate_feeds.py` | `[x] scout_runtime_route_gate_feed_result`, local replay route progress to pace/delay/darkness `SafetyGateEvent` batch, no Raspberry Pi dependency |
+| 14. Durable reducer state store | `scout_runtime_safety_state_store.py` | `[x] scout_runtime_safety_state_snapshot` and `scout_runtime_safety_state_store_index`, local candidate replay/review store, no Phase 1 mutation |
+| 15. Local shadow runtime replay | `scout_runtime_shadow_replay.py` | `[x] scout_runtime_shadow_replay_result`, macOS-safe route/gate/reducer/adapter/state-store pipeline, no Scout hardware dependency |
+| 16. Admin + debug state-store replay | `scout_runtime_state_store_projection.py`, `load_pretrip_debug_projection_view()`, `build_admin_case_view()`, and admin/debug HTML | `[x] scout_runtime_state_store_replay_projection`, `runtime_safety_state_store_snapshot` debug timeline event, `/admin` evidence tree and panel |
 
-The generic reducer contract and slice 7-12 details are specified in
+The generic reducer contract and slice 7-16 details are specified in
 `docs/specs/scout-runtime-multi-gate-safety-reducer.md`.
 
 ## Safety Gate Role And Reducer Boundary

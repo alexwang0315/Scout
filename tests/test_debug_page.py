@@ -657,6 +657,10 @@ class DebugPageTests(unittest.TestCase):
             html,
         )
         self.assertIn(
+            'runtime_safety_state_store_snapshot: ["skill", "safety", "route-progress", "segment"]',
+            html,
+        )
+        self.assertIn(
             'physiologic_gate_window: "生理壓力 gate 的 15 分鐘窗口 projection；不是醫療診斷或 safety truth。"',
             html,
         )
@@ -669,6 +673,10 @@ class DebugPageTests(unittest.TestCase):
             html,
         )
         self.assertIn(
+            'runtime_safety_state_store_snapshot: "State-store replay snapshot；admin/debug 共用只讀 reducer candidate，不是 Phase 1 safety truth。"',
+            html,
+        )
+        self.assertIn(
             'const projectedMapRefs = Array.isArray(event?.map_refs) ? event.map_refs.filter(Boolean) : [];',
             html,
         )
@@ -678,8 +686,10 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('(event.kind || "").startsWith("runtime_safety_")', html)
         self.assertIn('id="physiologicGateCount"', html)
         self.assertIn('id="runtimeSafetyReducerCount"', html)
+        self.assertIn('id="runtimeSafetyStateStoreCount"', html)
         self.assertIn('document.getElementById("physiologicGateCount").textContent = String(physiologicEvents.length);', html)
         self.assertIn('document.getElementById("runtimeSafetyReducerCount").textContent = String(runtimeSafetyReducerEvents.length);', html)
+        self.assertIn('document.getElementById("runtimeSafetyStateStoreCount").textContent = String(runtimeSafetyStateStoreEvents.length);', html)
         self.assertIn("Show ${escapeHtml(group.count)} events", html)
         self.assertIn("function selectorValue", html)
         self.assertIn("function eventByTimelineNode", html)
