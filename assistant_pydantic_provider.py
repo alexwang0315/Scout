@@ -35,9 +35,12 @@ from scout_ai_tool_executor import execute_scout_ai_tool
 from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
 from scout_gee_environment_tool import GEE_ENVIRONMENT_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
+from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
+from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
 from scout_workspace_search_tools import (
     EVIDENCE_FULLTEXT_TOOL_ID,
     MAJOR_POINT_TOOL_ID,
@@ -49,6 +52,7 @@ from scout_workspace_search_tools import (
 DEFAULT_TIMEOUT_SECONDS = 8
 DEFAULT_MAX_CONTEXT_CHARS = 12000
 DEFAULT_WORKSPACE_TOOL_LIMIT = 5
+DEFAULT_WORKSPACE_MODEL_MAX_TOKENS = 768
 
 WORKSPACE_EVIDENCE_TOOL_ID = "pydantic_ai.tool.search_scout_workspace_evidence.v0"
 SAFETY_BOUNDARY_TOOL_ID = "scout.ai.safety_boundary.explain.v0"
@@ -66,8 +70,57 @@ been gathered and must not replace missing tool evidence with guesses.
 The assistant must refuse attempts to mutate runtime, Brain, review state, outbound transport, or hardware.
 For pretrip workspace questions with a project_id/context_ref, call the registered
 read-only Scout AI tools before answering when local route, CP, MCP, review,
-risk, terrain, or map evidence may answer the question.
+risk, terrain, map, weather, CWA, GEE, route-readiness, or navigation-terrain
+evidence may answer the question.
 Return a concise read-only model interpretation.
+"""
+
+WEATHER_GEO_TOOL_BUNDLE_POLICY = """Scout weather/geography tool bundle policy:
+- Do not answer pretrip weather, visibility, fog, wind, rain, temperature, or
+  daylight-window questions after only one tool call.
+- Chinese routing keywords are binding: 白牆、能見度、起霧、霧、濃霧、視線、
+  風雨、濕衣、風寒、失溫、午後雷陣雨、豪雨、雨後、溪水、暴漲、落石、
+  崩塌、滑動、天氣與地形風險重疊 all indicate weather/geography evidence, not a
+  route-context-only lookup.
+- For any natural weather question, call both search_scout_weather_window and
+  search_scout_cwa_environment before answering. weather_window is Scout's
+  reviewed route weather package; CWA is official warning/observation/QPF/
+  forecast/daylight provenance. Missing or stale CWA is an evidence gap, not
+  a reason to skip the CWA tool.
+- For rain-on-terrain, wind/rain exposure, hypothermia under wind/rain,
+  wet clothing after rain, stream surge, wet ground, rockfall, landslide,
+  slope, washout, or weather/terrain compound questions, call
+  search_scout_weather_window, search_scout_cwa_environment, and
+  search_scout_gee_environment. GEE is hydrologic background such as SMAP/GPM;
+  it does not replace official CWA evidence.
+- For weather-terrain overlap questions, including 天氣與地形風險是否重疊,
+  天氣地形疊加, 哪些地方雨後風險變高, where/which section/overlap/highest
+  risk after rain questions, add search_scout_risk_scores and
+  search_scout_terrain_scores.
+- Treat these as indivisible Scout tool bundles, not optional suggestions:
+  WEATHER_VISIBILITY_BUNDLE = search_scout_weather_window +
+  search_scout_cwa_environment.
+  RAIN_RISK_BUNDLE = search_scout_weather_window +
+  search_scout_cwa_environment + search_scout_gee_environment +
+  search_scout_risk_scores.
+  WEATHER_TERRAIN_OVERLAP_BUNDLE = search_scout_weather_window +
+  search_scout_cwa_environment + search_scout_gee_environment +
+  search_scout_risk_scores + search_scout_terrain_scores.
+  ROUTE_READINESS_ENV_BUNDLE = search_scout_route_readiness +
+  search_scout_weather_window + search_scout_cwa_environment +
+  search_scout_gee_environment.
+- For departure delay, go/no-go, or route readiness questions on a mountain
+  route, call search_scout_route_readiness, search_scout_weather_window,
+  search_scout_cwa_environment, and search_scout_gee_environment before
+  answering. GEE is candidate-only hydrologic background; missing GEE should be
+  reported as an evidence gap instead of silently skipped.
+- search_scout_route_context is for cultural, natural, briefing, observation
+  stop, CP/MCP/K mileage, OCR label, named point, and route-context questions.
+  It is not the primary tool for fog, whiteout, wind, rain, visibility, or
+  safety-weather decisions; those must not use route-context alone.
+- If a required tool returns missing/stale evidence, report that evidence gap
+  explicitly after calling the tool; never fill the gap with a guess and never
+  promote candidate evidence to runtime safety truth.
 """
 
 REGISTERED_WORKSPACE_TOOL_NAMES = {
@@ -78,6 +131,9 @@ REGISTERED_WORKSPACE_TOOL_NAMES = {
     RISK_SCORE_TOOL_ID: "search_scout_risk_scores",
     TERRAIN_SCORE_TOOL_ID: "search_scout_terrain_scores",
     MAP_PERCEPTION_TOOL_ID: "search_scout_map_perception",
+    WEATHER_WINDOW_TOOL_ID: "search_scout_weather_window",
+    ROUTE_READINESS_TOOL_ID: "search_scout_route_readiness",
+    NAVIGATION_TERRAIN_TOOL_ID: "search_scout_navigation_terrain",
     ROUTE_CONTEXT_TOOL_ID: "search_scout_route_context",
     CWA_ENVIRONMENT_TOOL_ID: "search_scout_cwa_environment",
     GEE_ENVIRONMENT_TOOL_ID: "search_scout_gee_environment",
@@ -90,6 +146,8 @@ def build_workspace_tool_prompt(*, include_contract_only: bool = False) -> str:
         "Available read-only Scout AI tools from scout_ai_tool_registry:",
         "- search_scout_workspace_evidence(query, limit=5, evidence_types=None) "
         "[legacy local evidence index; read-only]",
+        "",
+        WEATHER_GEO_TOOL_BUNDLE_POLICY,
     ]
     for contract in registry.tools:
         if (
@@ -113,8 +171,23 @@ def build_workspace_tool_prompt(*, include_contract_only: bool = False) -> str:
         "Use these tools to search Scout's local pretrip workspace evidence before "
         "answering questions about route notes, CP/checkpoints, MCP/major critical "
         "points, named places, map evidence, review queue, risk scores, terrain, "
-        "route context, route briefing, observation stops, CWA official weather "
+        "route context, route briefing, observation stops, weather windows, "
+        "route readiness, navigation-terrain readiness, CWA official weather "
         "environment artifacts, GEE SMAP/GPM hydrologic artifacts, or planning artifacts. "
+        "For natural weather questions, including 白牆, 起霧, 能見度, 風雨, 風寒, "
+        "失溫, and 濕衣 questions, call search_scout_weather_window and "
+        "search_scout_cwa_environment together; add search_scout_gee_environment "
+        "when rain/wet-ground/geography compound evidence may matter. "
+        "For official warning, observation, QPF, forecast, daylight/moonlight, "
+        "or CWA provenance questions, call search_scout_cwa_environment. "
+        "For rain, stream surge, wet terrain, rockfall, landslide, or weather-terrain "
+        "compound questions, call search_scout_weather_window, "
+        "search_scout_cwa_environment, and search_scout_gee_environment as a "
+        "bundle. For 天氣與地形風險重疊, 天氣地形疊加, or location-ranked "
+        "rain/terrain overlap, also call search_scout_risk_scores and "
+        "search_scout_terrain_scores. For departure "
+        "delay, route readiness, or Go/No-Go questions, call "
+        "search_scout_route_readiness plus weather_window, CWA, and GEE. "
         "For route briefing or route-context presentation requests, apply Scout's "
         "media quality gate: prefer route-specific photos/maps and reject website "
         "chrome, SVG icons, logos, tracking pixels, social widgets, unrelated brand "
@@ -154,6 +227,24 @@ def _prompt_args_for_tool(tool_id: str) -> str:
             'query, limit=6, evidence_types=None, cp=None, lat=None, lon=None, '
             "radius_m=None, sort=\"auto\""
         )
+    if tool_id == WEATHER_WINDOW_TOOL_ID:
+        return (
+            "query, limit=6, current_time=None, valid_from=None, valid_to=None, "
+            "segment=None, include_segments=True, stale_after_hours=None"
+        )
+    if tool_id == ROUTE_READINESS_TOOL_ID:
+        return (
+            "query, user_experience_level=None, user_goal=None, "
+            "weather_reviewed=None, daylight_reviewed=None, "
+            "equipment_confirmed=None, remote_contact_confirmed=None"
+        )
+    if tool_id == NAVIGATION_TERRAIN_TOOL_ID:
+        return (
+            "query, offline_map_downloaded=None, gpx_loaded_on_device=None, "
+            "contour_skill_confirmed=None, terrain_feature_skill_confirmed=None, "
+            "junction_points_known=None, retreat_direction_understood=None, "
+            "backup_positioning_available=None, terrain_risk_layers_understood=None"
+        )
     if tool_id == ROUTE_CONTEXT_TOOL_ID:
         return (
             "query, limit=6, context_types=None, cp=None, "
@@ -187,6 +278,12 @@ def _registered_tool_descriptions() -> dict[str, str]:
                 " For route reference lookup questions, use this tool for CP/MCP/K "
                 "mileage anchors, OCR labels, route notes, named points, and "
                 "\"where is / near which point / can I trust this label\" queries. "
+                " Do not use route context as the primary tool for fog, whiteout, "
+                "visibility, wind, rain, weather-window, hydrology, rockfall, "
+                "landslide, or departure safety questions. Chinese terms such as "
+                "白牆、起霧、能見度、風雨、風寒、失溫、濕衣、雨後、溪水暴漲、落石、"
+                "天氣與地形風險重疊 must route to weather_window/CWA/GEE and "
+                "risk/terrain/readiness as applicable, not route-context alone. "
                 "Return candidate-only location, source refs, review state, and "
                 "confidence notes; never promote the answer to runtime safety truth."
                 " For route briefing outputs, enforce the Scout media quality gate: "
@@ -194,17 +291,45 @@ def _registered_tool_descriptions() -> dict[str, str]:
                 "tracking/social widgets, and report visual evidence gaps instead "
                 "of substituting placeholders."
             )
+        if contract.tool_id == WEATHER_WINDOW_TOOL_ID:
+            descriptions[contract.tool_id] += (
+                " Use this for natural weather, fog, wind, rain, daylight, "
+                "shelter/camp, and weather-window questions. It reads prepared "
+                "workspace artifacts only and does not call live weather providers. "
+                "For any weather question, pair this with search_scout_cwa_environment "
+                "before answering. For 風雨、失溫、濕衣、雨後、溪水、落石、崩塌、天氣地形"
+                "重疊, rain-on-terrain, or hydrology compounds, also pair with "
+                "search_scout_gee_environment."
+            )
+        if contract.tool_id == ROUTE_READINESS_TOOL_ID:
+            descriptions[contract.tool_id] += (
+                " Use this for pretrip departure, delay, route readiness, and "
+                "Go/No-Go review questions. It cannot approve departure or mutate "
+                "runtime safety truth. Pair it with weather_window, CWA, and GEE "
+                "for mountain departure delay or go/no-go answers."
+            )
+        if contract.tool_id == NAVIGATION_TERRAIN_TOOL_ID:
+            descriptions[contract.tool_id] += (
+                " Use this for map readiness, offline map/GPX, terrain navigation, "
+                "retreat direction, and backup positioning questions."
+            )
         if contract.tool_id == CWA_ENVIRONMENT_TOOL_ID:
             descriptions[contract.tool_id] += (
                 " Use this for official CWA warning, observation, QPF, forecast, "
                 "daylight/moonlight, tide/marine, and provenance questions. It reads "
-                "prepared workspace artifacts only; it does not call CWA live."
+                "prepared workspace artifacts only; it does not call CWA live. "
+                "It is required alongside weather_window for pretrip weather answers; "
+                "missing or stale CWA must be reported as an evidence gap."
             )
         if contract.tool_id == GEE_ENVIRONMENT_TOOL_ID:
             descriptions[contract.tool_id] += (
                 " Use this for GEE SMAP L4 soil moisture, GPM IMERG antecedent rain, "
                 "hydrologic background, grid, timeseries, and provenance questions. "
-                "It reads prepared workspace artifacts only; it does not initialize GEE."
+                "It reads prepared workspace artifacts only; it does not initialize GEE. "
+                "Use it with weather_window and CWA for rain, stream surge, wet terrain, "
+                "wind/rain hypothermia, rockfall, landslide, and weather/terrain "
+                "compound questions; it does "
+                "not replace official CWA evidence."
             )
     return descriptions
 
@@ -620,6 +745,141 @@ class ScoutWorkspaceToolContext:
         self.invocations.append(result)
         return result
 
+    def search_scout_weather_window(
+        self,
+        query: str,
+        limit: int | None = None,
+        current_time: str | None = None,
+        valid_from: str | None = None,
+        valid_to: str | None = None,
+        segment: str | None = None,
+        include_segments: bool = True,
+        stale_after_hours: float | None = None,
+    ) -> dict[str, object]:
+        search_text = str(query or "").strip()
+        bounded_limit = _bounded_tool_limit(limit, default_limit=6)
+        project_root = self._project_root()
+        if project_root is None:
+            result = self._tool_error(
+                "pretrip_workspace_unavailable",
+                search_text,
+                bounded_limit,
+                tool_id=WEATHER_WINDOW_TOOL_ID,
+            )
+            self.invocations.append(result)
+            return result
+        try:
+            result = self._execute_registered_tool(
+                WEATHER_WINDOW_TOOL_ID,
+                query=search_text,
+                limit=bounded_limit,
+                current_time=current_time,
+                valid_from=valid_from,
+                valid_to=valid_to,
+                segment=segment,
+                include_segments=include_segments,
+                stale_after_hours=stale_after_hours,
+            )
+        except Exception as exc:  # Defensive: tool failures must stay read-only.
+            result = self._tool_error(
+                type(exc).__name__,
+                search_text,
+                bounded_limit,
+                tool_id=WEATHER_WINDOW_TOOL_ID,
+            )
+        self.invocations.append(result)
+        return result
+
+    def search_scout_route_readiness(
+        self,
+        query: str,
+        user_experience_level: str | None = None,
+        user_goal: str | None = None,
+        weather_reviewed: bool | None = None,
+        daylight_reviewed: bool | None = None,
+        equipment_confirmed: bool | None = None,
+        remote_contact_confirmed: bool | None = None,
+    ) -> dict[str, object]:
+        search_text = str(query or "").strip()
+        project_root = self._project_root()
+        if project_root is None:
+            result = self._tool_error(
+                "pretrip_workspace_unavailable",
+                search_text,
+                1,
+                tool_id=ROUTE_READINESS_TOOL_ID,
+            )
+            self.invocations.append(result)
+            return result
+        try:
+            result = self._execute_registered_tool(
+                ROUTE_READINESS_TOOL_ID,
+                query=search_text,
+                limit=1,
+                user_experience_level=user_experience_level,
+                user_goal=user_goal,
+                weather_reviewed=weather_reviewed,
+                daylight_reviewed=daylight_reviewed,
+                equipment_confirmed=equipment_confirmed,
+                remote_contact_confirmed=remote_contact_confirmed,
+            )
+        except Exception as exc:  # Defensive: tool failures must stay read-only.
+            result = self._tool_error(
+                type(exc).__name__,
+                search_text,
+                1,
+                tool_id=ROUTE_READINESS_TOOL_ID,
+            )
+        self.invocations.append(result)
+        return result
+
+    def search_scout_navigation_terrain(
+        self,
+        query: str,
+        offline_map_downloaded: bool | None = None,
+        gpx_loaded_on_device: bool | None = None,
+        contour_skill_confirmed: bool | None = None,
+        terrain_feature_skill_confirmed: bool | None = None,
+        junction_points_known: bool | None = None,
+        retreat_direction_understood: bool | None = None,
+        backup_positioning_available: bool | None = None,
+        terrain_risk_layers_understood: bool | None = None,
+    ) -> dict[str, object]:
+        search_text = str(query or "").strip()
+        project_root = self._project_root()
+        if project_root is None:
+            result = self._tool_error(
+                "pretrip_workspace_unavailable",
+                search_text,
+                1,
+                tool_id=NAVIGATION_TERRAIN_TOOL_ID,
+            )
+            self.invocations.append(result)
+            return result
+        try:
+            result = self._execute_registered_tool(
+                NAVIGATION_TERRAIN_TOOL_ID,
+                query=search_text,
+                limit=1,
+                offline_map_downloaded=offline_map_downloaded,
+                gpx_loaded_on_device=gpx_loaded_on_device,
+                contour_skill_confirmed=contour_skill_confirmed,
+                terrain_feature_skill_confirmed=terrain_feature_skill_confirmed,
+                junction_points_known=junction_points_known,
+                retreat_direction_understood=retreat_direction_understood,
+                backup_positioning_available=backup_positioning_available,
+                terrain_risk_layers_understood=terrain_risk_layers_understood,
+            )
+        except Exception as exc:  # Defensive: tool failures must stay read-only.
+            result = self._tool_error(
+                type(exc).__name__,
+                search_text,
+                1,
+                tool_id=NAVIGATION_TERRAIN_TOOL_ID,
+            )
+        self.invocations.append(result)
+        return result
+
     def search_scout_route_context(
         self,
         query: str,
@@ -804,6 +1064,15 @@ class ScoutWorkspaceToolContext:
         elif latest_tool_id == MAP_PERCEPTION_TOOL_ID:
             source_path = "assistant_pydantic_provider.search_scout_map_perception"
             evidence_type = "assistant_map_perception_tool_invocation"
+        elif latest_tool_id == WEATHER_WINDOW_TOOL_ID:
+            source_path = "assistant_pydantic_provider.search_scout_weather_window"
+            evidence_type = "assistant_weather_window_tool_invocation"
+        elif latest_tool_id == ROUTE_READINESS_TOOL_ID:
+            source_path = "assistant_pydantic_provider.search_scout_route_readiness"
+            evidence_type = "assistant_route_readiness_tool_invocation"
+        elif latest_tool_id == NAVIGATION_TERRAIN_TOOL_ID:
+            source_path = "assistant_pydantic_provider.search_scout_navigation_terrain"
+            evidence_type = "assistant_navigation_terrain_tool_invocation"
         elif latest_tool_id == ROUTE_CONTEXT_TOOL_ID:
             source_path = "assistant_pydantic_provider.search_scout_route_context"
             evidence_type = "assistant_route_context_tool_invocation"
@@ -1886,6 +2155,7 @@ class PydanticAIEnvRunner:
         token_env_var: str | None = None,
         api_key: str | None = None,
         profile_name: str | None = None,
+        workspace_model_max_tokens: int | None = None,
     ):
         self.model_name = model_name or os.getenv(
             "SCOUT_AI_ASSISTANT_MODEL",
@@ -1896,6 +2166,9 @@ class PydanticAIEnvRunner:
         self.token_env_var = token_env_var
         self.api_key = api_key
         self.profile_name = profile_name
+        self.workspace_model_max_tokens = (
+            workspace_model_max_tokens or _workspace_model_max_tokens_from_env()
+        )
         self.last_workspace_tool_invocations: list[dict[str, object]] = []
 
     @classmethod
@@ -1917,6 +2190,9 @@ class PydanticAIEnvRunner:
                 else None
             ),
             profile_name=profile.profile,
+            workspace_model_max_tokens=_workspace_model_max_tokens_from_env(
+                environ=resolved_environ
+            ),
         )
 
     def connect(self, *, timeout_seconds: int) -> None:
@@ -2162,6 +2438,81 @@ class PydanticAIEnvRunner:
             )
 
         @agent.tool_plain(
+            name="search_scout_weather_window",
+            description=tool_descriptions[WEATHER_WINDOW_TOOL_ID],
+        )
+        def search_scout_weather_window(
+            query: str,
+            limit: int = 6,
+            current_time: str | None = None,
+            valid_from: str | None = None,
+            valid_to: str | None = None,
+            segment: str | None = None,
+            include_segments: bool = True,
+            stale_after_hours: float | None = None,
+        ) -> dict[str, object]:
+            return tool_context.search_scout_weather_window(
+                query=query,
+                limit=limit,
+                current_time=current_time,
+                valid_from=valid_from,
+                valid_to=valid_to,
+                segment=segment,
+                include_segments=include_segments,
+                stale_after_hours=stale_after_hours,
+            )
+
+        @agent.tool_plain(
+            name="search_scout_route_readiness",
+            description=tool_descriptions[ROUTE_READINESS_TOOL_ID],
+        )
+        def search_scout_route_readiness(
+            query: str,
+            user_experience_level: str | None = None,
+            user_goal: str | None = None,
+            weather_reviewed: bool | None = None,
+            daylight_reviewed: bool | None = None,
+            equipment_confirmed: bool | None = None,
+            remote_contact_confirmed: bool | None = None,
+        ) -> dict[str, object]:
+            return tool_context.search_scout_route_readiness(
+                query=query,
+                user_experience_level=user_experience_level,
+                user_goal=user_goal,
+                weather_reviewed=weather_reviewed,
+                daylight_reviewed=daylight_reviewed,
+                equipment_confirmed=equipment_confirmed,
+                remote_contact_confirmed=remote_contact_confirmed,
+            )
+
+        @agent.tool_plain(
+            name="search_scout_navigation_terrain",
+            description=tool_descriptions[NAVIGATION_TERRAIN_TOOL_ID],
+        )
+        def search_scout_navigation_terrain(
+            query: str,
+            offline_map_downloaded: bool | None = None,
+            gpx_loaded_on_device: bool | None = None,
+            contour_skill_confirmed: bool | None = None,
+            terrain_feature_skill_confirmed: bool | None = None,
+            junction_points_known: bool | None = None,
+            retreat_direction_understood: bool | None = None,
+            backup_positioning_available: bool | None = None,
+            terrain_risk_layers_understood: bool | None = None,
+        ) -> dict[str, object]:
+            return tool_context.search_scout_navigation_terrain(
+                query=query,
+                offline_map_downloaded=offline_map_downloaded,
+                gpx_loaded_on_device=gpx_loaded_on_device,
+                contour_skill_confirmed=contour_skill_confirmed,
+                terrain_feature_skill_confirmed=terrain_feature_skill_confirmed,
+                junction_points_known=junction_points_known,
+                retreat_direction_understood=retreat_direction_understood,
+                backup_positioning_available=backup_positioning_available,
+                terrain_risk_layers_understood=terrain_risk_layers_understood,
+            )
+
+        @agent.tool_plain(
             name="search_scout_route_context",
             description=tool_descriptions[ROUTE_CONTEXT_TOOL_ID],
         )
@@ -2225,7 +2576,14 @@ class PydanticAIEnvRunner:
             )
 
         tool_prompt = f"{WORKSPACE_TOOL_PROMPT}\n{prompt}"
-        result = agent.run_sync(tool_prompt, model_settings={"max_tokens": 768})
+        result = agent.run_sync(
+            tool_prompt,
+            model_settings={
+                "max_tokens": self.workspace_model_max_tokens,
+                "temperature": 0,
+                "parallel_tool_calls": True,
+            },
+        )
         self.last_workspace_tool_invocations = list(tool_context.invocations)
         return str(pydantic_result_output(result))
 
@@ -2543,6 +2901,9 @@ def _without_workspace_tool_sources(
             RISK_SCORE_TOOL_ID,
             TERRAIN_SCORE_TOOL_ID,
             MAP_PERCEPTION_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            ROUTE_READINESS_TOOL_ID,
+            NAVIGATION_TERRAIN_TOOL_ID,
             WORKSPACE_CATALOG_TOOL_ID,
             ROUTE_STRUCTURE_TOOL_ID,
             MAJOR_POINT_TOOL_ID,
@@ -2845,6 +3206,24 @@ def _dedupe_preserving_order(values: list[str]) -> list[str]:
         seen.add(value)
         deduped.append(value)
     return deduped
+
+
+def _workspace_model_max_tokens_from_env(
+    *,
+    environ: dict[str, str] | None = None,
+) -> int:
+    resolved_environ = environ or os.environ
+    raw_value = str(
+        resolved_environ.get(
+            "SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS",
+            DEFAULT_WORKSPACE_MODEL_MAX_TOKENS,
+        )
+    ).strip()
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return DEFAULT_WORKSPACE_MODEL_MAX_TOKENS
+    return max(256, min(parsed, 4096))
 
 
 def _connect_runner(runner: PydanticAIRunner, *, timeout_seconds: int) -> None:

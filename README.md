@@ -115,10 +115,10 @@ For OpenRouter, put `OPENROUTER_API_KEY=...` in the repo-local `.env` file.
 The smoke command loads `<repo-root>/.env` by default and reports only whether
 the key is present, never the key value. Model selection precedence is
 `--model`, then `SCOUT_AI_OS_MODEL`, then local `FunctionModel`. Common aliases
-such as `gpt-4o-mini` and `gemma3-27b` normalize to OpenRouter model strings:
+such as `glm-5.2`, `gpt-4o-mini`, and `gemma3-27b` normalize to OpenRouter model strings:
 
 ```bash
-./venv/bin/scout-ai-os-pydantic-smoke --model openrouter:openai/gpt-4o-mini
+./venv/bin/scout-ai-os-pydantic-smoke --model glm-5.2
 ```
 
 If an external model is selected but its required credential is missing, the
