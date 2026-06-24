@@ -649,7 +649,23 @@ class DebugPageTests(unittest.TestCase):
             html,
         )
         self.assertIn(
+            'runtime_safety_reducer_dry_run: ["skill", "safety", "route-progress", "segment"]',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_phase1_adapter_result: ["skill", "safety"]',
+            html,
+        )
+        self.assertIn(
             'physiologic_gate_window: "生理壓力 gate 的 15 分鐘窗口 projection；不是醫療診斷或 safety truth。"',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_reducer_dry_run: "多 gate safety reducer dry-run；顯示候選 L_n，不直接改 Phase 1。"',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_phase1_adapter_result: "Phase 1 adapter candidate；需 feature flag 與 review，這裡不呼叫 safety mutation endpoint。"',
             html,
         )
         self.assertIn(
@@ -659,8 +675,11 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('projectedMapRefs.forEach(ref => refs.add(ref));', html)
         self.assertIn('"physiologic_gate_window"', html)
         self.assertIn('(event.kind || "").startsWith("physiologic_")', html)
+        self.assertIn('(event.kind || "").startsWith("runtime_safety_")', html)
         self.assertIn('id="physiologicGateCount"', html)
+        self.assertIn('id="runtimeSafetyReducerCount"', html)
         self.assertIn('document.getElementById("physiologicGateCount").textContent = String(physiologicEvents.length);', html)
+        self.assertIn('document.getElementById("runtimeSafetyReducerCount").textContent = String(runtimeSafetyReducerEvents.length);', html)
         self.assertIn("Show ${escapeHtml(group.count)} events", html)
         self.assertIn("function selectorValue", html)
         self.assertIn("function eventByTimelineNode", html)

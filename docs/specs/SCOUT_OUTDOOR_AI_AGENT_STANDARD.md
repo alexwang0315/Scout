@@ -242,6 +242,13 @@ runtime safety gate 組成：`pace_gate`（配速過慢）、`delay_gate`（時�
 可以透過 `SafetyGateEvent -> Safety Arbiter / State Reducer -> L_n transition`
 影響 Phase 1 safety state。它不能私自覆寫 Phase 1、不能繞過 reducer 直接呼叫
 `/safety/*`，也不能自行送出 SOS / SMS / satellite / LoRaWAN 等 outbound alert。
+六個 runtime safety gate 的共用 event contract 與後續 reducer roadmap 另見
+`docs/specs/scout-runtime-multi-gate-safety-reducer.md`。目前已完成的
+deterministic slice 7-12 包含非生理 gate adapters、multi-gate reducer
+dry-run、escalation/hysteresis policy、`/admin/debug` reducer timeline
+projection，以及 feature-flagged reducer-owned Phase 1 adapter result。這些
+artifact 可產生 `L_n` transition candidate；實際 Phase 1 mutation 仍必須走
+受控 adapter 與後續 runtime service，不能由單一 gate 私自完成。
 
 ### 7.2 Scout Pace Coefficient
 

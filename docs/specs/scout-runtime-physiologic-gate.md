@@ -151,10 +151,18 @@ flowchart LR
   DebugView["[x] /admin/debug projection view<br/>optional physio refs"]
   TimelineUI["[x] Runtime debug timeline<br/>hints + grouping + skill count"]
   MapFocus["[x] Timeline item -> map focus<br/>map_refs / segment_id"]
-  SafetyReducer["[ ] Future safety reducer<br/>multi-gate L_n decision"]
+  GenericEvent["[x] Generic SafetyGateEvent<br/>multi-gate event contract"]
+  Adapters["[x] Other gate adapters<br/>pace / delay / darkness / weather / environment"]
+  SafetyReducer["[x] Multi-gate safety reducer dry-run<br/>candidate L_n decision"]
+  Phase1Adapter["[x] Controlled Phase 1 adapter result<br/>feature-flagged request only"]
 
   Artifacts --> Projection --> DebugView --> TimelineUI --> MapFocus
-  Projection -. candidate only .-> SafetyReducer
+  Projection -. candidate only .-> GenericEvent
+  GenericEvent --> SafetyReducer
+  Adapters --> GenericEvent
+  SafetyReducer --> Phase1Adapter
+  SafetyReducer --> TimelineUI
+  Phase1Adapter --> TimelineUI
 ```
 
 The projection is the admin/debug timeline input contract. It keeps events
@@ -174,6 +182,20 @@ sortable and clickable without exposing raw wearable or route payloads:
 `physiologic-gate` resident startup is explicit. It is enabled with
 `SCOUT_PHYSIOLOGIC_GATE_AUTOSTART=true` or explicit physiologic source config,
 and it reads `sensorlogger_mqtt_sensor_vitals_records.jsonl` by default.
+
+Implemented reducer / multi-gate safety slices:
+
+| Reducer slice | Implemented surface | Artifact/output |
+| --- | --- | --- |
+| 7. Generic SafetyGateEvent contract | `scout_runtime_safety_gate_models.py` | `[x] scout_runtime_safety_gate_event`, `scout_runtime_safety_gate_event_batch`, and `runtime_safety_gate_event_from_physiologic()` |
+| 8. Gate adapters | `scout_runtime_safety_gate_adapters.py` | `[x]` pace, delay, darkness, weather, and environment threat adapters |
+| 9. Multi-gate reducer dry-run | `scout_runtime_safety_reducer.py` | `[x] scout_runtime_safety_reducer_dry_run`, no Phase 1 mutation |
+| 10. Escalation policy + hysteresis | `reduce_runtime_safety_gate_events()` | `[x]` weak single-gate suppression, hard-gate escalation, two-clear-window de-escalation |
+| 11. Admin/debug reducer rendering | `load_pretrip_debug_projection_view()` and `docs/admin/phase-3-5-runtime-debug.html` | `[x] runtime_safety_reducer_dry_run` and `runtime_safety_phase1_adapter_result` timeline events |
+| 12. Controlled Phase 1 adapter | `build_phase1_adapter_result()` | `[x]` feature-flagged reducer-owned transition request; no safety API call or Phase 1 mutation in this slice |
+
+The generic reducer contract and slice 7-12 details are specified in
+`docs/specs/scout-runtime-multi-gate-safety-reducer.md`.
 
 ## Safety Gate Role And Reducer Boundary
 
