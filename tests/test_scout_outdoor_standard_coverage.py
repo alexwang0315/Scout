@@ -368,7 +368,7 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "State-store replay projection" in standard_text
     assert "runtime_safety_reducer_dry_run" in physiologic_spec
     assert "runtime_safety_phase1_adapter_result" in physiologic_spec
-    assert "deterministic slice 7-24" in standard_text
+    assert "deterministic slice 7-32" in standard_text
     assert "requires_safety_reducer_for_ln_transition" in physiologic_spec
     assert "Physiologic-First Safety Template" in physiologic_spec
     assert "physiologic-first safety template" in standard_text
@@ -398,6 +398,28 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "outbound policy is separate" in standard_text
     assert "The outbound policy is separate" in physiologic_spec
     assert "The outbound policy is separate" in reducer_spec
+    assert "scout_alert_application_layer.py" in standard_text
+    assert "scout_alert_application_layer.py" in physiologic_spec
+    assert "scout_alert_application_layer.py" in reducer_spec
+    assert "scout_alert_application_packet" in standard_text
+    assert "scout_alert_application_packet" in physiologic_spec
+    assert "scout_alert_application_packet" in reducer_spec
+    assert "scout_emergency_packet" in standard_text
+    assert "scout_emergency_packet" in physiologic_spec
+    assert "scout_emergency_packet" in reducer_spec
+    assert "render_sms_text()" in reducer_spec
+    assert "render_lora_compact()" in reducer_spec
+    assert "render_mqtt_json()" in reducer_spec
+    assert "decide_outbound_policy()" in reducer_spec
+    assert "run_alert_application_dry_run()" in reducer_spec
+    assert "alert_application_projection_events()" in reducer_spec
+    assert "scout_outbound_policy_decision" in reducer_spec
+    assert "scout_outbound_message_evidence" in reducer_spec
+    assert "scout_alert_application_dry_run_result" in reducer_spec
+    assert "Admin/debug timeline projection event" in reducer_spec
+    assert "external_send_allowed=false" in reducer_spec
+    assert "sent=false" in standard_text
+    assert "sent=false" in reducer_spec
 
     for required in (
         "source_provider=apple_healthkit",
