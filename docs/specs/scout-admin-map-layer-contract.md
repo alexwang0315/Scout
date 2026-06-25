@@ -43,6 +43,79 @@ This distinction is intentional:
 - `completed-track` is after-action/admin only; it must be absent from
   `/admin/pretrip` and `/admin/debug` controls but present on `/admin`.
 
+## Tile Provider And Cache Policy
+
+The admin map supports many basemap providers, but only one rendered-map source
+is currently allowed to enter route-bbox cache preparation:
+
+```text
+Rudy+TW = preparation cache + OCR + rendered hiking POI evidence
+All other WMTS/XYZ basemaps = runtime tile delivery only
+```
+
+`Rudy+TW`（Rudy 疊 TW 登山圖） is the authoritative rendered hiking map source
+for Scout's stable trail POI extraction. It may be cached for the selected
+route bbox and used by OCR/icon extraction to produce mileage K anchors,
+trail-name labels, temples/buildings, power-line/tower cues, communication
+labels, and other `rendered_map_poi_candidate` evidence.
+
+The following layers must be runtime tile providers only unless a future ADR or
+spec explicitly changes their source role:
+
+- NLSC WMTS layers such as `EMAP5`, `PHOTO_MIX`, `PHOTO2025`, `B5000`,
+  `TOPO25K_114`, `MOI_HILLSHADE`, `MOI_SHADERMAP`, `MOI_SLOPEP_LV7_2`,
+  `GeoSensitive2`, and `DDEM05`;
+- OSM XYZ/WMTS/vector tile layers used for public/city/lowland readability;
+- TWMap or other public WMTS/XYZ visual layers;
+- Rudy without the TW overlay, unless separately promoted to an OCR source.
+
+Runtime tile layers may use browser cache or the admin tile proxy for display,
+zoom fallback, and provider isolation. They must not be bulk pre-cut into
+`/data/scout/raster-tiles` by map preparation, and their absence from
+`pretrip_layer_preparation.py` outputs is not a failed layer. This is especially
+important for NLSC and OSM: they are valuable runtime basemaps, but they are not
+the hiking POI authority in the current pretrip preparation design.
+
+Historical/reference GPX notes remain route-condition evidence. They may
+support hazard freshness, slow-passage interpretation, detour context, MCP/Boss
+pressure, and candidate explanations. They should not be the primary source for
+stable POI facts when Rudy+TW rendered-map evidence is available.
+
+### NLSC No-Application Services
+
+The operator-provided
+`~/Downloads/免申請服務介接說明表.pdf` is the current no-application service catalog
+from NLSC（內政部國土測繪中心）. The table is dated `113/1/3`
+（2024-01-03） and lists WMTS/WMS/API candidates that Scout can integrate
+without a separate application step.
+
+This contract treats those services as runtime provider candidates. They should
+be added to the map provider registry and surfaced through layer controls after
+the implementation verifies each service through WMTS/WMS `GetCapabilities` or
+NLSC `MapLayerInfo`（圖層圖資說明）. They must not be bulk cached by pretrip map
+preparation unless a later spec explicitly changes the source role.
+
+Catalog groups to preserve in the provider registry:
+
+| Provider group | NLSC codes | UI role |
+|----------------|------------|---------|
+| NLSC electronic maps | `EMAP`/`EMAP5`, `EMAP6`, `EMAP15`, `EMAP16`, `EMAP01`, `EMAP2`, `EMAP12`, `EMAP9`, `EMAP8`, `EMAP7`, `EMAP5_OPENDATA`, `EMAP6_OPENDATA`, `EMAP3826`, `EMAP3525` | Basemap and transparent overlay options. Good for general/city routes and non-hiking readability. |
+| NLSC orthophoto | `PHOTO2`, `PHOTO_MIX`, `PHOTO3826` | Runtime imagery basemap; bottom visual layer. |
+| NLSC land-use | `LUIMAP`, `LUIMAP*`, `COM_017 LandUsePointQuery` | Optional land-use overlay or point-query context. |
+| NLSC topo/aerial products | `B5000`, `B25000`, `B50000`, `B100000`, `TOPO01K*`, `TOPO05K*`, `P5K*` | Runtime topographic or aerial reference overlays. |
+| NLSC UAS orthophoto | `UAV*` | High-value runtime imagery for route revalidation, post-disaster visual comparison, and local slope/washout/landslide/riverbed change review. Must be a first-class provider group, not buried under generic topo products. |
+| NLSC admin/cadastral/facility | `SCHOOL`, `ConvenienceStore`, `ROAD`, `LANDSECT`, `LANDSECT2`, `LandOffice`, `CITY`, `TOWN`, `Village` | Runtime context overlays or API-backed supporting evidence. |
+| NLSC terrain-derived maps | `MOI_ASPECT`, `MOI_CONTOUR_2`, `MOI_CONTOUR`, `MOI_HILLSHADE`, `MOI_SHADERMAP`, `MOI_SLOPEP_GT30_2`, `MOI_SLOPEP_GT30`, `MOI_SLOPEP_LV7_2`, `MOI_SLOPEP_LV7` | Runtime terrain reference overlays; complementary to Scout DEM/DTM evidence. |
+| NLSC open APIs | `COM_001`-`COM_017` | Route-context queries, administrative joins, road/intersection lookup, facility buffers, and layer metadata. |
+| NLSC map-entry APIs | `WEB_001`-`WEB_005` | External deep-link/open-in-NLSC-map support only. |
+
+Layer families with `*` are multi-layer families. The UI must discover the
+actual layer ids from capabilities/metadata before listing every child layer.
+Do not hardcode one `LUIMAP*`, `TOPO*`, `P5K*`, or `UAV*` child as if it were
+the whole family. `UAV*` deserves separate coverage/year metadata, because UAS
+orthophoto（無人飛行載具航拍正射影像） can be far more valuable than ordinary
+basemaps for local route-condition review.
+
 ## Regression Notes From Operator Reruns
 
 The following mistakes are easy to repeat and are considered contract
@@ -52,8 +125,18 @@ regressions:
   the UI contract contains 32 layers. The missing nine are runtime-only or
   post-process/UI contract layers, not preparation inputs.
 - Treating `rudy` or `rudy-twmap` as failed just because they do not appear in
-  `pretrip_layer_preparation.py --layers`. They are WMTS/runtime layers, while
-  Rudy+TW may still be used as the OCR source during preparation.
+  `pretrip_layer_preparation.py --layers`. Their UI controls are runtime layer
+  controls; Rudy+TW may still be selected separately as the only current
+  preparation cache/OCR source.
+- Caching NLSC, OSM, TWMap, or other WMTS/XYZ basemaps during map preparation
+  because they are visible in the UI. They are runtime tile providers. Only
+  Rudy+TW is approved for route-bbox rendered-map cache/OCR in this phase.
+- Treating the NLSC no-application catalog as proof that every listed item is
+  a WMTS layer. The PDF lists WMTS/WMS/API service candidates; implementation
+  must verify concrete service type and URL template before enabling controls.
+- Hiding `UAV*` under a generic topo/aerial bucket. UAS orthophoto is a
+  high-value route revalidation provider and must remain discoverable as its
+  own provider family with coverage/year metadata.
 - Treating four terrain overlay PNGs as the total terrain source count. The
   four files are display modes; the terrain source coverage must be checked
   separately through DTM coverage and terrain visualization counts.
@@ -68,13 +151,13 @@ regressions:
 
 | Scout layer | Required behavior | Files/components responsible | Ordering/dependency constraints | States and edge cases | Verification |
 |-------------|-------------------|------------------------------|---------------------------------|-----------------------|--------------|
-| `imagery` | WMTS imagery basemap, bottom-most visual layer. | `admin_map_layers.py`, `admin_imagery_sources.py`, three `docs/admin/*.html` pages. | z-index 0; below OSM and all evidence. | Can use runtime WMTS or seeded cache; failed tiles must not blank vector evidence. | Contract verifier plus browser layer toggle/group check. |
-| `rudy` | Optional Rudy hiking basemap overlay. | `admin_map_layers.py`, `admin_imagery_sources.py`, three admin pages. | Raster overlay rank 4; below OSM/evidence. | Off by default; network/cache failure isolated from evidence layers. | Source id, control, rank, group, browser toggle. |
-| `rudy-twmap` | Optional Rudy+TW basemap and preferred OCR source for trail mileage labels. | `admin_map_layers.py`, `admin_imagery_sources.py`, `pretrip_raster_label_ocr.py`. | Raster overlay rank 4; OCR output must pass through raster label adapter. | Can be visually off while still used as preparation/OCR source. | Source id, OCR plan/source checks, control/rank/group/toggle. |
-| `relief` | Optional color relief raster reference. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; not Scout terrain visualization. | Off by default; no workspace artifact required. | Control/rank/source/group/toggle. |
-| `geology` | Optional geology context overlay. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; candidate context only. | Off by default; no safety truth. | Control/rank/source/group/toggle. |
-| `topo-5k` | Optional 1/5000 topographic reference. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; below Scout evidence. | Off by default; cache/network failure cannot hide route evidence. | Control/rank/source/group/toggle. |
-| `forest` | Optional forest compartment overlay. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; below Scout evidence. | Off by default; candidate context only. | Control/rank/source/group/toggle. |
+| `imagery` | Runtime WMTS imagery basemap, bottom-most visual layer. | `admin_map_layers.py`, `admin_imagery_sources.py`, three `docs/admin/*.html` pages. | z-index 0; below OSM and all evidence. | Uses runtime WMTS/XYZ delivery by default; failed tiles must not blank vector evidence. Do not create preparation raster cache except legacy explicit local raster handoff. | Contract verifier plus browser layer toggle/group check. |
+| `rudy` | Optional Rudy hiking basemap overlay, runtime display only by default. | `admin_map_layers.py`, `admin_imagery_sources.py`, three admin pages. | Raster overlay rank 4; below OSM/evidence. | Off by default; network/cache failure isolated from evidence layers. Not an approved OCR/cache source unless later promoted. | Source id, control, rank, group, browser toggle. |
+| `rudy-twmap` | Optional Rudy+TW basemap and current approved preparation cache/OCR source for hiking rendered-map evidence. | `admin_map_layers.py`, `admin_imagery_sources.py`, `pretrip_raster_label_ocr.py`. | Raster overlay rank 4; OCR output must pass through raster label adapter. | Can be visually off while still used as preparation/OCR source. It is the only current route-bbox map cache source for mileage K, stable POI, rendered labels, and icons. | Source id, OCR plan/source checks, control/rank/group/toggle. |
+| `relief` | Optional runtime color relief raster reference. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; not Scout terrain visualization. | Off by default; no workspace artifact or preparation cache required. | Control/rank/source/group/toggle. |
+| `geology` | Optional runtime geology context overlay. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; candidate context only. | Off by default; no safety truth or preparation cache. | Control/rank/source/group/toggle. |
+| `topo-5k` | Optional runtime 1/5000 topographic reference. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; below Scout evidence. | Off by default; runtime WMTS only, no preparation cache. | Control/rank/source/group/toggle. |
+| `forest` | Optional runtime forest compartment overlay. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; below Scout evidence. | Off by default; candidate context only, no preparation cache. | Control/rank/source/group/toggle. |
 | `osm` | OSM/local XYZ basemap. | `admin_map_layers.py`, `admin_basemap_tiles.py`, `pretrip_layer_preparation.py`, admin pages. | z-index 8; above raster, below terrain/evidence. | Parent/cached fallback at high zoom; viewport must not become blank. | Preparation ready check, control/rank/group/toggle, browser zoom smoke. |
 | `terrain` | DEM/DTM hillshade, elevation tint, slope shading, contours. | `pretrip_layer_preparation.py`, `admin_map_layers.py`, admin pages. | z-index 20; above basemap, below route/risk/CP. | Missing DEM yields unavailable/partial evidence, not runtime truth. | Preparation ready check, artifact count/hash, group/rank/toggle. |
 | `corridors` | Route corridor/map context evidence. | `pretrip_layer_preparation.py`, `admin_map_layers.py`, admin pages. | z-index 40; below route and review targets. | May be unavailable without context source; must not block route display. | Source ref, rank, group, toggle. |
