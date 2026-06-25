@@ -21,6 +21,8 @@ ROUTE_CONTEXT_OPTIONAL_FIELDS = (
     "rest_area_candidates_path",
     "mcp_candidates_path",
     "named_point_evidence_path",
+    "route_mileage_k_anchors_path",
+    "mileage_tag_alignment_path",
 )
 
 DEFAULT_ROUTE_CONTEXT_LIMIT = 6
@@ -41,6 +43,8 @@ def assess_scout_route_context(
     rest_area_candidates_path: str | None = None,
     mcp_candidates_path: str | None = None,
     named_point_evidence_path: str | None = None,
+    route_mileage_k_anchors_path: str | None = None,
+    mileage_tag_alignment_path: str | None = None,
     limit: int = DEFAULT_ROUTE_CONTEXT_LIMIT,
 ) -> dict[str, Any]:
     root = Path(project_root)
@@ -79,6 +83,30 @@ def assess_scout_route_context(
         source_report=source_report,
     )
     items.extend(route_context_items)
+    existing_candidate_ids = {
+        str(item.get("candidate_id"))
+        for item in route_context_items
+        if item.get("candidate_id")
+    }
+    items.extend(
+        _route_mileage_anchor_items(
+            root,
+            project,
+            explicit_path=route_mileage_k_anchors_path,
+            existing_candidate_ids=existing_candidate_ids,
+            source_report=source_report,
+        )
+    )
+    if requested_mileage_anchors or _looks_like_mileage_tag_query(query):
+        items.extend(
+            _mileage_tag_alignment_items(
+                root,
+                project,
+                explicit_path=mileage_tag_alignment_path,
+                requested_mileage_anchors=requested_mileage_anchors,
+                source_report=source_report,
+            )
+        )
     mcp_explicit_path = mcp_candidates_path
     if mcp_explicit_path is None and route_context_path and not route_context_items:
         mcp_explicit_path = route_context_path
@@ -842,6 +870,191 @@ def _route_context_point_items(
             }
         )
     return items
+
+
+def _route_mileage_anchor_items(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    existing_candidate_ids: set[str],
+    source_report: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    ref = explicit_path or str(
+        project.get("route_mileage_k_anchors_ref")
+        or "candidates/route_mileage_k_anchors.json"
+    )
+    payload, source_path = _load_project_json(root, ref)
+    anchors = payload.get("anchors") if isinstance(payload, dict) else []
+    if not isinstance(anchors, list):
+        anchors = []
+    source_report.append(
+        _source_report("route_mileage_k_anchors", source_path, len(anchors))
+    )
+    items: list[dict[str, Any]] = []
+    for raw in anchors:
+        if not isinstance(raw, dict):
+            continue
+        candidate_id = str(raw.get("candidate_id") or "")
+        if candidate_id and candidate_id in existing_candidate_ids:
+            continue
+        label = str(
+            raw.get("display_label")
+            or raw.get("normalized_mileage_k")
+            or raw.get("raw_mileage_text")
+            or candidate_id
+        )
+        source_refs = raw.get("source_refs")
+        source_refs = source_refs if isinstance(source_refs, list) else []
+        raw_label_examples = raw.get("raw_label_examples")
+        raw_label_examples = raw_label_examples if isinstance(raw_label_examples, list) else []
+        supporting_candidate_ids = raw.get("supporting_candidate_ids")
+        supporting_candidate_ids = (
+            supporting_candidate_ids if isinstance(supporting_candidate_ids, list) else []
+        )
+        items.append(
+            {
+                "evidence_type": raw.get("label_role")
+                or raw.get("mileage_anchor_kind")
+                or "trail_mileage_k_anchor",
+                "context_kind": "route_context",
+                "candidate_id": candidate_id or raw.get("normalized_mileage_k"),
+                "label": label,
+                "distance_m": _float_or_none(raw.get("mileage_m")),
+                "lat": _float_or_none(raw.get("lat")),
+                "lon": _float_or_none(raw.get("lon")),
+                "nearest_cp_candidate_id": raw.get("nearest_cp_candidate_id"),
+                "label_role": raw.get("label_role"),
+                "mileage_anchor_kind": raw.get("mileage_anchor_kind"),
+                "mileage_k": _float_or_none(raw.get("mileage_k")),
+                "mileage_m": _float_or_none(raw.get("mileage_m")),
+                "normalized_mileage_k": raw.get("normalized_mileage_k"),
+                "raw_mileage_text": raw.get("raw_mileage_text"),
+                "route_mileage_m": _float_or_none(
+                    raw.get("route_mileage_m") or raw.get("mileage_m")
+                ),
+                "point_classes": ["route_mileage_k_anchor", "trail_mileage_k_anchor"],
+                "review_state": raw.get("review_state"),
+                "review_required": bool(raw.get("review_required", True)),
+                "confidence": raw.get("confidence"),
+                "experience_score": 0.0,
+                "guidance": "candidate route mileage anchor",
+                "stop_guidance": "mileage anchor is for route reference, not stop permission",
+                "candidate_only": bool(raw.get("candidate_only", True)),
+                "runtime_safety_truth": bool(raw.get("runtime_safety_truth", False)),
+                "source_path": source_path,
+                "source_gaps": raw.get("review_reasons", []),
+                "source_refs": source_refs,
+                "class_terms": ["route_mileage_k_anchor", "trail_mileage_k_anchor"],
+                "search_text": _search_text(
+                    label,
+                    candidate_id,
+                    raw.get("label_role"),
+                    raw.get("mileage_anchor_kind"),
+                    raw.get("normalized_mileage_k"),
+                    raw.get("raw_mileage_text"),
+                    raw.get("mileage_k"),
+                    raw.get("mileage_m"),
+                    raw.get("route_mileage_m"),
+                    raw_label_examples,
+                    supporting_candidate_ids,
+                ),
+            }
+        )
+    return items
+
+
+def _mileage_tag_alignment_items(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    explicit_path: str | None,
+    requested_mileage_anchors: set[str],
+    source_report: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    ref = explicit_path or str(
+        project.get("mileage_tag_alignment_ref")
+        or "outputs/mileage_tag_alignment.json"
+    )
+    payload, source_path = _load_project_json(root, ref)
+    tags = payload.get("mileage_tags") if isinstance(payload, dict) else []
+    if not isinstance(tags, list):
+        tags = []
+    source_report.append(
+        _source_report("mileage_tag_alignment", source_path, len(tags))
+    )
+    if not tags:
+        return []
+
+    items: list[dict[str, Any]] = []
+    for raw in tags:
+        if not isinstance(raw, dict):
+            continue
+        if requested_mileage_anchors and not _mileage_tag_matches_anchor(
+            raw,
+            requested_mileage_anchors,
+        ):
+            continue
+        if not requested_mileage_anchors and len(items) >= 64:
+            break
+        label = str(
+            raw.get("display_label")
+            or raw.get("source_label")
+            or raw.get("display_mileage_label")
+            or raw.get("mileage_tag_id")
+            or ""
+        )
+        display_mileage = raw.get("display_mileage")
+        display_mileage = display_mileage if isinstance(display_mileage, dict) else {}
+        items.append(
+            {
+                "evidence_type": "mileage_tag_alignment",
+                "context_kind": "route_context",
+                "candidate_id": raw.get("mileage_tag_id"),
+                "label": label,
+                "distance_m": _float_or_none(
+                    display_mileage.get("mileage_m")
+                    or raw.get("route_distance_m")
+                    or raw.get("route_mileage_m")
+                ),
+                "lat": _float_or_none(raw.get("lat")),
+                "lon": _float_or_none(raw.get("lon")),
+                "label_role": "mileage_tag_alignment",
+                "mileage_anchor_kind": "trail_mileage_k_anchor",
+                "normalized_mileage_k": raw.get("display_mileage_label"),
+                "raw_mileage_text": raw.get("display_label"),
+                "route_mileage_m": _float_or_none(
+                    display_mileage.get("mileage_m")
+                    or raw.get("route_distance_m")
+                    or raw.get("route_mileage_m")
+                ),
+                "point_classes": ["mileage_tag_alignment"],
+                "review_state": raw.get("review_state"),
+                "confidence": raw.get("confidence"),
+                "experience_score": 0.0,
+                "guidance": "workspace mileage tag alignment",
+                "stop_guidance": "mileage tags are route-display references only",
+                "candidate_only": bool(raw.get("candidate_only", True)),
+                "runtime_safety_truth": bool(raw.get("runtime_safety_truth", False)),
+                "source_path": source_path,
+                "source_gaps": [],
+                "source_refs": [{"source_path": raw.get("source_ref")}]
+                if raw.get("source_ref")
+                else [],
+                "class_terms": ["mileage_tag_alignment"],
+                "search_text": _search_text(
+                    label,
+                    raw.get("mileage_tag_id"),
+                    raw.get("display_mileage_label"),
+                    raw.get("display_mileage_span_label"),
+                    raw.get("source_id"),
+                    raw.get("source_kind"),
+                    raw.get("source_label"),
+                    raw.get("source_ref"),
+                ),
+            }
+        )
+    return items[:256]
 
 
 def _mcp_items(
@@ -1725,6 +1938,43 @@ def _mileage_anchor_keys(query: str) -> set[str]:
     for match in re.finditer(r"(?<!\d)(\d+(?:\.\d+)?)(?:k|公里|km)(?![a-z0-9])", text):
         keys.add(_format_mileage_anchor_key(float(match.group(1))))
     return keys
+
+
+def _looks_like_mileage_tag_query(query: str) -> bool:
+    lowered = str(query or "").lower()
+    return bool(
+        re.search(
+            r"mileage|里程|公里樁|樁號|k點|k\s*tag|display mileage|mileage tag",
+            lowered,
+        )
+    )
+
+
+def _mileage_tag_matches_anchor(
+    item: dict[str, Any],
+    requested_keys: set[str],
+) -> bool:
+    keys: set[str] = set()
+    display_mileage = item.get("display_mileage")
+    display_mileage = display_mileage if isinstance(display_mileage, dict) else {}
+    for value in (
+        item.get("display_mileage_label"),
+        item.get("display_mileage_span_label"),
+        item.get("display_label"),
+        item.get("source_label"),
+        item.get("mileage_tag_id"),
+        display_mileage.get("label"),
+    ):
+        keys.update(_mileage_anchor_keys(str(value or "")))
+    for value in (
+        display_mileage.get("mileage_m"),
+        item.get("route_distance_m"),
+        item.get("route_mileage_m"),
+    ):
+        parsed_m = _float_or_none(value)
+        if parsed_m is not None:
+            keys.add(_format_mileage_anchor_key(parsed_m / 1000.0))
+    return bool(keys & requested_keys)
 
 
 def _item_matches_mileage_anchor(

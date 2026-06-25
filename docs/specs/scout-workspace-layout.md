@@ -2,7 +2,7 @@
 
 Status: Draft
 
-Date: 2026-06-15
+Date: 2026-06-25
 
 ## Objective
 
@@ -163,6 +163,12 @@ pretrip/workspaces/{project_id}/
     sensors/
     vitals/
     context/
+      route_context/
+        route_context_evidence.json
+        route_context_pack.json
+        media_manifest.json
+        source_manifest.json
+        crawl_seed_plan.json
     pace/
     permissions/
     architecture/
@@ -180,6 +186,7 @@ pretrip/workspaces/{project_id}/
     route_guide_timing.json
     skill_config_manifest.json
     route_context_points.json
+    route_mileage_k_anchors.json
     pace_fit_candidates.json
     contextual_permission_rules.json
     route_architecture_candidates.json
@@ -204,6 +211,9 @@ pretrip/workspaces/{project_id}/
     admin_projection.json
     debug_projection_events.jsonl
     layers/
+      raster_label_ocr_output.json
+      normalized/
+        raster_label_evidence.geojson
     risk/
     mcp/
     spatial_imprint_manifest.json
@@ -212,6 +222,20 @@ pretrip/workspaces/{project_id}/
     planned_eta.json
     timing_measurements.json
     weather_daylight_evidence.json
+    boss_points.json
+    boss_points.geojson
+    route_pressure_profile.json
+    route_pressure_profile.geojson
+    mileage_tag_alignment.json
+    mileage_tag_alignment.geojson
+    readiness_report.json
+    brain_seed_nodes.json
+    briefings/
+      route_context_briefing.html
+    environment/
+      cwa/
+      gee/
+      derived/
   ai/
     candidates/
     approved/
@@ -234,6 +258,26 @@ review status, layer readiness, AI asset status, and boundary metadata such as:
   "phase2_brain_writeback_allowed": false
 }
 ```
+
+As the workspace evolves, `project.json` may also expose optional refs for
+route-context, mileage, raster OCR, and environment evidence. Current examples
+include:
+
+```json
+{
+  "route_context_points_ref": "candidates/route_context_points.json",
+  "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
+  "mileage_tag_alignment_ref": "outputs/mileage_tag_alignment.json",
+  "mileage_tag_alignment_geojson_ref": "outputs/mileage_tag_alignment.geojson",
+  "raster_label_ocr_output_ref": "outputs/layers/raster_label_ocr_output.json",
+  "raster_label_evidence_ref": "outputs/layers/normalized/raster_label_evidence.geojson",
+  "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html"
+}
+```
+
+Consumers should prefer these refs over hardcoded paths, tolerate missing
+optional refs, and avoid embedding large OCR or mileage alignment payloads in
+admin or AI responses.
 
 ### Emergency Approval Workspace Consumption
 
@@ -285,12 +329,12 @@ They should be placed as follows.
 
 | Standard section                          | Required data                                                                                                 | Canonical workspace refs                                                                                                                                                                                                                            | Boundary                                                                         |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Sec. 6 Route Context Intelligence         | historical, cultural, natural, seasonal, observation-point, named-point, article, OCR, and map-label evidence | `normalized/context/route_context/*.json`, `candidates/route_context_points.json`, `outputs/mcp/named_point_evidence.json`, `outputs/layers/normalized/web_case_evidence.json`, `outputs/layers/normalized/raster_label_evidence.geojson`           | Candidate evidence until reviewed                                                |
+| Sec. 6 Route Context Intelligence         | historical, cultural, natural, seasonal, observation-point, named-point, article, OCR, mileage tag, and map-label evidence | `normalized/context/route_context/*.json`, `candidates/route_context_points.json`, `candidates/route_mileage_k_anchors.json`, `outputs/mileage_tag_alignment.json`, `outputs/mileage_tag_alignment.geojson`, `outputs/briefings/route_context_briefing.html`, `outputs/mcp/named_point_evidence.json`, `outputs/layers/normalized/web_case_evidence.json`, `outputs/layers/normalized/raster_label_evidence.geojson`, `outputs/layers/raster_label_ocr_output.json` | Candidate evidence until reviewed                                                |
 | Sec. 7 Readiness & Pace Fit               | pace coefficient, team pace fit, energy reserve, segment timing, daylight, workload estimates, route boss demand, challenge fit | `normalized/pace/pace_coefficients.json`, `normalized/pace/team_pace_fit.json`, `outputs/boss_points.json`, `outputs/boss_points.geojson`, `outputs/resource_plan.json`, `outputs/planned_eta.json`, `outputs/timing_measurements.json`, `outputs/weather_daylight_evidence.json`, post-analysis imported refs | Advisory planning evidence, not medical diagnosis or runtime safety truth        |
 | Sec. 8 Contextual Permissioning           | permission rules, buffer budgets, stop/go constraints, CP progress requirements, decision traces              | `normalized/permissions/contextual_permission_model.json`, `candidates/contextual_permission_rules.json`, `outputs/compiled_mission_graph.*.json`, on-trip `runtime/sessions/{session_id}/contextual_permission_events.jsonl`                       | Pretrip rules are candidates; live actions require runtime authority             |
 | Sec. 9 Route Architecture Intelligence    | checkpoint graph, route type, hard sections, retreat points, alternatives, route dependency analysis          | `normalized/architecture/route_architecture.json`, `candidates/retreat_routes.json`, `candidates/segments.json`, `outputs/segment_policy_candidates.json`, `outputs/compiled_mission_graph.*.json`                                                  | Reviewed plan can feed runtime handoff                                           |
-| Sec. 10 Weather-to-Decision Intelligence  | forecast snapshots, weather windows, daylight, stale-source status, route-specific weather impacts            | `normalized/weather/forecast_snapshots.jsonl`, `normalized/weather/weather_source_manifest.json`, `outputs/weather_daylight_evidence.json`, `candidates/weather_decision_candidates.json`                                                           | Time-limited advisory evidence with TTL                                          |
-| Sec. 11 Navigation & Terrain Intelligence | offline map readiness, DEM/DTM, contours, slope/elevation, risk heat, terrain visualization, INS/DR readiness | `normalized/terrain/*`, `outputs/layers/normalized/terrain_*.png`, `outputs/layers/normalized/terrain_contours.geojson`, `outputs/risk/*`, `normalized/navigation/offline_map_manifest.json`, `normalized/navigation/ins_dr_readiness.json`         | Terrain and risk layers are pretrip evidence; runtime navigation needs admission |
+| Sec. 10 Weather-to-Decision Intelligence  | forecast snapshots, weather windows, daylight, stale-source status, route-specific weather impacts, hydrologic background | `normalized/weather/forecast_snapshots.jsonl`, `normalized/weather/weather_source_manifest.json`, `outputs/weather_daylight_evidence.json`, `outputs/environment/cwa/*.json`, `outputs/environment/gee/*.json`, `outputs/environment/derived/*.json`, `candidates/weather_decision_candidates.json` | Time-limited advisory evidence with TTL                                          |
+| Sec. 11 Navigation & Terrain Intelligence | offline map readiness, DEM/DTM, contours, slope/elevation, risk heat, terrain visualization, INS/DR readiness, raster OCR labels | `normalized/terrain/*`, `outputs/layers/normalized/terrain_*.png`, `outputs/layers/normalized/terrain_contours.geojson`, `outputs/layers/normalized/raster_label_evidence.geojson`, `outputs/layers/raster_label_ocr_output.json`, `outputs/risk/*`, `normalized/navigation/offline_map_manifest.json`, `normalized/navigation/ins_dr_readiness.json` | Terrain and risk layers are pretrip evidence; runtime navigation needs admission |
 
 ## Workspace-Scoped Scout AI Assets
 
@@ -685,6 +729,17 @@ terrain_route_samples.geojson
 terrain_visualization.geojson
 ```
 
+Raster OCR and map-label evidence belongs under the layer preparation output
+tree. The raw OCR output should stay bounded by refs, and the normalized
+GeoJSON is the primary Scout AI query surface:
+
+```text
+outputs/layers/
+  raster_label_ocr_output.json
+  normalized/
+    raster_label_evidence.geojson
+```
+
 Risk heat layers belong to `outputs/risk/` or explicitly named risk refs:
 
 ```text
@@ -699,6 +754,26 @@ Terrain visualization is map-reading evidence. Risk heat is planning diagnostic
 evidence. Neither becomes runtime safety truth without the reviewed handoff
 chain.
 
+Weather and environment preparation writes server-side evidence under:
+
+```text
+outputs/environment/
+  cwa/
+    cwa_weather_evidence.json
+    cwa_qpf_corridor_summary.json
+    cwa_qpf_route_timeline_evidence.json
+  gee/
+    smap_l4_timeseries.json
+    smap_l4_corridor_summary.json
+    soil_moisture_grid.geojson
+  derived/
+    compound_weather_terrain_candidates.json
+```
+
+These artifacts are pretrip candidate evidence. CWA API keys, GEE credentials,
+raw authorization headers, and provider tokens must never be written to the
+workspace or exposed to client-side UI.
+
 ## Validation Requirements
 
 A workspace validator should verify:
@@ -706,6 +781,8 @@ A workspace validator should verify:
 1. `project.json` exists and declares `schema_version`, `workspace_kind`, and
    boundary flags.
 2. All project-relative refs in `project.json` exist or are marked optional.
+   The validator should treat new `*_ref` fields as first-class refs instead of
+   requiring a fixed historical allowlist.
 3. `inbox/source_manifest.json` links raw imports to checksums and privacy
    classes.
 4. `sources/*_index.json` records source provenance.
@@ -726,12 +803,22 @@ A workspace validator should verify:
 12. No pretrip artifact claims `runtime_safety_truth=true`.
 13. Completed-trip workspaces do not treat public/reference GPX as user
     capability evidence unless explicitly marked.
+14. Route-context, mileage, and raster OCR artifacts remain candidate-only or
+    review-required unless a reviewed package explicitly promotes them.
+15. Large artifacts such as `outputs/mileage_tag_alignment.json`,
+    `outputs/layers/raster_label_ocr_output.json`, and provider raw-response
+    caches are referenced and summarized in AI/admin outputs rather than
+    embedded wholesale.
+16. CWA/GEE/environment artifacts include source refs, stale-risk or timestamp
+    metadata, candidate-only boundaries, and no secrets.
 
 ## Alpha Acceptance Criteria
 
 - Historical GPX importer writes to the active pretrip workspace and keeps raw
   sources in `inbox/` or the material bundle.
 - Map preparation reads the active workspace and writes only workspace outputs.
+- Route-context, mileage anchors, raster OCR labels, and environment evidence
+  are discoverable through `project.json` refs and Scout AI read-only tools.
 - `/admin`, `/admin/debug`, `/admin/pretrip`, and Emergency Mobile Approval UI
   v0 read the same workspace projection refs.
 - Post-analysis reads completed-trip workspaces and exports next-pretrip
