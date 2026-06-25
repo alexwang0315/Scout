@@ -96,6 +96,7 @@ def search_project_map_perception(
     items: list[dict[str, Any]] = []
     named_points = _load_named_points(root, project, source_report)
     items.extend(_load_ocr_label_items(root, project, named_points, source_report))
+    items.extend(_load_raster_label_evidence_items(root, project, source_report))
     items.extend(_load_contour_interpretation_items(root, project, source_report))
     items.extend(_load_map_layer_material_items(project, source_report))
 
@@ -323,6 +324,113 @@ def _load_ocr_label_items(
             "source_kind": "ocr_labels",
             "status": "loaded",
             "source_path": str(ref),
+            "loaded_count": len(items),
+            "artifact_kind": payload.get("artifact_kind"),
+        }
+    )
+    return items
+
+
+def _load_raster_label_evidence_items(
+    root: Path,
+    project: dict[str, Any],
+    source_report: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    refs = [
+        project.get("raster_label_evidence_ref"),
+        "outputs/layers/normalized/raster_label_evidence.geojson",
+    ]
+    ref = next((str(value) for value in refs if isinstance(value, str) and value.strip()), "")
+    path = _project_path(root, ref)
+    if not ref or not path.exists():
+        source_report.append(
+            {
+                "source_kind": "raster_label_evidence",
+                "status": "missing",
+                "source_path": ref or "outputs/layers/normalized/raster_label_evidence.geojson",
+                "loaded_count": 0,
+            }
+        )
+        return []
+    payload = _load_json_object(path)
+    features = payload.get("features")
+    if not isinstance(features, list):
+        features = []
+    items = []
+    for feature in features:
+        if not isinstance(feature, dict):
+            continue
+        properties = feature.get("properties")
+        properties = properties if isinstance(properties, dict) else {}
+        geometry = feature.get("geometry")
+        geometry = geometry if isinstance(geometry, dict) else {}
+        coordinates = geometry.get("coordinates")
+        lon = lat = None
+        if isinstance(coordinates, list) and len(coordinates) >= 2:
+            lon = _optional_float(coordinates[0])
+            lat = _optional_float(coordinates[1])
+        label_text = str(
+            properties.get("label_text")
+            or properties.get("label")
+            or feature.get("id")
+            or ""
+        )
+        label_role = str(
+            properties.get("label_role")
+            or properties.get("evidence_type")
+            or "raster_label"
+        )
+        items.append(
+            {
+                "evidence_type": "ocr_label",
+                "candidate_id": properties.get("candidate_id") or feature.get("id"),
+                "label_text": label_text,
+                "label_role": label_role,
+                "source_ref": properties.get("source_ref"),
+                "source_path": ref,
+                "source_payload_ref": properties.get("source_payload_ref"),
+                "bbox": properties.get("bbox_px"),
+                "confidence": _optional_float(properties.get("confidence")),
+                "named_point_id": None,
+                "named_point_name": None,
+                "aliases": [],
+                "point_class": [label_role, "raster_label_evidence"],
+                "lat": lat,
+                "lon": lon,
+                "distance_m": None,
+                "distance_km": None,
+                "tile_id": properties.get("tile_id"),
+                "tile_z": properties.get("tile_z"),
+                "tile_x": properties.get("tile_x"),
+                "tile_y": properties.get("tile_y"),
+                "review_required": bool(properties.get("review_required", True)),
+                "review_state": properties.get("review_state"),
+                "candidate_only": bool(properties.get("candidate_only", True)),
+                "runtime_safety_truth": bool(properties.get("runtime_safety_truth", False)),
+                "full_source_image_embedded": False,
+                "raw_tile_embedded": bool(properties.get("raw_tile_embedded", False)),
+                "raw_payload_embedded": bool(properties.get("raw_payload_embedded", False)),
+                "search_text": " ".join(
+                    str(part)
+                    for part in (
+                        label_text,
+                        label_role,
+                        properties.get("candidate_id"),
+                        feature.get("id"),
+                        properties.get("source_ref"),
+                        properties.get("source_payload_ref"),
+                        properties.get("tile_id"),
+                        properties.get("source_kind"),
+                    )
+                    if part
+                ),
+            }
+        )
+    source_report.append(
+        {
+            "source_kind": "raster_label_evidence",
+            "status": "loaded",
+            "source_path": ref,
             "loaded_count": len(items),
             "artifact_kind": payload.get("artifact_kind"),
         }
@@ -1012,12 +1120,14 @@ def _compact_result(item: dict[str, Any]) -> dict[str, Any]:
         "candidate_id",
         "match_score",
         "label_text",
+        "label_role",
         "named_point_id",
         "named_point_name",
         "aliases",
         "point_class",
         "source_ref",
         "source_path",
+        "source_payload_ref",
         "bbox",
         "confidence",
         "lat",
@@ -1038,12 +1148,18 @@ def _compact_result(item: dict[str, Any]) -> dict[str, Any]:
         "render_mode",
         "source_kind",
         "source_id",
+        "tile_id",
+        "tile_z",
+        "tile_x",
+        "tile_y",
         "available",
         "review_required",
         "candidate_only",
         "not_observed_fact",
         "runtime_safety_truth",
         "full_source_image_embedded",
+        "raw_tile_embedded",
+        "raw_payload_embedded",
     )
     return {key: item.get(key) for key in keys if item.get(key) is not None}
 

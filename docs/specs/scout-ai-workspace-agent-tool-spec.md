@@ -2,7 +2,7 @@
 
 Status: Draft
 
-Date: 2026-06-06
+Date: 2026-06-25
 
 ## Objective
 
@@ -81,6 +81,8 @@ workspace/
     weather/
     sensors/
     vitals/
+    context/
+      route_context/
   candidates/
     checkpoints.json
     segments.json
@@ -89,6 +91,8 @@ workspace/
     risk_rules.json
     route_notes.json
     map_perception.json
+    route_context_points.json
+    route_mileage_k_anchors.json
     skill_config_manifest.json
   reviews/
     human_reviews.json
@@ -104,6 +108,24 @@ workspace/
     runtime_audit_manifest.json
     debug_projection_events.jsonl
     admin_projection.json
+    boss_points.json
+    boss_points.geojson
+    route_pressure_profile.json
+    route_pressure_profile.geojson
+    mileage_tag_alignment.json
+    mileage_tag_alignment.geojson
+    readiness_report.json
+    brain_seed_nodes.json
+    briefings/
+      route_context_briefing.html
+    environment/
+      cwa/
+      gee/
+      derived/
+    layers/
+      raster_label_ocr_output.json
+      normalized/
+        raster_label_evidence.geojson
   field_sessions/
     raw_transport/
     normalized_records/
@@ -122,8 +144,16 @@ workspace/
 The current `chilai_nanhua_day1` fixture already contains many of these
 pretrip artifacts, including route summaries, checkpoints, segments, map
 context, Overpass evidence, DTM coverage, risk ribbon, MCP/OCR evidence,
-weather/daylight evidence, ETA/resource plans, review logs, compiled mission
+weather/daylight evidence, CWA/GEE/derived environment evidence, route-context
+briefing cache, route mileage anchors, OCR-derived mileage tag alignment,
+raster label OCR evidence, ETA/resource plans, review logs, compiled mission
 graph candidates, runtime handoff metadata, and admin/debug projection files.
+
+Tool implementations must treat `project.json` project-relative refs as the
+source of truth. New workspace refs are expected to appear over time, so tools
+should tolerate missing optional refs, prefer explicit refs over hardcoded
+paths, and keep large artifacts such as mileage alignment or OCR payloads
+bounded before passing them to the model.
 
 ## Workspace Data Taxonomy
 
@@ -131,15 +161,16 @@ graph candidates, runtime handoff metadata, and admin/debug projection files.
 | --- | --- | --- | --- | --- |
 | Workspace catalog | `project.json`, `outputs/import_manifest.json`, `outputs/departure_bundle_manifest.json`, `outputs/runtime_audit_manifest.json` | "這個 workspace 有哪些資料?", "出發包缺什麼?", "哪些 layer 已準備好?" | artifact manifest, workspace catalog search | Read-only provenance |
 | Route structure | `normalized/routes/route_summary.json`, `candidates/checkpoints.json`, `candidates/segments.json`, `outputs/segment_display_geometry.json`, `outputs/checkpoint_events.json` | "有多少 CP?", "黑水塘在第幾 CP 附近?", "CP12 到 CP13 多遠?" | route structure search, CP/segment resolver | Candidate or reviewed depending on source |
+| Route context and mileage anchors | `normalized/context/route_context/*.json`, `candidates/route_context_points.json`, `candidates/route_mileage_k_anchors.json`, `outputs/mileage_tag_alignment.json`, `outputs/mileage_tag_alignment.geojson`, `outputs/briefings/route_context_briefing.html` | "本次路徑的 15K 在哪?", "哪些點值得停 3 分鐘?", "沿途有哪些歷史、文化、自然或季節觀察?" | route-context assessor, mileage anchor resolver, bounded mileage-tag alignment search | Candidate-only until reviewed |
 | Map context and vector evidence | `normalized/map/map_context.geojson`, `candidates/map_candidates.json`, `candidates/overpass_evidence.json`, `normalized/map/overpass_vector_evidence.geojson` | "附近有叉路嗎?", "哪裡有水源或避難點?", "Overpass 有看到什麼?" | map evidence search, vector query, source attribution | Candidate-only unless reviewed |
-| Raster tiles, imagery, OCR, perception | `outputs/mcp/mcp_ocr_labels.json`, `outputs/mcp/named_point_evidence.json`, `outputs/contour_interpretation_candidates.json`, `outputs/gis_perception_candidates.json`, tile cache refs | "CP 附近圖上有標註嗎?", "這附近像森林還是草坡?", "等高線標了幾公尺?" | map perception search, tile OCR, tile vision classifier | Candidate-only, human review preferred |
+| Raster tiles, imagery, OCR, perception | `outputs/mcp/mcp_ocr_labels.json`, `outputs/mcp/named_point_evidence.json`, `outputs/layers/raster_label_ocr_output.json`, `outputs/layers/normalized/raster_label_evidence.geojson`, `outputs/contour_interpretation_candidates.json`, `outputs/gis_perception_candidates.json`, tile cache refs | "CP 附近圖上有標註嗎?", "這附近像森林還是草坡?", "等高線標了幾公尺?", "OCR 讀到哪些地圖文字?", "924m 標註在哪?" | map perception search, raster label OCR search, tile OCR, tile vision classifier | Candidate-only, human review preferred |
 | Terrain and DTM | `normalized/terrain/dtm_coverage_summary.json`, `normalized/terrain/segment_dtm_coverage.json`, terrain samples, contour overlays | "哪段最陡?", "CP 附近坡度多大?", "DTM 覆蓋完整嗎?" | terrain score search, slope/elevation profiler | Planning evidence, not direct safety truth |
 | Risk scores and ribbons | `outputs/risk_ribbon.geojson`, `outputs/risk_ribbon.metadata.json`, risk calibration outputs, risk heatmaps | "哪裡 baseline risk 最高?", "calibration 後哪段變高?", "這個點為什麼危險?" | risk score search, heatmap, attribution | Candidate/reviewed diagnostics |
 | Route notes and public reports | `candidates/route_note_candidates.json`, `normalized/notes/gpx_route_note_candidates.json`, `outputs/route_note_ln_proposals.json`, `outputs/route_note_review_options.json` | "危險地形在哪?", "黑水塘附近有什麼描述?", "以前有人提到崩塌嗎?" | full-text route-note search, LN proposal resolver | Candidate-only until reviewed |
 | Historical tracks and comparison | `sources/historical_gpx_source_index.json`, `outputs/reference_tracks.json`, `outputs/reference_track_display_geometry.json`, `outputs/route_comparison.json` | "以前路線怎麼走?", "我的路徑和參考線差多少?", "常見軌跡走廊多寬?" | reference-track search, route comparison profiler | Evidence, not automatic corridor truth |
 | Major points and MCP synthesis | `outputs/mcp/mcp_candidates.json`, `outputs/mcp/mcp_cp_support_reconciliation.json`, `outputs/mcp/mcp_retrieval_plan.json` | "重要點有哪些?", "哪些 MCP 支援某個 CP?", "哪些點仍需要人工 review?" | major-point search, CP support reconciliation | Candidate-only |
 | ETA, timing, daylight | `outputs/planned_eta.json`, `candidates/route_guide_timing.json`, `outputs/timing_measurements.json`, `outputs/weather_daylight_evidence.json` | "幾點會到營地?", "會不會摸黑?", "現在是否該折返?" | ETA/daylight context search, timing evaluator | Decision support, needs uncertainty |
-| Weather and forecast evidence | `outputs/weather_daylight_evidence.json`, future weather cache | "會下雨嗎?", "要不要提早紮營?", "風雨窗口在哪?" | weather evidence search, weather-risk advisor | Candidate/advisory, stale-risk required |
+| Weather and forecast evidence | `outputs/weather_daylight_evidence.json`, `outputs/environment/cwa/*.json`, `outputs/environment/gee/*.json`, `outputs/environment/derived/*.json` | "會下雨嗎?", "要不要提早紮營?", "風雨窗口在哪?", "QPF 和土壤濕度是否讓落石或溪水風險升高?" | weather evidence search, CWA evidence query, GEE hydrologic background query, weather-risk advisor | Candidate/advisory, stale-risk required |
 | Resource, energy, vitals | `outputs/resource_plan.json`, future `normalized/vitals/`, future `field_sessions/normalized_records/` | "體力夠嗎?", "心率異常嗎?", "補給和電力是否足夠?" | energy reserve search, vitals record query | Advisory only, not medical diagnosis |
 | Transport evidence | future `field_sessions/raw_transport/`, MQTT/HTTP/TCP/BLE/LoRa/satellite receipts | "資料有沒有進來?", "哪個 client 斷線?", "緊急封包有沒有送出?" | transport status query, black-box receipt query | Transport metadata, no app semantics |
 | Sensor and INS/DR records | future `normalized/sensors/`, `field_sessions/filter_outputs/`, `field_sessions/estimates/`, trajectory diff files | "室內那段在哪?", "GPS 和 INS/DR 差多少?", "哪裡 re-anchor?" | sensor record query, INS/DR estimate search, trajectory diff map | Safety admission required before runtime use |
@@ -158,7 +189,8 @@ lowest-cost deterministic tool that can answer the question.
    - Example: `scout.pretrip.artifact_manifest`.
 
 2. Retrieval tools
-   - Search text, structured refs, labels, route notes, OCR, and source snippets.
+   - Search text, structured refs, labels, route notes, OCR, route mileage
+     anchors, bounded mileage alignment summaries, and source snippets.
    - Example: `pydantic_ai.tool.search_scout_workspace_evidence.v0`.
 
 3. Resolver tools
@@ -172,8 +204,9 @@ lowest-cost deterministic tool that can answer the question.
      `pydantic_ai.tool.search_scout_terrain_scores.v0`, `scout.risk.heatmap`.
 
 5. Perception tools
-   - Interpret map tiles, OCR labels, contour text, visual vegetation hints,
-     map annotations, or imagery evidence.
+   - Interpret map tiles, legacy MCP OCR labels, normalized raster OCR labels,
+     contour text, visual vegetation hints, map annotations, or imagery
+     evidence.
    - Example: `pydantic_ai.tool.search_scout_map_perception.v0`.
 
 6. Normalizer tools
@@ -329,8 +362,12 @@ Reads:
 - route notes;
 - normalized notes;
 - MCP/OCR labels;
+- route mileage anchors;
+- bounded mileage tag alignment summaries and usable anchors;
+- normalized raster label OCR evidence;
 - review logs;
 - weather/daylight evidence;
+- CWA/GEE/derived environment summaries;
 - imported articles or conversations;
 - source manifests.
 
@@ -354,6 +391,8 @@ Example questions:
 - "有哪些人提過崩塌?"
 - "危險地形在哪些位置?"
 - "這趟會經過哪些營地?"
+- "15K 在哪?"
+- "OCR 讀到哪些地圖文字?"
 
 ### 4. `scout.ai.major_point.search.v0`
 
@@ -397,6 +436,12 @@ material, named-point evidence, and annotation evidence.
 Current implementation:
 
 - `pydantic_ai.tool.search_scout_map_perception.v0`.
+- Reads legacy MCP OCR labels and normalized raster label OCR GeoJSON through
+  `project.json` refs such as `mcp_ocr_labels_ref`,
+  `raster_label_ocr_output_ref`, and `raster_label_evidence_ref`.
+- Outputs compact label records with `label_text`, `label_role`, tile/source
+  refs, candidate/review flags, and `runtime_safety_truth=false`; it must not
+  embed raw tile pixels or raw OCR payloads in normal answers.
 
 Future extensions:
 
@@ -418,6 +463,7 @@ Outputs:
 
 - OCR/annotation/perception items;
 - tile source refs;
+- source payload refs for normalized raster OCR records;
 - nearest route anchor;
 - confidence and review requirement;
 - `runtime_safety_truth=false`.
@@ -427,6 +473,38 @@ Example questions:
 - "CP 附近圖上有沒有 annotation?"
 - "這段看起來是森林還是草原?"
 - "等高線標的高度是幾公尺?"
+- "OCR 讀到哪些地圖文字?"
+- "924m 標註在哪?"
+
+### 5a. `scout.ai.route_context.assess.v0`
+
+Purpose: answer route-context, observation-point, source-briefing, and route
+mileage anchor questions from pretrip route-context artifacts.
+
+Current implementation:
+
+- `pydantic_ai.tool.assess_scout_route_context.v0`.
+- Reads `candidates/route_context_points.json` for route-context points.
+- Reads `candidates/route_mileage_k_anchors.json` when the user asks about a
+  K/mileage anchor such as "15K 在哪".
+- Reads bounded slices from `outputs/mileage_tag_alignment.json` for explicit
+  mileage-tag alignment questions. The full alignment artifact can be large, so
+  tools must summarize counts and return only matching or bounded anchor items.
+- May reference `outputs/briefings/route_context_briefing.html` as an offline
+  briefing artifact, but the HTML itself remains candidate-only pretrip output.
+
+Outputs:
+
+- matched route-context or mileage-anchor items;
+- display label, route mileage, coordinates when available, guidance, source
+  refs, candidate/review flags, and limitations;
+- `runtime_safety_truth=false`.
+
+Example questions:
+
+- "本次路徑的 15K 在哪?"
+- "哪些點值得停 3 分鐘?"
+- "沿途有哪些歷史、文化、自然、地形、季節觀察?"
 
 ### 6. `scout.ai.terrain_scores.search.v0`
 
@@ -511,6 +589,12 @@ Reads:
 - `candidates/route_guide_timing.json`;
 - `outputs/timing_measurements.json`;
 - `outputs/weather_daylight_evidence.json`.
+- `outputs/environment/cwa/*.json` for official CWA warnings, observation,
+  forecast, QPF, daylight, moonlight, tide/marine, and provenance summaries;
+- `outputs/environment/gee/*.json` for SMAP/GPM/terrain-hydrology background
+  summaries;
+- `outputs/environment/derived/*.json` for compound weather-terrain candidate
+  summaries.
 
 Inputs:
 
@@ -522,6 +606,8 @@ Inputs:
 Outputs:
 
 - relevant ETA/weather/daylight evidence;
+- CWA/GEE/derived source refs and stale-risk fields when available;
+- compound weather, terrain, QPF, rain, and soil-moisture review candidates;
 - staleness and TTL;
 - advisory candidate, not safety mutation.
 
@@ -530,6 +616,7 @@ Example questions:
 - "今天會不會摸黑?"
 - "這段天氣看起來要不要紮營避雨?"
 - "如果晚一小時出發會怎樣?"
+- "雨量預報和土壤濕度會讓這段崩塌或落石風險升高嗎?"
 
 ### 9. `scout.ai.resource_energy.search.v0`
 
@@ -837,6 +924,9 @@ Minimum eval set:
 | "baseline risk 最高在哪?" | `scout.ai.risk_scores.search.v0` |
 | "terrain slope 最高在哪?" | `scout.ai.terrain_scores.search.v0` |
 | "CP 附近圖上有沒有 annotation?" | `scout.ai.map_perception.search.v0` |
+| "本次路徑的 15K 在哪?" | `scout.ai.route_context.assess.v0` plus route mileage anchor refs |
+| "OCR 讀到哪些地圖文字?" | `scout.ai.map_perception.search.v0` plus raster label refs |
+| "雨量預報和土壤濕度會讓這段風險升高嗎?" | CWA/GEE environment tools plus risk/terrain fan-out |
 | "會不會摸黑?" | `scout.ai.eta_weather_context.search.v0` |
 | "室內沒有 GPS 的地方 INS/DR 有沒有延續?" | `scout.ai.ins_dr_estimates.search.v0` |
 | "MQTT 到 INS/DR routing latency 多大?" | `scout.ai.sensor_record.search.v0` |
@@ -855,7 +945,7 @@ Negative evals:
 
 ## Implementation Priority
 
-### Implementation Snapshot 2026-06-06
+### Implementation Snapshot 2026-06-25
 
 The first tool-coverage slices from this spec are now implemented in this
 checkout:
@@ -879,10 +969,28 @@ checkout:
   - CLI manifest: `tools/scout_agent_tool_manifests/scout.ai.evidence_fulltext.search.json`
   - Pydantic provider tool id: `pydantic_ai.tool.search_scout_evidence_fulltext.v0`
   - Implementation: `scout_workspace_search_tools.search_project_evidence_fulltext`
+  - Indexes route mileage anchors, bounded mileage tag alignment summaries,
+    normalized raster label OCR evidence, and raw raster OCR summaries when
+    refs are present in `project.json`.
+
+- `scout.ai.route_context.assess`
+  - Pydantic provider tool id: `pydantic_ai.tool.assess_scout_route_context.v0`
+  - Implementation: `scout_route_context_tool.assess_scout_route_context`
+  - Resolves route-context questions and explicit K/mileage questions from
+    `route_context_points_ref`, `route_mileage_k_anchors_ref`, and bounded
+    `mileage_tag_alignment_ref` slices.
+
+- `scout.ai.map_perception.search`
+  - Pydantic provider tool id: `pydantic_ai.tool.search_scout_map_perception.v0`
+  - Implementation: `scout_map_perception_tool.search_project_map_perception`
+  - Searches legacy MCP OCR labels plus normalized raster label OCR GeoJSON
+    without embedding raw tile payloads.
 
 Implemented tests:
 
 - `tests/test_scout_workspace_search_tools.py`
+- `tests/test_scout_route_context_tool.py`
+- `tests/test_scout_map_perception_tool.py`
 - `tests/test_scout_ai_workspace_agent_tools_cli.py`
 - provider coverage in `tests/test_assistant_pydantic_provider.py`
 - assistant API fallback coverage in `tests/test_assistant_api.py`

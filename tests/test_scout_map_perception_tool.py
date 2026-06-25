@@ -91,10 +91,34 @@ def test_search_project_map_perception_cp_nearby_annotation_uses_named_point_dis
     assert top["label_text"] == "雲海保線所"
 
 
+def test_search_project_map_perception_reads_raster_label_evidence_geojson(
+    tmp_path: Path,
+) -> None:
+    workspace = _write_map_perception_workspace(tmp_path)
+
+    result = search_project_map_perception(
+        workspace,
+        query="924m OCR raster label",
+        limit=5,
+    )
+
+    assert result["answerability"] == "map_perception_evidence_available"
+    labels = {item.get("label_text") for item in result["results"]}
+    assert "924m" in labels
+    raster_label = next(item for item in result["results"] if item.get("label_text") == "924m")
+    assert raster_label["source_path"] == "outputs/layers/normalized/raster_label_evidence.geojson"
+    assert raster_label["label_role"] == "named_place_label"
+    assert raster_label["lat"] == 23.5759308
+    assert raster_label["lon"] == 121.54724121
+    assert raster_label["candidate_only"] is True
+    assert raster_label["runtime_safety_truth"] is False
+
+
 def _write_map_perception_workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "map-perception-workspace"
     (workspace / "candidates").mkdir(parents=True)
     (workspace / "outputs" / "mcp").mkdir(parents=True)
+    (workspace / "outputs" / "layers" / "normalized").mkdir(parents=True)
     (workspace / "outputs").mkdir(parents=True, exist_ok=True)
     (workspace / "normalized" / "map").mkdir(parents=True)
     (workspace / "project.json").write_text(
@@ -105,6 +129,9 @@ def _write_map_perception_workspace(tmp_path: Path) -> Path:
                 "map_context_ref": "normalized/map/map_context.geojson",
                 "mcp_ocr_labels_ref": "outputs/mcp/mcp_ocr_labels.json",
                 "mcp_named_point_evidence_ref": "outputs/mcp/named_point_evidence.json",
+                "raster_label_evidence_ref": (
+                    "outputs/layers/normalized/raster_label_evidence.geojson"
+                ),
                 "contour_interpretation_candidates_ref": (
                     "outputs/contour_interpretation_candidates.json"
                 ),
@@ -168,6 +195,45 @@ def _write_map_perception_workspace(tmp_path: Path) -> Path:
                         "boundary": {
                             "candidate_only": True,
                             "phase1_runtime_safety_truth": False,
+                        },
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (
+        workspace / "outputs" / "layers" / "normalized" / "raster_label_evidence.geojson"
+    ).write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_raster_label_evidence",
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "id": "ocr_label.fixture.924m",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.54724121, 23.5759308],
+                        },
+                        "properties": {
+                            "candidate_id": "ocr_label.fixture.924m",
+                            "candidate_only": True,
+                            "confidence": 0.95,
+                            "evidence_type": "named_place_label",
+                            "label": "924m",
+                            "label_role": "named_place_label",
+                            "label_text": "924m",
+                            "review_required": True,
+                            "review_state": "needs_human_review",
+                            "runtime_safety_truth": False,
+                            "source_payload_ref": (
+                                "outputs/layers/raster_label_ocr_output.json"
+                            ),
+                            "source_ref": "local_raster_tile.z6.x53.y27",
+                            "tile_id": "z6.x53.y27",
                         },
                     }
                 ],

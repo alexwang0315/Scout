@@ -72,6 +72,9 @@ def build_local_evidence_index(project_root: Path | str) -> ScoutAgentKbIndex:
     records.extend(_route_records(root, project))
     records.extend(_list_records(root, project, "checkpoint_candidates_ref", "pretrip_checkpoint_candidate"))
     records.extend(_list_records(root, project, "segment_candidates_ref", "pretrip_segment_candidate"))
+    records.extend(_route_mileage_anchor_records(root, project))
+    records.extend(_mileage_tag_alignment_records(root, project))
+    records.extend(_raster_label_records(root, project))
     records.extend(_route_note_records(root, project))
     records.extend(_review_queue_records(root, project))
     records.extend(_spatial_imprint_records(root, project))
@@ -608,6 +611,303 @@ def _route_note_records(root: Path, project: dict[str, Any]) -> list[ScoutAgentK
                 },
             )
         )
+    return records
+
+
+def _route_mileage_anchor_records(root: Path, project: dict[str, Any]) -> list[ScoutAgentKbRecord]:
+    ref = project.get("route_mileage_k_anchors_ref")
+    if not ref:
+        return []
+    path = _project_path(root, str(ref), "route_mileage_k_anchors_ref")
+    if not path.exists():
+        return []
+    payload = _load_json_object(path)
+    records: list[ScoutAgentKbRecord] = []
+    for index, item in enumerate(payload.get("anchors", []) or []):
+        if not isinstance(item, dict):
+            continue
+        record_id = str(item.get("candidate_id") or f"route_mileage_anchor.{index:05d}")
+        label = str(
+            item.get("display_label")
+            or item.get("normalized_mileage_k")
+            or item.get("raw_mileage_text")
+            or record_id
+        )
+        text = _compact_text(
+            {
+                "display_label": item.get("display_label"),
+                "normalized_mileage_k": item.get("normalized_mileage_k"),
+                "mileage_k": item.get("mileage_k"),
+                "mileage_m": item.get("mileage_m"),
+                "lat": item.get("lat"),
+                "lon": item.get("lon"),
+                "label_role": item.get("label_role"),
+                "mileage_anchor_kind": item.get("mileage_anchor_kind"),
+                "raw_label_examples": item.get("raw_label_examples"),
+                "supporting_candidate_ids": item.get("supporting_candidate_ids"),
+                "review_required": item.get("review_required"),
+                "candidate_only": item.get("candidate_only"),
+                "runtime_safety_truth": item.get("runtime_safety_truth"),
+            },
+            max_chars=1200,
+        )
+        records.append(
+            _record(
+                record_id=record_id,
+                evidence_type="pretrip_route_mileage_k_anchor",
+                source_path=str(ref),
+                title=label,
+                text=text or label,
+                tags=[
+                    "route_mileage",
+                    "mileage_anchor",
+                    "trail_mileage_k_anchor",
+                    str(item.get("normalized_mileage_k") or ""),
+                ],
+                metadata={
+                    "candidate_id": item.get("candidate_id"),
+                    "normalized_mileage_k": item.get("normalized_mileage_k"),
+                    "mileage_k": item.get("mileage_k"),
+                    "mileage_m": item.get("mileage_m"),
+                    "lat": item.get("lat"),
+                    "lon": item.get("lon"),
+                    "review_required": item.get("review_required"),
+                    "candidate_only": item.get("candidate_only"),
+                    "runtime_safety_truth": item.get("runtime_safety_truth"),
+                },
+            )
+        )
+    return records
+
+
+def _mileage_tag_alignment_records(root: Path, project: dict[str, Any]) -> list[ScoutAgentKbRecord]:
+    ref = project.get("mileage_tag_alignment_ref")
+    if not ref:
+        return []
+    path = _project_path(root, str(ref), "mileage_tag_alignment_ref")
+    if not path.exists():
+        return []
+    payload = _load_json_object(path)
+    records: list[ScoutAgentKbRecord] = []
+    counts = payload.get("counts") if isinstance(payload.get("counts"), dict) else {}
+    route_alignment = (
+        payload.get("route_mileage_alignment")
+        if isinstance(payload.get("route_mileage_alignment"), dict)
+        else {}
+    )
+    records.append(
+        _record(
+            record_id="mileage_tag_alignment.summary",
+            evidence_type="pretrip_mileage_tag_alignment_summary",
+            source_path=str(ref),
+            title="Mileage tag alignment summary",
+            text=_compact_text(
+                {
+                    "artifact_kind": payload.get("artifact_kind"),
+                    "status": payload.get("status"),
+                    "counts": counts,
+                    "policy": payload.get("policy"),
+                    "raw_source_summary": payload.get("raw_source_summary"),
+                    "usable_anchor_count": route_alignment.get("usable_anchor_count"),
+                    "projected_anchor_count": route_alignment.get("projected_anchor_count"),
+                    "rejected_anchor_count": route_alignment.get("rejected_anchor_count"),
+                },
+                max_chars=1800,
+            ),
+            tags=["mileage_tag_alignment", "route_mileage", "workspace_summary"],
+            metadata={
+                "artifact_kind": payload.get("artifact_kind"),
+                "status": payload.get("status"),
+                "counts": counts,
+                "mileage_tag_alignment_geojson_ref": payload.get(
+                    "mileage_tag_alignment_geojson_ref"
+                ),
+                "candidate_only": (payload.get("boundary") or {}).get("candidate_only")
+                if isinstance(payload.get("boundary"), dict)
+                else None,
+                "runtime_safety_truth": (payload.get("boundary") or {}).get(
+                    "runtime_safety_truth"
+                )
+                if isinstance(payload.get("boundary"), dict)
+                else None,
+            },
+        )
+    )
+    usable_anchors = route_alignment.get("usable_anchors")
+    if isinstance(usable_anchors, list):
+        for index, item in enumerate(usable_anchors[:128]):
+            if not isinstance(item, dict):
+                continue
+            label = str(
+                item.get("display_label")
+                or item.get("normalized_mileage_k")
+                or f"mileage_alignment_anchor.{index:05d}"
+            )
+            records.append(
+                _record(
+                    record_id=str(
+                        item.get("candidate_id")
+                        or f"mileage_alignment_anchor.{index:05d}"
+                    ),
+                    evidence_type="pretrip_mileage_tag_alignment_anchor",
+                    source_path=str(ref),
+                    title=label,
+                    text=_compact_text(item, max_chars=1200) or label,
+                    tags=[
+                        "mileage_tag_alignment",
+                        "usable_anchor",
+                        str(item.get("normalized_mileage_k") or ""),
+                    ],
+                    metadata={
+                        "normalized_mileage_k": item.get("normalized_mileage_k"),
+                        "mileage_k": item.get("mileage_k"),
+                        "mileage_m": item.get("mileage_m"),
+                        "lat": item.get("lat"),
+                        "lon": item.get("lon"),
+                        "candidate_only": item.get("candidate_only"),
+                        "runtime_safety_truth": item.get("runtime_safety_truth"),
+                    },
+                )
+            )
+    return records
+
+
+def _raster_label_records(root: Path, project: dict[str, Any]) -> list[ScoutAgentKbRecord]:
+    records: list[ScoutAgentKbRecord] = []
+    evidence_ref = project.get("raster_label_evidence_ref")
+    if evidence_ref:
+        evidence_path = _project_path(root, str(evidence_ref), "raster_label_evidence_ref")
+        if evidence_path.exists():
+            payload = _load_json_object(evidence_path)
+            for index, feature in enumerate(payload.get("features", []) or []):
+                if not isinstance(feature, dict):
+                    continue
+                properties = (
+                    feature.get("properties")
+                    if isinstance(feature.get("properties"), dict)
+                    else {}
+                )
+                geometry = (
+                    feature.get("geometry")
+                    if isinstance(feature.get("geometry"), dict)
+                    else {}
+                )
+                coordinates = geometry.get("coordinates")
+                lon = lat = None
+                if isinstance(coordinates, list) and len(coordinates) >= 2:
+                    lon = coordinates[0]
+                    lat = coordinates[1]
+                record_id = str(
+                    properties.get("candidate_id")
+                    or feature.get("id")
+                    or f"raster_label.{index:05d}"
+                )
+                label = str(
+                    properties.get("label_text")
+                    or properties.get("label")
+                    or record_id
+                )
+                records.append(
+                    _record(
+                        record_id=record_id,
+                        evidence_type="pretrip_raster_label_ocr",
+                        source_path=str(evidence_ref),
+                        title=label,
+                        text=_compact_text(
+                            {
+                                "label_text": properties.get("label_text"),
+                                "label_role": properties.get("label_role"),
+                                "confidence": properties.get("confidence"),
+                                "review_state": properties.get("review_state"),
+                                "review_required": properties.get("review_required"),
+                                "source_ref": properties.get("source_ref"),
+                                "source_payload_ref": properties.get("source_payload_ref"),
+                                "tile_id": properties.get("tile_id"),
+                                "lat": lat,
+                                "lon": lon,
+                                "candidate_only": properties.get("candidate_only"),
+                                "runtime_safety_truth": properties.get(
+                                    "runtime_safety_truth"
+                                ),
+                            },
+                            max_chars=1200,
+                        )
+                        or label,
+                        tags=[
+                            "raster_label",
+                            "ocr",
+                            str(properties.get("label_role") or ""),
+                            str(properties.get("label_text") or ""),
+                        ],
+                        metadata={
+                            "candidate_id": properties.get("candidate_id")
+                            or feature.get("id"),
+                            "label_text": properties.get("label_text"),
+                            "label_role": properties.get("label_role"),
+                            "confidence": properties.get("confidence"),
+                            "review_required": properties.get("review_required"),
+                            "lat": lat,
+                            "lon": lon,
+                            "source_payload_ref": properties.get("source_payload_ref"),
+                            "candidate_only": properties.get("candidate_only"),
+                            "runtime_safety_truth": properties.get(
+                                "runtime_safety_truth"
+                            ),
+                        },
+                    )
+                )
+    output_ref = project.get("raster_label_ocr_output_ref")
+    if output_ref:
+        output_path = _project_path(root, str(output_ref), "raster_label_ocr_output_ref")
+        if output_path.exists():
+            payload = _load_json_object(output_path)
+            for index, item in enumerate(payload.get("labels", []) or []):
+                if not isinstance(item, dict):
+                    continue
+                record_id = str(item.get("id") or f"raster_ocr_output.{index:05d}")
+                label = str(item.get("label_text") or record_id)
+                records.append(
+                    _record(
+                        record_id=f"{record_id}.raw",
+                        evidence_type="pretrip_raster_label_ocr_raw",
+                        source_path=str(output_ref),
+                        title=label,
+                        text=_compact_text(
+                            {
+                                "label_text": item.get("label_text"),
+                                "label_role": item.get("label_role"),
+                                "confidence": item.get("confidence"),
+                                "source_ref": item.get("source_ref"),
+                                "source_id": item.get("source_id"),
+                                "tile_z": item.get("tile_z"),
+                                "tile_x": item.get("tile_x"),
+                                "tile_y": item.get("tile_y"),
+                                "review_required": item.get("review_required"),
+                                "candidate_only": item.get("candidate_only"),
+                                "runtime_safety_truth": item.get(
+                                    "runtime_safety_truth"
+                                ),
+                            },
+                            max_chars=1200,
+                        )
+                        or label,
+                        tags=[
+                            "raster_label",
+                            "ocr_raw",
+                            str(item.get("label_role") or ""),
+                            str(item.get("label_text") or ""),
+                        ],
+                        metadata={
+                            "candidate_id": item.get("id"),
+                            "label_text": item.get("label_text"),
+                            "label_role": item.get("label_role"),
+                            "confidence": item.get("confidence"),
+                            "review_required": item.get("review_required"),
+                            "candidate_only": item.get("candidate_only"),
+                            "runtime_safety_truth": item.get("runtime_safety_truth"),
+                        },
+                    )
+                )
     return records
 
 

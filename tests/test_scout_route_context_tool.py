@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from scout_route_context_tool import (
@@ -127,6 +128,65 @@ def test_route_context_answers_exact_mileage_anchor_location() -> None:
     assert anchor["runtime_safety_truth"] is False
     assert "15K 在本次路徑約 15.0 km 處" in result["field_answer"]
     assert "lat 24.034234788, lon 121.280180449" in result["field_answer"]
+    assert "runtime_safety_truth=false" in result["field_answer"]
+
+
+def test_route_context_reads_standalone_route_mileage_anchor_artifact(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    (workspace / "candidates").mkdir(parents=True)
+    (workspace / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "mileage_anchor_fixture",
+                "route_context_points_ref": "candidates/route_context_points.json",
+                "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "candidates" / "route_context_points.json").write_text(
+        json.dumps({"artifact_kind": "empty_route_context", "points": []}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (workspace / "candidates" / "route_mileage_k_anchors.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_route_mileage_k_anchors",
+                "anchors": [
+                    {
+                        "candidate_id": "route_context.route_note_candidates.workspace_route.15K",
+                        "candidate_only": True,
+                        "display_label": "15K",
+                        "label_role": "trail_mileage_k_anchor",
+                        "lat": 24.034234788,
+                        "lon": 121.280180449,
+                        "mileage_anchor_kind": "trail_mileage_k_anchor",
+                        "mileage_k": 15.0,
+                        "mileage_m": 15000.0,
+                        "normalized_mileage_k": "15K",
+                        "review_required": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = assess_scout_route_context(workspace, query="本次路徑的15K在哪", limit=5)
+
+    assert result["answerability"] == "route_context_available"
+    assert result["filters"]["requested_mileage_anchors"] == ["15k"]
+    assert result["result_count"] == 1
+    anchor = result["results"][0]
+    assert anchor["source_path"] == "candidates/route_mileage_k_anchors.json"
+    assert anchor["normalized_mileage_k"] == "15K"
+    assert anchor["route_mileage_m"] == 15000.0
+    assert "15K 在本次路徑約 15.0 km 處" in result["field_answer"]
     assert "runtime_safety_truth=false" in result["field_answer"]
 
 

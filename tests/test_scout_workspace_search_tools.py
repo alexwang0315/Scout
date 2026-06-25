@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from scout_workspace_search_tools import (
@@ -103,3 +104,172 @@ def test_evidence_fulltext_wraps_local_evidence_index() -> None:
     assert any(item["record_id"] == "mcp.heishuitang.002" for item in result["results"])
     assert result["boundary"]["local_evidence_only"] is True
     assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_evidence_fulltext_indexes_mileage_and_raster_ocr_artifacts(
+    tmp_path: Path,
+) -> None:
+    workspace = _write_workspace_search_mileage_ocr_fixture(tmp_path)
+
+    mileage = search_project_evidence_fulltext(workspace, query="15K在哪", limit=4)
+    ocr = search_project_evidence_fulltext(workspace, query="924m OCR", limit=4)
+    alignment = search_project_evidence_fulltext(
+        workspace,
+        query="mileage tag alignment usable anchor",
+        limit=4,
+    )
+
+    assert any(
+        item["evidence_type"] == "pretrip_route_mileage_k_anchor"
+        and item["title"] == "15K"
+        for item in mileage["results"]
+    )
+    assert any(
+        item["evidence_type"] == "pretrip_raster_label_ocr"
+        and item["title"] == "924m"
+        for item in ocr["results"]
+    )
+    assert any(
+        item["evidence_type"] == "pretrip_mileage_tag_alignment_summary"
+        for item in alignment["results"]
+    )
+    assert mileage["boundary"]["runtime_safety_truth"] is False
+    assert ocr["boundary"]["raw_payloads_embedded"] is False
+
+
+def _write_workspace_search_mileage_ocr_fixture(tmp_path: Path) -> Path:
+    workspace = tmp_path / "workspace-search-fixture"
+    (workspace / "candidates").mkdir(parents=True)
+    (workspace / "outputs" / "layers" / "normalized").mkdir(parents=True)
+    (workspace / "outputs" / "layers").mkdir(parents=True, exist_ok=True)
+    (workspace / "outputs").mkdir(parents=True, exist_ok=True)
+    (workspace / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "workspace_search_fixture",
+                "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
+                "mileage_tag_alignment_ref": "outputs/mileage_tag_alignment.json",
+                "mileage_tag_alignment_geojson_ref": "outputs/mileage_tag_alignment.geojson",
+                "raster_label_evidence_ref": (
+                    "outputs/layers/normalized/raster_label_evidence.geojson"
+                ),
+                "raster_label_ocr_output_ref": "outputs/layers/raster_label_ocr_output.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "candidates" / "route_mileage_k_anchors.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_route_mileage_k_anchors",
+                "anchors": [
+                    {
+                        "candidate_id": "route_context.route_note_candidates.workspace_route.15K",
+                        "candidate_only": True,
+                        "display_label": "15K",
+                        "label_role": "trail_mileage_k_anchor",
+                        "lat": 24.034234788,
+                        "lon": 121.280180449,
+                        "mileage_anchor_kind": "trail_mileage_k_anchor",
+                        "mileage_k": 15.0,
+                        "mileage_m": 15000.0,
+                        "normalized_mileage_k": "15K",
+                        "review_required": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "outputs" / "mileage_tag_alignment.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_workspace_mileage_tag_alignment",
+                "status": "completed",
+                "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+                "counts": {"tag_count": 1, "usable_anchor_count": 1},
+                "mileage_tag_alignment_geojson_ref": "outputs/mileage_tag_alignment.geojson",
+                "route_mileage_alignment": {
+                    "usable_anchor_count": 1,
+                    "projected_anchor_count": 1,
+                    "rejected_anchor_count": 0,
+                    "usable_anchors": [
+                        {
+                            "candidate_id": "route_context.route_note_candidates.workspace_route.15K",
+                            "display_label": "15K",
+                            "normalized_mileage_k": "15K",
+                            "mileage_k": 15.0,
+                            "mileage_m": 15000.0,
+                            "lat": 24.034234788,
+                            "lon": 121.280180449,
+                            "candidate_only": True,
+                            "runtime_safety_truth": False,
+                        }
+                    ],
+                },
+                "mileage_tags": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (
+        workspace / "outputs" / "layers" / "normalized" / "raster_label_evidence.geojson"
+    ).write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_raster_label_evidence",
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "id": "ocr_label.fixture.924m",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.54724121, 23.5759308],
+                        },
+                        "properties": {
+                            "candidate_id": "ocr_label.fixture.924m",
+                            "candidate_only": True,
+                            "confidence": 0.95,
+                            "label_role": "named_place_label",
+                            "label_text": "924m",
+                            "review_required": True,
+                            "runtime_safety_truth": False,
+                            "source_payload_ref": (
+                                "outputs/layers/raster_label_ocr_output.json"
+                            ),
+                            "source_ref": "local_raster_tile.z6.x53.y27",
+                            "tile_id": "z6.x53.y27",
+                        },
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "outputs" / "layers" / "raster_label_ocr_output.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_raster_label_ocr_output",
+                "labels": [
+                    {
+                        "id": "ocr_label.fixture.924m",
+                        "candidate_only": True,
+                        "confidence": 0.95,
+                        "label_role": "named_place_label",
+                        "label_text": "924m",
+                        "review_required": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return workspace
