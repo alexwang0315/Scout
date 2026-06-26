@@ -746,7 +746,8 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "width: max-content;\n      max-width: 100%;\n      box-sizing: border-box;" in html
     assert "renderRasterLayer(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, \"imagery\", coverageBounds)" in html
     assert "renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds)" in html
-    assert "renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds)" in html
+    assert "renderOsmBasemap(osmGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds)" in html
+    assert '<input type="checkbox" data-layer="overpass" checked> Overpass' in html
     assert "function rasterTileCoverage" in html
     assert "function rasterBoundsFor" in html
     assert "function isDirectRuntimeRasterLayer" in html
@@ -756,6 +757,21 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "class: \"raster-tile\"" in html
     assert "data-raster-tile" in html
     assert "function renderOsmBasemap" in html
+    assert "function localOsmPbfVectorUrl" in html
+    assert "/osm-pbf-vector.geojson" in html
+    assert "function renderOsmPbfVector" in html
+    assert "state.osmPbfVector?.features" in html
+    assert "class: `osm-pbf-line ${category}`" in html
+    assert "class: `osm-pbf-area ${category}`" in html
+    assert ".osm-pbf-point { fill: #5a5f63;" in html
+    assert '"data-osm-pbf-label": "true"' in html
+    assert "function syncOsmPbfLabelScale" in html
+    assert "syncOsmPbfLabelScale(scale);" in html
+    update_layers_body = html.split("function updateLayers()", 1)[1].split("function checkedLayerIds()", 1)[0]
+    assert "syncMapMarkerScale();" in update_layers_body
+    assert update_layers_body.index("syncMapMarkerScale();") < update_layers_body.index("updatePointLabels();")
+    assert ".osm-pbf-line.trail" in html
+    assert ".osm-pbf-area.forest" in html
     assert 'group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));' in html
     assert "function osmTileCoverage" in html
     assert 'el("image"' in html

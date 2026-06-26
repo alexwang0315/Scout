@@ -583,6 +583,52 @@ def test_pretrip_project_terrain_overlay_api_serves_workspace_png(tmp_path: Path
     assert response.content == png_bytes
 
 
+def test_pretrip_project_osm_pbf_vector_api_serves_workspace_geojson(tmp_path: Path):
+    workspace_root = tmp_path / "pretrip_workspace"
+    project_root = workspace_root / PROJECT_ID
+    vector_ref = "normalized/map/osm_pbf_route_bbox_full.geojson"
+    vector_path = project_root / vector_ref
+    vector_path.parent.mkdir(parents=True, exist_ok=True)
+    vector_payload = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.1, 23.9]},
+                "properties": {
+                    "@type": "node",
+                    "@id": 1,
+                    "highway": "milestone",
+                    "distance": "7K+000",
+                },
+            }
+        ],
+    }
+    vector_path.write_text(json.dumps(vector_payload), encoding="utf-8")
+    (project_root / "project.json").write_text(
+        json.dumps({"osm_pbf_render_geojson_ref": vector_ref}),
+        encoding="utf-8",
+    )
+
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+    response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}/osm-pbf-vector.geojson")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/geo+json")
+    assert response.headers["x-scout-osm-pbf-vector"] == "true"
+    assert response.headers["x-scout-source-ref"] == vector_ref
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert response.json()["features"][0]["properties"]["distance"] == "7K+000"
+
+    project = {"osm_pbf_render_geojson_ref": "../outside.geojson"}
+    (project_root / "project.json").write_text(json.dumps(project), encoding="utf-8")
+    unsafe_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/osm-pbf-vector.geojson"
+    )
+    assert unsafe_response.status_code == 422
+
+
 def test_pretrip_project_weather_overlay_api_returns_summary_only_contract():
     client = TestClient(create_admin_app())
 

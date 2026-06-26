@@ -215,6 +215,26 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('aria-label="chilai_nanhua_day1 debug evidence map"', html)
         self.assertIn("background: #111820;", html)
         self.assertIn("renderDebugEvidenceMap", html)
+        self.assertIn("function localOsmPbfVectorUrl", html)
+        self.assertIn("/osm-pbf-vector.geojson", html)
+        self.assertIn("function renderOsmPbfVector", html)
+        self.assertIn("debugPageState.osmPbfVector?.features", html)
+        self.assertIn("if (!renderOsmPbfVector(osmGroup, projection, bounds)) appendRasterLayer", html)
+        self.assertIn('class: `osm-pbf-line ${category}`', html)
+        self.assertIn('class: `osm-pbf-area ${category}`', html)
+        self.assertIn('<input type="checkbox" data-layer="overpass" checked> Overpass', html)
+        self.assertIn(".osm-pbf-point { fill: #5a5f63;", html)
+        self.assertIn('"data-osm-pbf-label": "true"', html)
+        self.assertIn("function syncOsmPbfLabelScale", html)
+        self.assertIn("syncOsmPbfLabelScale(scale);", html)
+        update_layers_body = html.split("function updateLayers()", 1)[1].split("function layerInputChecked", 1)[0]
+        self.assertIn("syncMapMarkerScale();", update_layers_body)
+        self.assertLess(
+            update_layers_body.index("syncMapMarkerScale();"),
+            update_layers_body.index("updatePointLabels();"),
+        )
+        self.assertIn(".osm-pbf-line.trail", html)
+        self.assertIn(".osm-pbf-area.forest", html)
         self.assertIn("reference-track", html)
         self.assertIn("overpass-corridor", html)
         self.assertIn('aria-label="Map view controls"', html)
@@ -736,15 +756,22 @@ class DebugPageTests(unittest.TestCase):
         shared_script = ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8")
         fetch_targets = set(re.findall(r'fetchJson\("([^"]+)"\)', html))
 
+        self.assertIn("/admin/pretrip/projects/{projectId}/debug-projection", html)
         self.assertIn(
-            "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection",
+            "/admin/pretrip/projects/{projectId}/debug-projection-events",
             html,
         )
         self.assertIn(
-            "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection-events",
+            "`/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection`",
             html,
         )
-        self.assertIn('const PRETRIP_PROJECT_ID = "chilai_nanhua_day1"', html)
+        self.assertIn(
+            "`/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection-events`",
+            html,
+        )
+        self.assertIn('const DEFAULT_PRETRIP_PROJECT_ID = "chilai_nanhua_day1"', html)
+        self.assertIn('new URLSearchParams(window.location.search).get("projectId")', html)
+        self.assertIn("const PRETRIP_PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PRETRIP_PROJECT_ID_PARAM)", html)
         self.assertIn("PRETRIP_DEBUG_PROJECTION_PATH", html)
         self.assertIn("PRETRIP_DEBUG_PROJECTION_EVENTS_PATH", html)
         self.assertIn("loadProjectedDebugEventPayload", html)

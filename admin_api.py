@@ -2033,6 +2033,39 @@ def create_admin_router(
             },
         )
 
+    @router.get("/pretrip/projects/{project_id}/osm-pbf-vector.geojson")
+    def pretrip_project_osm_pbf_vector(project_id: str) -> Response:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+        vector_ref = (
+            project.get("osm_pbf_render_geojson_ref")
+            or "normalized/map/osm_pbf_route_bbox_full.geojson"
+        )
+        vector_path = _safe_pretrip_project_ref_path(project_root, vector_ref)
+        if vector_path is None:
+            raise HTTPException(status_code=422, detail="unsafe OSM PBF vector path")
+        if not vector_path.exists():
+            raise HTTPException(status_code=404, detail="OSM PBF vector extract not prepared")
+        return Response(
+            vector_path.read_bytes(),
+            media_type="application/geo+json",
+            headers={
+                "Cache-Control": "no-cache, max-age=0, must-revalidate",
+                "X-Scout-OSM-PBF-Vector": "true",
+                "X-Scout-Source-Ref": str(vector_ref),
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
     @router.get("/pretrip/projects/{project_id}/weather-overlay")
     def pretrip_project_weather_overlay(project_id: str) -> dict[str, Any]:
         try:
@@ -3358,13 +3391,9 @@ def create_admin_router(
     @router.get("/cases/{case_id}")
     def case(case_id: str) -> dict[str, Any]:
         try:
-            pretrip_project_root = (
-                _pretrip_workspace_project_root(
-                    pretrip_workspace_root,
-                    project_id=case_id,
-                )
-                if case_id == PRETRIP_CASE_ID
-                else None
+            pretrip_project_root = _pretrip_workspace_project_root(
+                pretrip_workspace_root,
+                project_id=case_id,
             )
             view = build_admin_case_view(
                 case_id,

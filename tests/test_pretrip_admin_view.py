@@ -1138,6 +1138,9 @@ def test_osm_map_layer_exposes_workspace_local_render_extract(
                 "local_osm_pbf_route_bbox_extract"
             ),
             "osm_pbf_render_extract_feature_count": 295,
+            "osm_pbf_render_geojson_ref": (
+                "normalized/map/osm_pbf_route_bbox_full.geojson"
+            ),
             "osm_pbf_feature_index_ref": (
                 "outputs/layers/normalized/osm_pbf_feature_index.json"
             ),
@@ -1235,6 +1238,9 @@ def test_osm_map_layer_exposes_workspace_local_render_extract(
         "local_osm_pbf_route_bbox_extract"
     )
     assert osm["local_osm_render_extract_feature_count"] == 295
+    assert osm["local_osm_render_geojson_ref"] == (
+        "normalized/map/osm_pbf_route_bbox_full.geojson"
+    )
     assert osm["local_osm_feature_index_feature_count"] == 2
     assert osm["osm_rendering_policy"] == "workspace_local_osm_extract_available"
     assert view["osm_pbf_evidence"]["counts"]["item_count"] == 2

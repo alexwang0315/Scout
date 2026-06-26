@@ -14095,6 +14095,9 @@ def _map_layers_with_local_raster_metadata(
                 enriched["osm_rendering_policy"] = (
                     "workspace_local_osm_extract_available"
                 )
+            render_geojson_ref = project_payload.get("osm_pbf_render_geojson_ref")
+            if render_geojson_ref:
+                enriched["local_osm_render_geojson_ref"] = render_geojson_ref
             feature_index_ref = project_payload.get("osm_pbf_feature_index_ref")
             if feature_index_ref:
                 enriched["local_osm_feature_index_ref"] = feature_index_ref
@@ -14107,6 +14110,11 @@ def _map_layers_with_local_raster_metadata(
                         {},
                     )
                 )
+            enriched["osm_rendering_policy"] = (
+                "workspace_local_osm_extract_available"
+                if render_ref or render_geojson_ref or feature_index_ref
+                else enriched.get("osm_rendering_policy", "osm_tile_fallback")
+            )
             enriched_layers.append(_map_layer_metadata(enriched))
             continue
         if layer.get("layer_id") not in wmts_layer_ids:
