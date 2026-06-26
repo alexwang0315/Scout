@@ -28,6 +28,7 @@ class SkillRegistryTests(unittest.TestCase):
                 "gee-environment-assess",
                 "ins-dr-wearable-route-constrained",
                 "latest-team-position-check",
+                "pretrip-import-preparation",
                 "remote-status-json",
                 "route-briefing-compose",
                 "route-reference-point-lookup",
@@ -75,6 +76,20 @@ class SkillRegistryTests(unittest.TestCase):
             route_reference.output_schema.artifact_kinds,
         )
         self.assertIn("runtime_safety_truth", route_reference.output_schema.required_fields)
+        pretrip_import = registry.get("pretrip-import-preparation")
+        self.assertEqual(pretrip_import.type, "artifact")
+        self.assertEqual(pretrip_import.activation_gate.mode, "operator_approved")
+        self.assertTrue(pretrip_import.activation_gate.requires_human_approval)
+        self.assertIn("scout.pretrip.import_gpx", pretrip_import.preflight.required_capabilities)
+        self.assertIn("scout.pretrip.prepare_layers", pretrip_import.preflight.required_capabilities)
+        self.assertIn("local.raw_gpx", pretrip_import.allowed_reads)
+        self.assertIn("pretrip.workspace.validation_reports", pretrip_import.allowed_writes)
+        self.assertIn("phase1.safety", pretrip_import.forbidden_writes)
+        self.assertIn("missing_inputs", pretrip_import.output_schema.required_fields)
+        self.assertIn(
+            "pretrip_import_preparation_run_result",
+            pretrip_import.output_schema.artifact_kinds,
+        )
 
     def test_manifest_schema_rejects_unknown_fields_and_overlapping_writes(self):
         payload = self._valid_manifest_payload()

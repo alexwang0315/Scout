@@ -102,6 +102,54 @@ REST_AREA_MIN_SOURCE_POINT_COUNT = 16
 ImportProfile = Literal["mac-workstation", "pi-offline", "pi-online-explicit"]
 ImportStage = Literal["pretrip", "post_analysis"]
 OFFLINE_PROFILES = {"mac-workstation", "pi-offline"}
+TIME_SENSITIVE_ENVIRONMENT_REF_KEYS: tuple[str, ...] = (
+    "environment_evidence_package_ref",
+    "environment_factor_matrix_ref",
+    "go_no_go_review_draft_ref",
+    "environment_risk_derivatives_ref",
+    "cwa_weather_evidence_ref",
+    "cwa_observations_geojson_ref",
+    "cwa_warnings_geojson_ref",
+    "cwa_qpf_grid_ref",
+    "cwa_qpf_corridor_summary_ref",
+    "cwa_qpf_route_timeline_ref",
+    "cwa_forecast_timeline_ref",
+    "cwa_astronomy_timeline_ref",
+    "cwa_tide_marine_timeline_ref",
+    "gee_raw_summary_ref",
+    "gee_gpm_imerg_raw_summary_ref",
+    "gee_feature_package_ref",
+    "soil_moisture_grid_ref",
+    "antecedent_rain_grid_ref",
+)
+TIME_SENSITIVE_ENVIRONMENT_METADATA_KEYS: tuple[str, ...] = (
+    "environment_evidence_updated_at",
+    "environment_risk_derivative_counts",
+    "environment_risk_derivative_headline",
+    "environment_risk_derivative_status",
+    "cwa_external_api_calls_made",
+    "cwa_api_request_attempted",
+    "cwa_api_request_attempted_at",
+    "cwa_api_request_attempted_at_hour",
+    "cwa_fetched_at",
+    "cwa_fetched_at_hour",
+    "cwa_valid_from_hour",
+    "cwa_valid_until_hour",
+    "cwa_qpf_feature_count",
+    "cwa_rain_observation_count",
+    "cwa_warning_count",
+    "cwa_weather_point_count",
+    "gee_environment_status",
+    "gee_external_api_calls_made",
+    "gee_feature_package_segment_count",
+    "gee_feature_package_status",
+    "gee_numeric_cacheable",
+    "gee_numeric_ttl_seconds",
+    "gee_raw_summary_sha256",
+    "gee_gpm_imerg_raw_summary_sha256",
+    "soil_moisture_feature_count",
+    "antecedent_rain_feature_count",
+)
 DURABLE_ADMIN_EVIDENCE_REF_KEYS: tuple[str, ...] = (
     "readiness_report_ref",
     "resource_plan_ref",
@@ -135,6 +183,30 @@ DURABLE_ADMIN_EVIDENCE_REF_KEYS: tuple[str, ...] = (
     "route_pressure_profile_geojson_ref",
     "boss_points_ref",
     "boss_points_geojson_ref",
+    "raster_label_plan_ref",
+    "raster_label_ocr_output_ref",
+    "raster_label_ocr_cache_ref",
+    "raster_label_evidence_ref",
+    "raster_label_adapter_manifest_ref",
+    "route_context_evidence_ref",
+    "route_context_source_manifest_ref",
+    "route_context_pack_ref",
+    "route_context_crawl_seed_plan_ref",
+    "route_context_media_manifest_ref",
+    "route_context_briefing_ref",
+    "route_context_points_ref",
+    "route_mileage_k_anchors_ref",
+    "overpass_evidence_ref",
+    "overpass_map_context_ref",
+    "overpass_raw_payload_ref",
+    "overpass_query_ref",
+    "overpass_route_alignment_ref",
+    "overpass_aligned_checkpoint_candidates_ref",
+    "overpass_aligned_segment_candidates_ref",
+    "overpass_aligned_segment_display_geometry_ref",
+    "overpass_aligned_mcp_candidates_ref",
+    "mileage_tag_alignment_ref",
+    "mileage_tag_alignment_geojson_ref",
 )
 DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS: dict[str, str] = {
     "readiness_report_ref": "outputs/readiness_report.json",
@@ -177,6 +249,44 @@ DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS: dict[str, str] = {
     "route_pressure_profile_geojson_ref": "outputs/route_pressure_profile.geojson",
     "boss_points_ref": "outputs/boss_points.json",
     "boss_points_geojson_ref": "outputs/boss_points.geojson",
+    "raster_label_plan_ref": "outputs/layers/plans/raster_label_plan.json",
+    "raster_label_ocr_output_ref": "outputs/layers/raster_label_ocr_output.json",
+    "raster_label_ocr_cache_ref": "outputs/layers/cache/raster_label_ocr_tiles",
+    "raster_label_evidence_ref": "outputs/layers/normalized/raster_label_evidence.geojson",
+    "raster_label_adapter_manifest_ref": "outputs/layers/raster_label_adapter_manifest.json",
+    "route_context_evidence_ref": (
+        "normalized/context/route_context/route_context_evidence.json"
+    ),
+    "route_context_source_manifest_ref": (
+        "normalized/context/route_context/source_manifest.json"
+    ),
+    "route_context_pack_ref": "normalized/context/route_context/route_context_pack.json",
+    "route_context_crawl_seed_plan_ref": (
+        "normalized/context/route_context/crawl_seed_plan.json"
+    ),
+    "route_context_media_manifest_ref": (
+        "normalized/context/route_context/media_manifest.json"
+    ),
+    "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
+    "route_context_points_ref": "candidates/route_context_points.json",
+    "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
+    "overpass_evidence_ref": "candidates/overpass_evidence.json",
+    "overpass_map_context_ref": "normalized/overpass/overpass_map_context.geojson",
+    "overpass_raw_payload_ref": "raw/overpass/overpass_response.json",
+    "overpass_query_ref": "outputs/layers/plans/overpass_query.txt",
+    "overpass_route_alignment_ref": "outputs/overpass_route_alignment.json",
+    "overpass_aligned_checkpoint_candidates_ref": (
+        "candidates/checkpoints.overpass_aligned.json"
+    ),
+    "overpass_aligned_segment_candidates_ref": (
+        "candidates/segments.overpass_aligned.json"
+    ),
+    "overpass_aligned_segment_display_geometry_ref": (
+        "outputs/segments.overpass_aligned.geojson"
+    ),
+    "overpass_aligned_mcp_candidates_ref": "candidates/mcp.overpass_aligned.json",
+    "mileage_tag_alignment_ref": "outputs/mileage_tag_alignment.json",
+    "mileage_tag_alignment_geojson_ref": "outputs/mileage_tag_alignment.geojson",
 }
 DURABLE_ADMIN_EVIDENCE_METADATA_KEYS: tuple[str, ...] = (
     "risk_route_sample_count",
@@ -200,6 +310,27 @@ DURABLE_ADMIN_EVIDENCE_METADATA_KEYS: tuple[str, ...] = (
     "boss_point_synthesis_updated_at",
     "boss_point_synthesis_candidate_only",
     "boss_point_synthesis_runtime_safety_truth",
+    "raster_label_evidence_count",
+    "raster_label_ocr_cache_hit_count",
+    "raster_label_ocr_cache_miss_count",
+    "raster_label_ocr_label_count",
+    "raster_label_ocr_status",
+    "route_context_collection_schema_version",
+    "route_context_collection_updated_at",
+    "route_context_crawl_seed_count",
+    "route_context_point_count",
+    "route_mileage_k_anchor_count",
+    "overpass_candidate_count",
+    "overpass_fetched_at",
+    "overpass_route_alignment_basis",
+    "overpass_route_alignment_kept_gpx_point_count",
+    "overpass_route_alignment_max_projection_distance_m",
+    "overpass_route_alignment_snapped_point_count",
+    "overpass_route_alignment_updated_at",
+    "overpass_skipped_object_count",
+    "mileage_tag_alignment_count",
+    "mileage_tag_alignment_schema_version",
+    "mileage_tag_alignment_updated_at",
 )
 
 
@@ -3765,6 +3896,7 @@ def restore_durable_admin_evidence_refs(
     *,
     project_root: Path,
     source_root: Path,
+    overwrite_existing: bool = False,
 ) -> dict[str, Any]:
     """Restore admin evidence refs that importer/layer prep do not regenerate."""
 
@@ -3777,6 +3909,7 @@ def restore_durable_admin_evidence_refs(
         project_payload,
         project_root=project_root,
         source_root=source_root,
+        overwrite_existing=overwrite_existing,
     )
     write_json(project_root / "project.json", project_payload)
     _refresh_admin_projection_export_summaries(project_root)
@@ -3804,6 +3937,7 @@ def _restore_durable_admin_refs_from_workspace(
     *,
     project_root: Path,
     source_root: Path | None = None,
+    overwrite_existing: bool = False,
 ) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "source_root": source_root.as_posix() if source_root is not None else None,
@@ -3817,14 +3951,25 @@ def _restore_durable_admin_refs_from_workspace(
         if source_project is None:
             summary["source_project_missing"] = True
         else:
+            for key in TIME_SENSITIVE_ENVIRONMENT_REF_KEYS:
+                if key in source_project:
+                    summary["skipped"][key] = (
+                        "time_sensitive_environment_ref_not_restored"
+                    )
+            for key in TIME_SENSITIVE_ENVIRONMENT_METADATA_KEYS:
+                if key in source_project:
+                    summary["skipped"][key] = (
+                        "time_sensitive_environment_metadata_not_restored"
+                    )
             _copy_durable_admin_evidence_files(
                 source_project=source_project,
                 source_root=source_root,
                 destination_root=project_root,
                 summary=summary,
+                overwrite_existing=overwrite_existing,
             )
             for key in DURABLE_ADMIN_EVIDENCE_METADATA_KEYS:
-                if key in payload:
+                if key in payload and not overwrite_existing:
                     summary["skipped"][key] = "payload_value_already_exists"
                     continue
                 if key not in source_project:
@@ -3833,7 +3978,7 @@ def _restore_durable_admin_refs_from_workspace(
                 payload[key] = source_project[key]
                 summary["restored"][key] = source_project[key]
     for key in DURABLE_ADMIN_EVIDENCE_REF_KEYS:
-        if _payload_ref_exists(payload, key, project_root=project_root):
+        if _payload_ref_exists(payload, key, project_root=project_root) and not overwrite_existing:
             summary["skipped"][key] = "payload_ref_already_exists"
             continue
         restored_ref = summary["copied"].get(key) or DEFAULT_DURABLE_ADMIN_EVIDENCE_REFS[key]
@@ -3853,6 +3998,7 @@ def _copy_durable_admin_evidence_files(
     source_root: Path,
     destination_root: Path,
     summary: dict[str, Any],
+    overwrite_existing: bool = False,
 ) -> None:
     for key in DURABLE_ADMIN_EVIDENCE_REF_KEYS:
         ref = source_project.get(key)
@@ -3867,10 +4013,15 @@ def _copy_durable_admin_evidence_files(
         if not source_path.exists():
             summary["skipped"][key] = "source_file_missing"
             continue
-        if destination_path.exists():
+        if destination_path.exists() and not overwrite_existing:
             summary["skipped"][key] = "destination_file_exists"
             continue
         destination_path.parent.mkdir(parents=True, exist_ok=True)
+        if destination_path.exists():
+            if destination_path.is_dir():
+                shutil.rmtree(destination_path)
+            else:
+                destination_path.unlink()
         if source_path.is_dir():
             shutil.copytree(source_path, destination_path)
         else:

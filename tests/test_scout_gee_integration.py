@@ -1,3 +1,5 @@
+import json
+
 from scout_gee_integration import (
     build_environment_risk_derivatives,
     build_route_segments_from_gpx,
@@ -314,7 +316,20 @@ def test_environment_risk_derivatives_create_candidate_layers(tmp_path) -> None:
         ],
     }
 
-    derivatives = build_environment_risk_derivatives(package, event_date="2026-06-01")
+    cwa_time_metadata = {
+        "api_request_attempted_at_hour": "2026-06-26T01:00:00Z",
+        "api_fetched_at_hour": "2026-06-26T01:00:00Z",
+        "forecast_valid_until_hour": "2026-06-26T08:00:00Z",
+        "valid_until_hour": "2026-06-26T09:00:00Z",
+        "time_precision": "hour",
+        "timezone": "UTC",
+    }
+
+    derivatives = build_environment_risk_derivatives(
+        package,
+        event_date="2026-06-01",
+        cwa_time_metadata=cwa_time_metadata,
+    )
 
     assert derivatives["schema_version"] == "scout_environment_risk_derivatives.v0.1"
     assert derivatives["boundary"]["runtime_safety_truth"] is False
@@ -327,12 +342,23 @@ def test_environment_risk_derivatives_create_candidate_layers(tmp_path) -> None:
         "scout_new_landslide_candidate.v0.1"
     )
     assert first["properties"]["runtime_safety_truth"] is False
+    wetness = derivatives["collections"]["wetness_flash_flood_susceptibility"][
+        "features"
+    ][0]
+    assert derivatives["cwa_time_metadata"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert wetness["properties"]["cwa_api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert wetness["properties"]["cwa_valid_until_hour"] == "2026-06-26T09:00:00Z"
     assert derivatives["route_revalidation_report"]["status"] == "ready"
 
     summary = write_environment_risk_derivative_artifacts(
         feature_package=package,
         output_dir=tmp_path,
         event_date="2026-06-01",
+        cwa_time_metadata=cwa_time_metadata,
     )
     assert (tmp_path / "new_landslide_candidates.geojson").is_file()
     assert (tmp_path / "wetness_flash_flood_susceptibility.geojson").is_file()
@@ -340,6 +366,14 @@ def test_environment_risk_derivatives_create_candidate_layers(tmp_path) -> None:
     assert (tmp_path / "practical_darkness_time.geojson").is_file()
     assert (tmp_path / "route_revalidation_report.json").is_file()
     assert summary["counts"]["segment_count"] == 1
+    written_wetness = json.loads(
+        (tmp_path / "wetness_flash_flood_susceptibility.geojson").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert written_wetness["features"][0]["properties"][
+        "cwa_api_fetched_at_hour"
+    ] == "2026-06-26T01:00:00Z"
 
 
 class _FakeRouteFeatureClient:

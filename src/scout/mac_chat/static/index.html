@@ -14,7 +14,10 @@
           <h1>Scout AI</h1>
           <p class="hint">Mac</p>
         </div>
-        <span id="serverState" class="state-pill">checking</span>
+        <div class="status-lamps" aria-label="Connection status">
+          <span id="serverState" class="state-pill">server checking</span>
+          <span id="fallbackState" class="state-pill">fallback checking</span>
+        </div>
       </div>
 
       <div class="status-grid">
@@ -33,6 +36,10 @@
         <div class="status-field">
           <span>UI bridge</span>
           <strong id="uiBridgeState">--</strong>
+        </div>
+        <div class="status-field">
+          <span>Local fallback</span>
+          <strong id="fallbackMode">--</strong>
         </div>
       </div>
 

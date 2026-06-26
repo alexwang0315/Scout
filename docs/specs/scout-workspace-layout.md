@@ -64,6 +64,7 @@ variables to `/tmp` or another local directory.
     {project_id}/
   caches/
     overpass/
+    osm_pbf/
     weather/
     map_tiles/
 ```
@@ -79,6 +80,7 @@ SCOUT_COMPLETED_TRIP_ROOT=/data/scout/completed_trips
 SCOUT_BLACK_BOX_EXPORT_ROOT=/data/scout/black-box/session_exports
 SCOUT_EXPORT_ROOT=/data/scout/exports
 SCOUT_RASTER_SOURCE_ROOT=/data/scout/raster-sources
+SCOUT_OSM_PBF_CACHE_ROOT=/data/scout/caches/osm_pbf
 ```
 
 ## Material Source Bundle
@@ -154,6 +156,7 @@ pretrip/workspaces/{project_id}/
     historical_gpx_source_index.json
     material_source_index.json
     template_source_index.json
+    osm_pbf_source_index.json
   normalized/
     routes/
     map/
@@ -260,8 +263,8 @@ review status, layer readiness, AI asset status, and boundary metadata such as:
 ```
 
 As the workspace evolves, `project.json` may also expose optional refs for
-route-context, mileage, raster OCR, and environment evidence. Current examples
-include:
+route-context, mileage, raster OCR, local OSM PBF extracts, and environment
+evidence. Current examples include:
 
 ```json
 {
@@ -271,13 +274,20 @@ include:
   "mileage_tag_alignment_geojson_ref": "outputs/mileage_tag_alignment.geojson",
   "raster_label_ocr_output_ref": "outputs/layers/raster_label_ocr_output.json",
   "raster_label_evidence_ref": "outputs/layers/normalized/raster_label_evidence.geojson",
+  "osm_pbf_source_ref": "/data/scout/caches/osm_pbf/taiwan-latest.osm.pbf",
+  "osm_pbf_source_url": "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf",
+  "osm_pbf_cache_status": "fresh",
+  "osm_pbf_render_extract_ref": "normalized/map/osm_pbf_route_bbox.osm.pbf",
+  "osm_pbf_render_extract_manifest_ref": "normalized/map/osm_pbf_render_extract_manifest.json",
+  "osm_pbf_render_extract_source_kind": "local_osm_pbf_route_bbox_extract",
+  "osm_pbf_render_extract_feature_count": 295,
   "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html"
 }
 ```
 
 Consumers should prefer these refs over hardcoded paths, tolerate missing
-optional refs, and avoid embedding large OCR or mileage alignment payloads in
-admin or AI responses.
+optional refs, and avoid embedding large OCR, mileage alignment, OSM JSON, or
+PBF payloads in admin or AI responses.
 
 ### Emergency Approval Workspace Consumption
 
@@ -718,6 +728,53 @@ outputs/layers/
   projections/
 ```
 
+Local OSM PBF evidence（本地 OSM PBF 證據） has two storage levels:
+
+1. Full-region PBF cache（全區 PBF 快取） outside the project workspace, for
+   example `/data/scout/caches/osm_pbf/taiwan-latest.osm.pbf`. This file may be
+   hundreds of megabytes and must not be copied into every workspace or git
+   fixture. It is referenced by absolute path, hash, source URL, and cache TTL
+   metadata.
+2. Workspace-local route-bbox extract（工作區內路線 bbox 小切片） inside the
+   selected project workspace. This is the portable rendering/evidence unit for
+   the `osm` layer and downstream Overpass-compatible candidate extraction.
+
+Canonical local OSM extract placement:
+
+```text
+pretrip/workspaces/{project_id}/
+  sources/
+    osm_pbf_source_index.json
+  normalized/
+    map/
+      osm_pbf_route_bbox.osm.pbf
+      osm_pbf_phase_a_raw.osm.json
+      osm_pbf_render_extract_manifest.json
+      overpass_vector_evidence.geojson
+  candidates/
+    overpass_evidence.json
+```
+
+The preferred OSM render source is
+`normalized/map/osm_pbf_route_bbox.osm.pbf` when `osmium extract` can write a
+small PBF. If only the Python streaming fallback is available, the render source
+may be `normalized/map/osm_pbf_phase_a_raw.osm.json`. In both cases,
+`osm_pbf_render_extract_manifest.json` must declare:
+
+- `preferred_render_source_ref`;
+- `preferred_render_source_kind`;
+- optional `pbf_extract_ref`;
+- `osmjson_extract_ref`;
+- `feature_count`;
+- extraction bbox/corridor plan;
+- PBF cache status, TTL, source URL, and refresh recommendation;
+- `candidate_only=true` and `runtime_safety_truth=false`.
+
+The full Taiwan PBF is a cache/source artifact, not a workspace artifact. The
+small extract is a workspace artifact. Admin UI and Scout AI tools should read
+the small extract refs from `project.json` or map-layer metadata instead of
+opening the full-region PBF during rendering.
+
 Terrain visualization layers belong to `outputs/layers/normalized/`:
 
 ```text
@@ -811,6 +868,14 @@ A workspace validator should verify:
     embedded wholesale.
 16. CWA/GEE/environment artifacts include source refs, stale-risk or timestamp
     metadata, candidate-only boundaries, and no secrets.
+17. Local OSM PBF workspaces do not embed the full-region `.osm.pbf` in the
+    project tree. They should reference the full PBF cache by path/hash and
+    preserve only the route-bbox extract or filtered OSM JSON under
+    `normalized/map/`.
+18. When `osm_pbf_render_extract_ref` is present, the referenced file and
+    `osm_pbf_render_extract_manifest_ref` must exist, the manifest must identify
+    the preferred render source and fallback source, and the `osm` layer must
+    expose matching `local_osm_render_extract_*` metadata.
 
 ## Alpha Acceptance Criteria
 

@@ -156,6 +156,51 @@ Scout priority for the next runtime provider slice:
 5. Register `COM_013 MapLayerInfo` as the preferred metadata lookup for layer
    descriptions and dynamically expanded `*` layer families.
 
+### Official Mountain Communication Point Dataset
+
+The data.gov.tw dataset
+`106640`（林業及自然保育署山區手機可通訊點標示） is an official
+mountain communication-point evidence source and must be kept separate from
+Rudy+TW OCR output. It is not a basemap or raster tile layer. It is route
+context data that should normalize into `official_communication_point_candidate`
+（官方手機可通訊點候選） records, then surface through the existing `pois`,
+`checkpoints`, and timeline evidence groups.
+
+Current source characteristics:
+
+| Source | Scout handling |
+|--------|----------------|
+| Provider | Agriculture open-data platform / Forestry and Nature Conservation Agency（農業部資料開放平臺 / 林業及自然保育署）. |
+| Dataset id | data.gov.tw `106640`, MOA open-data id `G07`. |
+| Formats | KML/ZIP style open-data package and SHP-style resource where available. The importer should prefer structured resource metadata, then parse KML `Placemark` records when that is the available payload. |
+| Update cadence | Annual（每年）. Treat older downloads as stale review evidence, not live signal truth. |
+| Core fields | `序號`, `名稱`/步道名, `分署`, `標示地`, `縣市`, `TWD97_X`, `TWD97_Y`, WGS84 `東經`/`北緯`, carrier fields `中華電`, `遠傳電`, `台灣大`, `亞太電`, and `備註`. |
+| Current known scale | The 2026 public notice describes 1,416 marked signs as of ROC 115 February. Do not hardcode this count; record it as source metadata. |
+
+Normalization requirements:
+
+- preserve dataset URL, source agency, resource id, request timestamp, raw
+  payload hash, parser version, record id, original KML/HTML field values, and
+  WGS84 geometry;
+- preserve `TWD97_X/Y` when present for audit and cross-checking, but use WGS84
+  `lon/lat` for Scout map display;
+- derive `carrier_count`, `carrier_names`, and `emergency_call_candidate`
+  metadata from the carrier fields, without claiming guaranteed reception;
+- join candidates to the route corridor and nearby checkpoints by distance,
+  not by name alone;
+- emit a candidate CP only when the communication point falls inside the route
+  corridor or configured along-track search buffer; otherwise retain it as
+  route-context POI evidence;
+- keep the caution text with the artifact: mountain communication quality is
+  affected by terrain, weather, power supply, device capability, and carrier
+  network state（山區地形、氣候、電力、手機與電信狀態皆會影響通訊品質）.
+
+This source is stronger than unstructured reference-GPX notes for stable
+communication POI facts, because the locations are official marked signs. It is
+still candidate-only evidence: it may support pretrip review, retreat planning,
+and "where to try communication" prompts, but it must not become runtime safety
+truth or a guarantee that rescue calls will work.
+
 In-house pre-trip preparation is connected by design. Before departure, the
 operator should use `--network-mode explicit-fetch --allow-network-fetch
 --seed-imagery-cache --imagery-provider-allows-offline-prefetch` so the
@@ -169,13 +214,79 @@ local/cache-only replay after departure; `pi-online-explicit` is the connected
 operator profile for pre-trip materialization.
 
 OSM raster tiles are not required when Overpass vector evidence is present.
-Overpass and OSM raster basemaps come from related OSM data, but they serve
-different purposes: Overpass is structured route-corridor evidence for CP/POI
-synthesis, while OSM/NLSC/TWMap tiles are visual basemap support. This alpha
-treats Overpass as the connected structured OSM data fetch and treats Rudy+TW
-as the only approved rendered-map cache/OCR material for hiking POI, mileage,
-and named-label extraction. OSM tiles, NLSC tiles, and other WMTS/XYZ basemaps
+Overpass, local OSM PBF, and OSM raster basemaps come from related OSM data,
+but they serve different purposes: Overpass is connected structured
+route-corridor evidence for CP/POI synthesis, local OSM PBF is offline
+structured route-corridor evidence（離線 OSM 結構化圖徵證據）, while
+OSM/NLSC/TWMap tiles are visual basemap support. This alpha treats Overpass or
+local OSM PBF as the structured OSM evidence source and treats Rudy+TW as the
+only approved rendered-map cache/OCR material for hiking POI, mileage, and
+named-label extraction. OSM tiles, NLSC tiles, and other WMTS/XYZ basemaps
 remain runtime-only.
+
+### Local OSM PBF Evidence Source
+
+When a full-region `.osm.pbf` file is available, Scout must not parse the whole
+file in-process. The preparation flow should:
+
+1. derive the route corridor bbox from the golden/reference planning route;
+2. use `osmium extract` to cut the PBF to the route bbox plus configured
+   corridor;
+3. use `osmium tags-filter` to retain the same hiking/path/POI/hazard tag
+   families as the Overpass Phase A query;
+4. convert the small extract to OSM JSON and hydrate way/relation geometry from
+   node refs;
+5. normalize the result through the same planning-candidate contract as
+   Overpass evidence.
+
+The current Taiwan source file used in alpha testing is downloaded from
+`http://download.geofabrik.de/asia/taiwan-latest.osm.pbf` and stored locally as
+`~/downloads/taiwan-260624.osm.pbf`. The path name is an operator snapshot name;
+the artifact provenance must preserve both the original download URL and the
+local file path/hash so future runs can distinguish "latest at download time"
+from "latest now"（下載當下最新版，不等於目前最新版）.
+
+`taiwan-latest.osm.pbf` is not a live dependency that must be refreshed on every
+preparation run. Scout treats the downloaded file as a local PBF cache
+（本地 PBF 快取） with a default `cache_ttl_days = 30`. Within 30 days of the
+download snapshot timestamp, preparation must reuse the local file and avoid a
+new download. After the TTL expires, preparation may still use the existing
+local file as candidate evidence, but it must mark `pbf_cache.cache_status =
+stale_refresh_recommended` and `refresh_required = true` so the next connected
+operator run can refresh the file deliberately. The cache policy is
+`download_once_reuse_until_ttl_expires`（下載一次，TTL 內重用）; do not delete the
+file or clear unrelated raster/OCR caches just to force OSM PBF refresh.
+
+This keeps the public Scout layer contract stable: the UI still reads the
+existing `osm`/`overpass`/`pois`/`corridors` groups, while provenance marks the
+source as `local_osm_pbf` instead of live Overpass. The generated artifact may
+reuse `overpass_evidence_ref` and `overpass_map_context_ref` for compatibility,
+but it must expose `artifact_kind = pretrip_osm_pbf_evidence`,
+`source = local_osm_pbf`, `osm_pbf_source_ref`, `osm_pbf_source_url`,
+`osm_pbf_source_sha256`, `osm_pbf_raw_payload_ref`, and
+`osm_pbf_extracted_at`. It must also expose `osm_pbf_cache_ttl_days`,
+`osm_pbf_cache_status`, `osm_pbf_cache_expires_at`,
+`osm_pbf_refresh_required`, and a matching `pbf_cache` object in the source and
+normalized evidence artifacts.
+
+Because the Taiwan PBF is too large to read during admin rendering, preparation
+must also preserve a workspace-local route-bbox extract（工作區內路線 bbox 小切片）
+for OSM layer rendering. Preferred output is
+`normalized/map/osm_pbf_route_bbox.osm.pbf` when the `osmium` CLI can create the
+small PBF extract. If the environment only has the Python `osmium` streaming
+fallback, the preferred render source may be the small filtered OSM JSON payload
+instead. In both cases, `project.json` and the `osm` layer record must expose
+`osm_pbf_render_extract_ref`, `osm_pbf_render_extract_manifest_ref`,
+`osm_pbf_render_extract_source_kind`, and
+`osm_pbf_render_extract_feature_count`. The manifest
+`normalized/map/osm_pbf_render_extract_manifest.json` identifies the preferred
+render source, the raw OSM JSON fallback, the cache status, and the route-bbox
+scope. This artifact is for local map rendering and review context only; it is
+still candidate-only evidence and is not runtime safety truth.
+
+Local PBF parsing is still candidate-only evidence. It may improve offline
+coverage and avoid live network fetches, but it is not runtime safety truth and
+does not replace Rudy+TW rendered-map OCR for stable map labels.
 
 ## Offline Map Handoff
 
@@ -539,7 +650,18 @@ verify these items before declaring the workspace refreshed:
    visualization and DTM coverage artifacts.
 4. Check CWA evidence by feature family. `0` warning features can be a valid
    result when no active CWA warning intersects the route/bbox; it does not
-   mean observation or QPF fetch failed.
+   mean observation or QPF fetch failed. CWA weather/QPF artifacts are
+   **no-cache evidence**: every explicit connected preparation must call CWA
+   again and write a current-run snapshot or current blocker. Do not restore
+   CWA weather, warning, observation, QPF, or CWA-derived environment values
+   from a durable source workspace.
+   Every CWA source artifact and every CWA-derived model/candidate output must
+   expose hour-precision timing metadata: API request attempt time, successful
+   fetch time when data was returned, forecast/observation valid-from and
+   valid-until windows when provider data includes them, `time_precision:
+   hour`, and timezone. Missing credentials or failed fetches must still record
+   the current attempt hour and must leave fetch/validity hours empty rather
+   than implying fresh weather evidence.
 5. Check GEE evidence by status. `soil-moisture` and `antecedent-rain` may
    produce a `missing_credentials` status feature when `SCOUT_GEE_ENABLED`,
    Earth Engine credentials, or the live fetcher are unavailable. This is a
@@ -556,7 +678,8 @@ verify these items before declaring the workspace refreshed:
    snapshot only. They must declare `cacheable: false`, `ttl_seconds: 0`, and
    `must_refetch_on_prepare: true`; a later preparation run must call GEE again
    under `network_mode=explicit-fetch` instead of reusing earlier SMAP/GPM
-   numbers as environmental state.
+   numbers as environmental state. Do not restore GEE or GEE-derived
+   environment values from a durable source workspace.
 6. Confirm Boss/route-pressure artifacts after risk outputs exist. Boss Points
    are generated as a post-process and remain part of the 32-layer UI contract,
    not a `--layers` input.

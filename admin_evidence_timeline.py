@@ -56,6 +56,7 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     route_notes = view.get("route_notes") or {}
     map_candidates = view.get("map_candidates") or {}
     overpass = view.get("overpass_evidence") or {}
+    osm_pbf = view.get("osm_pbf_evidence") or {}
     environment_values = view.get("environment_values") or {}
     route = view.get("route") or {}
     mileage = view.get("mileage_tag_alignment") or {}
@@ -85,6 +86,7 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         + _len((view.get("risk_heatmap") or {}).get("segments"))
         + _len((view.get("risk_delta") or {}).get("segments")),
         "map_context": int((overpass.get("counts") or {}).get("candidates") or 0)
+        + int((osm_pbf.get("counts") or {}).get("item_count") or 0)
         + int((map_candidates.get("counts") or {}).get("corridor_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("hazard_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0)
@@ -111,6 +113,7 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     route_notes = view.get("route_notes") or {}
     map_payload = view.get("map") or {}
     overpass = view.get("overpass_evidence") or {}
+    osm_pbf = view.get("osm_pbf_evidence") or {}
     map_candidates = view.get("map_candidates") or {}
     environment_values = view.get("environment_values") or {}
     mileage = view.get("mileage_tag_alignment") or {}
@@ -141,6 +144,7 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         + _len((view.get("risk_delta") or {}).get("segments"))
         + _len(view.get("risk_rules")),
         "map_context": int((overpass.get("counts") or {}).get("candidates") or 0)
+        + int((osm_pbf.get("counts") or {}).get("item_count") or 0)
         + int((map_candidates.get("counts") or {}).get("corridor_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("hazard_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0)

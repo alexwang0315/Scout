@@ -14,6 +14,13 @@ defines the agent-tool coverage needed to process each type. It is intended to
 grow Scout AI capability by adding reusable tools, schemas, and eval cases
 instead of one-off prompt patches.
 
+Current Scout runtime skill coverage includes
+`skills/scout/pretrip-import-preparation.yaml`, an operator-approved Pydantic AI
+v2 skill manifest for the full pretrip import + preparation workflow. It is not
+a Codex skill. It lets Scout AI collect missing user inputs, produce a
+clarification artifact when raw-data paths are incomplete, and only then invoke
+deterministic workspace-write tools after explicit operator approval.
+
 中文註釋：這份規格不是要替每一個問題寫一個 tool，而是把 workspace 的資料分成
 穩定類型。Scout AI 先用 skill/router 判斷問題需要哪一類資料，再呼叫該類資料的
 deterministic tool。模型負責解釋、比較、追問與整理，不直接取代解析、計算或安全
@@ -170,14 +177,15 @@ bounded before passing them to the model.
 | Historical tracks and comparison | `sources/historical_gpx_source_index.json`, `outputs/reference_tracks.json`, `outputs/reference_track_display_geometry.json`, `outputs/route_comparison.json` | "以前路線怎麼走?", "我的路徑和參考線差多少?", "常見軌跡走廊多寬?" | reference-track search, route comparison profiler | Evidence, not automatic corridor truth |
 | Major points and MCP synthesis | `outputs/mcp/mcp_candidates.json`, `outputs/mcp/mcp_cp_support_reconciliation.json`, `outputs/mcp/mcp_retrieval_plan.json` | "重要點有哪些?", "哪些 MCP 支援某個 CP?", "哪些點仍需要人工 review?" | major-point search, CP support reconciliation | Candidate-only |
 | ETA, timing, daylight | `outputs/planned_eta.json`, `candidates/route_guide_timing.json`, `outputs/timing_measurements.json`, `outputs/weather_daylight_evidence.json` | "幾點會到營地?", "會不會摸黑?", "現在是否該折返?" | ETA/daylight context search, timing evaluator | Decision support, needs uncertainty |
-| Weather and forecast evidence | `outputs/weather_daylight_evidence.json`, `outputs/environment/cwa/*.json`, `outputs/environment/gee/*.json`, `outputs/environment/derived/*.json` | "會下雨嗎?", "要不要提早紮營?", "風雨窗口在哪?", "QPF 和土壤濕度是否讓落石或溪水風險升高?" | weather evidence search, CWA evidence query, GEE hydrologic background query, weather-risk advisor | Candidate/advisory, stale-risk required |
+| Weather and forecast evidence | `outputs/weather_daylight_evidence.json`, `outputs/environment/cwa/*.json`, `outputs/environment/gee/*.json`, `outputs/environment/derived/*.json` | "會下雨嗎?", "要不要提早紮營?", "風雨窗口在哪?", "QPF 和土壤濕度是否讓落石或溪水風險升高?" | weather evidence search, CWA evidence query, GEE hydrologic background query, weather-risk advisor | Candidate/advisory; CWA/GEE must be current-run no-cache evidence |
 | Resource, energy, vitals | `outputs/resource_plan.json`, future `normalized/vitals/`, future `field_sessions/normalized_records/` | "體力夠嗎?", "心率異常嗎?", "補給和電力是否足夠?" | energy reserve search, vitals record query | Advisory only, not medical diagnosis |
 | Transport evidence | future `field_sessions/raw_transport/`, MQTT/HTTP/TCP/BLE/LoRa/satellite receipts | "資料有沒有進來?", "哪個 client 斷線?", "緊急封包有沒有送出?" | transport status query, black-box receipt query | Transport metadata, no app semantics |
 | Sensor and INS/DR records | future `normalized/sensors/`, `field_sessions/filter_outputs/`, `field_sessions/estimates/`, trajectory diff files | "室內那段在哪?", "GPS 和 INS/DR 差多少?", "哪裡 re-anchor?" | sensor record query, INS/DR estimate search, trajectory diff map | Safety admission required before runtime use |
 | Reviews and decisions | `reviews/human_reviews.json`, `reviews/review_decision_log.json`, `outputs/review_queue_manifest.json`, `outputs/expert_contribution_log.json` | "哪些候選還沒審?", "誰把這個點升級成 reviewed?", "有哪些爭議?" | review state search, decision register query | Audit/read-only by default |
 | Runtime handoff and debug | `outputs/runtime_handoff_metadata.candidate.json`, `outputs/runtime_audit_manifest.json`, `outputs/debug_projection_events.jsonl`, `outputs/admin_projection.json` | "為什麼 runtime 沒啟動?", "L2 的來源是什麼?", "admin projection 看到了什麼?" | runtime preflight, debug trace tail, projection query | Debug does not mutate safety state |
 | Spatial imprint and after-action | `outputs/spatial_imprint_set.json`, `outputs/spatial_imprint_manifest.json`, `reviews/spatial_imprint_reviews.json`, `outputs/after_action_next_plan_candidates.json` | "這趟留下哪些現地經驗?", "下次要修哪段?", "哪個 imprint 過期?" | spatial imprint search, after-action finder | Reviewed/candidate split |
-| Skill and tool registry | `outputs/planning_skill_manifest_catalog.json`, `outputs/planning_skill_audit.json`, `candidates/skill_config_manifest.json`, `tools/scout_agent_tool_manifests/*.json` | "Scout AI 會哪些工具?", "缺哪個能力?", "這個問題會派給哪個 skill?" | tool registry search, skill audit query | Read-only registry |
+| Pretrip import and preparation request | user-provided `project_id`, `workspace_root`, `golden_route_gpx`, `source_gpx_root` or `reference_gpx_paths`, optional `material_root`, `raster_tile_cache_root`, `durable_evidence_source_root`, `admin_base_url` | "幫我建立 pretrip workspace", "重新 import GPX + prepare layers", "golden GPX 是哪個?", "ref GPX 在哪?" | `skills/scout/pretrip-import-preparation.yaml`, `scout.pretrip.import_gpx`, `scout.pretrip.prepare_layers` | Operator-approved workspace write; clarify missing inputs first |
+| Skill and tool registry | `outputs/planning_skill_manifest_catalog.json`, `outputs/planning_skill_audit.json`, `candidates/skill_config_manifest.json`, `skills/scout/*.yaml`, `tools/scout_agent_tool_manifests/*.json` | "Scout AI 會哪些工具?", "缺哪個能力?", "這個問題會派給哪個 skill?" | tool registry search, skill audit query | Read-only registry |
 
 ## Tool Coverage Layers
 
@@ -211,7 +219,9 @@ lowest-cost deterministic tool that can answer the question.
 
 6. Normalizer tools
    - Convert external/raw material into Scout-owned records.
-   - Example: `scout.evidence.sensorlog_to_gpx`.
+   - Examples: `scout.evidence.sensorlog_to_gpx`,
+     `scout.pretrip.import_gpx`, and the operator-approved
+     `skills/scout/pretrip-import-preparation.yaml` orchestration skill.
 
 7. Router/filter tools
    - Route normalized observations to registered filters such as INS/DR,
@@ -227,6 +237,9 @@ lowest-cost deterministic tool that can answer the question.
      send outbound packets, or trigger hardware.
    - These require explicit non-read-only authority modes from
      `docs/specs/scout-agent-tools-cli.md`.
+   - Pretrip import/preparation is in this class: Scout AI can ask questions
+     and prepare a plan, but it must not call workspace-write tools until the
+     operator confirms the inputs and approval boundary.
 
 ## Agent Tool Spec Template
 
@@ -580,8 +593,8 @@ Example questions:
 
 ### 8. `scout.ai.eta_weather_context.search.v0`
 
-Purpose: combine planned ETA, timing measurements, daylight, cached forecast,
-and route anchors for decision support.
+Purpose: combine planned ETA, timing measurements, daylight, current-run
+weather/environment evidence, and route anchors for decision support.
 
 Reads:
 
@@ -803,6 +816,7 @@ coverage.
 Reads:
 
 - `tools/scout_agent_tool_manifests/*.json`;
+- `skills/scout/*.yaml`;
 - `outputs/planning_skill_manifest_catalog.json`;
 - `outputs/planning_skill_audit.json`;
 - `candidates/skill_config_manifest.json`;
@@ -828,6 +842,50 @@ Example questions:
 - "Scout AI 目前會哪些工具?"
 - "這個問題該派給哪個 skill?"
 - "還缺什麼 tool 才能回答地圖 OCR?"
+
+### 15. `skills/scout/pretrip-import-preparation.yaml`
+
+Purpose: let Scout AI orchestrate the complete pretrip import + preparation
+workflow through a runtime skill manifest, while keeping missing-input
+clarification and workspace writes behind explicit operator approval.
+
+Current manifest:
+
+- `skills/scout/pretrip-import-preparation.yaml`.
+
+Inputs Scout AI must collect before workspace writes:
+
+- `project_id`;
+- `workspace_root`;
+- `golden_route_gpx`;
+- `source_gpx_root` or `reference_gpx_paths`;
+- `material_root` when the run requires material manifests, MCP evidence,
+  OCR/raster labels, or reference-equivalence replay;
+- optional `raster_tile_cache_root`, `durable_evidence_source_root`,
+  `reference_workspace_roots`, `admin_base_url`, and `authorized_by`.
+
+Behavior:
+
+- if required inputs are missing, return a
+  `pretrip_input_clarification_request` artifact and do not call
+  workspace-write tools;
+- after complete input and explicit operator approval, plan
+  `scout.pretrip.import_gpx`, `scout.pretrip.prepare_layers`, route-context
+  collection, and layer/spec verification gates;
+- never use `durable_evidence_source_root` or workspace cache to replay CWA/GEE
+  weather, QPF, SMAP, GPM, or derived environment values. Those artifacts are
+  no-cache current-run evidence; provider failures must be surfaced as blockers;
+- return either `pretrip_import_preparation_plan` or
+  `pretrip_import_preparation_run_result`;
+- keep `candidate_only=true`, `runtime_safety_truth=false`, and forbid
+  `/safety/*`, Brain observed-fact, outbound-message, hardware, and raw-source
+  mutation writes.
+
+Example questions:
+
+- "幫我重新 import GPX + prepare map layers."
+- "golden GPX 是哪個? ref GPX 在哪?"
+- "請建立新的 pretrip workspace，但先告訴我還缺哪些 raw data."
 
 ## Router And Skill Contract
 
@@ -871,6 +929,54 @@ Example skill route:
     ]
   },
   "side_effect_policy": "no_runtime_safety_mutation"
+}
+```
+
+Example pretrip import/preparation skill route:
+
+```json
+{
+  "skill_id": "pretrip-import-preparation",
+  "version": "0.1.0",
+  "input_selectors": [
+    {
+      "match_any": [
+        {"intent": "pretrip_import_preparation"},
+        {
+          "phrase_any": [
+            "import GPX",
+            "prepare layers",
+            "map preparation",
+            "tile cache",
+            "golden GPX",
+            "reference GPX"
+          ]
+        }
+      ]
+    }
+  ],
+  "required_tools": [
+    "scout.pretrip.import_gpx",
+    "scout.pretrip.prepare_layers",
+    "scout.pretrip.route_context_collect",
+    "tools.verify_scout_layer_contract",
+    "tools.verify_pretrip_workspace_spec_alignment"
+  ],
+  "required_user_inputs": [
+    "project_id",
+    "workspace_root",
+    "golden_route_gpx",
+    "source_gpx_root or reference_gpx_paths"
+  ],
+  "optional_user_inputs": [
+    "material_root",
+    "raster_tile_cache_root",
+    "durable_evidence_source_root",
+    "reference_workspace_roots",
+    "admin_base_url"
+  ],
+  "missing_input_policy": "ask_user_before_workspace_write",
+  "side_effect_policy": "operator_approved_workspace_write_no_runtime_safety_mutation"
 }
 ```
 
@@ -932,6 +1038,7 @@ Minimum eval set:
 | "MQTT 到 INS/DR routing latency 多大?" | `scout.ai.sensor_record.search.v0` |
 | "哪些候選還沒 review?" | `scout.ai.review_state.search.v0` |
 | "Scout AI 目前會哪些工具?" | `scout.ai.tool_registry.search.v0` |
+| "幫我重新 import GPX 並 prepare map layers，但我還沒說 golden GPX" | `skills/scout/pretrip-import-preparation.yaml` clarification artifact |
 
 Negative evals:
 
@@ -985,6 +1092,17 @@ checkout:
   - Implementation: `scout_map_perception_tool.search_project_map_perception`
   - Searches legacy MCP OCR labels plus normalized raster label OCR GeoJSON
     without embedding raw tile payloads.
+
+- `skills/scout/pretrip-import-preparation.yaml`
+  - Scout runtime skill manifest for Pydantic AI v2 missing-input
+    clarification and operator-approved pretrip import/preparation
+    orchestration.
+  - Requires `scout.pretrip.import_gpx`, `scout.pretrip.prepare_layers`,
+    route-context collection, layer-contract gates, and workspace spec
+    alignment gates.
+  - Output artifact kinds: `pretrip_input_clarification_request`,
+    `pretrip_import_preparation_plan`, and
+    `pretrip_import_preparation_run_result`.
 
 Implemented tests:
 

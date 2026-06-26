@@ -3862,7 +3862,10 @@ _COMPACT_BOUNDARY_KEYS = (
     "not_departure_approval",
     "human_review_required_before_departure",
 )
-_COMPACT_ROUTE_NOTE_LIMIT = 500
+_COMPACT_ROUTE_NOTE_LIMIT = 120
+_COMPACT_COLLECTION_ITEM_LIMIT = 48
+_COMPACT_ROUTE_DISPLAY_POINTS_PER_SEGMENT = 24
+_COMPACT_SEGMENT_DISPLAY_POINTS_PER_SEGMENT = 4
 
 
 def _compact_mapping(payload: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
@@ -3916,18 +3919,24 @@ def _compact_collection_items(
     item_key: str,
     *,
     extra_keys: tuple[str, ...] = (),
+    limit: int = _COMPACT_COLLECTION_ITEM_LIMIT,
 ) -> Any:
     if not isinstance(payload, dict):
         return payload
     compact = dict(payload)
     items = payload.get(item_key)
     if isinstance(items, list):
+        source_count = len(items)
+        kept_items = items[:limit] if limit > 0 else []
         compact[item_key] = [
             _compact_evidence_item(item, extra_keys=extra_keys)
             if isinstance(item, dict)
             else item
-            for item in items
+            for item in kept_items
         ]
+        compact[f"source_{item_key}_count"] = source_count
+        compact["admin_payload_item_limit"] = limit
+        compact["admin_payload_truncated"] = source_count > len(kept_items)
     return compact
 
 
@@ -3936,18 +3945,24 @@ def _compact_summary_collection_items(
     item_key: str,
     *,
     extra_keys: tuple[str, ...] = (),
+    limit: int = _COMPACT_COLLECTION_ITEM_LIMIT,
 ) -> Any:
     if not isinstance(payload, dict):
         return payload
     compact = _compact_summary_payload(payload)
     items = payload.get(item_key)
     if isinstance(items, list):
+        source_count = len(items)
+        kept_items = items[:limit] if limit > 0 else []
         compact[item_key] = [
             _compact_evidence_item(item, extra_keys=extra_keys)
             if isinstance(item, dict)
             else item
-            for item in items
+            for item in kept_items
         ]
+        compact[f"source_{item_key}_count"] = source_count
+        compact["admin_payload_item_limit"] = limit
+        compact["admin_payload_truncated"] = source_count > len(kept_items)
     for key in ("bbox_wgs84", "cache_policy", "geojson_source_path"):
         if key in payload:
             compact[key] = payload[key]
@@ -3958,14 +3973,16 @@ def _compact_collection_list(
     payload: Any,
     *,
     extra_keys: tuple[str, ...] = (),
+    limit: int = _COMPACT_COLLECTION_ITEM_LIMIT,
 ) -> Any:
     if not isinstance(payload, list):
         return payload
+    kept_items = payload[:limit] if limit > 0 else []
     return [
         _compact_evidence_item(item, extra_keys=extra_keys)
         if isinstance(item, dict)
         else item
-        for item in payload
+        for item in kept_items
     ]
 
 
@@ -4066,8 +4083,11 @@ def _compact_overpass_evidence(payload: Any) -> Any:
                 _compact_overpass_candidate(item, extra_keys=extra_keys)
                 if isinstance(item, dict)
                 else item
-                for item in items
+                for item in items[:_COMPACT_COLLECTION_ITEM_LIMIT]
             ]
+            compact[f"source_{key}_count"] = len(items)
+            compact["admin_payload_item_limit"] = _COMPACT_COLLECTION_ITEM_LIMIT
+            compact["admin_payload_truncated"] = len(items) > _COMPACT_COLLECTION_ITEM_LIMIT
     return compact
 
 
@@ -4188,7 +4208,7 @@ def _compact_route(payload: Any) -> Any:
     if isinstance(display_geometry, dict):
         compact["display_geometry"] = _compact_display_geometry(
             display_geometry,
-            max_points_per_segment=300,
+            max_points_per_segment=_COMPACT_ROUTE_DISPLAY_POINTS_PER_SEGMENT,
         )
     elif isinstance(payload.get("polyline"), list):
         compact["polyline"] = [_compact_display_point(point) for point in payload["polyline"]]
@@ -4409,6 +4429,7 @@ def _compact_mileage_tag_alignment(payload: Any) -> Any:
             compact[key] = payload[key]
     timeline_items = payload.get("timeline_items")
     if isinstance(timeline_items, list):
+        kept_items = timeline_items[:_COMPACT_COLLECTION_ITEM_LIMIT]
         compact["timeline_items"] = [
             _compact_evidence_item(
                 item,
@@ -4424,8 +4445,11 @@ def _compact_mileage_tag_alignment(payload: Any) -> Any:
             )
             if isinstance(item, dict)
             else item
-            for item in timeline_items
+            for item in kept_items
         ]
+        compact["source_timeline_items_count"] = len(timeline_items)
+        compact["admin_payload_item_limit"] = _COMPACT_COLLECTION_ITEM_LIMIT
+        compact["admin_payload_truncated"] = len(timeline_items) > len(kept_items)
     return compact
 
 
@@ -4442,6 +4466,20 @@ def _compact_environment_risk_derivative_candidate(item: dict[str, Any]) -> dict
             "start_distance_m",
             "end_distance_m",
             "supporting_metrics",
+            "cwa_time_metadata",
+            "source_time_metadata",
+            "cwa_api_request_attempted_at",
+            "cwa_api_request_attempted_at_hour",
+            "cwa_api_fetched_at",
+            "cwa_api_fetched_at_hour",
+            "cwa_forecast_valid_from_hour",
+            "cwa_forecast_valid_until_hour",
+            "cwa_warning_valid_until_hour",
+            "cwa_latest_observation_at_hour",
+            "cwa_valid_from_hour",
+            "cwa_valid_until_hour",
+            "time_precision",
+            "timezone",
         ),
     )
 
@@ -4450,17 +4488,32 @@ def _compact_environment_risk_derivative_collection(payload: Any) -> Any:
     if not isinstance(payload, dict):
         return payload
     compact = _compact_summary_payload(payload)
-    for key in ("layer_id", "label", "counts", "bbox_wgs84"):
+    for key in (
+        "layer_id",
+        "label",
+        "counts",
+        "bbox_wgs84",
+        "cwa_time_metadata",
+        "source_time_metadata",
+        "cwa_api_fetched_at_hour",
+        "cwa_valid_until_hour",
+        "time_precision",
+        "timezone",
+    ):
         if key in payload:
             compact[key] = payload[key]
     candidates = payload.get("candidates")
     if isinstance(candidates, list):
+        kept_candidates = candidates[:_COMPACT_COLLECTION_ITEM_LIMIT]
         compact["candidates"] = [
             _compact_environment_risk_derivative_candidate(item)
             if isinstance(item, dict)
             else item
-            for item in candidates
+            for item in kept_candidates
         ]
+        compact["source_candidates_count"] = len(candidates)
+        compact["admin_payload_item_limit"] = _COMPACT_COLLECTION_ITEM_LIMIT
+        compact["admin_payload_truncated"] = len(candidates) > len(kept_candidates)
     return compact
 
 
@@ -4763,7 +4816,7 @@ def _compact_segments(payload: Any) -> Any:
         if isinstance(display_geometry, dict):
             compact_segment["display_geometry"] = _compact_display_geometry(
                 display_geometry,
-                max_points_per_segment=8,
+                max_points_per_segment=_COMPACT_SEGMENT_DISPLAY_POINTS_PER_SEGMENT,
             )
     return compact_segments
 

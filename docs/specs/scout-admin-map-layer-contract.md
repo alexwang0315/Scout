@@ -81,6 +81,45 @@ support hazard freshness, slow-passage interpretation, detour context, MCP/Boss
 pressure, and candidate explanations. They should not be the primary source for
 stable POI facts when Rudy+TW rendered-map evidence is available.
 
+### Local OSM PBF Evidence
+
+Scout may derive structured OSM evidence from a local full-region `.osm.pbf`
+file when pretrip map preparation is running offline. This is not a raster
+basemap and must not create a new layer id. The resulting route-corridor extract
+is Overpass-compatible for UI and downstream risk tooling, but its provenance
+must clearly state `source = local_osm_pbf`.
+
+Contract requirements:
+
+- parse only a route corridor extract, not the full Taiwan PBF in-process;
+- keep artifacts candidate-only and `runtime_safety_truth = false`;
+- preserve PBF path, PBF hash when available, bbox/corridor, extraction command
+  plan, raw OSM JSON hash, parser version, OSM object type/id/tags/geometry,
+  and normalized GeoJSON ref;
+- preserve the original download URL when known. For the current Taiwan alpha
+  snapshot, this is
+  `http://download.geofabrik.de/asia/taiwan-latest.osm.pbf`, stored locally as
+  `~/downloads/taiwan-260624.osm.pbf`. UI/provenance text should describe it as
+  "latest at download time"（下載當下最新版）, not a continuously updated local file;
+- enforce a default `cache_ttl_days = 30` for the local PBF snapshot. Within TTL,
+  Scout reuses the downloaded file and must not redownload `taiwan-latest.osm.pbf`
+  every preparation run. After TTL, the layer remains candidate evidence but
+  must expose `cache_status = stale_refresh_recommended` and
+  `refresh_required = true` so a connected operator can refresh it explicitly;
+- preserve a small route-bbox extract inside the workspace for OSM layer
+  rendering. The preferred source is
+  `normalized/map/osm_pbf_route_bbox.osm.pbf` when available, with
+  `normalized/map/osm_pbf_phase_a_raw.osm.json` as the small filtered OSM JSON
+  fallback. The `osm` layer must expose `local_osm_render_extract_ref`,
+  `local_osm_render_extract_manifest_ref`, source kind, feature count, and
+  `osm_rendering_policy = workspace_local_osm_extract_available` when this local
+  extract exists;
+- lifecycle for the `overpass` layer should show
+  `completed_local_osm_pbf_extract`, not `completed_live_fetch`;
+- the `osm` layer may report `covered_by_overpass_vector_evidence` because the
+  same compatible vector-evidence ref feeds the map context, but UI wording
+  should distinguish live Overpass from local OSM PBF when showing provenance.
+
 ### NLSC No-Application Services
 
 The operator-provided
@@ -116,6 +155,41 @@ the whole family. `UAV*` deserves separate coverage/year metadata, because UAS
 orthophoto（無人飛行載具航拍正射影像） can be far more valuable than ordinary
 basemaps for local route-condition review.
 
+### Official Communication-Point Evidence
+
+The Forestry and Nature Conservation Agency dataset
+`data.gov.tw/dataset/106640`（林業及自然保育署山區手機可通訊點標示） is an
+official point-evidence source, not a tile provider. It must not create a new
+Scout layer id or bypass the 32-layer contract. Normalized records should render
+through:
+
+- `pois` for communication-point POI markers;
+- `checkpoints` when the point is close enough to the planned route to become a
+  proposed route checkpoint;
+- timeline `Map / Risk` or `CP / Timeline` evidence groups, depending on
+  whether the point is corridor context or a selected checkpoint.
+
+Display requirements:
+
+- primary label should combine route/trail name and marked location, for
+  example `嘉明湖國家步道 1.5K 通訊點`;
+- detail text should list available carrier names and original source agency;
+- marker styling should distinguish official communication points from OCR
+  labels and reference-GPX notes;
+- labels remain above markers, route lines, terrain/risk overlays, and raster
+  basemaps according to the general map z-order rule.
+
+Provenance requirements:
+
+- preserve data.gov.tw dataset id `106640`, MOA open-data id `G07`, resource id,
+  source URL, request timestamp, raw payload hash, parser version, original
+  record id, original KML/HTML fields, WGS84 lon/lat, and any TWD97 coordinates;
+- record update cadence as annual and expose a stale-risk flag when the local
+  package is older than the configured TTL;
+- do not treat carrier names as guaranteed reception. The evidence means "this
+  is an official marked communication attempt point"（官方標示可嘗試通訊點）, not
+  "communication will work now"（即時通訊保證）.
+
 ## Regression Notes From Operator Reruns
 
 The following mistakes are easy to repeat and are considered contract
@@ -137,6 +211,9 @@ regressions:
 - Hiding `UAV*` under a generic topo/aerial bucket. UAS orthophoto is a
   high-value route revalidation provider and must remain discoverable as its
   own provider family with coverage/year metadata.
+- Adding the official mountain communication-point dataset as a 33rd layer.
+  It must be normalized into the existing `pois` and optional checkpoint/timeline
+  evidence groups while preserving source provenance and stale-risk metadata.
 - Treating four terrain overlay PNGs as the total terrain source count. The
   four files are display modes; the terrain source coverage must be checked
   separately through DTM coverage and terrain visualization counts.
@@ -175,7 +252,7 @@ regressions:
 | `cwa-qpf` | Central Weather Administration quantitative precipitation forecast grid/context. | `admin_weather_overlay.py`, `scout_weather_integration.py`, `admin_map_layers.py`, admin pages. | z-index 59; weather candidate evidence below risk points. | Unavailable without fetched CWA/open weather evidence; no runtime safety truth mutation. | Source/status availability, group/rank/toggle. |
 | `risk-score` | Point risk-score evidence. | `pretrip_risk_heatmap.py`, `pretrip_layer_preparation.py`, `admin_map_layers.py`, admin pages. | z-index 60; above risk raster/ribbon layers. | Off by default; candidate evidence only. | Risk point artifact/source/count, group/rank/toggle. |
 | `checkpoints` | CP candidates/reviewed checkpoints. | `pretrip_import.py`, `pretrip_overpass_route_alignment.py`, `pretrip_layer_preparation.py`, admin pages. | z-index 62; above risk layers. | Marker radius stays screen-sized; focus uses expected viewport policy. | CP count/source/alignment, group/rank/toggle/focus smoke. |
-| `pois` | Named POI/context candidates. | `pretrip_route_context_collection.py`, `admin_map_layers.py`, admin pages. | z-index 64; above checkpoints, below hazards. | Avoid raw variable-name labels; unavailable if no POI source. | Label/source/group/rank/toggle. |
+| `pois` | Named POI/context candidates, including official communication-point markers from the Forestry and Nature Conservation Agency mountain communication dataset. | `pretrip_route_context_collection.py`, `admin_map_layers.py`, admin pages. | z-index 64; above checkpoints, below hazards. | Avoid raw variable-name labels; unavailable if no POI source. Communication points are candidate evidence only and must preserve stale-risk/provenance metadata. | Label/source/group/rank/toggle. |
 | `hazards` | Hazard candidates from terrain/context/OCR/notes/external evidence. | `pretrip_route_context_collection.py`, `pretrip_layer_preparation.py`, `admin_map_layers.py`, admin pages. | z-index 65; above POI, below route notes/MCP/Boss. | Must keep provenance/review status; candidate only. | Source/group/rank/toggle. |
 | `route-notes` | Historical/public route notes. | `pretrip_import.py`, `pretrip_route_context_collection.py`, `admin_map_layers.py`, admin pages. | z-index 66; above hazards, below MCP/Boss. | Can seed context collection; low-signal notes should not flood MCP/Boss. | Source/count/group/rank/toggle. |
 | `cwa-weather` | Central Weather Administration warning, observation, and forecast evidence. | `admin_weather_overlay.py`, `scout_weather_integration.py`, `admin_map_layers.py`, admin pages. | z-index 67; weather candidate evidence above route notes and below MCP/Boss. | Unavailable without CWA/open weather source refs; no runtime safety truth mutation. | Weather source/status contract, group/rank/toggle. |
