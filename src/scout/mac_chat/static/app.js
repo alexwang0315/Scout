@@ -8,10 +8,12 @@
 
   const els = {
     serverState: document.getElementById("serverState"),
+    fallbackState: document.getElementById("fallbackState"),
     serverUrl: document.getElementById("serverUrl"),
     serverLatency: document.getElementById("serverLatency"),
     capabilityCount: document.getElementById("capabilityCount"),
     uiBridgeState: document.getElementById("uiBridgeState"),
+    fallbackMode: document.getElementById("fallbackMode"),
     boundaryList: document.getElementById("boundaryList"),
     refreshButton: document.getElementById("refreshButton"),
     clearButton: document.getElementById("clearButton"),
@@ -65,6 +67,7 @@
     state.config = await fetchJson("/api/config");
     state.surface = state.config.default_surface || "pretrip";
     els.serverUrl.textContent = state.config.target_url;
+    updateFallbackIndicator(state.config);
     renderBoundary(state.config.boundary);
     updateSegments();
   }
@@ -76,20 +79,57 @@
       els.serverUrl.textContent = payload.target_url;
       els.serverLatency.textContent = payload.latency_ms === null ? "--" : `${payload.latency_ms} ms`;
       els.capabilityCount.textContent = payload.connected ? payload.capability_count : "--";
-      els.uiBridgeState.textContent = payload.ui_action_capability_present ? "present" : "missing";
-      els.serverState.textContent = payload.connected ? "connected" : "offline";
+      els.uiBridgeState.textContent = payload.ui_action_capability_present
+        ? "present"
+        : (payload.local_fallback_enabled && payload.local_fallback_available ? "fallback" : "missing");
+      els.serverState.textContent = payload.connected ? "server online" : "server offline";
       els.serverState.className = `state-pill ${payload.connected ? "ok" : "bad"}`;
+      updateFallbackIndicator(payload);
       els.chatStatus.textContent = payload.connected
         ? "Scout hardware server connected."
-        : (payload.error || "Scout hardware server unavailable.");
+        : (
+            payload.local_fallback_enabled && payload.local_fallback_available
+              ? "Scout hardware server unavailable. Mac local fallback is enabled."
+              : (payload.error || "Scout hardware server unavailable.")
+          );
       if (payload.boundary) renderBoundary(payload.boundary);
     } catch (error) {
-      els.serverState.textContent = "offline";
+      els.serverState.textContent = "server offline";
       els.serverState.className = "state-pill bad";
+      updateFallbackIndicator(state.config || {});
       els.chatStatus.textContent = error.message;
     } finally {
       setBusy(false);
     }
+  }
+
+  function updateFallbackIndicator(payload = {}) {
+    const enabled = Boolean(payload.local_fallback_enabled || (state.config && state.config.local_fallback_enabled));
+    const available = payload.local_fallback_available === undefined
+      ? enabled
+      : Boolean(payload.local_fallback_available);
+    const used = payload.response_source === "mac_local_pydantic_ai_v2";
+    const model = payload.response && payload.response.local_fallback
+      ? payload.response.local_fallback.model
+      : null;
+
+    if (!enabled) {
+      els.fallbackState.textContent = "fallback off";
+      els.fallbackState.className = "state-pill";
+      els.fallbackMode.textContent = "disabled";
+      return;
+    }
+
+    if (!available) {
+      els.fallbackState.textContent = "fallback error";
+      els.fallbackState.className = "state-pill bad";
+      els.fallbackMode.textContent = "enabled / unavailable";
+      return;
+    }
+
+    els.fallbackState.textContent = used ? "fallback used" : "fallback on";
+    els.fallbackState.className = `state-pill ${used ? "warn" : "ok"}`;
+    els.fallbackMode.textContent = model ? `enabled / ${model}` : "enabled / ready";
   }
 
   function updateSegments() {
@@ -139,6 +179,7 @@
     const line = document.createElement("div");
     line.className = "status-line";
     const items = [
+      payload.response_source,
       response.status,
       route.route_class,
       route.tool_id,
@@ -155,7 +196,9 @@
     if (!message || state.busy) return;
 
     appendMessage("user", message, {meta: `You / ${state.surface}`});
-    els.chatStatus.textContent = "Sending to Scout hardware server.";
+    els.chatStatus.textContent = state.config && state.config.local_fallback_enabled
+      ? "Sending to Scout hardware server. Mac local fallback will answer if hardware is unavailable."
+      : "Sending to Scout hardware server.";
     setBusy(true);
 
     try {
@@ -171,9 +214,12 @@
         })
       });
       state.lastPayload = payload;
+      updateFallbackIndicator(payload);
       appendMessage("assistant", summaryNode(payload), {error: !payload.ok});
       renderDetail(payload);
-      els.chatStatus.textContent = payload.ok ? "Response received." : "Scout server returned an error.";
+      els.chatStatus.textContent = payload.response_source === "mac_local_pydantic_ai_v2"
+        ? "Response received from Mac local fallback."
+        : (payload.ok ? "Response received." : "Scout server returned an error.");
     } catch (error) {
       appendMessage("assistant", error.message, {error: true});
       els.chatStatus.textContent = error.message;
@@ -196,6 +242,9 @@
       ["route_class", route.route_class],
       ["tool_id", route.tool_id],
       ["workflow_id", response.workflow_id],
+      ["response_source", payload.response_source],
+      ["fallback_model", response.local_fallback && response.local_fallback.model],
+      ["remote_error", payload.remote_error],
       ["server", payload.target_url]
     ]);
     renderList(els.permissionList, [

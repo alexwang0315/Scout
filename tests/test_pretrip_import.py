@@ -1355,6 +1355,271 @@ def test_restore_durable_admin_evidence_refs_copies_safe_missing_refs(
     )
 
 
+def test_restore_durable_admin_evidence_refs_can_overwrite_existing_refs(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source_project"
+    destination_root = tmp_path / "destination_project"
+    source_cache = (
+        source_root / "outputs" / "layers" / "cache" / "raster_label_ocr_tiles"
+    )
+    destination_cache = (
+        destination_root / "outputs" / "layers" / "cache" / "raster_label_ocr_tiles"
+    )
+    source_cache.mkdir(parents=True)
+    destination_cache.mkdir(parents=True)
+    (source_root / "outputs").mkdir(exist_ok=True)
+    (destination_root / "outputs").mkdir(exist_ok=True)
+    (source_root / "outputs" / "route_comparison.json").write_text(
+        json.dumps({"kept": "source"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (destination_root / "outputs" / "route_comparison.json").write_text(
+        json.dumps({"kept": "destination"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (source_cache / "source.json").write_text(
+        json.dumps({"tile": "source"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (destination_cache / "destination.json").write_text(
+        json.dumps({"tile": "destination"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (source_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "source",
+                "route_comparison_ref": "outputs/route_comparison.json",
+                "raster_label_ocr_cache_ref": (
+                    "outputs/layers/cache/raster_label_ocr_tiles"
+                ),
+                "raster_label_ocr_label_count": 10,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    (destination_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "destination",
+                "route_comparison_ref": "outputs/route_comparison.json",
+                "raster_label_ocr_cache_ref": (
+                    "outputs/layers/cache/raster_label_ocr_tiles"
+                ),
+                "raster_label_ocr_label_count": 99,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    summary = restore_durable_admin_evidence_refs(
+        project_root=destination_root,
+        source_root=source_root,
+        overwrite_existing=True,
+    )
+
+    project = _load(destination_root / "project.json")
+    assert project["raster_label_ocr_label_count"] == 10
+    assert _load(destination_root / "outputs" / "route_comparison.json") == {
+        "kept": "source"
+    }
+    assert (destination_cache / "source.json").exists()
+    assert not (destination_cache / "destination.json").exists()
+    assert summary["copied"]["route_comparison_ref"] == "outputs/route_comparison.json"
+    assert summary["restored"]["raster_label_ocr_label_count"] == 10
+
+
+def test_restore_durable_admin_evidence_refs_never_replays_cwa_gee_environment(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source_project"
+    destination_root = tmp_path / "destination_project"
+    route_ref = "outputs/route_comparison.json"
+    cwa_ref = "outputs/environment/cwa/cwa_weather_evidence.json"
+    gee_ref = "outputs/environment/gee/scout_gee_feature_package.json"
+    derivative_ref = "outputs/environment/derived/environment_risk_derivatives.json"
+    for root, marker, cwa_count in (
+        (source_root, "source", 99),
+        (destination_root, "fresh", 7),
+    ):
+        for ref in (route_ref, cwa_ref, gee_ref, derivative_ref):
+            path = root / ref
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "project_id": marker,
+                        "marker": marker,
+                        "ref": ref,
+                    },
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+        (root / "project.json").write_text(
+            json.dumps(
+                {
+                    "project_id": marker,
+                    "route_comparison_ref": route_ref,
+                    "cwa_weather_evidence_ref": cwa_ref,
+                    "gee_feature_package_ref": gee_ref,
+                    "environment_risk_derivatives_ref": derivative_ref,
+                    "cwa_weather_point_count": cwa_count,
+                    "gee_feature_package_segment_count": cwa_count,
+                    "environment_risk_derivative_status": marker,
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    summary = restore_durable_admin_evidence_refs(
+        project_root=destination_root,
+        source_root=source_root,
+        overwrite_existing=True,
+    )
+
+    project = _load(destination_root / "project.json")
+    assert _load(destination_root / route_ref)["marker"] == "source"
+    assert _load(destination_root / cwa_ref)["marker"] == "fresh"
+    assert _load(destination_root / gee_ref)["marker"] == "fresh"
+    assert _load(destination_root / derivative_ref)["marker"] == "fresh"
+    assert project["cwa_weather_point_count"] == 7
+    assert project["gee_feature_package_segment_count"] == 7
+    assert project["environment_risk_derivative_status"] == "fresh"
+    assert summary["copied"]["route_comparison_ref"] == route_ref
+    assert summary["skipped"]["cwa_weather_evidence_ref"] == (
+        "time_sensitive_environment_ref_not_restored"
+    )
+    assert summary["skipped"]["gee_feature_package_ref"] == (
+        "time_sensitive_environment_ref_not_restored"
+    )
+    assert summary["skipped"]["cwa_weather_point_count"] == (
+        "time_sensitive_environment_metadata_not_restored"
+    )
+
+
+def test_compare_pretrip_workspace_strict_counts_excludes_cwa_gee_metrics(
+    tmp_path: Path,
+) -> None:
+    required_refs = {
+        "import_manifest_ref": "outputs/import_manifest.json",
+        "route_evidence_bundle_ref": "normalized/routes/route_evidence_bundle.json",
+        "reference_segment_timing_ref": "outputs/reference_segment_timing.json",
+        "layer_preparation_manifest_ref": "outputs/layers/layer_preparation_manifest.json",
+        "layer_validation_report_ref": "outputs/layers/layer_validation_report.json",
+        "layer_map_projection_ref": "outputs/layers/projections/pretrip_map_layers.json",
+        "overpass_evidence_ref": "candidates/overpass_evidence.json",
+        "overpass_map_context_ref": "normalized/overpass/overpass_map_context.geojson",
+        "overpass_route_alignment_ref": "outputs/overpass_route_alignment.json",
+        "overpass_aligned_segment_candidates_ref": (
+            "candidates/segments.overpass_aligned.json"
+        ),
+        "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
+        "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+        "calibrated_risk_heatmap_ref": "outputs/risk/calibrated_risk_heatmap.geojson",
+        "environment_risk_derivatives_ref": (
+            "outputs/environment/derived/environment_risk_derivatives.json"
+        ),
+        "raster_label_ocr_output_ref": "outputs/layers/raster_label_ocr_output.json",
+        "raster_label_evidence_ref": (
+            "outputs/layers/normalized/raster_label_evidence.geojson"
+        ),
+        "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
+        "mileage_tag_alignment_ref": "outputs/mileage_tag_alignment.json",
+        "boss_points_ref": "outputs/boss_points.json",
+        "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+    }
+    stable_metrics = {
+        "checkpoint_candidate_count": 3,
+        "segment_candidate_count": 4,
+        "route_note_candidate_count": 5,
+        "reference_track_count": 2,
+        "gpx_speed_filter_removed_track_point_count": 0,
+        "mcp_candidate_count": 1,
+        "mcp_ocr_label_count": 1,
+        "dtm_candidate_tile_count": 8,
+        "raster_label_ocr_status": "completed",
+        "raster_label_ocr_label_count": 10,
+        "imagery_tile_cache_seed_status": "completed",
+        "imagery_tile_cache_plan_tile_count": 12,
+        "overpass_candidate_count": 13,
+        "overpass_route_alignment_kept_gpx_point_count": 14,
+        "overpass_route_alignment_snapped_point_count": 15,
+        "risk_score_point_count": 16,
+        "risk_ribbon_segment_count": 17,
+        "calibrated_risk_heatmap_segment_count": 18,
+        "route_mileage_k_anchor_count": 19,
+        "mileage_tag_alignment_count": 20,
+        "reference_segment_timing_measurement_count": 21,
+        "reference_segment_timing_segment_count": 22,
+        "boss_point_count": 23,
+        "route_pressure_peak_count": 24,
+        "route_pressure_sample_count": 25,
+    }
+    for root, marker, environment_metrics in (
+        (
+            tmp_path / "reference",
+            "reference",
+            {
+                "environment_risk_derivative_status": "ready",
+                "cwa_warning_count": 9,
+                "gee_environment_status": "fetched",
+            },
+        ),
+        (
+            tmp_path / "candidate",
+            "candidate",
+            {
+                "environment_risk_derivative_status": "ready_with_data_gaps",
+                "cwa_warning_count": 0,
+                "gee_environment_status": "missing_credentials",
+            },
+        ),
+    ):
+        for ref in required_refs.values():
+            path = root / ref
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps({"marker": marker}, sort_keys=True),
+                encoding="utf-8",
+            )
+        (root / "project.json").write_text(
+            json.dumps(
+                {
+                    "project_id": marker,
+                    **required_refs,
+                    **stable_metrics,
+                    **environment_metrics,
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "compare_pretrip_workspace_against_reference.py"),
+            "--reference-root",
+            str(tmp_path / "reference"),
+            "--candidate-root",
+            str(tmp_path / "candidate"),
+            "--strict-counts",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads(result.stdout)
+    assert report["status"] == "pass"
+    assert report["metric_diffs"] == {}
+    assert "gee_environment_status" in report["time_sensitive_metrics_excluded"]
+
+
 def test_pretrip_import_template_workspace_feeds_admin_view_projection(tmp_path: Path) -> None:
     golden_route = _write_gpx(
         tmp_path / "golden-route.gpx",

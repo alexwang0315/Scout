@@ -1,7 +1,9 @@
 import json
+import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -243,6 +245,157 @@ def test_layer_preparation_run_writes_planned_overpass_refs_and_allows_live_refr
     assert refreshed_evidence["counts"]["candidates"] == 8
 
 
+def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm_pbf(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    pbf_path = project_root / "sources" / "taiwan.osm.pbf"
+    pbf_path.write_bytes(b"fixture-pbf")
+    fresh_mtime = datetime(2026, 6, 20, tzinfo=timezone.utc).timestamp()
+    os.utime(pbf_path, (fresh_mtime, fresh_mtime))
+    raw_fixture = ROOT / "tests" / "fixtures" / "maps" / "phase_a_osm_pbf_osmjson.json"
+
+    def fake_extract(**kwargs):
+        assert kwargs["pbf_path"] == pbf_path.resolve()
+        assert kwargs["bbox"]["south"] < kwargs["bbox"]["north"]
+        assert kwargs["bbox"]["west"] < kwargs["bbox"]["east"]
+        extracted_pbf_path = kwargs["raw_payload_path"].parent / "osm_pbf_route_bbox.osm.pbf"
+        extracted_pbf_path.write_bytes(b"fixture-route-bbox-pbf")
+        return (
+            raw_fixture.read_bytes(),
+            {
+                "pbf_path": kwargs["pbf_path"].as_posix(),
+                "bbox_wgs84": kwargs["bbox"],
+                "extracted_pbf_path": extracted_pbf_path.as_posix(),
+                "commands": [["osmium", "extract"]],
+                "external_network_calls_made": False,
+            },
+        )
+
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_extract_osm_pbf_raw_payload",
+        fake_extract,
+    )
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("osm", "overpass"),
+            network_mode="no-network",
+            allow_network_fetch=False,
+            osm_pbf_path=pbf_path,
+            osm_pbf_source_url=(
+                "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
+            ),
+            osm_pbf_cache_ttl_days=30,
+            prepared_at="2026-06-25T00:00:00+00:00",
+        )
+    )
+    project = _load(project_root / "project.json")
+    evidence = _load(project_root / project["overpass_evidence_ref"])
+    normalized = _load(project_root / project["overpass_map_context_ref"])
+    layers_by_id = {layer["layer_id"]: layer for layer in manifest["layers"]}
+
+    assert evidence["artifact_kind"] == "pretrip_osm_pbf_evidence"
+    assert evidence["boundary"]["live_network_required"] is False
+    assert evidence["counts"]["candidates"] == 6
+    assert normalized["properties"]["source"] == "local_osm_pbf"
+    assert normalized["properties"]["pbf_download_url"] == (
+        "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
+    )
+    assert project["osm_pbf_source_ref"] == pbf_path.resolve().as_posix()
+    assert project["osm_pbf_source_url"] == (
+        "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
+    )
+    assert project["osm_pbf_raw_payload_ref"] == "normalized/map/osm_pbf_phase_a_raw.osm.json"
+    assert project["osm_pbf_extracted_at"] == "2026-06-25T00:00:00+00:00"
+    assert project["osm_pbf_route_extract_ref"] == (
+        "normalized/map/osm_pbf_route_bbox.osm.pbf"
+    )
+    assert project["osm_pbf_render_extract_ref"] == (
+        "normalized/map/osm_pbf_route_bbox.osm.pbf"
+    )
+    assert project["osm_pbf_render_extract_manifest_ref"] == (
+        "normalized/map/osm_pbf_render_extract_manifest.json"
+    )
+    assert project["osm_pbf_render_extract_source_kind"] == (
+        "local_osm_pbf_route_bbox_extract"
+    )
+    assert project["osm_pbf_render_extract_feature_count"] == 12
+    assert project["osm_pbf_feature_index_ref"] == (
+        "outputs/layers/normalized/osm_pbf_feature_index.json"
+    )
+    assert project["osm_pbf_feature_index_feature_count"] == 6
+    assert project["osm_pbf_feature_index_category_counts"] == {
+        "amenity_poi": 1,
+        "peak_terrain": 1,
+        "trail_network": 3,
+        "water_hydrology": 1,
+    }
+    assert project["osm_pbf_cache_ttl_days"] == 30
+    assert project["osm_pbf_cache_status"] == "fresh"
+    assert project["osm_pbf_cache_expires_at"] == "2026-07-20T00:00:00+00:00"
+    assert project["osm_pbf_refresh_required"] is False
+    assert evidence["pbf_cache"]["cache_status"] == "fresh"
+    render_manifest = _load(project_root / project["osm_pbf_render_extract_manifest_ref"])
+    assert render_manifest["preferred_render_source_ref"] == (
+        "normalized/map/osm_pbf_route_bbox.osm.pbf"
+    )
+    raw_ref = project["osm_pbf_raw_payload_ref"]
+    assert render_manifest["osmjson_extract_ref"] == raw_ref
+    assert (project_root / raw_ref).is_file()
+    assert layers_by_id["overpass"]["status"] == "ready_from_project_ref"
+    assert layers_by_id["overpass"]["lifecycle"]["fetch"]["status"] == (
+        "completed_local_osm_pbf_extract"
+    )
+    assert layers_by_id["overpass"]["lifecycle"]["fetch"][
+        "external_network_calls_made"
+    ] is False
+    assert layers_by_id["overpass"]["lifecycle"]["fetch"][
+        "local_pbf_source_url"
+    ] == "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
+    assert layers_by_id["overpass"]["lifecycle"]["fetch"][
+        "local_pbf_cache_status"
+    ] == "fresh"
+    assert layers_by_id["overpass"]["lifecycle"]["fetch"][
+        "local_pbf_refresh_required"
+    ] is False
+    assert layers_by_id["osm"]["counts"]["overpass_candidate_count"] == 6
+    assert layers_by_id["osm"]["output_refs"]["local_osm_render_extract_ref"] == (
+        "normalized/map/osm_pbf_route_bbox.osm.pbf"
+    )
+    assert layers_by_id["osm"]["output_refs"]["osm_rendering_policy"] == (
+        "workspace_local_osm_extract_available"
+    )
+    assert layers_by_id["osm"]["counts"]["local_osm_render_extract_feature_count"] == 12
+    assert layers_by_id["osm"]["counts"]["local_osm_feature_index_feature_count"] == 6
+    assert layers_by_id["osm"]["output_refs"]["local_osm_feature_index_ref"] == (
+        "outputs/layers/normalized/osm_pbf_feature_index.json"
+    )
+
+
+def test_local_osm_pbf_cache_metadata_marks_stale_after_ttl(tmp_path: Path) -> None:
+    pbf_path = tmp_path / "taiwan.osm.pbf"
+    pbf_path.write_bytes(b"fixture-pbf")
+    stale_mtime = datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp()
+    os.utime(pbf_path, (stale_mtime, stale_mtime))
+
+    metadata = pretrip_layer_preparation._osm_pbf_cache_metadata(
+        pbf_path,
+        source_url="http://download.geofabrik.de/asia/taiwan-latest.osm.pbf",
+        ttl_days=30,
+        now_iso="2026-06-25T00:00:00+00:00",
+    )
+
+    assert metadata["cache_policy"] == "download_once_reuse_until_ttl_expires"
+    assert metadata["cache_status"] == "stale_refresh_recommended"
+    assert metadata["refresh_required"] is True
+    assert metadata["expires_at"] == "2026-05-31T00:00:00+00:00"
+
+
 def test_layer_preparation_run_writes_workspace_outputs_and_project_refs(
     tmp_path: Path,
 ) -> None:
@@ -350,21 +503,59 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
 
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     for ref_key in (
+        "environment_evidence_package_ref",
+        "environment_factor_matrix_ref",
+        "go_no_go_review_draft_ref",
         "cwa_qpf_grid_ref",
         "cwa_weather_evidence_ref",
+        "cwa_forecast_timeline_ref",
+        "cwa_astronomy_timeline_ref",
+        "cwa_tide_marine_timeline_ref",
         "soil_moisture_grid_ref",
         "antecedent_rain_grid_ref",
+        "gee_gpm_imerg_raw_summary_ref",
         "gee_feature_package_ref",
     ):
         assert ref_key in project
         assert (project_root / project[ref_key]).is_file()
 
+    cwa_evidence = json.loads(
+        (project_root / project["cwa_weather_evidence_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
     qpf = json.loads((project_root / project["cwa_qpf_grid_ref"]).read_text(encoding="utf-8"))
     soil = json.loads(
         (project_root / project["soil_moisture_grid_ref"]).read_text(encoding="utf-8")
     )
+    assert project["cwa_cacheable"] is False
+    assert project["cwa_ttl_seconds"] == 0
+    assert project["cwa_cache_policy"]["must_refetch_on_prepare"] is True
+    assert cwa_evidence["cache_policy"]["cacheable"] is False
+    assert cwa_evidence["time_precision"] == "hour"
+    assert qpf["cache_policy"]["reuse_previous_values"] is False
     assert qpf["features"][0]["properties"]["layer_id"] == "cwa-qpf"
     assert qpf["features"][0]["properties"]["runtime_safety_truth"] is False
+    environment_package = json.loads(
+        (project_root / project["environment_evidence_package_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    factor_matrix = json.loads(
+        (project_root / project["environment_factor_matrix_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    go_no_go = json.loads(
+        (project_root / project["go_no_go_review_draft_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert environment_package["artifact_kind"] == "environment_evidence_package"
+    assert environment_package["runtime_safety_truth"] is False
+    assert factor_matrix["artifact_kind"] == "environment_factor_matrix"
+    assert go_no_go["artifact_kind"] == "go_no_go_review_draft"
+    assert go_no_go["decision_state"] == "hold"
     assert soil["features"][0]["properties"]["status"] in {
         "missing_credentials",
         "configured_pending_fetcher",
@@ -389,6 +580,166 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
     assert view["cwa_qpf"]["points"][0]["runtime_safety_truth"] is False
 
 
+def test_layer_preparation_writes_cwa_hourly_fetch_and_validity_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+
+    import scout_weather_integration
+
+    def fake_fetch_cwa_dataset(dataset_id: str, **_kwargs: object) -> dict[str, object]:
+        return {"dataset_id": dataset_id}
+
+    def fake_normalize_weather_points(
+        dataset_id: str,
+        _payload: dict[str, object],
+        *,
+        source_run_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "source": dataset_id,
+                "source_run_id": source_run_id,
+                "areaName": "南投縣仁愛鄉",
+                "validFrom": "2026-06-26T02:30:00+00:00",
+                "validTo": "2026-06-26T08:30:00+00:00",
+                "rainProbability": 75,
+                "rainfallMm": 18.5,
+                "weatherText": "午後雷陣雨",
+            }
+        ]
+
+    def fake_normalize_warnings(
+        _payload: dict[str, object],
+        *,
+        source_run_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "source": "W-C0033-001",
+                "source_run_id": source_run_id,
+                "warning_id": "warning.001",
+                "headline": "大雨特報",
+                "valid_from": "2026-06-26T03:15:00+00:00",
+                "valid_to": "2026-06-26T09:45:00+00:00",
+            }
+        ]
+
+    monkeypatch.setenv("SCOUT_CWA_API_KEY", "test-key")
+    monkeypatch.setattr(
+        scout_weather_integration,
+        "fetch_cwa_dataset",
+        fake_fetch_cwa_dataset,
+    )
+    monkeypatch.setattr(
+        scout_weather_integration,
+        "normalize_cwa_weather_points",
+        fake_normalize_weather_points,
+    )
+    monkeypatch.setattr(
+        scout_weather_integration,
+        "normalize_cwa_warnings",
+        fake_normalize_warnings,
+    )
+
+    run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("cwa-weather", "cwa-qpf"),
+            network_mode="explicit-fetch",
+            allow_network_fetch=True,
+            prepared_at="2026-06-26T01:12:44+00:00",
+        )
+    )
+
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    cwa_evidence = json.loads(
+        (project_root / project["cwa_weather_evidence_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    qpf = json.loads((project_root / project["cwa_qpf_grid_ref"]).read_text(encoding="utf-8"))
+    qpf_summary = json.loads(
+        (project_root / project["cwa_qpf_corridor_summary_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    forecast_timeline = json.loads(
+        (project_root / project["cwa_forecast_timeline_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    environment_package = json.loads(
+        (project_root / project["environment_evidence_package_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    factor_matrix = json.loads(
+        (project_root / project["environment_factor_matrix_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    go_no_go = json.loads(
+        (project_root / project["go_no_go_review_draft_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    view = build_pretrip_admin_view(
+        "chilai_nanhua_day1",
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    assert project["cwa_fetched_at_hour"] == "2026-06-26T01:00:00Z"
+    assert project["cwa_valid_from_hour"] == "2026-06-26T02:00:00Z"
+    assert project["cwa_valid_until_hour"] == "2026-06-26T09:00:00Z"
+    assert cwa_evidence["api_fetched_at_hour"] == "2026-06-26T01:00:00Z"
+    assert cwa_evidence["cwa_time_metadata"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert cwa_evidence["forecast_valid_until_hour"] == "2026-06-26T08:00:00Z"
+    assert cwa_evidence["warning_valid_until_hour"] == "2026-06-26T09:00:00Z"
+    assert qpf["cwa_time_metadata"]["valid_until_hour"] == "2026-06-26T09:00:00Z"
+    assert qpf["features"][0]["properties"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert qpf["features"][0]["properties"]["cwa_time_metadata"][
+        "api_fetched_at_hour"
+    ] == "2026-06-26T01:00:00Z"
+    assert qpf["features"][0]["properties"]["valid_until_hour"] == (
+        "2026-06-26T08:00:00Z"
+    )
+    assert qpf_summary["valid_until_hour"] == "2026-06-26T09:00:00Z"
+    assert forecast_timeline["events"][0]["valid_until_hour"] == (
+        "2026-06-26T08:00:00Z"
+    )
+    assert environment_package["cwa_time_metadata"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert factor_matrix["cwa_time_metadata"]["valid_until_hour"] == (
+        "2026-06-26T09:00:00Z"
+    )
+    assert go_no_go["data_freshness_summary"]["cwa_api_request_attempted_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert go_no_go["data_freshness_summary"]["cwa_valid_until_hour"] == (
+        "2026-06-26T09:00:00Z"
+    )
+    assert view["cwa_qpf"]["temporal_coverage"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    cwa_value_item = next(
+        item
+        for item in view["environment_values"]["items"]
+        if item["layer_id"] == "cwa-qpf"
+    )
+    assert cwa_value_item["value_summary"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+
+
 def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -405,6 +756,31 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     )
     project_payload = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     project_payload["golden_route_gpx_ref"] = str(route_gpx.relative_to(project_root))
+    cwa_time_metadata = {
+        "api_request_attempted_at_hour": "2026-06-26T01:00:00Z",
+        "api_fetched_at_hour": "2026-06-26T01:00:00Z",
+        "forecast_valid_until_hour": "2026-06-26T08:00:00Z",
+        "valid_until_hour": "2026-06-26T09:00:00Z",
+        "time_precision": "hour",
+        "timezone": "UTC",
+    }
+    cwa_root = project_root / "outputs" / "environment" / "cwa"
+    cwa_root.mkdir(parents=True, exist_ok=True)
+    (cwa_root / "cwa_weather_evidence.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "cwa_weather_environment_evidence",
+                "status": "ready",
+                "cwa_time_metadata": cwa_time_metadata,
+                "temporal_coverage": cwa_time_metadata,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    project_payload["cwa_weather_evidence_ref"] = (
+        "outputs/environment/cwa/cwa_weather_evidence.json"
+    )
     (project_root / "project.json").write_text(
         json.dumps(project_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -494,7 +870,7 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
                         "sentinel2_indices": {"ndvi": 0.44, "bsi": 0.2, "ndwi": -0.1},
                         "sentinel2_before_after_change_score": 0.2,
                         "sentinel1_before_after_backscatter_anomaly_db": -1.5,
-                        "gpm_recent_rainfall_mm": 22.5,
+                        "gpm_recent_rainfall_mm": 128.0,
                         "chirps_rainfall_anomaly": 0.8,
                         "nearest_firms_active_fire_distance_m": 12000,
                         "sentinel2_cloud_free_count": 2,
@@ -538,11 +914,21 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     raw_summary = json.loads(
         (project_root / project["gee_raw_summary_ref"]).read_text(encoding="utf-8")
     )
+    gpm_raw_summary = json.loads(
+        (project_root / project["gee_gpm_imerg_raw_summary_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
     feature_package = json.loads(
         (project_root / project["gee_feature_package_ref"]).read_text(encoding="utf-8")
     )
     derivatives = json.loads(
         (project_root / project["environment_risk_derivatives_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    wetness = json.loads(
+        (project_root / project["wetness_flash_flood_susceptibility_ref"]).read_text(
             encoding="utf-8"
         )
     )
@@ -567,6 +953,9 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     )
     assert raw_summary["cache_policy"]["cacheable"] is False
     assert raw_summary["secret_value_embedded"] is False
+    assert gpm_raw_summary["artifact_kind"] == "gee_gpm_imerg_raw_summary"
+    assert gpm_raw_summary["cache_policy"]["cacheable"] is False
+    assert gpm_raw_summary["secret_value_embedded"] is False
     assert soil["boundary"]["external_api_calls_made"] is True
     assert soil["features"][0]["properties"]["runtime_safety_truth"] is False
     assert project["gee_feature_package_status"] == "ready"
@@ -578,6 +967,13 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     assert (project_root / project["practical_darkness_time_ref"]).is_file()
     assert (project_root / project["route_revalidation_report_ref"]).is_file()
     assert derivatives["artifact_kind"] == "scout_environment_risk_derivatives"
+    assert derivatives["cwa_time_metadata"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert wetness["cwa_time_metadata"]["valid_until_hour"] == "2026-06-26T09:00:00Z"
+    assert wetness["features"][0]["properties"]["cwa_api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
     assert derivatives["counts"]["segment_count"] > 0
     assert derivatives["boundary"]["runtime_safety_truth"] is False
     assert feature_package["route"]["buffer_m"] == 500.0
@@ -1540,6 +1936,11 @@ def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
 ) -> None:
     pytest.importorskip("numpy")
     project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    project["risk_score_generation_status"] = "failed"
+    project["risk_score_generation_error"] = "No module named 'numpy'"
+    _write_json(project_path, project)
     monkeypatch.setattr(pretrip_layer_preparation, "SCOUT_RISK_OUTPUT_SOURCES", {})
 
     manifest = run_layer_preparation(
@@ -1553,6 +1954,7 @@ def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
 
     project = _load(project_root / "project.json")
     assert project["risk_score_generation_status"] == "completed"
+    assert "risk_score_generation_error" not in project
     assert project["risk_score_source_profile"] == (
         "scout_risk_engine_workspace_generated_overpass_route_profile"
     )
@@ -1815,6 +2217,7 @@ def _write_minimal_overpass_dtm_workspace(tmp_path: Path) -> Path:
     route_bundle_ref = "normalized/routes/route_evidence_bundle.json"
     overpass_ref = "normalized/map/overpass_vector_evidence.geojson"
     dtm_ref = "normalized/terrain/dtm_coverage_summary.json"
+    segment_dtm_ref = "normalized/terrain/segment_dtm_coverage.json"
 
     _write_json(
         project_root / route_summary_ref,
@@ -1920,6 +2323,15 @@ def _write_minimal_overpass_dtm_workspace(tmp_path: Path) -> Path:
         },
     )
     _write_json(
+        project_root / segment_dtm_ref,
+        {
+            "artifact_kind": "pretrip_segment_dtm_coverage",
+            "segment_count": 1,
+            "candidate_tile_count": 1,
+            "missing_grid_count": 0,
+        },
+    )
+    _write_json(
         project_root / "project.json",
         {
             "project_id": "chilai_nanhua_day1",
@@ -1927,6 +2339,7 @@ def _write_minimal_overpass_dtm_workspace(tmp_path: Path) -> Path:
             "route_evidence_bundle_ref": route_bundle_ref,
             "overpass_map_context_ref": overpass_ref,
             "dtm_coverage_summary_ref": dtm_ref,
+            "segment_dtm_coverage_ref": segment_dtm_ref,
         },
     )
     return project_root

@@ -182,3 +182,106 @@ def test_overpass_route_alignment_uses_50m_gpx_normal_corridor_before_gpx_fallba
     assert normal_display["coordinates"][-1]["lat"] == 24.0
     assert normal_display["display_point_count"] >= 2
     assert display["boundary"]["runtime_safety_truth"] is False
+
+
+def test_overpass_route_alignment_rejects_inflated_segment_display_path(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "workspace" / "inflated"
+    _write_json(
+        project_root / "project.json",
+        {
+            "project_id": "inflated",
+            "checkpoint_candidates_ref": "candidates/checkpoints.json",
+            "segment_candidates_ref": "candidates/segments.json",
+            "segment_display_geometry_ref": "outputs/segment_display_geometry.json",
+            "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+        },
+    )
+    _write_json(
+        project_root / "outputs/risk/risk_ribbon.geojson",
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "segment_id": "overpass.long.001",
+                        "start_distance_m": 0.0,
+                        "end_distance_m": 10_000.0,
+                    },
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[121.0, 24.0], [121.1, 24.0]],
+                    },
+                }
+            ],
+        },
+    )
+    _write_json(
+        project_root / "candidates/checkpoints.json",
+        {
+            "candidates": [
+                {"candidate_id": "cp.long-start", "lat": 24.00001, "lon": 121.001},
+                {"candidate_id": "cp.long-end", "lat": 24.00001, "lon": 121.099},
+            ],
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+    )
+    _write_json(
+        project_root / "candidates/segments.json",
+        {
+            "candidates": [
+                {
+                    "candidate_id": "seg.001",
+                    "from_candidate_id": "cp.long-start",
+                    "to_candidate_id": "cp.long-end",
+                    "distance_m": 100.0,
+                }
+            ],
+            "boundary": {"candidate_only": True},
+        },
+    )
+    _write_json(
+        project_root / "outputs/segment_display_geometry.json",
+        {
+            "segments": [
+                {
+                    "segment_candidate_id": "seg.001",
+                    "distance_m": 100.0,
+                    "coordinates": [
+                        {"lat": 24.00001, "lon": 121.001},
+                        {"lat": 24.00002, "lon": 121.0018},
+                    ],
+                    "coordinate_segments": [
+                        [
+                            {"lat": 24.00001, "lon": 121.001},
+                            {"lat": 24.00002, "lon": 121.0018},
+                        ]
+                    ],
+                }
+            ],
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+    )
+
+    result = align_workspace_route_to_overpass(
+        project_root,
+        generated_at="2026-06-20T00:00:00+00:00",
+    )
+
+    assert result["status"] == "completed"
+    assert result["counts"]["rejected_segment_alignment_count"] >= 1
+    segments = _load(project_root / "outputs/overpass_aligned_segments.json")
+    aligned_segment = segments["candidates"][0]
+    assert aligned_segment["overpass_projection"]["status"] == (
+        "rejected_overpass_segment_path_inflation_kept_gpx"
+    )
+    assert aligned_segment["overpass_projection"]["aligned_distance_m"] == 9800.0
+    assert "overpass_display_coordinate_segments" not in aligned_segment
+
+    display = _load(project_root / "outputs/overpass_aligned_segment_display_geometry.json")
+    display_segment = display["segments"][0]
+    assert display_segment["display_point_count"] < 10
+    assert display_segment["coordinates"][0]["lon"] < 121.01
+    assert display_segment["coordinates"][-1]["lon"] < 121.01

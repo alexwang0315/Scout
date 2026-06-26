@@ -984,12 +984,99 @@ def write_scout_gee_feature_package(
     return package
 
 
+_CWA_TIME_METADATA_KEYS = (
+    "request_timestamp",
+    "request_timestamp_hour",
+    "generated_at_hour",
+    "api_request_attempted",
+    "api_request_attempted_at",
+    "api_request_attempted_at_hour",
+    "api_fetched_at",
+    "api_fetched_at_hour",
+    "fetched_at",
+    "fetched_at_hour",
+    "forecast_valid_from",
+    "forecast_valid_from_hour",
+    "forecast_valid_until",
+    "forecast_valid_until_hour",
+    "warning_valid_from",
+    "warning_valid_from_hour",
+    "warning_valid_until",
+    "warning_valid_until_hour",
+    "latest_observation_at",
+    "latest_observation_at_hour",
+    "valid_from",
+    "valid_from_hour",
+    "valid_to",
+    "valid_to_hour",
+    "valid_until",
+    "valid_until_hour",
+    "time_precision",
+    "timezone",
+    "time_metadata_required",
+)
+
+
+def _normalise_cwa_time_metadata(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    source: Mapping[str, Any] = value
+    for key in ("cwa_time_metadata", "temporal_coverage", "cwa"):
+        nested = source.get(key)
+        if isinstance(nested, Mapping):
+            source = nested
+            break
+    if isinstance(source.get("cwa"), Mapping):
+        source = source["cwa"]
+    metadata = {
+        key: source.get(key)
+        for key in _CWA_TIME_METADATA_KEYS
+        if key in source
+    }
+    if metadata and "time_precision" not in metadata:
+        metadata["time_precision"] = "hour"
+    if metadata and "timezone" not in metadata:
+        metadata["timezone"] = "UTC"
+    return metadata
+
+
+def _cwa_derivative_time_properties(
+    cwa_time_metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    metadata = _normalise_cwa_time_metadata(cwa_time_metadata)
+    if not metadata:
+        return {}
+    properties = {
+        "cwa_time_metadata": metadata,
+        "source_time_metadata": {"cwa": metadata},
+        "time_precision": metadata.get("time_precision", "hour"),
+        "timezone": metadata.get("timezone", "UTC"),
+        "cwa_api_request_attempted_at": metadata.get("api_request_attempted_at"),
+        "cwa_api_request_attempted_at_hour": metadata.get(
+            "api_request_attempted_at_hour"
+        ),
+        "cwa_api_fetched_at": metadata.get("api_fetched_at")
+        or metadata.get("fetched_at"),
+        "cwa_api_fetched_at_hour": metadata.get("api_fetched_at_hour")
+        or metadata.get("fetched_at_hour"),
+        "cwa_forecast_valid_from_hour": metadata.get("forecast_valid_from_hour"),
+        "cwa_forecast_valid_until_hour": metadata.get("forecast_valid_until_hour"),
+        "cwa_warning_valid_until_hour": metadata.get("warning_valid_until_hour"),
+        "cwa_latest_observation_at_hour": metadata.get("latest_observation_at_hour"),
+        "cwa_valid_from_hour": metadata.get("valid_from_hour"),
+        "cwa_valid_until_hour": metadata.get("valid_until_hour")
+        or metadata.get("valid_to_hour"),
+    }
+    return {key: value for key, value in properties.items() if value not in (None, "")}
+
+
 def build_environment_risk_derivatives(
     feature_package: Mapping[str, Any],
     *,
     project_id: str | None = None,
     generated_at: str | None = None,
     event_date: str | None = None,
+    cwa_time_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build candidate-only route environmental risk derivatives.
 
@@ -1006,6 +1093,12 @@ def build_environment_risk_derivatives(
         for item in feature_package.get("source_datasets", [])
         if isinstance(item, Mapping)
     ]
+    resolved_cwa_time_metadata = _normalise_cwa_time_metadata(
+        cwa_time_metadata
+        or feature_package.get("cwa_time_metadata")
+        or feature_package.get("temporal_coverage")
+        or {}
+    )
     route = feature_package.get("route") if isinstance(feature_package.get("route"), Mapping) else {}
     route_buffer = route.get("buffer") if isinstance(route.get("buffer"), Mapping) else {}
     route_buffer_m = _optional_float(route.get("buffer_m"))
@@ -1021,24 +1114,28 @@ def build_environment_risk_derivatives(
             resolved_project_id,
             resolved_generated_at,
             source_datasets,
+            cwa_time_metadata=resolved_cwa_time_metadata,
         ),
         "wetness_flash_flood_susceptibility": _empty_derivative_collection(
             "wetness_flash_flood_susceptibility",
             resolved_project_id,
             resolved_generated_at,
             source_datasets,
+            cwa_time_metadata=resolved_cwa_time_metadata,
         ),
         "trail_obscurity_risk": _empty_derivative_collection(
             "trail_obscurity_risk",
             resolved_project_id,
             resolved_generated_at,
             source_datasets,
+            cwa_time_metadata=resolved_cwa_time_metadata,
         ),
         "practical_darkness_time": _empty_derivative_collection(
             "practical_darkness_time",
             resolved_project_id,
             resolved_generated_at,
             source_datasets,
+            cwa_time_metadata=resolved_cwa_time_metadata,
         ),
     }
     candidates_by_kind: dict[str, list[dict[str, Any]]] = {
@@ -1081,6 +1178,11 @@ def build_environment_risk_derivatives(
                     ),
                     "candidate_only": True,
                     "runtime_safety_truth": False,
+                    **(
+                        _cwa_derivative_time_properties(resolved_cwa_time_metadata)
+                        if kind == "wetness_flash_flood_susceptibility"
+                        else {}
+                    ),
                 },
             }
             collections[kind]["features"].append(feature)
@@ -1134,6 +1236,13 @@ def build_environment_risk_derivatives(
         "source_raw_response_sha256": feature_package.get("raw_response_sha256"),
         "source_datasets": source_datasets,
         "source_metric_gaps": source_metric_gaps,
+        "source_time_metadata": {"cwa": resolved_cwa_time_metadata}
+        if resolved_cwa_time_metadata
+        else {},
+        "cwa_time_metadata": resolved_cwa_time_metadata,
+        "temporal_coverage": {"cwa": resolved_cwa_time_metadata}
+        if resolved_cwa_time_metadata
+        else {},
         "route_buffer_m": route_buffer_m,
         "counts": counts,
         "headline": _derivative_headline(counts, route_buffer_m),
@@ -1158,12 +1267,14 @@ def write_environment_risk_derivative_artifacts(
     project_id: str | None = None,
     generated_at: str | None = None,
     event_date: str | None = None,
+    cwa_time_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     derivatives = build_environment_risk_derivatives(
         feature_package,
         project_id=project_id,
         generated_at=generated_at,
         event_date=event_date,
+        cwa_time_metadata=cwa_time_metadata,
     )
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -1218,7 +1329,10 @@ def _empty_derivative_collection(
     project_id: str,
     generated_at: str,
     source_datasets: list[dict[str, Any]],
+    *,
+    cwa_time_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    resolved_cwa_time_metadata = _normalise_cwa_time_metadata(cwa_time_metadata or {})
     return {
         "type": "FeatureCollection",
         "artifact_kind": f"scout_{layer_key}",
@@ -1227,6 +1341,13 @@ def _empty_derivative_collection(
         "generated_at": generated_at,
         "layer_key": layer_key,
         "source_datasets": source_datasets,
+        "source_time_metadata": {"cwa": resolved_cwa_time_metadata}
+        if resolved_cwa_time_metadata
+        else {},
+        "cwa_time_metadata": resolved_cwa_time_metadata,
+        "temporal_coverage": {"cwa": resolved_cwa_time_metadata}
+        if resolved_cwa_time_metadata
+        else {},
         "features": [],
         "boundary": {
             "candidate_only": True,

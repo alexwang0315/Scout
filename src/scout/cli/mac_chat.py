@@ -8,6 +8,11 @@ import webbrowser
 
 from scout.mac_chat import create_mac_chat_app
 from scout.mac_chat.client import DEFAULT_SCOUT_SERVER_URL
+from scout.mac_chat.local_fallback import (
+    DEFAULT_MAC_LOCAL_FALLBACK_MODEL,
+    PydanticAIV2MacLocalFallback,
+    load_env_file,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,6 +27,41 @@ def main(argv: list[str] | None = None) -> int:
         help="Scout AI OS server URL on the Scout hardware.",
     )
     parser.add_argument(
+        "--local-fallback",
+        action="store_true",
+        default=_truthy_env("SCOUT_AI_MAC_CHAT_LOCAL_FALLBACK"),
+        help=(
+            "Use the Mac-local Pydantic AI v2 assistant when the Scout hardware "
+            "server is unavailable."
+        ),
+    )
+    parser.add_argument(
+        "--env-file",
+        default=os.getenv("SCOUT_AI_MAC_CHAT_ENV_FILE", ".env"),
+        help="Local env file to load before constructing the fallback provider.",
+    )
+    parser.add_argument(
+        "--fallback-model",
+        default=None,
+        help="Mac-local fallback model name, for example openrouter:z-ai/glm-5.2.",
+    )
+    parser.add_argument(
+        "--fallback-timeout-seconds",
+        type=int,
+        default=None,
+        help="Mac-local fallback provider timeout.",
+    )
+    parser.add_argument(
+        "--fallback-workspace-root",
+        default=None,
+        help="Local pretrip workspace root used by Scout AI read-only tools.",
+    )
+    parser.add_argument(
+        "--fallback-project-id",
+        default=None,
+        help="Default project_id for Mac-local fallback queries.",
+    )
+    parser.add_argument(
         "--no-open",
         action="store_true",
         help="Do not open the Mac browser after the local UI starts.",
@@ -30,12 +70,49 @@ def main(argv: list[str] | None = None) -> int:
 
     import uvicorn
 
-    app = create_mac_chat_app(target_url=args.target_url)
+    if args.env_file and args.env_file.lower() not in {"none", "false", "0"}:
+        load_env_file(args.env_file)
+
+    local_fallback_provider = None
+    if args.local_fallback:
+        local_fallback_provider = PydanticAIV2MacLocalFallback(
+            model_name=(
+                args.fallback_model
+                or os.getenv("SCOUT_AI_MAC_CHAT_FALLBACK_MODEL")
+                or os.getenv("SCOUT_AI_ASSISTANT_MODEL")
+                or DEFAULT_MAC_LOCAL_FALLBACK_MODEL
+            ),
+            timeout_seconds=(
+                args.fallback_timeout_seconds
+                or _int_env("SCOUT_AI_MAC_CHAT_FALLBACK_TIMEOUT_SECONDS", 90)
+            ),
+            max_context_chars=_int_env("SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS", 12000),
+            workspace_root=args.fallback_workspace_root
+            or os.getenv("SCOUT_PRETRIP_WORKSPACE_ROOT"),
+            project_id=args.fallback_project_id or os.getenv("SCOUT_AI_MAC_CHAT_PROJECT_ID"),
+        )
+
+    app = create_mac_chat_app(
+        target_url=args.target_url,
+        local_fallback_enabled=args.local_fallback,
+        local_fallback_provider=local_fallback_provider,
+    )
     url = f"http://{args.host}:{args.port}"
     if not args.no_open:
         webbrowser.open(url)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
+
+
+def _truthy_env(key: str) -> bool:
+    return os.getenv(key, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _int_env(key: str, default: int) -> int:
+    try:
+        return int(os.getenv(key, str(default)))
+    except (TypeError, ValueError):
+        return default
 
 
 __all__ = ["main"]

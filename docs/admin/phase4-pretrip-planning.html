@@ -2037,7 +2037,15 @@
 
   <script src="/admin/scout-assistant-ui.js"></script>
   <script>
-    const PROJECT_ID = "chilai_nanhua_day1";
+    const DEFAULT_PROJECT_ID = "chilai_nanhua_day1";
+    const PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";
+    const PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PROJECT_ID_PARAM)
+      ? PROJECT_ID_PARAM
+      : DEFAULT_PROJECT_ID;
+    const routeContextBriefingLink = document.getElementById("routeContextBriefingLink");
+    if (routeContextBriefingLink) {
+      routeContextBriefingLink.href = `/admin/pretrip/projects/${encodeURIComponent(PROJECT_ID)}/briefings/route-context`;
+    }
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
     const MAP_VISUAL_PADDING = 56;
@@ -2054,14 +2062,14 @@
     const TERRAIN_FALLBACK_CELL_GAP_PX = 1;
     const MAP_ZOOM_STEP_FACTOR = 1.25;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent`;
+    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=offline`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
     const OSM_TARGET_ZOOM = 17;
     const OSM_MAX_TILES = 64;
     const RASTER_MAX_TILES = 64;
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
-    const OSM_TILE_CACHE_BUST = "transparent-fallback-v12";
+    const OSM_TILE_CACHE_BUST = "offline-fallback-v13";
     const RASTER_TILE_CACHE_BUST = "wmts-runtime-v1";
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const HAPPYMAN_WMTS_ENDPOINT = "https://tile.happyman.idv.tw/mp/service";
@@ -2587,9 +2595,7 @@
       });
     }
     function renderOsmBasemap(group, bounds, width, height, coverageBounds = bounds) {
-      if (!isLocalOsmTileMode()) {
-        group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));
-      }
+      group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));
       osmTileCoverage(coverageBounds).forEach(tile => {
         const image = el("image", {
           href: tile.href,
@@ -3050,14 +3056,20 @@
         const pop = item?.rain_probability ?? item?.rainProbability ?? values.max_rain_probability;
         const rain = item?.rainfall_mm ?? item?.rainfallMm ?? values.max_rainfall_mm;
         const weather = item?.weather_text || item?.weatherText || item?.status || "forecast";
-        return `CWA forecast-derived QPF: PoP ${environmentNumber(pop, 0, "%")}, rain ${environmentNumber(rain, 1, "mm")} | ${weather}; ${candidateNote}`;
+        const fetched = item?.api_fetched_at_hour || item?.fetched_at_hour || values.api_fetched_at_hour || "fetch hour n/a";
+        const validUntil = item?.valid_until_hour || item?.valid_to_hour || values.valid_until_hour || "valid-until hour n/a";
+        return `CWA forecast-derived QPF: PoP ${environmentNumber(pop, 0, "%")}, rain ${environmentNumber(rain, 1, "mm")} | fetched ${fetched}; valid until ${validUntil}; ${weather}; ${candidateNote}`;
       }
       if (layerId.includes("cwa-weather")) {
         if (String(item?.evidence_type || "").includes("warning")) {
-          return `Official CWA warning evidence: ${item?.headline || item?.label || item?.status || "warning"} | ${candidateNote}`;
+          const fetched = item?.api_fetched_at_hour || item?.fetched_at_hour || "fetch hour n/a";
+          const validUntil = item?.valid_until_hour || item?.valid_to_hour || "valid-until hour n/a";
+          return `Official CWA warning evidence: ${item?.headline || item?.label || item?.status || "warning"} | fetched ${fetched}; valid until ${validUntil}; ${candidateNote}`;
         }
         const station = item?.station_name || item?.label || "CWA station";
-        return `CWA observation station: ${station} | 24h rain ${environmentNumber(item?.last_24h_mm, 1, "mm")} | ${candidateNote}`;
+        const fetched = item?.api_fetched_at_hour || item?.fetched_at_hour || "fetch hour n/a";
+        const observed = item?.source_observed_at_hour || item?.obs_time_hour || "observed hour n/a";
+        return `CWA observation station: ${station} | 24h rain ${environmentNumber(item?.last_24h_mm, 1, "mm")} | fetched ${fetched}; observed ${observed}; ${candidateNote}`;
       }
       return "";
     }
@@ -3066,16 +3078,18 @@
       const layerId = String(item?.layer_id || "").toLowerCase();
       const values = item?.value_summary || {};
       if (type.includes("environment_risk_derivative")) {
-        return `${item.status || "candidate"} | landslide ${values.new_landslide_candidate_count ?? 0} | wet ${values.wetness_flash_flood_candidate_count ?? 0} | obscure ${values.trail_obscurity_candidate_count ?? 0} | dark ${values.practical_darkness_candidate_count ?? 0}`;
+        const fetched = values.cwa_api_fetched_at_hour || item.cwa_api_fetched_at_hour || "-";
+        const validUntil = values.cwa_valid_until_hour || item.cwa_valid_until_hour || "-";
+        return `${item.status || "candidate"} | landslide ${values.new_landslide_candidate_count ?? 0} | wet ${values.wetness_flash_flood_candidate_count ?? 0} | obscure ${values.trail_obscurity_candidate_count ?? 0} | dark ${values.practical_darkness_candidate_count ?? 0} | CWA fetched ${fetched} | valid until ${validUntil}`;
       }
       if (type.includes("gee_route_environment_feature_package")) {
         return `${item.status || "candidate"} | ${item.counts?.segment_count ?? 0} segments | stale ${item.counts?.stale_warning_count ?? 0} | datasets ${(item.dataset_ids || []).length}`;
       }
       if (layerId === "cwa-qpf") {
-        return `${item.status || "candidate"} | PoP ${environmentNumber(values.max_rain_probability, 0, "%")} | rain ${environmentNumber(values.max_rainfall_mm, 1, "mm")}`;
+        return `${item.status || "candidate"} | PoP ${environmentNumber(values.max_rain_probability, 0, "%")} | rain ${environmentNumber(values.max_rainfall_mm, 1, "mm")} | fetched ${values.api_fetched_at_hour || "-"} | valid until ${values.valid_until_hour || "-"}`;
       }
       if (layerId === "cwa-weather") {
-        return `${item.status || "candidate"} | warnings ${values.warning_point_count ?? 0} | stations ${values.observation_point_count ?? 0} | max 24h ${environmentNumber(values.max_last_24h_mm, 1, "mm")}`;
+        return `${item.status || "candidate"} | warnings ${values.warning_point_count ?? 0} | stations ${values.observation_point_count ?? 0} | max 24h ${environmentNumber(values.max_last_24h_mm, 1, "mm")} | fetched ${values.api_fetched_at_hour || "-"} | valid until ${values.valid_until_hour || "-"}`;
       }
       if (layerId === "soil-moisture") {
         return `${item.status || "candidate"} | surface ${environmentNumber(values.sm_surface_wetness, 2)} | root ${environmentNumber(values.sm_rootzone_wetness, 2)} | no-cache`;
@@ -3090,7 +3104,10 @@
       const count = item?.candidate_count ?? item?.counts?.candidate_count ?? values.candidate_count;
       const first = values.first_candidate_label ? ` | first ${values.first_candidate_label}` : "";
       const report = values.route_revalidation_status ? ` | ${values.route_revalidation_status}` : "";
-      return `${item.status || "candidate"} | ${count ?? 0} candidates${report}${first}`;
+      const fetched = values.cwa_api_fetched_at_hour || item.cwa_api_fetched_at_hour;
+      const validUntil = values.cwa_valid_until_hour || item.cwa_valid_until_hour;
+      const cwa = fetched || validUntil ? ` | CWA fetched ${fetched || "-"} | valid until ${validUntil || "-"}` : "";
+      return `${item.status || "candidate"} | ${count ?? 0} candidates${report}${first}${cwa}`;
     }
     function environmentRiskCandidateTreeSummary(item = {}) {
       const score = Number(item?.score);
@@ -3100,7 +3117,10 @@
       const scoreText = Number.isFinite(score) ? `score ${score.toFixed(2)}` : "score n/a";
       const distanceText = Number.isFinite(distance) ? `${Math.round(distance)}m` : "distance n/a";
       const coordinateText = Number.isFinite(lat) && Number.isFinite(lon) ? `${lat.toFixed(6)}, ${lon.toFixed(6)}` : "no coordinate";
-      return `${item.severity || item.status || "candidate"} | ${scoreText} | ${distanceText} | ${coordinateText}`;
+      const fetched = item?.cwa_api_fetched_at_hour || item?.api_fetched_at_hour;
+      const validUntil = item?.cwa_valid_until_hour || item?.valid_until_hour || item?.valid_to_hour;
+      const cwa = fetched || validUntil ? ` | CWA fetched ${fetched || "-"} | valid until ${validUntil || "-"}` : "";
+      return `${item.severity || item.status || "candidate"} | ${scoreText} | ${distanceText} | ${coordinateText}${cwa}`;
     }
     function environmentLayerBounds(layer) {
       const bbox = layer?.bbox_wgs84 || layer?.summary?.bbox_wgs84 || {};
@@ -6282,6 +6302,67 @@
         label: item.label || item.display_mileage_label || item.source_id,
         sublabel: `${item.source_kind || "mileage"} | ${item.route_projection_status || "projection-review"} | ${Math.round(item.route_distance_m || 0)}m`
       }), false, "timeline");
+      const overpassGroups = view.overpass_evidence?.category_groups || {};
+      const overpassSummary = item => `${item.candidate_type || item.feature_type || "overpass"} | ${item.osm_type || "object"}/${item.osm_id || "-"} | ${item.confidence || "-"}`;
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Trail Corridors", overpassGroups.overpass_trail_corridor || view.overpass_evidence?.corridor_candidates || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Hiking Routes", overpassGroups.overpass_hiking_route || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Shelters", overpassGroups.overpass_shelter || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Water Sources", overpassGroups.overpass_water_source || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Parking", overpassGroups.overpass_parking || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Peaks", overpassGroups.overpass_peak || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Terrain Risk", overpassGroups.overpass_terrain_risk || view.overpass_evidence?.hazard_candidates || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Other POI", overpassGroups.overpass_other_poi || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      const osmPbfItems = view.osm_pbf_evidence?.items || [];
+      const osmPbfCategory = categoryId => osmPbfItems.filter(item => item.category_id === categoryId);
+      const osmPbfSummary = item => `${item.feature_type || "osm"} | ${item.geometry_type || "-"} | ${item.osm_type || "object"}/${item.osm_id || "-"}`;
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Trail Network", osmPbfCategory("trail_network"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Milestones", osmPbfCategory("milestone_route_marker"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "timeline");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Mobile", osmPbfCategory("mobile_signal"), item => ({
+        label: item.label || "通訊點",
+        sublabel: osmPbfSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Peaks / Terrain", [...osmPbfCategory("peak_terrain"), ...osmPbfCategory("terrain_risk_context")], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM POI / Amenities", osmPbfCategory("amenity_poi"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Water / Hydrology", osmPbfCategory("water_hydrology"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "risk");
       appendEvidenceTreeGroup(tree, "map_risk", "Risk Score", view.risk_score?.points || [], item => ({
         label: `${item.score_field || "pretrip_risk"} ${Number(item.pretrip_risk || 0).toFixed(1)}`,
         sublabel: `L${item.risk_level || "-"} | ${Math.round(item.distance_m || 0)}m${item.teii_20m == null ? "" : ` | TEII ${Number(item.teii_20m).toFixed(1)}`}`
@@ -6328,11 +6409,11 @@
       }), false, "risk");
       appendEvidenceTreeGroup(tree, "map_risk", "CWA QPF", view.cwa_qpf?.points || [], item => ({
         label: item.label || "CWA QPF",
-        sublabel: `${item.status || "candidate"} | PoP ${item.rain_probability ?? item.rainProbability ?? "-"}% | ${item.valid_from || "-"}`
+        sublabel: `${item.status || "candidate"} | PoP ${item.rain_probability ?? item.rainProbability ?? "-"}% | fetched ${item.api_fetched_at_hour || item.fetched_at_hour || "-"} | valid until ${item.valid_until_hour || item.valid_to_hour || "-"}`
       }), false, "risk");
       appendEvidenceTreeGroup(tree, "map_risk", "CWA Weather", view.cwa_weather?.points || [], item => ({
         label: item.label || item.station_name || "CWA weather",
-        sublabel: `${item.evidence_type || "cwa"} | 24h ${item.last_24h_mm ?? "-"} mm | ${item.status || "candidate"}`
+        sublabel: `${item.evidence_type || "cwa"} | 24h ${item.last_24h_mm ?? "-"} mm | fetched ${item.api_fetched_at_hour || item.fetched_at_hour || "-"} | valid until ${item.valid_until_hour || item.valid_to_hour || item.source_observed_at_hour || "-"}`
       }), false, "risk");
       appendEvidenceTreeGroup(tree, "map_risk", "Soil Moisture", view.soil_moisture?.points || [], item => ({
         label: item.label || "SMAP soil moisture",

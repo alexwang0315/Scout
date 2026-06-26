@@ -28,6 +28,8 @@ from scout_runtime_safety_state_store import RuntimeSafetyStateStore
 from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
 from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
+    _mileage_tag_alignment_summary,
+    _reference_segment_timing_summary,
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
     load_pretrip_debug_projection_view,
@@ -43,6 +45,103 @@ WEARABLE_FIXTURES = [
     WEARABLE_FIXTURE_ROOT / "apple_health_missing_hr_interval.json",
     WEARABLE_FIXTURE_ROOT / "garmin_body_battery_provider_values.json",
 ]
+
+
+def test_reference_segment_timing_without_projection_does_not_highlight_whole_route():
+    timing = _reference_segment_timing_summary(
+        {
+            "project_id": "demo_route",
+            "status": "ready",
+            "counts": {"usable_segment_count": 1, "measurement_count": 3},
+            "segments": [
+                {
+                    "segment_id": "ref_segment_timing.demo.unprojected",
+                    "label": "Unprojected reference segment",
+                    "sample_count": 3,
+                    "duration_minutes": {"p50": 42},
+                    "track_distance_km": {"p50": 1.2},
+                }
+            ],
+            "privacy": {"coordinates_embedded": False},
+            "boundary": {"runtime_safety_truth": False},
+        },
+        "outputs/reference_segment_timing.json",
+        project_id="demo_route",
+        route_segments=[],
+    )
+
+    item = timing["segments"][0]
+    assert item["map_target_ids"] == []
+    assert item["map_focus_basis"] == "no_segment_distance_projection"
+
+
+def test_mileage_timeline_prioritizes_reviewable_k_labels_before_uncalibrated_tags():
+    mileage = _mileage_tag_alignment_summary(
+        {
+            "project_id": "demo_route",
+            "status": "completed",
+            "counts": {
+                "tag_count": 3,
+                "aligned_tag_count": 2,
+                "usable_anchor_count": 2,
+                "runtime_safety_truth_count": 0,
+            },
+            "mileage_tags": [
+                {
+                    "mileage_tag_id": "mileage.demo.uncalibrated",
+                    "source_id": "cp.001",
+                    "source_kind": "checkpoint",
+                    "display_label": "K待校正 CP 001",
+                    "display_mileage_label": "K待校正",
+                    "display_mileage": {
+                        "label": "K待校正",
+                        "alignment_status": "outside_anchor_range",
+                    },
+                    "route_distance_m": 10.0,
+                    "lat": 24.0,
+                    "lon": 121.0,
+                },
+                {
+                    "mileage_tag_id": "mileage.demo.one_k",
+                    "source_id": "cp.100",
+                    "source_kind": "checkpoint",
+                    "display_label": "1K CP 100",
+                    "display_mileage_label": "1K",
+                    "display_mileage": {
+                        "label": "1K",
+                        "alignment_status": "interpolated_between_mileage_anchors",
+                    },
+                    "route_distance_m": 1000.0,
+                    "lat": 24.0,
+                    "lon": 121.01,
+                },
+                {
+                    "mileage_tag_id": "mileage.demo.two_k",
+                    "source_id": "seg.200",
+                    "source_kind": "segment",
+                    "display_label": "2K Segment 200",
+                    "display_mileage_label": "2K",
+                    "display_mileage": {
+                        "label": "2K",
+                        "alignment_status": "matched_mileage_anchor",
+                    },
+                    "route_distance_m": 2000.0,
+                    "lat": 24.0,
+                    "lon": 121.02,
+                },
+            ],
+            "boundary": {"runtime_safety_truth": False},
+        },
+        {"features": []},
+        source_refs={"mileage_tag_alignment": "outputs/mileage_tag_alignment.json"},
+    )
+
+    labels = [
+        item["display_mileage"]["label"]
+        for item in mileage["timeline_items"]
+    ]
+    assert labels[:2] == ["1K", "2K"]
+    assert labels[-1] == "K待校正"
 
 
 def _assert_pretrip_candidate_metadata(item):
@@ -424,9 +523,30 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
     _assert_pretrip_candidate_metadata(view["map_candidates"]["poi_candidates"][0])
     assert view["overpass_evidence"]["counts"]["candidates"] == 219
     assert view["overpass_evidence"]["counts"]["skipped"] == 0
+    assert view["overpass_evidence"]["counts"]["item_count"] == 219
+    assert view["overpass_evidence"]["counts"]["category_counts"] == {
+        "overpass_parking": 2,
+        "overpass_peak": 19,
+        "overpass_shelter": 4,
+        "overpass_trail_corridor": 191,
+        "overpass_water_source": 3,
+    }
     assert len(view["overpass_evidence"]["corridor_candidates"]) == 191
     assert len(view["overpass_evidence"]["hazard_candidates"]) == 0
     assert len(view["overpass_evidence"]["poi_candidates"]) == 28
+    assert len(view["overpass_evidence"]["timeline_items"]) == 219
+    assert len(
+        view["overpass_evidence"]["category_groups"]["overpass_trail_corridor"]
+    ) == 191
+    assert len(view["overpass_evidence"]["category_groups"]["overpass_peak"]) == 19
+    assert (
+        view["overpass_evidence"]["corridor_candidates"][0]["category_id"]
+        == "overpass_trail_corridor"
+    )
+    assert (
+        view["overpass_evidence"]["poi_candidates"][0]["category_id"]
+        == "overpass_peak"
+    )
     _assert_pretrip_candidate_metadata(
         view["overpass_evidence"]["corridor_candidates"][0]
     )
@@ -998,6 +1118,137 @@ def test_map_layers_expose_local_raster_coverage_metadata(tmp_path: Path) -> Non
         assert rudy_twmap["imagery_source_id"] == "happyman_rudy_twmap"
 
 
+def test_osm_map_layer_exposes_workspace_local_render_extract(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID,
+        project_root,
+    )
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project.update(
+        {
+            "osm_pbf_render_extract_ref": "normalized/map/osm_pbf_route_bbox.osm.pbf",
+            "osm_pbf_render_extract_manifest_ref": (
+                "normalized/map/osm_pbf_render_extract_manifest.json"
+            ),
+            "osm_pbf_render_extract_source_kind": (
+                "local_osm_pbf_route_bbox_extract"
+            ),
+            "osm_pbf_render_extract_feature_count": 295,
+            "osm_pbf_feature_index_ref": (
+                "outputs/layers/normalized/osm_pbf_feature_index.json"
+            ),
+            "osm_pbf_feature_index_feature_count": 2,
+            "osm_pbf_feature_index_category_counts": {
+                "milestone_route_marker": 1,
+                "mobile_signal": 1,
+            },
+        }
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    feature_index_path = (
+        project_root / "outputs/layers/normalized/osm_pbf_feature_index.json"
+    )
+    feature_index_path.parent.mkdir(parents=True, exist_ok=True)
+    feature_index_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_local_osm_pbf_feature_index",
+                "status": "candidate_only",
+                "render_source_ref": "normalized/map/osm_pbf_route_bbox.osm.pbf",
+                "counts": {
+                    "item_count": 2,
+                    "category_counts": {
+                        "milestone_route_marker": 1,
+                        "mobile_signal": 1,
+                    },
+                },
+                "categories": [
+                    {
+                        "category_id": "milestone_route_marker",
+                        "category_label": "OSM mileage / route markers（OSM 里程與路標）",
+                        "timeline_group": "OSM Milestones",
+                        "count": 1,
+                    },
+                    {
+                        "category_id": "mobile_signal",
+                        "category_label": "OSM mobile signal points（OSM 通訊點）",
+                        "timeline_group": "OSM Mobile",
+                        "count": 1,
+                    },
+                ],
+                "items": [
+                    {
+                        "candidate_id": "osm_pbf.node.1",
+                        "category_id": "milestone_route_marker",
+                        "label": "7K+000",
+                        "feature_type": "highway:milestone",
+                        "geometry_type": "Point",
+                        "osm_type": "node",
+                        "osm_id": "1",
+                        "lat": 23.87,
+                        "lon": 121.17,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                    {
+                        "candidate_id": "osm_pbf.node.2",
+                        "category_id": "mobile_signal",
+                        "label": "通訊點",
+                        "feature_type": "information:mobile",
+                        "geometry_type": "Point",
+                        "osm_type": "node",
+                        "osm_id": "2",
+                        "lat": 23.871,
+                        "lon": 121.171,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                ],
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(PROJECT_ID, root=ROOT, project_root=project_root)
+
+    osm = next(layer for layer in view["map_layers"] if layer["layer_id"] == "osm")
+    assert osm["local_osm_render_extract_ref"] == (
+        "normalized/map/osm_pbf_route_bbox.osm.pbf"
+    )
+    assert osm["local_osm_render_extract_manifest_ref"] == (
+        "normalized/map/osm_pbf_render_extract_manifest.json"
+    )
+    assert osm["local_osm_render_extract_source_kind"] == (
+        "local_osm_pbf_route_bbox_extract"
+    )
+    assert osm["local_osm_render_extract_feature_count"] == 295
+    assert osm["local_osm_feature_index_feature_count"] == 2
+    assert osm["osm_rendering_policy"] == "workspace_local_osm_extract_available"
+    assert view["osm_pbf_evidence"]["counts"]["item_count"] == 2
+    assert view["osm_pbf_evidence"]["category_groups"]["milestone_route_marker"][0][
+        "lat"
+    ] == 23.87
+    map_context = next(
+        category
+        for category in view["evidence_timeline"]["categories"]
+        if category["category_id"] == "map_context"
+    )
+    assert map_context["count"] >= 2
+
+
 def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     projection = load_pretrip_debug_projection_view(PROJECT_ID, root=ROOT)
 
@@ -1323,9 +1574,9 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
     cwa_root = env_root / "cwa"
     gee_root = env_root / "gee"
     derived_root = env_root / "derived"
-    cwa_root.mkdir(parents=True)
-    gee_root.mkdir(parents=True)
-    derived_root.mkdir(parents=True)
+    cwa_root.mkdir(parents=True, exist_ok=True)
+    gee_root.mkdir(parents=True, exist_ok=True)
+    derived_root.mkdir(parents=True, exist_ok=True)
 
     def write_geojson(path: Path, layer_id: str, source_id: str, label: str) -> None:
         layer_props = {}
@@ -1385,7 +1636,22 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
         score: float,
         center_lat: float,
         center_lon: float,
+        cwa_time_metadata: dict[str, object] | None = None,
     ) -> None:
+        cwa_fields = (
+            {
+                "cwa_time_metadata": cwa_time_metadata,
+                "source_time_metadata": {"cwa": cwa_time_metadata},
+                "cwa_api_fetched_at_hour": cwa_time_metadata.get(
+                    "api_fetched_at_hour"
+                ),
+                "cwa_valid_until_hour": cwa_time_metadata.get("valid_until_hour"),
+                "time_precision": "hour",
+                "timezone": "UTC",
+            }
+            if cwa_time_metadata
+            else {}
+        )
         path.write_text(
             json.dumps(
                 {
@@ -1396,6 +1662,7 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
                         "east": 121.3,
                         "north": 23.9,
                     },
+                    **cwa_fields,
                     "features": [
                         {
                             "type": "Feature",
@@ -1426,6 +1693,7 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
                                 "missing_metrics": ["gpm_1h_mm"],
                                 "candidate_only": True,
                                 "runtime_safety_truth": False,
+                                **cwa_fields,
                             },
                         }
                     ],
@@ -1436,6 +1704,13 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
             encoding="utf-8",
         )
 
+    cwa_time_metadata = {
+        "api_request_attempted_at_hour": "2026-06-26T01:00:00Z",
+        "api_fetched_at_hour": "2026-06-26T01:00:00Z",
+        "valid_until_hour": "2026-06-26T09:00:00Z",
+        "time_precision": "hour",
+        "timezone": "UTC",
+    }
     (cwa_root / "cwa_weather_evidence.json").write_text(
         json.dumps(
             {
@@ -1443,6 +1718,8 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
                 "external_api_calls_made": True,
                 "counts": {"observation_count": 1},
                 "datasets": ["O-A0002-001"],
+                "cwa_time_metadata": cwa_time_metadata,
+                "temporal_coverage": cwa_time_metadata,
                 "boundary": {
                     "candidate_only": True,
                     "runtime_safety_truth": False,
@@ -1558,6 +1835,8 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
                 "source_metric_gaps": [
                     {"metric_family": "sentinel1", "missing_ratio": 0.5}
                 ],
+                "cwa_time_metadata": cwa_time_metadata,
+                "temporal_coverage": {"cwa": cwa_time_metadata},
                 "counts": {
                     "segment_count": 2,
                     "new_landslide_candidate_count": 1,
@@ -1588,6 +1867,7 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
         score=0.65,
         center_lat=23.8901,
         center_lon=121.2201,
+        cwa_time_metadata=cwa_time_metadata,
     )
     write_derived_geojson(
         derived_root / "practical_darkness_time.geojson",
@@ -1760,6 +2040,11 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
     assert wetness["lon"] == 121.2201
     assert len(wetness["coordinates"]) == 2
     assert wetness["supporting_metrics"]["flow_accumulation_proxy"] == 447.0
+    assert wetness["cwa_api_fetched_at_hour"] == "2026-06-26T01:00:00Z"
+    assert wetness["cwa_valid_until_hour"] == "2026-06-26T09:00:00Z"
+    assert wetness["cwa_time_metadata"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
     assert wetness["runtime_safety_truth"] is False
     assert wetness["boundary"]["runtime_safety_truth"] is False
     darkness = derivative_layers["practical_darkness_time"]["candidates"][0]
@@ -1772,6 +2057,17 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
         "日落地形遮蔽候選：1",
         "災後路線重評估",
     } <= {item["label"] for item in derivative_layers["category_items"]}
+    wetness_category = next(
+        item
+        for item in derivative_layers["category_items"]
+        if item["category_key"] == "wetness_flash_flood_susceptibility"
+    )
+    assert wetness_category["value_summary"]["cwa_api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert derivatives_item["value_summary"]["cwa_valid_until_hour"] == (
+        "2026-06-26T09:00:00Z"
+    )
     assert debug["environment_values"]["counts"]["item_count"] == 6
     assert debug["environment_risk_derivative_layers"]["counts"][
         "total_candidate_count"
@@ -2282,6 +2578,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("risk_delta", "Risk Delta"),
         ("weather", "Weather And Daylight"),
         ("overpass_evidence", "Overpass Vector Evidence"),
+        ("osm_pbf_evidence", "Local OSM PBF Feature Index"),
         ("gis_perception_timeline", "GIS Perception CP Timeline"),
         ("major_critical_points", "Major Critical Points"),
         ("route_notes", "Route Notes"),

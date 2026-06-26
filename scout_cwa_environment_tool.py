@@ -473,6 +473,14 @@ def _compact_qpf_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "uncertainty_policy",
         "qpf_uncertainty",
         "severe_weather_intensified_operation",
+        "api_fetched_at_hour",
+        "fetched_at_hour",
+        "forecast_valid_from_hour",
+        "forecast_valid_until_hour",
+        "latest_observation_at_hour",
+        "valid_from_hour",
+        "valid_until_hour",
+        "time_precision",
     )
     compact = {key: payload[key] for key in keys if key in payload}
     if "datasets" not in compact:

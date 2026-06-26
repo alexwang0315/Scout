@@ -181,6 +181,14 @@ Map preparation must:
 - expose CWA QPF/weather and GEE soil-moisture/antecedent-rain as explicit
   pretrip evidence layers when source artifacts or explicit fetch permissions
   exist;
+- treat CWA and GEE as no-cache, no-durable-replay evidence. A connected
+  preparation run must fetch the latest CWA/GEE values every time; if fetch is
+  blocked, the workspace must record the current blocker/status rather than
+  reusing older weather, QPF, SMAP, GPM, or derived environment values;
+- mark all CWA source evidence and CWA-derived model/candidate outputs with
+  hour-precision timing metadata, including API request attempt hour,
+  successful fetch hour when data exists, provider valid-from/valid-until or
+  observation hours when available, `time_precision: hour`, and timezone;
 - keep weather/environment source status visible as `missing_source`,
   `unavailable`, `stale`, or `prepared`; missing CWA/GEE credentials must never
   produce fake data;

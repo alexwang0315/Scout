@@ -81,6 +81,41 @@ EMPTY_PRETRIP_BOUNDARY = {
     "runtime_safety_truth": False,
 }
 
+OVERPASS_TIMELINE_CATEGORIES: dict[str, dict[str, str]] = {
+    "overpass_trail_corridor": {
+        "label": "Overpass trail corridors（Overpass 步道線）",
+        "timeline_group": "Overpass Trails",
+    },
+    "overpass_hiking_route": {
+        "label": "Overpass hiking routes（Overpass 登山路線）",
+        "timeline_group": "Overpass Routes",
+    },
+    "overpass_shelter": {
+        "label": "Overpass shelters（Overpass 避難與山屋點）",
+        "timeline_group": "Overpass Shelters",
+    },
+    "overpass_water_source": {
+        "label": "Overpass water sources（Overpass 水源點）",
+        "timeline_group": "Overpass Water",
+    },
+    "overpass_parking": {
+        "label": "Overpass parking points（Overpass 停車點）",
+        "timeline_group": "Overpass Parking",
+    },
+    "overpass_peak": {
+        "label": "Overpass peaks（Overpass 山峰點）",
+        "timeline_group": "Overpass Peaks",
+    },
+    "overpass_terrain_risk": {
+        "label": "Overpass terrain risk context（Overpass 地形風險脈絡）",
+        "timeline_group": "Overpass Terrain Risk",
+    },
+    "overpass_other_poi": {
+        "label": "Other Overpass POI（其他 Overpass 興趣點）",
+        "timeline_group": "Overpass Other POI",
+    },
+}
+
 
 def _route_projection_bounds(route_summary: dict[str, Any]) -> dict[str, float] | None:
     bbox = route_summary.get("bbox_wgs84")
@@ -307,6 +342,17 @@ def _default_pretrip_artifact(
             "candidates": [],
             "skipped_objects": [],
         }
+    if artifact_key == "osm_pbf_feature_index":
+        return {
+            "artifact_kind": "pretrip_local_osm_pbf_feature_index",
+            "source_id": f"osm_pbf_feature_index.{project_id}.missing",
+            "source_path": "project.json#osm_pbf_feature_index_ref",
+            "status": "missing_source",
+            "counts": {"item_count": 0, "category_counts": {}},
+            "categories": [],
+            "items": [],
+            "boundary": boundary,
+        }
     if artifact_key == "review_draft_log":
         return {
             "log_id": f"review_draft.{project_id}.missing",
@@ -493,6 +539,14 @@ def build_pretrip_admin_view(
         artifacts.get("overpass_evidence")
     ) or _default_pretrip_artifact(
         "overpass_evidence",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    osm_pbf_feature_index = _load_optional_json(
+        artifacts.get("osm_pbf_feature_index")
+    ) or _default_pretrip_artifact(
+        "osm_pbf_feature_index",
         project_id=project_id,
         project=project,
         route_summary=route_summary,
@@ -918,6 +972,10 @@ def build_pretrip_admin_view(
             overpass_evidence,
             source_refs["overpass_evidence"],
         ),
+        "osm_pbf_evidence": _osm_pbf_feature_index_summary(
+            osm_pbf_feature_index,
+            source_refs.get("osm_pbf_feature_index", ""),
+        ),
         "route_note_ln_proposals": _route_note_ln_proposal_summary(
             route_note_ln_proposals,
             source_refs["route_note_ln_proposals"],
@@ -1284,6 +1342,7 @@ def build_pretrip_admin_view(
         "risk_heatmap": planning_tab["risk_heatmap"],
         "risk_delta": planning_tab["risk_delta"],
         "overpass_evidence": planning_tab["overpass_evidence"],
+        "osm_pbf_evidence": planning_tab["osm_pbf_evidence"],
         "gis_perception": planning_tab["gis_perception"],
         "gis_perception_timeline": planning_tab["gis_perception_timeline"],
         "route_note_ln_proposals": planning_tab["route_note_ln_proposals"],
@@ -1458,6 +1517,7 @@ def resolve_pretrip_project_artifacts(
         "layer_validation_report": "layer_validation_report_ref",
         "layer_map_projection": "layer_map_projection_ref",
         "layer_debug_projection_events": "layer_debug_projection_events_ref",
+        "osm_pbf_feature_index": "osm_pbf_feature_index_ref",
         "risk_route_profile": "risk_route_profile_ref",
         "risk_route_profile_metadata": "risk_route_profile_metadata_ref",
         "risk_ribbon": "risk_ribbon_ref",
@@ -1696,6 +1756,9 @@ def load_pretrip_debug_projection_view(
     )
     overpass_evidence_raw = _load_optional_json(
         optional_project_path("overpass_evidence_ref")
+    )
+    osm_pbf_feature_index_raw = _load_optional_json(
+        optional_project_path("osm_pbf_feature_index_ref")
     )
     gis_perception_raw = _load_optional_json(
         optional_project_path("gis_perception_candidates_ref")
@@ -2008,6 +2071,15 @@ def load_pretrip_debug_projection_view(
             project_id,
             overpass_evidence_raw,
             source_refs["overpass_evidence"],
+        ),
+        "osm_pbf_evidence": _osm_pbf_feature_index_summary(
+            osm_pbf_feature_index_raw
+            or _default_pretrip_artifact(
+                "osm_pbf_feature_index",
+                project_id=project_id,
+                project=project,
+            ),
+            source_refs.get("osm_pbf_feature_index", ""),
         ),
         "gis_perception": _debug_projection_gis_perception_summary(
             project_id,
@@ -7227,37 +7299,241 @@ def _risk_bucket(score: float) -> str:
     return "low"
 
 
+def _evidence_category_projection_metadata(
+    *,
+    category_id: str,
+    label: str,
+    source_path: str,
+    evidence_type: str,
+    source_kind: str,
+    extractor_version: str,
+    summary: str,
+) -> dict[str, Any]:
+    candidate_id = f"{source_kind}.{category_id}"
+    return {
+        "candidate_id": candidate_id,
+        "source_id": candidate_id,
+        **_projection_record_metadata(
+            {
+                "candidate_id": candidate_id,
+                "category_id": category_id,
+                "label": label,
+                "source_refs": [source_path, category_id],
+            },
+            source_path=source_path,
+            evidence_type=evidence_type,
+            source_kind=source_kind,
+            identity_keys=("candidate_id", "category_id", "label", "source_refs"),
+            review_state="projection_only",
+            confidence="medium",
+            stale_risk="medium",
+            extractor_version=extractor_version,
+            prompt_version="not_applicable_deterministic_category_projection.v1",
+            summary=summary,
+        ),
+    }
+
+
 def _overpass_evidence_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
     candidates = payload.get("candidates", [])
+    corridor_candidates = [
+        _overpass_candidate(candidate, source_path, "pretrip_overpass_corridor_candidate")
+        for candidate in candidates
+        if candidate["feature_type"] == "approved_corridor"
+    ]
+    hazard_candidates = [
+        _overpass_candidate(candidate, source_path, "pretrip_overpass_hazard_candidate")
+        for candidate in candidates
+        if candidate["feature_type"] == "hazard_zone"
+    ]
+    poi_candidates = [
+        _overpass_candidate(candidate, source_path, "pretrip_overpass_poi_candidate")
+        for candidate in candidates
+        if candidate["feature_type"] == "poi"
+    ]
+    timeline_items = [*corridor_candidates, *hazard_candidates, *poi_candidates]
+    category_counts = Counter(
+        str(item.get("category_id") or "overpass_other_poi")
+        for item in timeline_items
+    )
+    category_items = [
+        {
+            "category_id": category_id,
+            "category_label": category["label"],
+            "label": category["label"],
+            "timeline_group": category["timeline_group"],
+            "count": int(category_counts.get(category_id, 0)),
+            "sample_labels": [
+                item["label"]
+                for item in timeline_items
+                if item.get("category_id") == category_id
+            ][:8],
+            "source_path": source_path,
+            "evidence_type": "pretrip_overpass_vector_evidence_category",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            **_evidence_category_projection_metadata(
+                category_id=category_id,
+                label=category["label"],
+                source_path=source_path,
+                evidence_type="pretrip_overpass_vector_evidence_category",
+                source_kind="overpass_vector_evidence_category",
+                extractor_version="overpass-vector-evidence.category_projection.v1",
+                summary=(
+                    "Overpass vector evidence category projected for Scout "
+                    "Map/Risk timeline review; candidate-only evidence and not "
+                    "runtime safety truth."
+                ),
+            ),
+        }
+        for category_id, category in OVERPASS_TIMELINE_CATEGORIES.items()
+        if category_counts.get(category_id, 0)
+    ]
+    category_groups = {
+        category["category_id"]: [
+            item for item in timeline_items if item.get("category_id") == category["category_id"]
+        ]
+        for category in category_items
+    }
+    counts = dict(payload["counts"])
+    counts.setdefault("item_count", len(timeline_items))
+    counts["category_counts"] = dict(sorted(category_counts.items()))
     return {
         "source_id": payload["source_artifact"]["artifact_id"],
         "source_path": source_path,
         "evidence_type": "pretrip_overpass_vector_evidence",
         "status": "candidate_only",
-        "counts": payload["counts"],
+        "counts": counts,
         "boundary": _summary_boundary(payload["boundary"]),
         "request": payload["request"],
         "source_artifact": payload["source_artifact"],
         "normalized_geojson_ref": payload["normalized_geojson_ref"],
         "raw_response_sha256": payload["request"]["raw_response_sha256"],
         "conversion_rule_version": payload["request"]["conversion_rule_version"],
-        "corridor_candidates": [
-            _overpass_candidate(candidate, source_path, "pretrip_overpass_corridor_candidate")
-            for candidate in candidates
-            if candidate["feature_type"] == "approved_corridor"
-        ],
-        "hazard_candidates": [
-            _overpass_candidate(candidate, source_path, "pretrip_overpass_hazard_candidate")
-            for candidate in candidates
-            if candidate["feature_type"] == "hazard_zone"
-        ],
-        "poi_candidates": [
-            _overpass_candidate(candidate, source_path, "pretrip_overpass_poi_candidate")
-            for candidate in candidates
-            if candidate["feature_type"] == "poi"
-        ],
+        "categories": category_items,
+        "category_groups": category_groups,
+        "timeline_items": timeline_items,
+        "corridor_candidates": corridor_candidates,
+        "hazard_candidates": hazard_candidates,
+        "poi_candidates": poi_candidates,
         "skipped_objects": payload.get("skipped_objects", []),
     }
+
+
+def _osm_pbf_feature_index_summary(
+    payload: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    resolved_source_path = (
+        source_path
+        or payload.get("source_path")
+        or "project.json#osm_pbf_feature_index_ref"
+    )
+    items = [
+        _osm_pbf_feature_item(item, resolved_source_path)
+        for item in payload.get("items", [])
+        if isinstance(item, dict)
+    ]
+    category_items = [
+        {
+            **category,
+            "label": category.get("category_label")
+            or category.get("label")
+            or category.get("category_id"),
+            "source_path": resolved_source_path,
+            "evidence_type": "pretrip_local_osm_pbf_feature_category",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            **_evidence_category_projection_metadata(
+                category_id=str(category.get("category_id") or "unknown"),
+                label=str(
+                    category.get("category_label")
+                    or category.get("label")
+                    or category.get("category_id")
+                    or "OSM PBF feature category"
+                ),
+                source_path=resolved_source_path,
+                evidence_type="pretrip_local_osm_pbf_feature_category",
+                source_kind="local_osm_pbf_feature_category",
+                extractor_version="osm-pbf-local-feature-index.category_projection.v1",
+                summary=(
+                    "Local OSM PBF feature category projected for Scout "
+                    "Map/Risk timeline review; candidate-only evidence and not "
+                    "runtime safety truth."
+                ),
+            ),
+        }
+        for category in payload.get("categories", [])
+        if isinstance(category, dict)
+    ]
+    category_groups = {
+        category["category_id"]: [
+            item for item in items if item.get("category_id") == category["category_id"]
+        ]
+        for category in category_items
+        if category.get("category_id")
+    }
+    counts = dict(payload.get("counts") or {})
+    counts.setdefault("item_count", len(items))
+    counts.setdefault(
+        "category_counts",
+        dict(Counter(str(item.get("category_id") or "unknown") for item in items)),
+    )
+    return {
+        "source_id": payload.get("source_id", "local_osm_pbf.feature_index"),
+        "source_path": resolved_source_path,
+        "evidence_type": "pretrip_local_osm_pbf_feature_index",
+        "artifact_kind": payload.get(
+            "artifact_kind",
+            "pretrip_local_osm_pbf_feature_index",
+        ),
+        "status": payload.get("status", "missing_source"),
+        "conversion_rule_version": payload.get("conversion_rule_version"),
+        "render_source_ref": payload.get("render_source_ref"),
+        "counts": counts,
+        "categories": category_items,
+        "category_groups": category_groups,
+        "items": items,
+        "boundary": _summary_boundary(payload.get("boundary", EMPTY_PRETRIP_BOUNDARY)),
+    }
+
+
+def _osm_pbf_feature_item(
+    item: dict[str, Any],
+    source_path: str,
+) -> dict[str, Any]:
+    lat = _coerce_float(item.get("lat"))
+    lon = _coerce_float(item.get("lon"))
+    projected = {
+        **item,
+        "source_path": source_path or item.get("source_path", ""),
+        "evidence_type": item.get(
+            "evidence_type",
+            "pretrip_local_osm_pbf_feature",
+        ),
+        "review_state": item.get("review_state", "needs_review"),
+        "confidence": item.get("confidence", "medium"),
+        "stale_risk": item.get("stale_risk", "medium"),
+        "candidate_only": item.get("candidate_only", True),
+        "runtime_safety_truth": item.get("runtime_safety_truth", False),
+        "map_target_ids": item.get("map_target_ids") or [item.get("candidate_id")],
+    }
+    if lat is not None:
+        projected["lat"] = lat
+    if lon is not None:
+        projected["lon"] = lon
+    if not projected.get("source_refs"):
+        projected["source_refs"] = [
+            ref
+            for ref in (
+                source_path,
+                projected.get("candidate_id"),
+                projected.get("osm_type"),
+                projected.get("osm_id"),
+            )
+            if ref
+        ]
+    return projected
 
 
 def _overpass_candidate(
@@ -7267,11 +7543,17 @@ def _overpass_candidate(
 ) -> dict[str, Any]:
     feature = candidate["geojson_feature"]
     properties = feature["properties"]
+    category_id = _overpass_timeline_category_id(candidate)
+    category = OVERPASS_TIMELINE_CATEGORIES[category_id]
     return {
         "candidate_id": candidate["candidate_id"],
         "source_id": candidate["candidate_id"],
         "source_path": source_path,
         "evidence_type": evidence_type,
+        "review_category": "map_risk_overpass",
+        "category_id": category_id,
+        "category_label": category["label"],
+        "timeline_group": category["timeline_group"],
         **_overpass_candidate_provenance(
             candidate,
             source_path=source_path,
@@ -7301,6 +7583,40 @@ def _overpass_candidate(
         },
         **_overpass_map_payload(candidate, properties),
     }
+
+
+def _overpass_timeline_category_id(candidate: dict[str, Any]) -> str:
+    candidate_type = str(candidate.get("candidate_type") or "")
+    if candidate_type == "trail_corridor_candidate":
+        return "overpass_trail_corridor"
+    if candidate_type == "hiking_route_candidate":
+        return "overpass_hiking_route"
+    if candidate_type == "shelter_candidate":
+        return "overpass_shelter"
+    if candidate_type == "water_source_candidate":
+        return "overpass_water_source"
+    if candidate_type == "parking_candidate":
+        return "overpass_parking"
+    if candidate_type == "peak_candidate":
+        return "overpass_peak"
+    if candidate_type == "terrain_risk_candidate":
+        return "overpass_terrain_risk"
+    if candidate.get("feature_type") == "hazard_zone":
+        return "overpass_terrain_risk"
+    tags = candidate.get("tags") or {}
+    if tags.get("geological") == "landslide":
+        return "overpass_terrain_risk"
+    if tags.get("natural") in {"cliff", "scree", "bare_rock"}:
+        return "overpass_terrain_risk"
+    if tags.get("natural") == "peak":
+        return "overpass_peak"
+    if tags.get("natural") == "spring" or tags.get("amenity") == "drinking_water":
+        return "overpass_water_source"
+    if tags.get("tourism") in {"wilderness_hut", "alpine_hut"}:
+        return "overpass_shelter"
+    if tags.get("amenity") == "parking":
+        return "overpass_parking"
+    return "overpass_other_poi"
 
 
 def _overpass_map_payload(candidate: dict[str, Any], properties: dict[str, Any]) -> dict[str, Any]:
@@ -8372,7 +8688,29 @@ def _select_mileage_timeline_tags(tags: list[dict[str, Any]]) -> list[dict[str, 
 
     def sort_key(tag: dict[str, Any]) -> tuple[int, float, str]:
         source_kind = str(tag.get("source_kind") or "")
-        priority = 0 if source_kind in preferred_source_kinds else 1
+        display_mileage = (
+            tag.get("display_mileage")
+            if isinstance(tag.get("display_mileage"), dict)
+            else {}
+        )
+        display_label = str(
+            tag.get("display_mileage_label")
+            or display_mileage.get("label")
+            or ""
+        )
+        display_status = str(
+            display_mileage.get("alignment_status")
+            or tag.get("display_mileage_status")
+            or ""
+        )
+        has_reviewable_mileage = bool(
+            display_label
+            and display_label != "K待校正"
+            and display_status != "outside_anchor_range"
+        )
+        priority = 0 if has_reviewable_mileage else 1
+        if source_kind not in preferred_source_kinds:
+            priority += 2
         route_distance = _coerce_float(tag.get("route_distance_m"))
         if route_distance is None:
             route_distance = _coerce_float(tag.get("source_distance_m"))
@@ -9132,6 +9470,20 @@ def _environment_geojson_summary(
     status = "ready" if points else "missing_source"
     if isinstance(summary_payload, dict) and summary_payload.get("status"):
         status = str(summary_payload["status"])
+    temporal_coverage = (
+        payload.get("temporal_coverage")
+        or summary_payload.get("temporal_coverage")
+        or {
+            "api_fetched_at_hour": payload.get("api_fetched_at_hour")
+            or summary_payload.get("api_fetched_at_hour"),
+            "valid_from_hour": payload.get("valid_from_hour")
+            or summary_payload.get("valid_from_hour"),
+            "valid_until_hour": payload.get("valid_until_hour")
+            or summary_payload.get("valid_until_hour"),
+            "time_precision": payload.get("time_precision")
+            or summary_payload.get("time_precision"),
+        }
+    )
     return {
         "source_id": f"{project_id}.{layer_id}",
         "source_path": source_path,
@@ -9145,6 +9497,7 @@ def _environment_geojson_summary(
         },
         "bbox_wgs84": _environment_bbox(payload, summary_payload),
         "cache_policy": payload.get("cache_policy") or summary_payload.get("cache_policy"),
+        "temporal_coverage": temporal_coverage,
         "points": points,
         "features": points,
         "summary": summary_payload,
@@ -9207,6 +9560,7 @@ def _cwa_weather_environment_summary(
             or observation_summary.get("cache_policy")
             or (evidence_payload or {}).get("cache_policy")
         ),
+        "temporal_coverage": (evidence_payload or {}).get("temporal_coverage", {}),
         "datasets": (evidence_payload or {}).get("datasets", []),
         "points": points,
         "features": points,
@@ -9222,6 +9576,65 @@ def _cwa_weather_environment_summary(
             )
         ),
     }
+
+
+def _cwa_time_metadata_from_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    for key in ("cwa_time_metadata", "temporal_coverage"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            cwa_value = value.get("cwa")
+            return dict(cwa_value if isinstance(cwa_value, dict) else value)
+    source_time = payload.get("source_time_metadata")
+    if isinstance(source_time, dict) and isinstance(source_time.get("cwa"), dict):
+        return dict(source_time["cwa"])
+    keys = (
+        "api_request_attempted_at",
+        "api_request_attempted_at_hour",
+        "api_fetched_at",
+        "api_fetched_at_hour",
+        "fetched_at",
+        "fetched_at_hour",
+        "forecast_valid_from_hour",
+        "forecast_valid_until_hour",
+        "warning_valid_until_hour",
+        "latest_observation_at_hour",
+        "valid_from_hour",
+        "valid_to_hour",
+        "valid_until_hour",
+        "time_precision",
+        "timezone",
+    )
+    metadata = {key: payload.get(key) for key in keys if key in payload}
+    return metadata if metadata else {}
+
+
+def _cwa_time_projection_fields(metadata: dict[str, Any]) -> dict[str, Any]:
+    if not metadata:
+        return {}
+    fields = {
+        "cwa_time_metadata": metadata,
+        "source_time_metadata": {"cwa": metadata},
+        "time_precision": metadata.get("time_precision", "hour"),
+        "timezone": metadata.get("timezone", "UTC"),
+        "cwa_api_request_attempted_at": metadata.get("api_request_attempted_at"),
+        "cwa_api_request_attempted_at_hour": metadata.get(
+            "api_request_attempted_at_hour"
+        ),
+        "cwa_api_fetched_at": metadata.get("api_fetched_at")
+        or metadata.get("fetched_at"),
+        "cwa_api_fetched_at_hour": metadata.get("api_fetched_at_hour")
+        or metadata.get("fetched_at_hour"),
+        "cwa_forecast_valid_from_hour": metadata.get("forecast_valid_from_hour"),
+        "cwa_forecast_valid_until_hour": metadata.get("forecast_valid_until_hour"),
+        "cwa_warning_valid_until_hour": metadata.get("warning_valid_until_hour"),
+        "cwa_latest_observation_at_hour": metadata.get("latest_observation_at_hour"),
+        "cwa_valid_from_hour": metadata.get("valid_from_hour"),
+        "cwa_valid_until_hour": metadata.get("valid_until_hour")
+        or metadata.get("valid_to_hour"),
+    }
+    return {key: value for key, value in fields.items() if value not in (None, "")}
 
 
 ENVIRONMENT_RISK_DERIVATIVE_SPECS: dict[str, dict[str, str]] = {
@@ -9278,6 +9691,7 @@ def _environment_risk_derivative_layers_summary(
         if isinstance(environment_risk_derivatives, dict)
         else {}
     )
+    cwa_time_metadata = _cwa_time_metadata_from_payload(environment_risk_derivatives)
     collections = {
         key: _environment_risk_candidate_collection_summary(
             project_id,
@@ -9290,6 +9704,7 @@ def _environment_risk_derivative_layers_summary(
                 "environment_risk_derivatives",
                 "",
             ),
+            cwa_time_metadata=cwa_time_metadata,
         )
         for key, spec in ENVIRONMENT_RISK_DERIVATIVE_SPECS.items()
     }
@@ -9352,6 +9767,10 @@ def _environment_risk_derivative_layers_summary(
             )
         ),
         "counts": counts,
+        **_cwa_time_projection_fields(cwa_time_metadata),
+        "temporal_coverage": {"cwa": cwa_time_metadata}
+        if cwa_time_metadata
+        else {},
         "category_items": _environment_risk_derivative_category_items(
             project_id,
             collections=collections,
@@ -9418,7 +9837,11 @@ def _environment_risk_candidate_collection_summary(
     source_path: str,
     summary_counts: dict[str, Any],
     derivatives_source_path: str,
+    cwa_time_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    resolved_cwa_time_metadata = (
+        cwa_time_metadata or _cwa_time_metadata_from_payload(payload)
+    )
     features = (
         [feature for feature in payload.get("features", []) if isinstance(feature, dict)]
         if isinstance(payload, dict)
@@ -9436,6 +9859,7 @@ def _environment_risk_candidate_collection_summary(
                 index=index,
                 source_path=source_path,
                 derivatives_source_path=derivatives_source_path,
+                cwa_time_metadata=resolved_cwa_time_metadata,
             )
         )
         is not None
@@ -9482,6 +9906,7 @@ def _environment_risk_candidate_collection_summary(
             "confidence_counts": confidence_counts,
         },
         "bbox_wgs84": _environment_bbox(payload or {}, {}),
+        **_cwa_time_projection_fields(resolved_cwa_time_metadata),
         "candidates": candidates,
         "features": candidates,
         "candidate_only": True,
@@ -9498,6 +9923,7 @@ def _environment_risk_candidate_from_feature(
     index: int,
     source_path: str,
     derivatives_source_path: str,
+    cwa_time_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     geometry = feature.get("geometry") if isinstance(feature.get("geometry"), dict) else {}
     props = feature.get("properties") if isinstance(feature.get("properties"), dict) else {}
@@ -9525,6 +9951,11 @@ def _environment_risk_candidate_from_feature(
     score = _coerce_float(props.get("score"))
     severity = str(props.get("severity") or "candidate")
     confidence = str(props.get("confidence") or "low")
+    feature_cwa_time_metadata = (
+        _cwa_time_metadata_from_payload(props)
+        or cwa_time_metadata
+        or _cwa_time_metadata_from_payload(feature)
+    )
     source_refs = _unique_limited(
         [
             source_path,
@@ -9565,6 +9996,7 @@ def _environment_risk_candidate_from_feature(
         "source_segment_id": source_segment_id,
         "candidate_only": True,
         "runtime_safety_truth": False,
+        **_cwa_time_projection_fields(feature_cwa_time_metadata or {}),
         "map_target_ids": _unique_limited(
             [
                 candidate_id,
@@ -9671,6 +10103,12 @@ def _environment_risk_derivative_category_items(
         first_candidate = (
             collection["candidates"][0] if collection.get("candidates") else {}
         )
+        cwa_time_metadata = _cwa_time_metadata_from_payload(first_candidate) or (
+            collection.get("cwa_time_metadata")
+            if isinstance(collection.get("cwa_time_metadata"), dict)
+            else {}
+        )
+        cwa_time_fields = _cwa_time_projection_fields(cwa_time_metadata)
         item = {
             "candidate_id": f"{project_id}.{key}.summary",
             "source_id": f"{project_id}.{key}.summary",
@@ -9686,11 +10124,13 @@ def _environment_risk_derivative_category_items(
             "candidate_count": count,
             "candidate_only": True,
             "runtime_safety_truth": False,
+            **cwa_time_fields,
             "map_target_ids": [key, "risk-delta"],
             "value_summary": {
                 "candidate_count": count,
                 "source_path": collection.get("source_path", ""),
                 "first_candidate_label": first_candidate.get("label"),
+                **cwa_time_fields,
             },
         }
         if first_candidate.get("lat") is not None and first_candidate.get("lon") is not None:
@@ -10120,6 +10560,8 @@ def _environment_risk_derivatives_value_item(
         if isinstance(payload.get("route_revalidation_report"), dict)
         else {}
     )
+    cwa_time_metadata = _cwa_time_metadata_from_payload(payload)
+    cwa_time_fields = _cwa_time_projection_fields(cwa_time_metadata)
     value_summary = {
         "status": payload.get("status"),
         "headline": payload.get("headline"),
@@ -10137,6 +10579,7 @@ def _environment_risk_derivatives_value_item(
         ),
         "route_revalidation_status": report.get("status"),
         "event_date": report.get("event_date"),
+        **cwa_time_fields,
     }
     source_refs = _unique_limited(
         [
@@ -10182,6 +10625,7 @@ def _environment_risk_derivatives_value_item(
         "value_summary": value_summary,
         "raw_response_sha256": payload.get("source_raw_response_sha256"),
         "source_metric_gaps": payload.get("source_metric_gaps", []),
+        **cwa_time_fields,
         "cache_policy": {
             "cacheable": False,
             "ttl_seconds": 0,
@@ -10297,6 +10741,7 @@ def _environment_layer_value_payload(
     if not isinstance(values, dict):
         values = {}
     if layer_id == "cwa-qpf":
+        temporal = summary.get("temporal_coverage") or summary.get("summary", {})
         return {
             "max_rain_probability": _max_numeric(
                 points,
@@ -10305,8 +10750,15 @@ def _environment_layer_value_payload(
             "max_rainfall_mm": _max_numeric(points, ("rainfall_mm", "rainfallMm")),
             "valid_from": _first_point_value(points, "valid_from", "start_time"),
             "valid_to": _first_point_value(points, "valid_to", "end_time"),
+            "api_fetched_at_hour": temporal.get("api_fetched_at_hour")
+            or temporal.get("fetched_at_hour"),
+            "valid_from_hour": temporal.get("valid_from_hour"),
+            "valid_until_hour": temporal.get("valid_until_hour")
+            or temporal.get("valid_to_hour"),
+            "time_precision": temporal.get("time_precision"),
         }
     if layer_id == "cwa-weather":
+        temporal = summary.get("temporal_coverage") or {}
         return {
             "warning_point_count": (summary.get("counts") or {}).get(
                 "warning_point_count"
@@ -10316,6 +10768,12 @@ def _environment_layer_value_payload(
             ),
             "max_last_24h_mm": _max_numeric(points, ("last_24h_mm", "rain_24h_mm")),
             "datasets": summary.get("datasets", []),
+            "api_fetched_at_hour": temporal.get("api_fetched_at_hour")
+            or temporal.get("fetched_at_hour"),
+            "latest_observation_at_hour": temporal.get("latest_observation_at_hour"),
+            "valid_until_hour": temporal.get("valid_until_hour")
+            or temporal.get("valid_to_hour"),
+            "time_precision": temporal.get("time_precision"),
         }
     if layer_id == "soil-moisture":
         surface = _first_numeric(points, ("sm_surface_wetness", "sm_surface"))
@@ -10429,20 +10887,60 @@ def _environment_feature_point(
         or props.get("area_name")
         or source_id
     )
+    confidence = props.get("confidence", "medium")
+    stale_risk = props.get("stale_risk", "medium")
+    model_hash = props.get("model_output_sha256") or _stable_projection_hash(
+        {
+            "source_id": source_id,
+            "layer_id": layer_id,
+            "label": label,
+            "lat": coordinate["lat"],
+            "lon": coordinate["lon"],
+            "properties": props,
+        }
+    )
     return {
         **props,
         "source_id": source_id,
         "candidate_id": source_id,
         "source_path": source_path,
         "source_refs": [source_path] if source_path else [],
+        "source_attribution": props.get("source_attribution")
+        or [
+            {
+                "source_kind": "environment_geojson_feature",
+                "source_ref": source_path,
+                "source_candidate_id": source_id,
+                "confidence": confidence,
+                "stale_risk": stale_risk,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
         "evidence_type": props.get("evidence_type") or layer_id,
         "layer_id": props.get("layer_id") or layer_id,
         "label": label,
         "lat": coordinate["lat"],
         "lon": coordinate["lon"],
+        "confidence": confidence,
+        "stale_risk": stale_risk,
         "candidate_only": props.get("candidate_only", True),
         "runtime_safety_truth": props.get("runtime_safety_truth", False),
         "review_state": props.get("review_state", "needs_review"),
+        "extractor_version": props.get(
+            "extractor_version",
+            "pretrip_environment_geojson.projection.v1",
+        ),
+        "pydantic_ai_prompt_version": props.get(
+            "pydantic_ai_prompt_version",
+            "not_applicable_deterministic_environment_geojson_projection.v1",
+        ),
+        "model_output_sha256": str(model_hash),
+        "model_output_summary": props.get("model_output_summary")
+        or (
+            "Environment GeoJSON feature projected as pretrip candidate-only "
+            "map evidence; not runtime safety truth."
+        ),
     }
 
 
@@ -10686,14 +11184,13 @@ def _reference_segment_timing_item(
         "map_target_ids": _unique_limited(
             [
                 *(map_target_ids or []),
-                "route" if not map_target_ids else "",
             ],
             limit=36,
         ),
         "map_focus_basis": (
             "route_segment_distance_projection"
             if map_target_ids
-            else "route_fallback_no_segment_distance_projection"
+            else "no_segment_distance_projection"
         ),
         "source_refs": _unique_limited(
             [
@@ -11813,6 +12310,7 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
     risk_delta = planning_tab["risk_delta"]
     weather = planning_tab["weather"]
     overpass_evidence = planning_tab["overpass_evidence"]
+    osm_pbf_evidence = planning_tab.get("osm_pbf_evidence")
     gis_perception_timeline = planning_tab["gis_perception_timeline"]
     major_critical_points = planning_tab.get("major_critical_points")
     boss_points = planning_tab.get("boss_points")
@@ -12186,6 +12684,28 @@ def _planning_sections(planning_tab: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
             },
             boundary=overpass_evidence["boundary"],
+        ),
+        _section(
+            "osm_pbf_evidence",
+            "Local OSM PBF Feature Index",
+            osm_pbf_evidence,
+            status=(osm_pbf_evidence or {}).get("status", "missing_source"),
+            counts=(osm_pbf_evidence or {}).get("counts", {}),
+            summary={
+                "item_count": (osm_pbf_evidence or {})
+                .get("counts", {})
+                .get("item_count", 0),
+                "category_counts": (osm_pbf_evidence or {})
+                .get("counts", {})
+                .get("category_counts", {}),
+                "render_source_ref": (osm_pbf_evidence or {}).get(
+                    "render_source_ref"
+                ),
+            },
+            boundary=(osm_pbf_evidence or {}).get(
+                "boundary",
+                EMPTY_PRETRIP_BOUNDARY,
+            ),
         ),
         _section(
             "gis_perception_timeline",
@@ -13554,6 +14074,41 @@ def _map_layers_with_local_raster_metadata(
     }
     enriched_layers: list[dict[str, Any]] = []
     for layer in map_layers:
+        if layer.get("layer_id") == "osm":
+            enriched = dict(layer)
+            render_ref = project_payload.get("osm_pbf_render_extract_ref")
+            render_manifest_ref = project_payload.get(
+                "osm_pbf_render_extract_manifest_ref"
+            )
+            if render_ref:
+                enriched["local_osm_render_extract_ref"] = render_ref
+                enriched["local_osm_render_extract_manifest_ref"] = (
+                    render_manifest_ref
+                )
+                enriched["local_osm_render_extract_source_kind"] = (
+                    project_payload.get("osm_pbf_render_extract_source_kind")
+                    or "local_osm_pbf_render_extract"
+                )
+                enriched["local_osm_render_extract_feature_count"] = (
+                    project_payload.get("osm_pbf_render_extract_feature_count", 0)
+                )
+                enriched["osm_rendering_policy"] = (
+                    "workspace_local_osm_extract_available"
+                )
+            feature_index_ref = project_payload.get("osm_pbf_feature_index_ref")
+            if feature_index_ref:
+                enriched["local_osm_feature_index_ref"] = feature_index_ref
+                enriched["local_osm_feature_index_feature_count"] = (
+                    project_payload.get("osm_pbf_feature_index_feature_count", 0)
+                )
+                enriched["local_osm_feature_index_category_counts"] = (
+                    project_payload.get(
+                        "osm_pbf_feature_index_category_counts",
+                        {},
+                    )
+                )
+            enriched_layers.append(_map_layer_metadata(enriched))
+            continue
         if layer.get("layer_id") not in wmts_layer_ids:
             enriched_layers.append(_map_layer_metadata(layer))
             continue

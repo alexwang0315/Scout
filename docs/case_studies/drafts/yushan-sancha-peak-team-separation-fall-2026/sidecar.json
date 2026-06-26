@@ -1,0 +1,324 @@
+{
+  "schema_version": "case-study-addition.v0.1",
+  "case_id": "yushan_sancha_peak_team_separation_fall_2026",
+  "case_slug": "yushan-sancha-peak-team-separation-fall-2026",
+  "status": "draft",
+  "created_at": "2026-06-24T16:33:45+08:00",
+  "updated_at": "2026-06-25",
+  "sources": [
+    {
+      "source_id": "src_001",
+      "type": "url",
+      "title": "玉山三叉峰山難 女子獨自離隊失聯墜亡",
+      "url": "https://www.cna.com.tw/news/asoc/202606230189.aspx",
+      "publisher": "Central News Agency",
+      "published_date": "2026-06-23",
+      "accessed_at": "2026-06-24",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_002",
+      "type": "url",
+      "title": "玉山三叉峰傳憾事！57歲女山友疑體力不支 墜百米山谷身亡",
+      "url": "https://www.mirrormedia.mg/story/amp/20260623edi054",
+      "publisher": "Mirror Media",
+      "published_date": "2026-06-23",
+      "accessed_at": "2026-06-24",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_003",
+      "type": "pasted_text",
+      "title": "User-provided wilderness case framing on team separation",
+      "url": null,
+      "publisher": "pasted_text",
+      "published_date": null,
+      "accessed_at": "2026-06-24",
+      "reliability": "assumption",
+      "text_summary": "User framed the Sancha Peak incident as a team-separation case study and highlighted weak-member care, face-saving pressure, help-seeking, and pre-trip readiness."
+    },
+    {
+      "source_id": "src_004",
+      "type": "pasted_text",
+      "title": "徹夜未眠！卑南主到玉山後四峰，跨單位一日雙線緊急救援",
+      "url": null,
+      "publisher": "Kaohsiung City Fire Department Sixth Brigade, attributed pasted text",
+      "published_date": null,
+      "accessed_at": "2026-06-25",
+      "reliability": "reported_fact",
+      "source_url_hint": "https://www.facebook.com/100064842872284/photos/470632158441543/",
+      "access_note": "Text supplied by user; external search found a matching Facebook URL hint, but direct page fetch was not used as the source body.",
+      "text_summary": "Pasted rescue summary describing two 2026-06-22 mountain incidents: Yushan rear four peaks fall and Beinan Main Mountain lost-party rescue."
+    }
+  ],
+  "quotes": [
+    {
+      "quote_id": "q_001",
+      "source_id": "src_001",
+      "text": "徐女昨天下午2時許疑體力不支，在玉山三叉峰向同行者告知要自行返回圓峰山屋",
+      "reason": "reported team separation trigger",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_002",
+      "source_id": "src_001",
+      "text": "其他山友發現徐女未回山屋後，隨即請求救援。",
+      "reason": "reported missing-member discovery and rescue request",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_003",
+      "source_id": "src_002",
+      "text": "在圓峰山屋附近一處約100公尺深的谷地發現徐女",
+      "reason": "reported search outcome location",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_004",
+      "source_id": "src_003",
+      "text": "隊伍必須照顧最弱的隊員。強的人有更大的責任，不是更大的權利。",
+      "reason": "user-provided design framing",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_005",
+      "source_id": "src_004",
+      "text": "大家在玉山南峰登山口（四叉路口）停下稍作休息",
+      "reason": "reported last group pause context",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_006",
+      "source_id": "src_004",
+      "text": "天色全黑，伴隨著濃霧，能見度極差、視線嚴重受阻",
+      "reason": "reported search environment",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_007",
+      "source_id": "src_004",
+      "text": "團體行動時切勿獨自脫隊先行！",
+      "reason": "reported safety reminder from rescue post",
+      "copyright_check": "short_excerpt"
+    }
+  ],
+  "source_facts": [
+    {
+      "fact_id": "fact_001",
+      "summary": "A seven-person group was reported to be climbing in the Yushan rear four peaks area on 2026-06-22.",
+      "source_refs": [
+        "src_001",
+        "src_002",
+        "src_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_002",
+      "summary": "Reports say the 57-year-old woman felt physically unwell or lacked strength and told teammates she would return to Yuanfeng Hut alone.",
+      "source_refs": [
+        "q_001"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_003",
+      "summary": "The rescue-summary text adds that the team paused near the Yushan South Peak trailhead four-way intersection while returning from Lushan toward Yuanfeng Hut.",
+      "source_refs": [
+        "q_005"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_004",
+      "summary": "Reports say teammates later did not find her at Yuanfeng Hut and requested rescue; the rescue-summary text says the guide searched and reported the incident.",
+      "source_refs": [
+        "q_002",
+        "src_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_005",
+      "summary": "The rescue-summary text reports dark and foggy conditions with poor visibility during the night search.",
+      "source_refs": [
+        "q_006"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_006",
+      "summary": "Reports say rescuers later found her deceased in a valley or steep-slope area near Yuanfeng Hut; official terrain details require human review.",
+      "source_refs": [
+        "q_003",
+        "src_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_007",
+      "summary": "The rescue-summary text says the body was packed and carried to Yuanfeng Hut, then hoisted by National Airborne Service Corps helicopter on 2026-06-24.",
+      "source_refs": [
+        "src_004"
+      ],
+      "confidence": "reported_fact"
+    }
+  ],
+  "timeline": [
+    {
+      "time_ref": "2026-06-22 return from Lushan toward Yuanfeng Hut",
+      "event": "team_paused_at_yushan_south_peak_trailhead_four_way_intersection",
+      "source_refs": [
+        "q_005"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-22 afternoon",
+      "event": "teammate_requested_solo_return_to_yuanfeng_hut",
+      "source_refs": [
+        "q_001",
+        "src_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-22 after teammate return was expected",
+      "event": "teammates_found_missing_member_not_at_hut_and_requested_rescue",
+      "source_refs": [
+        "q_002"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-22 night",
+      "event": "guide_and_rescuers_searched_in_dark_fog_low_visibility",
+      "source_refs": [
+        "q_006"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-23 morning",
+      "event": "rescuers_reportedly_found_deceased_member_near_yuanfeng_hut_slope_or_valley_area",
+      "source_refs": [
+        "q_003",
+        "src_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-24 morning",
+      "event": "national_airborne_service_corps_completed_body_hoist",
+      "source_refs": [
+        "src_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "case-study interpretation",
+      "event": "user_framed_case_as_team_separation_and_help_seeking_pressure_pattern",
+      "source_refs": [
+        "q_004"
+      ],
+      "confidence": "assumption"
+    }
+  ],
+  "taxonomy_keys": [
+    "team_separation_missing_member",
+    "condition_deterioration_on_route",
+    "schedule_slip_and_retreat_gate",
+    "pace_buffer_required",
+    "pretrip_fitness_readiness",
+    "attention_decline_from_fatigue",
+    "rescue_message_v1",
+    "field_actions",
+    "near_route_fall_hazard",
+    "descent_attention_risk",
+    "low_tolerance_terrain"
+  ],
+  "scout_implications": [
+    {
+      "implication_id": "imp_001",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "team_state.separation_guard",
+      "type": "case_study_signal",
+      "summary": "Scout should treat a weak, tired, or symptomatic teammate requesting solo return as a team-separation risk that requires human review, companion assignment, contact confirmation, or whole-team retreat planning.",
+      "source_refs": [
+        "q_001",
+        "q_004",
+        "q_007"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_002",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "pretrip_readiness.pace_and_load_match",
+      "type": "case_study_signal",
+      "summary": "Scout pre-trip review should surface route workload, pace buffer, pack-load tolerance, offline map readiness, and satellite messenger availability as planning prompts, not as a medical or legal finding.",
+      "source_refs": [
+        "q_004"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_003",
+      "phase": "case_study_corpus",
+      "hook": "field_decision.assisted_return_checkpoint",
+      "type": "case_study_signal",
+      "summary": "A field prompt could ask whether the returning member has an escort, confirmed route, communication method, last-known point, and explicit check-in deadline before separation is accepted.",
+      "source_refs": [
+        "q_001",
+        "q_002",
+        "q_005",
+        "q_007"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_004",
+      "phase": "case_study_corpus",
+      "hook": "incident_package.missing_member_last_known_point",
+      "type": "case_study_signal",
+      "summary": "If a member becomes missing, Scout should help humans package last-known point, intended destination, separation time, communication status, observed condition, weather, visibility, and search constraints for approved rescue communication.",
+      "source_refs": [
+        "q_001",
+        "q_002",
+        "q_003",
+        "q_005",
+        "q_006"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_005",
+      "phase": "case_study_corpus",
+      "hook": "retreat_gate.darkness_fog_visibility_margin",
+      "type": "case_study_signal",
+      "summary": "Scout should keep darkness, fog, and visibility as review factors for late-day separation and retreat decisions, while leaving actual go/no-go authority to humans.",
+      "source_refs": [
+        "q_006"
+      ],
+      "confidence": "assumption"
+    }
+  ],
+  "boundaries": {
+    "medical": "not_diagnosis",
+    "legal": "no_fault_assignment",
+    "rescue": "not_official_sop",
+    "phase_change": "requires_human_review"
+  },
+  "discussion_questions": [
+    "Should Scout pre-trip and field prompts flag solo return by a tired or unwell teammate as a team-separation checkpoint requiring explicit human decision review?",
+    "What is the minimum evidence Scout should ask a team to record before any planned separation: escort, route, communication, last-known point, deadline, weather, and visibility?",
+    "How should Scout phrase help-seeking prompts so a tired team member can ask for assistance without framing it as failure or blame?",
+    "Should a dark/fog/poor-visibility condition automatically escalate a planned solo return to a whole-team retreat or escort-required review prompt?"
+  ],
+  "promotion": {
+    "recommended_target": "docs/case_studies/accepted/",
+    "phase_1_patch_required": false,
+    "phase_2_patch_required": false,
+    "fixture_required": false
+  }
+}

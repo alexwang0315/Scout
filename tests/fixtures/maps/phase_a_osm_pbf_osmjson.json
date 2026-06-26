@@ -1,0 +1,125 @@
+{
+  "elements": [
+    {
+      "id": 1,
+      "lat": 23.8701,
+      "lon": 121.1701,
+      "type": "node"
+    },
+    {
+      "id": 2,
+      "lat": 23.8705,
+      "lon": 121.1705,
+      "type": "node"
+    },
+    {
+      "id": 3,
+      "lat": 23.8709,
+      "lon": 121.1709,
+      "type": "node"
+    },
+    {
+      "id": 4,
+      "lat": 23.8712,
+      "lon": 121.1712,
+      "type": "node"
+    },
+    {
+      "id": 5,
+      "lat": 23.8715,
+      "lon": 121.1715,
+      "type": "node"
+    },
+    {
+      "id": 10,
+      "lat": 23.872,
+      "lon": 121.172,
+      "tags": {
+        "name": "測試山",
+        "natural": "peak"
+      },
+      "type": "node"
+    },
+    {
+      "id": 11,
+      "lat": 23.873,
+      "lon": 121.173,
+      "tags": {
+        "name": "測試避難小屋",
+        "tourism": "wilderness_hut"
+      },
+      "type": "node"
+    },
+    {
+      "id": 12,
+      "lat": 23.874,
+      "lon": 121.174,
+      "tags": {
+        "amenity": "drinking_water",
+        "name": "測試水源"
+      },
+      "type": "node"
+    },
+    {
+      "id": 100,
+      "nodes": [
+        1,
+        2,
+        3
+      ],
+      "tags": {
+        "highway": "path",
+        "name": "測試步道"
+      },
+      "type": "way"
+    },
+    {
+      "id": 101,
+      "nodes": [
+        3,
+        4,
+        5
+      ],
+      "tags": {
+        "highway": "footway",
+        "name": "測試支線"
+      },
+      "type": "way"
+    },
+    {
+      "id": 102,
+      "nodes": [
+        1,
+        999
+      ],
+      "tags": {
+        "highway": "path",
+        "name": "缺點位步道"
+      },
+      "type": "way"
+    },
+    {
+      "id": 200,
+      "members": [
+        {
+          "ref": 100,
+          "role": "",
+          "type": "way"
+        },
+        {
+          "ref": 101,
+          "role": "",
+          "type": "way"
+        }
+      ],
+      "tags": {
+        "name": "測試登山路線",
+        "route": "hiking",
+        "type": "route"
+      },
+      "type": "relation"
+    }
+  ],
+  "generator": "scout fixture",
+  "version": 0.6
+}

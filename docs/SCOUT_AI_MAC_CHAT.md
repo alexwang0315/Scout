@@ -1,7 +1,7 @@
 # Scout AI Mac Chat
 
 `scout-ai-os-mac-chat` runs a Mac-local browser interface while using the Scout
-hardware as the Scout AI OS server.
+hardware as the Scout AI OS server by default.
 
 ```text
 Mac browser
@@ -50,6 +50,37 @@ The target can also be set with:
 SCOUT_AI_SERVER_URL=http://scout.local:9120 ./venv/bin/scout-ai-os-mac-chat
 ```
 
+## Mac Local Fallback Mode
+
+When the Scout hardware is offline or under repair, the same UI can fall back to
+the Mac-local Scout assistant provider:
+
+```bash
+cd /Users/alexwang0315/scout-fusion
+./venv/bin/scout-ai-os-mac-chat \
+  --target-url http://scout.local:9120 \
+  --local-fallback \
+  --fallback-model openrouter:z-ai/glm-5.2 \
+  --fallback-project-id chilai_nanhua_day1 \
+  --fallback-workspace-root /path/to/pretrip/workspace
+```
+
+The CLI loads `.env` by default before constructing the fallback provider. It
+does not print token values. For OpenRouter-backed models, `.env` or the shell
+must provide `OPENROUTER_API_KEY`.
+
+Fallback behavior:
+
+- The Mac proxy first tries the Scout hardware `/requests` endpoint.
+- If the hardware request fails, the Mac process calls Scout's read-only
+  Pydantic AI v2 assistant provider.
+- The fallback provider reuses the existing assistant safety wrapper, skill
+  routing, and Scout workspace tools.
+- The JSON response includes `response_source=mac_local_pydantic_ai_v2` and
+  preserves the remote error as `remote_error`.
+- Missing local workspace/project context is reported as an evidence gap; it is
+  not treated as proof of safety.
+
 ## Local API
 
 The Mac proxy exposes:
@@ -81,8 +112,8 @@ The Mac UI is a client/proxy only.
 - It does not mutate Phase 1 L0-L4 runtime safety truth.
 - It does not send outbound Telegram/SMS/satellite messages.
 - It does not control hardware.
-- It does not fall back to a local model when the Scout hardware server is
-  disconnected.
+- Local fallback is opt-in with `--local-fallback`; fallback model output is
+  still read-only model interpretation and is never runtime safety truth.
 
 Session-local UI operation requests may return `scout_ui_action_plan.v0`.
 Workflow requests may install or require approval according to the Scout AI OS

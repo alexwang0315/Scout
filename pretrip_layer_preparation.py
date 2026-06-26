@@ -8,12 +8,13 @@ import os
 import signal
 import shutil
 import statistics
+import subprocess
 import sys
 import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -31,12 +32,18 @@ from admin_local_raster_tiles import (
     seed_imagery_tile_cache,
 )
 from pretrip_models import RouteBBox
+from pretrip_osm_pbf_ingest import (
+    build_osm_pbf_feature_index,
+    extract_osm_pbf_to_osm_json,
+    import_osm_pbf_evidence_candidates,
+)
 from pretrip_overpass_ingest import import_overpass_evidence_candidates
 from pretrip_source_ingest import wgs84_to_twd97
 
 
 LAYER_PREPARATION_VERSION = "0.1.0"
 RISK_PROVENANCE_STAMP_VERSION = "pretrip_risk_provenance.v0.1"
+DEFAULT_OSM_PBF_CACHE_TTL_DAYS = 30
 LayerProfile = Literal["mac-workstation", "pi-offline", "pi-online-explicit"]
 NetworkMode = Literal["no-network", "explicit-fetch"]
 AiMode = Literal["fixture-or-precomputed", "pydantic-cloud-explicit"]
@@ -91,18 +98,31 @@ OUTPUT_REFS = {
     "terrain_contours_overlay_ref": (
         "outputs/layers/normalized/terrain_contours.png"
     ),
+    "environment_evidence_package_ref": (
+        "outputs/environment/environment_evidence_package.json"
+    ),
+    "environment_factor_matrix_ref": (
+        "outputs/environment/environment_factor_matrix.json"
+    ),
+    "go_no_go_review_draft_ref": "outputs/environment/go_no_go_review_draft.json",
     "cwa_weather_evidence_ref": "outputs/environment/cwa/cwa_weather_evidence.json",
     "cwa_warnings_geojson_ref": "outputs/environment/cwa/warnings.geojson",
     "cwa_observations_geojson_ref": "outputs/environment/cwa/observations.geojson",
     "cwa_qpf_grid_ref": "outputs/environment/cwa/qpf_grid.geojson",
     "cwa_qpf_route_timeline_ref": "outputs/environment/cwa/qpf_route_timeline.json",
     "cwa_qpf_corridor_summary_ref": "outputs/environment/cwa/qpf_corridor_summary.json",
+    "cwa_forecast_timeline_ref": "outputs/environment/cwa/forecast_timeline.json",
+    "cwa_astronomy_timeline_ref": "outputs/environment/cwa/astronomy_timeline.json",
+    "cwa_tide_marine_timeline_ref": "outputs/environment/cwa/tide_marine_timeline.json",
     "soil_moisture_grid_ref": "outputs/environment/gee/soil_moisture_grid.geojson",
     "smap_l4_timeseries_ref": "outputs/environment/gee/smap_l4_timeseries.json",
     "smap_l4_corridor_summary_ref": (
         "outputs/environment/gee/smap_l4_corridor_summary.json"
     ),
     "antecedent_rain_grid_ref": "outputs/environment/gee/antecedent_rain_grid.geojson",
+    "gee_gpm_imerg_raw_summary_ref": (
+        "outputs/environment/gee/gpm_imerg_raw_summary.json"
+    ),
     "gpm_imerg_timeseries_ref": "outputs/environment/gee/gpm_imerg_timeseries.json",
     "gpm_imerg_corridor_summary_ref": (
         "outputs/environment/gee/gpm_imerg_corridor_summary.json"
@@ -367,10 +387,16 @@ class LayerPreparationRequest:
     seed_imagery_cache: bool = False
     imagery_provider_allows_offline_prefetch: bool = False
     imagery_seed_max_tiles: int | None = None
+    osm_pbf_path: Path | None = None
+    osm_pbf_source_url: str | None = None
+    osm_pbf_cache_ttl_days: int = DEFAULT_OSM_PBF_CACHE_TTL_DAYS
+    osmium_bin: str = "osmium"
     prepared_at: str | None = None
 
 
 def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
+    _validate_request(request)
+    _maybe_prepare_local_osm_pbf_evidence(request)
     _maybe_fetch_overpass_evidence(request)
     _maybe_seed_imagery_tile_cache(request)
     _maybe_prepare_environment_evidence(request)
@@ -527,9 +553,150 @@ def build_layer_preparation_preview(request: LayerPreparationRequest) -> dict[st
     }
 
 
+def _maybe_prepare_local_osm_pbf_evidence(request: LayerPreparationRequest) -> None:
+    if request.osm_pbf_path is None:
+        return
+    normalized_layers = set(_normalize_layer_ids(request.layers))
+    if not {"osm", "overpass"} & normalized_layers:
+        return
+    project_root = _resolve_project_root(request)
+    _reject_fixture_fetch(project_root)
+    project_path = project_root / "project.json"
+    project = _load_json(project_path)
+    route_summary = _load_project_ref(
+        project_root,
+        project,
+        "route_summary_ref",
+        required=True,
+    )
+    route_bbox = normalize_bbox_wgs84(request.bbox or route_summary["bbox_wgs84"])
+    query_bbox = _expand_bbox_by_meters(route_bbox, request.route_corridor_m)
+    route_corridor = _route_corridor_record(
+        project=project,
+        route_summary=route_summary,
+        route_bbox=route_bbox,
+        query_bbox=query_bbox,
+        request=request,
+    )
+    planned_request = _planned_overpass_request(
+        bbox=query_bbox,
+        request=request,
+        route_corridor=route_corridor,
+    )
+    pbf_path = request.osm_pbf_path.expanduser().resolve()
+    prepared_at = request.prepared_at or _utc_now()
+    pbf_cache = _osm_pbf_cache_metadata(
+        pbf_path,
+        source_url=request.osm_pbf_source_url,
+        ttl_days=request.osm_pbf_cache_ttl_days,
+        now_iso=prepared_at,
+    )
+    raw_ref = "normalized/map/osm_pbf_phase_a_raw.osm.json"
+    raw_path = project_root / raw_ref
+    raw_bytes, extraction_plan = _extract_osm_pbf_raw_payload(
+        pbf_path=pbf_path,
+        bbox=query_bbox,
+        raw_payload_path=raw_path,
+        osmium_bin=request.osmium_bin,
+    )
+    raw_payload = json.loads(raw_bytes.decode("utf-8"))
+    normalized_ref = planned_request["normalized_artifact_target_ref"]
+    evidence_ref = "candidates/overpass_evidence.json"
+    pbf_sha256 = _sha256_file(pbf_path) if pbf_path.exists() else None
+    render_extract = _local_osm_render_extract_metadata(
+        project_root=project_root,
+        extraction_plan=extraction_plan,
+        raw_payload_ref=raw_ref,
+        raw_payload=raw_payload,
+        pbf_cache=pbf_cache,
+    )
+    feature_index_ref = "outputs/layers/normalized/osm_pbf_feature_index.json"
+    render_geojson = _export_local_osm_render_geojson(
+        project_root=project_root,
+        extraction_plan=extraction_plan,
+        osmium_bin=request.osmium_bin,
+    )
+    feature_index_source_ref = render_geojson["ref"] if render_geojson else raw_ref
+    feature_index_payload = render_geojson["payload"] if render_geojson else raw_payload
+    feature_index = build_osm_pbf_feature_index(
+        feature_index_payload,
+        source_ref=feature_index_source_ref,
+        render_source_ref=render_extract["preferred_render_source_ref"],
+        request_timestamp=prepared_at,
+        route_corridor=route_corridor,
+        pbf_cache_metadata=pbf_cache,
+        pbf_source_uri=pbf_path.as_posix(),
+        pbf_download_url=request.osm_pbf_source_url,
+        pbf_source_sha256=pbf_sha256,
+    )
+    evidence = import_osm_pbf_evidence_candidates(
+        raw_payload,
+        query_body=json.dumps(extraction_plan, ensure_ascii=False, sort_keys=True),
+        bbox_wgs84=RouteBBox(
+            min_lat=query_bbox["south"],
+            min_lon=query_bbox["west"],
+            max_lat=query_bbox["north"],
+            max_lon=query_bbox["east"],
+        ),
+        route_corridor=route_corridor,
+        request_timestamp=prepared_at,
+        endpoint=f"local-osm-pbf://{pbf_path.as_posix()}",
+        raw_payload_uri=raw_ref,
+        raw_response_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+        normalized_artifact_path=normalized_ref,
+        source_ref=raw_ref,
+        pbf_source_uri=pbf_path.as_posix(),
+        pbf_download_url=request.osm_pbf_source_url,
+        pbf_source_sha256=pbf_sha256,
+        pbf_cache_metadata=pbf_cache,
+        extraction_plan=extraction_plan,
+    )
+    _write_json(project_root / raw_ref, raw_payload)
+    _write_json(project_root / normalized_ref, evidence["normalized_geojson"])
+    _write_json(project_root / evidence_ref, evidence)
+    _write_json(project_root / feature_index_ref, feature_index)
+    updated = {
+        **project,
+        "overpass_evidence_ref": evidence_ref,
+        "overpass_map_context_ref": normalized_ref,
+        "overpass_raw_payload_ref": raw_ref,
+        "overpass_candidate_count": evidence["counts"]["candidates"],
+        "overpass_skipped_object_count": evidence["counts"]["skipped"],
+        "osm_pbf_source_ref": pbf_path.as_posix(),
+        "osm_pbf_source_url": request.osm_pbf_source_url,
+        "osm_pbf_source_sha256": pbf_sha256,
+        "osm_pbf_raw_payload_ref": raw_ref,
+        "osm_pbf_extracted_at": prepared_at,
+        "osm_pbf_route_extract_ref": render_extract.get("pbf_extract_ref"),
+        "osm_pbf_render_extract_ref": render_extract["preferred_render_source_ref"],
+        "osm_pbf_render_extract_manifest_ref": render_extract["manifest_ref"],
+        "osm_pbf_render_extract_source_kind": render_extract[
+            "preferred_render_source_kind"
+        ],
+        "osm_pbf_render_extract_feature_count": render_extract["feature_count"],
+        "osm_pbf_render_geojson_ref": (
+            render_geojson["ref"] if render_geojson is not None else None
+        ),
+        "osm_pbf_feature_index_ref": feature_index_ref,
+        "osm_pbf_feature_index_feature_count": feature_index["counts"][
+            "item_count"
+        ],
+        "osm_pbf_feature_index_category_counts": feature_index["counts"][
+            "category_counts"
+        ],
+        "osm_pbf_cache_ttl_days": pbf_cache["cache_ttl_days"],
+        "osm_pbf_cache_status": pbf_cache["cache_status"],
+        "osm_pbf_cache_expires_at": pbf_cache["expires_at"],
+        "osm_pbf_refresh_required": pbf_cache["refresh_required"],
+    }
+    _write_json(project_path, updated)
+
+
 def _maybe_fetch_overpass_evidence(request: LayerPreparationRequest) -> None:
     normalized_layers = _normalize_layer_ids(request.layers)
     if "overpass" not in normalized_layers:
+        return
+    if request.osm_pbf_path is not None:
         return
     if request.network_mode != "explicit-fetch" or not request.allow_network_fetch:
         return
@@ -666,6 +833,22 @@ def _maybe_prepare_environment_evidence(request: LayerPreparationRequest) -> Non
                 bbox=query_bbox,
                 request=request,
                 prepared_at=prepared_at,
+                cwa_time_metadata=outputs.get("cwa_time_metadata")
+                if isinstance(outputs.get("cwa_time_metadata"), dict)
+                else None,
+            )
+        )
+
+    if outputs:
+        outputs.update(
+            _write_environment_synthesis_artifacts(
+                project_root=project_root,
+                project={**project, **outputs},
+                route_summary=route_summary,
+                bbox=query_bbox,
+                prepared_at=prepared_at,
+                requested_cwa=requested_cwa,
+                requested_gee=requested_gee,
             )
         )
 
@@ -695,10 +878,13 @@ def _prepare_cwa_environment_artifacts(
     observations: list[dict[str, Any]] = []
     fetch_results: list[dict[str, Any]] = []
     external_calls_made = False
+    external_fetch_requested = (
+        request.network_mode == "explicit-fetch" and request.allow_network_fetch
+    )
     source_run_id = f"cwa.{project.get('project_id') or request.project_id}.{_job_timestamp(prepared_at)}"
+    cache_policy = _cwa_no_cache_policy()
 
-    if request.network_mode == "explicit-fetch" and request.allow_network_fetch:
-        external_calls_made = True
+    if external_fetch_requested:
         try:
             from scout_weather_integration import (
                 CWA_36H_FORECAST,
@@ -775,19 +961,33 @@ def _prepare_cwa_environment_artifacts(
                     "reason": "network_mode_not_explicit_fetch_or_allow_network_fetch_false"
                 },
             )
-        )
+            )
 
+    external_calls_made = any(item.get("status") == "ready" for item in fetch_results)
+    time_metadata = _cwa_time_metadata(
+        prepared_at=prepared_at,
+        api_request_attempted=external_fetch_requested,
+        external_calls_made=external_calls_made,
+        weather_points=weather_points,
+        warnings=warnings,
+        observations=observations,
+    )
     qpf_features = _cwa_qpf_features_from_weather_points(
         weather_points,
         bbox=bbox,
         source_run_id=source_run_id,
         prepared_at=prepared_at,
+        time_metadata=time_metadata,
     )
-    observation_features = _cwa_observation_features(observations)
+    observation_features = _cwa_observation_features(
+        observations,
+        time_metadata=time_metadata,
+    )
     warning_features = _cwa_warning_features(
         warnings,
         bbox=bbox,
         source_run_id=source_run_id,
+        time_metadata=time_metadata,
     )
     if not qpf_features and not observation_features and not warning_features:
         qpf_features.append(
@@ -800,6 +1000,7 @@ def _prepare_cwa_environment_artifacts(
                 source_run_id=source_run_id,
                 prepared_at=prepared_at,
                 detail="CWA fetch did not return route-visible forecast or station data.",
+                extra={**time_metadata, "cwa_time_metadata": time_metadata},
             )
         )
 
@@ -808,10 +1009,17 @@ def _prepare_cwa_environment_artifacts(
         "schema_version": LAYER_PREPARATION_VERSION,
         "project_id": project.get("project_id") or request.project_id,
         "generated_at": prepared_at,
+        "request_timestamp": prepared_at,
         "source_run_id": source_run_id,
         "provider": "cwa_opendata",
+        "source_family": "cwa_weather_environment",
         "status": "ready" if any(item["status"] == "ready" for item in fetch_results) else "not_available",
         "external_api_calls_made": external_calls_made,
+        "api_request_attempted": external_fetch_requested,
+        "cache_policy": cache_policy,
+        **time_metadata,
+        "cwa_time_metadata": time_metadata,
+        "temporal_coverage": time_metadata,
         "datasets": fetch_results,
         "counts": {
             "weather_point_count": len(weather_points),
@@ -834,25 +1042,33 @@ def _prepare_cwa_environment_artifacts(
         project_id=project.get("project_id") or request.project_id,
         generated_at=prepared_at,
         bbox=bbox,
+        external_calls_made=external_calls_made,
     )
+    qpf_geojson["temporal_coverage"] = time_metadata
     warnings_geojson = _feature_collection(
         "cwa_weather_warnings",
         warning_features,
         project_id=project.get("project_id") or request.project_id,
         generated_at=prepared_at,
         bbox=bbox,
+        external_calls_made=external_calls_made,
     )
+    warnings_geojson["temporal_coverage"] = time_metadata
     observations_geojson = _feature_collection(
         "cwa_rain_observations",
         observation_features,
         project_id=project.get("project_id") or request.project_id,
         generated_at=prepared_at,
         bbox=bbox,
+        external_calls_made=external_calls_made,
     )
+    observations_geojson["temporal_coverage"] = time_metadata
     qpf_timeline = _cwa_qpf_timeline(
         qpf_features,
         project_id=project.get("project_id") or request.project_id,
         generated_at=prepared_at,
+        time_metadata=time_metadata,
+        external_calls_made=external_calls_made,
     )
     qpf_summary = _cwa_qpf_corridor_summary(
         qpf_features,
@@ -861,7 +1077,40 @@ def _prepare_cwa_environment_artifacts(
         route_summary=route_summary,
         generated_at=prepared_at,
         bbox=bbox,
+        time_metadata=time_metadata,
+        external_calls_made=external_calls_made,
     )
+    forecast_timeline = _cwa_forecast_timeline(
+        weather_points,
+        project_id=project.get("project_id") or request.project_id,
+        generated_at=prepared_at,
+        time_metadata=time_metadata,
+        external_calls_made=external_calls_made,
+    )
+    astronomy_timeline = _cwa_astronomy_timeline(
+        project_id=project.get("project_id") or request.project_id,
+        generated_at=prepared_at,
+        time_metadata=time_metadata,
+        external_calls_made=external_calls_made,
+    )
+    tide_marine_timeline = _cwa_tide_marine_timeline(
+        project_id=project.get("project_id") or request.project_id,
+        generated_at=prepared_at,
+        time_metadata=time_metadata,
+        external_calls_made=external_calls_made,
+    )
+    for artifact in (
+        qpf_geojson,
+        warnings_geojson,
+        observations_geojson,
+        qpf_timeline,
+        qpf_summary,
+        forecast_timeline,
+        astronomy_timeline,
+        tide_marine_timeline,
+    ):
+        artifact["cache_policy"] = cache_policy
+        artifact["cwa_time_metadata"] = time_metadata
 
     _write_json(cwa_dir / "cwa_weather_evidence.json", cwa_evidence)
     _write_json(cwa_dir / "qpf_grid.geojson", qpf_geojson)
@@ -869,6 +1118,9 @@ def _prepare_cwa_environment_artifacts(
     _write_json(cwa_dir / "observations.geojson", observations_geojson)
     _write_json(cwa_dir / "qpf_route_timeline.json", qpf_timeline)
     _write_json(cwa_dir / "qpf_corridor_summary.json", qpf_summary)
+    _write_json(cwa_dir / "forecast_timeline.json", forecast_timeline)
+    _write_json(cwa_dir / "astronomy_timeline.json", astronomy_timeline)
+    _write_json(cwa_dir / "tide_marine_timeline.json", tide_marine_timeline)
 
     return {
         "cwa_weather_evidence_ref": OUTPUT_REFS["cwa_weather_evidence_ref"],
@@ -879,12 +1131,29 @@ def _prepare_cwa_environment_artifacts(
         "cwa_qpf_corridor_summary_ref": OUTPUT_REFS[
             "cwa_qpf_corridor_summary_ref"
         ],
+        "cwa_forecast_timeline_ref": OUTPUT_REFS["cwa_forecast_timeline_ref"],
+        "cwa_astronomy_timeline_ref": OUTPUT_REFS["cwa_astronomy_timeline_ref"],
+        "cwa_tide_marine_timeline_ref": OUTPUT_REFS["cwa_tide_marine_timeline_ref"],
         "cwa_weather_point_count": len(weather_points),
         "cwa_warning_count": len(warnings),
         "cwa_rain_observation_count": len(observations),
         "cwa_qpf_feature_count": len(qpf_features),
+        "cwa_api_request_attempted": external_fetch_requested,
+        "cwa_api_request_attempted_at": (
+            time_metadata.get("api_request_attempted_at", "") or ""
+        ),
+        "cwa_api_request_attempted_at_hour": (
+            time_metadata.get("api_request_attempted_at_hour", "") or ""
+        ),
         "cwa_fetched_at": prepared_at if external_calls_made else "",
+        "cwa_fetched_at_hour": time_metadata.get("fetched_at_hour", ""),
+        "cwa_valid_from_hour": time_metadata.get("valid_from_hour", ""),
+        "cwa_valid_until_hour": time_metadata.get("valid_until_hour", ""),
         "cwa_external_api_calls_made": external_calls_made,
+        "cwa_cache_policy": cache_policy,
+        "cwa_cacheable": False,
+        "cwa_ttl_seconds": 0,
+        "cwa_time_metadata": time_metadata,
     }
 
 
@@ -896,6 +1165,7 @@ def _prepare_gee_environment_artifacts(
     bbox: dict[str, float],
     request: LayerPreparationRequest,
     prepared_at: str,
+    cwa_time_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     del route_summary
     gee_dir = project_root / "outputs" / "environment" / "gee"
@@ -1015,6 +1285,19 @@ def _prepare_gee_environment_artifacts(
     ).encode("utf-8")
     raw_summary_hash = hashlib.sha256(raw_summary_bytes).hexdigest()
     raw_summary_ref = "outputs/environment/gee/gee_raw_summary.json"
+    gpm_raw_summary_ref = OUTPUT_REFS["gee_gpm_imerg_raw_summary_ref"]
+    gpm_raw_summary = _gee_gpm_imerg_raw_summary(
+        raw_summary=raw_summary,
+        project_id=str(project_id),
+        generated_at=prepared_at,
+        status=status,
+        blockers=blockers,
+        external_calls_made=external_calls_made,
+        cache_policy=cache_policy,
+        raw_summary_ref=raw_summary_ref,
+        raw_summary_sha256=raw_summary_hash,
+    )
+    gpm_raw_summary_hash = _stable_projection_hash(gpm_raw_summary)
 
     soil_feature = _environment_status_feature(
         bbox=bbox,
@@ -1143,6 +1426,7 @@ def _prepare_gee_environment_artifacts(
         gpm_timeseries["cache_policy"] = cache_policy
 
     _write_json(gee_dir / "gee_raw_summary.json", raw_summary)
+    _write_json(gee_dir / "gpm_imerg_raw_summary.json", gpm_raw_summary)
     _write_json(gee_dir / "soil_moisture_grid.geojson", soil_geojson)
     _write_json(gee_dir / "antecedent_rain_grid.geojson", rain_geojson)
     _write_json(gee_dir / "smap_l4_corridor_summary.json", smap_summary)
@@ -1217,11 +1501,17 @@ def _prepare_gee_environment_artifacts(
         and isinstance(feature_package_for_derivatives, dict)
     ):
         try:
+            derivative_cwa_time_metadata = _project_cwa_time_metadata(
+                project_root=project_root,
+                project=project,
+                fallback=cwa_time_metadata,
+            )
             derivatives_summary = write_environment_risk_derivative_artifacts(
                 feature_package=feature_package_for_derivatives,
                 output_dir=project_root / "outputs" / "environment" / "derived",
                 project_id=str(project_id),
                 generated_at=prepared_at,
+                cwa_time_metadata=derivative_cwa_time_metadata,
             )
         except Exception as exc:  # pragma: no cover - defensive derivative boundary.
             derivatives_summary = {
@@ -1263,6 +1553,8 @@ def _prepare_gee_environment_artifacts(
         "gee_cache_policy": cache_policy,
         "gee_raw_summary_ref": raw_summary_ref,
         "gee_raw_summary_sha256": raw_summary_hash,
+        "gee_gpm_imerg_raw_summary_ref": gpm_raw_summary_ref,
+        "gee_gpm_imerg_raw_summary_sha256": gpm_raw_summary_hash,
         "gee_feature_package_ref": OUTPUT_REFS["gee_feature_package_ref"],
         "gee_feature_package_status": feature_package_status,
         "gee_feature_package_segment_count": feature_package_segment_count,
@@ -1283,6 +1575,396 @@ def _prepare_gee_environment_artifacts(
         "environment_risk_derivative_status": derivatives_summary.get("status"),
         "environment_risk_derivative_counts": derivatives_summary.get("counts", {}),
         "environment_risk_derivative_headline": derivatives_summary.get("headline", ""),
+    }
+
+
+def _write_environment_synthesis_artifacts(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    route_summary: dict[str, Any],
+    bbox: dict[str, float],
+    prepared_at: str,
+    requested_cwa: bool,
+    requested_gee: bool,
+) -> dict[str, Any]:
+    env_dir = project_root / "outputs" / "environment"
+    env_dir.mkdir(parents=True, exist_ok=True)
+    source_refs = _environment_source_refs(project_root, project)
+    cwa_qpf = _load_project_ref_if_exists(
+        project_root,
+        project,
+        "cwa_qpf_corridor_summary_ref",
+    )
+    cwa_weather = _load_project_ref_if_exists(
+        project_root,
+        project,
+        "cwa_weather_evidence_ref",
+    )
+    smap = _load_project_ref_if_exists(
+        project_root,
+        project,
+        "smap_l4_corridor_summary_ref",
+    )
+    gpm = _load_project_ref_if_exists(
+        project_root,
+        project,
+        "gpm_imerg_corridor_summary_ref",
+    )
+    cwa_time = (
+        cwa_weather.get("temporal_coverage")
+        if isinstance(cwa_weather.get("temporal_coverage"), dict)
+        else cwa_qpf
+    )
+    if not isinstance(cwa_time, dict):
+        cwa_time = {}
+    missing_evidence = _environment_missing_evidence(
+        requested_cwa=requested_cwa,
+        requested_gee=requested_gee,
+        project=project,
+        cwa_qpf=cwa_qpf,
+        cwa_weather=cwa_weather,
+        smap=smap,
+        gpm=gpm,
+    )
+    package = {
+        "artifact_kind": "environment_evidence_package",
+        "schema_version": "scout_environment_evidence_package.v0",
+        "project_id": project.get("project_id"),
+        "route_name": route_summary.get("route_name"),
+        "generated_at": prepared_at,
+        "request_timestamp": prepared_at,
+        "generated_at_hour": _iso_hour(prepared_at),
+        "time_precision": "hour",
+        "timezone": "UTC",
+        "cwa_time_metadata": cwa_time,
+        "bbox_wgs84": bbox,
+        "status": "ready_with_data_gaps" if missing_evidence else "ready",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "human_review_required": True,
+        "source_refs": source_refs,
+        "missing_evidence": missing_evidence,
+        "temporal_coverage": {
+            "cwa": cwa_time,
+            "gee": {
+                "request_timestamp": prepared_at,
+                "request_timestamp_hour": _iso_hour(prepared_at),
+                "api_fetched_at": prepared_at
+                if project.get("gee_external_api_calls_made")
+                else None,
+                "api_fetched_at_hour": _iso_hour(prepared_at)
+                if project.get("gee_external_api_calls_made")
+                else None,
+                "time_precision": "hour",
+                "timezone": "UTC",
+            },
+        },
+        "provider_status": {
+            "cwa_external_api_calls_made": bool(
+                project.get("cwa_external_api_calls_made")
+            ),
+            "gee_external_api_calls_made": bool(
+                project.get("gee_external_api_calls_made")
+            ),
+            "gee_environment_status": project.get("gee_environment_status"),
+        },
+        "boundary": _environment_boundary(
+            external_calls_made=bool(
+                project.get("cwa_external_api_calls_made")
+                or project.get("gee_external_api_calls_made")
+            )
+        ),
+    }
+    factor_matrix = _environment_factor_matrix(
+        project=project,
+        route_summary=route_summary,
+        generated_at=prepared_at,
+        cwa_qpf=cwa_qpf,
+        cwa_weather=cwa_weather,
+        smap=smap,
+        gpm=gpm,
+        missing_evidence=missing_evidence,
+    )
+    go_no_go = _environment_go_no_go_review_draft(
+        project=project,
+        route_summary=route_summary,
+        generated_at=prepared_at,
+        source_refs=source_refs,
+        factor_matrix=factor_matrix,
+        missing_evidence=missing_evidence,
+    )
+    _write_json(env_dir / "environment_evidence_package.json", package)
+    _write_json(env_dir / "environment_factor_matrix.json", factor_matrix)
+    _write_json(env_dir / "go_no_go_review_draft.json", go_no_go)
+    return {
+        "environment_evidence_package_ref": OUTPUT_REFS[
+            "environment_evidence_package_ref"
+        ],
+        "environment_factor_matrix_ref": OUTPUT_REFS["environment_factor_matrix_ref"],
+        "go_no_go_review_draft_ref": OUTPUT_REFS["go_no_go_review_draft_ref"],
+    }
+
+
+def _environment_source_refs(project_root: Path, project: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    for key in (
+        "cwa_weather_evidence_ref",
+        "cwa_warnings_geojson_ref",
+        "cwa_observations_geojson_ref",
+        "cwa_qpf_grid_ref",
+        "cwa_qpf_route_timeline_ref",
+        "cwa_qpf_corridor_summary_ref",
+        "cwa_forecast_timeline_ref",
+        "cwa_astronomy_timeline_ref",
+        "cwa_tide_marine_timeline_ref",
+        "soil_moisture_grid_ref",
+        "smap_l4_timeseries_ref",
+        "smap_l4_corridor_summary_ref",
+        "antecedent_rain_grid_ref",
+        "gee_gpm_imerg_raw_summary_ref",
+        "gpm_imerg_timeseries_ref",
+        "gpm_imerg_corridor_summary_ref",
+    ):
+        value = project.get(key)
+        if isinstance(value, str) and value and (project_root / value).exists():
+            refs.append(value)
+    return refs
+
+
+def _load_project_ref_if_exists(
+    project_root: Path,
+    project: dict[str, Any],
+    ref_key: str,
+) -> dict[str, Any]:
+    value = project.get(ref_key)
+    if not isinstance(value, str) or not value:
+        return {}
+    path = project_root / value
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        payload = _load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _environment_missing_evidence(
+    *,
+    requested_cwa: bool,
+    requested_gee: bool,
+    project: dict[str, Any],
+    cwa_qpf: dict[str, Any],
+    cwa_weather: dict[str, Any],
+    smap: dict[str, Any],
+    gpm: dict[str, Any],
+) -> list[dict[str, Any]]:
+    missing: list[dict[str, Any]] = []
+    if requested_cwa and not cwa_weather:
+        missing.append({"source_kind": "cwa_weather_evidence", "reason": "missing"})
+    if requested_cwa and not cwa_qpf:
+        missing.append({"source_kind": "cwa_qpf_corridor_summary", "reason": "missing"})
+    if requested_cwa and not project.get("cwa_external_api_calls_made"):
+        missing.append(
+            {
+                "source_kind": "cwa_live_fetch",
+                "reason": "not_fetched_in_current_run",
+            }
+        )
+    if requested_gee and not smap:
+        missing.append({"source_kind": "gee_smap_l4_corridor_summary", "reason": "missing"})
+    if requested_gee and not gpm:
+        missing.append({"source_kind": "gee_gpm_imerg_corridor_summary", "reason": "missing"})
+    if requested_gee and project.get("gee_environment_status") != "fetched":
+        missing.append(
+            {
+                "source_kind": "gee_live_fetch",
+                "reason": str(project.get("gee_environment_status") or "not_fetched"),
+            }
+        )
+    return missing
+
+
+def _environment_factor_matrix(
+    *,
+    project: dict[str, Any],
+    route_summary: dict[str, Any],
+    generated_at: str,
+    cwa_qpf: dict[str, Any],
+    cwa_weather: dict[str, Any],
+    smap: dict[str, Any],
+    gpm: dict[str, Any],
+    missing_evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    smap_values = smap.get("values") if isinstance(smap.get("values"), dict) else {}
+    gpm_values = gpm.get("values") if isinstance(gpm.get("values"), dict) else {}
+    cwa_time = (
+        cwa_weather.get("temporal_coverage")
+        if isinstance(cwa_weather.get("temporal_coverage"), dict)
+        else cwa_qpf
+    )
+    if not isinstance(cwa_time, dict):
+        cwa_time = {}
+    return {
+        "artifact_kind": "environment_factor_matrix",
+        "schema_version": "scout_environment_factor_matrix.v0",
+        "project_id": project.get("project_id"),
+        "route_name": route_summary.get("route_name"),
+        "generated_at": generated_at,
+        "generated_at_hour": _iso_hour(generated_at),
+        "time_precision": "hour",
+        "timezone": "UTC",
+        "cwa_time_metadata": cwa_time,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "official_warning": {
+            "warning_count": project.get("cwa_warning_count", 0),
+            "source_ref": project.get("cwa_warnings_geojson_ref"),
+            "api_fetched_at_hour": cwa_time.get("api_fetched_at_hour"),
+        },
+        "rain_observed": {
+            "max_24h_mm": cwa_qpf.get("max_observed_24h_mm"),
+            "mean_24h_mm": cwa_qpf.get("mean_observed_24h_mm"),
+            "latest_observation_at_hour": cwa_time.get("latest_observation_at_hour"),
+            "source_ref": project.get("cwa_observations_geojson_ref"),
+        },
+        "rain_forecast": {
+            "max_rain_probability": cwa_qpf.get("max_rain_probability"),
+            "qpf_feature_count": project.get("cwa_qpf_feature_count", 0),
+            "forecast_valid_from_hour": cwa_time.get("forecast_valid_from_hour"),
+            "forecast_valid_until_hour": cwa_time.get("forecast_valid_until_hour"),
+            "source_ref": project.get("cwa_qpf_corridor_summary_ref"),
+        },
+        "qpf_accumulation": "forecast-derived route-area QPF candidates",
+        "qpf_peak_window": _qpf_peak_window_from_cwa_time(cwa_time),
+        "qpf_update_cadence": "current_run_cwa_fetch",
+        "qpf_lead_time": "derived_from_cwa_forecast_valid_window",
+        "qpf_uncertainty": "mountain_orographic_and_convective_uncertainty",
+        "severe_weather_intensified_operation": False,
+        "antecedent_wetness": {
+            "sm_surface_wetness": smap_values.get("sm_surface_wetness"),
+            "sm_rootzone_wetness": smap_values.get("sm_rootzone_wetness"),
+            "source_ref": project.get("smap_l4_corridor_summary_ref"),
+        },
+        "antecedent_rain": {
+            "last_3h_mm": gpm_values.get("last_3h_mm"),
+            "last_24h_mm": gpm_values.get("last_24h_mm"),
+            "last_72h_mm": gpm_values.get("last_72h_mm"),
+            "source_ref": project.get("gpm_imerg_corridor_summary_ref"),
+        },
+        "satellite_precipitation": {
+            "gee_environment_status": project.get("gee_environment_status"),
+            "api_fetched_at_hour": _iso_hour(generated_at)
+            if project.get("gee_external_api_calls_made")
+            else None,
+        },
+        "missing_evidence": missing_evidence,
+    }
+
+
+def _qpf_peak_window_from_cwa_time(cwa_time: dict[str, Any]) -> str | None:
+    start = cwa_time.get("forecast_valid_from_hour") or cwa_time.get("valid_from_hour")
+    end = cwa_time.get("forecast_valid_until_hour") or cwa_time.get("valid_until_hour")
+    if start and end:
+        return f"{start}/{end}"
+    return None
+
+
+def _environment_go_no_go_review_draft(
+    *,
+    project: dict[str, Any],
+    route_summary: dict[str, Any],
+    generated_at: str,
+    source_refs: list[str],
+    factor_matrix: dict[str, Any],
+    missing_evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    warning_candidates: list[dict[str, Any]] = []
+    if project.get("cwa_warning_count", 0):
+        warning_candidates.append(
+            {
+                "category": "official_warning",
+                "label": "CWA warning evidence requires human review",
+                "source_ref": project.get("cwa_warnings_geojson_ref"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    max_pop = (
+        factor_matrix.get("rain_forecast", {}).get("max_rain_probability")
+        if isinstance(factor_matrix.get("rain_forecast"), dict)
+        else None
+    )
+    if isinstance(max_pop, (int, float)) and max_pop >= 70:
+        warning_candidates.append(
+            {
+                "category": "qpf_review",
+                "label": "CWA forecast rain probability is elevated",
+                "value": max_pop,
+                "valid_from_hour": factor_matrix["rain_forecast"].get(
+                    "forecast_valid_from_hour"
+                ),
+                "valid_until_hour": factor_matrix["rain_forecast"].get(
+                    "forecast_valid_until_hour"
+                ),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    return {
+        "artifact_kind": "go_no_go_review_draft",
+        "schema_version": "scout_go_no_go_review_draft.v0",
+        "project_id": project.get("project_id"),
+        "route_name": route_summary.get("route_name"),
+        "generated_at": generated_at,
+        "generated_at_hour": _iso_hour(generated_at),
+        "time_precision": "hour",
+        "timezone": "UTC",
+        "cwa_time_metadata": factor_matrix.get("cwa_time_metadata", {}),
+        "review_window": {
+            "planned_start": None,
+            "planned_end": None,
+            "time_precision": "hour",
+        },
+        "decision_state": "hold" if missing_evidence else "needs_human_review",
+        "data_freshness_summary": {
+            "cwa_api_request_attempted_at_hour": project.get(
+                "cwa_api_request_attempted_at_hour"
+            ),
+            "cwa_api_fetched_at_hour": project.get("cwa_fetched_at_hour"),
+            "cwa_valid_from_hour": project.get("cwa_valid_from_hour"),
+            "cwa_valid_until_hour": project.get("cwa_valid_until_hour"),
+            "gee_api_fetched_at_hour": _iso_hour(generated_at)
+            if project.get("gee_external_api_calls_made")
+            else None,
+            "time_precision": "hour",
+        },
+        "blocker_candidates": [
+            {
+                "category": "missing_environment_evidence",
+                "label": item["source_kind"],
+                "reason": item["reason"],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "human_review_required": True,
+            }
+            for item in missing_evidence
+        ],
+        "warning_candidates": warning_candidates,
+        "missing_evidence": missing_evidence,
+        "evidence_source_refs": source_refs,
+        "operator_decision": None,
+        "operator_decision_at": None,
+        "human_review_required": True,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "boundary": _environment_boundary(
+            external_calls_made=bool(
+                project.get("cwa_external_api_calls_made")
+                or project.get("gee_external_api_calls_made")
+            )
+        ),
     }
 
 
@@ -1639,6 +2321,36 @@ def main(argv: list[str] | None = None) -> None:
         type=int,
         help="Optional tile limit for explicit imagery seeding.",
     )
+    parser.add_argument(
+        "--osm-pbf-path",
+        type=Path,
+        help=(
+            "Optional local .osm.pbf source. When supplied, Scout extracts the "
+            "route corridor locally with osmium and writes Overpass-compatible "
+            "OSM vector evidence without live network access."
+        ),
+    )
+    parser.add_argument(
+        "--osm-pbf-source-url",
+        help=(
+            "Original download URL for --osm-pbf-path, preserved in provenance "
+            "metadata. Example: http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
+        ),
+    )
+    parser.add_argument(
+        "--osm-pbf-cache-ttl-days",
+        type=int,
+        default=DEFAULT_OSM_PBF_CACHE_TTL_DAYS,
+        help=(
+            "Reuse a local --osm-pbf-path snapshot for this many days before "
+            "marking it refresh_required. Default: 30."
+        ),
+    )
+    parser.add_argument(
+        "--osmium-bin",
+        default="osmium",
+        help="osmium CLI binary used with --osm-pbf-path.",
+    )
     parser.add_argument("--prepared-at")
     args = parser.parse_args(argv)
 
@@ -1671,6 +2383,10 @@ def main(argv: list[str] | None = None) -> None:
             args.imagery_provider_allows_offline_prefetch
         ),
         imagery_seed_max_tiles=args.imagery_seed_max_tiles,
+        osm_pbf_path=args.osm_pbf_path,
+        osm_pbf_source_url=args.osm_pbf_source_url,
+        osm_pbf_cache_ttl_days=args.osm_pbf_cache_ttl_days,
+        osmium_bin=args.osmium_bin,
         prepared_at=args.prepared_at,
     )
     manifest = run_layer_preparation(request)
@@ -2046,6 +2762,68 @@ def _osm_layer_record(
         )
         if project.get(key)
     ]
+    render_extract_ref = project.get("osm_pbf_render_extract_ref")
+    render_manifest_ref = project.get("osm_pbf_render_extract_manifest_ref")
+    feature_index_ref = project.get("osm_pbf_feature_index_ref")
+    if isinstance(render_extract_ref, str) and render_extract_ref:
+        source_refs.append(
+            {
+                "ref": render_extract_ref,
+                "source_kind": project.get(
+                    "osm_pbf_render_extract_source_kind",
+                    "local_osm_pbf_render_extract",
+                ),
+                "project_ref_key": "osm_pbf_render_extract_ref",
+                "external_network_required": False,
+                "network_calls_made": False,
+                "cache_status": project.get("osm_pbf_cache_status", ""),
+                "refresh_required": bool(
+                    project.get("osm_pbf_refresh_required", False)
+                ),
+            }
+        )
+        output_refs["local_osm_render_extract_ref"] = render_extract_ref
+        output_refs["local_osm_render_extract_source_kind"] = project.get(
+            "osm_pbf_render_extract_source_kind",
+            "local_osm_pbf_render_extract",
+        )
+        output_refs["osm_rendering_policy"] = "workspace_local_osm_extract_available"
+        counts["local_osm_render_extract_feature_count"] = project.get(
+            "osm_pbf_render_extract_feature_count",
+            0,
+        )
+        status = "ready_from_project_ref"
+    if isinstance(feature_index_ref, str) and feature_index_ref:
+        source_refs.append(
+            {
+                "ref": feature_index_ref,
+                "source_kind": "local_osm_pbf_feature_index",
+                "project_ref_key": "osm_pbf_feature_index_ref",
+                "external_network_required": False,
+                "network_calls_made": False,
+            }
+        )
+        output_refs["local_osm_feature_index_ref"] = feature_index_ref
+        counts["local_osm_feature_index_feature_count"] = project.get(
+            "osm_pbf_feature_index_feature_count",
+            0,
+        )
+        counts["local_osm_feature_index_category_counts"] = project.get(
+            "osm_pbf_feature_index_category_counts",
+            {},
+        )
+        status = "ready_from_project_ref"
+    if isinstance(render_manifest_ref, str) and render_manifest_ref:
+        source_refs.append(
+            {
+                "ref": render_manifest_ref,
+                "source_kind": "local_osm_render_extract_manifest",
+                "project_ref_key": "osm_pbf_render_extract_manifest_ref",
+                "external_network_required": False,
+                "network_calls_made": False,
+            }
+        )
+        output_refs["local_osm_render_extract_manifest_ref"] = render_manifest_ref
     for ref_key, ref in overpass_refs:
         source_refs.append(
             {
@@ -2822,7 +3600,75 @@ def _overpass_layer_record(
 
     record["planned_request"] = planned_request
     record["route_corridor"] = route_corridor
-    if project.get("overpass_fetched_at"):
+    if project.get("osm_pbf_extracted_at"):
+        record["network_policy"] = _network_policy(request, network_calls_made=False)
+        record["lifecycle"]["fetch"]["status"] = "completed_local_osm_pbf_extract"
+        record["lifecycle"]["fetch"]["external_network_calls_made"] = False
+        record["lifecycle"]["fetch"]["fetched_at"] = project["osm_pbf_extracted_at"]
+        record["lifecycle"]["fetch"]["local_pbf_source_ref"] = project.get(
+            "osm_pbf_source_ref",
+            "",
+        )
+        record["lifecycle"]["fetch"]["local_pbf_source_url"] = project.get(
+            "osm_pbf_source_url",
+            "",
+        )
+        record["lifecycle"]["fetch"]["local_pbf_cache_status"] = project.get(
+            "osm_pbf_cache_status",
+            "",
+        )
+        record["lifecycle"]["fetch"]["local_pbf_cache_expires_at"] = project.get(
+            "osm_pbf_cache_expires_at",
+            "",
+        )
+        record["lifecycle"]["fetch"]["local_pbf_refresh_required"] = bool(
+            project.get("osm_pbf_refresh_required", False)
+        )
+        record["source_refs"].append(
+            {
+                "ref": project.get("osm_pbf_raw_payload_ref", ""),
+                "source_kind": "local_osm_pbf_osmjson_extract",
+                "external_network_required": False,
+                "network_calls_made": False,
+                "cache_status": project.get("osm_pbf_cache_status", ""),
+                "refresh_required": bool(
+                    project.get("osm_pbf_refresh_required", False)
+                ),
+            }
+        )
+        record["output_refs"]["local_osm_pbf_source_ref"] = project.get(
+            "osm_pbf_source_ref",
+            "",
+        )
+        record["output_refs"]["local_osm_pbf_source_url"] = project.get(
+            "osm_pbf_source_url",
+            "",
+        )
+        record["output_refs"]["local_osm_pbf_cache_status"] = project.get(
+            "osm_pbf_cache_status",
+            "",
+        )
+        record["output_refs"]["local_osm_pbf_cache_expires_at"] = project.get(
+            "osm_pbf_cache_expires_at",
+            "",
+        )
+        record["output_refs"]["local_osm_pbf_refresh_required"] = bool(
+            project.get("osm_pbf_refresh_required", False)
+        )
+        record.setdefault("policy_notes", []).append(
+            (
+                "OSM vector evidence was extracted from a local .osm.pbf route "
+                "corridor, not fetched from live Overpass."
+            )
+        )
+        if project.get("osm_pbf_refresh_required"):
+            record.setdefault("warnings", []).append(
+                (
+                    "Local OSM PBF cache is older than the configured TTL; "
+                    "refresh recommended before new pretrip fetch."
+                )
+            )
+    elif project.get("overpass_fetched_at"):
         record["network_policy"] = _network_policy(request, network_calls_made=True)
         record["lifecycle"]["fetch"]["status"] = "completed_live_fetch"
         record["lifecycle"]["fetch"]["external_network_calls_made"] = True
@@ -3548,6 +4394,8 @@ def _update_project_refs(
         "layer_preparation_updated_at": prepared_at,
         "layer_preparation_schema_version": LAYER_PREPARATION_VERSION,
     }
+    if updated.get("risk_score_generation_status") == "completed":
+        _clear_risk_generation_failure_metadata(updated)
     _write_json(project_path, updated)
 
 
@@ -4039,6 +4887,7 @@ def _sync_scout_risk_outputs(
 ) -> dict[str, Any]:
     if _workspace_scout_risk_outputs_ready(project_root=project_root, project=project):
         updated = _project_with_scout_risk_refs(project)
+        _clear_risk_generation_failure_metadata(updated)
         _stamp_synced_risk_output_provenance(project_root=project_root, project=updated)
         return _project_with_scout_risk_metadata_counts(
             project_root=project_root,
@@ -4080,6 +4929,7 @@ def _sync_scout_risk_outputs(
         updated[ref_key] = ref
 
     _stamp_synced_risk_output_provenance(project_root=project_root, project=updated)
+    _clear_risk_generation_failure_metadata(updated)
 
     return _project_with_scout_risk_metadata_counts(
         project_root=project_root,
@@ -4231,6 +5081,7 @@ def _generate_scout_risk_outputs_from_workspace(
         "risk_score_generation_status": "completed",
         "risk_score_generation_basis": "workspace_dtm_overpass_reference_gpx",
     }
+    _clear_risk_generation_failure_metadata(updated)
     _stamp_synced_risk_output_provenance(project_root=project_root, project=updated)
     return _project_with_scout_risk_metadata_counts(
         project_root=project_root,
@@ -4238,6 +5089,11 @@ def _generate_scout_risk_outputs_from_workspace(
         prepared_at=prepared_at,
         source_profile="scout_risk_engine_workspace_generated_overpass_route_profile",
     )
+
+
+def _clear_risk_generation_failure_metadata(project: dict[str, Any]) -> None:
+    for key in ("risk_score_generation_error", "risk_score_generation_skipped_reason"):
+        project.pop(key, None)
 
 
 def _ensure_scout_risk_package_importable() -> None:
@@ -5030,6 +5886,173 @@ def _environment_fetch_result(
     }
 
 
+def _iso_hour(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = _parse_iso_datetime(str(value))
+    except (TypeError, ValueError):
+        return None
+    return (
+        parsed.replace(minute=0, second=0, microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _iso_or_none(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    try:
+        return _parse_iso_datetime(str(value)).isoformat().replace("+00:00", "Z")
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _min_iso(values: list[Any]) -> str | None:
+    parsed: list[datetime] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        try:
+            parsed.append(_parse_iso_datetime(str(value)))
+        except (TypeError, ValueError):
+            continue
+    if not parsed:
+        return None
+    return min(parsed).isoformat().replace("+00:00", "Z")
+
+
+def _max_iso(values: list[Any]) -> str | None:
+    parsed: list[datetime] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        try:
+            parsed.append(_parse_iso_datetime(str(value)))
+        except (TypeError, ValueError):
+            continue
+    if not parsed:
+        return None
+    return max(parsed).isoformat().replace("+00:00", "Z")
+
+
+def _cwa_time_metadata(
+    *,
+    prepared_at: str,
+    api_request_attempted: bool,
+    external_calls_made: bool,
+    weather_points: list[dict[str, Any]],
+    warnings: list[dict[str, Any]],
+    observations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    forecast_valid_from = _min_iso([point.get("validFrom") for point in weather_points])
+    forecast_valid_until = _max_iso([point.get("validTo") for point in weather_points])
+    warning_valid_from = _min_iso([warning.get("valid_from") for warning in warnings])
+    warning_valid_until = _max_iso([warning.get("valid_to") for warning in warnings])
+    latest_observation_at = _max_iso([item.get("obs_time") for item in observations])
+    valid_from = _min_iso([forecast_valid_from, warning_valid_from, latest_observation_at])
+    valid_until = _max_iso([forecast_valid_until, warning_valid_until, latest_observation_at])
+    attempted_at = prepared_at if api_request_attempted else None
+    fetched_at = prepared_at if external_calls_made else None
+    metadata = {
+        "request_timestamp": prepared_at,
+        "request_timestamp_hour": _iso_hour(prepared_at),
+        "generated_at_hour": _iso_hour(prepared_at),
+        "api_request_attempted": api_request_attempted,
+        "api_request_attempted_at": attempted_at,
+        "api_request_attempted_at_hour": _iso_hour(attempted_at),
+        "api_fetched_at": fetched_at,
+        "api_fetched_at_hour": _iso_hour(fetched_at),
+        "fetched_at": fetched_at,
+        "fetched_at_hour": _iso_hour(fetched_at),
+        "forecast_valid_from": forecast_valid_from,
+        "forecast_valid_from_hour": _iso_hour(forecast_valid_from),
+        "forecast_valid_until": forecast_valid_until,
+        "forecast_valid_until_hour": _iso_hour(forecast_valid_until),
+        "warning_valid_from": warning_valid_from,
+        "warning_valid_from_hour": _iso_hour(warning_valid_from),
+        "warning_valid_until": warning_valid_until,
+        "warning_valid_until_hour": _iso_hour(warning_valid_until),
+        "latest_observation_at": latest_observation_at,
+        "latest_observation_at_hour": _iso_hour(latest_observation_at),
+        "valid_from": valid_from,
+        "valid_from_hour": _iso_hour(valid_from),
+        "valid_to": valid_until,
+        "valid_to_hour": _iso_hour(valid_until),
+        "valid_until": valid_until,
+        "valid_until_hour": _iso_hour(valid_until),
+        "time_precision": "hour",
+        "timezone": "UTC",
+        "time_metadata_required": True,
+    }
+    return metadata
+
+
+def _extract_cwa_time_metadata(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    for key in ("cwa_time_metadata", "temporal_coverage"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            cwa_value = value.get("cwa")
+            return dict(cwa_value if isinstance(cwa_value, dict) else value)
+    keys = (
+        "request_timestamp",
+        "request_timestamp_hour",
+        "generated_at_hour",
+        "api_request_attempted",
+        "api_request_attempted_at",
+        "api_request_attempted_at_hour",
+        "api_fetched_at",
+        "api_fetched_at_hour",
+        "fetched_at",
+        "fetched_at_hour",
+        "forecast_valid_from",
+        "forecast_valid_from_hour",
+        "forecast_valid_until",
+        "forecast_valid_until_hour",
+        "warning_valid_from",
+        "warning_valid_from_hour",
+        "warning_valid_until",
+        "warning_valid_until_hour",
+        "latest_observation_at",
+        "latest_observation_at_hour",
+        "valid_from",
+        "valid_from_hour",
+        "valid_to",
+        "valid_to_hour",
+        "valid_until",
+        "valid_until_hour",
+        "time_precision",
+        "timezone",
+        "time_metadata_required",
+    )
+    metadata = {key: payload.get(key) for key in keys if key in payload}
+    return metadata if metadata else {}
+
+
+def _project_cwa_time_metadata(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    fallback: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if isinstance(fallback, dict) and fallback:
+        return dict(fallback)
+    for ref_key in (
+        "cwa_weather_evidence_ref",
+        "cwa_qpf_corridor_summary_ref",
+        "cwa_qpf_grid_ref",
+        "cwa_forecast_timeline_ref",
+    ):
+        payload = _load_project_ref_if_exists(project_root, project, ref_key)
+        metadata = _extract_cwa_time_metadata(payload)
+        if metadata:
+            return metadata
+    return {}
+
+
 def _safe_exception_summary(exc: Exception) -> dict[str, Any]:
     return {
         "error_type": type(exc).__name__,
@@ -5049,6 +6072,21 @@ def _environment_boundary(*, external_calls_made: bool) -> dict[str, Any]:
         "source_mutation_allowed": False,
         "external_api_calls_made": external_calls_made,
         "secret_value_embedded": False,
+    }
+
+
+def _cwa_no_cache_policy() -> dict[str, Any]:
+    return {
+        "cacheable": False,
+        "ttl_seconds": 0,
+        "must_refetch_on_prepare": True,
+        "reuse_previous_values": False,
+        "artifact_role": "current_run_evidence_snapshot",
+        "reason": (
+            "CWA weather, warning, observation, and QPF evidence is "
+            "time-sensitive and must be refetched during every explicit map "
+            "preparation run."
+        ),
     }
 
 
@@ -5242,7 +6280,11 @@ def _cwa_station_coordinate(station: dict[str, Any]) -> tuple[float, float] | No
     return lat, lon
 
 
-def _cwa_observation_features(observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _cwa_observation_features(
+    observations: list[dict[str, Any]],
+    *,
+    time_metadata: dict[str, Any],
+) -> list[dict[str, Any]]:
     features: list[dict[str, Any]] = []
     for index, observation in enumerate(observations):
         lat = _as_float(observation.get("lat"))
@@ -5260,6 +6302,15 @@ def _cwa_observation_features(observations: list[dict[str, Any]]) -> list[dict[s
                     "layer_id": "cwa-weather",
                     "provider": "cwa_opendata",
                     "evidence_type": "cwa_rain_observation",
+                    "api_fetched_at": time_metadata.get("api_fetched_at"),
+                    "api_fetched_at_hour": time_metadata.get("api_fetched_at_hour"),
+                    "fetched_at": time_metadata.get("fetched_at"),
+                    "fetched_at_hour": time_metadata.get("fetched_at_hour"),
+                    "cwa_time_metadata": time_metadata,
+                    "obs_time_hour": _iso_hour(observation.get("obs_time")),
+                    "source_observed_at": observation.get("obs_time"),
+                    "source_observed_at_hour": _iso_hour(observation.get("obs_time")),
+                    "time_precision": "hour",
                 },
             }
         )
@@ -5272,6 +6323,7 @@ def _cwa_qpf_features_from_weather_points(
     bbox: dict[str, float],
     source_run_id: str,
     prepared_at: str,
+    time_metadata: dict[str, Any],
 ) -> list[dict[str, Any]]:
     if not weather_points:
         return []
@@ -5322,8 +6374,27 @@ def _cwa_qpf_features_from_weather_points(
                     "rainfall_mm": _as_float(point.get("rainfallMm")),
                     "weather_text": weather_text,
                     "valid_from": point.get("validFrom"),
+                    "valid_from_hour": _iso_hour(point.get("validFrom")),
                     "valid_to": point.get("validTo"),
+                    "valid_to_hour": _iso_hour(point.get("validTo")),
+                    "valid_until": point.get("validTo"),
+                    "valid_until_hour": _iso_hour(point.get("validTo")),
                     "prepared_at": prepared_at,
+                    "generated_at_hour": _iso_hour(prepared_at),
+                    "model_inference_generated_at": prepared_at,
+                    "model_inference_generated_at_hour": _iso_hour(prepared_at),
+                    "api_request_attempted_at": time_metadata.get(
+                        "api_request_attempted_at"
+                    ),
+                    "api_request_attempted_at_hour": time_metadata.get(
+                        "api_request_attempted_at_hour"
+                    ),
+                    "api_fetched_at": time_metadata.get("api_fetched_at"),
+                    "api_fetched_at_hour": time_metadata.get("api_fetched_at_hour"),
+                    "fetched_at": time_metadata.get("fetched_at"),
+                    "fetched_at_hour": time_metadata.get("fetched_at_hour"),
+                    "cwa_time_metadata": time_metadata,
+                    "time_precision": "hour",
                     "candidate_only": True,
                     "runtime_safety_truth": False,
                     "qpf_direct_grid": False,
@@ -5339,6 +6410,7 @@ def _cwa_warning_features(
     *,
     bbox: dict[str, float],
     source_run_id: str,
+    time_metadata: dict[str, Any],
 ) -> list[dict[str, Any]]:
     lat, lon = _bbox_center(bbox)
     features: list[dict[str, Any]] = []
@@ -5357,6 +6429,16 @@ def _cwa_warning_features(
                     "provider": "cwa_opendata",
                     "evidence_type": "cwa_weather_warning",
                     "label": warning.get("headline") or "CWA weather warning",
+                    "valid_from_hour": _iso_hour(warning.get("valid_from")),
+                    "valid_to_hour": _iso_hour(warning.get("valid_to")),
+                    "valid_until": warning.get("valid_to"),
+                    "valid_until_hour": _iso_hour(warning.get("valid_to")),
+                    "api_fetched_at": time_metadata.get("api_fetched_at"),
+                    "api_fetched_at_hour": time_metadata.get("api_fetched_at_hour"),
+                    "fetched_at": time_metadata.get("fetched_at"),
+                    "fetched_at_hour": time_metadata.get("fetched_at_hour"),
+                    "cwa_time_metadata": time_metadata,
+                    "time_precision": "hour",
                     "candidate_only": True,
                     "runtime_safety_truth": False,
                 },
@@ -5370,6 +6452,8 @@ def _cwa_qpf_timeline(
     *,
     project_id: str,
     generated_at: str,
+    time_metadata: dict[str, Any],
+    external_calls_made: bool,
 ) -> dict[str, Any]:
     items = []
     for feature in features:
@@ -5379,10 +6463,22 @@ def _cwa_qpf_timeline(
                 "event_id": props.get("source_id"),
                 "label": props.get("label"),
                 "valid_from": props.get("valid_from"),
+                "valid_from_hour": props.get("valid_from_hour"),
                 "valid_to": props.get("valid_to"),
+                "valid_to_hour": props.get("valid_to_hour"),
+                "valid_until": props.get("valid_until"),
+                "valid_until_hour": props.get("valid_until_hour"),
                 "rain_probability": props.get("rain_probability"),
                 "rainfall_mm": props.get("rainfall_mm"),
                 "weather_text": props.get("weather_text"),
+                "api_fetched_at": props.get("api_fetched_at"),
+                "api_fetched_at_hour": props.get("api_fetched_at_hour"),
+                "cwa_time_metadata": time_metadata,
+                "model_inference_generated_at": props.get("model_inference_generated_at"),
+                "model_inference_generated_at_hour": props.get(
+                    "model_inference_generated_at_hour"
+                ),
+                "time_precision": "hour",
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             }
@@ -5392,9 +6488,11 @@ def _cwa_qpf_timeline(
         "schema_version": LAYER_PREPARATION_VERSION,
         "project_id": project_id,
         "generated_at": generated_at,
+        "request_timestamp": generated_at,
+        **time_metadata,
         "item_count": len(items),
         "items": items,
-        "boundary": _environment_boundary(external_calls_made=False),
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
     }
 
 
@@ -5406,6 +6504,8 @@ def _cwa_qpf_corridor_summary(
     route_summary: dict[str, Any],
     generated_at: str,
     bbox: dict[str, float],
+    time_metadata: dict[str, Any],
+    external_calls_made: bool,
 ) -> dict[str, Any]:
     rain_probabilities = [
         value
@@ -5424,6 +6524,8 @@ def _cwa_qpf_corridor_summary(
         "project_id": project_id,
         "route_name": route_summary.get("route_name"),
         "generated_at": generated_at,
+        "request_timestamp": generated_at,
+        **time_metadata,
         "bbox_wgs84": bbox,
         "status": "ready" if features or observations else "not_available",
         "counts": {
@@ -5435,7 +6537,183 @@ def _cwa_qpf_corridor_summary(
         "mean_observed_24h_mm": statistics.mean(observed_24h) if observed_24h else None,
         "candidate_only": True,
         "runtime_safety_truth": False,
-        "boundary": _environment_boundary(external_calls_made=False),
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
+    }
+
+
+def _cwa_forecast_timeline(
+    weather_points: list[dict[str, Any]],
+    *,
+    project_id: str,
+    generated_at: str,
+    time_metadata: dict[str, Any],
+    external_calls_made: bool,
+) -> dict[str, Any]:
+    events: list[dict[str, Any]] = []
+    for index, point in enumerate(weather_points[:120]):
+        event = {
+            "event_id": f"cwa.forecast.{index:03d}",
+            "event": "township_or_area_forecast",
+            "dataset_id": point.get("source") or "F-C0032-001",
+            "area_name": point.get("areaName") or point.get("county"),
+            "valid_from": point.get("validFrom"),
+            "valid_from_hour": _iso_hour(point.get("validFrom")),
+            "valid_to": point.get("validTo"),
+            "valid_to_hour": _iso_hour(point.get("validTo")),
+            "valid_until": point.get("validTo"),
+            "valid_until_hour": _iso_hour(point.get("validTo")),
+            "rain_probability_percent": point.get("rainProbability"),
+            "rainfall_mm": point.get("rainfallMm"),
+            "weather_text": point.get("weatherText") or point.get("weather"),
+            "api_fetched_at": time_metadata.get("api_fetched_at"),
+            "api_fetched_at_hour": time_metadata.get("api_fetched_at_hour"),
+            "cwa_time_metadata": time_metadata,
+            "time_precision": "hour",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        events.append({key: value for key, value in event.items() if value is not None})
+    return {
+        "artifact_kind": "cwa_forecast_timeline",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "generated_at": generated_at,
+        "request_timestamp": generated_at,
+        **time_metadata,
+        "dataset_ids": sorted(
+            {str(point.get("source") or "F-C0032-001") for point in weather_points}
+        ),
+        "raw_response_hash": f"sha256:{_stable_projection_hash(weather_points)}",
+        "status": "ready" if events else "not_available",
+        "stale_risk": "low" if external_calls_made else "missing_source",
+        "event_count": len(events),
+        "events": events,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
+    }
+
+
+def _cwa_astronomy_timeline(
+    *,
+    project_id: str,
+    generated_at: str,
+    time_metadata: dict[str, Any],
+    external_calls_made: bool,
+) -> dict[str, Any]:
+    event = {
+        "event": "not_available_in_current_preparation",
+        "reason": (
+            "No CWA astronomy adapter is configured in this preparation step; "
+            "use weather_daylight_evidence for daylight review until a CWA "
+            "astronomy fetcher is wired."
+        ),
+        "api_fetched_at": time_metadata.get("api_fetched_at"),
+        "api_fetched_at_hour": time_metadata.get("api_fetched_at_hour"),
+        "cwa_time_metadata": time_metadata,
+        "generated_at": generated_at,
+        "generated_at_hour": _iso_hour(generated_at),
+        "time_precision": "hour",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    return {
+        "artifact_kind": "cwa_astronomy_timeline",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "generated_at": generated_at,
+        "request_timestamp": generated_at,
+        **time_metadata,
+        "dataset_ids": ["A-B0062-001", "A-B0063-001"],
+        "raw_response_hash": f"sha256:{_stable_projection_hash(event)}",
+        "status": "not_available",
+        "stale_risk": "low",
+        "events": [event],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
+    }
+
+
+def _cwa_tide_marine_timeline(
+    *,
+    project_id: str,
+    generated_at: str,
+    time_metadata: dict[str, Any],
+    external_calls_made: bool,
+) -> dict[str, Any]:
+    event = {
+        "event": "not_applicable_inland_route",
+        "reason": "Current route is treated as inland mountain pretrip planning.",
+        "api_fetched_at": time_metadata.get("api_fetched_at"),
+        "api_fetched_at_hour": time_metadata.get("api_fetched_at_hour"),
+        "cwa_time_metadata": time_metadata,
+        "generated_at": generated_at,
+        "generated_at_hour": _iso_hour(generated_at),
+        "time_precision": "hour",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    return {
+        "artifact_kind": "cwa_tide_marine_timeline",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "generated_at": generated_at,
+        "request_timestamp": generated_at,
+        **time_metadata,
+        "dataset_ids": ["F-A0021-001", "O-B0075-001"],
+        "raw_response_hash": f"sha256:{_stable_projection_hash(event)}",
+        "status": "not_applicable",
+        "stale_risk": "low",
+        "events": [event],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
+    }
+
+
+def _gee_gpm_imerg_raw_summary(
+    *,
+    raw_summary: dict[str, Any],
+    project_id: str,
+    generated_at: str,
+    status: str,
+    blockers: list[str],
+    external_calls_made: bool,
+    cache_policy: dict[str, Any],
+    raw_summary_ref: str,
+    raw_summary_sha256: str,
+) -> dict[str, Any]:
+    response = (
+        (raw_summary.get("responses") or {}).get("gpm_imerg_precipitation")
+        if isinstance(raw_summary.get("responses"), dict)
+        else None
+    )
+    result = response.get("result") if isinstance(response, dict) else {}
+    image_count = result.get("image_count") if isinstance(result, dict) else None
+    return {
+        "artifact_kind": "gee_gpm_imerg_raw_summary",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "project_id": project_id,
+        "provider": "google_earth_engine",
+        "collection_id": "NASA/GPM_L3/IMERG_V07",
+        "generated_at": generated_at,
+        "request_timestamp": generated_at,
+        "request_timestamp_hour": _iso_hour(generated_at),
+        "api_fetched_at": generated_at if external_calls_made else None,
+        "api_fetched_at_hour": _iso_hour(generated_at) if external_calls_made else None,
+        "status": status,
+        "blocker_reasons": blockers,
+        "image_count": image_count,
+        "source_raw_summary_ref": raw_summary_ref,
+        "source_raw_summary_sha256": raw_summary_sha256,
+        "raw_response_hash": f"sha256:{raw_summary_sha256}",
+        "cache_policy": cache_policy,
+        "stale_risk": "low" if external_calls_made else "missing_source",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "secret_value_embedded": False,
+        "boundary": _environment_boundary(external_calls_made=external_calls_made),
     }
 
 
@@ -6421,6 +7699,174 @@ def _write_layer_plan_files(project_root: Path, manifest: dict[str, Any]) -> Non
             project_root / planned_request["query_body_ref"],
             planned_request["query_body"],
         )
+
+
+def _extract_osm_pbf_raw_payload(
+    *,
+    pbf_path: Path,
+    bbox: dict[str, float],
+    raw_payload_path: Path,
+    osmium_bin: str,
+) -> tuple[bytes, dict[str, Any]]:
+    return extract_osm_pbf_to_osm_json(
+        pbf_path=pbf_path,
+        bbox_wgs84=bbox,
+        raw_osm_json_path=raw_payload_path,
+        osmium_bin=osmium_bin,
+    )
+
+
+def _osm_pbf_cache_metadata(
+    pbf_path: Path,
+    *,
+    source_url: str | None,
+    ttl_days: int,
+    now_iso: str,
+) -> dict[str, Any]:
+    if ttl_days <= 0:
+        raise ValueError("osm_pbf_cache_ttl_days must be greater than 0")
+    stat = pbf_path.stat()
+    now = _parse_iso_datetime(now_iso)
+    file_modified_at = datetime.fromtimestamp(stat.st_mtime, timezone.utc)
+    expires_at = file_modified_at + timedelta(days=ttl_days)
+    age_seconds = max(0.0, (now - file_modified_at).total_seconds())
+    refresh_required = now > expires_at
+    return {
+        "cache_policy": "download_once_reuse_until_ttl_expires",
+        "cache_ttl_days": ttl_days,
+        "cache_ttl_seconds": ttl_days * 24 * 60 * 60,
+        "cache_status": (
+            "stale_refresh_recommended" if refresh_required else "fresh"
+        ),
+        "refresh_required": refresh_required,
+        "source_url": source_url,
+        "source_url_semantics": "latest_at_download_time",
+        "local_path": pbf_path.as_posix(),
+        "file_modified_at": file_modified_at.isoformat(),
+        "downloaded_at": file_modified_at.isoformat(),
+        "age_days": round(age_seconds / (24 * 60 * 60), 3),
+        "checked_at": now.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "notes": (
+            "taiwan-latest.osm.pbf is treated as a local snapshot. Scout "
+            "reuses it within the TTL and only marks refresh_required after "
+            "the TTL expires."
+        ),
+    }
+
+
+def _local_osm_render_extract_metadata(
+    *,
+    project_root: Path,
+    extraction_plan: dict[str, Any],
+    raw_payload_ref: str,
+    raw_payload: dict[str, Any],
+    pbf_cache: dict[str, Any],
+) -> dict[str, Any]:
+    pbf_extract_ref: str | None = None
+    extracted_pbf_path_value = extraction_plan.get("extracted_pbf_path")
+    if isinstance(extracted_pbf_path_value, str) and extracted_pbf_path_value:
+        extracted_pbf_path = Path(extracted_pbf_path_value)
+        if extracted_pbf_path.is_file():
+            try:
+                pbf_extract_ref = extracted_pbf_path.resolve().relative_to(
+                    project_root.resolve()
+                ).as_posix()
+            except ValueError:
+                pbf_extract_ref = extracted_pbf_path.resolve().as_posix()
+    preferred_ref = pbf_extract_ref or raw_payload_ref
+    preferred_kind = (
+        "local_osm_pbf_route_bbox_extract"
+        if pbf_extract_ref
+        else "local_osm_filtered_osmjson_extract"
+    )
+    feature_count = len(raw_payload.get("elements", []))
+    manifest_ref = "normalized/map/osm_pbf_render_extract_manifest.json"
+    manifest = {
+        "artifact_kind": "pretrip_local_osm_render_extract_manifest",
+        "schema_version": LAYER_PREPARATION_VERSION,
+        "status": "ready",
+        "preferred_render_source_ref": preferred_ref,
+        "preferred_render_source_kind": preferred_kind,
+        "pbf_extract_ref": pbf_extract_ref,
+        "osmjson_extract_ref": raw_payload_ref,
+        "feature_count": feature_count,
+        "source_plan": extraction_plan,
+        "pbf_cache": pbf_cache,
+        "rendering_scope": "route_bbox_osm_vector_extract",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "notes": (
+            "Small workspace-local OSM extract prepared from the cached Taiwan "
+            "PBF. It can support future OSM layer vector rendering without "
+            "reading the full-region PBF at render time."
+        ),
+    }
+    _write_json(project_root / manifest_ref, manifest)
+    return {
+        "manifest_ref": manifest_ref,
+        "preferred_render_source_ref": preferred_ref,
+        "preferred_render_source_kind": preferred_kind,
+        "pbf_extract_ref": pbf_extract_ref,
+        "feature_count": feature_count,
+    }
+
+
+def _export_local_osm_render_geojson(
+    *,
+    project_root: Path,
+    extraction_plan: dict[str, Any],
+    osmium_bin: str,
+) -> dict[str, Any] | None:
+    extracted_pbf_path_value = extraction_plan.get("extracted_pbf_path")
+    if not isinstance(extracted_pbf_path_value, str) or not extracted_pbf_path_value:
+        return None
+    extracted_pbf_path = Path(extracted_pbf_path_value)
+    if not extracted_pbf_path.is_file():
+        return None
+    osmium_path = Path(osmium_bin).expanduser()
+    if not osmium_path.is_file() and shutil.which(osmium_bin) is None:
+        return None
+    output_ref = "normalized/map/osm_pbf_route_bbox_full.geojson"
+    output_path = project_root / output_ref
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        osmium_bin,
+        "export",
+        "--overwrite",
+        "--output-format",
+        "geojson",
+        "--geometry-types",
+        "point,linestring,polygon",
+        "--attributes",
+        "type,id",
+        "--output",
+        output_path.as_posix(),
+        extracted_pbf_path.as_posix(),
+    ]
+    try:
+        subprocess.run(
+            command,
+            check=True,
+            cwd=project_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    if not output_path.is_file():
+        return None
+    try:
+        payload = _load_json(output_path)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return {
+        "ref": output_ref,
+        "path": output_path,
+        "payload": payload,
+        "command": command,
+    }
 
 
 def _write_planned_overpass_evidence(
@@ -8153,6 +9599,8 @@ def _validate_request(request: LayerPreparationRequest) -> None:
         raise ValueError("imagery_min_zoom must be <= imagery_max_zoom")
     if request.imagery_seed_max_tiles is not None and request.imagery_seed_max_tiles < 1:
         raise ValueError("imagery_seed_max_tiles must be positive when set")
+    if request.osm_pbf_cache_ttl_days <= 0:
+        raise ValueError("osm_pbf_cache_ttl_days must be greater than 0")
 
 
 def _validate_project_id(project_id: str) -> None:
@@ -8270,8 +9718,26 @@ def _sha256_json(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _stable_projection_hash(payload: Any) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_iso_datetime(value: str) -> datetime:
+    normalized = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _job_timestamp(value: str) -> str:

@@ -5409,6 +5409,67 @@
         label: item.label || item.display_mileage_label || item.source_id,
         sublabel: `${item.source_kind || "mileage"} | ${item.route_projection_status || "projection-review"} | ${Math.round(item.route_distance_m || 0)}m`
       }), false, "timeline");
+      const overpassGroups = view.overpass_evidence?.category_groups || {};
+      const overpassSummary = item => `${item.candidate_type || item.feature_type || "overpass"} | ${item.osm_type || "object"}/${item.osm_id || "-"} | ${item.confidence || "-"}`;
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Trail Corridors", overpassGroups.overpass_trail_corridor || view.overpass_evidence?.corridor_candidates || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Hiking Routes", overpassGroups.overpass_hiking_route || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Shelters", overpassGroups.overpass_shelter || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Water Sources", overpassGroups.overpass_water_source || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Parking", overpassGroups.overpass_parking || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Peaks", overpassGroups.overpass_peak || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Terrain Risk", overpassGroups.overpass_terrain_risk || view.overpass_evidence?.hazard_candidates || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Other POI", overpassGroups.overpass_other_poi || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      const osmPbfItems = view.osm_pbf_evidence?.items || [];
+      const osmPbfCategory = categoryId => osmPbfItems.filter(item => item.category_id === categoryId);
+      const osmPbfSummary = item => `${item.feature_type || "osm"} | ${item.geometry_type || "-"} | ${item.osm_type || "object"}/${item.osm_id || "-"}`;
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Trail Network", osmPbfCategory("trail_network"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Milestones", osmPbfCategory("milestone_route_marker"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "timeline");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Mobile", osmPbfCategory("mobile_signal"), item => ({
+        label: item.label || "通訊點",
+        sublabel: osmPbfSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Peaks / Terrain", [...osmPbfCategory("peak_terrain"), ...osmPbfCategory("terrain_risk_context")], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM POI / Amenities", osmPbfCategory("amenity_poi"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Water / Hydrology", osmPbfCategory("water_hydrology"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "risk");
       appendEvidenceTreeGroup(tree, "default", "AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
         label: item.display_label || item.map_label || item.route_note_summary || item.candidate_id,
         sublabel: `${item.checkpoint_type || "-"} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`

@@ -760,6 +760,13 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("overpass-corridor", response.text)
         self.assertIn("overpass-hazard", response.text)
         self.assertIn("overpass-poi", response.text)
+        self.assertIn(
+            "const overpassGroups = view.overpass_evidence?.category_groups",
+            response.text,
+        )
+        self.assertIn("Overpass Trail Corridors", response.text)
+        self.assertIn("Overpass Water Sources", response.text)
+        self.assertIn("Overpass Terrain Risk", response.text)
         self.assertIn('data-layer="boss-points" checked> Boss</label>', response.text)
         self.assertIn("view.boss_points?.boss_points || []", response.text)
         self.assertIn(

@@ -650,7 +650,10 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
 def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     html = PAGE.read_text(encoding="utf-8")
 
-    assert 'const PROJECT_ID = "chilai_nanhua_day1"' in html
+    assert 'const DEFAULT_PROJECT_ID = "chilai_nanhua_day1"' in html
+    assert "new URLSearchParams(window.location.search).get(\"projectId\")" in html
+    assert "const PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PROJECT_ID_PARAM)" in html
+    assert "encodeURIComponent(PROJECT_ID)" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}" in html
     assert "apiBase()" in html
     assert 'data-layer="imagery"' in html
@@ -688,7 +691,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "RASTER_TILE_CACHE_BUST" in html
     assert "function rasterTileCacheBustedUrl" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png" in html
-    assert "/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent" in html
+    assert "/admin/tiles/osm/{z}/{x}/{y}.png?fallback=offline" in html
     assert "function osmTileTemplate" in html
     assert "function isLocalOsmTileMode" in html
     assert 'return requested === "public" ? OSM_PUBLIC_TILE_URL_TEMPLATE : OSM_LOCAL_TILE_URL_TEMPLATE' in html
@@ -753,7 +756,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "class: \"raster-tile\"" in html
     assert "data-raster-tile" in html
     assert "function renderOsmBasemap" in html
-    assert "if (!isLocalOsmTileMode())" in html
+    assert 'group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));' in html
     assert "function osmTileCoverage" in html
     assert 'el("image"' in html
     assert "class: \"osm-tile\"" in html
@@ -877,6 +880,12 @@ def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():
     assert "overpass-corridor" in html
     assert "overpass-hazard" in html
     assert "overpass-poi" in html
+    assert "const overpassGroups = view.overpass_evidence?.category_groups" in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Trail Corridors"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Shelters"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Water Sources"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Peaks"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Terrain Risk"' in html
     assert "view.overpass_evidence?.corridor_candidates" in html
     assert "view.overpass_evidence?.hazard_candidates" in html
     assert "view.overpass_evidence?.poi_candidates" in html

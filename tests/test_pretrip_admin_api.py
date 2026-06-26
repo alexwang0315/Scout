@@ -368,6 +368,14 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
                                 {"lat": 23.91, "lon": 121.11},
                             ],
                             "score": 0.8,
+                            "cwa_time_metadata": {
+                                "api_fetched_at_hour": "2026-06-26T03:00:00Z",
+                                "valid_until_hour": "2026-06-27T18:00:00Z",
+                                "time_precision": "hour",
+                                "timezone": "UTC",
+                            },
+                            "cwa_api_fetched_at_hour": "2026-06-26T03:00:00Z",
+                            "cwa_valid_until_hour": "2026-06-27T18:00:00Z",
                             "candidate_only": True,
                             "runtime_safety_truth": False,
                         }
@@ -456,12 +464,12 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
     )
 
     segment_geometry = compact["segments"][0]["display_geometry"]
-    assert segment_geometry["display_point_count"] == 8
+    assert segment_geometry["display_point_count"] == 4
     assert segment_geometry["source_display_point_count"] == len(dense_points)
     assert "coordinates" not in segment_geometry
     assert "overpass_projection" not in segment_geometry["coordinate_segments"][0][0]
     assert compact["segments"][0]["overpass_projection"]["status"] == "aligned"
-    assert len(compact["route_notes"]["candidates"]) == 500
+    assert len(compact["route_notes"]["candidates"]) == 120
     assert compact["route_notes"]["source_candidate_count"] == 501
     assert compact["route_notes"]["admin_payload_truncated"] is True
     assert compact["overpass_evidence"]["corridor_candidates"][0]["corridor"][
@@ -481,6 +489,12 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
     assert derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
         "coordinates"
     ]
+    assert derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
+        "cwa_api_fetched_at_hour"
+    ] == "2026-06-26T03:00:00Z"
+    assert derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
+        "cwa_time_metadata"
+    ]["valid_until_hour"] == "2026-06-27T18:00:00Z"
     assert compact["risk_score"]["points"][0]["pretrip_risk"] == 50
     assert compact["risk_ribbon"]["segments"][0]["coordinates"]
     assert compact["risk_heatmap"]["segments"][0]["coordinates"]
