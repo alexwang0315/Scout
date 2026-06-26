@@ -76,7 +76,7 @@ def build_admin_case_view(
     incident_store_path: Path | None = None,
     pretrip_project_root: Path | None = None,
 ) -> dict[str, Any]:
-    if case_id == PRETRIP_CASE_ID:
+    if case_id == PRETRIP_CASE_ID or pretrip_project_root is not None:
         return _build_pretrip_admin_case_view(
             case_id,
             root=root,

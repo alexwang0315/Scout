@@ -427,6 +427,25 @@
       pointer-events: visiblePainted;
     }
     .osm-tile { opacity: .86; image-rendering: auto; }
+    .osm-pbf-area { stroke: rgba(95, 107, 91, .36); stroke-width: .7; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-area.forest { fill: #b8d9aa; }
+    .osm-pbf-area.water { fill: #b8dff0; stroke: rgba(54, 139, 184, .44); }
+    .osm-pbf-area.built { fill: #dedbd0; }
+    .osm-pbf-area.farmland { fill: #eadf9f; }
+    .osm-pbf-area.default { fill: #eef1df; }
+    .osm-pbf-line { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-line.trail { stroke: #dc5967; stroke-width: 1.9; }
+    .osm-pbf-line.track { stroke: #ffffff; stroke-width: 3.4; }
+    .osm-pbf-line.road { stroke: #f8f6ee; stroke-width: 3.8; }
+    .osm-pbf-line.waterway { stroke: #268bd2; stroke-width: 1.25; }
+    .osm-pbf-line.infrastructure { stroke: #8a8f99; stroke-width: 1.15; stroke-dasharray: 6 4; }
+    .osm-pbf-line.default { stroke: #a36b2c; stroke-width: 1.2; }
+    .osm-pbf-point { fill: #5a5f63; stroke: rgba(255, 255, 255, .92); stroke-width: 1; opacity: .86; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-point.milestone { fill: #8c6a21; stroke: #fff8df; stroke-width: 1.1; }
+    .osm-pbf-point.mobile { fill: #0077b6; stroke: #e6f6ff; stroke-width: 1.1; }
+    .osm-pbf-point.peak { fill: #a46020; stroke: #fff6e7; stroke-width: 1.1; }
+    .osm-pbf-point.poi { fill: #5a5f63; stroke: white; stroke-width: 1; }
+    .osm-pbf-label { fill: #4a4a4a; font-size: 11px; font-weight: 650; paint-order: stroke; stroke: rgba(255, 255, 255, .9); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
     .osm-attribution {
       fill: #405064;
       font-size: 11px;
@@ -1618,7 +1637,7 @@
                     <label title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>
                     <label title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>
                     <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
-                    <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass"> Overpass</label>
+                    <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
                     <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
                     <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks"> Ref GPX</label>
                     <label title="Retreat route layer"><input type="checkbox" data-layer="retreat" checked> Retreat</label>
@@ -2130,7 +2149,9 @@
       reviewQueueCursor: -1,
       selectedReviewCandidateRefs: new Set(),
       routeNoteDraftDisposition: "",
-      weatherOverlay: null
+      weatherOverlay: null,
+      osmPbfVector: null,
+      osmPbfVectorStatus: "not_loaded"
     };
     const svg = document.getElementById("map");
     const hoverHint = document.getElementById("hoverHint");
@@ -2424,6 +2445,103 @@
         .filter(Boolean)
         .join(" ");
     }
+    function geoJsonCoordinateToPoint(coordinate) {
+      if (!Array.isArray(coordinate) || coordinate.length < 2) return null;
+      const lon = Number(coordinate[0]);
+      const lat = Number(coordinate[1]);
+      return Number.isFinite(lat) && Number.isFinite(lon) ? {lat, lon} : null;
+    }
+    function geoJsonLineToPath(bounds, coordinates) {
+      return pathFromCoords(bounds, (coordinates || []).map(geoJsonCoordinateToPoint).filter(Boolean));
+    }
+    function geoJsonPolygonToPath(bounds, rings) {
+      return (rings || [])
+        .map(ring => {
+          const d = geoJsonLineToPath(bounds, ring);
+          return d ? `${d} Z` : "";
+        })
+        .filter(Boolean)
+        .join(" ");
+    }
+    function pathFromGeoJsonGeometry(bounds, geometry) {
+      if (!geometry) return "";
+      if (geometry.type === "LineString") return geoJsonLineToPath(bounds, geometry.coordinates);
+      if (geometry.type === "MultiLineString") return (geometry.coordinates || []).map(line => geoJsonLineToPath(bounds, line)).filter(Boolean).join(" ");
+      if (geometry.type === "Polygon") return geoJsonPolygonToPath(bounds, geometry.coordinates);
+      if (geometry.type === "MultiPolygon") return (geometry.coordinates || []).map(polygon => geoJsonPolygonToPath(bounds, polygon)).filter(Boolean).join(" ");
+      return "";
+    }
+    function osmPbfFeatureId(feature) {
+      const props = feature?.properties || {};
+      return `osm_pbf.${props["@type"] || "object"}.${props["@id"] || props.id || "unknown"}`;
+    }
+    function osmPbfFeatureLabel(feature) {
+      const props = feature?.properties || {};
+      return props["name:zh"] || props.name || props.ref || props.distance || props["@id"] || "OSM feature";
+    }
+    function osmPbfFeatureItem(feature, category) {
+      const props = feature?.properties || {};
+      const geometry = feature?.geometry || {};
+      const point = geometry.type === "Point"
+        ? geoJsonCoordinateToPoint(geometry.coordinates)
+        : null;
+      return {
+        candidate_id: osmPbfFeatureId(feature),
+        source_id: osmPbfFeatureId(feature),
+        label: osmPbfFeatureLabel(feature),
+        evidence_type: "pretrip_local_osm_pbf_vector_feature",
+        category_id: category,
+        feature_type: geometry.type || "geometry",
+        osm_type: props["@type"],
+        osm_id: props["@id"],
+        tags: props,
+        lat: point?.lat,
+        lon: point?.lon,
+        source_path: "normalized/map/osm_pbf_route_bbox_full.geojson",
+        candidate_only: true,
+        runtime_safety_truth: false
+      };
+    }
+    function osmPbfStyleCategory(feature) {
+      const props = feature?.properties || {};
+      const highway = String(props.highway || "");
+      const natural = String(props.natural || "");
+      const landuse = String(props.landuse || "");
+      const amenity = String(props.amenity || "");
+      const information = String(props.information || "");
+      if (props.waterway || natural === "water" || props.water) return "water";
+      if (highway === "milestone" || information === "route_marker" || props.distance) return "milestone";
+      if (information === "mobile") return "mobile";
+      if (natural === "peak") return "peak";
+      if (["path", "footway", "steps"].includes(highway)) return "trail";
+      if (["track", "service"].includes(highway)) return "track";
+      if (highway) return "road";
+      if (natural === "wood" || landuse === "forest") return "forest";
+      if (landuse === "farmland") return "farmland";
+      if (props.building || amenity) return "built";
+      if (props.power || props.man_made) return "infrastructure";
+      return "default";
+    }
+    function osmPbfPointRadius(category) {
+      if (category === "milestone") return 3.2;
+      if (category === "mobile") return 3.8;
+      if (category === "peak") return 4.2;
+      return 2.6;
+    }
+    function appendOsmPbfLabel(group, bounds, feature, x, y, category, index) {
+      if (index > 120) return;
+      const label = osmPbfFeatureLabel(feature);
+      if (!label || label === "OSM feature") return;
+      if (!["milestone", "mobile", "peak"].includes(category) && index % 9 !== 0) return;
+      group.appendChild(el("text", {
+        x: (x + 6).toFixed(2),
+        y: (y - 5).toFixed(2),
+        class: "osm-pbf-label",
+        "data-osm-pbf-label": "true",
+        "data-anchor-x": x.toFixed(2),
+        "data-anchor-y": y.toFixed(2)
+      }, label));
+    }
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
     }
@@ -2477,6 +2595,11 @@
       const resolvedLayerId = layer.layer_id || "imagery";
       const definition = rasterSourceDefinitionFor(resolvedLayerId, layer);
       return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y));
+    }
+    function localOsmPbfVectorUrl(view) {
+      const layer = mapLayerById(view, "osm");
+      if (!layer.local_osm_render_geojson_ref && !layer.local_osm_feature_index_ref) return "";
+      return `${apiBase()}/admin/pretrip/projects/${encodeURIComponent(PROJECT_ID)}/osm-pbf-vector.geojson?cb=${encodeURIComponent(OSM_TILE_CACHE_BUST)}`;
     }
     function tileRangeForZoom(bounds, zoom) {
       const maxIndex = (2 ** zoom) - 1;
@@ -2594,7 +2717,7 @@
         group.appendChild(image);
       });
     }
-    function renderOsmBasemap(group, bounds, width, height, coverageBounds = bounds) {
+    function renderOsmTileFallback(group, bounds, width, height, coverageBounds = bounds) {
       group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));
       osmTileCoverage(coverageBounds).forEach(tile => {
         const image = el("image", {
@@ -2608,6 +2731,63 @@
         group.appendChild(image);
       });
       group.appendChild(el("text", {x: width - 10, y: height - 10, "text-anchor": "end", class: "osm-attribution"}, OSM_ATTRIBUTION));
+    }
+    function renderOsmPbfVector(group, view, bounds, width, height) {
+      const features = state.osmPbfVector?.features || [];
+      if (!features.length) return false;
+      group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));
+      const areaGroup = el("g", {"data-osm-pbf-kind": "areas"});
+      const lineGroup = el("g", {"data-osm-pbf-kind": "lines"});
+      const pointGroup = el("g", {"data-osm-pbf-kind": "points"});
+      const labelGroup = el("g", {"data-osm-pbf-kind": "labels"});
+      let labelIndex = 0;
+      features.forEach(feature => {
+        const geometry = feature?.geometry;
+        if (!geometry) return;
+        const category = osmPbfStyleCategory(feature);
+        const item = osmPbfFeatureItem(feature, category);
+        if (["Polygon", "MultiPolygon"].includes(geometry.type)) {
+          const d = pathFromGeoJsonGeometry(bounds, geometry);
+          if (!d) return;
+          const path = el("path", {d, class: `osm-pbf-area ${category}`});
+          attachEvidence(path, item);
+          areaGroup.appendChild(path);
+          return;
+        }
+        if (["LineString", "MultiLineString"].includes(geometry.type)) {
+          const d = pathFromGeoJsonGeometry(bounds, geometry);
+          if (!d) return;
+          const path = el("path", {d, class: `osm-pbf-line ${category}`});
+          attachEvidence(path, item);
+          lineGroup.appendChild(path);
+          return;
+        }
+        if (geometry.type === "Point") {
+          const point = geoJsonCoordinateToPoint(geometry.coordinates);
+          if (!point) return;
+          const [x, y] = project(bounds, point.lat, point.lon);
+          const circle = el("circle", {
+            cx: x.toFixed(2),
+            cy: y.toFixed(2),
+            r: osmPbfPointRadius(category),
+            class: `osm-pbf-point ${category}`
+          });
+          attachEvidence(circle, item);
+          pointGroup.appendChild(circle);
+          appendOsmPbfLabel(labelGroup, bounds, feature, x, y, category, labelIndex);
+          labelIndex += 1;
+        }
+      });
+      group.appendChild(areaGroup);
+      group.appendChild(lineGroup);
+      group.appendChild(pointGroup);
+      group.appendChild(labelGroup);
+      group.appendChild(el("text", {x: width - 10, y: height - 10, "text-anchor": "end", class: "osm-attribution"}, "Scout local OSM PBF vector"));
+      return true;
+    }
+    function renderOsmBasemap(group, view, bounds, width, height, coverageBounds = bounds) {
+      if (renderOsmPbfVector(group, view, bounds, width, height)) return;
+      renderOsmTileFallback(group, bounds, width, height, coverageBounds);
     }
     function layerInputChecked(layerId) {
       const input = document.querySelector(`input[data-layer="${selectorValue(layerId)}"]`);
@@ -3505,7 +3685,7 @@
       const osmGroup = svg.querySelector('[data-layer-group="osm"]');
       if (osmGroup) {
         osmGroup.replaceChildren();
-        if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
+        if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
       }
     }
     function applyMapViewport() {
@@ -3604,6 +3784,19 @@
         if (Number.isFinite(baseRadius)) {
           circle.setAttribute("r", Math.max(mapMarkerRadiusPx(circle, scale, baseRadius) / scale, 0.001).toFixed(4));
         }
+      });
+      syncOsmPbfLabelScale(scale);
+    }
+    function syncOsmPbfLabelScale(scale) {
+      const unitsPerPx = 1 / Math.max(scale, 1);
+      svg.querySelectorAll('[data-osm-pbf-label="true"]').forEach(label => {
+        const anchorX = Number(label.dataset.anchorX);
+        const anchorY = Number(label.dataset.anchorY);
+        if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
+        label.setAttribute("x", (anchorX + 6 * unitsPerPx).toFixed(3));
+        label.setAttribute("y", (anchorY - 5 * unitsPerPx).toFixed(3));
+        label.setAttribute("font-size", (11 * unitsPerPx).toFixed(3));
+        label.setAttribute("stroke-width", (3 * unitsPerPx).toFixed(3));
       });
     }
     function clampMapPan() {
@@ -5672,7 +5865,7 @@
       });
 
       const osmGroup = el("g", {"data-layer-group": "osm"});
-      if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
+      if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
       svg.appendChild(osmGroup);
 
       const corridorGroup = el("g", {"data-layer-group": "corridors"});
@@ -6623,6 +6816,7 @@
         const enabled = layerInputs.filter(input => input.checked).length;
         summary.textContent = `${enabled}/${layerInputs.length}`;
       }
+      syncMapMarkerScale();
       updatePointLabels();
       highlightMapFor(state.selected);
       highlightTreeNode(state.selected);
@@ -6821,6 +7015,26 @@
       const weatherOverlayResponse = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/weather-overlay`);
       state.weatherOverlay = weatherOverlayResponse.ok ? await weatherOverlayResponse.json() : null;
       renderMap(view);
+      await loadOsmPbfVectorLayer(view);
+    }
+    async function loadOsmPbfVectorLayer(view) {
+      const url = localOsmPbfVectorUrl(view);
+      if (!url) {
+        state.osmPbfVector = null;
+        state.osmPbfVectorStatus = "missing_ref";
+        return;
+      }
+      try {
+        state.osmPbfVectorStatus = "loading";
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        state.osmPbfVector = await response.json();
+        state.osmPbfVectorStatus = "ready";
+        renderMap(view);
+      } catch (error) {
+        state.osmPbfVector = null;
+        state.osmPbfVectorStatus = `failed: ${error.message}`;
+      }
     }
     async function load() {
       bindControls();

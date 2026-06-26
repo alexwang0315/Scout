@@ -1244,6 +1244,25 @@
       image-rendering: auto;
     }
     .raster-tile { opacity: .92; }
+    .osm-pbf-area { stroke: rgba(95, 107, 91, .36); stroke-width: .7; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-area.forest { fill: #b8d9aa; }
+    .osm-pbf-area.water { fill: #b8dff0; stroke: rgba(54, 139, 184, .44); }
+    .osm-pbf-area.built { fill: #dedbd0; }
+    .osm-pbf-area.farmland { fill: #eadf9f; }
+    .osm-pbf-area.default { fill: #eef1df; }
+    .osm-pbf-line { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-line.trail { stroke: #dc5967; stroke-width: 1.9; }
+    .osm-pbf-line.track { stroke: #ffffff; stroke-width: 3.4; }
+    .osm-pbf-line.road { stroke: #f8f6ee; stroke-width: 3.8; }
+    .osm-pbf-line.waterway { stroke: #268bd2; stroke-width: 1.25; }
+    .osm-pbf-line.infrastructure { stroke: #8a8f99; stroke-width: 1.15; stroke-dasharray: 6 4; }
+    .osm-pbf-line.default { stroke: #a36b2c; stroke-width: 1.2; }
+    .osm-pbf-point { fill: #5a5f63; stroke: rgba(255, 255, 255, .92); stroke-width: 1; opacity: .86; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-point.milestone { fill: #8c6a21; stroke: #fff8df; stroke-width: 1.1; }
+    .osm-pbf-point.mobile { fill: #0077b6; stroke: #e6f6ff; stroke-width: 1.1; }
+    .osm-pbf-point.peak { fill: #a46020; stroke: #fff6e7; stroke-width: 1.1; }
+    .osm-pbf-point.poi { fill: #5a5f63; stroke: white; stroke-width: 1; }
+    .osm-pbf-label { fill: #4a4a4a; font-size: 11px; font-weight: 650; paint-order: stroke; stroke: rgba(255, 255, 255, .9); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
     .terrain-raster-overlay {
       image-rendering: pixelated;
       pointer-events: visiblePainted;
@@ -2218,7 +2237,7 @@
                       <label title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>
                       <label title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>
                       <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
-                      <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass"> Overpass</label>
+                      <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
                       <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
                       <label title="Reference GPX tracks"><input type="checkbox" data-layer="reference-tracks"> Ref GPX</label>
                       <label title="Retreat route layer"><input type="checkbox" data-layer="retreat" checked> Retreat</label>
@@ -2359,8 +2378,8 @@
             <section class="assistant-sources" aria-label="Assistant sources">
               <h3>Sources</h3>
               <ul id="assistantSourcesList" class="assistant-list">
-                <li>/admin/pretrip/projects/chilai_nanhua_day1/debug-projection</li>
-                <li>/admin/pretrip/projects/chilai_nanhua_day1/debug-projection-events</li>
+                <li>/admin/pretrip/projects/{projectId}/debug-projection</li>
+                <li>/admin/pretrip/projects/{projectId}/debug-projection-events</li>
                 <li>/debug/events</li>
                 <li>/debug/state</li>
                 <li>/debug/messages</li>
@@ -2377,9 +2396,13 @@
 
   <script src="/admin/scout-assistant-ui.js"></script>
   <script>
-    const PRETRIP_PROJECT_ID = "chilai_nanhua_day1";
-    const PRETRIP_DEBUG_PROJECTION_PATH = "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection";
-    const PRETRIP_DEBUG_PROJECTION_EVENTS_PATH = "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection-events";
+    const DEFAULT_PRETRIP_PROJECT_ID = "chilai_nanhua_day1";
+    const PRETRIP_PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";
+    const PRETRIP_PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PRETRIP_PROJECT_ID_PARAM)
+      ? PRETRIP_PROJECT_ID_PARAM
+      : DEFAULT_PRETRIP_PROJECT_ID;
+    const PRETRIP_DEBUG_PROJECTION_PATH = `/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection`;
+    const PRETRIP_DEBUG_PROJECTION_EVENTS_PATH = `/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection-events`;
     const HARDWARE_READINESS_CONTEXT_PATH = "/admin/hardware-readiness/context";
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
@@ -2459,7 +2482,9 @@
       zoomSelection: null,
       focusedLabelIds: new Set(),
       mapKeyboardActive: false,
-      hoveredMapTarget: null
+      hoveredMapTarget: null,
+      osmPbfVector: null,
+      osmPbfVectorStatus: "not_loaded"
     };
     const runtimeMap = document.getElementById("runtimeMap");
     const MAP_LAYER_RANKS = {
@@ -2876,6 +2901,109 @@
         return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
       }).join(" ");
     }
+    function shouldLoadOsmPbfVector(projection) {
+      const layer = mapLayerById(projection, "osm");
+      return Boolean(
+        layer.local_osm_render_geojson_ref
+        || layer.local_osm_feature_index_ref
+        || layer.osm_rendering_policy === "workspace_local_osm_extract_available"
+      );
+    }
+    function localOsmPbfVectorUrl(projection) {
+      if (!shouldLoadOsmPbfVector(projection)) return "";
+      return `${apiBase()}/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/osm-pbf-vector.geojson?cb=${encodeURIComponent(OSM_TILE_CACHE_BUST)}`;
+    }
+    function geoJsonCoordinateToPoint(coordinate) {
+      if (!Array.isArray(coordinate) || coordinate.length < 2) return null;
+      const lon = Number(coordinate[0]);
+      const lat = Number(coordinate[1]);
+      return Number.isFinite(lat) && Number.isFinite(lon) ? {lat, lon} : null;
+    }
+    function geoJsonLineToPath(bounds, coordinates) {
+      return pathFromCoords(bounds, (coordinates || []).map(geoJsonCoordinateToPoint).filter(Boolean));
+    }
+    function geoJsonPolygonToPath(bounds, rings) {
+      return (rings || []).map(ring => {
+        const d = geoJsonLineToPath(bounds, ring);
+        return d ? `${d} Z` : "";
+      }).filter(Boolean).join(" ");
+    }
+    function pathFromGeoJsonGeometry(bounds, geometry) {
+      if (!geometry) return "";
+      if (geometry.type === "LineString") return geoJsonLineToPath(bounds, geometry.coordinates);
+      if (geometry.type === "MultiLineString") return (geometry.coordinates || []).map(line => geoJsonLineToPath(bounds, line)).filter(Boolean).join(" ");
+      if (geometry.type === "Polygon") return geoJsonPolygonToPath(bounds, geometry.coordinates);
+      if (geometry.type === "MultiPolygon") return (geometry.coordinates || []).map(polygon => geoJsonPolygonToPath(bounds, polygon)).filter(Boolean).join(" ");
+      return "";
+    }
+    function osmPbfFeatureId(feature) {
+      const props = feature?.properties || {};
+      return `osm_pbf.${props["@type"] || "object"}.${props["@id"] || props.id || "unknown"}`;
+    }
+    function osmPbfFeatureLabel(feature) {
+      const props = feature?.properties || {};
+      return props["name:zh"] || props.name || props.ref || props.distance || props["@id"] || "OSM feature";
+    }
+    function osmPbfFeatureItem(feature, category) {
+      const props = feature?.properties || {};
+      const point = feature?.geometry?.type === "Point" ? geoJsonCoordinateToPoint(feature.geometry.coordinates) : null;
+      return {
+        candidate_id: osmPbfFeatureId(feature),
+        source_id: osmPbfFeatureId(feature),
+        label: osmPbfFeatureLabel(feature),
+        evidence_type: "pretrip_local_osm_pbf_vector_feature",
+        category_id: category,
+        feature_type: feature?.geometry?.type || "geometry",
+        osm_type: props["@type"],
+        osm_id: props["@id"],
+        tags: props,
+        lat: point?.lat,
+        lon: point?.lon,
+        source_path: "normalized/map/osm_pbf_route_bbox_full.geojson",
+        candidate_only: true,
+        runtime_safety_truth: false
+      };
+    }
+    function osmPbfStyleCategory(feature) {
+      const props = feature?.properties || {};
+      const highway = String(props.highway || "");
+      const natural = String(props.natural || "");
+      const landuse = String(props.landuse || "");
+      const amenity = String(props.amenity || "");
+      const information = String(props.information || "");
+      if (props.waterway || natural === "water" || props.water) return "water";
+      if (highway === "milestone" || information === "route_marker" || props.distance) return "milestone";
+      if (information === "mobile") return "mobile";
+      if (natural === "peak") return "peak";
+      if (["path", "footway", "steps"].includes(highway)) return "trail";
+      if (["track", "service"].includes(highway)) return "track";
+      if (highway) return "road";
+      if (natural === "wood" || landuse === "forest") return "forest";
+      if (landuse === "farmland") return "farmland";
+      if (props.building || amenity) return "built";
+      if (props.power || props.man_made) return "infrastructure";
+      return "default";
+    }
+    function osmPbfPointRadius(category) {
+      if (category === "milestone") return 3.2;
+      if (category === "mobile") return 3.8;
+      if (category === "peak") return 4.2;
+      return 2.6;
+    }
+    function appendOsmPbfLabel(group, feature, x, y, category, index) {
+      if (index > 120) return;
+      const label = osmPbfFeatureLabel(feature);
+      if (!label || label === "OSM feature") return;
+      if (!["milestone", "mobile", "peak"].includes(category) && index % 9 !== 0) return;
+      group.appendChild(svgEl("text", {
+        x: (x + 6).toFixed(2),
+        y: (y - 5).toFixed(2),
+        class: "osm-pbf-label",
+        "data-osm-pbf-label": "true",
+        "data-anchor-x": x.toFixed(2),
+        "data-anchor-y": y.toFixed(2)
+      }, label));
+    }
     function coordinateSegments(displayGeometry, fallbackCoords = []) {
       const segments = displayGeometry?.coordinate_segments || [];
       const usableSegments = segments.filter(segment => Array.isArray(segment) && segment.length >= 2);
@@ -3230,6 +3358,19 @@
           circle.setAttribute("r", Math.max(mapMarkerRadiusPx(circle, scale, baseRadius) / scale, 0.001).toFixed(4));
         }
       });
+      syncOsmPbfLabelScale(scale);
+    }
+    function syncOsmPbfLabelScale(scale) {
+      const unitsPerPx = 1 / Math.max(scale, 1);
+      runtimeMap.querySelectorAll('[data-osm-pbf-label="true"]').forEach(label => {
+        const anchorX = Number(label.dataset.anchorX);
+        const anchorY = Number(label.dataset.anchorY);
+        if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
+        label.setAttribute("x", (anchorX + 6 * unitsPerPx).toFixed(3));
+        label.setAttribute("y", (anchorY - 5 * unitsPerPx).toFixed(3));
+        label.setAttribute("font-size", (11 * unitsPerPx).toFixed(3));
+        label.setAttribute("stroke-width", (3 * unitsPerPx).toFixed(3));
+      });
     }
 
     function clampMapPan() {
@@ -3402,6 +3543,7 @@
         const enabled = layerInputs.filter(input => input.checked).length;
         summary.textContent = `${enabled}/${layerInputs.length}`;
       }
+      syncMapMarkerScale();
       updatePointLabels();
       highlightMapForEvent(selectedMapEvent());
       syncLayerPresetButtons();
@@ -3420,7 +3562,9 @@
         const group = runtimeMap.querySelector(`[data-layer-group="${selectorValue(layerId)}"]`);
         if (!group) return;
         group.replaceChildren();
-        if (layerInputChecked(layerId)) appendRasterLayer(group, projection, bounds, layerId, coverageBounds);
+        if (!layerInputChecked(layerId)) return;
+        if (layerId === "osm" && renderOsmPbfVector(group, projection, bounds)) return;
+        appendRasterLayer(group, projection, bounds, layerId, coverageBounds);
       });
     }
 
@@ -3570,6 +3714,55 @@
       });
     }
 
+    function renderOsmPbfVector(group, projection, bounds) {
+      const features = debugPageState.osmPbfVector?.features || [];
+      if (!features.length) return false;
+      group.appendChild(svgEl("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: "layer-osm"}));
+      const areaGroup = svgEl("g", {"data-osm-pbf-kind": "areas"});
+      const lineGroup = svgEl("g", {"data-osm-pbf-kind": "lines"});
+      const pointGroup = svgEl("g", {"data-osm-pbf-kind": "points"});
+      const labelGroup = svgEl("g", {"data-osm-pbf-kind": "labels"});
+      let labelIndex = 0;
+      features.forEach(feature => {
+        const geometry = feature?.geometry;
+        if (!geometry) return;
+        const category = osmPbfStyleCategory(feature);
+        const item = osmPbfFeatureItem(feature, category);
+        if (["Polygon", "MultiPolygon"].includes(geometry.type)) {
+          const d = pathFromGeoJsonGeometry(bounds, geometry);
+          if (!d) return;
+          const path = svgEl("path", {d, class: `osm-pbf-area ${category}`});
+          attachMapEvidence(path, item, osmPbfFeatureId(feature));
+          areaGroup.appendChild(path);
+          return;
+        }
+        if (["LineString", "MultiLineString"].includes(geometry.type)) {
+          const d = pathFromGeoJsonGeometry(bounds, geometry);
+          if (!d) return;
+          const path = svgEl("path", {d, class: `osm-pbf-line ${category}`});
+          attachMapEvidence(path, item, osmPbfFeatureId(feature));
+          lineGroup.appendChild(path);
+          return;
+        }
+        if (geometry.type === "Point") {
+          const point = geoJsonCoordinateToPoint(geometry.coordinates);
+          if (!point) return;
+          const [x, y] = projectPoint(bounds, point.lat, point.lon);
+          const circle = svgEl("circle", {cx: x.toFixed(2), cy: y.toFixed(2), r: osmPbfPointRadius(category), class: `osm-pbf-point ${category}`});
+          attachMapEvidence(circle, item, osmPbfFeatureId(feature));
+          pointGroup.appendChild(circle);
+          appendOsmPbfLabel(labelGroup, feature, x, y, category, labelIndex);
+          labelIndex += 1;
+        }
+      });
+      group.appendChild(areaGroup);
+      group.appendChild(lineGroup);
+      group.appendChild(pointGroup);
+      group.appendChild(labelGroup);
+      group.appendChild(svgEl("text", {x: MAP_WIDTH - 10, y: MAP_HEIGHT - 10, "text-anchor": "end", class: "osm-attribution"}, "Scout local OSM PBF vector"));
+      return true;
+    }
+
     function renderDebugEvidenceMap(projection) {
       if (!projection?.route?.bounds) return;
       const bounds = boundsForProjection(projection);
@@ -3588,7 +3781,7 @@
       });
 
       const osmGroup = svgEl("g", {"data-layer-group": "osm"});
-      appendRasterLayer(osmGroup, projection, bounds, "osm");
+      if (!renderOsmPbfVector(osmGroup, projection, bounds)) appendRasterLayer(osmGroup, projection, bounds, "osm");
       runtimeMap.appendChild(osmGroup);
 
       const terrainGroup = svgEl("g", {"data-layer-group": "terrain"});
@@ -6038,6 +6231,26 @@
       }
     }
 
+    async function loadOsmPbfVectorLayer() {
+      const url = localOsmPbfVectorUrl(debugPageState.projection);
+      if (!url) {
+        debugPageState.osmPbfVector = null;
+        debugPageState.osmPbfVectorStatus = "missing_ref";
+        return;
+      }
+      try {
+        debugPageState.osmPbfVectorStatus = "loading";
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        debugPageState.osmPbfVector = await response.json();
+        debugPageState.osmPbfVectorStatus = "ready";
+        if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
+      } catch (error) {
+        debugPageState.osmPbfVector = null;
+        debugPageState.osmPbfVectorStatus = `failed: ${error.message}`;
+      }
+    }
+
     async function loadDebugSurface() {
       try {
         const [eventResult, state, messagePayload, hardwareReadiness, mobileWearableIngress, monitoringCenter] = await Promise.all([
@@ -6054,6 +6267,7 @@
         debugPageState.mobileWearableIngress = mobileWearableIngress || null;
         debugPageState.monitoringCenter = monitoringCenter || null;
         if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
+        loadOsmPbfVectorLayer();
         const resolvedState = stateWithProjectedEvents(state || {}, eventPayload);
         renderEndpointPayloads(eventPayload || {}, resolvedState || {}, messagePayload || {});
         renderState(resolvedState || {});

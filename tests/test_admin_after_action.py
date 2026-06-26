@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import tempfile
 import unittest
@@ -318,6 +319,32 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(boss_layer["source_path"], "outputs/boss_points.geojson")
         self.assertFalse(view["boss_points"]["boundary"]["runtime_safety_truth"])
 
+    def test_admin_case_api_can_project_any_workspace_pretrip_project(self):
+        custom_project_id = "chilai_nanhua_day1_tryimport_scoutAI_1"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_root = Path(temp_dir)
+            project_root = workspace_root / custom_project_id
+            shutil.copytree(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PRETRIP_CASE_ID,
+                project_root,
+            )
+            project_path = project_root / "project.json"
+            project = json.loads(project_path.read_text(encoding="utf-8"))
+            project["project_id"] = custom_project_id
+            project_path.write_text(json.dumps(project), encoding="utf-8")
+
+            client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+            response = client.get(f"/admin/cases/{custom_project_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["case_id"], custom_project_id)
+        self.assertEqual(payload["project_id"], custom_project_id)
+        self.assertEqual(payload["admin_surface_projection"]["surface_targets"], [
+            "/admin",
+            "/admin/pretrip",
+            "/admin/debug",
+        ])
     def test_pretrip_project_api_energy_reserve_monitor_reads_loaded_health_baseline(self):
         activities = load_wearable_activity_summaries(WEARABLE_FIXTURES, root=ROOT)
         with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
@@ -810,7 +837,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("narrativeFacts", response.text)
         self.assertIn("chilai_nanhua_day1 is shown as read-only GPX projection evidence", response.text)
         self.assertIn("not Phase 1 runtime safety truth", response.text)
-        self.assertIn('const CASE_ID = "chilai_nanhua_day1"', response.text)
+        self.assertIn('const DEFAULT_CASE_ID = "chilai_nanhua_day1"', response.text)
+        self.assertIn('new URLSearchParams(window.location.search).get("caseId")', response.text)
+        self.assertIn('new URLSearchParams(window.location.search).get("projectId")', response.text)
+        self.assertIn("const CASE_ID = /^[A-Za-z0-9_.-]+$/.test(CASE_ID_PARAM)", response.text)
         self.assertIn("nextPlanCandidatePanel", response.text)
         self.assertNotIn("completedTripScenarioPanel", response.text)
         self.assertNotIn("Completed Trip Scenario", response.text)
@@ -1054,6 +1084,23 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('class: "raster-tile"', response.text)
         self.assertIn("data-raster-tile", response.text)
         self.assertIn("function renderOsmBasemap", response.text)
+        self.assertIn("function localOsmPbfVectorUrl", response.text)
+        self.assertIn("/osm-pbf-vector.geojson", response.text)
+        self.assertIn("state.osmPbfVector?.features", response.text)
+        self.assertIn('class: `osm-pbf-line ${category}`', response.text)
+        self.assertIn('class: `osm-pbf-area ${category}`', response.text)
+        self.assertIn(".osm-pbf-point { fill: #5a5f63;", response.text)
+        self.assertIn('"data-osm-pbf-label": "true"', response.text)
+        self.assertIn("function syncOsmPbfLabelScale", response.text)
+        self.assertIn("syncOsmPbfLabelScale(scale);", response.text)
+        update_layers_body = response.text.split("function updateLayers()", 1)[1].split("function checkedLayerIds()", 1)[0]
+        self.assertIn("syncMapMarkerScale();", update_layers_body)
+        self.assertLess(
+            update_layers_body.index("syncMapMarkerScale();"),
+            update_layers_body.index("updatePointLabels();"),
+        )
+        self.assertIn(".osm-pbf-line.trail", response.text)
+        self.assertIn(".osm-pbf-area.forest", response.text)
         self.assertIn("if (!isLocalOsmTileMode())", response.text)
         self.assertIn("function osmTileCoverage", response.text)
         self.assertIn('el("image"', response.text)
