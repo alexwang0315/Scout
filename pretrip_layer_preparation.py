@@ -4465,8 +4465,15 @@ def _run_overpass_route_alignment_after_layer_preparation(
     try:
         from pretrip_overpass_route_alignment import align_workspace_route_to_overpass
 
+        route_corridor = manifest.get("route_corridor") or {}
+        max_projection_distance_m = route_corridor.get("corridor_m")
+        if not isinstance(max_projection_distance_m, (int, float)):
+            max_projection_distance_m = None
         result = align_workspace_route_to_overpass(
             project_root,
+            max_projection_distance_m=float(max_projection_distance_m)
+            if max_projection_distance_m
+            else 500.0,
             generated_at=manifest["finished_at"],
         )
     except Exception as exc:  # pragma: no cover - defensive manifest reporting

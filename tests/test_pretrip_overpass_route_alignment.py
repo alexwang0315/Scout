@@ -184,6 +184,183 @@ def test_overpass_route_alignment_uses_50m_gpx_normal_corridor_before_gpx_fallba
     assert display["boundary"]["runtime_safety_truth"] is False
 
 
+def test_overpass_route_alignment_uses_checkpoint_route_order_for_foldback_routes(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "workspace" / "foldback"
+    _write_json(
+        project_root / "project.json",
+        {
+            "project_id": "foldback",
+            "checkpoint_candidates_ref": "candidates/checkpoints.json",
+            "segment_candidates_ref": "candidates/segments.json",
+            "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+        },
+    )
+    _write_json(
+        project_root / "outputs/risk/risk_ribbon.geojson",
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "segment_id": "overpass.early",
+                        "start_distance_m": 0.0,
+                        "end_distance_m": 100.0,
+                    },
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[121.0, 24.0], [121.001, 24.0]],
+                    },
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "segment_id": "overpass.foldback",
+                        "start_distance_m": 9000.0,
+                        "end_distance_m": 9100.0,
+                    },
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [
+                            [121.00054, 24.00039],
+                            [121.00056, 24.00039],
+                        ],
+                    },
+                },
+            ],
+        },
+    )
+    _write_json(
+        project_root / "candidates/checkpoints.json",
+        {
+            "candidates": [
+                {"candidate_id": "cp.start", "lat": 24.0004, "lon": 121.00055},
+                {"candidate_id": "cp.001", "lat": 24.00002, "lon": 121.00095},
+            ],
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+    )
+    _write_json(
+        project_root / "candidates/segments.json",
+        {
+            "candidates": [
+                {
+                    "candidate_id": "seg.001",
+                    "from_candidate_id": "cp.start",
+                    "to_candidate_id": "cp.001",
+                    "distance_m": 100.0,
+                    "route_point_start_index": 0,
+                    "route_point_end_index": 10,
+                }
+            ],
+            "boundary": {"candidate_only": True},
+        },
+    )
+
+    result = align_workspace_route_to_overpass(
+        project_root,
+        max_projection_distance_m=100.0,
+        generated_at="2026-06-20T00:00:00+00:00",
+    )
+
+    assert result["status"] == "completed"
+    checkpoints = _load(project_root / "outputs/overpass_aligned_checkpoints.json")
+    start = checkpoints["candidates"][0]
+    assert start["overpass_projection"]["status"] == "snapped_to_overpass"
+    assert start["overpass_projection"]["route_distance_hint_m"] == 0.0
+    assert start["route_distance_m"] < 100.0
+    assert start["overpass_projection"]["route_distance_m"] < 100.0
+
+
+def test_overpass_route_alignment_keeps_spatial_nearest_when_hint_is_not_comparable(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "workspace" / "spatial"
+    _write_json(
+        project_root / "project.json",
+        {
+            "project_id": "spatial",
+            "checkpoint_candidates_ref": "candidates/checkpoints.json",
+            "segment_candidates_ref": "candidates/segments.json",
+            "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+        },
+    )
+    _write_json(
+        project_root / "outputs/risk/risk_ribbon.geojson",
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "segment_id": "overpass.hinted-but-far",
+                        "start_distance_m": 0.0,
+                        "end_distance_m": 100.0,
+                    },
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[121.0, 24.002], [121.001, 24.002]],
+                    },
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "segment_id": "overpass.nearby",
+                        "start_distance_m": 5000.0,
+                        "end_distance_m": 5100.0,
+                    },
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[121.0, 24.00001], [121.001, 24.00001]],
+                    },
+                },
+            ],
+        },
+    )
+    _write_json(
+        project_root / "candidates/checkpoints.json",
+        {
+            "candidates": [
+                {"candidate_id": "cp.start", "lat": 24.0, "lon": 121.0005},
+                {"candidate_id": "cp.001", "lat": 24.0, "lon": 121.0009},
+            ],
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+    )
+    _write_json(
+        project_root / "candidates/segments.json",
+        {
+            "candidates": [
+                {
+                    "candidate_id": "seg.001",
+                    "from_candidate_id": "cp.start",
+                    "to_candidate_id": "cp.001",
+                    "distance_m": 100.0,
+                    "route_point_start_index": 0,
+                    "route_point_end_index": 10,
+                }
+            ],
+            "boundary": {"candidate_only": True},
+        },
+    )
+
+    result = align_workspace_route_to_overpass(
+        project_root,
+        max_projection_distance_m=500.0,
+        generated_at="2026-06-20T00:00:00+00:00",
+    )
+
+    assert result["status"] == "completed"
+    checkpoints = _load(project_root / "outputs/overpass_aligned_checkpoints.json")
+    start = checkpoints["candidates"][0]
+    assert start["overpass_projection"]["status"] == "snapped_to_overpass"
+    assert start["overpass_projection"]["route_distance_hint_m"] == 0.0
+    assert start["overpass_projection"]["route_distance_m"] > 4000.0
+    assert start["overpass_projection"]["offset_m"] < 2.0
+
+
 def test_overpass_route_alignment_rejects_inflated_segment_display_path(
     tmp_path: Path,
 ) -> None:

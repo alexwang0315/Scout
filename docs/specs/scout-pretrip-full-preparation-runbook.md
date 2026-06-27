@@ -896,3 +896,392 @@ pnpm lint/typecheck/test: PASS
 ```text
 http://127.0.0.1:9112/admin/pretrip?projectId=chilai_nanhua_day1_tryimport_scoutAI_1
 ```
+
+## Run Log: 2026-06-26 Latest UI Historical Import Replay
+
+Target workspace:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport_scoutAI_1
+```
+
+Issues encountered:
+
+1. The rebuild wrapper completed full import/preparation but did not carry the
+   local OSM PBF source into the new workspace.
+   - Symptom: `osm_pbf_render_geojson_ref` and
+     `osm_pbf_feature_index_ref` were missing after rebuild.
+   - Fix used: restore only the `osm_pbf_*` refs and PBF-derived vector/index
+     artifacts from the same timestamped workspace backup; keep CWA/GEE current
+     and do not restore time-sensitive environment evidence.
+   - SOP change: the wrapper or Scout skill path should pass an explicit
+     `osm_pbf_path` when the target environment has a local Taiwan PBF; OSM PBF
+     is local vector context and must not replace Rudy+TW OCR/cache authority.
+
+2. The real 9112 admin app did not serve `/admin/debug`, even though the smoke
+   fixture did.
+   - Symptom: `/admin/debug?projectId=...` returned 404 in the live app.
+   - Fix used: add the `/admin/debug` HTML route backed by
+     `docs/admin/phase-3-5-runtime-debug.html`, with a regression test.
+   - SOP change: live UI verification must check the actual admin app routes,
+     not only `tools/admin_ui_visual_smoke.js`.
+
+3. The debug page loaded `/debug/state` and `/debug/messages` as hard
+   requirements.
+   - Symptom: those runtime endpoints returned 404 in the pretrip-only local
+     app, so `Promise.all` aborted before `renderDebugEvidenceMap()` and no
+     OSM/Overpass/Segments layer groups appeared.
+   - Fix used: add read-only unavailable fallback payloads for runtime debug
+     state/messages, matching the existing `/debug/events` fallback behavior.
+   - SOP change: pretrip projection map rendering must not be blocked by
+     unrelated runtime debug endpoint availability.
+
+4. OSM PBF label scaling needed live pixel validation after the latest UI
+   update.
+   - Symptom: the first high-zoom browser measurement showed labels could be
+     oversized when CSS font/stroke declarations overrode SVG attributes.
+   - Fix used: set the computed scaled `font-size` and `stroke-width` as
+     important inline styles in all three admin surfaces.
+   - SOP change: after changing viewBox zoom or layer toggles, verify OSM PBF
+     markers and labels by actual browser pixel measurements.
+
+Verification summary:
+
+```text
+Historical GPX importer + map preparation: PASS
+Overpass refs and aligned segment provenance: PASS
+OSM PBF vector refs: PASS after restoring PBF-derived refs from same-workspace backup
+Terrain/risk/OCR/mileage refs: PASS
+CWA refs: PASS with current hourly metadata
+GEE refs: PRESENT, provider fetch result fetch_failed
+Live /admin/pretrip route: PASS
+Live /admin/debug route: PASS
+Live /admin route: PASS
+Segments toggle OSM PBF marker scale: PASS
+High-zoom marker/label/route/segment pixel size: PASS
+```
+
+9112 URLs:
+
+```text
+http://127.0.0.1:9112/admin/pretrip?projectId=chilai_nanhua_day1_tryimport_scoutAI_1
+http://127.0.0.1:9112/admin/debug?projectId=chilai_nanhua_day1_tryimport_scoutAI_1&tab=panel-state&event=debug_event.admin_ui_smoke.000003
+http://127.0.0.1:9112/admin?projectId=chilai_nanhua_day1_tryimport_scoutAI_1
+```
+
+## Run Log: 2026-06-26 Compact Admin Map Coverage Regression
+
+Target workspace:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport_scoutAI_1
+```
+
+Reference workspace:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport_scoutAI
+```
+
+Issues encountered:
+
+1. The workspace artifacts were already aligned with the reference workspace,
+   but the compact admin API truncated map-visible layers to 48 items.
+   - Symptom: route/corridor covered the full golden GPX, while
+     `segments`, `risk-ribbon`, `risk-heatmap`, and `risk-delta` rendered as a
+     short subset in `/admin/pretrip`.
+   - Root cause: `_compact_pretrip_project_view()` applied the generic
+     evidence-list limit to map-rendered segment arrays.
+   - Fix used: introduce a separate map-layer item limit for `segments` and
+     risk segment arrays while keeping per-segment display geometry
+     downsampled.
+   - SOP change: compact API validation must compare map layer item counts and
+     bbox against file artifacts, not only check that some coordinates exist.
+
+2. The pretrip SVG segment renderer depended on compact checkpoint presence
+   even when each segment already carried `display_geometry`.
+   - Symptom: after fixing compact API counts, the browser still drew only 47
+     segment paths because missing compact checkpoints caused most segments to
+     be skipped.
+   - Fix used: render segments from their own `display_geometry` first, and
+     fallback to checkpoint endpoints only when display geometry is absent.
+   - SOP change: admin map renderers must not require separately compacted
+     evidence lists when the map layer item already includes geometry.
+
+Verification summary:
+
+```text
+Tryimport_scoutAI_1 vs tryimport_scoutAI segment display artifacts: PASS
+Tryimport_scoutAI_1 vs tryimport_scoutAI risk artifacts: PASS
+Tryimport_scoutAI_1 vs tryimport_scoutAI Overpass artifacts: PASS
+Live 9112 compact API map layer counts: PASS
+Live 9112 SVG segments/risk bbox: PASS
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS
+Admin UI visual smoke: PASS
+Focused pretrip/admin/debug tests: PASS
+pnpm lint/typecheck/test: PASS
+```
+
+## Run Log: 2026-06-26 Overpass And OSM PBF Layer Recovery
+
+Target workspace:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport_scoutAI_1
+```
+
+Issues encountered:
+
+1. Overpass vector evidence existed, but the live pretrip map rendered only the
+   first 48 compact corridor candidates.
+   - Symptom: `overpass_candidate_count` was 513 and
+     `overpass_trail_corridor` was 414, but the SVG Overpass layer looked like
+     the road/trail network was mostly absent.
+   - Root cause: `_compact_overpass_evidence()` used the generic 48-item
+     evidence-list limit for `corridor_candidates`, `hazard_candidates`, and
+     `poi_candidates`, even though those arrays are map-rendered layers.
+   - Fix used: apply the map-layer item limit to Overpass map candidates.
+   - SOP change: Overpass UI verification must inspect compact API candidate
+     array lengths and browser SVG path counts, not only project-level
+     `overpass_candidate_count`.
+
+2. The target workspace had no active `osm_pbf_*` refs after the rebuild.
+   - Symptom: `osm_pbf_render_geojson_ref` and
+     `osm_pbf_feature_index_ref` were missing from current `project.json`, so
+     the admin OSM layer could not load the local PBF vector GeoJSON.
+   - Fix used: restore only `osm_pbf_*` refs and PBF-derived artifacts from
+     the same target workspace backup
+     `chilai_nanhua_day1_tryimport_scoutAI_1.backup.20260626T082612Z`;
+     live Overpass, CWA, and GEE refs were not overwritten.
+   - SOP change: after rebuild, always check `osm_pbf_render_geojson_ref`,
+     `osm_pbf_feature_index_ref`, `/osm-pbf-vector.geojson`, and live SVG
+     `data-layer-group="osm"` path/circle counts.
+
+Verification summary:
+
+```text
+Live 9112 compact Overpass corridor candidates: PASS (414)
+Live 9112 compact Overpass POI candidates: PASS (61)
+Live 9112 OSM PBF feature index: PASS (4098 items)
+Live 9112 /osm-pbf-vector.geojson: PASS (4098 features)
+Live 9112 SVG overpass layer: PASS (452 paths, 61 circles)
+Live 9112 SVG osm layer: PASS (2823 paths, 1275 circles)
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS
+Admin UI visual smoke: PASS
+Focused pretrip layer/admin tests: PASS
+pnpm lint/typecheck/test: PASS
+```
+
+## Run Log: 2026-06-26 CP/MCP Overpass Projection Recovery
+
+Target workspace:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport_scoutAI_1
+```
+
+Issues encountered:
+
+1. CP/MCP projection did not consistently overlap the Overpass/risk-ribbon
+   route basis required by
+   `docs/specs/pretrip-route-corridor-map-preparation.md` Spatial Policy.
+   - Symptom: CP/MCP markers could remain on raw GPX coordinates even when an
+     Overpass centerline existed inside the project corridor.
+   - Root cause: layer preparation still used the old 50 m point projection
+     tolerance instead of the route-corridor policy. A first attempted
+     route-distance hint fix then over-weighted along-track distance and could
+     choose a farther centerline over the geographically nearest Overpass
+     centerline.
+   - Fix used: pass the route corridor width into route alignment; keep
+     route-distance hints only as a tie breaker for comparable nearby
+     candidates; do not treat generic MCP `distance_m` as an Overpass
+     centerline hint.
+   - SOP change: CP/MCP validation must compare snapped counts and offsets from
+     `outputs/overpass_aligned_checkpoints.json`,
+     `outputs/overpass_aligned_mcp_candidates.json`, and the live compact API.
+
+2. The live compact API hid most CP markers and stripped MCP projection
+   provenance.
+   - Symptom: the file artifact contained all 240 CP candidates, but the
+     compact API only returned 48 CP rows; MCP lat/lon values were snapped but
+     `overpass_projection` metadata was omitted.
+   - Fix used: compact `checkpoints` with the map-layer limit and preserve
+     `overpass_projection` for MCP candidates.
+   - SOP change: map-layer compaction must use map-layer limits for rendered
+     geometries, not review-card limits.
+
+Verification summary:
+
+```text
+tryimport_scoutAI_1 CP projection: PASS (182/240 snapped_to_overpass)
+tryimport_scoutAI_1 MCP projection: PASS (5/6 snapped_to_overpass; 1 explicit outlier)
+tryimport_scoutAI_1 segment projection: PASS (172 endpoint-snapped, 4 normal-corridor-snapped)
+Live 9112 compact CP payload: PASS (240 rows)
+Live 9112 compact MCP payload: PASS (projection metadata retained)
+Live 9112 Overpass compact payload: PASS (414 corridor candidates, 61 POIs)
+Live 9112 OSM PBF compact payload: PASS (4098 items)
+```
+
+## Run Log: 2026-06-26 Tryimport1 Full-Route Replay Against ScoutAI_1
+
+Target workspace:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport1
+```
+
+Reference workspace:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport_scoutAI_1
+```
+
+Issues encountered:
+
+1. The first replay used the material manifest golden GPX
+   `sources/gpx/golden/奇萊南華-能高越嶺步道Day1.gpx`.
+   - Symptom: strict comparison failed with only 36 checkpoints, 35 segments,
+     24 reference tracks, and a 14.6 km route.
+   - Root cause: the reference workspace was built from the full-route golden
+     `sources/gpx/reference/能高安東軍.gpx.gpx`, not the Day1 golden GPX.
+   - Fix used: rerun the Codex pretrip import/preparation skill with
+     `SCOUT_GOLDEN_ROUTE_GPX` explicitly set to
+     `/private/tmp/scout-local-materials/pretrip/chilai_nanhua_day1_tryimport1/sources/gpx/reference/能高安東軍.gpx.gpx`.
+   - SOP change: when replaying against a reference workspace, read the
+     reference `outputs/import_manifest.json` first and use its golden GPX
+     role/source, even if the target material manifest has another golden.
+
+2. The successful replay still did not preserve local OSM PBF refs.
+   - Symptom: `osm_pbf_render_geojson_ref`, `osm_pbf_feature_index_ref`, and
+     the 4098-item PBF feature index were missing from target `project.json`.
+   - Root cause: the current rebuild wrapper does not pass the local
+     `--osm-pbf-path` path into layer preparation.
+   - Fix used: restore only `osm_pbf_*` refs and PBF-derived artifacts from
+     `chilai_nanhua_day1_tryimport_scoutAI_1`; live Overpass, risk, CWA, and
+     GEE evidence from the new run were not overwritten.
+   - SOP change: after every replay, compare both project metrics and
+     `osm_pbf_*` refs. Do not run PBF regeneration if it would overwrite live
+     Overpass evidence; use a bounded PBF-only restore until the wrapper passes
+     `--osm-pbf-path` correctly.
+
+Attempt summary:
+
+```text
+Attempt 1 log: /tmp/scout_pretrip_rebuild_chilai_nanhua_day1_tryimport1_20260626T123810Z.log
+Attempt 1 result: FAIL strict counts, wrong Day1 golden route
+Attempt 2 log: /tmp/scout_pretrip_rebuild_chilai_nanhua_day1_tryimport1_20260626T124100Z.log
+Attempt 2 result: PASS import/preparation in 135 seconds
+Attempts used: 2/10
+```
+
+Verification summary:
+
+```text
+tryimport1 vs tryimport_scoutAI_1 strict compare: PASS
+Checkpoint count: PASS (240)
+Segment count: PASS (239)
+Reference track count: PASS (23)
+Route points/distance: PASS (11191 points, 112258.31 m)
+Overpass evidence: PASS (513 items; 414 trail corridors, 61 POIs)
+OSM PBF evidence: PASS (4098 items)
+MCP evidence: PASS (6 candidates)
+Mileage tags: PASS (5526 tags, 29 projected anchors)
+Risk ribbon: PASS (841 segments)
+Risk score: PASS (840 points)
+Reference segment timing: PASS (48 measurements, 8 timing segments)
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS with known metadata warnings only
+Admin UI visual smoke: PASS
+Focused pretrip/admin/debug tests: PASS (182 passed, 1 warning)
+```
+
+## Run Log: 2026-06-26 Tryimport2 Scout AI Skill Replay Against ScoutAI_1
+
+Target workspace:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport2
+```
+
+Reference workspaces:
+
+```text
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport_scoutAI_1
+/tmp/scout-local-pretrip-workspaces/chilai_nanhua_day1_tryimport1
+```
+
+Scout AI skill invocation:
+
+```text
+skill_id=pretrip-import-preparation
+skill_manifest=skills/scout/pretrip-import-preparation.yaml
+plan_ref=outputs/scout_ai/pretrip_import_preparation_plan.json
+run_result_ref=outputs/scout_ai/pretrip_import_preparation_run_result.json
+skill_run_record_ref=outputs/scout_ai/pretrip_import_preparation_skill_run_record.json
+```
+
+Issues encountered:
+
+1. The Scout agent builtin write tools are still narrower than the full
+   connected preparation SOP.
+   - Symptom: `scout_agent_builtin_tools pretrip-import-gpx` does not forward
+     `material_root`, which this material-backed replay needs for MCP, DTM,
+     imagery, and route-context evidence. `pretrip-prepare-layers` is also
+     hard-coded to no-network mode.
+   - Fix used: invoke the Scout AI skill manifest and record a SkillRunRecord,
+     then use the skill's `degrade_to: manual_pretrip_import_preparation_runbook`
+     fallback to run the deterministic full-preparation wrapper with explicit
+     fetch enabled.
+   - SOP change: either extend the Scout agent builtin import/prepare tools to
+     carry `material_root`, `explicit-fetch`, imagery cache flags, and local
+     OSM PBF path, or keep recording this fallback as a deliberate `degrade`
+     activation decision.
+
+2. The rebuild again omitted local OSM PBF refs.
+   - Symptom: strict comparison passed for default metrics, but
+     `osm_pbf_render_geojson_ref`, `osm_pbf_feature_index_ref`, and
+     `osm_pbf_feature_index_feature_count` were missing from `tryimport2`.
+   - Fix used: restore only `osm_pbf_*` refs and PBF-derived artifacts from
+     `chilai_nanhua_day1_tryimport_scoutAI_1`; current-run Overpass, risk,
+     CWA, and GEE artifacts were preserved.
+   - SOP change: the reference-equivalence compare must include an explicit
+     OSM PBF refs/count check until the wrapper passes the local PBF path into
+     layer preparation.
+
+Attempt summary:
+
+```text
+Attempt 1 log: /tmp/scout_pretrip_rebuild_chilai_nanhua_day1_tryimport2_20260626T131156Z.log
+Attempt 1 result: PASS import/preparation in 139 seconds
+Corrections after attempt 1: restored OSM PBF refs/artifacts only
+Attempts used: 1/10
+```
+
+Verification summary:
+
+```text
+tryimport2 vs tryimport_scoutAI_1 strict compare: PASS
+tryimport2 vs tryimport1 strict compare: PASS
+Checkpoint count: PASS (240)
+Segment count: PASS (239)
+Reference track count: PASS (23)
+Route points/distance: PASS (11191 points, 112258.31 m)
+Overpass evidence: PASS (513 items; 414 trail corridors, 61 POIs)
+OSM PBF evidence: PASS after PBF-only restore (4098 items)
+MCP evidence: PASS (6 candidates)
+Mileage tags: PASS (5526 tags, 29 projected anchors)
+Risk ribbon: PASS (841 segments)
+Risk score: PASS (840 points)
+Reference segment timing: PASS (48 measurements, 8 timing segments)
+CWA current-run evidence: PASS (ready, fetched hour 2026-06-26T13:00:00Z)
+GEE current-run evidence: PASS current blocker surfaced (fetch_failed)
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS with known metadata warnings only
+Admin UI visual smoke: PASS
+```

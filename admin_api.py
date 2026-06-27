@@ -156,6 +156,7 @@ from scout_wearable_validator import validate_wearable_activity_summary_contract
 
 DEFAULT_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
 DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
+DEFAULT_DEBUG_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
 DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
 
@@ -732,6 +733,16 @@ def create_admin_router(
             raise HTTPException(status_code=404, detail="Pre-trip admin page not found")
         return Response(
             DEFAULT_PRETRIP_ADMIN_PAGE.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/debug", response_class=HTMLResponse)
+    def debug_admin_page() -> Response:
+        if not DEFAULT_DEBUG_ADMIN_PAGE.exists():
+            raise HTTPException(status_code=404, detail="Debug admin page not found")
+        return Response(
+            DEFAULT_DEBUG_ADMIN_PAGE.read_text(encoding="utf-8"),
             media_type="text/html",
             headers={"Cache-Control": "no-store"},
         )
@@ -3893,6 +3904,7 @@ _COMPACT_BOUNDARY_KEYS = (
 )
 _COMPACT_ROUTE_NOTE_LIMIT = 120
 _COMPACT_COLLECTION_ITEM_LIMIT = 48
+_COMPACT_MAP_LAYER_ITEM_LIMIT = 4096
 _COMPACT_ROUTE_DISPLAY_POINTS_PER_SEGMENT = 24
 _COMPACT_SEGMENT_DISPLAY_POINTS_PER_SEGMENT = 4
 
@@ -4112,11 +4124,13 @@ def _compact_overpass_evidence(payload: Any) -> Any:
                 _compact_overpass_candidate(item, extra_keys=extra_keys)
                 if isinstance(item, dict)
                 else item
-                for item in items[:_COMPACT_COLLECTION_ITEM_LIMIT]
+                for item in items[:_COMPACT_MAP_LAYER_ITEM_LIMIT]
             ]
             compact[f"source_{key}_count"] = len(items)
-            compact["admin_payload_item_limit"] = _COMPACT_COLLECTION_ITEM_LIMIT
-            compact["admin_payload_truncated"] = len(items) > _COMPACT_COLLECTION_ITEM_LIMIT
+            compact["admin_payload_item_limit"] = _COMPACT_MAP_LAYER_ITEM_LIMIT
+            compact["admin_payload_truncated"] = (
+                len(items) > _COMPACT_MAP_LAYER_ITEM_LIMIT
+            )
     return compact
 
 
@@ -4396,6 +4410,10 @@ def _compact_major_critical_points(payload: Any) -> Any:
                     "linked_named_points",
                     "linked_risk_segments",
                     "nearest_scout_cp",
+                    "lat",
+                    "lon",
+                    "route_distance_m",
+                    "overpass_projection",
                     "source_family_coverage",
                     "nearby_points_suppressed_by_spacing",
                     "cp_support_reconciliation",
@@ -4681,6 +4699,7 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
     view["checkpoints"] = _compact_collection_list(
         view.get("checkpoints"),
         extra_keys=("lat", "lon", "label", "route_distance_m", "overpass_projection"),
+        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
     )
     view["environment_risk_derivative_layers"] = (
         _compact_environment_risk_derivative_layers(
@@ -4756,16 +4775,19 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
         view.get("risk_ribbon"),
         "segments",
         extra_keys=risk_segment_keys,
+        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
     )
     view["risk_heatmap"] = _compact_summary_collection_items(
         view.get("risk_heatmap"),
         "segments",
         extra_keys=risk_segment_keys,
+        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
     )
     view["risk_delta"] = _compact_summary_collection_items(
         view.get("risk_delta"),
         "segments",
         extra_keys=risk_segment_keys,
+        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
     )
     view["terrain_visualization"] = _compact_collection_items(
         view.get("terrain_visualization"),
@@ -4837,6 +4859,7 @@ def _compact_segments(payload: Any) -> Any:
             "overpass_route_distance_m",
             "route_basis",
         ),
+        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
     )
     for compact_segment, original_segment in zip(compact_segments, payload):
         if not isinstance(compact_segment, dict) or not isinstance(original_segment, dict):
