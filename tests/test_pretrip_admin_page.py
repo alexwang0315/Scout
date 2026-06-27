@@ -88,6 +88,16 @@ def test_pretrip_admin_latest_ui_surfaces_reference_segment_timing():
     assert "Wearables" in html
     assert "Scout Agent Skills" in html
     assert 'id="reviewWorkspacePanel"' in html
+
+
+def test_pretrip_admin_map_segments_render_from_display_geometry_first():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "let segmentCoordSegments = coordinateSegments(" in html
+    assert "segment.display_geometry?.coordinates || []" in html
+    assert "if (!segmentCoordSegments.length) {" in html
+    assert "segmentCoordSegments = [[from, to]];" in html
+    assert "d: pathFromCoordSegments(bounds, segmentCoordSegments)" in html
     assert 'id="reviewWorkspaceTree"' in html
     assert 'id="importGpxPanel"' in html
     assert 'id="wearablesPanel"' in html

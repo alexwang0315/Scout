@@ -5963,10 +5963,14 @@
         const anchorX = Number(label.dataset.anchorX);
         const anchorY = Number(label.dataset.anchorY);
         if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
+        const fontSize = (11 * unitsPerPx).toFixed(3);
+        const strokeWidth = (3 * unitsPerPx).toFixed(3);
         label.setAttribute("x", (anchorX + 6 * unitsPerPx).toFixed(3));
         label.setAttribute("y", (anchorY - 5 * unitsPerPx).toFixed(3));
-        label.setAttribute("font-size", (11 * unitsPerPx).toFixed(3));
-        label.setAttribute("stroke-width", (3 * unitsPerPx).toFixed(3));
+        label.setAttribute("font-size", fontSize);
+        label.setAttribute("stroke-width", strokeWidth);
+        label.style.setProperty("font-size", `${fontSize}px`, "important");
+        label.style.setProperty("stroke-width", `${strokeWidth}px`, "important");
       });
     }
 

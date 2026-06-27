@@ -3366,10 +3366,14 @@
         const anchorX = Number(label.dataset.anchorX);
         const anchorY = Number(label.dataset.anchorY);
         if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
+        const fontSize = (11 * unitsPerPx).toFixed(3);
+        const strokeWidth = (3 * unitsPerPx).toFixed(3);
         label.setAttribute("x", (anchorX + 6 * unitsPerPx).toFixed(3));
         label.setAttribute("y", (anchorY - 5 * unitsPerPx).toFixed(3));
-        label.setAttribute("font-size", (11 * unitsPerPx).toFixed(3));
-        label.setAttribute("stroke-width", (3 * unitsPerPx).toFixed(3));
+        label.setAttribute("font-size", fontSize);
+        label.setAttribute("stroke-width", strokeWidth);
+        label.style.setProperty("font-size", `${fontSize}px`, "important");
+        label.style.setProperty("stroke-width", `${strokeWidth}px`, "important");
       });
     }
 
@@ -4251,6 +4255,46 @@
           },
           unavailable: true,
           error: error.message
+        };
+      }
+    }
+
+    async function loadRuntimeDebugStatePayload() {
+      try {
+        return await fetchJson("/debug/state");
+      } catch (error) {
+        return {
+          artifact_kind: "scout_runtime_debug_state",
+          status: "unavailable",
+          unavailable: true,
+          error: error.message,
+          debug_boundary: {
+            read_only: true,
+            phase1_mutation_allowed: false,
+            phase2_writeback_allowed: false,
+            real_outbound_transport_allowed: false
+          }
+        };
+      }
+    }
+
+    async function loadRuntimeDebugMessagesPayload() {
+      try {
+        return await fetchJson("/debug/messages");
+      } catch (error) {
+        return {
+          artifact_kind: "scout_runtime_debug_messages",
+          status: "unavailable",
+          unavailable: true,
+          error: error.message,
+          message_count: 0,
+          messages: [],
+          debug_boundary: {
+            read_only: true,
+            phase1_mutation_allowed: false,
+            phase2_writeback_allowed: false,
+            real_outbound_transport_allowed: false
+          }
         };
       }
     }
@@ -6255,8 +6299,8 @@
       try {
         const [eventResult, state, messagePayload, hardwareReadiness, mobileWearableIngress, monitoringCenter] = await Promise.all([
           loadProjectedDebugEventPayload(),
-          fetchJson("/debug/state"),
-          fetchJson("/debug/messages"),
+          loadRuntimeDebugStatePayload(),
+          loadRuntimeDebugMessagesPayload(),
           loadHardwareReadinessContext(),
           loadMobileWearableIngressContext(),
           loadMonitoringCenter()

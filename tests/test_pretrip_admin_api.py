@@ -157,6 +157,19 @@ def test_pretrip_admin_page_serves_static_shell():
     assert "segment-overlay" in response.text
 
 
+def test_debug_admin_page_serves_static_shell():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/debug")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert "Scout Phase 3.5 Runtime Debug" in response.text
+    assert "PRETRIP_DEBUG_PROJECTION_PATH" in response.text
+    assert "/debug-projection" in response.text
+    assert "data-layer=\"overpass\"" in response.text
+
+
 def test_pretrip_projects_api_lists_fixture_projects():
     client = TestClient(create_admin_app())
 
@@ -279,6 +292,57 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
         }
         for index in range(20)
     ]
+    map_segments = [
+        {
+            "candidate_id": f"seg.{index:03d}",
+            "source_id": f"seg.{index:03d}",
+            "from_candidate_id": f"cp.{index:03d}",
+            "to_candidate_id": f"cp.{index + 1:03d}",
+            "distance_m": 100,
+            "display_geometry": {
+                "display_point_count": len(dense_points),
+                "coordinates": dense_points,
+            },
+            "overpass_projection": {"status": "aligned"},
+        }
+        for index in range(60)
+    ]
+    risk_segments = [
+        {
+            "source_id": f"risk.segment.{index:03d}",
+            "coordinates": [
+                {"lat": 23.9 + index / 10000, "lon": 121.1 + index / 10000},
+                {
+                    "lat": 23.9005 + index / 10000,
+                    "lon": 121.1005 + index / 10000,
+                },
+            ],
+            "pretrip_risk": 50 + index % 10,
+            "risk_bucket": "moderate",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        for index in range(60)
+    ]
+    overpass_corridors = [
+        {
+            "candidate_id": f"overpass.{index:03d}",
+            "candidate_type": "trail_corridor_candidate",
+            "feature_type": "path",
+            "osm_type": "way",
+            "osm_id": str(index),
+            "corridor": {
+                "coordinates": [
+                    {"lat": 23.9 + index / 10000, "lon": 121.1 + index / 10000},
+                    {
+                        "lat": 23.9005 + index / 10000,
+                        "lon": 121.1005 + index / 10000,
+                    },
+                ]
+            },
+        }
+        for index in range(60)
+    ]
     compact = _compact_pretrip_project_view(
         {
             "project_id": PROJECT_ID,
@@ -292,33 +356,10 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
                     "coordinates": dense_points,
                 },
             },
-            "segments": [
-                {
-                    "candidate_id": "seg.001",
-                    "source_id": "seg.001",
-                    "from_candidate_id": "cp.001",
-                    "to_candidate_id": "cp.002",
-                    "distance_m": 100,
-                    "display_geometry": {
-                        "display_point_count": len(dense_points),
-                        "coordinates": dense_points,
-                    },
-                    "overpass_projection": {"status": "aligned"},
-                }
-            ],
+            "segments": map_segments,
             "route_notes": {"candidates": route_note_candidates},
             "overpass_evidence": {
-                "corridor_candidates": [
-                    {
-                        "candidate_id": "overpass.001",
-                        "corridor": {
-                            "coordinates": [
-                                {"lat": 23.9, "lon": 121.1},
-                                {"lat": 23.91, "lon": 121.11},
-                            ]
-                        },
-                    }
-                ],
+                "corridor_candidates": overpass_corridors,
                 "hazard_candidates": [],
                 "poi_candidates": [],
             },
@@ -414,55 +455,28 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
                 ],
             },
             "risk_ribbon": {
-                "counts": {"segment_count": 1},
-                "segments": [
-                    {
-                        "source_id": "risk.ribbon.001",
-                        "coordinates": [
-                            {"lat": 23.9, "lon": 121.1},
-                            {"lat": 23.91, "lon": 121.11},
-                        ],
-                        "pretrip_risk": 50,
-                        "risk_bucket": "moderate",
-                        "candidate_only": True,
-                        "runtime_safety_truth": False,
-                    }
-                ],
+                "counts": {"segment_count": len(risk_segments)},
+                "segments": risk_segments,
             },
             "risk_heatmap": {
-                "counts": {"segment_count": 1},
-                "segments": [
-                    {
-                        "source_id": "risk.heat.001",
-                        "coordinates": [
-                            {"lat": 23.9, "lon": 121.1},
-                            {"lat": 23.91, "lon": 121.11},
-                        ],
-                        "pretrip_risk": 55,
-                        "risk_bucket": "moderate",
-                        "candidate_only": True,
-                        "runtime_safety_truth": False,
-                    }
-                ],
+                "counts": {"segment_count": len(risk_segments)},
+                "segments": risk_segments,
             },
             "risk_delta": {
-                "counts": {"segment_count": 1},
+                "counts": {"segment_count": len(risk_segments)},
                 "segments": [
                     {
-                        "source_id": "risk.delta.001",
-                        "coordinates": [
-                            {"lat": 23.9, "lon": 121.1},
-                            {"lat": 23.91, "lon": 121.11},
-                        ],
+                        **segment,
+                        "source_id": f"risk.delta.{index:03d}",
                         "delta_score": 5,
-                        "candidate_only": True,
-                        "runtime_safety_truth": False,
                     }
+                    for index, segment in enumerate(risk_segments)
                 ],
             },
         }
     )
 
+    assert len(compact["segments"]) == len(map_segments)
     segment_geometry = compact["segments"][0]["display_geometry"]
     assert segment_geometry["display_point_count"] == 4
     assert segment_geometry["source_display_point_count"] == len(dense_points)
@@ -475,6 +489,13 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
     assert compact["overpass_evidence"]["corridor_candidates"][0]["corridor"][
         "coordinates"
     ]
+    assert len(compact["overpass_evidence"]["corridor_candidates"]) == len(
+        overpass_corridors
+    )
+    assert compact["overpass_evidence"]["source_corridor_candidates_count"] == len(
+        overpass_corridors
+    )
+    assert compact["overpass_evidence"]["admin_payload_truncated"] is False
     assert compact["mileage_tag_alignment"]["timeline_items"][0][
         "display_mileage_label"
     ] == "K1.0"
@@ -496,8 +517,17 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
         "cwa_time_metadata"
     ]["valid_until_hour"] == "2026-06-27T18:00:00Z"
     assert compact["risk_score"]["points"][0]["pretrip_risk"] == 50
+    assert len(compact["risk_ribbon"]["segments"]) == len(risk_segments)
+    assert compact["risk_ribbon"]["source_segments_count"] == len(risk_segments)
+    assert compact["risk_ribbon"]["admin_payload_truncated"] is False
     assert compact["risk_ribbon"]["segments"][0]["coordinates"]
+    assert len(compact["risk_heatmap"]["segments"]) == len(risk_segments)
+    assert compact["risk_heatmap"]["source_segments_count"] == len(risk_segments)
+    assert compact["risk_heatmap"]["admin_payload_truncated"] is False
     assert compact["risk_heatmap"]["segments"][0]["coordinates"]
+    assert len(compact["risk_delta"]["segments"]) == len(risk_segments)
+    assert compact["risk_delta"]["source_segments_count"] == len(risk_segments)
+    assert compact["risk_delta"]["admin_payload_truncated"] is False
     assert compact["risk_delta"]["segments"][0]["coordinates"]
 
 
@@ -1017,6 +1047,11 @@ def test_pretrip_project_workspace_api_creates_metadata_only_tmp_copy(tmp_path):
     ).is_file()
     assert all(
         path.suffix.lower() in {".json", ".geojson", ".jsonl"}
+        or (
+            path.suffix.lower() == ".html"
+            and path.relative_to(workspace_project_root).parent
+            == Path("outputs/briefings")
+        )
         for path in workspace_project_root.rglob("*")
         if path.is_file()
     )
@@ -1361,6 +1396,12 @@ def test_pretrip_import_gpx_run_writes_workspace_and_returns_projection_paths(tm
 def test_pretrip_prepare_layers_preview_is_workspace_metadata_only(tmp_path):
     original_fixture_bytes = _repo_fixture_bytes()
     workspace_root = _copy_pretrip_workspace(tmp_path)
+    workspace_project_root = workspace_root / PROJECT_ID
+    workspace_bytes_before = {
+        path.relative_to(workspace_project_root): path.read_bytes()
+        for path in sorted(workspace_project_root.rglob("*"))
+        if path.is_file()
+    }
     client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
 
     response = client.post(
@@ -1381,7 +1422,12 @@ def test_pretrip_prepare_layers_preview_is_workspace_metadata_only(tmp_path):
     assert payload["boundary"]["workspace_file_mutation_allowed"] is False
     assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert payload["mutation"]["workspace_files_mutated"] is False
-    assert not (workspace_root / PROJECT_ID / "outputs" / "layers").exists()
+    workspace_bytes_after = {
+        path.relative_to(workspace_project_root): path.read_bytes()
+        for path in sorted(workspace_project_root.rglob("*"))
+        if path.is_file()
+    }
+    assert workspace_bytes_after == workspace_bytes_before
     assert "<trkpt" not in response.text.lower()
     assert _repo_fixture_bytes() == original_fixture_bytes
 

@@ -69,6 +69,7 @@ def align_workspace_route_to_overpass(
         "overpass_route_alignment_ref": ALIGNMENT_SUMMARY_REF,
     }
     summaries: dict[str, Any] = {}
+    checkpoint_route_distance_hints = _checkpoint_route_distance_hints(root, project)
 
     checkpoints_result = _align_candidate_file(
         root=root,
@@ -79,6 +80,7 @@ def align_workspace_route_to_overpass(
         id_keys=("candidate_id", "checkpoint_id"),
         route_edges=route_edges,
         max_projection_distance_m=max_projection_distance_m,
+        route_distance_hints_m=checkpoint_route_distance_hints,
         generated_at=generated_at,
     )
     if checkpoints_result["status"] == "completed":
@@ -187,6 +189,49 @@ def align_workspace_route_to_overpass(
     }
 
 
+def _checkpoint_route_distance_hints(root: Path, project: dict[str, Any]) -> dict[str, float]:
+    ref = project.get("segment_candidates_ref")
+    if not isinstance(ref, str) or not ref:
+        return {}
+    path = root / ref
+    if not path.exists():
+        return {}
+    payload = _load_json(path)
+    _, source_items = _candidate_list(payload, ("candidates",))
+    if not isinstance(source_items, list):
+        return {}
+    indexed_segments = [
+        item
+        for item in source_items
+        if isinstance(item, dict)
+        and isinstance(_as_float(item.get("route_point_start_index")), float)
+        and isinstance(_as_float(item.get("route_point_end_index")), float)
+    ]
+    if not indexed_segments:
+        return {}
+
+    hints: dict[str, float] = {}
+    cumulative_m = 0.0
+    for item in sorted(
+        indexed_segments,
+        key=lambda candidate: (
+            _as_float(candidate.get("route_point_start_index")) or 0.0,
+            _as_float(candidate.get("route_point_end_index")) or 0.0,
+        ),
+    ):
+        from_id = _first_text(item, ("from_candidate_id", "from_checkpoint_id"))
+        to_id = _first_text(item, ("to_candidate_id", "to_checkpoint_id"))
+        distance_m = _as_float(item.get("distance_m"))
+        if not isinstance(distance_m, float) or distance_m < 0:
+            continue
+        if from_id:
+            cumulative_m = hints.setdefault(from_id, cumulative_m)
+        cumulative_m += distance_m
+        if to_id:
+            hints[to_id] = cumulative_m
+    return hints
+
+
 def _align_candidate_file(
     *,
     root: Path,
@@ -198,6 +243,7 @@ def _align_candidate_file(
     route_edges: list[_RouteEdge],
     max_projection_distance_m: float,
     generated_at: str,
+    route_distance_hints_m: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     ref = project.get(ref_key)
     if not isinstance(ref, str) or not ref:
@@ -227,12 +273,20 @@ def _align_candidate_file(
         if not isinstance(item, dict):
             continue
         item_id = _first_text(item, id_keys) or f"{ref_key}.{index + 1:06d}"
+        expected_route_distance_m = (
+            (route_distance_hints_m or {}).get(item_id)
+            if route_distance_hints_m is not None
+            else None
+        )
+        if expected_route_distance_m is None:
+            expected_route_distance_m = _record_route_distance_hint(item)
         aligned_items.append(
             _align_point_record(
                 item,
                 item_id=item_id,
                 route_edges=route_edges,
                 max_projection_distance_m=max_projection_distance_m,
+                expected_route_distance_m=expected_route_distance_m,
                 stats=stats,
             )
         )
@@ -1041,6 +1095,7 @@ def _align_point_record(
     item_id: str,
     route_edges: list[_RouteEdge],
     max_projection_distance_m: float,
+    expected_route_distance_m: float | None = None,
     stats: "_Stats",
 ) -> dict[str, Any]:
     aligned = dict(item)
@@ -1053,7 +1108,13 @@ def _align_point_record(
         }
         return aligned
     lat, lon = point
-    projection = _nearest_projection(lat, lon, route_edges)
+    projection = _nearest_projection(
+        lat,
+        lon,
+        route_edges,
+        max_projection_distance_m=max_projection_distance_m,
+        expected_route_distance_m=expected_route_distance_m,
+    )
     if projection is None:
         stats.kept_gpx_point_count += 1
         aligned["overpass_projection"] = {
@@ -1077,6 +1138,9 @@ def _align_point_record(
             "item_id": item_id,
             "offset_m": round(projection["offset_m"], 3),
             "route_distance_m": round(projection["route_distance_m"], 3),
+            "route_distance_hint_m": round(expected_route_distance_m, 3)
+            if isinstance(expected_route_distance_m, float)
+            else None,
             "max_projection_distance_m": max_projection_distance_m,
             "source_feature_id": projection["source_feature_id"],
         }
@@ -1088,10 +1152,25 @@ def _align_point_record(
         "item_id": item_id,
         "offset_m": round(projection["offset_m"], 3),
         "route_distance_m": round(projection["route_distance_m"], 3),
+        "route_distance_hint_m": round(expected_route_distance_m, 3)
+        if isinstance(expected_route_distance_m, float)
+        else None,
         "max_projection_distance_m": max_projection_distance_m,
         "source_feature_id": projection["source_feature_id"],
     }
     return aligned
+
+
+def _record_route_distance_hint(item: dict[str, Any]) -> float | None:
+    for key in (
+        "route_distance_m",
+        "overpass_route_distance_m",
+        "mileage_m",
+    ):
+        value = _as_float(item.get(key))
+        if isinstance(value, float) and value >= 0:
+            return value
+    return None
 
 
 def _align_coordinate(
@@ -1204,8 +1283,12 @@ def _nearest_projection(
     lat: float,
     lon: float,
     edges: list[_RouteEdge],
+    *,
+    max_projection_distance_m: float | None = None,
+    expected_route_distance_m: float | None = None,
 ) -> dict[str, Any] | None:
-    best: dict[str, Any] | None = None
+    candidates: list[dict[str, Any]] = []
+    best_by_offset: dict[str, Any] | None = None
     lat_scale = 111_320.0
     lon_scale = 111_320.0 * math.cos(math.radians(lat))
     for edge_index, edge in enumerate(edges):
@@ -1227,16 +1310,51 @@ def _nearest_projection(
         route_distance = edge.start_distance_m + (
             edge.end_distance_m - edge.start_distance_m
         ) * t
-        if best is None or offset_m < best["offset_m"]:
-            best = {
-                "lat": projected_lat,
-                "lon": projected_lon,
-                "offset_m": offset_m,
-                "route_distance_m": route_distance,
-                "edge_index": edge_index,
-                "source_feature_id": edge.source_feature_id,
-            }
-    return best
+        route_distance_delta_m = (
+            abs(route_distance - expected_route_distance_m)
+            if isinstance(expected_route_distance_m, float)
+            else 0.0
+        )
+        candidate = {
+            "lat": projected_lat,
+            "lon": projected_lon,
+            "offset_m": offset_m,
+            "route_distance_m": route_distance,
+            "route_distance_delta_m": route_distance_delta_m,
+            "edge_index": edge_index,
+            "source_feature_id": edge.source_feature_id,
+        }
+        candidates.append(candidate)
+        if best_by_offset is None or offset_m < best_by_offset["offset_m"]:
+            best_by_offset = candidate
+    if best_by_offset is None:
+        return None
+    if not isinstance(expected_route_distance_m, float):
+        return best_by_offset
+
+    tie_tolerance_m = 50.0
+    if isinstance(max_projection_distance_m, float):
+        tie_tolerance_m = max(50.0, min(100.0, max_projection_distance_m * 0.1))
+    comparable_candidates = [
+        candidate
+        for candidate in candidates
+        if (
+            candidate["offset_m"] <= best_by_offset["offset_m"] + tie_tolerance_m
+            and (
+                not isinstance(max_projection_distance_m, float)
+                or candidate["offset_m"] <= max_projection_distance_m
+            )
+        )
+    ]
+    if not comparable_candidates:
+        return best_by_offset
+    return min(
+        comparable_candidates,
+        key=lambda candidate: (
+            candidate["route_distance_delta_m"],
+            candidate["offset_m"],
+        ),
+    )
 
 
 def _slice_centerline(

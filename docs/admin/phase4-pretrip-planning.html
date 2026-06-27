@@ -2937,12 +2937,20 @@
       );
       view.segments.forEach(segment => {
         const terrain = terrainBySegment.get(segment.candidate_id);
-        const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
-        const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
-        if (!from || !to || !terrain) return;
+        let segmentCoordSegments = coordinateSegments(
+          segment.display_geometry,
+          segment.display_geometry?.coordinates || []
+        );
+        if (!segmentCoordSegments.length) {
+          const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
+          const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
+          if (!from || !to) return;
+          segmentCoordSegments = [[from, to]];
+        }
+        if (!terrain) return;
         const linkedTileCount = terrain.candidate_tiles?.length || 0;
         const path = el("path", {
-          d: pathFromCoords(bounds, [from, to]),
+          d: pathFromCoordSegments(bounds, segmentCoordSegments),
           class: linkedTileCount ? "terrain-line" : "terrain-line is-unlinked",
           "data-terrain-tile-count": linkedTileCount
         });
@@ -3793,10 +3801,14 @@
         const anchorX = Number(label.dataset.anchorX);
         const anchorY = Number(label.dataset.anchorY);
         if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
+        const fontSize = (11 * unitsPerPx).toFixed(3);
+        const strokeWidth = (3 * unitsPerPx).toFixed(3);
         label.setAttribute("x", (anchorX + 6 * unitsPerPx).toFixed(3));
         label.setAttribute("y", (anchorY - 5 * unitsPerPx).toFixed(3));
-        label.setAttribute("font-size", (11 * unitsPerPx).toFixed(3));
-        label.setAttribute("stroke-width", (3 * unitsPerPx).toFixed(3));
+        label.setAttribute("font-size", fontSize);
+        label.setAttribute("stroke-width", strokeWidth);
+        label.style.setProperty("font-size", `${fontSize}px`, "important");
+        label.style.setProperty("stroke-width", `${strokeWidth}px`, "important");
       });
     }
     function clampMapPan() {
@@ -5935,17 +5947,18 @@
 
       const segmentGroup = el("g", {"data-layer-group": "segments"});
       view.segments.forEach(segment => {
-        const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
-        const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
-        if (!from || !to) return;
-        const segmentCoordinates = segment.display_geometry?.coordinates?.length >= 2
-          ? segment.display_geometry.coordinates
-          : [from, to];
+        let segmentCoordSegments = coordinateSegments(
+          segment.display_geometry,
+          segment.display_geometry?.coordinates || []
+        );
+        if (!segmentCoordSegments.length) {
+          const from = view.checkpoints.find(item => item.candidate_id === segment.from_candidate_id);
+          const to = view.checkpoints.find(item => item.candidate_id === segment.to_candidate_id);
+          if (!from || !to) return;
+          segmentCoordSegments = [[from, to]];
+        }
         const path = el("path", {
-          d: pathFromCoordSegments(
-            bounds,
-            coordinateSegments(segment.display_geometry, segmentCoordinates)
-          ),
+          d: pathFromCoordSegments(bounds, segmentCoordSegments),
           class: "segment-overlay"
         });
         attachEvidence(path, segment);

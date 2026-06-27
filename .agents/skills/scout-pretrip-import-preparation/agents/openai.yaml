@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scout Pretrip Import Preparation"
+  short_description: "Run Scout GPX import and map prep"
+  default_prompt: "Use $scout-pretrip-import-preparation to rebuild a Scout pretrip workspace from GPX/materials, run map preparation, and verify the admin layers."
