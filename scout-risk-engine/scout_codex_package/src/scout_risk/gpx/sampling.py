@@ -22,6 +22,9 @@ class XYRoutePoint:
     lat: float | None = None
     lon: float | None = None
     elevation_m: float | None = None
+    route_base_source: str | None = None
+    route_base_feature_id: str | None = None
+    route_base_projection_distance_m: float | None = None
 
 
 def haversine_m(a: RoutePoint, b: RoutePoint) -> float:
@@ -133,4 +136,3 @@ def _is_geographic_crs(crs: str | None) -> bool:
         return True
     normalized = crs.upper()
     return "4326" in normalized or "WGS84" in normalized or "WGS 84" in normalized
-

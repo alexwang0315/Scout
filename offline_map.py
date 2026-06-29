@@ -94,7 +94,7 @@ def load_offline_map_context(path: Path | str) -> OfflineMapContext:
         feature_metadata = _source_metadata(properties, fallback=metadata)
 
         if feature_type == "approved_corridor":
-            corridors.append(_corridor_from_feature(properties, geometry, feature_metadata))
+            corridors.extend(_corridors_from_feature(properties, geometry, feature_metadata))
         elif feature_type == "hazard_zone":
             hazards.append(_hazard_from_feature(properties, geometry, feature_metadata))
         elif feature_type == "poi":
@@ -121,17 +121,54 @@ def _source_metadata(properties: dict[str, Any], fallback: MapSourceMetadata | N
     )
 
 
-def _corridor_from_feature(
+def _corridors_from_feature(
     properties: dict[str, Any],
     geometry: dict[str, Any],
     source_metadata: MapSourceMetadata,
+) -> list[TrailCorridor]:
+    geometry_type = geometry.get("type")
+    if geometry_type == "LineString":
+        return [
+            _corridor_from_coordinates(
+                properties,
+                geometry["coordinates"],
+                source_metadata,
+            )
+        ]
+    if geometry_type == "MultiLineString":
+        corridors: list[TrailCorridor] = []
+        for index, coordinates in enumerate(geometry.get("coordinates", []), start=1):
+            if not coordinates:
+                continue
+            corridors.append(
+                _corridor_from_coordinates(
+                    properties,
+                    coordinates,
+                    source_metadata,
+                    part_index=index,
+                )
+            )
+        if corridors:
+            return corridors
+    raise ValueError("Approved corridor features must use LineString or MultiLineString geometry")
+
+
+def _corridor_from_coordinates(
+    properties: dict[str, Any],
+    coordinates: list[list[float]],
+    source_metadata: MapSourceMetadata,
+    *,
+    part_index: int | None = None,
 ) -> TrailCorridor:
-    if geometry.get("type") != "LineString":
-        raise ValueError("Approved corridor features must use LineString geometry")
+    corridor_id = properties["id"]
+    name = properties.get("name", corridor_id)
+    if part_index is not None:
+        corridor_id = f"{corridor_id}.part_{part_index:03d}"
+        name = f"{name} part {part_index}"
     return TrailCorridor(
-        corridor_id=properties["id"],
-        name=properties.get("name", properties["id"]),
-        coordinates=_line_coordinates(geometry["coordinates"]),
+        corridor_id=corridor_id,
+        name=name,
+        coordinates=_line_coordinates(coordinates),
         corridor_half_width_m=float(properties.get("corridor_half_width_m", DEFAULT_CORRIDOR_HALF_WIDTH_M)),
         route_level=properties.get("route_level"),
         source_metadata=source_metadata,

@@ -1961,6 +1961,10 @@ def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
     assert (project_root / project["risk_route_profile_ref"]).is_file()
     assert (project_root / project["risk_score_points_ref"]).is_file()
     assert (project_root / project["risk_ribbon_ref"]).is_file()
+    route_metadata = _load(project_root / project["risk_route_profile_metadata_ref"])
+    assert route_metadata["route_base"]["sampling_strategy"] == (
+        "reference_progress_projected_to_nearest_overpass_segment.v1"
+    )
 
     layers = {layer["layer_id"]: layer for layer in manifest["layers"]}
     assert layers["risk-score"]["status"] == "ready_from_project_ref"

@@ -4513,6 +4513,9 @@ def _compact_environment_risk_derivative_candidate(item: dict[str, Any]) -> dict
             "start_distance_m",
             "end_distance_m",
             "supporting_metrics",
+            "source_status",
+            "source_metric_gaps",
+            "data_quality",
             "cwa_time_metadata",
             "source_time_metadata",
             "cwa_api_request_attempted_at",
@@ -4539,6 +4542,9 @@ def _compact_environment_risk_derivative_collection(payload: Any) -> Any:
         "layer_id",
         "label",
         "counts",
+        "source_status",
+        "source_metric_gaps",
+        "data_quality",
         "bbox_wgs84",
         "cwa_time_metadata",
         "source_time_metadata",
@@ -4568,7 +4574,14 @@ def _compact_environment_risk_derivative_layers(payload: Any) -> Any:
     if not isinstance(payload, dict):
         return payload
     compact = _compact_summary_payload(payload)
-    for key in ("layer_id", "counts", "category_items"):
+    for key in (
+        "layer_id",
+        "counts",
+        "source_status",
+        "source_metric_gaps",
+        "data_quality",
+        "category_items",
+    ):
         if key in payload and key != "category_items":
             compact[key] = payload[key]
     category_items = payload.get("category_items")
@@ -4580,6 +4593,9 @@ def _compact_environment_risk_derivative_layers(payload: Any) -> Any:
                     "candidate_count",
                     "value_summary",
                     "layer_id",
+                    "source_status",
+                    "source_metric_gaps",
+                    "data_quality",
                 ),
             )
             if isinstance(item, dict)

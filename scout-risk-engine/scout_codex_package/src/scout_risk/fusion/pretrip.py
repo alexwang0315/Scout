@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from scout_risk.cp.parser import load_cp_csv, parse_cp_notes
 from scout_risk.dem.io import read_dem
@@ -112,6 +113,12 @@ def build_overpass_pretrip_route_profile(
         risk_config=config.route_risk,
         scp_config=config.scp,
     )
+    reference_gpx_not_used_as_route_centerline = bool(
+        route_base.metadata.get("reference_gpx_not_used_as_route_centerline") is True
+    )
+    route_base_is_overpass_vector_evidence = bool(
+        route_base.metadata.get("route_base_is_overpass_vector_evidence") is True
+    )
     metadata = {
         "artifact_kind": "scout_risk_overpass_route_profile_metadata",
         "route_base": route_base.metadata,
@@ -129,8 +136,12 @@ def build_overpass_pretrip_route_profile(
         "terrain_risk_config": loaded_config.metadata(),
         "route_risk_sample_count": len(profile.samples),
         "boundary": {
-            "reference_gpx_not_used_as_route_centerline": True,
-            "route_base_is_overpass_vector_evidence": True,
+            "reference_gpx_not_used_as_route_centerline": (
+                reference_gpx_not_used_as_route_centerline
+            ),
+            "route_base_is_overpass_vector_evidence": (
+                route_base_is_overpass_vector_evidence
+            ),
             "candidate_only": True,
             "runtime_safety_truth": False,
             "raw_dtm_copied": False,
@@ -144,6 +155,13 @@ def _overpass_route_base_samples_to_twd97(
     *,
     sample_interval_m: float,
 ) -> list[XYRoutePoint]:
+    if route_base.sample_metadata and len(route_base.sample_metadata) == len(
+        route_base.points
+    ):
+        return [
+            _route_base_point_to_twd97(point, metadata)
+            for point, metadata in zip(route_base.points, route_base.sample_metadata)
+        ]
     samples = resample_route_points(route_base.points, interval_m=sample_interval_m)
     output: list[XYRoutePoint] = []
     for sample in samples:
@@ -159,3 +177,23 @@ def _overpass_route_base_samples_to_twd97(
             )
         )
     return output
+
+
+def _route_base_point_to_twd97(
+    point: Any,
+    metadata: dict[str, Any],
+) -> XYRoutePoint:
+    x, y = wgs84_to_twd97(point.lat, point.lon)
+    return XYRoutePoint(
+        x=x,
+        y=y,
+        distance_m=float(metadata.get("reference_distance_m") or 0.0),
+        lat=point.lat,
+        lon=point.lon,
+        elevation_m=point.elevation_m,
+        route_base_source=metadata.get("route_base_source"),
+        route_base_feature_id=metadata.get("route_base_feature_id"),
+        route_base_projection_distance_m=metadata.get(
+            "route_base_projection_distance_m"
+        ),
+    )

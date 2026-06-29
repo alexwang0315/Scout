@@ -1,6 +1,7 @@
 import json
 
 from scout_gee_integration import (
+    _gee_access_token,
     build_environment_risk_derivatives,
     build_route_segments_from_gpx,
     build_scout_gee_feature_package,
@@ -51,6 +52,24 @@ def test_gee_runtime_status_accepts_service_account_refs_without_values() -> Non
     assert status.account_ref == "env:SCOUT_GEE_SERVICE_ACCOUNT"
     assert payload["credential_refs"] == ["env:SCOUT_GEE_CREDENTIALS_PATH"]
     assert payload["secret_value_embedded"] is False
+
+
+def test_gee_access_token_expands_user_credentials_path(tmp_path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    credentials_dir = home / "scout-fusion"
+    credentials_dir.mkdir(parents=True)
+    credentials_path = credentials_dir / "earthengine.json"
+    credentials_path.write_text(
+        json.dumps({"access_token": "path-token"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HOME", str(home))
+
+    token = _gee_access_token(
+        {"SCOUT_GEE_CREDENTIALS_PATH": "~/scout-fusion/earthengine.json"}
+    )
+
+    assert token == "path-token"
 
 
 def test_gee_dataset_catalog_is_candidate_only_environment_evidence() -> None:

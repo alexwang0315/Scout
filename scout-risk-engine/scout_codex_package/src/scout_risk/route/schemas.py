@@ -30,7 +30,9 @@ class RouteRiskSample(BaseModel):
     scp: float = Field(ge=0, le=100)
     pretrip_risk: float = Field(ge=0, le=100)
     risk_level: int = Field(ge=1, le=5)
+    route_base_source: str | None = None
+    route_base_feature_id: str | None = None
+    route_base_projection_distance_m: float | None = None
     hazard_types: list[str] = Field(default_factory=list)
     confidence: RiskConfidence = Field(default_factory=RiskConfidence)
     explanation: list[str] = Field(default_factory=list)
-

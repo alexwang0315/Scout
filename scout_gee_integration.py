@@ -2581,6 +2581,7 @@ def _gee_access_token(active_env: Mapping[str, str]) -> str:
     path = credential_path or google_credential_path
     if not path:
         raise GeeFetchError(["missing_gee_credentials_path"])
+    path = str(Path(path).expanduser())
     try:
         credential_payload = _json_loads_bytes(open(path, "rb").read())
     except FileNotFoundError as exc:

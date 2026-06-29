@@ -970,6 +970,65 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
     assert capability["boundary"]["mission_graph_compile_allowed"] is False
 
 
+def test_admin_view_accepts_overpass_multiline_corridor_geometry(
+    tmp_path: Path,
+) -> None:
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    workspace_project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, workspace_project_root)
+    project = json.loads(
+        (workspace_project_root / "project.json").read_text(encoding="utf-8")
+    )
+    overpass_path = workspace_project_root / project["overpass_evidence_ref"]
+    overpass = json.loads(overpass_path.read_text(encoding="utf-8"))
+    candidate = next(
+        item
+        for item in overpass["candidates"]
+        if item["feature_type"] == "approved_corridor"
+    )
+    candidate["geometry"] = {
+        "type": "MultiLineString",
+        "coordinates": [
+            [[121.21, 24.05], [121.211, 24.051]],
+            [[121.22, 24.06], [121.221, 24.061]],
+        ],
+    }
+    candidate["geojson_feature"]["geometry"] = candidate["geometry"]
+    overpass_path.write_text(
+        json.dumps(overpass, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=workspace_project_root,
+    )
+
+    rendered = next(
+        item
+        for item in view["overpass_evidence"]["corridor_candidates"]
+        if item["candidate_id"] == candidate["candidate_id"]
+    )
+    assert rendered["geometry"]["type"] == "MultiLineString"
+    assert rendered["corridor"]["coordinates"] == [
+        {"lon": 121.21, "lat": 24.05},
+        {"lon": 121.211, "lat": 24.051},
+    ]
+    assert rendered["corridor"]["coordinate_segments"] == [
+        [
+            {"lon": 121.21, "lat": 24.05},
+            {"lon": 121.211, "lat": 24.051},
+        ],
+        [
+            {"lon": 121.22, "lat": 24.06},
+            {"lon": 121.221, "lat": 24.061},
+        ],
+    ]
+
+
 def test_layer_preparation_rows_preserve_spec_metadata_after_workspace_run(
     tmp_path: Path,
 ) -> None:
@@ -2031,6 +2090,9 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
     )
     assert derivatives_item["boundary"]["runtime_safety_truth"] is False
     derivative_layers = view["environment_risk_derivative_layers"]
+    assert derivative_layers["source_status"] == "ready_with_data_gaps"
+    assert derivative_layers["source_metric_gaps"][0]["metric_family"] == "sentinel1"
+    assert derivative_layers["data_quality"]["missing_metric_family_count"] == 1
     assert derivative_layers["counts"]["wetness_flash_flood_candidate_count"] == 1
     assert derivative_layers["counts"]["practical_darkness_candidate_count"] == 1
     assert derivative_layers["counts"]["total_candidate_count"] == 2
@@ -2068,6 +2130,10 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
         for item in derivative_layers["category_items"]
         if item["category_key"] == "wetness_flash_flood_susceptibility"
     )
+    assert wetness_category["source_status"] == "ready_with_data_gaps"
+    assert wetness_category["data_quality"]["missing_metric_families"] == [
+        "sentinel1"
+    ]
     assert wetness_category["value_summary"]["cwa_api_fetched_at_hour"] == (
         "2026-06-26T01:00:00Z"
     )

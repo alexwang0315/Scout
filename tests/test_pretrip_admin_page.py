@@ -770,18 +770,31 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function localOsmPbfVectorUrl" in html
     assert "/osm-pbf-vector.geojson" in html
     assert "function renderOsmPbfVector" in html
+    assert "function osmPbfFeatureTags" in html
+    assert "props.tags && typeof props.tags === \"object\"" in html
     assert "state.osmPbfVector?.features" in html
-    assert "class: `osm-pbf-line ${category}`" in html
+    assert "function appendOsmPbfLine" in html
+    assert "function appendOsmPbfLineLabel" in html
+    assert "osm-pbf-line osm-pbf-line-casing" in html
+    assert "osm-pbf-line osm-pbf-line-core" in html
+    assert "osm-pbf-line-label" in html
+    assert '"data-osm-pbf-line-label": "true"' in html
     assert "class: `osm-pbf-area ${category}`" in html
     assert ".osm-pbf-point { fill: #5a5f63;" in html
+    assert ".osm-pbf-point.shelter" in html
     assert '"data-osm-pbf-label": "true"' in html
     assert "function syncOsmPbfLabelScale" in html
     assert "syncOsmPbfLabelScale(scale);" in html
     update_layers_body = html.split("function updateLayers()", 1)[1].split("function checkedLayerIds()", 1)[0]
     assert "syncMapMarkerScale();" in update_layers_body
     assert update_layers_body.index("syncMapMarkerScale();") < update_layers_body.index("updatePointLabels();")
-    assert ".osm-pbf-line.trail" in html
+    assert ".osm-pbf-line-core.path" in html
+    assert ".osm-pbf-line-core.track" in html
+    assert ".osm-pbf-line-core.road" in html
+    assert ".osm-pbf-line-core.terrain" in html
     assert ".osm-pbf-area.forest" in html
+    assert "const hasLocalVector = Boolean(localOsmPbfVectorUrl(state.view));" in html
+    assert "if (isLocalOsmTileMode() && hasLocalVector) return false;" in html
     assert 'group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));' in html
     assert "function osmTileCoverage" in html
     assert 'el("image"' in html
@@ -813,6 +826,12 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "weatherOverlayLabel(cards[0]?.summary || \"Weather evidence pending.\")" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay" in html
     assert "state.weatherOverlay" in html
+    reload_body = html.split("async function reloadProjectView()", 1)[1].split("async function loadOsmPbfVectorLayer", 1)[0]
+    assert "const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);" in reload_body
+    assert reload_body.index("const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);") < reload_body.index(
+        "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay"
+    )
+    assert "await osmPbfVectorPromise;" in reload_body
     assert "Weather API overlay" in html
     assert html.index('"Risk Score", view.risk_score?.points') < html.index(
         '"Baseline Risk", view.risk_ribbon?.segments'
@@ -884,8 +903,12 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Soil Moisture"' in html
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Antecedent Rain"' in html
     assert "function environmentValueTreeSummary" in html
+    assert "function environmentRiskMetricGapText" in html
+    assert "function environmentRiskEmptyNote" in html
+    assert "options.emptyNote" in html
     assert 'type.includes("environment_risk_derivative")' in html
     assert "new_landslide_candidate_count" in html
+    assert "data gaps:" in html
     assert "environment_risk_derivative_layers" in html
     assert "environment-risk-derivative" in html
     assert 'type.includes("environment") || type.includes("gee_") || type.includes("cwa_")' in html

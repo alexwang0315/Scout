@@ -112,6 +112,73 @@ def test_risk_ribbon_geojson_uses_adjacent_samples_and_risk_buckets(tmp_path: Pa
     assert ribbon.metadata["boundary"]["route_aligned_samples_only"] is True
 
 
+def test_risk_ribbon_skips_fallback_and_large_route_base_jumps(tmp_path: Path):
+    route_risk_path = tmp_path / "route_risk.geojson"
+    route_risk_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    _feature(
+                        "sample.0000",
+                        121.0,
+                        24.0,
+                        0.0,
+                        40.0,
+                        2,
+                        route_base_source="overpass_projection",
+                    ),
+                    _feature(
+                        "sample.0001",
+                        121.0001,
+                        24.0001,
+                        20.0,
+                        70.0,
+                        4,
+                        route_base_source="overpass_projection",
+                    ),
+                    _feature(
+                        "sample.0002",
+                        121.0002,
+                        24.0002,
+                        40.0,
+                        55.0,
+                        3,
+                        route_base_source="reference_gpx_gap_fallback",
+                    ),
+                    _feature(
+                        "sample.0003",
+                        121.01,
+                        24.01,
+                        60.0,
+                        60.0,
+                        4,
+                        route_base_source="overpass_projection",
+                    ),
+                    _feature(
+                        "sample.0004",
+                        121.02,
+                        24.02,
+                        80.0,
+                        65.0,
+                        4,
+                        route_base_source="overpass_projection",
+                    ),
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    ribbon = build_risk_ribbon_from_geojson(route_risk_path)
+
+    assert len(ribbon.features) == 1
+    assert ribbon.features[0]["properties"]["from_sample_id"] == "sample.0000"
+    assert ribbon.features[0]["properties"]["to_sample_id"] == "sample.0001"
+    assert ribbon.metadata["skipped_pair_count"] == 3
+
+
 def test_risk_ribbon_writes_geojson_and_metadata(tmp_path: Path):
     route_risk_path = _write_route_risk_fixture(tmp_path)
     ribbon = build_risk_ribbon_from_geojson(route_risk_path)
@@ -181,7 +248,13 @@ def _feature(
     distance_m: float,
     risk: float,
     level: int,
+    route_base_source: str | None = None,
 ) -> dict:
+    route_base_properties = {}
+    if route_base_source is not None:
+        route_base_properties["route_base_source"] = route_base_source
+        route_base_properties["route_base_feature_id"] = "osm.way.fixture"
+        route_base_properties["route_base_projection_distance_m"] = 0.0
     return {
         "type": "Feature",
         "geometry": {"type": "Point", "coordinates": [lon, lat]},
@@ -197,5 +270,6 @@ def _feature(
             "scp": 0.0,
             "pretrip_risk": risk,
             "risk_level": level,
+            **route_base_properties,
         },
     }

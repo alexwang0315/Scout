@@ -12,7 +12,9 @@ from geo_utils import haversine_m
 
 DEFAULT_MAX_PROJECTION_DISTANCE_M = 50.0
 MAX_SEGMENT_ALIGNMENT_DISTANCE_RATIO = 8.0
+MIN_SEGMENT_ALIGNMENT_DISTANCE_RATIO = 0.30
 MIN_SEGMENT_ALIGNMENT_LIMIT_M = 2_000.0
+MAX_POINT_ROUTE_DISTANCE_DELTA_M = 2_000.0
 
 ALIGNMENT_SUMMARY_REF = "outputs/overpass_route_alignment.json"
 ALIGNED_CHECKPOINTS_REF = "outputs/overpass_aligned_checkpoints.json"
@@ -93,6 +95,7 @@ def align_workspace_route_to_overpass(
         checkpoint_output_ref=ALIGNED_CHECKPOINTS_REF,
         route_edges=route_edges,
         max_projection_distance_m=max_projection_distance_m,
+        route_distance_hints_m=checkpoint_route_distance_hints,
         generated_at=generated_at,
     )
     if segments_result["status"] == "completed":
@@ -325,6 +328,7 @@ def _align_segments_from_checkpoints(
     checkpoint_output_ref: str,
     route_edges: list[_RouteEdge],
     max_projection_distance_m: float,
+    route_distance_hints_m: dict[str, float],
     generated_at: str,
 ) -> dict[str, Any]:
     ref = project.get("segment_candidates_ref")
@@ -390,6 +394,12 @@ def _align_segments_from_checkpoints(
             )
             display_alignment = _segment_alignment_from_display_geometry(
                 display_segments_by_id.get(segment_id),
+                expected_route_distances_by_segment=_segment_expected_route_distances_by_segment(
+                    display_segments_by_id.get(segment_id),
+                    from_id=from_id,
+                    to_id=to_id,
+                    route_distance_hints_m=route_distance_hints_m,
+                ),
                 route_edges=route_edges,
                 max_projection_distance_m=max_projection_distance_m,
                 stats=stats,
@@ -604,6 +614,7 @@ def _align_segment_display_geometry(
     stats = _Stats()
     aligned_segments: list[dict[str, Any]] = []
     aligned_segment_map = _aligned_segments_by_id(root / ALIGNED_SEGMENTS_REF)
+    route_distance_hints_m = _checkpoint_route_distance_hints(root, project)
 
     for segment in payload.get("segments", []):
         if not isinstance(segment, dict):
@@ -675,11 +686,24 @@ def _align_segment_display_geometry(
         for coordinate_segment in coordinate_segments:
             if not isinstance(coordinate_segment, list):
                 continue
+            expected_segments = _segment_expected_route_distances_by_segment(
+                segment,
+                from_id=_first_text(segment, ("from_candidate_id", "from_checkpoint_id")),
+                to_id=_first_text(segment, ("to_candidate_id", "to_checkpoint_id")),
+                route_distance_hints_m=route_distance_hints_m,
+            )
+            expected_index = len(aligned_coordinate_segments)
             aligned_coordinate_segments.append(
                 _align_coordinate_segment(
                     coordinate_segment,
                     route_edges=route_edges,
                     max_projection_distance_m=max_projection_distance_m,
+                    expected_route_distances_m=(
+                        expected_segments[expected_index]
+                        if expected_segments is not None
+                        and expected_index < len(expected_segments)
+                        else None
+                    ),
                     stats=stats,
                 )
             )
@@ -688,6 +712,20 @@ def _align_segment_display_geometry(
             for coordinate_segment in aligned_coordinate_segments
             for point in coordinate_segment
         ]
+        if _snapped_overpass_point_count(flattened) == 0:
+            aligned_segments.append(
+                _fallback_display_segment(
+                    segment,
+                    source_ref=ref,
+                    max_projection_distance_m=max_projection_distance_m,
+                    rejection={
+                        "status": "kept_gpx_no_display_points_snapped_to_overpass",
+                        "segment_id": str(segment_id),
+                        "projection_policy": "display_coordinate_corridor",
+                    },
+                )
+            )
+            continue
         rejection = _display_alignment_rejection(
             segment_id=str(segment_id),
             source_segment=segment,
@@ -800,6 +838,7 @@ def _segment_display_segments_by_id(
 def _segment_alignment_from_display_geometry(
     segment: dict[str, Any] | None,
     *,
+    expected_route_distances_by_segment: list[list[float | None]] | None = None,
     route_edges: list[_RouteEdge],
     max_projection_distance_m: float,
     stats: "_Stats",
@@ -810,13 +849,25 @@ def _segment_alignment_from_display_geometry(
     if not coordinate_segments:
         return None
     snapped_distances: list[float] = []
-    for coordinate_segment in coordinate_segments:
+    for segment_index, coordinate_segment in enumerate(coordinate_segments):
+        expected_distances = (
+            expected_route_distances_by_segment[segment_index]
+            if expected_route_distances_by_segment is not None
+            and segment_index < len(expected_route_distances_by_segment)
+            else None
+        )
         for index, point in enumerate(coordinate_segment):
             aligned_point = _align_coordinate(
                 point,
                 item_id=f"segment-corridor.pt{index + 1:04d}",
                 route_edges=route_edges,
                 max_projection_distance_m=max_projection_distance_m,
+                expected_route_distance_m=(
+                    expected_distances[index]
+                    if expected_distances is not None
+                    and index < len(expected_distances)
+                    else None
+                ),
                 stats=stats,
             )
             projection = aligned_point.get("overpass_projection")
@@ -884,6 +935,18 @@ def _segment_alignment_rejection(
         return None
     if not isinstance(aligned_distance_m, float) or aligned_distance_m <= 0:
         return None
+    min_distance_m = source_distance_m * MIN_SEGMENT_ALIGNMENT_DISTANCE_RATIO
+    if aligned_distance_m < min_distance_m:
+        return {
+            "status": "rejected_overpass_segment_path_compression_kept_gpx",
+            "segment_id": segment_id,
+            "source_distance_m": round(source_distance_m, 3),
+            "aligned_distance_m": round(aligned_distance_m, 3),
+            "min_allowed_aligned_distance_m": round(min_distance_m, 3),
+            "min_alignment_distance_ratio": MIN_SEGMENT_ALIGNMENT_DISTANCE_RATIO,
+            "aligned_display_point_count": aligned_point_count,
+            "projection_policy": projection_policy,
+        }
     limit_m = max(
         MIN_SEGMENT_ALIGNMENT_LIMIT_M,
         source_distance_m * MAX_SEGMENT_ALIGNMENT_DISTANCE_RATIO,
@@ -967,6 +1030,66 @@ def _display_points(points: list[Any]) -> list[dict[str, Any]]:
     return display_points
 
 
+def _segment_expected_route_distances_by_segment(
+    segment: dict[str, Any] | None,
+    *,
+    from_id: str | None,
+    to_id: str | None,
+    route_distance_hints_m: dict[str, float],
+) -> list[list[float | None]] | None:
+    if not isinstance(segment, dict) or not from_id or not to_id:
+        return None
+    start_distance_m = route_distance_hints_m.get(from_id)
+    end_distance_m = route_distance_hints_m.get(to_id)
+    if not isinstance(start_distance_m, float) or not isinstance(end_distance_m, float):
+        return None
+    coordinate_segments = _segment_coordinate_segments(segment)
+    if not coordinate_segments:
+        return None
+
+    normalized_segments = [_display_points(points) for points in coordinate_segments]
+    normalized_segments = [points for points in normalized_segments if points]
+    if not normalized_segments:
+        return None
+
+    positions_by_segment: list[list[float]] = []
+    total_distance_m = 0.0
+    previous: tuple[float, float] | None = None
+    for points in normalized_segments:
+        segment_positions: list[float] = []
+        previous = None
+        for point in points:
+            current = _lat_lon_from_point(point)
+            if current is None:
+                segment_positions.append(total_distance_m)
+                continue
+            if previous is not None:
+                total_distance_m += haversine_m(
+                    previous[0],
+                    previous[1],
+                    current[0],
+                    current[1],
+                )
+            segment_positions.append(total_distance_m)
+            previous = current
+        positions_by_segment.append(segment_positions)
+
+    if total_distance_m <= 0:
+        return [
+            [start_distance_m for _ in segment_positions]
+            for segment_positions in positions_by_segment
+        ]
+
+    route_span_m = end_distance_m - start_distance_m
+    return [
+        [
+            start_distance_m + (position_m / total_distance_m) * route_span_m
+            for position_m in segment_positions
+        ]
+        for segment_positions in positions_by_segment
+    ]
+
+
 def _lat_lon_from_point(point: dict[str, Any]) -> tuple[float, float] | None:
     lat = _as_float(point.get("lat"))
     lon = _as_float(point.get("lon"))
@@ -1011,6 +1134,15 @@ def _fallback_display_segment(
     }
 
 
+def _snapped_overpass_point_count(points: list[dict[str, Any]]) -> int:
+    count = 0
+    for point in points:
+        projection = point.get("overpass_projection")
+        if isinstance(projection, dict) and projection.get("status") == "snapped_to_overpass":
+            count += 1
+    return count
+
+
 def _segment_coordinate_segments(segment: dict[str, Any]) -> list[list[Any]]:
     coordinate_segments = segment.get("coordinate_segments")
     if isinstance(coordinate_segments, list) and coordinate_segments:
@@ -1049,6 +1181,7 @@ def _align_coordinate_segment(
     *,
     route_edges: list[_RouteEdge],
     max_projection_distance_m: float,
+    expected_route_distances_m: list[float | None] | None = None,
     stats: "_Stats",
 ) -> list[dict[str, Any]]:
     aligned_points = [
@@ -1057,6 +1190,12 @@ def _align_coordinate_segment(
             item_id=f"display.pt{index + 1:04d}",
             route_edges=route_edges,
             max_projection_distance_m=max_projection_distance_m,
+            expected_route_distance_m=(
+                expected_route_distances_m[index]
+                if expected_route_distances_m is not None
+                and index < len(expected_route_distances_m)
+                else None
+            ),
             stats=stats,
         )
         for index, point in enumerate(coordinate_segment)
@@ -1123,6 +1262,25 @@ def _align_point_record(
         }
         return aligned
     if projection["offset_m"] <= max_projection_distance_m:
+        route_distance_delta_m = _as_float(projection.get("route_distance_delta_m"))
+        if _route_distance_hint_mismatch(route_distance_delta_m):
+            stats.kept_gpx_point_count += 1
+            aligned["overpass_projection"] = {
+                "status": "kept_gpx_route_distance_hint_mismatch",
+                "item_id": item_id,
+                "offset_m": round(projection["offset_m"], 3),
+                "route_distance_m": round(projection["route_distance_m"], 3),
+                "route_distance_hint_m": round(expected_route_distance_m, 3)
+                if isinstance(expected_route_distance_m, float)
+                else None,
+                "route_distance_delta_m": round(route_distance_delta_m, 3)
+                if isinstance(route_distance_delta_m, float)
+                else None,
+                "max_route_distance_delta_m": MAX_POINT_ROUTE_DISTANCE_DELTA_M,
+                "max_projection_distance_m": max_projection_distance_m,
+                "source_feature_id": projection["source_feature_id"],
+            }
+            return aligned
         stats.snapped_point_count += 1
         aligned["gpx_lat"] = lat
         aligned["gpx_lon"] = lon
@@ -1140,6 +1298,9 @@ def _align_point_record(
             "route_distance_m": round(projection["route_distance_m"], 3),
             "route_distance_hint_m": round(expected_route_distance_m, 3)
             if isinstance(expected_route_distance_m, float)
+            else None,
+            "route_distance_delta_m": round(route_distance_delta_m, 3)
+            if isinstance(route_distance_delta_m, float)
             else None,
             "max_projection_distance_m": max_projection_distance_m,
             "source_feature_id": projection["source_feature_id"],
@@ -1173,12 +1334,20 @@ def _record_route_distance_hint(item: dict[str, Any]) -> float | None:
     return None
 
 
+def _route_distance_hint_mismatch(route_distance_delta_m: float | None) -> bool:
+    return (
+        isinstance(route_distance_delta_m, float)
+        and route_distance_delta_m > MAX_POINT_ROUTE_DISTANCE_DELTA_M
+    )
+
+
 def _align_coordinate(
     point: Any,
     *,
     item_id: str,
     route_edges: list[_RouteEdge],
     max_projection_distance_m: float,
+    expected_route_distance_m: float | None = None,
     stats: "_Stats",
 ) -> dict[str, Any]:
     if isinstance(point, dict):
@@ -1198,6 +1367,7 @@ def _align_coordinate(
         item_id=item_id,
         route_edges=route_edges,
         max_projection_distance_m=max_projection_distance_m,
+        expected_route_distance_m=expected_route_distance_m,
         stats=stats,
     )
 
