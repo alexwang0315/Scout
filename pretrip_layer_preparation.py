@@ -36,6 +36,7 @@ from pretrip_osm_pbf_ingest import (
     build_osm_pbf_feature_index,
     extract_osm_pbf_to_osm_json,
     import_osm_pbf_evidence_candidates,
+    osm_json_to_geojson_feature_collection,
 )
 from pretrip_overpass_ingest import import_overpass_evidence_candidates
 from pretrip_source_ingest import wgs84_to_twd97
@@ -390,6 +391,7 @@ class LayerPreparationRequest:
     seed_imagery_cache: bool = False
     imagery_provider_allows_offline_prefetch: bool = False
     imagery_seed_max_tiles: int | None = None
+    imagery_cache_fallback_project_ids: tuple[str, ...] = ()
     osm_pbf_path: Path | None = None
     osm_pbf_source_url: str | None = None
     osm_pbf_cache_ttl_days: int = DEFAULT_OSM_PBF_CACHE_TTL_DAYS
@@ -618,6 +620,8 @@ def _maybe_prepare_local_osm_pbf_evidence(request: LayerPreparationRequest) -> N
         project_root=project_root,
         extraction_plan=extraction_plan,
         osmium_bin=request.osmium_bin,
+        raw_payload=raw_payload,
+        raw_payload_ref=raw_ref,
     )
     feature_index_source_ref = render_geojson["ref"] if render_geojson else raw_ref
     feature_index_payload = render_geojson["payload"] if render_geojson else raw_payload
@@ -1181,6 +1185,10 @@ def _prepare_gee_environment_artifacts(
     )
     try:
         from scout_gee_integration import (
+            SMAP_L4_BANDS,
+            SMAP_L4_COLLECTION_ID,
+            SMAP_L4_SPATIAL_RESOLUTION_M,
+            SMAP_L4_TEMPORAL_RESOLUTION,
             build_gee_runtime_status,
             fetch_gee_environment_evidence,
             gee_environment_dataset_catalog,
@@ -1213,6 +1221,21 @@ def _prepare_gee_environment_artifacts(
         }
         write_scout_gee_feature_package = None
         write_environment_risk_derivative_artifacts = None
+        SMAP_L4_COLLECTION_ID = "NASA/SMAP/SPL4SMGP/008"
+        SMAP_L4_TEMPORAL_RESOLUTION = "3h"
+        SMAP_L4_SPATIAL_RESOLUTION_M = 11000
+        SMAP_L4_BANDS = (
+            "sm_surface",
+            "sm_rootzone",
+            "sm_profile",
+            "sm_surface_wetness",
+            "sm_rootzone_wetness",
+            "sm_profile_wetness",
+            "surface_temp",
+            "sm_rootzone_pctl",
+            "sm_profile_pctl",
+            "sm_surface_anomaly",
+        )
 
     fetch_result: dict[str, Any] | None = None
     external_calls_made = False
@@ -1259,10 +1282,22 @@ def _prepare_gee_environment_artifacts(
             blockers = ["gee_fetch_requires_explicit_network"]
         soil_summary = {
             "dataset_family": "SMAP",
-            "collection_id": "NASA/SMAP/SPL4SMGP/008",
+            "collection_id": SMAP_L4_COLLECTION_ID,
+            "source_collection_id": SMAP_L4_COLLECTION_ID,
+            "layer_id": "soil-moisture",
+            "sm_surface": None,
+            "sm_rootzone": None,
+            "sm_profile": None,
             "sm_surface_wetness": None,
             "sm_rootzone_wetness": None,
+            "sm_profile_wetness": None,
             "antecedent_wetness_percentile": None,
+            "band_names": list(SMAP_L4_BANDS),
+            "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+            "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "human_review_required": True,
         }
         rain_summary = {
             "dataset_family": "GPM_IMERG",
@@ -1288,6 +1323,58 @@ def _prepare_gee_environment_artifacts(
     ).encode("utf-8")
     raw_summary_hash = hashlib.sha256(raw_summary_bytes).hexdigest()
     raw_summary_ref = "outputs/environment/gee/gee_raw_summary.json"
+    smap_route_scope = {
+        "scope_kind": "route_bbox_corridor_proxy",
+        "bbox_wgs84": bbox,
+        "route_corridor_m": request.route_corridor_m,
+        "aggregation_geometry": "bbox_wgs84",
+        "corridor_geometry_available": False,
+        "note": (
+            "SMAP L4 is coarse 11km hydrologic background summarized for the "
+            "route bbox/corridor proxy; it is candidate evidence only."
+        ),
+    }
+    smap_source_metadata = {
+        "provider": "google_earth_engine",
+        "collection_id": SMAP_L4_COLLECTION_ID,
+        "official_catalog_url": (
+            "https://developers.google.com/earth-engine/datasets/catalog/"
+            "NASA_SMAP_SPL4SMGP_008"
+        ),
+        "band_names": list(SMAP_L4_BANDS),
+        "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+        "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "human_review_required": True,
+    }
+    soil_route_scope = {
+        **smap_route_scope,
+        **(
+            soil_summary.get("route_scope")
+            if isinstance(soil_summary.get("route_scope"), dict)
+            else {}
+        ),
+        "bbox_wgs84": bbox,
+        "route_corridor_m": request.route_corridor_m,
+        "aggregation_geometry": "bbox_wgs84",
+    }
+    soil_summary.update(
+        {
+            "source_collection_id": SMAP_L4_COLLECTION_ID,
+            "layer_id": "soil-moisture",
+            "band_names": list(SMAP_L4_BANDS),
+            "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+            "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+            "route_scope": soil_route_scope,
+            "source_metadata": soil_summary.get("source_metadata")
+            or smap_source_metadata,
+            "external_api_calls_made": external_calls_made,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "human_review_required": True,
+        }
+    )
     gpm_raw_summary_ref = OUTPUT_REFS["gee_gpm_imerg_raw_summary_ref"]
     gpm_raw_summary = _gee_gpm_imerg_raw_summary(
         raw_summary=raw_summary,
@@ -1311,7 +1398,7 @@ def _prepare_gee_environment_artifacts(
         source_run_id=f"gee.{project_id}.{_job_timestamp(prepared_at)}",
         prepared_at=prepared_at,
         detail=(
-            "SMAP/GEE bbox-reduced soil moisture evidence."
+            "SMAP/GEE coarse route bbox/corridor hydrologic background evidence."
             if status == "fetched"
             else "SMAP/GEE source status; numeric soil moisture requires configured GEE credentials and explicit fetch."
         ),
@@ -1321,8 +1408,15 @@ def _prepare_gee_environment_artifacts(
             "blocker_reasons": blockers,
             "raw_summary_ref": raw_summary_ref,
             "raw_summary_sha256": raw_summary_hash,
+            "raw_response_hash": f"sha256:{raw_summary_hash}",
+            "normalized_artifact_ref": OUTPUT_REFS["soil_moisture_grid_ref"],
             "cache_policy": cache_policy,
             "external_api_calls_made": external_calls_made,
+            "source_collection_id": SMAP_L4_COLLECTION_ID,
+            "collection_id": SMAP_L4_COLLECTION_ID,
+            "route_scope": soil_route_scope,
+            "source_metadata": smap_source_metadata,
+            "human_review_required": True,
         },
     )
     rain_feature = _environment_status_feature(
@@ -1357,6 +1451,26 @@ def _prepare_gee_environment_artifacts(
         external_calls_made=external_calls_made,
     )
     soil_geojson["cache_policy"] = cache_policy
+    soil_geojson.update(
+        {
+            "layer_id": "soil-moisture",
+            "collection_id": SMAP_L4_COLLECTION_ID,
+            "source_collection_id": SMAP_L4_COLLECTION_ID,
+            "band_names": list(SMAP_L4_BANDS),
+            "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+            "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+            "route_scope": soil_route_scope,
+            "source_metadata": smap_source_metadata,
+            "raw_summary_ref": raw_summary_ref,
+            "raw_summary_sha256": raw_summary_hash,
+            "raw_response_hash": f"sha256:{raw_summary_hash}",
+            "normalized_artifact_ref": OUTPUT_REFS["soil_moisture_grid_ref"],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "human_review_required": True,
+            "external_api_calls_made": external_calls_made,
+        }
+    )
     rain_geojson = _feature_collection(
         "gee_antecedent_rain_grid",
         [rain_feature],
@@ -1412,6 +1526,26 @@ def _prepare_gee_environment_artifacts(
     )
     if isinstance(smap_timeseries, dict):
         smap_timeseries["cache_policy"] = cache_policy
+        smap_timeseries.setdefault("collection_id", SMAP_L4_COLLECTION_ID)
+        smap_timeseries.setdefault("source_collection_id", SMAP_L4_COLLECTION_ID)
+        smap_timeseries.setdefault("band_names", list(SMAP_L4_BANDS))
+        smap_timeseries.setdefault("temporal_resolution", SMAP_L4_TEMPORAL_RESOLUTION)
+        smap_timeseries.setdefault("spatial_resolution_m", SMAP_L4_SPATIAL_RESOLUTION_M)
+        smap_timeseries.setdefault("source_metadata", smap_source_metadata)
+        smap_timeseries["route_scope"] = {
+            **soil_route_scope,
+            **(
+                smap_timeseries.get("route_scope")
+                if isinstance(smap_timeseries.get("route_scope"), dict)
+                else {}
+            ),
+            "bbox_wgs84": bbox,
+            "route_corridor_m": request.route_corridor_m,
+        }
+        smap_timeseries["external_api_calls_made"] = external_calls_made
+        smap_timeseries["candidate_only"] = True
+        smap_timeseries["runtime_safety_truth"] = False
+        smap_timeseries["human_review_required"] = True
     gpm_timeseries = (
         fetch_result.get("gpm_timeseries")
         if fetch_result and fetch_result.get("gpm_timeseries")
@@ -2326,6 +2460,15 @@ def main(argv: list[str] | None = None) -> None:
         help="Optional tile limit for explicit imagery seeding.",
     )
     parser.add_argument(
+        "--imagery-cache-fallback-project-id",
+        action="append",
+        default=[],
+        help=(
+            "Optional project namespace to reuse fresh raw imagery tiles from "
+            "before remote fetching. May be supplied more than once."
+        ),
+    )
+    parser.add_argument(
         "--osm-pbf-path",
         type=Path,
         help=(
@@ -2387,6 +2530,11 @@ def main(argv: list[str] | None = None) -> None:
             args.imagery_provider_allows_offline_prefetch
         ),
         imagery_seed_max_tiles=args.imagery_seed_max_tiles,
+        imagery_cache_fallback_project_ids=tuple(
+            item
+            for item in args.imagery_cache_fallback_project_id
+            if str(item).strip()
+        ),
         osm_pbf_path=args.osm_pbf_path,
         osm_pbf_source_url=args.osm_pbf_source_url,
         osm_pbf_cache_ttl_days=args.osm_pbf_cache_ttl_days,
@@ -3217,6 +3365,7 @@ def _maybe_seed_imagery_tile_cache(
         provider_allows_offline_prefetch=True,
         dry_run=False,
         max_tiles=request.imagery_seed_max_tiles,
+        fallback_cache_project_ids=request.imagery_cache_fallback_project_ids,
     )
     project_id = request.project_id or str(project.get("project_id") or project_root.name)
     plan_ref = f"outputs/layers/manifests/{project_id}.imagery_tile_cache_plan.json"
@@ -3232,6 +3381,9 @@ def _maybe_seed_imagery_tile_cache(
         "seed_summary": seed_summary,
         "imagery_source_id": imagery_source.get("source_id"),
         "imagery_source_kind": imagery_source.get("source_kind"),
+        "imagery_cache_fallback_project_ids": list(
+            request.imagery_cache_fallback_project_ids
+        ),
         "candidate_only": True,
         "runtime_safety_truth": False,
         "raw_tile_embedded": False,
@@ -6814,6 +6966,8 @@ def _gee_environment_summary(
         "dataset_catalog": dataset_catalog,
         "candidate_only": True,
         "runtime_safety_truth": False,
+        "human_review_required": True,
+        "external_api_calls_made": external_calls_made,
         "boundary": _environment_boundary(external_calls_made=external_calls_made),
     }
 
@@ -6880,6 +7034,8 @@ def _gee_timeseries_placeholder(
         "cache_policy": cache_policy,
         "candidate_only": True,
         "runtime_safety_truth": False,
+        "human_review_required": True,
+        "external_api_calls_made": external_calls_made,
         "boundary": _environment_boundary(external_calls_made=external_calls_made),
     }
 
@@ -7881,18 +8037,35 @@ def _export_local_osm_render_geojson(
     project_root: Path,
     extraction_plan: dict[str, Any],
     osmium_bin: str,
+    raw_payload: dict[str, Any] | None = None,
+    raw_payload_ref: str | None = None,
 ) -> dict[str, Any] | None:
     extracted_pbf_path_value = extraction_plan.get("extracted_pbf_path")
-    if not isinstance(extracted_pbf_path_value, str) or not extracted_pbf_path_value:
-        return None
-    extracted_pbf_path = Path(extracted_pbf_path_value)
-    if not extracted_pbf_path.is_file():
-        return None
-    osmium_path = Path(osmium_bin).expanduser()
-    if not osmium_path.is_file() and shutil.which(osmium_bin) is None:
-        return None
     output_ref = "normalized/map/osm_pbf_route_bbox_full.geojson"
     output_path = project_root / output_ref
+    if not isinstance(extracted_pbf_path_value, str) or not extracted_pbf_path_value:
+        return _export_osmjson_render_geojson(
+            output_path=output_path,
+            output_ref=output_ref,
+            raw_payload=raw_payload,
+            raw_payload_ref=raw_payload_ref,
+        )
+    extracted_pbf_path = Path(extracted_pbf_path_value)
+    if not extracted_pbf_path.is_file():
+        return _export_osmjson_render_geojson(
+            output_path=output_path,
+            output_ref=output_ref,
+            raw_payload=raw_payload,
+            raw_payload_ref=raw_payload_ref,
+        )
+    osmium_path = Path(osmium_bin).expanduser()
+    if not osmium_path.is_file() and shutil.which(osmium_bin) is None:
+        return _export_osmjson_render_geojson(
+            output_path=output_path,
+            output_ref=output_ref,
+            raw_payload=raw_payload,
+            raw_payload_ref=raw_payload_ref,
+        )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     command = [
         osmium_bin,
@@ -7918,18 +8091,60 @@ def _export_local_osm_render_geojson(
             text=True,
         )
     except (OSError, subprocess.CalledProcessError):
-        return None
+        return _export_osmjson_render_geojson(
+            output_path=output_path,
+            output_ref=output_ref,
+            raw_payload=raw_payload,
+            raw_payload_ref=raw_payload_ref,
+        )
     if not output_path.is_file():
-        return None
+        return _export_osmjson_render_geojson(
+            output_path=output_path,
+            output_ref=output_ref,
+            raw_payload=raw_payload,
+            raw_payload_ref=raw_payload_ref,
+        )
     try:
         payload = _load_json(output_path)
     except (OSError, json.JSONDecodeError):
-        return None
+        return _export_osmjson_render_geojson(
+            output_path=output_path,
+            output_ref=output_ref,
+            raw_payload=raw_payload,
+            raw_payload_ref=raw_payload_ref,
+        )
     return {
         "ref": output_ref,
         "path": output_path,
         "payload": payload,
         "command": command,
+    }
+
+
+def _export_osmjson_render_geojson(
+    *,
+    output_path: Path,
+    output_ref: str,
+    raw_payload: dict[str, Any] | None,
+    raw_payload_ref: str | None,
+) -> dict[str, Any] | None:
+    if raw_payload is None:
+        return None
+    payload = osm_json_to_geojson_feature_collection(raw_payload)
+    payload.setdefault("properties", {})
+    payload["properties"].update(
+        {
+            "render_source_ref": raw_payload_ref,
+            "render_source_kind": "local_osm_pbf_osmjson_extract",
+        }
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(output_path, payload)
+    return {
+        "ref": output_ref,
+        "path": output_path,
+        "payload": payload,
+        "command": None,
     }
 
 

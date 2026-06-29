@@ -77,15 +77,79 @@ class SkillRegistryTests(unittest.TestCase):
         )
         self.assertIn("runtime_safety_truth", route_reference.output_schema.required_fields)
         pretrip_import = registry.get("pretrip-import-preparation")
+        self.assertEqual(pretrip_import.version, "0.1.1")
         self.assertEqual(pretrip_import.type, "artifact")
         self.assertEqual(pretrip_import.activation_gate.mode, "operator_approved")
         self.assertTrue(pretrip_import.activation_gate.requires_human_approval)
+        self.assertTrue(
+            any(
+                "reference_progress_projected_to_nearest_overpass_segment.v1" in condition
+                for condition in pretrip_import.activation_gate.conditions
+            )
+        )
+        self.assertTrue(
+            any(
+                "local OSM PBF success requires" in condition
+                for condition in pretrip_import.activation_gate.conditions
+            )
+        )
+        self.assertTrue(
+            any(
+                "from-zero run" in condition
+                and "durable_evidence_source_root must be empty" in condition
+                for condition in pretrip_import.activation_gate.conditions
+            )
+        )
+        self.assertTrue(
+            any(
+                "SCOUT_PRETRIP_RESTORE_FROM_BACKUP=0" in condition
+                for condition in pretrip_import.activation_gate.conditions
+            )
+        )
+        self.assertTrue(
+            any(
+                "SkillRunRecord" in condition and "outputs/scout_ai" in condition
+                for condition in pretrip_import.activation_gate.conditions
+            )
+        )
+        self.assertTrue(
+            any(
+                "boss-points" in condition and "not a layer-preparation CLI id" in condition
+                for condition in pretrip_import.activation_gate.conditions
+            )
+        )
         self.assertIn("scout.pretrip.import_gpx", pretrip_import.preflight.required_capabilities)
         self.assertIn("scout.pretrip.prepare_layers", pretrip_import.preflight.required_capabilities)
+        self.assertIn(
+            "tools.admin_ui_visual_smoke",
+            pretrip_import.preflight.required_capabilities,
+        )
         self.assertIn("local.raw_gpx", pretrip_import.allowed_reads)
+        self.assertIn("pretrip.workspace.osm_pbf_vector", pretrip_import.allowed_reads)
+        self.assertIn("pretrip.workspace.risk_route_base", pretrip_import.allowed_reads)
         self.assertIn("pretrip.workspace.validation_reports", pretrip_import.allowed_writes)
+        self.assertIn(
+            "pretrip.workspace.risk_route_base_metadata",
+            pretrip_import.allowed_writes,
+        )
+        self.assertIn(
+            "pretrip.workspace.scout_ai_skill_run_audit",
+            pretrip_import.allowed_writes,
+        )
         self.assertIn("phase1.safety", pretrip_import.forbidden_writes)
         self.assertIn("missing_inputs", pretrip_import.output_schema.required_fields)
+        self.assertIn(
+            "risk_route_base_strategy",
+            pretrip_import.output_schema.required_fields,
+        )
+        self.assertIn(
+            "osm_pbf_vector_render_check",
+            pretrip_import.output_schema.required_fields,
+        )
+        self.assertIn(
+            "cwa_timing_metadata",
+            pretrip_import.output_schema.required_fields,
+        )
         self.assertIn(
             "pretrip_import_preparation_run_result",
             pretrip_import.output_schema.artifact_kinds,

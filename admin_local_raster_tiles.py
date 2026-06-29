@@ -6,7 +6,7 @@ import io
 import json
 import math
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -374,6 +374,7 @@ def seed_imagery_tile_cache(
     dry_run: bool = True,
     max_tiles: int | None = None,
     tile_ttl_days: float | None = DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS,
+    fallback_cache_project_ids: Sequence[str] | None = None,
     fetch_tile: ImageryTileFetch | None = None,
 ) -> dict[str, Any]:
     if plan.get("artifact_kind") != "admin_imagery_tile_cache_plan":
@@ -390,6 +391,7 @@ def seed_imagery_tile_cache(
     tiles_written = 0
     tiles_refreshed = 0
     tiles_skipped_existing = 0
+    tiles_copied_from_fallback_cache = 0
     tiles_failed = 0
     tile_error_samples: list[dict[str, Any]] = []
     bytes_written = 0
@@ -415,6 +417,25 @@ def seed_imagery_tile_cache(
         else:
             stale_existing = False
         if dry_run:
+            continue
+        fallback_path = _fresh_fallback_raster_tile_path(
+            cache_root,
+            project_ids=fallback_cache_project_ids,
+            current_project_id=str(plan["project_id"]),
+            layer_id=str(plan["layer_id"]),
+            z=tile["z"],
+            x=tile["x"],
+            y=tile["y"],
+            tile_ttl_days=tile_ttl_days,
+            now=now,
+        )
+        if fallback_path is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(fallback_path.read_bytes())
+            tiles_copied_from_fallback_cache += 1
+            if stale_existing:
+                tiles_refreshed += 1
+            bytes_written += path.stat().st_size
             continue
         try:
             remote_tile = fetcher(
@@ -455,6 +476,7 @@ def seed_imagery_tile_cache(
         tiles_refreshed=tiles_refreshed,
         tiles_skipped_existing=tiles_skipped_existing,
         tiles_failed=tiles_failed,
+        tiles_copied_from_fallback_cache=tiles_copied_from_fallback_cache,
         tile_error_samples=tile_error_samples,
         tile_ttl_days=tile_ttl_days,
         bytes_written=bytes_written,
@@ -487,6 +509,43 @@ def build_local_raster_tile_proxy_contract(
             "若明確開啟遠端取圖，proxy 會從 Scout imagery source registry 取圖並寫入本機 cache。",
         ],
     }
+
+
+def _fresh_fallback_raster_tile_path(
+    cache_root: Path,
+    *,
+    project_ids: Sequence[str] | None,
+    current_project_id: str,
+    layer_id: str,
+    z: int | str,
+    x: int | str,
+    y: int | str,
+    tile_ttl_days: float | None,
+    now: float,
+) -> Path | None:
+    if not project_ids:
+        return None
+    seen: set[str] = {current_project_id}
+    for raw_project_id in project_ids:
+        project_id = str(raw_project_id or "").strip()
+        if not project_id or project_id in seen:
+            continue
+        seen.add(project_id)
+        path = raster_tile_cache_path(
+            project_id,
+            layer_id,
+            z,
+            x,
+            y,
+            cache_root=cache_root,
+        )
+        if path.exists() and _cached_tile_is_fresh(
+            path,
+            tile_ttl_days=tile_ttl_days,
+            now=now,
+        ):
+            return path
+    return None
 
 
 def raster_tile_cache_path(
@@ -838,6 +897,7 @@ def _imagery_seed_summary(
     tiles_refreshed: int,
     tiles_skipped_existing: int,
     tiles_failed: int,
+    tiles_copied_from_fallback_cache: int,
     tile_error_samples: list[dict[str, Any]] | None,
     tile_ttl_days: float | None,
     bytes_written: int,
@@ -856,6 +916,7 @@ def _imagery_seed_summary(
         "tiles_written": tiles_written,
         "tiles_refreshed": tiles_refreshed,
         "tiles_skipped_existing": tiles_skipped_existing,
+        "tiles_copied_from_fallback_cache": tiles_copied_from_fallback_cache,
         "tiles_failed": tiles_failed,
         "tile_error_samples": tile_error_samples or [],
         "tile_ttl_days": tile_ttl_days,

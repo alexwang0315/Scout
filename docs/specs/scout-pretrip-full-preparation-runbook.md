@@ -342,9 +342,25 @@ The raster tile cache default TTL is 30 days
 (`DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS = 30`). Do not delete the cache to force
 refresh.
 
+`SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT` must point at the shared raster tile
+root, for example `/Users/alexwang0315/workspace/scout-local-data/raster-tiles`
+or `/tmp/scout-local-data/raster-tiles`. Do not set it to
+`.../raster-tiles/<project-id>` because the cache writer already appends the
+project namespace and layer id. The wrapper normalizes this mistake, but manual
+commands must avoid it.
+
+For `tryimport`, suffix-test, or from-zero comparison runs that must reuse
+unchanged Rudy/Rudy+TW raw tiles without replaying old workspace artifacts, set
+`SCOUT_PRETRIP_RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS` to one or more stable
+raw tile cache namespaces, comma-separated. The seeding step copies only fresh
+raw PNG tiles according to TTL before remote fetch; it does not copy OCR,
+Overpass, risk, mileage, or other derived workspace artifacts.
+
 Expected behavior when `--seed-imagery-cache` is used:
 
 - fresh cached tiles are skipped;
+- fresh tiles from configured fallback cache namespaces are copied into the
+  current project cache before remote fetch;
 - expired/stale cached tiles are refreshed individually;
 - missing tiles are fetched individually;
 - failed individual tiles produce warnings but must not erase vector evidence;
@@ -847,6 +863,260 @@ Tryimport2 vs reference strict compare: PASS
 Workspace spec alignment rerun: PASS
 9112 Playwright query URL check: PASS
 Admin UI visual smoke: PASS
+```
+
+## Run Log: 2026-06-29 From-Zero Scout AI Test0629 Replay
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI_test0629
+```
+
+Material root:
+
+```text
+/Users/alexwang0315/workspace/scout-local-materials/pretrip/chilai_nanhua_day1_scoutAI_test0629
+```
+
+Scout AI skill invocation:
+
+```text
+skill_id=pretrip-import-preparation
+skill_manifest=skills/scout/pretrip-import-preparation.yaml
+plan_ref=/Users/alexwang0315/workspace/scout-local-materials/pretrip/chilai_nanhua_day1_scoutAI_test0629/outputs/scout_ai/pretrip_import_preparation_plan_model_call.json
+pydantic_ai_provider=openrouter
+pydantic_ai_tool_called=true
+activation_decision=degrade
+degraded_to=manual_pretrip_import_preparation_runbook
+```
+
+Attempt 1:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0629_20260629T101651Z.log
+Elapsed: 64.5 seconds
+Result: FAIL
+```
+
+Issue encountered:
+
+1. The run mixed 32-layer admin contract ids with
+   `pretrip_layer_preparation --layers`.
+   - Symptom: layer preparation failed with
+     `ValueError: unsupported layer id: boss-points`.
+   - Root cause: `boss-points` is a 32-layer admin contract layer and a required
+     evidence/admin gate, but it is not currently a `pretrip_layer_preparation`
+     CLI layer id.
+   - Fix to apply before retry: remove `boss-points` from
+     `SCOUT_PRETRIP_LAYERS` for the layer-preparation CLI run. Continue to
+     verify Boss evidence separately through project refs, admin view, and the
+     32-layer contract gate.
+   - SOP change: do not pass all 32 admin layer ids directly to
+     `pretrip_layer_preparation --layers`; use only layer-preparation-supported
+     ids and validate the complete 32-layer contract afterward.
+
+Attempt 2:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0629_20260629T102057Z.log
+Elapsed before stop: approximately 60 seconds
+Result: STOPPED
+```
+
+Issue encountered:
+
+1. The wrapper attempted implicit durable restore from the previous partial
+   target backup while `durable_evidence_source_root` was empty.
+   - Symptom: `Restoring durable admin evidence refs from
+     /Users/alexwang0315/workspace/.pretrip-backups/chilai_nanhua_day1_scoutAI_test0629.backup...`
+     appeared during a declared from-zero run.
+   - Root cause: the wrapper treated a just-created target backup as an
+     implicit durable source whenever no explicit durable source was set.
+   - Fix applied: add `SCOUT_PRETRIP_RESTORE_FROM_BACKUP`; from-zero runs must
+     set `SCOUT_PRETRIP_RESTORE_FROM_BACKUP=0`.
+   - SOP change: a from-zero run may move old target workspaces to backup for
+     cleanup, but must not read that backup as evidence or durable replay input.
+
+2. The local OSM PBF path fell back to Python `osmium` streaming because the
+   `osmium` CLI was not available.
+   - Symptom: layer preparation entered
+     `python_osmium_streaming_fallback` over the full Taiwan PBF.
+   - Fix applied before retry: keep the source-backed OSM JSON to GeoJSON
+     render fallback so `osm_pbf_render_geojson_ref` is not lost when the CLI
+     is unavailable.
+   - SOP note: Python fallback is correctness-capable but may be slow; prefer a
+     preinstalled `osmium` CLI or target-specific PBF extract cache for
+     time-bounded replays.
+
+Attempt 3:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0629_20260629T102522Z.log
+Elapsed before stop: approximately 8 minutes
+Result: STOPPED
+```
+
+Issue encountered:
+
+1. Python `osmium` fallback spent too long materializing tags for unrelated OSM
+   nodes before bbox/corridor filtering could complete.
+   - Symptom: the stack was inside `_osmium_tags(node)` while scanning the
+     Taiwan PBF; no `osm_pbf_phase_a_raw.osm.json` had been written after
+     several minutes.
+   - Root cause: the fallback handler converted every node's tags to a Python
+     dict before checking whether the node carried any Scout-relevant tag.
+   - Fix applied: first scan only the relevant tag keys for node/way/relation
+     matching; materialize full tags only for matched OSM elements.
+   - SOP change: keep Python `osmium` fallback correctness-capable, but optimize
+     it for sparse relevant tags and prefer CLI bbox extraction whenever the
+     CLI is already installed.
+
+Attempt 4:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0629_20260629T103705Z.log
+Elapsed before stop: approximately 4 minutes
+Result: STOPPED
+```
+
+Issue encountered:
+
+1. Python-level tag prefiltering was not enough because pyosmium still invoked
+   the Python handler for too many objects.
+   - Symptom: `pretrip_layer_preparation` remained in the PBF scan for several
+     minutes without writing `osm_pbf_phase_a_raw.osm.json`.
+   - Root cause: the handler still received all objects from pyosmium; only the
+     in-handler dict allocation was reduced.
+   - Fix applied: add native pyosmium `KeyFilter` with the Scout-relevant tag
+     keys before the Python handler. The location index still runs in native
+     code, but unrelated objects are not dispatched into Python callbacks.
+   - SOP change: Python fallback must use native pyosmium filters when the
+     `osmium` CLI is unavailable.
+
+Attempt 5:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0629_20260629T104538Z.log
+Elapsed: approximately 10 minutes
+Result: COMPLETED, STRICT COMPARISON FAILED
+```
+
+Issues encountered:
+
+1. The full wrapper run completed and produced source-backed Overpass, OSM PBF,
+   risk, OCR, mileage, Boss, MCP, CWA, and GEE refs, but strict comparison
+   against `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI` failed.
+   - Symptom: compare diffs included `raster_label_ocr_label_count 13 vs 20`,
+     `overpass_route_alignment_kept_gpx_point_count 943 vs 1023`,
+     `overpass_route_alignment_snapped_point_count 990 vs 983`,
+     `route_pressure_sample_count 225 vs 182`, and
+     `mileage_tag_alignment_count 17089 vs 19879`.
+   - Confirmed non-cause: primary GPX SHA and 24-GPX source corpus matched the
+     reference; OSM PBF feature index, Overpass candidate count, risk score
+     point count, and risk ribbon segment count matched the current reference
+     project metrics.
+
+2. Raster tile cache root was passed as a project directory.
+   - Symptom: target tile refs were written under
+     `.../raster-tiles/chilai_nanhua_day1_scoutAI_test0629/chilai_nanhua_day1_scoutAI_test0629/imagery/...`
+     while the stable reference raw tiles existed under
+     `.../raster-tiles/chilai_nanhua_day1_scoutAI/imagery/...`.
+   - Impact: the same z/x/y Rudy+TW tile was fetched again and had a different
+     image hash, so OCR produced 13 labels instead of the cached 20-label
+     result.
+   - Fix applied: wrapper now normalizes
+     `SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT` when it accidentally ends with the
+     current project id, and `admin_local_raster_tiles.seed_imagery_tile_cache`
+     supports `fallback_cache_project_ids` to copy fresh raw PNG tiles before
+     remote fetch.
+   - SOP change: use a shared raster tile root plus
+     `SCOUT_PRETRIP_RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS` for project-id
+     suffix replay. This is raw tile cache reuse, not durable derived evidence
+     replay.
+
+3. The comparison reference contains a route-pressure inconsistency.
+   - Symptom: reference `normalized/routes/route_summary.json`,
+     `candidates/segments.json`, and
+     `outputs/overpass_aligned_segment_display_geometry.json` all describe a
+     112.258 km route, but `outputs/route_pressure_profile.json` contains only
+     182 samples ending at 90.599 km.
+   - Impact: a current coherent from-zero run generates 225 route-pressure
+     samples for the full 112.258 km route, which then changes mileage tag
+     totals.
+   - SOP change: when strict comparison fails on route-pressure or mileage
+     counts, first check whether the reference workspace has internally
+     consistent route extent, risk route profile, route pressure, and mileage
+     artifacts. Do not intentionally degrade a fresh full-route workspace to a
+     partial stale reference without operator confirmation.
+
+Attempt 6:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0629_20260629T111316Z.log
+Elapsed: 347 seconds
+Result: COMPLETED, STRICT COMPARISON STILL FAILED BECAUSE REFERENCE IS INCOHERENT
+```
+
+Fixes verified:
+
+1. Scout AI planning went through Pydantic AI/OpenRouter and called the plan
+   tool.
+   - Plan artifact:
+     `outputs/scout_ai/pretrip_import_preparation_plan_attempt6_model_call.json`.
+   - Run result artifact:
+     `outputs/scout_ai/pretrip_import_preparation_run_result.json`.
+   - SkillRunRecord artifact:
+     `outputs/scout_ai/pretrip_import_preparation_skill_run_record.json`.
+
+2. Raw Rudy+TW tile cache fallback worked without durable workspace replay.
+   - Wrapper env: `SCOUT_PRETRIP_DURABLE_EVIDENCE_SOURCE_ROOT=""`,
+     `SCOUT_PRETRIP_RESTORE_FROM_BACKUP=0`,
+     `SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT=/Users/alexwang0315/workspace/scout-local-data/raster-tiles`,
+     `SCOUT_PRETRIP_RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS=chilai_nanhua_day1_scoutAI`.
+   - Imagery seed summary: `tiles_seen=191`,
+     `tiles_copied_from_fallback_cache=191`, `tiles_written=0`.
+   - OCR result: `raster_label_ocr_label_count=20`.
+
+3. The remaining strict-count diffs were reduced to reference-incoherent
+   project/artifact metrics:
+   - `overpass_route_alignment_kept_gpx_point_count 943 vs 1023`;
+   - `overpass_route_alignment_snapped_point_count 990 vs 983`;
+   - `route_pressure_sample_count 225 vs 182`;
+   - `mileage_tag_alignment_count 17096 vs 19879`.
+   - Reference coherence report:
+     `outputs/scout_ai/reference_coherence_report.json`, status
+     `reference_incoherent`.
+
+Reference incoherence details:
+
+- Reference route summary and segment display geometry describe a 112.258 km
+  route, but reference route pressure ends at 90.599 km.
+- Reference mileage tags were generated from stale source counts that no
+  longer match reference project metrics: risk score/ribbon/heatmap and route
+  pressure counts differ.
+- Reference `project.json` Overpass alignment counts do not match reference
+  `outputs/overpass_route_alignment.json`.
+
+Verification summary:
+
+```text
+Scout AI/OpenRouter plan tool call: PASS
+From-zero backup restore disabled: PASS
+Raw tile fallback cache TTL reuse: PASS
+OCR restored to source-cache count: PASS (20 labels)
+OSM PBF refs: PASS
+Overpass evidence refs: PASS
+CWA/GEE latest-run refs: PASS
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS
+Admin UI visual smoke: PASS
+Focused pytest: PASS (14 passed)
+pnpm lint: PASS
+pnpm typecheck: PASS
+pnpm test: PASS (17 passed)
+Strict reference count comparison: FAIL, blocked by reference_incoherent report
 ```
 
 ## Run Log: 2026-06-29 Durable Workspace Scout AI Replay

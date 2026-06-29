@@ -202,6 +202,60 @@ def test_wmts_imagery_tile_cache_uses_30_day_ttl(tmp_path):
     assert len(calls) == 2
 
 
+def test_wmts_imagery_tile_cache_reuses_fresh_fallback_namespace(tmp_path):
+    source = imagery_source_for_project({"imagery_source_id": "happyman_rudy"})
+    plan = build_imagery_tile_cache_plan(
+        {
+            "west": 121.2,
+            "south": 24.03,
+            "east": 121.2,
+            "north": 24.03,
+        },
+        project_id="tryimport_project",
+        layer_id="rudy",
+        imagery_source=source,
+        cache_root=tmp_path / "imagery-tiles",
+        min_zoom=12,
+        max_zoom=12,
+    )
+    tile = plan["zoom_ranges"][0]
+    fallback_path = raster_tile_cache_path(
+        "stable_project",
+        "rudy",
+        12,
+        tile["x_min"],
+        tile["y_min"],
+        cache_root=tmp_path / "imagery-tiles",
+    )
+    fallback_path.parent.mkdir(parents=True)
+    fallback_path.write_bytes(b"\x89PNG\r\n\x1a\nstable-cache")
+
+    def failing_fetch(imagery_source, z, x, y):
+        raise AssertionError("fresh fallback cache should avoid remote fetch")
+
+    summary = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fallback_cache_project_ids=("stable_project",),
+        fetch_tile=failing_fetch,
+    )
+
+    target_path = raster_tile_cache_path(
+        "tryimport_project",
+        "rudy",
+        12,
+        tile["x_min"],
+        tile["y_min"],
+        cache_root=tmp_path / "imagery-tiles",
+    )
+    assert summary["status"] == "seed_complete"
+    assert summary["tiles_copied_from_fallback_cache"] == 1
+    assert summary["tiles_written"] == 0
+    assert target_path.read_bytes() == fallback_path.read_bytes()
+
+
 def test_dry_run_does_not_write_tiles(tmp_path):
     source = tmp_path / "sample_wgs84.tiff"
     _write_sample_geotiff(source)

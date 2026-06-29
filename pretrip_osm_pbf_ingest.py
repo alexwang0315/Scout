@@ -68,6 +68,12 @@ OSM_PBF_FEATURE_CATEGORIES: dict[str, dict[str, str]] = {
         "timeline_group": "OSM Other",
     },
 }
+_NODE_MATCH_KEYS = frozenset({"natural", "amenity", "tourism", "man_made"})
+_WAY_MATCH_KEYS = frozenset({"highway", "natural", "geological", "hazard", "risk"})
+_RELATION_MATCH_KEYS = frozenset({"route", "type"})
+_OSM_PBF_NATIVE_FILTER_KEYS = tuple(
+    sorted(_NODE_MATCH_KEYS | _WAY_MATCH_KEYS | _RELATION_MATCH_KEYS)
+)
 
 
 @dataclass(frozen=True)
@@ -210,6 +216,7 @@ class _PbfRouteEvidenceHandler:
         self.bbox = bbox
         self.elements: list[dict[str, Any]] = []
         self._way_geometries: dict[int, list[dict[str, float]]] = {}
+        self.osmium_module = osmium_module
         self._handler = osmium_module.SimpleHandler
 
     def apply_file(self, path: str, *, locations: bool) -> None:
@@ -225,11 +232,19 @@ class _PbfRouteEvidenceHandler:
             def relation(self, relation: Any) -> None:
                 outer._handle_relation(relation)
 
-        Handler().apply_file(path, locations=locations)
+        filter_module = getattr(self.osmium_module, "filter", None)
+        filters = []
+        if filter_module is not None:
+            filters.append(filter_module.KeyFilter(*_OSM_PBF_NATIVE_FILTER_KEYS))
+        Handler().apply_file(path, locations=locations, filters=filters)
 
     def _handle_node(self, node: Any) -> None:
-        tags = _osmium_tags(node)
-        if not _matches_node_tags(tags):
+        tags = _osmium_tags_if_matches(
+            node,
+            relevant_keys=_NODE_MATCH_KEYS,
+            matcher=_matches_node_tags,
+        )
+        if tags is None:
             return
         location = getattr(node, "location", None)
         if location is None or not _osmium_location_valid(location):
@@ -243,8 +258,12 @@ class _PbfRouteEvidenceHandler:
         )
 
     def _handle_way(self, way: Any) -> None:
-        tags = _osmium_tags(way)
-        if not _matches_way_tags(tags):
+        tags = _osmium_tags_if_matches(
+            way,
+            relevant_keys=_WAY_MATCH_KEYS,
+            matcher=_matches_way_tags,
+        )
+        if tags is None:
             return
         geometry = []
         for node_ref in way.nodes:
@@ -264,8 +283,12 @@ class _PbfRouteEvidenceHandler:
         )
 
     def _handle_relation(self, relation: Any) -> None:
-        tags = _osmium_tags(relation)
-        if not _matches_relation_tags(tags):
+        tags = _osmium_tags_if_matches(
+            relation,
+            relevant_keys=_RELATION_MATCH_KEYS,
+            matcher=_matches_relation_tags,
+        )
+        if tags is None:
             return
         members = []
         for member in relation.members:
@@ -495,6 +518,52 @@ def build_osm_pbf_feature_index(
             "network_mode": "local_file",
             "phase1_runtime_mutation_allowed": False,
             "phase2_brain_writeback_allowed": False,
+        },
+    }
+
+
+def osm_json_to_geojson_feature_collection(payload: dict[str, Any]) -> dict[str, Any]:
+    """Convert the local OSM JSON extract into a renderable GeoJSON layer."""
+
+    overpass_payload = osm_json_to_overpass_payload(payload)
+    features: list[dict[str, Any]] = []
+    for element in overpass_payload.get("elements", []):
+        if not isinstance(element, dict):
+            continue
+        geometry = _feature_index_geometry_from_overpass_element(element)
+        if geometry is None:
+            continue
+        tags = dict(element.get("tags") or {})
+        osm_type = str(element.get("type") or "feature")
+        osm_id = element.get("id")
+        properties = {
+            "@type": osm_type,
+            "@id": osm_id,
+            "type": osm_type,
+            "id": osm_id,
+            "source": "local_osm_pbf",
+            "source_kind": "local_osm_pbf_osmjson_extract",
+            **tags,
+        }
+        features.append(
+            {
+                "type": "Feature",
+                "id": f"{osm_type}/{osm_id}",
+                "properties": properties,
+                "geometry": geometry,
+            }
+        )
+    return {
+        "type": "FeatureCollection",
+        "name": "scout_local_osm_pbf_route_bbox",
+        "features": features,
+        "properties": {
+            "source": "local_osm_pbf",
+            "source_kind": "local_osm_pbf_osmjson_extract",
+            "generator": "scout.pretrip_osm_pbf_ingest.osm_json_to_geojson_feature_collection",
+            "conversion_rule_version": CONVERSION_RULE_VERSION,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
         },
     }
 
@@ -1101,6 +1170,25 @@ def _matches_relation_tags(tags: dict[str, Any]) -> bool:
 
 def _osmium_tags(entity: Any) -> dict[str, Any]:
     return {str(tag.k): str(tag.v) for tag in entity.tags}
+
+
+def _osmium_tags_if_matches(
+    entity: Any,
+    *,
+    relevant_keys: frozenset[str],
+    matcher: Any,
+) -> dict[str, Any] | None:
+    relevant: dict[str, Any] | None = None
+    for tag in entity.tags:
+        key = str(tag.k)
+        if key not in relevant_keys:
+            continue
+        if relevant is None:
+            relevant = {}
+        relevant[key] = str(tag.v)
+    if relevant is None or not matcher(relevant):
+        return None
+    return _osmium_tags(entity)
 
 
 def _osmium_location_valid(location: Any) -> bool:

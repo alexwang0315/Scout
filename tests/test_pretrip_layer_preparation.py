@@ -291,6 +291,7 @@ def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm
                 "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
             ),
             osm_pbf_cache_ttl_days=30,
+            osmium_bin="missing-osmium-for-test",
             prepared_at="2026-06-25T00:00:00+00:00",
         )
     )
@@ -325,12 +326,23 @@ def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm
         "local_osm_pbf_route_bbox_extract"
     )
     assert project["osm_pbf_render_extract_feature_count"] == 12
+    assert project["osm_pbf_render_geojson_ref"] == (
+        "normalized/map/osm_pbf_route_bbox_full.geojson"
+    )
+    render_geojson = _load(project_root / project["osm_pbf_render_geojson_ref"])
+    assert render_geojson["type"] == "FeatureCollection"
+    assert render_geojson["properties"]["source"] == "local_osm_pbf"
+    assert render_geojson["properties"]["render_source_kind"] in {
+        "local_osm_pbf_osmjson_extract",
+        "local_osm_pbf_geojson_extract",
+    }
     assert project["osm_pbf_feature_index_ref"] == (
         "outputs/layers/normalized/osm_pbf_feature_index.json"
     )
-    assert project["osm_pbf_feature_index_feature_count"] == 6
+    assert project["osm_pbf_feature_index_feature_count"] == 11
     assert project["osm_pbf_feature_index_category_counts"] == {
         "amenity_poi": 1,
+        "other_osm_feature": 5,
         "peak_terrain": 1,
         "trail_network": 3,
         "water_hydrology": 1,
@@ -371,7 +383,7 @@ def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm
         "workspace_local_osm_extract_available"
     )
     assert layers_by_id["osm"]["counts"]["local_osm_render_extract_feature_count"] == 12
-    assert layers_by_id["osm"]["counts"]["local_osm_feature_index_feature_count"] == 6
+    assert layers_by_id["osm"]["counts"]["local_osm_feature_index_feature_count"] == 11
     assert layers_by_id["osm"]["output_refs"]["local_osm_feature_index_ref"] == (
         "outputs/layers/normalized/osm_pbf_feature_index.json"
     )
@@ -512,6 +524,8 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
         "cwa_astronomy_timeline_ref",
         "cwa_tide_marine_timeline_ref",
         "soil_moisture_grid_ref",
+        "smap_l4_timeseries_ref",
+        "smap_l4_corridor_summary_ref",
         "antecedent_rain_grid_ref",
         "gee_gpm_imerg_raw_summary_ref",
         "gee_feature_package_ref",
@@ -908,6 +922,14 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     soil = json.loads(
         (project_root / project["soil_moisture_grid_ref"]).read_text(encoding="utf-8")
     )
+    smap_summary = json.loads(
+        (project_root / project["smap_l4_corridor_summary_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    smap_timeseries = json.loads(
+        (project_root / project["smap_l4_timeseries_ref"]).read_text(encoding="utf-8")
+    )
     rain = json.loads(
         (project_root / project["antecedent_rain_grid_ref"]).read_text(encoding="utf-8")
     )
@@ -940,9 +962,24 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     assert project["gee_cache_policy"]["must_refetch_on_prepare"] is True
     assert manifest["boundary"]["external_api_calls_made"] is True
     assert soil["cache_policy"]["cacheable"] is False
+    assert soil["layer_id"] == "soil-moisture"
+    assert soil["source_collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    assert soil["spatial_resolution_m"] == 11000
+    assert soil["temporal_resolution"] == "3h"
+    assert "sm_profile" in soil["band_names"]
+    assert soil["route_scope"]["route_corridor_m"] == 500.0
+    assert soil["normalized_artifact_ref"] == (
+        "outputs/environment/gee/soil_moisture_grid.geojson"
+    )
+    assert soil["human_review_required"] is True
     assert rain["cache_policy"]["ttl_seconds"] == 0
     assert soil["features"][0]["properties"]["sm_surface_wetness"] == 0.37
     assert soil["features"][0]["properties"]["sm_rootzone_wetness"] == 0.44
+    assert soil["features"][0]["properties"]["source_collection_id"] == (
+        "NASA/SMAP/SPL4SMGP/008"
+    )
+    assert soil["features"][0]["properties"]["spatial_resolution_m"] == 11000
+    assert soil["features"][0]["properties"]["human_review_required"] is True
     assert rain["features"][0]["properties"]["last_72h_mm"] == 22.5
     assert soil["features"][0]["properties"]["raw_summary_sha256"]
     assert (
@@ -953,6 +990,16 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     )
     assert raw_summary["cache_policy"]["cacheable"] is False
     assert raw_summary["secret_value_embedded"] is False
+    assert smap_summary["layer_id"] == "soil-moisture"
+    assert smap_summary["values"]["source_collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    assert smap_summary["values"]["route_scope"]["route_corridor_m"] == 500.0
+    assert smap_summary["human_review_required"] is True
+    assert smap_summary["external_api_calls_made"] is True
+    assert smap_timeseries["source_collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    assert smap_timeseries["route_scope"]["route_corridor_m"] == 500.0
+    assert smap_timeseries["spatial_resolution_m"] == 11000
+    assert smap_timeseries["human_review_required"] is True
+    assert smap_timeseries["external_api_calls_made"] is True
     assert gpm_raw_summary["artifact_kind"] == "gee_gpm_imerg_raw_summary"
     assert gpm_raw_summary["cache_policy"]["cacheable"] is False
     assert gpm_raw_summary["secret_value_embedded"] is False
