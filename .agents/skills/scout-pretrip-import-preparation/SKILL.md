@@ -50,6 +50,12 @@ Default corridor values are `SCOUT_ROUTE_CORRIDOR_M=500` and `SCOUT_REFERENCE_TR
 
 Risk generation must receive the same `SCOUT_ROUTE_CORRIDOR_M` as map preparation. The expected route-base strategy is `reference_progress_projected_to_nearest_overpass_segment.v1`: project reference route progress to nearest Overpass/local OSM PBF trail corridor candidates, mark unmatched samples as explicit `reference_gpx_gap_fallback`, and never present fallback samples as Overpass-backed route evidence. Baseline `risk_ribbon.geojson` and `calibrated_risk_heatmap.geojson` may connect only adjacent `overpass_projection` samples inside the accepted route-base segment threshold.
 
+Overpass display alignment has a separate GPX-normal snap tolerance. Do not
+reuse `SCOUT_ROUTE_CORRIDOR_M=500` as the point/segment projection tolerance:
+the default normal snap is 50m via `SCOUT_OVERPASS_ALIGNMENT_MAX_PROJECTION_DISTANCE_M`.
+Using 500m can pull GPX checkpoints and segment display points onto nearby but
+wrong road/trail centerlines and create map-crossing straight segments.
+
 ## Preflight
 
 Identify these values before running:

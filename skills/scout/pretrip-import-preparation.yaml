@@ -24,6 +24,7 @@ activation_gate:
     - Scout AI skill invocations must produce plan_ref, run_result_ref, and SkillRunRecord refs under outputs/scout_ai; if connected preparation degrades to the manual wrapper, record activation_decision=degrade and degraded_to=manual_pretrip_import_preparation_runbook
     - local runs must load /Users/alexwang0315/scout-fusion/.env through SCOUT_ENV_FILE when CWA/GEE credentials are needed, without logging secret values
     - "Spatial Policy is mandatory: GPX import defines route scope; bbox is acquisition only; route_corridor_m defaults to 500; reference_track_corridor_m defaults to 300; route-relevant evidence is filtered by along-track corridor"
+    - "Overpass alignment uses a separate GPX-normal snap tolerance: default SCOUT_OVERPASS_ALIGNMENT_MAX_PROJECTION_DISTANCE_M is 50m; never reuse the 500m route_corridor_m as the point/segment projection tolerance"
     - risk generation must use the same route_corridor_m as map preparation and must expose route_base.sampling_strategy reference_progress_projected_to_nearest_overpass_segment.v1
     - fallback route samples must stay explicitly marked as reference_gpx_gap_fallback candidate points; risk ribbon and calibrated heatmap must not connect fallback samples into straight line overlays
     - Overpass evidence must be fetched in explicit connected mode and aligned to route segments; planned_no_network or zero candidates is not a complete connected preparation run
