@@ -57,11 +57,16 @@ def test_overpass_node_way_relation_tags_become_phase_a_candidates():
 
     relation = _candidate(result, "overpass.hiking_route_candidate.relation.2001")
     assert relation.osm_type == "relation"
-    assert relation.geometry["type"] == "LineString"
+    assert relation.geometry["type"] == "MultiLineString"
     assert relation.geometry["coordinates"] == [
-        [121.211, 24.051],
-        [121.214, 24.052],
-        [121.222, 24.055],
+        [
+            [121.211, 24.051],
+            [121.214, 24.052],
+        ],
+        [
+            [121.214, 24.052],
+            [121.222, 24.055],
+        ],
     ]
 
     shelter = _candidate(result, "overpass.shelter_candidate.node.5001")
@@ -96,7 +101,15 @@ def test_normalized_overpass_geojson_loads_as_existing_scout_map_context(tmp_pat
 
     context = load_offline_map_context(normalized_path)
 
-    assert len(context.corridors) == 3
+    assert len(context.corridors) == 4
+    assert {
+        corridor.corridor_id
+        for corridor in context.corridors
+        if corridor.corridor_id.startswith("overpass.hiking_route_candidate.relation.2001")
+    } == {
+        "overpass.hiking_route_candidate.relation.2001.part_001",
+        "overpass.hiking_route_candidate.relation.2001.part_002",
+    }
     assert len(context.hazards) == 1
     assert len(context.pois) == 4
     assert {poi.poi_type for poi in context.pois} == {"shelter", "water_source", "parking", "peak"}
@@ -107,6 +120,17 @@ def test_normalized_overpass_geojson_loads_as_existing_scout_map_context(tmp_pat
 def test_normalized_geojson_features_keep_evidence_chain_metadata():
     result = _load_fixture()
 
+    assert result.normalized_geojson["artifact_kind"] == "pretrip_overpass_vector_evidence"
+    assert result.normalized_geojson["schema_version"] == "route_corridor_map_preparation.v1"
+    assert result.normalized_geojson["route_scope_ref"] == "normalized/routes/route_evidence_bundle.json"
+    assert result.normalized_geojson["boundary"] == {
+        "candidate_only": True,
+        "runtime_truth": False,
+        "runtime_safety_truth": False,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "raw_gpx_embedded_in_json": False,
+    }
     feature = result.normalized_geojson["features"][0]
     properties = feature["properties"]
 

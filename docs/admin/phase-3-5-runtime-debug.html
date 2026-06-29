@@ -1236,7 +1236,7 @@
     }
 
     .layer-imagery { fill: #f4f7fa; }
-    .layer-osm { fill: #ffffff; }
+    .layer-osm { fill: #f2efe9; opacity: .9; }
     [data-layer-hidden="true"] { display: none; }
     .osm-tile,
     .raster-tile {
@@ -1244,25 +1244,44 @@
       image-rendering: auto;
     }
     .raster-tile { opacity: .92; }
-    .osm-pbf-area { stroke: rgba(95, 107, 91, .36); stroke-width: .7; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
-    .osm-pbf-area.forest { fill: #b8d9aa; }
-    .osm-pbf-area.water { fill: #b8dff0; stroke: rgba(54, 139, 184, .44); }
-    .osm-pbf-area.built { fill: #dedbd0; }
+    .osm-pbf-area { stroke: rgba(110, 114, 102, .34); stroke-width: .65; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-area.forest { fill: #cde8bd; }
+    .osm-pbf-area.water { fill: #aad3df; stroke: rgba(72, 151, 180, .55); }
+    .osm-pbf-area.built { fill: #d9d6cc; }
     .osm-pbf-area.farmland { fill: #eadf9f; }
-    .osm-pbf-area.default { fill: #eef1df; }
+    .osm-pbf-area.terrain { fill: #e7dfd2; stroke: rgba(153, 126, 92, .45); }
+    .osm-pbf-area.default { fill: #eeeece; }
     .osm-pbf-line { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
-    .osm-pbf-line.trail { stroke: #dc5967; stroke-width: 1.9; }
-    .osm-pbf-line.track { stroke: #ffffff; stroke-width: 3.4; }
-    .osm-pbf-line.road { stroke: #f8f6ee; stroke-width: 3.8; }
-    .osm-pbf-line.waterway { stroke: #268bd2; stroke-width: 1.25; }
-    .osm-pbf-line.infrastructure { stroke: #8a8f99; stroke-width: 1.15; stroke-dasharray: 6 4; }
-    .osm-pbf-line.default { stroke: #a36b2c; stroke-width: 1.2; }
+    .osm-pbf-line-casing.path, .osm-pbf-line-casing.footway, .osm-pbf-line-casing.steps { stroke: rgba(255, 255, 255, .96); stroke-width: 3.4; }
+    .osm-pbf-line-core.path { stroke: #b88958; stroke-width: 1.45; stroke-dasharray: 4 4; }
+    .osm-pbf-line-core.footway { stroke: #d36f7a; stroke-width: 1.35; stroke-dasharray: 3 4; }
+    .osm-pbf-line-core.steps { stroke: #a8794c; stroke-width: 1.45; stroke-dasharray: 1.5 3; }
+    .osm-pbf-line-casing.track { stroke: #d6c6a6; stroke-width: 4.8; }
+    .osm-pbf-line-core.track { stroke: #f7f3df; stroke-width: 2.4; stroke-dasharray: 7 4; }
+    .osm-pbf-line-casing.service { stroke: #c8bda3; stroke-width: 4.2; }
+    .osm-pbf-line-core.service { stroke: #ffffff; stroke-width: 2.3; }
+    .osm-pbf-line-casing.road { stroke: #b9a98c; stroke-width: 5.1; }
+    .osm-pbf-line-core.road { stroke: #ffffff; stroke-width: 3.1; }
+    .osm-pbf-line-casing.route { stroke: rgba(255, 255, 255, .9); stroke-width: 3.6; }
+    .osm-pbf-line-core.route { stroke: #7b8f2a; stroke-width: 1.55; stroke-dasharray: 8 5; }
+    .osm-pbf-line-casing.waterway { stroke: rgba(255, 255, 255, .85); stroke-width: 2.8; }
+    .osm-pbf-line-core.waterway { stroke: #4aa5d8; stroke-width: 1.35; }
+    .osm-pbf-line-casing.terrain { stroke: rgba(255, 255, 255, .75); stroke-width: 2.6; }
+    .osm-pbf-line-core.terrain { stroke: #9c8d78; stroke-width: 1.15; stroke-dasharray: 2 3; }
+    .osm-pbf-line-casing.infrastructure { stroke: rgba(255, 255, 255, .8); stroke-width: 2.6; }
+    .osm-pbf-line-core.infrastructure { stroke: #8a8f99; stroke-width: 1.15; stroke-dasharray: 6 4; }
+    .osm-pbf-line-casing.default { stroke: rgba(255, 255, 255, .82); stroke-width: 2.5; }
+    .osm-pbf-line-core.default { stroke: #a36b2c; stroke-width: 1.1; }
     .osm-pbf-point { fill: #5a5f63; stroke: rgba(255, 255, 255, .92); stroke-width: 1; opacity: .86; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
     .osm-pbf-point.milestone { fill: #8c6a21; stroke: #fff8df; stroke-width: 1.1; }
     .osm-pbf-point.mobile { fill: #0077b6; stroke: #e6f6ff; stroke-width: 1.1; }
     .osm-pbf-point.peak { fill: #a46020; stroke: #fff6e7; stroke-width: 1.1; }
+    .osm-pbf-point.shelter { fill: #6d5e3a; stroke: #fff8df; stroke-width: 1.15; }
+    .osm-pbf-point.parking { fill: #3f78b5; stroke: #eef6ff; stroke-width: 1.15; }
+    .osm-pbf-point.water { fill: #2f90c8; stroke: #e7f7ff; stroke-width: 1.15; }
     .osm-pbf-point.poi { fill: #5a5f63; stroke: white; stroke-width: 1; }
     .osm-pbf-label { fill: #4a4a4a; font-size: 11px; font-weight: 650; paint-order: stroke; stroke: rgba(255, 255, 255, .9); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+    .osm-pbf-line-label { fill: #685a49; font-size: 10px; font-weight: 600; }
     .terrain-raster-overlay {
       image-rendering: pixelated;
       pointer-events: visiblePainted;
@@ -2940,12 +2959,18 @@
       const props = feature?.properties || {};
       return `osm_pbf.${props["@type"] || "object"}.${props["@id"] || props.id || "unknown"}`;
     }
-    function osmPbfFeatureLabel(feature) {
+    function osmPbfFeatureTags(feature) {
       const props = feature?.properties || {};
+      const tags = props.tags && typeof props.tags === "object" ? props.tags : {};
+      return {...tags, ...props};
+    }
+    function osmPbfFeatureLabel(feature) {
+      const props = osmPbfFeatureTags(feature);
       return props["name:zh"] || props.name || props.ref || props.distance || props["@id"] || "OSM feature";
     }
     function osmPbfFeatureItem(feature, category) {
       const props = feature?.properties || {};
+      const tags = osmPbfFeatureTags(feature);
       const point = feature?.geometry?.type === "Point" ? geoJsonCoordinateToPoint(feature.geometry.coordinates) : null;
       return {
         candidate_id: osmPbfFeatureId(feature),
@@ -2956,7 +2981,7 @@
         feature_type: feature?.geometry?.type || "geometry",
         osm_type: props["@type"],
         osm_id: props["@id"],
-        tags: props,
+        tags,
         lat: point?.lat,
         lon: point?.lon,
         source_path: "normalized/map/osm_pbf_route_bbox_full.geojson",
@@ -2965,36 +2990,130 @@
       };
     }
     function osmPbfStyleCategory(feature) {
-      const props = feature?.properties || {};
+      const props = osmPbfFeatureTags(feature);
+      const geometryType = String(feature?.geometry?.type || "");
       const highway = String(props.highway || "");
       const natural = String(props.natural || "");
       const landuse = String(props.landuse || "");
       const amenity = String(props.amenity || "");
       const information = String(props.information || "");
-      if (props.waterway || natural === "water" || props.water) return "water";
+      const route = String(props.route || "");
+      const tourism = String(props.tourism || "");
+      if (props.waterway || natural === "water" || natural === "spring" || props.water) {
+        return geometryType === "Point" ? "water" : "waterway";
+      }
       if (highway === "milestone" || information === "route_marker" || props.distance) return "milestone";
       if (information === "mobile") return "mobile";
       if (natural === "peak") return "peak";
-      if (["path", "footway", "steps"].includes(highway)) return "trail";
-      if (["track", "service"].includes(highway)) return "track";
+      if (amenity === "shelter" || tourism === "alpine_hut" || tourism === "wilderness_hut") return "shelter";
+      if (amenity === "parking") return "parking";
+      if (route === "hiking" || props.type === "route") return "route";
+      if (highway === "path") return "path";
+      if (highway === "footway") return "footway";
+      if (highway === "pedestrian") return "footway";
+      if (highway === "steps") return "steps";
+      if (highway === "track") return "track";
+      if (highway === "service") return "service";
       if (highway) return "road";
       if (natural === "wood" || landuse === "forest") return "forest";
+      if (["scree", "bare_rock", "cliff"].includes(natural)) return "terrain";
       if (landuse === "farmland") return "farmland";
       if (props.building || amenity) return "built";
       if (props.power || props.man_made) return "infrastructure";
       return "default";
     }
+    function appendOsmPbfLine(group, d, category, item, featureId) {
+      const casing = svgEl("path", {d, class: `osm-pbf-line osm-pbf-line-casing ${category}`});
+      const core = svgEl("path", {d, class: `osm-pbf-line osm-pbf-line-core ${category}`});
+      attachMapEvidence(casing, item, featureId);
+      attachMapEvidence(core, item, featureId);
+      group.appendChild(casing);
+      group.appendChild(core);
+    }
+    function osmPbfGeometryLines(geometry) {
+      if (geometry?.type === "LineString") return [geometry.coordinates || []];
+      if (geometry?.type === "MultiLineString") return geometry.coordinates || [];
+      return [];
+    }
+    function osmPbfProjectedLine(bounds, line) {
+      return (line || [])
+        .map(coordinate => {
+          const point = geoJsonCoordinateToPoint(coordinate);
+          if (!point) return null;
+          const [x, y] = projectPoint(bounds, point.lat, point.lon);
+          return {x, y};
+        })
+        .filter(Boolean);
+    }
+    function osmPbfLineLength(points) {
+      let length = 0;
+      for (let index = 1; index < points.length; index += 1) {
+        const dx = points[index].x - points[index - 1].x;
+        const dy = points[index].y - points[index - 1].y;
+        length += Math.hypot(dx, dy);
+      }
+      return length;
+    }
+    function osmPbfLineLabelAnchor(bounds, geometry) {
+      let bestPoints = [];
+      let bestLength = 0;
+      osmPbfGeometryLines(geometry).forEach(line => {
+        const points = osmPbfProjectedLine(bounds, line);
+        const length = osmPbfLineLength(points);
+        if (points.length >= 2 && length > bestLength) {
+          bestPoints = points;
+          bestLength = length;
+        }
+      });
+      if (bestLength < 44 || bestPoints.length < 2) return null;
+      const target = bestLength / 2;
+      let covered = 0;
+      for (let index = 1; index < bestPoints.length; index += 1) {
+        const start = bestPoints[index - 1];
+        const end = bestPoints[index];
+        const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+        if (covered + segmentLength >= target) {
+          const ratio = segmentLength ? (target - covered) / segmentLength : 0;
+          return {
+            x: start.x + ratio * (end.x - start.x),
+            y: start.y + ratio * (end.y - start.y)
+          };
+        }
+        covered += segmentLength;
+      }
+      return bestPoints[Math.floor(bestPoints.length / 2)];
+    }
+    function appendOsmPbfLineLabel(group, bounds, feature, geometry, category, index) {
+      if (index > 220) return;
+      if (!["path", "footway", "track", "service", "road", "route", "waterway"].includes(category)) return;
+      const label = osmPbfFeatureLabel(feature);
+      if (!label || label === "OSM feature" || /^\d+$/.test(label)) return;
+      const anchor = osmPbfLineLabelAnchor(bounds, geometry);
+      if (!anchor) return;
+      group.appendChild(svgEl("text", {
+        x: anchor.x.toFixed(2),
+        y: anchor.y.toFixed(2),
+        class: "osm-pbf-label osm-pbf-line-label",
+        "text-anchor": "middle",
+        "data-osm-pbf-label": "true",
+        "data-osm-pbf-line-label": "true",
+        "data-anchor-x": anchor.x.toFixed(2),
+        "data-anchor-y": anchor.y.toFixed(2)
+      }, label));
+    }
     function osmPbfPointRadius(category) {
       if (category === "milestone") return 3.2;
       if (category === "mobile") return 3.8;
       if (category === "peak") return 4.2;
+      if (category === "shelter" || category === "parking") return 3.5;
+      if (category === "water") return 3.1;
       return 2.6;
     }
     function appendOsmPbfLabel(group, feature, x, y, category, index) {
       if (index > 120) return;
       const label = osmPbfFeatureLabel(feature);
       if (!label || label === "OSM feature") return;
-      if (!["milestone", "mobile", "peak"].includes(category) && index % 9 !== 0) return;
+      if (!["milestone", "mobile", "peak", "shelter", "parking", "water"].includes(category) && index % 9 !== 0) return;
       group.appendChild(svgEl("text", {
         x: (x + 6).toFixed(2),
         y: (y - 5).toFixed(2),
@@ -3368,8 +3487,10 @@
         if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
         const fontSize = (11 * unitsPerPx).toFixed(3);
         const strokeWidth = (3 * unitsPerPx).toFixed(3);
-        label.setAttribute("x", (anchorX + 6 * unitsPerPx).toFixed(3));
-        label.setAttribute("y", (anchorY - 5 * unitsPerPx).toFixed(3));
+        const offsetX = label.dataset.osmPbfLineLabel === "true" ? 0 : 6;
+        const offsetY = label.dataset.osmPbfLineLabel === "true" ? 0 : -5;
+        label.setAttribute("x", (anchorX + offsetX * unitsPerPx).toFixed(3));
+        label.setAttribute("y", (anchorY + offsetY * unitsPerPx).toFixed(3));
         label.setAttribute("font-size", fontSize);
         label.setAttribute("stroke-width", strokeWidth);
         label.style.setProperty("font-size", `${fontSize}px`, "important");
@@ -3567,8 +3688,8 @@
         if (!group) return;
         group.replaceChildren();
         if (!layerInputChecked(layerId)) return;
-        if (layerId === "osm" && renderOsmPbfVector(group, projection, bounds)) return;
         appendRasterLayer(group, projection, bounds, layerId, coverageBounds);
+        if (layerId === "osm") renderOsmPbfVector(group, projection, bounds);
       });
     }
 
@@ -3610,6 +3731,11 @@
     function appendRasterLayer(group, projection, bounds, kind, coverageBounds = bounds) {
       if (!layerInputChecked(kind)) return;
       const isOsm = kind === "osm";
+      const localOsmVectorAvailable = isOsm && isLocalOsmTileMode() && Boolean(localOsmPbfVectorUrl(projection));
+      if (localOsmVectorAvailable) {
+        group.appendChild(svgEl("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: "layer-osm"}));
+        return;
+      }
       if (isOsm && !isLocalOsmTileMode()) {
         group.appendChild(svgEl("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: "layer-osm"}));
       }
@@ -3721,7 +3847,6 @@
     function renderOsmPbfVector(group, projection, bounds) {
       const features = debugPageState.osmPbfVector?.features || [];
       if (!features.length) return false;
-      group.appendChild(svgEl("rect", {x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT, class: "layer-osm"}));
       const areaGroup = svgEl("g", {"data-osm-pbf-kind": "areas"});
       const lineGroup = svgEl("g", {"data-osm-pbf-kind": "lines"});
       const pointGroup = svgEl("g", {"data-osm-pbf-kind": "points"});
@@ -3743,9 +3868,9 @@
         if (["LineString", "MultiLineString"].includes(geometry.type)) {
           const d = pathFromGeoJsonGeometry(bounds, geometry);
           if (!d) return;
-          const path = svgEl("path", {d, class: `osm-pbf-line ${category}`});
-          attachMapEvidence(path, item, osmPbfFeatureId(feature));
-          lineGroup.appendChild(path);
+          appendOsmPbfLine(lineGroup, d, category, item, osmPbfFeatureId(feature));
+          appendOsmPbfLineLabel(labelGroup, bounds, feature, geometry, category, labelIndex);
+          labelIndex += 1;
           return;
         }
         if (geometry.type === "Point") {
@@ -3763,7 +3888,7 @@
       group.appendChild(lineGroup);
       group.appendChild(pointGroup);
       group.appendChild(labelGroup);
-      group.appendChild(svgEl("text", {x: MAP_WIDTH - 10, y: MAP_HEIGHT - 10, "text-anchor": "end", class: "osm-attribution"}, "Scout local OSM PBF vector"));
+      group.appendChild(svgEl("text", {x: MAP_WIDTH - 10, y: MAP_HEIGHT - 24, "text-anchor": "end", class: "osm-attribution"}, "Scout local OSM PBF vector"));
       return true;
     }
 
@@ -3785,7 +3910,8 @@
       });
 
       const osmGroup = svgEl("g", {"data-layer-group": "osm"});
-      if (!renderOsmPbfVector(osmGroup, projection, bounds)) appendRasterLayer(osmGroup, projection, bounds, "osm");
+      appendRasterLayer(osmGroup, projection, bounds, "osm");
+      renderOsmPbfVector(osmGroup, projection, bounds);
       runtimeMap.appendChild(osmGroup);
 
       const terrainGroup = svgEl("g", {"data-layer-group": "terrain"});

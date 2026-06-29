@@ -136,6 +136,114 @@ def test_heat_buckets_use_workspace_relative_thresholds() -> None:
     assert heat_bucket(thresholds["p95"], thresholds) == "extreme"
 
 
+def test_calibrated_heatmap_skips_fallback_and_large_route_base_jumps(
+    tmp_path: Path,
+) -> None:
+    route_risk = tmp_path / "route_risk.geojson"
+    diagnostic = tmp_path / "risk_attribution_diagnostic.json"
+    warnings = tmp_path / "excluded_extreme_warning_cp_proposals.json"
+    route_risk.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    _route_risk_feature(
+                        "sample.001",
+                        24.0,
+                        121.0,
+                        0,
+                        20,
+                        10,
+                        0,
+                        30,
+                        0,
+                        route_base_source="overpass_projection",
+                    ),
+                    _route_risk_feature(
+                        "sample.002",
+                        24.0001,
+                        121.0001,
+                        20,
+                        90,
+                        95,
+                        20,
+                        92,
+                        0,
+                        route_base_source="overpass_projection",
+                    ),
+                    _route_risk_feature(
+                        "sample.003",
+                        24.0002,
+                        121.0002,
+                        40,
+                        60,
+                        50,
+                        80,
+                        65,
+                        0,
+                        route_base_source="reference_gpx_gap_fallback",
+                    ),
+                    _route_risk_feature(
+                        "sample.004",
+                        24.01,
+                        121.01,
+                        60,
+                        60,
+                        50,
+                        80,
+                        65,
+                        0,
+                        route_base_source="overpass_projection",
+                    ),
+                    _route_risk_feature(
+                        "sample.005",
+                        24.02,
+                        121.02,
+                        80,
+                        60,
+                        50,
+                        80,
+                        65,
+                        0,
+                        route_base_source="overpass_projection",
+                    ),
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    diagnostic.write_text(
+        json.dumps(
+            {
+                "schema_version": "0.2.0",
+                "factor_analysis": {
+                    "formula_candidate": {
+                        "status": "candidate_only",
+                        "expression": "tri",
+                        "selected_dimensions": ["tri"],
+                        "terms": [{"dimension": "tri", "normalized_weight": 1.0}],
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    warnings.write_text(json.dumps({"proposals": []}), encoding="utf-8")
+
+    heatmap = build_calibrated_risk_heatmap(
+        route_risk_path=route_risk,
+        risk_attribution_diagnostic_path=diagnostic,
+        warning_cp_proposals_path=warnings,
+    )
+
+    assert heatmap["metadata"]["segment_count"] == 1
+    assert heatmap["metadata"]["skipped_pair_count"] == 3
+    assert heatmap["features"][0]["properties"]["from_sample_id"] == "sample.001"
+    assert heatmap["features"][0]["properties"]["to_sample_id"] == "sample.002"
+
+
 def test_workspace_refs_do_not_require_preview_png(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -189,7 +297,13 @@ def _route_risk_feature(
     sri: float,
     lec: float,
     scp: float,
+    route_base_source: str | None = None,
 ) -> dict:
+    route_base_properties = {}
+    if route_base_source is not None:
+        route_base_properties["route_base_source"] = route_base_source
+        route_base_properties["route_base_feature_id"] = "osm.way.fixture"
+        route_base_properties["route_base_projection_distance_m"] = 0.0
     return {
         "type": "Feature",
         "geometry": {"type": "Point", "coordinates": [lon, lat]},
@@ -203,5 +317,6 @@ def _route_risk_feature(
             "lec": lec,
             "scp": scp,
             "pretrip_risk": 0,
+            **route_base_properties,
         },
     }

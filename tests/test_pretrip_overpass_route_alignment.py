@@ -274,7 +274,7 @@ def test_overpass_route_alignment_uses_checkpoint_route_order_for_foldback_route
     assert start["overpass_projection"]["route_distance_m"] < 100.0
 
 
-def test_overpass_route_alignment_keeps_spatial_nearest_when_hint_is_not_comparable(
+def test_overpass_route_alignment_keeps_gpx_when_spatial_nearest_conflicts_with_route_hint(
     tmp_path: Path,
 ) -> None:
     project_root = tmp_path / "workspace" / "spatial"
@@ -355,10 +355,118 @@ def test_overpass_route_alignment_keeps_spatial_nearest_when_hint_is_not_compara
     assert result["status"] == "completed"
     checkpoints = _load(project_root / "outputs/overpass_aligned_checkpoints.json")
     start = checkpoints["candidates"][0]
-    assert start["overpass_projection"]["status"] == "snapped_to_overpass"
+    assert start["overpass_projection"]["status"] == "kept_gpx_route_distance_hint_mismatch"
     assert start["overpass_projection"]["route_distance_hint_m"] == 0.0
     assert start["overpass_projection"]["route_distance_m"] > 4000.0
+    assert start["overpass_projection"]["route_distance_delta_m"] > 4000.0
     assert start["overpass_projection"]["offset_m"] < 2.0
+
+
+def test_overpass_route_alignment_rejects_compressed_segment_display_path(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "workspace" / "compressed"
+    _write_json(
+        project_root / "project.json",
+        {
+            "project_id": "compressed",
+            "checkpoint_candidates_ref": "candidates/checkpoints.json",
+            "segment_candidates_ref": "candidates/segments.json",
+            "segment_display_geometry_ref": "outputs/segment_display_geometry.json",
+            "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+        },
+    )
+    _write_json(
+        project_root / "outputs/risk/risk_ribbon.geojson",
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "segment_id": "overpass.short.001",
+                        "start_distance_m": 0.0,
+                        "end_distance_m": 20.0,
+                    },
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[121.0, 24.0], [121.0002, 24.0]],
+                    },
+                }
+            ],
+        },
+    )
+    _write_json(
+        project_root / "candidates/checkpoints.json",
+        {
+            "candidates": [
+                {"candidate_id": "cp.short-start", "lat": 24.00001, "lon": 121.0},
+                {"candidate_id": "cp.short-end", "lat": 24.00001, "lon": 121.0002},
+            ],
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+    )
+    _write_json(
+        project_root / "candidates/segments.json",
+        {
+            "candidates": [
+                {
+                    "candidate_id": "seg.001",
+                    "from_candidate_id": "cp.short-start",
+                    "to_candidate_id": "cp.short-end",
+                    "distance_m": 500.0,
+                }
+            ],
+            "boundary": {"candidate_only": True},
+        },
+    )
+    _write_json(
+        project_root / "outputs/segment_display_geometry.json",
+        {
+            "segments": [
+                {
+                    "segment_candidate_id": "seg.001",
+                    "from_candidate_id": "cp.short-start",
+                    "to_candidate_id": "cp.short-end",
+                    "distance_m": 500.0,
+                    "coordinates": [
+                        {"lat": 24.00001, "lon": 121.0},
+                        {"lat": 24.00001, "lon": 121.0002},
+                    ],
+                    "coordinate_segments": [
+                        [
+                            {"lat": 24.00001, "lon": 121.0},
+                            {"lat": 24.00001, "lon": 121.0002},
+                        ]
+                    ],
+                }
+            ],
+            "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+        },
+    )
+
+    result = align_workspace_route_to_overpass(
+        project_root,
+        generated_at="2026-06-20T00:00:00+00:00",
+    )
+
+    assert result["status"] == "completed"
+    assert result["counts"]["rejected_segment_alignment_count"] >= 1
+    segments = _load(project_root / "outputs/overpass_aligned_segments.json")
+    aligned_segment = segments["candidates"][0]
+    assert aligned_segment["overpass_projection"]["status"] == (
+        "rejected_overpass_segment_path_compression_kept_gpx"
+    )
+    assert "overpass_display_coordinate_segments" not in aligned_segment
+
+    display = _load(project_root / "outputs/overpass_aligned_segment_display_geometry.json")
+    display_segment = display["segments"][0]
+    assert display_segment["overpass_alignment"]["route_basis"] == (
+        "original_gpx_display_geometry"
+    )
+    assert display_segment["overpass_alignment"]["status"] == (
+        "kept_gpx_no_display_points_snapped_to_overpass"
+    )
 
 
 def test_overpass_route_alignment_rejects_inflated_segment_display_path(

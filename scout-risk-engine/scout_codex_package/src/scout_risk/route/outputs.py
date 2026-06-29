@@ -47,6 +47,9 @@ def write_route_csv(profile: RouteRiskProfile, path: str | Path) -> None:
         "scp",
         "pretrip_risk",
         "risk_level",
+        "route_base_source",
+        "route_base_feature_id",
+        "route_base_projection_distance_m",
         "hazard_types",
         "explanation",
     ]
@@ -74,4 +77,3 @@ def _sample_feature(sample: RouteRiskSample) -> dict[str, Any]:
             exclude={"lat", "lon", "x", "y"},
         ),
     }
-

@@ -28,6 +28,9 @@ class RiskScorePoint:
     sri: float | None
     lec: float | None
     scp: float | None
+    route_base_source: str | None
+    route_base_feature_id: str | None
+    route_base_projection_distance_m: float | None
     source_sample_count: int
     source_sample_ids: tuple[str, ...]
 
@@ -152,6 +155,7 @@ def build_risk_ribbon_from_geojson(
     route_risk_geojson_path: str | Path,
     *,
     score_field: str = "pretrip_risk",
+    max_route_base_segment_m: float = 80.0,
 ) -> RiskRibbonMap:
     source_path = Path(route_risk_geojson_path)
     raw = source_path.read_bytes()
@@ -162,6 +166,13 @@ def build_risk_ribbon_from_geojson(
 
     for start, end in zip(samples, samples[1:]):
         if start["route_id"] != end["route_id"]:
+            skipped_pair_count += 1
+            continue
+        if not _risk_samples_can_connect(
+            start,
+            end,
+            max_route_base_segment_m=max_route_base_segment_m,
+        ):
             skipped_pair_count += 1
             continue
         rs = max(float(start["rs"]), float(end["rs"]))
@@ -211,6 +222,7 @@ def build_risk_ribbon_from_geojson(
         "source_sample_count": len(samples),
         "segment_count": len(features),
         "skipped_pair_count": skipped_pair_count,
+        "max_route_base_segment_m": max_route_base_segment_m,
         "style": {
             "low": {"max_exclusive": 40, "stroke": "#8fb7a1"},
             "moderate": {"min": 40, "max_exclusive": 60, "stroke": "#eab308"},
@@ -274,6 +286,9 @@ def write_risk_score_csv(point_map: RiskScorePointMap, path: str | Path) -> None
         "score_field",
         "source_sample_count",
         "source_sample_ids",
+        "route_base_source",
+        "route_base_feature_id",
+        "route_base_projection_distance_m",
         "elevation_m",
         "teii_20m",
         "tri",
@@ -316,6 +331,9 @@ def write_risk_score_geojson(point_map: RiskScorePointMap, path: str | Path) -> 
                 "risk_level": point.risk_level,
                 "source_sample_count": point.source_sample_count,
                 "source_sample_ids": list(point.source_sample_ids),
+                "route_base_source": point.route_base_source,
+                "route_base_feature_id": point.route_base_feature_id,
+                "route_base_projection_distance_m": point.route_base_projection_distance_m,
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             },
@@ -374,6 +392,11 @@ def _point_payload(
         sri=_optional_float(properties.get("sri")),
         lec=_optional_float(properties.get("lec")),
         scp=_optional_float(properties.get("scp")),
+        route_base_source=_optional_str(properties.get("route_base_source")),
+        route_base_feature_id=_optional_str(properties.get("route_base_feature_id")),
+        route_base_projection_distance_m=_optional_float(
+            properties.get("route_base_projection_distance_m")
+        ),
         source_sample_count=1,
         source_sample_ids=(),
     )
@@ -400,6 +423,13 @@ def _route_risk_samples(payload: dict[str, Any], *, score_field: str) -> list[di
                 "sample_id": str(properties.get("sample_id", "")),
                 "distance_m": _optional_float(properties.get("distance_m")),
                 "risk_level": _optional_int(properties.get("risk_level")),
+                "route_base_source": _optional_str(properties.get("route_base_source")),
+                "route_base_feature_id": _optional_str(
+                    properties.get("route_base_feature_id")
+                ),
+                "route_base_projection_distance_m": _optional_float(
+                    properties.get("route_base_projection_distance_m")
+                ),
             }
         )
     return sorted(
@@ -409,6 +439,45 @@ def _route_risk_samples(payload: dict[str, Any], *, score_field: str) -> list[di
             sample["distance_m"] if sample["distance_m"] is not None else 0.0,
         ),
     )
+
+
+def _risk_samples_can_connect(
+    start: dict[str, Any],
+    end: dict[str, Any],
+    *,
+    max_route_base_segment_m: float,
+) -> bool:
+    start_source = start.get("route_base_source")
+    end_source = end.get("route_base_source")
+    if start_source is None and end_source is None:
+        return True
+    if start_source != "overpass_projection" or end_source != "overpass_projection":
+        return False
+    return (
+        _haversine_m(start["lat"], start["lon"], end["lat"], end["lon"])
+        <= max_route_base_segment_m
+    )
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    from math import atan2, cos, radians, sin, sqrt
+
+    earth_radius_m = 6_371_000.0
+    phi1 = radians(lat1)
+    phi2 = radians(lat2)
+    dphi = radians(lat2 - lat1)
+    dlambda = radians(lon2 - lon1)
+    h = (
+        sin(dphi / 2) ** 2
+        + cos(phi1) * cos(phi2) * sin(dlambda / 2) ** 2
+    )
+    return earth_radius_m * 2 * atan2(sqrt(h), sqrt(1 - h))
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    return str(value)
 
 
 def _risk_bucket(rs: float) -> str:

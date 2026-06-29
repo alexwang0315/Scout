@@ -381,7 +381,20 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
                 ],
             },
             "environment_risk_derivative_layers": {
-                "status": "ready",
+                "status": "ready_with_data_gaps",
+                "source_status": "ready_with_data_gaps",
+                "source_metric_gaps": [
+                    {
+                        "metric_family": "sentinel1",
+                        "missing_ratio": 0.5,
+                        "missing_segment_count": 5,
+                        "segment_count": 10,
+                    }
+                ],
+                "data_quality": {
+                    "source_status": "ready_with_data_gaps",
+                    "missing_metric_family_count": 1,
+                },
                 "counts": {
                     "wetness_flash_flood_candidate_count": 1,
                     "practical_darkness_candidate_count": 1,
@@ -391,12 +404,24 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
                         "source_id": "env.category.wetness",
                         "label": "濕滑/溪溝暴漲候選：1",
                         "candidate_count": 1,
+                        "source_status": "ready_with_data_gaps",
+                        "source_metric_gaps": [
+                            {"metric_family": "sentinel1", "missing_ratio": 0.5}
+                        ],
+                        "data_quality": {
+                            "missing_metric_families": ["sentinel1"],
+                        },
                         "candidate_only": True,
                         "runtime_safety_truth": False,
                     }
                 ],
                 "wetness_flash_flood_susceptibility": {
                     "counts": {"candidate_count": 1},
+                    "source_status": "ready_with_data_gaps",
+                    "source_metric_gaps": [
+                        {"metric_family": "sentinel1", "missing_ratio": 0.5}
+                    ],
+                    "data_quality": {"missing_metric_families": ["sentinel1"]},
                     "candidates": [
                         {
                             "source_id": "wetness.001",
@@ -503,7 +528,19 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
         "route_distance_m"
     ] == 1000
     derivative_layers = compact["environment_risk_derivative_layers"]
+    assert derivative_layers["source_status"] == "ready_with_data_gaps"
+    assert derivative_layers["source_metric_gaps"][0]["metric_family"] == "sentinel1"
+    assert derivative_layers["data_quality"]["missing_metric_family_count"] == 1
     assert len(derivative_layers["category_items"]) == 1
+    assert derivative_layers["category_items"][0]["source_status"] == (
+        "ready_with_data_gaps"
+    )
+    assert derivative_layers["category_items"][0]["data_quality"][
+        "missing_metric_families"
+    ] == ["sentinel1"]
+    assert derivative_layers["wetness_flash_flood_susceptibility"][
+        "source_status"
+    ] == "ready_with_data_gaps"
     assert derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
         "candidate_kind"
     ] == "wetness_flash_flood_susceptibility"

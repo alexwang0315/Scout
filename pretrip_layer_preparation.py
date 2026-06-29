@@ -258,6 +258,9 @@ SCOUT_RISK_OUTPUT_REFS = {
     "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
     "risk_ribbon_metadata_ref": "outputs/risk/risk_ribbon.metadata.json",
 }
+SCOUT_RISK_ROUTE_BASE_SAMPLING_STRATEGY = (
+    "reference_progress_projected_to_nearest_overpass_segment.v1"
+)
 CALIBRATED_RISK_OUTPUT_REFS = {
     "risk_attribution_diagnostic_ref": "outputs/risk/risk_attribution_diagnostic.json",
     "excluded_extreme_warning_cp_proposals_ref": (
@@ -2004,6 +2007,7 @@ def _build_layer_preparation_manifest(
             project_root=project_root,
             project=project,
             prepared_at=prepared_at,
+            route_corridor_m=request.route_corridor_m,
         )
         project = _sync_calibrated_risk_outputs(
             project_root=project_root,
@@ -4891,8 +4895,13 @@ def _sync_scout_risk_outputs(
     project_root: Path,
     project: dict[str, Any],
     prepared_at: str,
+    route_corridor_m: float = 500.0,
 ) -> dict[str, Any]:
-    if _workspace_scout_risk_outputs_ready(project_root=project_root, project=project):
+    if _workspace_scout_risk_outputs_ready(
+        project_root=project_root,
+        project=project,
+        route_corridor_m=route_corridor_m,
+    ):
         updated = _project_with_scout_risk_refs(project)
         _clear_risk_generation_failure_metadata(updated)
         _stamp_synced_risk_output_provenance(project_root=project_root, project=updated)
@@ -4909,6 +4918,7 @@ def _sync_scout_risk_outputs(
             project_root=project_root,
             project=project,
             prepared_at=prepared_at,
+            route_corridor_m=route_corridor_m,
         )
 
     required = (
@@ -4922,6 +4932,17 @@ def _sync_scout_risk_outputs(
             project_root=project_root,
             project=project,
             prepared_at=prepared_at,
+            route_corridor_m=route_corridor_m,
+        )
+    if not _scout_risk_route_base_metadata_matches_policy(
+        source_root / "route_risk.metadata.json",
+        route_corridor_m=route_corridor_m,
+    ):
+        return _generate_scout_risk_outputs_from_workspace(
+            project_root=project_root,
+            project=project,
+            prepared_at=prepared_at,
+            route_corridor_m=route_corridor_m,
         )
 
     updated = dict(project)
@@ -4954,6 +4975,7 @@ def _workspace_scout_risk_outputs_ready(
     *,
     project_root: Path,
     project: dict[str, Any],
+    route_corridor_m: float = 500.0,
 ) -> bool:
     for ref_key in (
         "risk_route_profile_ref",
@@ -4966,6 +4988,39 @@ def _workspace_scout_risk_outputs_ready(
             return False
         if not (project_root / ref).exists():
             return False
+    route_metadata_ref = (
+        project.get("risk_route_profile_metadata_ref")
+        or SCOUT_RISK_OUTPUT_REFS["risk_route_profile_metadata_ref"]
+    )
+    route_metadata_path = project_root / route_metadata_ref
+    return _scout_risk_route_base_metadata_matches_policy(
+        route_metadata_path,
+        route_corridor_m=route_corridor_m,
+    )
+
+
+def _scout_risk_route_base_metadata_matches_policy(
+    route_metadata_path: Path,
+    *,
+    route_corridor_m: float,
+) -> bool:
+    try:
+        route_metadata = _load_json(route_metadata_path)
+    except (OSError, json.JSONDecodeError):
+        return False
+    route_base = route_metadata.get("route_base")
+    if isinstance(route_base, dict) and route_base.get("route_base") == (
+        "overpass_vector_evidence"
+    ):
+        if (
+            route_base.get("sampling_strategy")
+            != SCOUT_RISK_ROUTE_BASE_SAMPLING_STRATEGY
+        ):
+            return False
+        corridor_m = _as_float(route_base.get("corridor_m"))
+        if corridor_m is None:
+            return False
+        return abs(corridor_m - float(route_corridor_m)) < 0.001
     return True
 
 
@@ -5010,6 +5065,7 @@ def _generate_scout_risk_outputs_from_workspace(
     project_root: Path,
     project: dict[str, Any],
     prepared_at: str,
+    route_corridor_m: float = 500.0,
 ) -> dict[str, Any]:
     inputs = _workspace_scout_risk_generation_inputs(
         project_root=project_root,
@@ -5056,6 +5112,7 @@ def _generate_scout_risk_outputs_from_workspace(
             overpass_geojson_path=inputs["overpass_geojson_path"],
             reference_gpx_path=inputs["reference_gpx_path"],
             route_id=f"{project.get('project_id', 'route')}.overpass_risk_ribbon",
+            corridor_m=route_corridor_m,
         )
         write_route_geojson(profile, route_risk_path)
         write_route_csv(profile, route_csv_path)

@@ -48,6 +48,17 @@ In practical terms:
 - Segment display, Overpass projection, risk ribbon, route context, K anchors,
   MCP, and Boss evidence must be route-corridor evidence, not global bbox
   evidence.
+- Risk generation must receive the same `route_corridor_m` used by map
+  preparation. Do not let the risk package fall back to a narrow default such
+  as 35 m during a full pretrip route-corridor run.
+- Risk route-base generation must project reference route progress to nearest
+  Overpass/local OSM PBF trail corridor candidates. Fallback GPX samples may
+  remain as explicit candidate points, but their provenance must say they are
+  `reference_gpx_gap_fallback`, not Overpass-backed route evidence.
+- Baseline risk ribbon and calibrated heatmap line overlays may connect only
+  adjacent samples whose `route_base_source` is `overpass_projection` and whose
+  geometry jump is within the accepted route-base segment threshold. Do not
+  connect fallback samples into straight lines across Overpass gaps.
 
 ## Local Skills Available
 
@@ -295,6 +306,19 @@ Strict reference comparison must exclude CWA/GEE weather/environment metrics
 from count/status equivalence. It should still require the current workspace's
 CWA/GEE refs to exist and expose the latest fetch result or current blocker.
 
+Risk-route-base note:
+
+- The `--route-corridor-m 500` value must be passed through to risk generation,
+  not only to Overpass acquisition or admin layer preparation.
+- The expected route-base strategy for this full preparation flow is
+  `reference_progress_projected_to_nearest_overpass_segment.v1`.
+- If a stale workspace already has risk refs generated with a different
+  `route_base.sampling_strategy` or `route_base.corridor_m`, regenerate risk
+  outputs before accepting baseline/calibrated overlays.
+- If full layer preparation stalls inside segment alignment, diagnose
+  `pretrip_overpass_route_alignment.py` separately. Do not keep rerunning the
+  whole import/preparation loop and hiding the route-base or alignment cause.
+
 For a local one-command rebuild, prefer the wrapper after setting variables:
 
 ```bash
@@ -534,6 +558,19 @@ If Overpass is `planned_no_network` or candidate count is `0`, do not claim a
 full preparation run. Re-run Step 2 with `--network-mode explicit-fetch` and
 `--allow-network-fetch`.
 
+Segment/risk projection checks:
+
+- CP, MCP, segment display, baseline risk ribbon, and calibrated heatmap must
+  visually follow the Overpass/local PBF route basis wherever Overpass-projected
+  route-base samples exist.
+- `route_risk.geojson` may include fallback candidate points when the route
+  basis has gaps. `risk_ribbon.geojson` and `calibrated_risk_heatmap.geojson`
+  must not connect those fallback points into long straight lines.
+- If a line overlay crosses the map as a straight segment, inspect the source
+  feature. Flattened OSM relation members should be preserved as
+  `MultiLineString`, and route-base fallback pairs should be skipped rather
+  than connected.
+
 ## Step 7: Boss/MCP/Risk Checks
 
 Boss synthesis is normally triggered by layer preparation. Standalone command:
@@ -570,6 +607,46 @@ PY
 
 Report missing MCP/Boss as `FAIL` or `NOT APPLICABLE` with reason. Do not hide
 them under a green layer count.
+
+Inspect route-base metadata before accepting risk overlays:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python - <<'PY'
+import json, os
+from pathlib import Path
+
+root = Path(os.environ["PROJECT_ROOT"])
+project = json.loads((root / "project.json").read_text())
+risk_ref = project.get("risk_score_points_ref")
+if not risk_ref:
+    raise SystemExit("missing risk_score_points_ref")
+risk = json.loads((root / risk_ref).read_text())
+meta = risk.get("metadata") or {}
+route_base = meta.get("route_base") or {}
+for key in [
+    "sampling_strategy",
+    "corridor_m",
+    "reference_sample_count",
+    "projected_reference_sample_count",
+    "fallback_reference_sample_count",
+    "route_point_count",
+    "selected_feature_count",
+    "trail_feature_count",
+    "max_reference_distance_m",
+    "median_reference_distance_m",
+]:
+    print(key, route_base.get(key))
+PY
+```
+
+Expected connected route-base result:
+
+- `sampling_strategy` is
+  `reference_progress_projected_to_nearest_overpass_segment.v1`;
+- `corridor_m` matches the run's `route_corridor_m` value, normally `500`;
+- fallback count is allowed only as explicit gap provenance;
+- risk ribbon and calibrated heatmap segment counts exclude skipped fallback
+  pairs.
 
 ## Step 8: Full Workspace Spec And Layer Gates
 
@@ -618,6 +695,22 @@ Remember: `pretrip_layer_preparation --layers` supports 23 preparation-backed
 layers. The 32-layer admin contract includes runtime-only or UI/post-process
 layers such as `rudy`, `rudy-twmap`, `relief`, `geology`, `topo-5k`, `forest`,
 `completed-track`, `boss-points`, `events`, and `weather-api`.
+
+OSM PBF vector render checks:
+
+- `osm_pbf_render_geojson_ref` and `osm_pbf_feature_index_ref` must exist in
+  the workspace when a local PBF source is available.
+- `/admin/pretrip/projects/<project-id>/osm-pbf-vector.geojson` must return
+  source-backed vector features. Endpoint counts alone are not sufficient.
+- Do not use the local OSM PBF preview PNG as a map layer.
+- The admin pages should render PBF vectors with OSM-like classed SVG geometry:
+  line casing/core strokes for paths, tracks, steps, service/roads, routes,
+  waterways, and infrastructure; readable point and line labels; and marker
+  scale reapplied after layer toggles and viewBox changes.
+- Runtime OSM raster tiles are optional browser context and are not a
+  preparation cache target. A valid local-PBF render may have zero
+  `image.osm-tile` elements as long as the vector layer itself is present,
+  styled, labeled, and not backed by the preview PNG.
 
 ## Step 9: Optional Offline Replay Check
 
@@ -754,6 +847,92 @@ Tryimport2 vs reference strict compare: PASS
 Workspace spec alignment rerun: PASS
 9112 Playwright query URL check: PASS
 Admin UI visual smoke: PASS
+```
+
+## Run Log: 2026-06-29 Durable Workspace Scout AI Replay
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Material root:
+
+```text
+/Users/alexwang0315/workspace/scout-local-materials/pretrip/chilai_nanhua_day1_scoutAI
+```
+
+Scout AI skill invocation:
+
+```text
+skill_id=pretrip-import-preparation
+skill_manifest=skills/scout/pretrip-import-preparation.yaml
+activation_decision=degrade
+degraded_to=manual_pretrip_import_preparation_runbook
+plan_ref=outputs/scout_ai/pretrip_import_preparation_plan.json
+run_result_ref=outputs/scout_ai/pretrip_import_preparation_run_result.json
+skill_run_record_ref=outputs/scout_ai/pretrip_import_preparation_skill_run_record.json
+```
+
+Issues encountered:
+
+1. Previous `/tmp` and `/private/tmp` tryimport workspaces were not durable.
+   - Symptom: earlier tryimport comparison roots were no longer present after
+     restart/cleanup, so they could not be used as live comparison inputs.
+   - Fix used: place the replay workspace, material root, raster tile cache,
+     and rebuild logs under `/Users/alexwang0315/workspace`.
+   - SOP change: future Scout AI import/preparation replays should default to
+     `/Users/alexwang0315/workspace` unless the operator explicitly asks for
+     temporary storage.
+
+2. Inline local OSM PBF extraction exceeded the 30-minute target when the
+   `osmium` CLI was unavailable.
+   - Symptom: attempt 1 completed GPX import and reference timing, but layer
+     preparation spent too long streaming the Taiwan PBF through the Python
+     fallback. It was stopped by the time guard.
+   - Fix used: preserve the completed OSM JSON extract and feature index, rerun
+     full layer preparation without re-streaming the PBF, then convert the
+     workspace-local OSM JSON extract to
+     `normalized/map/osm_pbf_route_bbox_full.geojson` and set
+     `osm_pbf_render_geojson_ref`.
+   - SOP change: install/use `osmium` for fast PBF export, or keep the
+     deterministic OSM JSON to GeoJSON fallback as a post-run repair step when
+     `osm_pbf_feature_index_ref` exists but `osm_pbf_render_geojson_ref` is
+     empty.
+
+Attempt summary:
+
+```text
+Attempt 1 log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_20260629T012956Z.log
+Attempt 1 result: STOPPED by 30-minute target guard during inline local OSM PBF preparation
+Attempt 2 log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_layer_retry_no_pbf_chilai_nanhua_day1_scoutAI_20260629T020356Z.log
+Attempt 2 result: PASS layer preparation, route context, and Boss synthesis in 610 seconds
+Attempts used: 2/10
+```
+
+Verification summary:
+
+```text
+Retired comparison root: /Users/alexwang0315/.scout-fusion/pretrip-workspaces/chilai_nanhua_day1 (deleted 2026-06-29; too old, do not reference)
+Temporary tryimport comparison roots: unavailable locally
+Evidence count snapshot ref: outputs/scout_ai/evidence_count_comparison.json (candidate-only counts; previous old comparison invalidated)
+Checkpoint count: PASS (240)
+Segment count: PASS (239)
+Reference track count: PASS (23)
+Route points/distance: PASS (11191 points, 112258.31 m)
+Overpass evidence: PASS (517 items)
+Overpass-aligned segments/checkpoints: PASS (239 segments, 240 checkpoints)
+OSM PBF evidence: PASS (518 feature-index items, 518 render GeoJSON features)
+MCP evidence: PASS (6 candidates)
+Mileage tags: PASS (19879 tags, 29 projected anchors)
+OCR evidence: PASS (20 raster labels)
+Risk ribbon: PASS (4530 features)
+Risk score: PASS (4077 points)
+Reference segment timing: PASS (48 measurements, 8 timing segments)
+CWA current-run evidence: PASS (fetched hour 2026-06-29T02:00:00Z, valid until 2026-06-30T18:00:00Z)
+GEE current-run evidence: PASS current blocker surfaced (fetch_failed, no cached numeric reuse)
+Layer preparation: PASS (23 requested layers ready, 0 missing, 0 blocked)
 ```
 
 9112 URL:
@@ -1283,5 +1462,226 @@ GEE current-run evidence: PASS current blocker surfaced (fetch_failed)
 32-layer repo gate: PASS
 32-layer workspace gate: PASS
 Workspace spec alignment: PASS with known metadata warnings only
+Admin UI visual smoke: PASS
+```
+
+## Run Log: 2026-06-29 Overpass Relation Geometry And OSM PBF Render Repair
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Attempt:
+
+```text
+Attempt 1/10
+Attempt type: targeted repair and validation of an existing prepared workspace
+Started: 2026-06-29T03:10:29Z
+Full import rerun: not run in this attempt
+```
+
+Issues encountered:
+
+1. Overpass/local OSM PBF hiking route relations rendered as long straight
+   connector lines across the map.
+   - Symptom: the live admin map showed several thick dashed lines spanning
+     large parts of the viewport. Tooltip provenance pointed to
+     `candidates/overpass_evidence.json`, including the relation label
+     `能高安東軍縱走`, not to a raw GPX overlay.
+   - Root cause: OSM `relation` member geometries were flattened into one
+     `LineString`. Separate member ways were therefore connected by artificial
+     line segments in both Overpass evidence and local OSM PBF rendering.
+   - Fix applied: preserve relation members as `MultiLineString` when more than
+     one member line is present. Update offline map context and the pretrip
+     admin map payload to accept and render `MultiLineString` corridors without
+     inserting connector segments.
+   - Workspace correction: regenerated Overpass-compatible evidence from
+     `normalized/map/osm_pbf_phase_a_raw.osm.json` into
+     `candidates/overpass_evidence.json`,
+     `normalized/map/overpass_vector_evidence.geojson`, and
+     `outputs/layers/normalized/overpass_vector_evidence.geojson`.
+   - SOP change: relation geometry QA must check for flattened relation member
+     jumps. Route relation candidates should remain source-backed
+     `MultiLineString` evidence unless a deterministic topology join proves the
+     member ways are contiguous.
+
+2. The pretrip page initially showed only OSM raster fallback and did not request
+   the local OSM PBF vector endpoint.
+   - Symptom: `/admin/pretrip` DOM contained OSM raster tiles but zero
+     `.osm-pbf-line`, `.osm-pbf-point`, or `.osm-pbf-label` nodes. The local
+     endpoint `/admin/pretrip/projects/<project>/osm-pbf-vector.geojson`
+     returned data, but the page had not requested it yet.
+   - Root cause: `reloadProjectView()` waited for `/weather-overlay` before
+     calling `loadOsmPbfVectorLayer(view)`. A slow weather overlay delayed OSM
+     vector loading and left the visible map on fallback tiles.
+   - Fix applied: start `loadOsmPbfVectorLayer(view)` immediately after the
+     first map render, then fetch the weather overlay in parallel and await the
+     OSM vector promise after the weather re-render.
+   - SOP change: browser smoke for local OSM PBF must verify both the vector
+     endpoint response and rendered DOM counts on `/admin/pretrip`; endpoint
+     readiness alone is insufficient.
+
+3. The OSM layer still looked like generic point/line/polygon evidence rather
+   than an OSM-style map.
+   - Symptom: local OSM PBF vector rendering showed only generic sparse
+     evidence instead of recognizable OSM-style roads, trails, route lines, and
+     labels.
+   - Root cause: `renderOsmBasemap()` and the three admin surfaces treated the
+     local OSM PBF as generic evidence, and the style classifier read only
+     direct properties while the route-bbox GeoJSON stored real OSM tags under
+     `properties.tags`.
+   - Fix applied: render local OSM PBF vectors directly with OSM-like classed
+     casing/core strokes, merge nested `properties.tags`, keep point and line
+     labels at screen-readable scale, and reapply marker/label scale after
+     layer toggles and viewBox changes.
+   - SOP change: OSM visual smoke must check local PBF vector class
+     distribution, labels, and the absence of preview-PNG rendering. Runtime
+     OSM raster tile presence is optional and must not be treated as the
+     preparation cache target.
+
+4. The evidence count comparison used a retired workspace as the old baseline.
+   - Symptom: the comparison table showed `n/a` for OSM PBF, mileage, OCR,
+     CWA/GEE, Boss, and route-pressure metrics under the old column.
+   - Root cause: the comparison root
+     `/Users/alexwang0315/.scout-fusion/pretrip-workspaces/chilai_nanhua_day1`
+     was an old persistent workspace without those newer refs/metrics.
+   - Fix applied: delete that old workspace at operator request and rewrite
+     `outputs/scout_ai/evidence_count_comparison.json` as a candidate-only
+     count snapshot with the previous comparison invalidated.
+   - SOP change: do not use that retired root as a reference. If no current
+     reviewed reference workspace exists locally, emit a candidate snapshot
+     instead of an `old` comparison column with ambiguous `n/a` cells.
+
+5. Environmental candidate groups showed `(0)` without the data-gap reason.
+   - Symptom: the Map/Risk evidence tree showed `New Landslide Candidates (0)`,
+     `Wetness / Flash Flood Candidates (0)`, `Trail Obscurity Candidates (0)`,
+     and `Practical Darkness Candidates (0)` even though GEE source evidence
+     had failed to fetch numeric values.
+   - Root cause: the deterministic derivative artifacts correctly recorded
+     `ready_with_data_gaps` and `source_metric_gaps`, but the admin projection
+     and compact API did not preserve those fields on the candidate collections
+     or category summaries. The UI therefore showed a bare zero that could be
+     misread as low risk.
+   - Fix applied: preserve `source_status`, `source_metric_gaps`, and
+     `data_quality` through `pretrip_admin_view.py` and the compact API, then
+     show data-gap notes in the environmental derivative tree summaries and
+     empty candidate groups.
+   - SOP change: when environmental candidate count is zero, verify whether the
+     derivative source status is `ready`, `ready_with_data_gaps`, or
+     `missing_source`. A zero with metric gaps is not evidence of low
+     landslide, wetness, trail obscurity, or darkness risk.
+
+Validation snapshot:
+
+```text
+Overpass/local OSM PBF vector endpoint: PASS (518 features; 453 LineString, 61 Point, 4 MultiLineString)
+Live /admin/pretrip DOM OSM runtime tiles: NOT REQUIRED (0 observed in the final 9112 check)
+Live /admin/pretrip DOM OSM PBF render: PASS (457 casing lines, 457 core lines, 61 points, 104 labels, 43 line labels)
+Live /admin/pretrip OSM PBF style classes: PASS (footway 112, path 147, track 138, steps 13, road 4, route 3)
+Live /admin/pretrip local PBF preview PNG use: PASS (not used as the OSM layer)
+Live /admin/pretrip DOM Overpass render: PASS (456 Overpass paths)
+Live /admin/pretrip compact environmental data gaps: PASS (status ready_with_data_gaps; missing sentinel2, sentinel1, dynamic_world, rainfall, terrain)
+Overpass relation gap check: PASS (517 features; 4 MultiLineString relations; max independent adjacent point step 336.0 m)
+Workspace spec alignment: PASS (0 errors; 5 existing workspace layout metadata warnings)
+```
+
+## Run Log: 2026-06-29 Risk Route-Base Projection And Local OSM PBF Styling
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Attempt:
+
+```text
+Attempt type: targeted risk route-base, calibrated heatmap, and admin OSM PBF validation
+Full import rerun: not run in this attempt
+Reference comparison root: not used; retired ~/.scout-fusion pretrip workspace was deleted earlier
+```
+
+Issues encountered:
+
+1. Baseline and calibrated risk line overlays did not follow the Overpass route
+   basis.
+   - Symptom: `risk_ribbon` and `calibrated_risk_heatmap` could draw long
+     straight line segments over gaps instead of following visible
+     Overpass/local PBF trail geometry.
+   - Root cause: the route-base builder selected nearby trail vertices and
+     sorted them by nearest GPX progress. This could concatenate unrelated
+     branches or route gaps, especially when the available Overpass/PBF
+     coverage was incomplete.
+   - Fix applied: use
+     `reference_progress_projected_to_nearest_overpass_segment.v1`. For each
+     reference sample, project to the nearest Overpass/local PBF trail segment
+     within the Spatial Policy corridor, keep projection provenance, and mark
+     unmatched samples as explicit `reference_gpx_gap_fallback`.
+   - SOP change: risk generation must receive `route_corridor_m=500` for this
+     route-corridor preparation flow. Do not rely on the risk package default
+     corridor.
+
+2. Fallback candidate points were being interpreted as connected route
+   overlays.
+   - Symptom: risk score points could still be valid candidate samples, but
+     baseline/calibrated line layers made the fallback areas look like
+     source-backed trail geometry.
+   - Fix applied: `risk_ribbon.geojson` and
+     `calibrated_risk_heatmap.geojson` now skip adjacent pairs when either
+     endpoint is not `route_base_source=overpass_projection`, or when the
+     geometry jump exceeds the route-base segment threshold.
+   - SOP change: `route_risk.geojson` may include fallback candidate points,
+     but line overlays must represent only connected Overpass-projected
+     route-base samples.
+
+3. Local OSM PBF was present but still needed style-level validation.
+   - Symptom: "OSM render" could pass by feature count while the UI still
+     looked like generic point/line evidence.
+   - Fix applied: validate SVG classed OSM-like render output on the live admin
+     surface: casing/core path counts, point counts, point labels, line labels,
+     and `hasPreviewPngAsOsm=false`.
+   - SOP change: OSM PBF acceptance is visual/vector-render acceptance, not
+     merely ref existence. Runtime OSM raster tiles are optional in this check.
+
+Validation snapshot:
+
+```text
+Project root: /Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+Risk route sample count: 4214
+Route-base strategy: reference_progress_projected_to_nearest_overpass_segment.v1
+Route-base corridor_m: 500.0
+Reference samples: 5614
+Projected reference samples: 5054
+Fallback reference samples: 560
+Selected trail features: 86
+Trail feature count: 414
+Trail segment count: 17943
+Median reference projection distance: 7.251 m
+Max reference projection distance: 498.687 m
+Risk ribbon segments: 3576
+Risk ribbon skipped fallback/gap pairs: 637
+Calibrated heatmap segments: 3576
+Calibrated heatmap skipped fallback/gap pairs: 637
+Route-risk point distance to route base: median 0.0 m, p90 593.78 m, max 1309.38 m, over_35m 560
+Risk-ribbon distance to route base: median 0.0 m, p90 0.0 m, max 0.0 m, over_35m 0
+Calibrated-heatmap distance to route base: median 0.0 m, p90 0.0 m, max 0.0 m, over_35m 0
+Live 9112 OSM tile images: 0
+Live 9112 OSM PBF line casings: 457
+Live 9112 OSM PBF line cores: 457
+Live 9112 OSM PBF points: 61
+Live 9112 OSM PBF labels: 104
+Live 9112 OSM PBF line labels: 43
+Live 9112 hasPreviewPngAsOsm: false
+Live 9112 risk ribbon paths: 3576
+Live 9112 heatmap paths: 3576
+Screenshot: /tmp/scout_9112_osm_risk_after.png
+pnpm lint: PASS
+pnpm typecheck: PASS
+pnpm test: PASS
+Focused pretrip/admin/debug/API/view pytest: PASS (177 passed, 8 subtests passed)
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
 Admin UI visual smoke: PASS
 ```

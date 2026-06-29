@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -25,6 +26,7 @@ HEAT_COLORS = {
     "very_high": "#fdae61",
     "extreme": "#d7191c",
 }
+MAX_ROUTE_BASE_HEATMAP_SEGMENT_M = 80.0
 
 
 def build_calibrated_risk_heatmap(
@@ -58,6 +60,13 @@ def build_calibrated_risk_heatmap(
     skipped_pair_count = 0
     for start, end in zip(scored_points, scored_points[1:]):
         if start["route_id"] != end["route_id"]:
+            skipped_pair_count += 1
+            continue
+        if not route_risk_points_can_connect(
+            start,
+            end,
+            max_segment_m=MAX_ROUTE_BASE_HEATMAP_SEGMENT_M,
+        ):
             skipped_pair_count += 1
             continue
         score = max(start["calibrated_score"], end["calibrated_score"])
@@ -127,6 +136,7 @@ def build_calibrated_risk_heatmap(
         "source_sample_count": len(scored_points),
         "segment_count": len(features),
         "skipped_pair_count": skipped_pair_count,
+        "max_route_base_segment_m": MAX_ROUTE_BASE_HEATMAP_SEGMENT_M,
         "warning_cp_overlay_count": len(warning_proposals),
         "style": {
             bucket: {"stroke": color}
@@ -181,7 +191,40 @@ def scored_route_point(
             dimension: _optional_float(point.properties.get(dimension))
             for dimension in RISK_DIMENSIONS
         },
+        "route_base_source": point.properties.get("route_base_source"),
+        "route_base_feature_id": point.properties.get("route_base_feature_id"),
+        "route_base_projection_distance_m": _optional_float(
+            point.properties.get("route_base_projection_distance_m")
+        ),
     }
+
+
+def route_risk_points_can_connect(
+    start: dict[str, Any],
+    end: dict[str, Any],
+    *,
+    max_segment_m: float,
+) -> bool:
+    start_source = start.get("route_base_source")
+    end_source = end.get("route_base_source")
+    if start_source is None and end_source is None:
+        return True
+    if start_source != "overpass_projection" or end_source != "overpass_projection":
+        return False
+    return _haversine_m(start["lat"], start["lon"], end["lat"], end["lon"]) <= max_segment_m
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    earth_radius_m = 6_371_000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    h = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    )
+    return earth_radius_m * 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h))
 
 
 def heat_thresholds(scores: Sequence[float] | Any) -> dict[str, float]:

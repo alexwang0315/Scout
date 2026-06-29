@@ -197,6 +197,13 @@ def import_overpass_evidence_candidates(
             features.append(candidate.geojson_feature)
 
     normalized_geojson = {
+        "artifact_kind": "pretrip_overpass_vector_evidence",
+        "schema_version": "route_corridor_map_preparation.v1",
+        "route_scope_ref": (
+            (route_corridor or {}).get("route_evidence_bundle_ref")
+            or "normalized/routes/route_evidence_bundle.json"
+        ),
+        "status": "ready",
         "type": "FeatureCollection",
         "properties": {
             "source": "overpass_osm",
@@ -215,6 +222,14 @@ def import_overpass_evidence_candidates(
             "conversion_rule_version": CONVERSION_RULE_VERSION,
             "candidate_layer": "pretrip_overpass_vector_evidence",
             "runtime_truth": False,
+        },
+        "boundary": {
+            "candidate_only": True,
+            "runtime_truth": False,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "phase2_brain_writeback_allowed": False,
+            "raw_gpx_embedded_in_json": False,
         },
         "features": features,
     }
@@ -421,6 +436,8 @@ def _point_geometry(element: dict[str, Any]) -> tuple[dict[str, Any] | None, str
 
 
 def _line_geometry(element: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    if element.get("type") == "relation":
+        return _relation_line_geometry(element)
     coordinates = _element_line_coordinates(element)
     if coordinates is None:
         return None, "Line candidate requires complete Overpass geometry coordinates"
@@ -465,6 +482,27 @@ def _relation_line_coordinates(element: dict[str, Any]) -> list[list[float]] | N
             if not coordinates or coordinates[-1] != coordinate:
                 coordinates.append(coordinate)
     return coordinates
+
+
+def _relation_line_geometry(element: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    members = element.get("members")
+    if not isinstance(members, list):
+        return None, "Line candidate requires complete Overpass geometry coordinates"
+    lines: list[list[list[float]]] = []
+    for member in members:
+        geometry = member.get("geometry") if isinstance(member, dict) else None
+        if not isinstance(geometry, list):
+            continue
+        member_coordinates = _geometry_points(geometry)
+        if member_coordinates is None:
+            return None, "Line candidate requires complete Overpass geometry coordinates"
+        if len(member_coordinates) >= 2:
+            lines.append(member_coordinates)
+    if not lines:
+        return None, "Line candidate requires complete Overpass geometry coordinates"
+    if len(lines) == 1:
+        return {"type": "LineString", "coordinates": lines[0]}, None
+    return {"type": "MultiLineString", "coordinates": lines}, None
 
 
 def _geometry_points(points: list[Any]) -> list[list[float]] | None:

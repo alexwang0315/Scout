@@ -7622,11 +7622,14 @@ def _overpass_timeline_category_id(candidate: dict[str, Any]) -> str:
 def _overpass_map_payload(candidate: dict[str, Any], properties: dict[str, Any]) -> dict[str, Any]:
     geometry = candidate["geometry"]
     if candidate["feature_type"] == "approved_corridor":
+        coordinate_segments = _geojson_line_coordinate_segments(geometry)
+        coordinates = coordinate_segments[0] if coordinate_segments else []
         return {
             "corridor": {
                 "corridor_id": candidate["candidate_id"],
                 "name": candidate["label"],
-                "coordinates": _geojson_line_coordinates(geometry),
+                "coordinates": coordinates,
+                "coordinate_segments": coordinate_segments,
                 "corridor_half_width_m": 12.0,
                 "route_level": properties.get("route_level"),
             }
@@ -7957,6 +7960,25 @@ def _geojson_line_coordinates(geometry: dict[str, Any]) -> list[dict[str, float]
         {"lon": float(lon), "lat": float(lat)}
         for lon, lat, *_ in geometry.get("coordinates", [])
     ]
+
+
+def _geojson_line_coordinate_segments(
+    geometry: dict[str, Any],
+) -> list[list[dict[str, float]]]:
+    geometry_type = geometry.get("type")
+    if geometry_type == "LineString":
+        coordinates = _geojson_line_coordinates(geometry)
+        return [coordinates] if coordinates else []
+    if geometry_type == "MultiLineString":
+        segments: list[list[dict[str, float]]] = []
+        for line in geometry.get("coordinates", []):
+            if not isinstance(line, list):
+                continue
+            coordinates = _geojson_line_coordinates({"coordinates": line})
+            if coordinates:
+                segments.append(coordinates)
+        return segments
+    return []
 
 
 def _geojson_point_coordinate(geometry: dict[str, Any]) -> dict[str, float]:
@@ -9691,6 +9713,28 @@ def _environment_risk_derivative_layers_summary(
         if isinstance(environment_risk_derivatives, dict)
         else {}
     )
+    source_status = (
+        str(environment_risk_derivatives.get("status") or "")
+        if isinstance(environment_risk_derivatives, dict)
+        else ""
+    )
+    source_metric_gaps = _environment_source_metric_gaps(
+        environment_risk_derivatives
+    )
+    data_quality = {
+        "source_status": source_status or "missing_source",
+        "source_metric_gaps": source_metric_gaps,
+        "complete_metric_family_count": sum(
+            1
+            for gap in source_metric_gaps
+            if float(gap.get("missing_ratio") or 0.0) <= 0.0
+        ),
+        "missing_metric_family_count": sum(
+            1
+            for gap in source_metric_gaps
+            if float(gap.get("missing_ratio") or 0.0) > 0.0
+        ),
+    }
     cwa_time_metadata = _cwa_time_metadata_from_payload(environment_risk_derivatives)
     collections = {
         key: _environment_risk_candidate_collection_summary(
@@ -9705,6 +9749,8 @@ def _environment_risk_derivative_layers_summary(
                 "",
             ),
             cwa_time_metadata=cwa_time_metadata,
+            source_status=source_status,
+            source_metric_gaps=source_metric_gaps,
         )
         for key, spec in ENVIRONMENT_RISK_DERIVATIVE_SPECS.items()
     }
@@ -9767,6 +9813,9 @@ def _environment_risk_derivative_layers_summary(
             )
         ),
         "counts": counts,
+        "data_quality": data_quality,
+        "source_status": source_status or "missing_source",
+        "source_metric_gaps": source_metric_gaps,
         **_cwa_time_projection_fields(cwa_time_metadata),
         "temporal_coverage": {"cwa": cwa_time_metadata}
         if cwa_time_metadata
@@ -9838,6 +9887,8 @@ def _environment_risk_candidate_collection_summary(
     summary_counts: dict[str, Any],
     derivatives_source_path: str,
     cwa_time_metadata: dict[str, Any] | None = None,
+    source_status: str = "",
+    source_metric_gaps: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     resolved_cwa_time_metadata = (
         cwa_time_metadata or _cwa_time_metadata_from_payload(payload)
@@ -9873,6 +9924,16 @@ def _environment_risk_candidate_collection_summary(
         confidence = str(candidate.get("confidence") or "unknown")
         severity_counts[severity] = severity_counts.get(severity, 0) + 1
         confidence_counts[confidence] = confidence_counts.get(confidence, 0) + 1
+    metric_gaps = list(source_metric_gaps or [])
+    data_quality = {
+        "source_status": source_status or "unknown",
+        "source_metric_gaps": metric_gaps,
+        "missing_metric_families": [
+            str(gap.get("metric_family"))
+            for gap in metric_gaps
+            if gap.get("metric_family") and float(gap.get("missing_ratio") or 0.0) > 0.0
+        ],
+    }
     return {
         "source_id": f"{project_id}.{key}",
         "source_path": source_path,
@@ -9905,6 +9966,9 @@ def _environment_risk_candidate_collection_summary(
             "severity_counts": severity_counts,
             "confidence_counts": confidence_counts,
         },
+        "source_status": source_status or "unknown",
+        "source_metric_gaps": metric_gaps,
+        "data_quality": data_quality,
         "bbox_wgs84": _environment_bbox(payload or {}, {}),
         **_cwa_time_projection_fields(resolved_cwa_time_metadata),
         "candidates": candidates,
@@ -10041,6 +10105,35 @@ def _environment_risk_candidate_from_feature(
     }
 
 
+def _environment_source_metric_gaps(
+    payload: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    gaps = payload.get("source_metric_gaps")
+    if not isinstance(gaps, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for gap in gaps:
+        if not isinstance(gap, dict):
+            continue
+        metric_family = str(gap.get("metric_family") or "").strip()
+        if not metric_family:
+            continue
+        normalized.append(
+            {
+                "metric_family": metric_family,
+                "missing_ratio": _coerce_float(gap.get("missing_ratio")),
+                "missing_segment_count": _coerce_int(
+                    gap.get("missing_segment_count"),
+                    0,
+                ),
+                "segment_count": _coerce_int(gap.get("segment_count"), 0),
+            }
+        )
+    return normalized
+
+
 def _environment_risk_candidate_center(
     props: dict[str, Any],
     geometry: dict[str, Any],
@@ -10109,6 +10202,11 @@ def _environment_risk_derivative_category_items(
             else {}
         )
         cwa_time_fields = _cwa_time_projection_fields(cwa_time_metadata)
+        data_quality = (
+            collection.get("data_quality")
+            if isinstance(collection.get("data_quality"), dict)
+            else {}
+        )
         item = {
             "candidate_id": f"{project_id}.{key}.summary",
             "source_id": f"{project_id}.{key}.summary",
@@ -10120,6 +10218,9 @@ def _environment_risk_derivative_category_items(
             "category_key": key,
             "candidate_kind": spec["candidate_kind"],
             "status": collection.get("status", "unknown"),
+            "source_status": collection.get("source_status", "unknown"),
+            "source_metric_gaps": collection.get("source_metric_gaps", []),
+            "data_quality": data_quality,
             "counts": collection.get("counts", {}),
             "candidate_count": count,
             "candidate_only": True,
@@ -10130,6 +10231,11 @@ def _environment_risk_derivative_category_items(
                 "candidate_count": count,
                 "source_path": collection.get("source_path", ""),
                 "first_candidate_label": first_candidate.get("label"),
+                "source_status": collection.get("source_status", "unknown"),
+                "missing_metric_families": data_quality.get(
+                    "missing_metric_families",
+                    [],
+                ),
                 **cwa_time_fields,
             },
         }
