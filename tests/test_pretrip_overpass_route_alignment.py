@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pretrip_layer_preparation
+import pretrip_overpass_route_alignment
 from pretrip_overpass_route_alignment import align_workspace_route_to_overpass
 
 
@@ -13,6 +15,47 @@ def _write_json(path: Path, payload: object) -> None:
 
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_layer_preparation_alignment_uses_normal_corridor_not_route_corridor(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_root = tmp_path / "workspace" / "route"
+    _write_json(project_root / "project.json", {"project_id": "route"})
+    seen: dict[str, float] = {}
+
+    def fake_align_workspace_route_to_overpass(
+        project_root_arg: Path | str,
+        *,
+        max_projection_distance_m: float,
+        generated_at: str | None = None,
+    ) -> dict:
+        seen["max_projection_distance_m"] = max_projection_distance_m
+        return {
+            "status": "completed",
+            "output_refs": {},
+            "counts": {},
+        }
+
+    monkeypatch.delenv("SCOUT_OVERPASS_ALIGNMENT_MAX_PROJECTION_DISTANCE_M", raising=False)
+    monkeypatch.setattr(
+        pretrip_overpass_route_alignment,
+        "align_workspace_route_to_overpass",
+        fake_align_workspace_route_to_overpass,
+    )
+
+    result = pretrip_layer_preparation._run_overpass_route_alignment_after_layer_preparation(
+        project_root=project_root,
+        manifest={
+            "normalized_layers": ["overpass"],
+            "route_corridor": {"corridor_m": 500.0},
+            "finished_at": "2026-06-29T00:00:00+00:00",
+        },
+    )
+
+    assert result["status"] == "completed"
+    assert seen["max_projection_distance_m"] == 50.0
 
 
 def test_overpass_route_alignment_uses_50m_gpx_normal_corridor_before_gpx_fallback(

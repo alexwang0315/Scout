@@ -865,6 +865,68 @@ Workspace spec alignment rerun: PASS
 Admin UI visual smoke: PASS
 ```
 
+## Run Log: 2026-06-29 Overpass Alignment Normal Corridor Regression
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI_test0629
+```
+
+Attempt:
+
+```text
+Attempt type: targeted route/segment Overpass alignment correction
+Full import rerun: not run in this attempt
+Reference comparison root: /Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Issue encountered:
+
+- Symptom: the target workspace's golden-route-derived segment display could
+  visually jump across the map instead of roughly following the road/trail
+  geometry visible in Rudy/TW map imagery. The raw golden route and speed
+  filter were not the cause: both target and reference had
+  `11413 -> 11191` primary route points after GPX speed filtering.
+- Root cause: `pretrip_layer_preparation.py` passed the Spatial Policy
+  route-corridor width (`route_corridor_m=500`) into
+  `align_workspace_route_to_overpass()` as the GPX point/segment projection
+  tolerance. The 500m value is an evidence corridor for acquisition and
+  filtering; it is too large for display alignment normal snapping and can pull
+  checkpoints or segment display points onto nearby but wrong
+  Overpass/risk-ribbon centerlines.
+- Fix applied: keep `route_corridor_m=500` for route-corridor evidence and risk
+  generation, but use a separate Overpass alignment normal snap tolerance,
+  defaulting to `SCOUT_OVERPASS_ALIGNMENT_MAX_PROJECTION_DISTANCE_M=50`.
+- SOP change: never reuse `SCOUT_ROUTE_CORRIDOR_M` as the Overpass alignment
+  projection tolerance. If visual segment alignment shows map-crossing straight
+  lines while the raw segment display follows the route, inspect
+  `project.overpass_route_alignment_max_projection_distance_m` first.
+
+Validation snapshot:
+
+```text
+Focused pytest: PASS (tests/test_pretrip_overpass_route_alignment.py, 6 passed)
+Target overpass_route_alignment_max_projection_distance_m: 50.0
+Target route_edge_count: 3576
+Target snapped_point_count: 891
+Target kept_gpx_point_count: 3163
+Target rejected_segment_alignment_count: 10
+Target segments 051-086: mostly original GPX display geometry or short valid alignment; no 500m tolerance snapping
+Risk ribbon segments: 3576
+Risk ribbon skipped fallback/gap pairs: 637
+Calibrated heatmap segments: 3576
+Calibrated heatmap skipped fallback/gap pairs: 637
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS
+Admin UI visual smoke: PASS
+Focused pretrip layer/admin pytest: PASS (59 passed, 1 warning)
+pnpm lint: PASS
+pnpm typecheck: PASS
+pnpm test: PASS
+```
+
 ## Run Log: 2026-06-29 From-Zero Scout AI Test0629 Replay
 
 Target workspace:

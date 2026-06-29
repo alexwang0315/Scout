@@ -262,6 +262,7 @@ SCOUT_RISK_OUTPUT_REFS = {
 SCOUT_RISK_ROUTE_BASE_SAMPLING_STRATEGY = (
     "reference_progress_projected_to_nearest_overpass_segment.v1"
 )
+DEFAULT_OVERPASS_ALIGNMENT_MAX_PROJECTION_DISTANCE_M = 50.0
 CALIBRATED_RISK_OUTPUT_REFS = {
     "risk_attribution_diagnostic_ref": "outputs/risk/risk_attribution_diagnostic.json",
     "excluded_extreme_warning_cp_proposals_ref": (
@@ -4621,15 +4622,14 @@ def _run_overpass_route_alignment_after_layer_preparation(
     try:
         from pretrip_overpass_route_alignment import align_workspace_route_to_overpass
 
-        route_corridor = manifest.get("route_corridor") or {}
-        max_projection_distance_m = route_corridor.get("corridor_m")
-        if not isinstance(max_projection_distance_m, (int, float)):
-            max_projection_distance_m = None
+        max_projection_distance_m = _as_float(
+            os.environ.get("SCOUT_OVERPASS_ALIGNMENT_MAX_PROJECTION_DISTANCE_M")
+        )
+        if max_projection_distance_m is None:
+            max_projection_distance_m = DEFAULT_OVERPASS_ALIGNMENT_MAX_PROJECTION_DISTANCE_M
         result = align_workspace_route_to_overpass(
             project_root,
-            max_projection_distance_m=float(max_projection_distance_m)
-            if max_projection_distance_m
-            else 500.0,
+            max_projection_distance_m=max_projection_distance_m,
             generated_at=manifest["finished_at"],
         )
     except Exception as exc:  # pragma: no cover - defensive manifest reporting
