@@ -1,11 +1,11 @@
 id: pretrip-import-preparation
-version: 0.1.0
+version: 0.1.1
 status: experimental
 type: artifact
 priority: 62
 triggers:
   - event: assistant.pretrip_import_preparation_requested
-    description: Let Scout AI collect missing operator inputs, then run GPX import and pretrip map/layer preparation through deterministic tools.
+    description: Let Scout AI collect missing operator inputs, then run GPX import and full pretrip map/layer preparation through deterministic tools and the runbook gates for route-base, OSM PBF, CWA/GEE, OCR, and admin UI validation.
     required_refs: []
 activation_gate:
   mode: operator_approved
@@ -14,9 +14,23 @@ activation_gate:
     - Scout AI may ask the user for missing raw-data inputs before any write occurs
     - required inputs include project_id, workspace_root, golden_route_gpx, and source_gpx_root or reference_gpx_paths
     - material_root is required when the run must include material_manifest, MCP named-point evidence, OCR/raster-label sources, or reference-equivalence replay
-    - optional inputs include durable_evidence_source_root, raster_tile_cache_root, admin_base_url, reference_workspace_roots, and authorized_by
+    - optional inputs include durable_evidence_source_root, raster_tile_cache_root, raster_tile_cache_fallback_project_ids, admin_base_url, reference_workspace_roots, and authorized_by
+    - if the operator requests a from-zero run, durable_evidence_source_root must be empty, material_root must not be copied from the reference workspace/material root, and failed outputs must be fixed by workflow changes followed by a fresh rerun rather than artifact patching
+    - from-zero wrapper runs must set SCOUT_PRETRIP_RESTORE_FROM_BACKUP=0 so previous partial target backups are not used as implicit durable evidence sources
+    - from-zero material manifests must record independent raw GPX/source provenance and target-specific project-scoped material such as MCP named-point evidence
     - CWA/GEE environment artifacts are no-cache current-run evidence; durable_evidence_source_root must not replay weather, QPF, SMAP, GPM, or derived environment values
+    - raster_tile_cache_root must point at the shared raw tile root, not root/project_id; suffix/test projects may use raster_tile_cache_fallback_project_ids to copy only fresh raw Rudy/Rudy+TW PNG tiles by TTL before remote fetch, never derived OCR/Overpass/risk/mileage artifacts
     - CWA source evidence and CWA-derived model/review outputs must expose hour-precision API request, fetch, valid-from, valid-until or observation timing metadata; failed or credential-blocked fetches record the attempt hour without synthetic fetch/validity hours
+    - Scout AI skill invocations must produce plan_ref, run_result_ref, and SkillRunRecord refs under outputs/scout_ai; if connected preparation degrades to the manual wrapper, record activation_decision=degrade and degraded_to=manual_pretrip_import_preparation_runbook
+    - local runs must load /Users/alexwang0315/scout-fusion/.env through SCOUT_ENV_FILE when CWA/GEE credentials are needed, without logging secret values
+    - "Spatial Policy is mandatory: GPX import defines route scope; bbox is acquisition only; route_corridor_m defaults to 500; reference_track_corridor_m defaults to 300; route-relevant evidence is filtered by along-track corridor"
+    - risk generation must use the same route_corridor_m as map preparation and must expose route_base.sampling_strategy reference_progress_projected_to_nearest_overpass_segment.v1
+    - fallback route samples must stay explicitly marked as reference_gpx_gap_fallback candidate points; risk ribbon and calibrated heatmap must not connect fallback samples into straight line overlays
+    - Overpass evidence must be fetched in explicit connected mode and aligned to route segments; planned_no_network or zero candidates is not a complete connected preparation run
+    - local OSM PBF success requires osm_pbf_render_geojson_ref, osm_pbf_feature_index_ref, the osm-pbf-vector endpoint, live classed vector rendering with labels, and no preview PNG as the OSM layer; runtime OSM raster tiles are optional
+    - do not pass all 32 admin contract layer ids directly to pretrip_layer_preparation --layers; boss-points is verified through evidence/admin gates and is not a layer-preparation CLI id
+    - if full preparation stalls inside segment alignment, record the attempt and diagnose pretrip_overpass_route_alignment.py instead of blindly rerunning the full import/preparation loop
+    - if strict reference comparison fails on route-pressure or mileage counts, first inspect whether the reference workspace route_summary, segment display geometry, route risk, route pressure, and mileage artifacts have the same route extent before reproducing a stale partial count
     - if any required input is missing, output a clarification artifact and do not call workspace-write tools
     - after inputs are complete, require explicit operator approval before calling import or preparation tools
     - all outputs remain candidate-only pretrip evidence and must not mutate runtime safety truth
@@ -33,10 +47,15 @@ preflight:
     - pydantic_ai.v2.input_clarification
     - scout.pretrip.import_gpx
     - scout.pretrip.prepare_layers
+    - scout.pretrip.raster_label_ocr
+    - scout.pretrip.raster_label_adapter
     - scout.pretrip.route_context_collect
+    - scout.pretrip.boss_points_synthesize
     - scout.checks.pretrip_release
+    - tools.compare_pretrip_workspace_against_reference
     - tools.verify_scout_layer_contract
     - tools.verify_pretrip_workspace_spec_alignment
+    - tools.admin_ui_visual_smoke
   required_artifacts: []
 allowed_reads:
   - local.raw_gpx
@@ -44,12 +63,17 @@ allowed_reads:
   - local.gpx.golden_route
   - local.materials.pretrip
   - local.materials.material_manifest
+  - local.raster_tile_cache
   - pretrip.workspace.project
   - pretrip.workspace.normalized
   - pretrip.workspace.candidates
   - pretrip.workspace.outputs
   - pretrip.workspace.layer_manifest
   - pretrip.workspace.reference_comparison
+  - pretrip.workspace.overpass_alignment
+  - pretrip.workspace.osm_pbf_vector
+  - pretrip.workspace.risk_route_base
+  - pretrip.workspace.environment_timing
   - scout.layer_contract
   - scout.pretrip.full_preparation_runbook
 allowed_writes:
@@ -62,6 +86,9 @@ allowed_writes:
   - pretrip.workspace.debug_projection
   - pretrip.workspace.rebuild_logs
   - pretrip.workspace.validation_reports
+  - pretrip.workspace.osm_pbf_refs
+  - pretrip.workspace.risk_route_base_metadata
+  - pretrip.workspace.scout_ai_skill_run_audit
 forbidden_writes:
   - local.raw_gpx
   - local.materials.source_data
@@ -88,6 +115,7 @@ output_schema:
     - golden_route_gpx
     - source_gpx_root
     - material_root
+    - raster_tile_cache_root
     - missing_inputs
     - operator_approval_required
     - planned_tools
@@ -95,6 +123,17 @@ output_schema:
     - run_attempt_count
     - candidate_only
     - runtime_safety_truth
+    - spatial_policy_route_corridor_m
+    - spatial_policy_reference_track_corridor_m
+    - risk_route_base_strategy
+    - risk_route_base_corridor_m
+    - risk_ribbon_fallback_skip
+    - calibrated_heatmap_fallback_skip
+    - osm_pbf_vector_render_check
+    - cwa_gee_current_run_policy
+    - cwa_timing_metadata
+    - layer_contract_32_status
+    - browser_ui_smoke_status
 failure_policy:
   on_error: record_failure
   retry:

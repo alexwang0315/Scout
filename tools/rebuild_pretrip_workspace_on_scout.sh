@@ -7,6 +7,9 @@ MATERIAL_ROOT="${SCOUT_PRETRIP_MATERIAL_ROOT:-/data/scout/materials/pretrip/${PR
 MATERIAL_MANIFEST="${MATERIAL_ROOT}/material_manifest.json"
 MATERIAL_SOURCE_GPX_ROOT=""
 MATERIAL_GOLDEN_ROUTE_GPX=""
+MATERIAL_OSM_PBF_PATH=""
+MATERIAL_OSM_PBF_SOURCE_URL=""
+MATERIAL_OSM_PBF_CACHE_TTL_DAYS=""
 if [[ -f "${MATERIAL_MANIFEST}" ]]; then
   MATERIAL_VALUES="$(
     python3 - "${MATERIAL_MANIFEST}" <<'PY'
@@ -37,12 +40,25 @@ golden = (
     or source_path(sources.get("golden_route_reference"))
     or source_path(sources.get("golden_route_gpx"))
 )
+local_osm_pbf = sources.get("local_osm_pbf")
+osm_pbf_path = source_path(local_osm_pbf)
+osm_pbf_source_url = ""
+osm_pbf_cache_ttl_days = ""
+if isinstance(local_osm_pbf, dict):
+    osm_pbf_source_url = str(local_osm_pbf.get("source_url", "") or "")
+    osm_pbf_cache_ttl_days = str(local_osm_pbf.get("cache_ttl_days", "") or "")
 print(gpx_root)
 print(golden)
+print(osm_pbf_path)
+print(osm_pbf_source_url)
+print(osm_pbf_cache_ttl_days)
 PY
   )"
   MATERIAL_SOURCE_GPX_ROOT="$(printf '%s\n' "${MATERIAL_VALUES}" | sed -n '1p')"
   MATERIAL_GOLDEN_ROUTE_GPX="$(printf '%s\n' "${MATERIAL_VALUES}" | sed -n '2p')"
+  MATERIAL_OSM_PBF_PATH="$(printf '%s\n' "${MATERIAL_VALUES}" | sed -n '3p')"
+  MATERIAL_OSM_PBF_SOURCE_URL="$(printf '%s\n' "${MATERIAL_VALUES}" | sed -n '4p')"
+  MATERIAL_OSM_PBF_CACHE_TTL_DAYS="$(printf '%s\n' "${MATERIAL_VALUES}" | sed -n '5p')"
 fi
 if [[ -z "${SCOUT_SOURCE_GPX_ROOT:-}" ]]; then
   SOURCE_GPX_ROOT="${MATERIAL_SOURCE_GPX_ROOT:-/data/scout/source-gpx/twmap-gpx-yunhai}"
@@ -77,13 +93,24 @@ LAYER_PROFILE="${SCOUT_PRETRIP_LAYER_PROFILE:-pi-online-explicit}"
 NETWORK_MODE="${SCOUT_PRETRIP_NETWORK_MODE:-explicit-fetch}"
 ALLOW_NETWORK_FETCH="${SCOUT_PRETRIP_ALLOW_NETWORK_FETCH:-1}"
 DURABLE_EVIDENCE_SOURCE_ROOT="${SCOUT_PRETRIP_DURABLE_EVIDENCE_SOURCE_ROOT:-}"
+RESTORE_FROM_BACKUP="${SCOUT_PRETRIP_RESTORE_FROM_BACKUP:-1}"
+OSM_PBF_PATH="${SCOUT_PRETRIP_OSM_PBF_PATH:-${MATERIAL_OSM_PBF_PATH}}"
+OSM_PBF_SOURCE_URL="${SCOUT_PRETRIP_OSM_PBF_SOURCE_URL:-${MATERIAL_OSM_PBF_SOURCE_URL}}"
+OSM_PBF_CACHE_TTL_DAYS="${SCOUT_PRETRIP_OSM_PBF_CACHE_TTL_DAYS:-${MATERIAL_OSM_PBF_CACHE_TTL_DAYS:-30}}"
+OSMIUM_BIN="${SCOUT_PRETRIP_OSMIUM_BIN:-osmium}"
 IMAGERY_SEED_CACHE="${SCOUT_PRETRIP_SEED_IMAGERY_CACHE:-1}"
 IMAGERY_PROVIDER_ALLOWS_OFFLINE_PREFETCH="${SCOUT_PRETRIP_IMAGERY_PROVIDER_ALLOWS_OFFLINE_PREFETCH:-1}"
 IMAGERY_MIN_ZOOM="${SCOUT_PRETRIP_IMAGERY_MIN_ZOOM:-5}"
 IMAGERY_MAX_ZOOM="${SCOUT_PRETRIP_IMAGERY_MAX_ZOOM:-14}"
 IMAGERY_SEED_MAX_TILES="${SCOUT_PRETRIP_IMAGERY_SEED_MAX_TILES:-250}"
+RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS="${SCOUT_PRETRIP_RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS:-}"
 if [[ -n "${SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT:-}" && -z "${SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT:-}" ]]; then
-  export SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT="${SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT}"
+  CACHE_ROOT_CANDIDATE="${SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT%/}"
+  if [[ "$(basename "${CACHE_ROOT_CANDIDATE}")" == "${PROJECT_ID}" ]]; then
+    export SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT="$(dirname "${CACHE_ROOT_CANDIDATE}")"
+  else
+    export SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT="${SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT}"
+  fi
 fi
 BACKUP_ROOT="${SCOUT_PRETRIP_BACKUP_ROOT:-${WORKSPACE_ROOT}}"
 LOG_ROOT="${SCOUT_PRETRIP_REBUILD_LOG_ROOT:-/tmp}"
@@ -122,6 +149,11 @@ if [[ ! -d "${SOURCE_GPX_ROOT}" ]]; then
   exit 2
 fi
 
+if [[ -n "${OSM_PBF_PATH}" && ! -f "${OSM_PBF_PATH}" ]]; then
+  echo "Local OSM PBF source not found: ${OSM_PBF_PATH}" >&2
+  exit 2
+fi
+
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 PROJECT_ROOT="${WORKSPACE_ROOT}/${PROJECT_ID}"
 BACKUP_PATH="${BACKUP_ROOT}/${PROJECT_ID}.backup.${STAMP}"
@@ -143,7 +175,13 @@ mkdir -p "${WORKSPACE_ROOT}" "${BACKUP_ROOT}" "${LOG_ROOT}"
   echo "route_context_include_route_notes=${ROUTE_CONTEXT_INCLUDE_ROUTE_NOTES}"
   echo "route_context_limit_route_notes=${ROUTE_CONTEXT_LIMIT_ROUTE_NOTES}"
   echo "durable_evidence_source_root=${DURABLE_EVIDENCE_SOURCE_ROOT}"
+  echo "restore_from_backup=${RESTORE_FROM_BACKUP}"
+  echo "osm_pbf_path=${OSM_PBF_PATH}"
+  echo "osm_pbf_source_url=${OSM_PBF_SOURCE_URL}"
+  echo "osm_pbf_cache_ttl_days=${OSM_PBF_CACHE_TTL_DAYS}"
+  echo "osmium_bin=${OSMIUM_BIN}"
   echo "raster_tile_cache_root=${SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT:-}"
+  echo "raster_tile_cache_fallback_project_ids=${RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS}"
   echo "imagery_seed_cache=${IMAGERY_SEED_CACHE}"
   echo "imagery_zoom_range=${IMAGERY_MIN_ZOOM}-${IMAGERY_MAX_ZOOM}"
   echo "imagery_seed_max_tiles=${IMAGERY_SEED_MAX_TILES}"
@@ -179,7 +217,7 @@ mkdir -p "${WORKSPACE_ROOT}" "${BACKUP_ROOT}" "${LOG_ROOT}"
   RESTORE_SOURCE_ROOT=""
   if [[ -n "${DURABLE_EVIDENCE_SOURCE_ROOT}" && -f "${DURABLE_EVIDENCE_SOURCE_ROOT}/project.json" ]]; then
     RESTORE_SOURCE_ROOT="${DURABLE_EVIDENCE_SOURCE_ROOT}"
-  elif [[ -f "${BACKUP_PATH}/project.json" ]]; then
+  elif [[ "${RESTORE_FROM_BACKUP}" != "0" && "${RESTORE_FROM_BACKUP}" != "false" && "${RESTORE_FROM_BACKUP}" != "FALSE" && -f "${BACKUP_PATH}/project.json" ]]; then
     RESTORE_SOURCE_ROOT="${BACKUP_PATH}"
   fi
   if [[ -n "${RESTORE_SOURCE_ROOT}" ]]; then
@@ -234,6 +272,24 @@ PY
       --imagery-max-zoom "${IMAGERY_MAX_ZOOM}"
       --imagery-seed-max-tiles "${IMAGERY_SEED_MAX_TILES}"
     )
+    if [[ -n "${RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS}" ]]; then
+      IFS=',' read -r -a FALLBACK_PROJECT_ID_ITEMS <<< "${RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS}"
+      for fallback_project_id in "${FALLBACK_PROJECT_ID_ITEMS[@]}"; do
+        if [[ -n "${fallback_project_id}" ]]; then
+          LAYER_ARGS+=(--imagery-cache-fallback-project-id "${fallback_project_id}")
+        fi
+      done
+    fi
+  fi
+  if [[ -n "${OSM_PBF_PATH}" ]]; then
+    LAYER_ARGS+=(
+      --osm-pbf-path "${OSM_PBF_PATH}"
+      --osm-pbf-cache-ttl-days "${OSM_PBF_CACHE_TTL_DAYS:-30}"
+      --osmium-bin "${OSMIUM_BIN}"
+    )
+    if [[ -n "${OSM_PBF_SOURCE_URL}" ]]; then
+      LAYER_ARGS+=(--osm-pbf-source-url "${OSM_PBF_SOURCE_URL}")
+    fi
   fi
   PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" "${LAYER_ARGS[@]}"
 
