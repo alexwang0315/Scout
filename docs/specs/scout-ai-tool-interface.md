@@ -4,6 +4,49 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
+## Implementation Update 2026-06-30
+
+Scout AI now runs against Pydantic AI v2.1.x on the Mac and Pi dependency
+tracks. Tool execution remains deterministic and read-only by default:
+
+- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.1.x for Pi admin/live
+  runtimes and the local development venv.
+- Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
+  provider calls. This intentionally avoids Pydantic AI v2's default graceful
+  continuation from executing extra same-turn tools after Scout has produced a
+  typed output.
+- OpenRouter model strings use the dedicated Pydantic AI OpenRouter provider
+  through the `openrouter:<vendor/model>` prefix.
+- Direct OpenAI model strings must use `openai-chat:<model>`. If an operator
+  supplies `openai:<model>`, Scout normalizes it to `openai-chat:<model>` to
+  preserve the existing Chat-Completions-like Scout tool/output contract rather
+  than silently switching to the OpenAI Responses API behavior.
+- Native WebSearch and WebFetch are disabled by default. An operator may enable
+  a trusted no-per-query-approval research mode with
+  `SCOUT_AI_OS_NATIVE_RESEARCH=1`, or individually with
+  `SCOUT_AI_OS_NATIVE_WEB_SEARCH=1` / `SCOUT_AI_OS_NATIVE_WEB_FETCH=1`.
+  Outputs remain candidate-only evidence and must not become runtime safety
+  truth, Phase 1 L0-L4 state, hardware control, or outbound transport.
+- Provider-native MCP remains disabled until the matching Pydantic AI optional
+  dependency and a Scout-owned connector boundary are added.
+- Environment secrets remain server-side. Tool artifacts, admin/debug payloads,
+  and logs may report missing credential env names such as `OPENROUTER_API_KEY`
+  or `OPENAI_API_KEY`, but never their values.
+
+Recent workspace tool coverage also includes route-context mileage and raster
+OCR evidence:
+
+- `scout.ai.route_context.assess.v0` /
+  `pydantic_ai.tool.assess_scout_route_context.v0` resolves route-context
+  questions and K/mileage anchors such as "15K 在哪" from
+  `route_context_points_ref`, `route_mileage_k_anchors_ref`, and bounded
+  `mileage_tag_alignment_ref` slices.
+- `pydantic_ai.tool.search_scout_map_perception.v0` now reads normalized raster
+  OCR GeoJSON from `raster_label_evidence_ref` in addition to legacy MCP OCR.
+- `pydantic_ai.tool.search_scout_evidence_fulltext.v0` indexes route mileage
+  anchors, bounded mileage alignment summaries, normalized raster OCR records,
+  and raw OCR summaries when `project.json` refs are present.
+
 ## Registry Tool
 
 Manifest id:
@@ -450,6 +493,14 @@ Output artifact:
     "outbound_send_performed": false,
     "hardware_control_performed": false
   },
+  "model_policy": {
+    "pydantic_ai_version": "2.1.0",
+    "provider_mode": "deterministic_tools_only",
+    "external_model_used": false,
+    "fallback_used": false,
+    "required_credential_env": [],
+    "missing_credential_env": []
+  },
   "boundary": {
     "read_only": true,
     "runtime_safety_truth": false,
@@ -523,6 +574,18 @@ Result artifact:
       "evidence_type": "scout_ai_tool_contract"
     }
   ],
+  "model_policy": {
+    "pydantic_ai_version": "2.1.0",
+    "provider_mode": "deterministic_tool_runner",
+    "external_model_used": false,
+    "native_research_enabled": true,
+    "native_web_search_enabled": true,
+    "native_web_fetch_enabled": true,
+    "native_research_requires_approval": false,
+    "native_research_candidate_only": true,
+    "native_research_runtime_safety_truth": false,
+    "provider_native_mcp_enabled": false
+  },
   "boundary": {
     "read_only": true,
     "runtime_safety_truth": false,
@@ -618,6 +681,31 @@ Both outputs must include:
 - `external_api_calls_made: false`
 - `source_report`, `provenance_summary`, `missing_fields`, and `warnings`
 - a compact `field_answer` suitable for answer synthesis
+
+## Route Context, Mileage, And Raster OCR Workspace Tools
+
+Scout AI now treats route mileage and raster OCR as first-class workspace
+evidence instead of relying on prompt-only interpretation.
+
+| Layer | Tool id | Role |
+| --- | --- | --- |
+| Route-context assessor | `scout.ai.route_context.assess.v0` / `pydantic_ai.tool.assess_scout_route_context.v0` | Answer route context, observation-point, and K/mileage anchor questions. |
+| Raster/map perception | `pydantic_ai.tool.search_scout_map_perception.v0` | Search legacy MCP OCR, normalized raster OCR GeoJSON, contour/map labels, and tile-source refs. |
+| Workspace full-text | `pydantic_ai.tool.search_scout_evidence_fulltext.v0` | Index route mileage anchors, bounded mileage tag alignment, OCR labels, route notes, and source snippets. |
+
+Required reads are project-ref driven:
+
+- `route_context_points_ref`
+- `route_mileage_k_anchors_ref`
+- `mileage_tag_alignment_ref`
+- `mileage_tag_alignment_geojson_ref`
+- `raster_label_ocr_output_ref`
+- `raster_label_evidence_ref`
+
+These tools must keep large artifacts bounded. They may summarize
+`outputs/mileage_tag_alignment.json` and raw OCR output, but must not pass full
+alignment or raw tile payloads into the model. All returned items remain
+candidate-only unless a reviewed package explicitly promotes them.
 
 Planner behavior:
 

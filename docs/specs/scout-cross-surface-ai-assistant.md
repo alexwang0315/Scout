@@ -1,5 +1,7 @@
 # Spec: Scout Cross-Surface AI Assistant Guardrails
 
+Date: 2026-06-30
+
 ## Status
 
 Implemented through Slice 26 for the current Milestone 10 guardrail path.
@@ -20,6 +22,16 @@ Milestone 10.2 Slice 11 records the repo-owned Pi/Ollama hardware experiment
 assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
 keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
+
+2026-06-30 update: Scout AI provider compatibility now targets Pydantic AI
+v2.1.x. The assistant and Mac-local fallback paths keep Scout's read-only,
+typed-output contract by using `end_strategy="early"`, normalizing
+`openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
+provider for `openrouter:<vendor/model>`. Native WebSearch, WebFetch, and
+provider-native MCP are not enabled automatically by the Pydantic AI v2
+upgrade. Operators can enable trusted no-per-query-approval WebSearch/WebFetch
+research with `SCOUT_AI_OS_NATIVE_RESEARCH=1`; this remains candidate-only
+assistant research and cannot mutate runtime safety truth or hardware state.
 
 This document defines the cross-surface assistant guardrails that now anchor the
 mock provider, bounded context adapters, read-only API, UI shell, opt-in
@@ -156,6 +168,44 @@ candidate-only, human-review-required, and not runtime safety truth. If CWA QPF
 or GEE SMAP/GPM evidence is missing or stale, the assistant reports that gap
 and avoids saying conditions are safe.
 
+## Route Context / Mileage / OCR Evidence Across Surfaces
+
+For route-context, mileage-anchor, and OCR questions, the cross-surface
+assistant must route through Scout workspace tools instead of prompt-only map
+interpretation.
+
+Required tool layering:
+
+- `pydantic_ai.tool.assess_scout_route_context.v0` answers route-context,
+  observation-point, and K/mileage anchor questions using
+  `route_context_points_ref`, `route_mileage_k_anchors_ref`, and bounded
+  `mileage_tag_alignment_ref` slices.
+- `pydantic_ai.tool.search_scout_map_perception.v0` searches legacy MCP OCR,
+  normalized raster OCR GeoJSON, contour labels, tile/source refs, and map
+  perception candidates.
+- `pydantic_ai.tool.search_scout_evidence_fulltext.v0` provides fallback
+  full-text retrieval for mileage anchors, OCR labels, route notes, source
+  snippets, and review/provenance records.
+
+Surface-specific behavior:
+
+- `/admin/pretrip`: may answer "15K 在哪", "OCR 讀到哪些地圖文字", or "哪些點值得停
+  3 分鐘" using candidate-only workspace evidence. It must not write review
+  decisions or rebuild the workspace.
+- `/admin/debug`: may explain which route-context/OCR evidence was available to
+  the assistant and why an answer is limited. It must not mutate debug/runtime
+  state.
+- `/admin`: may explain after-action route-context/OCR provenance. It must not
+  rewrite historical evidence or Brain facts.
+- Mac local chat fallback: may use the same read-only tool outputs when Scout
+  hardware is unavailable, but it must label answers as local fallback model
+  interpretation when a model was involved.
+
+Raw raster tiles, raw OCR payloads, and full mileage alignment files must stay
+out of model prompts and UI responses. Tool outputs should return bounded,
+source-linked records with `candidate_only=true` and
+`runtime_safety_truth=false`.
+
 ## Architecture
 
 The milestone should introduce four concepts.
@@ -218,6 +268,20 @@ Provider support should be staged:
 
 1. `mock`: deterministic, no model call, used for tests and UI contract.
 2. `pydantic_ai`: opt-in provider behind environment flags.
+
+Current Pydantic AI provider policy:
+
+- supported runtime family: Pydantic AI v2.1.x;
+- default model path: local `FunctionModel`;
+- external OpenRouter model path: `openrouter:<vendor/model>` with
+  `OPENROUTER_API_KEY`;
+- direct OpenAI chat path: `openai-chat:<model>` with `OPENAI_API_KEY`;
+- compatibility alias: `openai:<model>` is normalized to
+  `openai-chat:<model>` to avoid an implicit switch to Responses API behavior;
+- `end_strategy="early"` is required for typed Scout assistant calls;
+- WebSearch and WebFetch are off by default. `SCOUT_AI_OS_NATIVE_RESEARCH=1`
+  enables trusted no-per-query-approval candidate-only research.
+- provider-native MCP remains off unless separately reviewed and permissioned.
 
 Proposed flags:
 

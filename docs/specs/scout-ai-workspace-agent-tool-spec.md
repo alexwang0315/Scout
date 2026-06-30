@@ -2,7 +2,7 @@
 
 Status: Draft
 
-Date: 2026-06-25
+Date: 2026-06-30
 
 ## Objective
 
@@ -60,6 +60,27 @@ Default rules:
   separate explicit authority modes;
 - high-frequency sensor routing must use pipeline rules, not a per-message LLM
   router.
+
+Pydantic AI provider rules:
+
+- Scout workspace tools target Pydantic AI v2.1.x.
+- Local deterministic tools and local `FunctionModel` remain the default.
+- External OpenRouter calls use `openrouter:<vendor/model>` and
+  `OPENROUTER_API_KEY`.
+- Direct OpenAI chat calls use `openai-chat:<model>` and `OPENAI_API_KEY`;
+  `openai:<model>` is normalized to `openai-chat:<model>` to preserve Scout's
+  current Chat-Completions-like typed-output contract.
+- Scout keeps `end_strategy="early"` for typed agent calls so model execution
+  cannot continue into extra same-turn tool calls after Scout has produced its
+  typed output.
+- Pydantic AI native WebSearch/WebFetch are not implicitly available to
+  workspace questions. Operators can enable trusted no-per-query-approval
+  research mode through `SCOUT_AI_OS_NATIVE_RESEARCH=1`, or separately with
+  `SCOUT_AI_OS_NATIVE_WEB_SEARCH=1` and `SCOUT_AI_OS_NATIVE_WEB_FETCH=1`.
+  Results are candidate-only research evidence and cannot mutate runtime safety
+  truth, Phase 1 L0-L4 state, hardware controls, or outbound transports.
+- Provider-native MCP remains unavailable until Scout adds a connector boundary
+  and the required Pydantic AI optional dependency.
 
 ## Complete Workspace Shape
 
@@ -1052,10 +1073,21 @@ Negative evals:
 
 ## Implementation Priority
 
-### Implementation Snapshot 2026-06-25
+### Implementation Snapshot 2026-06-30
 
 The first tool-coverage slices from this spec are now implemented in this
 checkout:
+
+- Pydantic AI provider compatibility
+  - Runtime target: Pydantic AI v2.1.x.
+  - Scout keeps `end_strategy="early"` for typed provider calls.
+  - `openrouter:<vendor/model>` uses the Pydantic AI OpenRouter provider.
+  - `openai:<model>` is normalized to `openai-chat:<model>`.
+  - WebSearch/WebFetch remain unavailable by default, but
+    `SCOUT_AI_OS_NATIVE_RESEARCH=1` enables trusted no-per-query-approval
+    native research as candidate-only evidence.
+  - Native MCP remains unavailable unless Scout registers a reviewed
+    connector/capability.
 
 - `scout.ai.workspace_catalog.search`
   - CLI manifest: `tools/scout_agent_tool_manifests/scout.ai.workspace_catalog.search.json`

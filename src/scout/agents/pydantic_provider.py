@@ -21,6 +21,7 @@ from scout.agents.model_policy import ModelPolicy, resolve_model_policy
 from scout.agents.pydantic_ai_compat import (
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities,
     pydantic_result_output,
 )
 
@@ -58,6 +59,7 @@ class PydanticScoutAgentProvider:
                 name=request.agent_name,
                 retries={"output": 3},
                 tools=_read_only_tools(request),
+                capabilities=pydantic_native_research_capabilities(self._model_policy),
                 **pydantic_agent_runtime_kwargs(),
             )
             result = agent.run_sync(request.prompt)
@@ -81,7 +83,7 @@ class PydanticScoutAgentProvider:
         return validate_provider_output(sla_result.output, request.output_type)
 
     def _agent_model(self, request: ScoutAgentRequest) -> Any:
-        if isinstance(self._model, str) and self._model.startswith("openrouter:"):
+        if isinstance(self._model, str):
             return build_chat_model(model_name=self._model)
         return self._model or self._local_function_model(request)
 
