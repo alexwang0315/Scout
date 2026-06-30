@@ -22,7 +22,7 @@ To opt in to an external model smoke:
 ./venv/bin/scout-ai-os-hardware-smoke \
   --repo-root /Users/alexwang0315/scout-fusion \
   --allow-external-model \
-  --model gpt-4o-mini
+  --model glm-5.2
 ```
 
 If the required credential is missing, the report marks the model check as
