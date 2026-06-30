@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
+
+from scout.agents.model_policy import ModelPolicy
+
+
+OPENAI_KEY_ENV = "OPENAI_API_KEY"
+OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 
 
 def pydantic_ai_runtime_version() -> str:
@@ -23,12 +30,65 @@ def pydantic_result_output(result: Any) -> Any:
     return getattr(result, "output", getattr(result, "data", result))
 
 
+def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
+    """Build no-approval native research capabilities for trusted Scout runs.
+
+    These are provider/model capabilities, not Scout runtime safety tools.
+    Results must remain candidate evidence unless a deterministic Scout
+    preparation step later reviews and materializes them.
+    """
+
+    if (
+        not policy.native_research_enabled
+        or getattr(policy.mode, "value", policy.mode) != "external_pydantic_ai"
+    ):
+        return []
+
+    capabilities: list[Any] = []
+    if policy.native_web_search_enabled:
+        from pydantic_ai.capabilities.web_search import WebSearch
+
+        capabilities.append(
+            WebSearch(
+                native=True,
+                max_uses=policy.native_research_max_searches,
+                allowed_domains=policy.native_research_allowed_domains or None,
+                blocked_domains=policy.native_research_blocked_domains or None,
+                description=(
+                    "Scout trusted native web search. No per-query approval is "
+                    "required, but findings are candidate-only and are not "
+                    "runtime safety truth."
+                ),
+            )
+        )
+    if policy.native_web_fetch_enabled:
+        from pydantic_ai.capabilities.web_fetch import WebFetch
+
+        capabilities.append(
+            WebFetch(
+                native=True,
+                max_uses=policy.native_research_max_fetches,
+                allowed_domains=policy.native_research_allowed_domains or None,
+                blocked_domains=policy.native_research_blocked_domains or None,
+                enable_citations=True,
+                max_content_tokens=12000,
+                description=(
+                    "Scout trusted native web fetch. No per-query approval is "
+                    "required, but fetched content is candidate-only and is not "
+                    "runtime safety truth."
+                ),
+            )
+        )
+    return capabilities
+
+
 def build_chat_model(
     *,
     model_name: str,
     base_url: str | None = None,
     api_key: str | None = None,
 ) -> Any:
+    model_name = normalize_chat_model_name(model_name)
     if _is_openrouter_model(model_name=model_name, base_url=base_url):
         normalized_name = _strip_openrouter_prefix(model_name)
         try:
@@ -37,7 +97,7 @@ def build_chat_model(
 
             return OpenRouterModel(
                 normalized_name,
-                provider=OpenRouterProvider(api_key=api_key),
+                provider=OpenRouterProvider(api_key=api_key or os.getenv(OPENROUTER_KEY_ENV)),
             )
         except ImportError:
             model_name = normalized_name
@@ -50,9 +110,23 @@ def build_chat_model(
     from pydantic_ai.providers.openai import OpenAIProvider
 
     return OpenAIChatModel(
-        model_name,
-        provider=OpenAIProvider(base_url=base_url, api_key=api_key),
+        _strip_openai_chat_prefix(model_name),
+        provider=OpenAIProvider(base_url=base_url, api_key=api_key or os.getenv(OPENAI_KEY_ENV)),
     )
+
+
+def normalize_chat_model_name(model_name: str) -> str:
+    """Normalize Scout cloud aliases to chat-model semantics.
+
+    Pydantic AI v2 uses the OpenAI Responses API for the ``openai:`` model
+    string prefix. Scout's existing provider path is intentionally
+    Chat-Completions-like and side-effect constrained, so ``openai:`` is
+    normalized to ``openai-chat:`` before constructing a model object.
+    """
+
+    if model_name.startswith("openai:"):
+        return "openai-chat:" + model_name.removeprefix("openai:")
+    return model_name
 
 
 def _is_openrouter_model(*, model_name: str, base_url: str | None) -> bool:
@@ -64,4 +138,10 @@ def _is_openrouter_model(*, model_name: str, base_url: str | None) -> bool:
 def _strip_openrouter_prefix(model_name: str) -> str:
     if model_name.startswith("openrouter:"):
         return model_name.removeprefix("openrouter:")
+    return model_name
+
+
+def _strip_openai_chat_prefix(model_name: str) -> str:
+    if model_name.startswith("openai-chat:"):
+        return model_name.removeprefix("openai-chat:")
     return model_name

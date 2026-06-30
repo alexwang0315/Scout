@@ -1,7 +1,7 @@
 # Scout AI OS MVP Specification
 
-**Document version:** 0.1.0
-**Date:** 2026-06-08
+**Document version:** 0.1.1
+**Date:** 2026-06-30
 **Audience:** Codex / coding agent / human implementer
 **Target platform:** Raspberry Pi edge controller + remote LLM APIs + future mobile companion runtime
 **Primary language:** Python 3.12+
@@ -13,6 +13,30 @@
 Scout AI OS is an adaptive workflow agent platform. Its purpose is to accept a user's ad-hoc natural-language request, compile that request into a typed workflow, search existing capabilities, compose or build missing low-risk capabilities, verify them in a sandbox, install executable workflows, notify the user when conditions are met, and save reusable learning artifacts for future similar requests.
 
 Scout must not be a pure chatbot. It must be a controlled automation system where the LLM plans and proposes, while deterministic runtime code validates, persists, executes, audits, and enforces permissions.
+
+### 1.0 Current Implementation Snapshot
+
+This repository now implements Phase 0 through Phase 9 of the Scout AI OS MVP
+architecture. The implemented core includes:
+
+- typed Pydantic schema contracts for workflows, capabilities, permissions,
+  runtime, sandbox, and learning artifacts;
+- deterministic SQLite stores and permission gates;
+- local notification gateway and runtime tick loop;
+- provider-backed agent facades with a local `FunctionModel` default;
+- model policy, timeout/cost SLA gateway, and external-model fallback handling;
+- Pydantic AI v2.1.x compatibility helpers;
+- generated capability sandbox verification;
+- FastAPI routes and focused API/runtime tests;
+- Scout AI read-only workspace tool workflow:
+  context registry -> tool plan -> evidence collection -> answer synthesis;
+- weather/environment workspace tools for CWA and GEE artifacts;
+- route-context, route-mileage, and raster OCR evidence lookup tools;
+- Mac local chat fallback mode for Scout hardware-unavailable development.
+
+The MVP is still not allowed to let model output mutate Phase 1 safety state,
+call `/safety/*`, write Phase 2 Brain observed facts, send outbound messages,
+or control hardware.
 
 ### 1.1 Core Product Promise
 
@@ -58,6 +82,8 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
+- Pydantic AI v2.1.x model execution with explicit model policy, OpenRouter and
+  OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
 - Permission checks.
@@ -67,6 +93,8 @@ Build a Raspberry Pi-compatible Scout core that supports:
 - Sandbox verifier for low-risk generated Python capabilities.
 - Learning artifact generation.
 - FastAPI endpoints for user requests, workflows, approvals, capabilities, and learning artifacts.
+- Read-only Scout AI evidence workflows for pretrip/admin/debug questions.
+- Mac-local fallback UI path when Scout hardware is unavailable.
 - Automated tests.
 
 ### 2.2 Non-Goals for MVP
@@ -261,7 +289,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai
+pydantic-ai-slim[openai,openrouter] >= 2.1,<3
+pydantic-evals >= 2.1,<3
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -283,6 +312,29 @@ sqlite-vec
 dbos
 mcp clients
 ```
+
+Pydantic AI v2.1 operating rules:
+
+- Scout's package path uses `pydantic-ai-slim` with `openai` and `openrouter`
+  extras for Pi compatibility.
+- `pydantic_ai.Agent` calls must keep `end_strategy="early"` unless a future
+  reviewed design proves that continuing same-turn tool execution cannot
+  violate Scout's no-side-effect defaults.
+- OpenRouter models use `openrouter:<vendor/model>` and require
+  `OPENROUTER_API_KEY`.
+- Direct OpenAI chat models use `openai-chat:<model>` and require
+  `OPENAI_API_KEY`. If an operator supplies `openai:<model>`, Scout normalizes
+  it to `openai-chat:<model>` to avoid an implicit switch to the OpenAI
+  Responses API behavior.
+- Native WebSearch and WebFetch are disabled by default. Operators may enable
+  trusted no-per-query-approval research mode with
+  `SCOUT_AI_OS_NATIVE_RESEARCH=1`, or individually with
+  `SCOUT_AI_OS_NATIVE_WEB_SEARCH=1` / `SCOUT_AI_OS_NATIVE_WEB_FETCH=1`.
+  Results remain candidate-only evidence and must not mutate runtime safety
+  truth, Phase 1 L0-L4 state, hardware controls, or outbound transports.
+- Provider-native MCP remains disabled until a separate Scout
+  connector/capability and the required Pydantic AI optional dependency are
+  reviewed and explicitly enabled.
 
 ---
 
@@ -698,7 +750,63 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Scout AI Weather / Environment Evidence Tools
+### 7.6 Pydantic AI v2.1 Provider Policy
+
+Scout AI OS uses Pydantic AI v2.1.x as a typed provider facade, not as an
+unbounded autonomous runtime.
+
+Provider modes:
+
+- local `FunctionModel`: default for tests, Mac smoke, and no-credential runs;
+- `openrouter:<vendor/model>`: external OpenRouter provider, gated by
+  `OPENROUTER_API_KEY`;
+- `openai-chat:<model>`: direct OpenAI chat provider, gated by
+  `OPENAI_API_KEY`;
+- `openai:<model>`: accepted only as an operator convenience alias and
+  normalized to `openai-chat:<model>`.
+
+Required provider behavior:
+
+- model policy output may report requested model, normalized model, timeout,
+  estimated cost, fallback model, and missing credential env names;
+- model policy output must never contain token values;
+- all provider calls use Scout's SLA gateway for timeout, budget preflight,
+  provider health, fallback, and telemetry;
+- local fallback is allowed for read-only interpretation only;
+- `end_strategy="early"` is required for typed Scout `Agent` calls;
+- native WebSearch and WebFetch remain disabled by default, but
+  `SCOUT_AI_OS_NATIVE_RESEARCH=1` enables trusted no-per-query-approval
+  candidate-only research;
+- provider-native MCP remains disabled until a reviewed Scout connector
+  explicitly enables it.
+
+### 7.7 Scout AI Route Context / Mileage / OCR Evidence Tools
+
+The Scout AI assistant tool layer may expose deterministic workspace evidence
+tools for route context, mileage anchors, and OCR labels:
+
+- `scout.ai.route_context.assess.v0` /
+  `pydantic_ai.tool.assess_scout_route_context.v0` reads
+  `route_context_points_ref`, `route_mileage_k_anchors_ref`, and bounded
+  `mileage_tag_alignment_ref` slices to answer questions such as "15K 在哪".
+- `pydantic_ai.tool.search_scout_map_perception.v0` reads legacy MCP OCR and
+  normalized raster OCR GeoJSON from `raster_label_evidence_ref`.
+- `pydantic_ai.tool.search_scout_evidence_fulltext.v0` indexes route mileage
+  anchors, mileage alignment summaries, normalized raster OCR, raw OCR
+  summaries, route notes, and source snippets.
+
+Required rules:
+
+- large mileage alignment and OCR payloads must be summarized or sliced before
+  model synthesis;
+- raw tile pixels and raw provider payloads must not be embedded in assistant
+  answers;
+- all route-context, mileage, and OCR outputs remain candidate-only unless a
+  reviewed package explicitly promotes them;
+- no route-context/OCR answer may mutate review decisions, runtime handoff,
+  Phase 1 safety state, `/safety/*`, outbound transport, or hardware.
+
+### 7.8 Scout AI Weather / Environment Evidence Tools
 
 The Scout AI assistant tool layer may expose deterministic workspace evidence
 tools to the Pydantic AI provider. These tools are capabilities in the Scout AI

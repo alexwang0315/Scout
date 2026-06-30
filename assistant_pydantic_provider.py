@@ -24,8 +24,10 @@ from assistant_offline_fallback_contract import (
 from pydantic_ai_runtime_compat import (
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities,
     pydantic_result_output,
 )
+from scout.agents.model_policy import resolve_model_policy
 from scout_ai_tool_contracts import (
     ScoutAiToolImplementationStatus,
     ScoutAiToolStatus,
@@ -2169,6 +2171,7 @@ class PydanticAIEnvRunner:
         self.workspace_model_max_tokens = (
             workspace_model_max_tokens or _workspace_model_max_tokens_from_env()
         )
+        self.model_policy = resolve_model_policy(self.model_name)
         self.last_workspace_tool_invocations: list[dict[str, object]] = []
 
     @classmethod
@@ -2239,6 +2242,7 @@ class PydanticAIEnvRunner:
                 api_key=self.api_key,
             ),
             system_prompt=GLOBAL_ASSISTANT_PROMPT,
+            capabilities=pydantic_native_research_capabilities(self.model_policy),
             **pydantic_agent_runtime_kwargs(),
         )
         result = agent.run_sync(prompt, model_settings={"max_tokens": 512})
@@ -2258,6 +2262,7 @@ class PydanticAIEnvRunner:
                 api_key=self.api_key,
             ),
             system_prompt=f"{GLOBAL_ASSISTANT_PROMPT}\n{WORKSPACE_TOOL_PROMPT}",
+            capabilities=pydantic_native_research_capabilities(self.model_policy),
             **pydantic_agent_runtime_kwargs(),
         )
         tool_descriptions = _registered_tool_descriptions()
