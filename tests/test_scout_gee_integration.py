@@ -1,6 +1,7 @@
 import json
 
 from scout_gee_integration import (
+    RestGeeRouteFeatureClient,
     _gee_access_token,
     build_environment_risk_derivatives,
     build_route_segments_from_gpx,
@@ -80,6 +81,16 @@ def test_gee_dataset_catalog_is_candidate_only_environment_evidence() -> None:
     assert "NASA/SMAP/SPL4SMGP/008" in collection_ids
     assert "NASA/GPM_L3/IMERG_V07" in collection_ids
     assert all(dataset["runtime_safety_truth"] is False for dataset in catalog)
+    smap_l4 = next(
+        dataset
+        for dataset in catalog
+        if dataset["collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    )
+    assert smap_l4["temporal_resolution"] == "3h"
+    assert smap_l4["spatial_resolution_m"] == 11000
+    assert {"sm_surface", "sm_rootzone", "sm_profile"} <= set(smap_l4["bands"])
+    assert smap_l4["candidate_only"] is True
+    assert smap_l4["human_review_required"] is True
 
 
 def test_gee_fetch_uses_injected_client_without_live_network() -> None:
@@ -94,6 +105,11 @@ def test_gee_fetch_uses_injected_client_without_live_network() -> None:
                         "result": {
                             "sm_surface": 0.34,
                             "sm_rootzone": 0.41,
+                            "sm_profile": 0.46,
+                            "sm_surface_wetness": 0.52,
+                            "sm_rootzone_wetness": 0.57,
+                            "sm_profile_wetness": 0.61,
+                            "sm_surface_anomaly": 0.07,
                         },
                     },
                     "gpm_imerg_precipitation": {
@@ -118,10 +134,30 @@ def test_gee_fetch_uses_injected_client_without_live_network() -> None:
 
     assert result.status == "fetched"
     assert result.external_api_calls_made is True
-    assert result.smap_summary["sm_surface_wetness"] == 0.34
-    assert result.smap_summary["sm_rootzone_wetness"] == 0.41
+    assert result.smap_summary["sm_surface"] == 0.34
+    assert result.smap_summary["sm_rootzone"] == 0.41
+    assert result.smap_summary["sm_profile"] == 0.46
+    assert result.smap_summary["sm_surface_wetness"] == 0.52
+    assert result.smap_summary["sm_rootzone_wetness"] == 0.57
+    assert result.smap_summary["sm_profile_wetness"] == 0.61
+    assert result.smap_summary["sm_surface_anomaly"] == 0.07
+    assert result.smap_summary["source_collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    assert result.smap_summary["spatial_resolution_m"] == 11000
+    assert result.smap_summary["temporal_resolution"] == "3h"
+    assert "sm_profile" in result.smap_summary["band_names"]
+    assert result.smap_summary["candidate_only"] is True
+    assert result.smap_summary["runtime_safety_truth"] is False
+    assert result.smap_summary["human_review_required"] is True
+    assert result.smap_summary["external_api_calls_made"] is True
+    assert result.smap_summary["route_scope"]["aggregation_geometry"] == "bbox_wgs84"
+    assert "coarse route-level hydrologic background" in result.smap_summary["limitation"]
     assert result.gpm_summary["last_72h_mm"] == 18.5
     assert result.raw_summary["secret_value_embedded"] is False
+    assert result.raw_summary["candidate_only"] is True
+    assert result.raw_summary["human_review_required"] is True
+    assert result.smap_timeseries["source_collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    assert result.smap_timeseries["spatial_resolution_m"] == 11000
+    assert result.smap_timeseries["human_review_required"] is True
     payload = result.to_dict()
     assert payload["runtime_safety_truth"] is False
     assert payload["cache_policy"]["cacheable"] is False
@@ -145,9 +181,16 @@ def test_gee_route_dataset_config_lists_v0_1_datasets() -> None:
         "COPERNICUS/S1_GRD",
         "GOOGLE/DYNAMICWORLD/V1",
         "NASA/GPM_L3/IMERG_V07",
+        "NASA/SMAP/SPL4SMGP/008",
         "UCSB-CHG/CHIRPS/DAILY",
         "FIRMS",
     }.issubset(dataset_ids)
+    smap_l4 = next(
+        item for item in catalog if item["dataset_id"] == "NASA/SMAP/SPL4SMGP/008"
+    )
+    assert smap_l4["role"] == "route_corridor_soil_moisture_background"
+    assert smap_l4["spatial_resolution_m"] == 11000
+    assert smap_l4["human_review_required"] is True
     assert all(item["server_side_only"] is True for item in catalog)
     assert all(item["runtime_safety_truth"] is False for item in catalog)
 
@@ -246,6 +289,51 @@ def test_scout_gee_feature_package_does_not_fetch_live_by_default(tmp_path) -> N
     assert "live_gee_fetch_not_allowed" in package["blocker_reasons"]
 
 
+def test_scout_gee_feature_package_live_fetch_uses_gee_project_id(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    gpx = tmp_path / "route.gpx"
+    _write_test_gpx(gpx)
+    seen: dict[str, str] = {}
+
+    class FakeRestRouteFeatureClient:
+        def __init__(self, env):
+            pass
+
+        def fetch_route_feature_package(self, **kwargs):
+            seen["project_id"] = kwargs["project_id"]
+            return {
+                "provider": "google_earth_engine",
+                "status": "fetched_empty",
+                "segment_features": [],
+                "secret_value_embedded": False,
+                "external_api_call_performed": True,
+                "runtime_safety_truth": False,
+            }
+
+    monkeypatch.setattr(
+        "scout_gee_integration.RestGeeRouteFeatureClient",
+        FakeRestRouteFeatureClient,
+    )
+
+    package = build_scout_gee_feature_package(
+        gpx_path=gpx,
+        project_id="scout-workspace-id",
+        prepared_at="2026-06-22T00:00:00Z",
+        env={
+            "SCOUT_GEE_ENABLED": "true",
+            "SCOUT_GEE_PROJECT_ID": "gee-cloud-project",
+            "EARTHENGINE_TOKEN": "token-ref",
+        },
+        allow_live_fetch=True,
+    )
+
+    assert seen["project_id"] == "gee-cloud-project"
+    assert package["project_id"] == "scout-workspace-id"
+    assert package["boundary"]["external_api_calls_made"] is True
+
+
 def test_scout_gee_feature_package_uses_route_risk_terrain_fallback(tmp_path) -> None:
     gpx = tmp_path / "route.gpx"
     risk = tmp_path / "route_risk.geojson"
@@ -273,6 +361,58 @@ def test_scout_gee_feature_package_uses_route_risk_terrain_fallback(tmp_path) ->
         "scout_risk_engine_route_profile"
     )
     assert first["runtime_safety_truth"] is False
+
+
+def test_scout_gee_feature_package_does_not_treat_echo_manifest_as_metrics(
+    tmp_path,
+) -> None:
+    class EchoRouteFeatureClient(RestGeeRouteFeatureClient):
+        def _compute_value(self, **kwargs):
+            return {
+                "http_status": 200,
+                "result": {
+                    "job_kind": "scout_gee_route_feature_package",
+                    "job_version": "scout_gee_feature_package.v0.1",
+                    "expected_output": "segment_features",
+                    "segments": [
+                        {
+                            "type": "Feature",
+                            "properties": {"segment_id": "gee.segment.0001"},
+                            "geometry": {"type": "LineString", "coordinates": []},
+                        }
+                    ],
+                    "dataset_config": {"datasets": [{}, {}]},
+                },
+            }
+
+    gpx = tmp_path / "route.gpx"
+    risk = tmp_path / "route_risk.geojson"
+    _write_test_gpx(gpx)
+    _write_route_risk_geojson(risk)
+
+    package = build_scout_gee_feature_package(
+        gpx_path=gpx,
+        project_id="test-route",
+        prepared_at="2026-06-22T00:00:00Z",
+        route_risk_geojson_path=risk,
+        env={
+            "SCOUT_GEE_ENABLED": "true",
+            "SCOUT_GEE_PROJECT_ID": "test-project",
+            "EARTHENGINE_TOKEN": "token-ref",
+        },
+        client=EchoRouteFeatureClient({"EARTHENGINE_TOKEN": "token-ref"}),
+    )
+
+    first = package["segments"][0]
+    assert package["status"] == "server_script_not_configured"
+    assert package["counts"]["raw_segment_feature_count"] == 0
+    assert package["blocker_reasons"] == ["gee_route_feature_script_not_configured"]
+    assert package["raw_failure_summary"]["result_summary"]["input_segment_count"] == 1
+    assert first["slope_deg"] == 36
+    assert first["metric_source_notes"][0]["source_kind"] == (
+        "scout_risk_engine_route_profile"
+    )
+    assert first["sentinel2_indices"]["ndvi"] is None
 
 
 def test_environment_risk_derivatives_create_candidate_layers(tmp_path) -> None:

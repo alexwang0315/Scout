@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 from xml.etree.ElementTree import ParseError
 
+import yaml
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -159,6 +160,7 @@ DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.
 DEFAULT_DEBUG_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
 DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
+DEFAULT_OSM_CARTO_PALETTE = ROOT / "config" / "osm_carto_palette.yaml"
 
 
 class PreTripReviewDecisionCorrectionRequest(BaseModel):
@@ -754,6 +756,30 @@ def create_admin_router(
         return Response(
             DEFAULT_ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8"),
             media_type="application/javascript",
+        )
+
+    @router.get("/pretrip/osm-carto-palette")
+    def pretrip_osm_carto_palette() -> Response:
+        if not DEFAULT_OSM_CARTO_PALETTE.exists():
+            raise HTTPException(status_code=404, detail="OSM Carto palette not found")
+        try:
+            payload = yaml.safe_load(
+                DEFAULT_OSM_CARTO_PALETTE.read_text(encoding="utf-8")
+            )
+        except (OSError, yaml.YAMLError) as exc:
+            raise HTTPException(status_code=422, detail="invalid OSM Carto palette") from exc
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get("css_variables"), dict
+        ):
+            raise HTTPException(status_code=422, detail="invalid OSM Carto palette")
+        return Response(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+            media_type="application/json",
+            headers={
+                "Cache-Control": "no-cache, max-age=0, must-revalidate",
+                "X-Scout-OSM-Carto-Palette": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
         )
 
     @router.get("/cases")

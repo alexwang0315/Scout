@@ -67,6 +67,17 @@ def test_gee_environment_tool_reads_workspace_artifacts_without_gee_init() -> No
     assert payload["gee_summary"]["gpm_timeseries_count"] == 1
     assert payload["gee_summary"]["antecedent_rain_grid_feature_count"] == 1
     assert "NASA/SMAP/SPL4SMGP/008" in payload["field_answer"]
+    assert "coarse 11km/3h candidate-only hydrologic background" in payload["field_answer"]
+    assert "not a single-slope passability or runtime safety conclusion" in payload[
+        "field_answer"
+    ]
+    smap_l4 = next(
+        dataset
+        for dataset in payload["gee_summary"]["supported_environment_datasets"]
+        if dataset["collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    )
+    assert smap_l4["spatial_resolution_m"] == 11000
+    assert smap_l4["human_review_required"] is True
     assert payload["boundary"]["live_safety_api_calls_allowed"] is False
 
 
@@ -143,6 +154,7 @@ def test_answer_synthesis_uses_environment_tool_field_answers() -> None:
     assert gee_answer.completed_source_count >= 1
     assert GEE_ENVIRONMENT_TOOL_ID in {source.tool_id for source in gee_answer.sources}
     assert "GEE workspace evidence" in gee_answer.answer
+    assert "candidate-only hydrologic background" in gee_answer.answer
     assert gee_answer.boundary.runtime_safety_truth is False
 
 

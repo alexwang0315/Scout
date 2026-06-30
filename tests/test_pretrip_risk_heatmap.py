@@ -17,6 +17,18 @@ def test_builds_calibrated_heatmap_from_workspace_diagnostic_shape(tmp_path: Pat
         json.dumps(
             {
                 "type": "FeatureCollection",
+                "metadata": {
+                    "route_base": {
+                        "route_base": "overpass_vector_evidence",
+                        "sampling_strategy": (
+                            "reference_progress_projected_to_nearest_overpass_segment.v1"
+                        ),
+                        "corridor_m": 500.0,
+                        "projected_reference_sample_count": 4,
+                        "fallback_reference_sample_count": 1,
+                        "route_point_count": 5,
+                    }
+                },
                 "features": [
                     _route_risk_feature("sample.001", 24.0, 121.0, 0, 20, 10, 0, 30, 0),
                     _route_risk_feature("sample.002", 24.001, 121.001, 100, 90, 95, 20, 92, 0),
@@ -146,6 +158,18 @@ def test_calibrated_heatmap_skips_fallback_and_large_route_base_jumps(
         json.dumps(
             {
                 "type": "FeatureCollection",
+                "metadata": {
+                    "route_base": {
+                        "route_base": "overpass_vector_evidence",
+                        "sampling_strategy": (
+                            "reference_progress_projected_to_nearest_overpass_segment.v1"
+                        ),
+                        "corridor_m": 500.0,
+                        "projected_reference_sample_count": 4,
+                        "fallback_reference_sample_count": 1,
+                        "route_point_count": 5,
+                    }
+                },
                 "features": [
                     _route_risk_feature(
                         "sample.001",
@@ -240,6 +264,10 @@ def test_calibrated_heatmap_skips_fallback_and_large_route_base_jumps(
 
     assert heatmap["metadata"]["segment_count"] == 1
     assert heatmap["metadata"]["skipped_pair_count"] == 3
+    assert heatmap["metadata"]["route_base"]["sampling_strategy"] == (
+        "reference_progress_projected_to_nearest_overpass_segment.v1"
+    )
+    assert heatmap["metadata"]["route_base"]["fallback_reference_sample_count"] == 1
     assert heatmap["features"][0]["properties"]["from_sample_id"] == "sample.001"
     assert heatmap["features"][0]["properties"]["to_sample_id"] == "sample.002"
 

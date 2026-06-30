@@ -1,0 +1,182 @@
+schema_version: scout_osm_carto_palette.v1
+name: Scout simplified OSM Carto palette
+source:
+  upstream_project: openstreetmap-carto
+  upstream_repository: https://github.com/openstreetmap-carto/openstreetmap-carto
+  upstream_standard_layer_note: OpenStreetMap.org Standard layer CartoCSS stylesheets.
+  upstream_style_files:
+    roads:
+      - style/road-colors-generated.mss
+      - style/roads.mss
+      - road-colors.yaml
+    landcover:
+      - style/landcover.mss
+    water:
+      - style/water.mss
+      - style/water-features.mss
+    buildings:
+      - style/buildings.mss
+    labels:
+      - style/amenity-points.mss
+      - style/placenames.mss
+  scout_renderer_policy: Use these colors in Scout simplified SVG vector rendering; do not vendor the full Mapnik/osm-carto pipeline.
+palette:
+  roads:
+    motorway_casing: "#dc2a67"
+    motorway_fill: "#e892a2"
+    trunk_fill: "#f9b29c"
+    primary_fill: "#fcd6a4"
+    secondary_fill: "#f7fabf"
+    residential_tertiary_fill: "#ffffff"
+    track_fill: "#996600"
+  landcover:
+    grass: "#cdebb0"
+    forest: "#add19e"
+    park: "#c8facc"
+    farmland: "#eef0d5"
+    residential_landuse: "#e0dfdf"
+  buildings:
+    building_fill: "#d9d0c9"
+    building_outline: "#b8ada6"
+  water:
+    water_fill: "#aad3df"
+    water_text: "#4d80b3"
+    glacier: "#ddecec"
+  labels:
+    placename_text: "#222222"
+    line_label_text: "#685a49"
+css_variables:
+  --osm-carto-motorway-casing: "#dc2a67"
+  --osm-carto-motorway-fill: "#e892a2"
+  --osm-carto-trunk-fill: "#f9b29c"
+  --osm-carto-primary-fill: "#fcd6a4"
+  --osm-carto-secondary-fill: "#f7fabf"
+  --osm-carto-residential-tertiary-fill: "#ffffff"
+  --osm-carto-track-fill: "#996600"
+  --osm-carto-grass: "#cdebb0"
+  --osm-carto-forest: "#add19e"
+  --osm-carto-park: "#c8facc"
+  --osm-carto-farmland: "#eef0d5"
+  --osm-carto-residential-landuse: "#e0dfdf"
+  --osm-carto-building-fill: "#d9d0c9"
+  --osm-carto-building-outline: "#b8ada6"
+  --osm-carto-water-fill: "#aad3df"
+  --osm-carto-water-text: "#4d80b3"
+  --osm-carto-glacier: "#ddecec"
+  --osm-carto-placename-text: "#222222"
+  --osm-carto-line-label-text: "#685a49"
+  --osm-carto-default-land: "#eeeece"
+  --osm-carto-road-casing: "#b9a16f"
+  --osm-carto-road-casing-strong: "#8d6f38"
+  --osm-carto-path-casing: "#ffffff"
+  --osm-carto-path-fill: "#b47d46"
+  --osm-carto-footway-fill: "#cf5f70"
+  --osm-carto-steps-fill: "#9e7048"
+  --osm-carto-service-fill: "#ffffff"
+  --osm-carto-water-line: "#4d80b3"
+  --osm-carto-terrain-line: "#9c8d78"
+renderer_mapping:
+  path:
+    casing: --osm-carto-path-casing
+    core: --osm-carto-path-fill
+    line_style: dashed
+  footway:
+    casing: --osm-carto-path-casing
+    core: --osm-carto-footway-fill
+    line_style: dashed
+  steps:
+    casing: --osm-carto-path-casing
+    core: --osm-carto-steps-fill
+    line_style: dotted
+  track:
+    casing: --osm-carto-road-casing-strong
+    core: --osm-carto-track-fill
+    line_style: dashed
+  service:
+    casing: --osm-carto-road-casing
+    core: --osm-carto-service-fill
+    line_style: solid
+  motorway:
+    casing: --osm-carto-motorway-casing
+    core: --osm-carto-motorway-fill
+    line_style: solid
+  trunk:
+    casing: --osm-carto-road-casing
+    core: --osm-carto-trunk-fill
+    line_style: solid
+  primary:
+    casing: --osm-carto-road-casing
+    core: --osm-carto-primary-fill
+    line_style: solid
+  secondary:
+    casing: --osm-carto-road-casing
+    core: --osm-carto-secondary-fill
+    line_style: solid
+  tertiary:
+    casing: --osm-carto-road-casing
+    core: --osm-carto-residential-tertiary-fill
+    line_style: solid
+  unclassified:
+    casing: --osm-carto-road-casing
+    core: --osm-carto-residential-tertiary-fill
+    line_style: solid
+  residential:
+    casing: --osm-carto-road-casing
+    core: --osm-carto-residential-tertiary-fill
+    line_style: solid
+  road:
+    casing: --osm-carto-road-casing
+    core: --osm-carto-residential-tertiary-fill
+    line_style: solid
+  water:
+    fill: --osm-carto-water-fill
+    stroke: --osm-carto-water-text
+    draw_order: 20
+  forest:
+    fill: --osm-carto-forest
+    draw_order: 12
+  park:
+    fill: --osm-carto-park
+    draw_order: 13
+  grass:
+    fill: --osm-carto-grass
+    draw_order: 11
+  farmland:
+    fill: --osm-carto-farmland
+    draw_order: 10
+  residential_area:
+    fill: --osm-carto-residential-landuse
+    draw_order: 14
+  building:
+    fill: --osm-carto-building-fill
+    stroke: --osm-carto-building-outline
+    draw_order: 30
+  glacier:
+    fill: --osm-carto-glacier
+    draw_order: 9
+rendering_contract:
+  drawing_order:
+    - background
+    - landcover
+    - water_polygons
+    - building_polygons
+    - road_casings
+    - road_fills
+    - points
+    - labels
+  road_policy: Draw every line casing first and every line fill second so later casings do not cover earlier road fills.
+  zoom_policy: Keep SVG strokes non-scaling and scale labels/markers back to screen pixels after pan, zoom, and layer toggles.
+  scope_note: Scout uses this simplified vector renderer as local OSM context; it does not vendor Mapnik/osm-carto or replace Rudy+TW OCR/cache.
+zoom_rules:
+  scout_admin_zoom_scale:
+    line_labels:
+      major_roads_min: 1.15
+      minor_paths_min: 1.45
+    point_labels:
+      primary_poi_min: 1.25
+      secondary_poi_min: 1.85
+    points:
+      primary_poi_min: 1.0
+      secondary_poi_min: 1.45
+    dense_areas:
+      building_and_residential_min: 1.35

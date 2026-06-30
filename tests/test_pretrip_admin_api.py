@@ -696,6 +696,41 @@ def test_pretrip_project_osm_pbf_vector_api_serves_workspace_geojson(tmp_path: P
     assert unsafe_response.status_code == 422
 
 
+def test_pretrip_osm_carto_palette_api_serves_simplified_renderer_contract():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/pretrip/osm-carto-palette")
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-osm-carto-palette"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    payload = response.json()
+    assert payload["schema_version"] == "scout_osm_carto_palette.v1"
+    assert payload["source"]["upstream_project"] == "openstreetmap-carto"
+    assert (
+        payload["css_variables"]["--osm-carto-track-fill"]
+        == payload["palette"]["roads"]["track_fill"]
+        == "#996600"
+    )
+    assert payload["renderer_mapping"]["track"]["core"] == "--osm-carto-track-fill"
+    assert payload["renderer_mapping"]["primary"]["core"] == "--osm-carto-primary-fill"
+    assert payload["renderer_mapping"]["forest"]["fill"] == "--osm-carto-forest"
+    assert payload["palette"]["water"]["water_fill"] == "#aad3df"
+    assert payload["renderer_mapping"]["building"]["draw_order"] == 30
+    assert payload["rendering_contract"]["drawing_order"] == [
+        "background",
+        "landcover",
+        "water_polygons",
+        "building_polygons",
+        "road_casings",
+        "road_fills",
+        "points",
+        "labels",
+    ]
+    assert "casing first" in payload["rendering_contract"]["road_policy"]
+    assert payload["zoom_rules"]["scout_admin_zoom_scale"]["line_labels"]["major_roads_min"] == 1.15
+
+
 def test_pretrip_project_weather_overlay_api_returns_summary_only_contract():
     client = TestClient(create_admin_app())
 

@@ -148,6 +148,9 @@ def build_risk_score_point_map_from_geojson(
             "route_aligned_samples_only": True,
         },
     }
+    route_base = (payload.get("metadata") or {}).get("route_base")
+    if isinstance(route_base, dict):
+        metadata["route_base"] = route_base
     return RiskScorePointMap(points=points, metadata=metadata)
 
 
@@ -239,6 +242,9 @@ def build_risk_ribbon_from_geojson(
             "route_aligned_samples_only": True,
         },
     }
+    route_base = (payload.get("metadata") or {}).get("route_base")
+    if isinstance(route_base, dict):
+        metadata["route_base"] = route_base
     return RiskRibbonMap(features=features, metadata=metadata)
 
 

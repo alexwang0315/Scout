@@ -38,6 +38,7 @@ def build_calibrated_risk_heatmap(
     route_risk_path = Path(route_risk_path)
     diagnostic_path = Path(risk_attribution_diagnostic_path)
     route_points = load_route_risk_points(route_risk_path)
+    route_base = _route_risk_route_base_metadata(route_risk_path)
     diagnostic = json.loads(diagnostic_path.read_text(encoding="utf-8"))
     formula = diagnostic["factor_analysis"]["formula_candidate"]
     terms = tuple(formula.get("terms", []))
@@ -154,6 +155,8 @@ def build_calibrated_risk_heatmap(
             ],
         },
     }
+    if route_base:
+        metadata["route_base"] = route_base
     return {
         "type": "FeatureCollection",
         "metadata": metadata,
@@ -163,6 +166,15 @@ def build_calibrated_risk_heatmap(
             point_by_sample_id=point_by_sample_id,
         ),
     }
+
+
+def _route_risk_route_base_metadata(route_risk_path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(route_risk_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    route_base = (payload.get("metadata") or {}).get("route_base")
+    return route_base if isinstance(route_base, dict) else {}
 
 
 def scored_route_point(

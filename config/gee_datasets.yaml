@@ -64,6 +64,28 @@ datasets:
     date_range: recent_72h
     confidence: 0.72
 
+  - key: smap_l4_soil_moisture
+    dataset_id: NASA/SMAP/SPL4SMGP/008
+    role: route_corridor_soil_moisture_background
+    # SMAP L4 土壤含水是粗解析度水文背景，不是單一坡面安全結論。
+    bands:
+      - sm_surface
+      - sm_rootzone
+      - sm_profile
+      - sm_surface_wetness
+      - sm_rootzone_wetness
+      - sm_profile_wetness
+      - surface_temp
+      - sm_rootzone_pctl
+      - sm_profile_pctl
+      - sm_surface_anomaly
+    date_range: recent_30d
+    temporal_resolution: 3h
+    spatial_resolution_m: 11000
+    confidence: 0.64
+    candidate_only: true
+    human_review_required: true
+
   - key: chirps_daily
     dataset_id: UCSB-CHG/CHIRPS/DAILY
     role: rainfall_anomaly

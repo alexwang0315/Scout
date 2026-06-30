@@ -865,6 +865,479 @@ Workspace spec alignment rerun: PASS
 Admin UI visual smoke: PASS
 ```
 
+## Run Log: 2026-06-30 Environment Derivatives After Risk Sync
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI_test0630_1
+```
+
+Attempt:
+
+```text
+Attempt type: targeted environment-risk derivative repair
+Full import rerun: not run in this attempt
+```
+
+Issues encountered:
+
+1. Environmental derivative candidate groups were all zero.
+   - Symptom: `New Landslide Candidates`, `Wetness / Flash Flood Candidates`,
+     `Trail Obscurity Candidates`, and `Practical Darkness Candidates` showed
+     `0`, with data gaps for `sentinel2`, `sentinel1`, `dynamic_world`,
+     `rainfall`, and `terrain`.
+   - Root cause: `run_layer_preparation()` prepared CWA/GEE environment
+     derivatives before the same preparation run synchronized/generated Scout
+     Risk Engine route-risk outputs. The GEE feature package therefore could
+     not apply the existing route-risk terrain proxy fallback.
+   - Fix applied: environment evidence preparation now runs after risk sync in
+     the layer-preparation manifest path, then reloads `project.json` before
+     layer records and projections are built.
+   - SOP change: when risk and GEE layers are requested in the same connected
+     preparation run, risk route-profile refs must be ready before
+     `scout_gee_feature_package.json` and derived environment candidates are
+     written.
+
+2. GEE route feature REST used the Scout workspace id as the Google Cloud
+   project id.
+   - Symptom: `scout_gee_feature_package.json` had
+     `gee_route_feature_http_error:400`; the provider error was
+     `Invalid project resource name projects/chilai_nanhua_day1_scoutAI_test0630_1`.
+   - Root cause: `build_scout_gee_feature_package()` preserved the Scout
+     workspace `project_id` correctly in the artifact, but also passed it to
+     the Earth Engine REST URL. The REST URL must use `SCOUT_GEE_PROJECT_ID`,
+     `SCOUT_GEE_PROJECT`, or `GOOGLE_CLOUD_PROJECT` from the loaded env.
+   - Fix applied: live route-feature fetch now resolves the GEE project id
+     from env while keeping the Scout project id in artifact metadata.
+   - SOP change: `.env` GEE project id is provider routing metadata; it must
+     never be replaced with the Scout workspace/project id.
+
+3. Small route-feature requests could echo the job manifest instead of
+   returning computed per-segment metrics.
+   - Symptom: a single-segment `value:compute` call returned HTTP 200 but
+     included `job_kind=scout_gee_route_feature_package`,
+     `expected_output=segment_features`, and the input `segments` rather than
+     computed `segment_features`.
+   - Fix applied: echo manifests are now classified as
+     `server_script_not_configured` with blocker
+     `gee_route_feature_script_not_configured`; input segments are not counted
+     as raw GEE metric features. Failed/blocked route-feature packages now keep
+     a secret-safe `raw_failure_summary`.
+   - SOP change: do not treat HTTP 200 from `value:compute` as route-feature
+     success unless computed `segment_features` are present.
+
+Validation snapshot:
+
+```text
+Workspace: /Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI_test0630_1
+Feature package status: server_script_not_configured
+Feature package blocker: gee_route_feature_script_not_configured
+Route points: 11191
+Route feature segments: 749
+Raw GEE segment features: 0
+Terrain proxy source: scout_risk_engine_route_profile
+Environment derivative status: ready_with_data_gaps
+New landslide candidates: 0
+Wetness / flash flood candidates: 327
+Trail obscurity candidates: 0
+Practical darkness candidates: 584
+Remaining metric gaps: sentinel2, sentinel1, dynamic_world, rainfall
+Terrain metric gap: resolved through Scout Risk Engine route-profile fallback
+CWA fetched hour retained in derivatives: 2026-06-30T05:00:00Z
+Focused pytest: PASS
+pnpm lint: PASS
+pnpm typecheck: PASS
+pnpm test: PASS
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+```
+
+## Run Log: 2026-06-30 From-Zero Scout AI Test0630 Replay
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI_test0630
+```
+
+Material root:
+
+```text
+/Users/alexwang0315/workspace/scout-local-materials/pretrip/chilai_nanhua_day1_scoutAI_test0630
+```
+
+Policy:
+
+- This is a from-zero replay. It must not copy material or durable evidence from
+  `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI`.
+- `SCOUT_PRETRIP_DURABLE_EVIDENCE_SOURCE_ROOT` must remain empty and
+  `SCOUT_PRETRIP_RESTORE_FROM_BACKUP=0`.
+- Raw Rudy/Rudy+TW tile cache fallback may point at
+  `chilai_nanhua_day1_scoutAI` for TTL-valid PNG tiles only; derived OCR,
+  Overpass, risk, mileage, CWA/GEE, and workspace artifacts must be regenerated.
+
+Attempt 1:
+
+```text
+Result: FAIL during importer preflight
+```
+
+Issue encountered:
+
+1. Target-specific MCP material contained an unsupported
+   `search_profile.material_provenance` field.
+   - Symptom: Pydantic validation failed while loading
+     `sources/mcp/named_point_evidence.json`.
+   - Fix applied before retry: regenerate the target MCP material with the
+     project id set to `chilai_nanhua_day1_scoutAI_test0630` and without the
+     unsupported extra field.
+   - SOP change: material provenance belongs in `material_manifest.json` or
+     an accepted MCP schema field; do not add ad hoc fields to project-scoped
+     MCP evidence JSON.
+
+Attempt 2:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0630_20260629T155830Z.log
+Elapsed: 438 seconds
+Result: COMPLETED, but not accepted
+```
+
+Issues encountered:
+
+1. Strict reference comparison failed against
+   `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI`.
+   - Symptom: diffs included mileage tag alignment, Overpass kept/snapped GPX
+     point counts, and route-pressure sample count.
+   - Investigation: the candidate workspace was internally coherent, while the
+     reference workspace had stale/inconsistent project metrics versus its
+     artifact contents for route pressure, mileage, and Overpass alignment.
+   - SOP change: when the reference is internally incoherent, record a
+     reference coherence report before changing target workflow behavior. Do
+     not degrade a fresh full-route target to match a stale partial reference
+     unless the operator explicitly requests artifact-equivalence over current
+     full-route preparation.
+
+2. Route-base summary metadata existed in `route_risk.metadata.json` but did
+   not propagate into the GeoJSON artifacts checked by the Scout AI skill.
+   - Symptom: `risk_score_points.geojson` lacked
+     `metadata.route_base.sampling_strategy`, so the skill route-base check
+     could not prove
+     `reference_progress_projected_to_nearest_overpass_segment.v1` from the
+     accepted risk-score layer ref.
+   - Root cause: `write_route_geojson()` wrote only a FeatureCollection and
+     dropped the metadata returned by
+     `build_overpass_pretrip_route_profile()`. Downstream risk-score, ribbon,
+     and calibrated heatmap builders therefore could not inherit route-base
+     summary metadata, even though per-sample `route_base_source` was present.
+   - Fix applied before retry: allow `route_risk.geojson` to carry metadata,
+     pass route metadata from layer preparation, and propagate
+     `metadata.route_base` into `risk_score_points`, `risk_ribbon`, and
+     `calibrated_risk_heatmap` metadata.
+   - SOP change: route-base acceptance must inspect both per-feature
+     `route_base_source` provenance and summary metadata on the map-rendered
+     risk artifacts, especially `risk_score_points.geojson`.
+
+Validation before retry:
+
+```text
+Focused route-base metadata tests: PASS
+```
+
+Attempt 3:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0630_20260629T163436Z.log
+Elapsed: 357 seconds
+Result: COMPLETED, strict comparison still failed because the reference is incoherent
+```
+
+Fixes verified:
+
+1. Scout AI planning went through Pydantic AI/OpenRouter and called
+   `record_pretrip_import_preparation_plan`.
+   - Plan artifact:
+     `outputs/scout_ai/pretrip_import_preparation_plan_attempt3_model_call.json`.
+   - Run result artifact:
+     `outputs/scout_ai/pretrip_import_preparation_run_result.json`.
+   - SkillRunRecord artifact:
+     `outputs/scout_ai/pretrip_import_preparation_skill_run_record.json`.
+
+2. Route-base summary metadata now propagates to all risk refs required by the
+   Scout AI skill.
+   - `route_risk.geojson`, `risk_score_points.geojson`,
+     `risk_score_points.metadata.json`, `risk_ribbon.geojson`,
+     `risk_ribbon.metadata.json`, `calibrated_risk_heatmap.geojson`, and
+     `calibrated_risk_heatmap.metadata.json` all expose
+     `route_base.sampling_strategy =
+     reference_progress_projected_to_nearest_overpass_segment.v1` and
+     `route_base.corridor_m = 500.0`.
+   - Candidate route-base counts: projected reference samples `5054`, fallback
+     reference samples `560`, route-base points `4214`.
+
+3. Live local OSM PBF render was verified on the actual 9112 admin app.
+   - `/admin/pretrip/projects/chilai_nanhua_day1_scoutAI_test0630/osm-pbf-vector.geojson`
+     returned 518 features.
+   - `/admin/pretrip`, `/admin/debug`, and `/admin` rendered 457 OSM PBF
+     casing/core lines and 61 points without using a preview PNG as the OSM
+     layer.
+   - Toggling `segments` did not enlarge the sampled OSM PBF point marker.
+
+Remaining failure:
+
+- Strict comparison against
+  `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI` still fails on
+  `mileage_tag_alignment_count`, Overpass kept/snapped GPX point counts, and
+  `route_pressure_sample_count`.
+- The target workspace is internally coherent after the workflow fix. The
+  reference workspace is not: its current risk files contain 3476 score points
+  and 3576 ribbon/heatmap segments, but
+  `mileage_tag_alignment.json` still references stale source counts of 4077
+  score points and 4530 ribbon/heatmap segments. The reference risk GeoJSON and
+  risk-score/ribbon/heatmap metadata also do not yet carry route-base summary
+  metadata, except for `route_risk.metadata.json`.
+- SOP change: do not declare a from-zero target replay complete when strict
+  comparison is still failing. If the operator wants count-equivalence, first
+  repair or rebuild the comparison reference workspace through the same Scout
+  AI skill path, then rerun the target from zero and compare against the
+  coherent reference. Do not intentionally reproduce stale partial
+  route-pressure or mileage artifacts in a fresh full-route target.
+
+Verification summary:
+
+```text
+Scout AI/OpenRouter plan tool call: PASS
+From-zero backup restore disabled: PASS
+Wrapper elapsed under 30 minutes: PASS (357s)
+Overpass evidence: PASS (517 candidates)
+OSM PBF evidence/render: PASS (518 endpoint features; live 9112 classed render)
+OCR: PASS (20 labels)
+Route-base metadata: PASS
+Risk ribbon/calibrated fallback skip: PASS (3576 segments, 637 skipped pairs)
+CWA/GEE current-run refs: PASS
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS with known layout metadata warnings
+Admin UI visual smoke: PASS
+Focused pytest: PASS (175 passed)
+Strict reference count comparison: FAIL, blocked by reference_incoherent report
+```
+
+Continuation audit, 2026-06-30:
+
+```text
+Command: tools/compare_pretrip_workspace_against_reference.py --strict-counts
+Reference: /Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+Candidate: /Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI_test0630
+Result: FAIL
+Missing refs: none
+```
+
+Current metric diffs:
+
+```text
+mileage_tag_alignment_count: reference=19879 candidate=17096
+overpass_route_alignment_kept_gpx_point_count: reference=1023 candidate=3163
+overpass_route_alignment_snapped_point_count: reference=983 candidate=891
+route_pressure_sample_count: reference=182 candidate=225
+```
+
+Reference coherence evidence:
+
+- Both reference and candidate route summaries describe the same imported route
+  extent: 112258.31 m and 11191 route points.
+- Reference `project.json` reports risk counts of 3476 score points and 3576
+  ribbon/heatmap segments, but reference `mileage_tag_alignment.json` still
+  carries stale source-kind counts of 4077 risk-score points, 4530
+  risk-ribbon segments, 4530 calibrated heatmap segments, and 4531
+  terrain-route samples.
+- Reference `project.json` reports Overpass alignment metrics of 1023 kept GPX
+  points and 983 snapped points, while the referenced
+  `outputs/overpass_route_alignment.json` artifact reports 22888 kept GPX
+  points, 92 snapped points, and 4530 route edges.
+- Candidate `chilai_nanhua_day1_scoutAI_test0630` regenerates coherent current
+  artifacts from zero with 3576 risk ribbon/heatmap segments, 3476 risk score
+  points, 4214 terrain route samples, 225 route-pressure samples, and
+  route-base metadata on the accepted risk GeoJSON refs.
+
+Blocking decision:
+
+- Another from-zero target rerun is not expected to make strict comparison pass
+  because the remaining diffs are caused by the comparison reference mixing
+  stale derived counts with current risk artifacts.
+- The Scout AI skill boundary says not to mutate a reference workspace.
+- The runbook policy says not to intentionally reproduce stale partial
+  route-pressure or mileage artifacts unless the operator explicitly requests
+  artifact-equivalence over current full-route preparation.
+- Next allowed action needs operator approval for one of these paths:
+  rebuild/repair `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI`
+  through the same Scout AI skill path and then rerun the target from zero, or
+  explicitly request artifact-equivalence against the stale reference counts.
+
+## Run Log: 2026-06-30 From-Zero Scout AI Test0630_1 Replay
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI_test0630_1
+```
+
+Reference workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI_test0630
+```
+
+Policy:
+
+- This is a from-zero Scout AI skill replay.
+- Do not copy material, durable evidence, or derived artifacts from
+  `chilai_nanhua_day1_scoutAI_test0630`.
+- Keep `SCOUT_PRETRIP_DURABLE_EVIDENCE_SOURCE_ROOT=""` and
+  `SCOUT_PRETRIP_RESTORE_FROM_BACKUP=0`.
+- If the run fails, fix the workflow or input-material generation and rerun the
+  full skill/wrapper path from zero; do not patch the target workspace outputs
+  into shape.
+
+Attempt 1:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0630_1_20260630T030434Z.log
+Elapsed: <60 seconds
+Result: FAIL during importer MCP material validation
+```
+
+Issue encountered:
+
+1. Target-specific MCP material contained a top-level
+   `material_provenance` field.
+   - Symptom: `NamedPointEvidenceSet` rejected the field with
+     `Extra inputs are not permitted`.
+   - Root cause: the target material-generation step put provenance into
+     `sources/mcp/named_point_evidence.json` instead of keeping it only in
+     `material_manifest.json`.
+   - Fix applied before retry: remove `material_provenance` from the MCP JSON
+     and keep target material provenance in `material_manifest.json`.
+   - SOP change: none; this confirms the existing SOP that MCP provenance must
+     not use ad hoc schema fields.
+
+Attempt 2:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0630_1_20260630T032653Z.log
+Elapsed: 800 seconds
+Result: FAIL strict reference comparison after a complete from-zero run
+```
+
+Issue encountered:
+
+1. OSM Carto render-context expansion leaked into the Overpass-style route
+   candidate basis.
+   - Symptom: complete run finished, but strict comparison against
+     `chilai_nanhua_day1_scoutAI_test0630` failed with
+     `overpass_candidate_count` 855 vs 517, risk ribbon/heatmap segment counts
+     4835 vs 3576, and mileage tag alignment 21125 vs 17096.
+   - Root cause: local OSM PBF extraction was expanded for richer OSM Carto
+     vector rendering, but the same expanded payload was also consumed by the
+     route/risk candidate adapter.
+   - Fix applied before retry: split the local OSM PBF payload into a full
+     OSM Carto render context and a narrower route-evidence candidate basis.
+     The full render context remains available through
+     `osm_pbf_render_geojson_ref` / `osm_pbf_feature_index_ref`; the candidate
+     adapter must not consume OSM Carto background roads, landcover, buildings,
+     or place labels. It may keep only trail highways, hiking routes, reference
+     terrain risk evidence, and relevant POI evidence, while preserving
+     untagged node geometry needed to hydrate kept ways.
+   - SOP change: OSM PBF acceptance must distinguish "render context" from
+     "Overpass/risk route basis"; a richer OSM background must not change
+     route alignment, risk, mileage, or segment counts.
+
+Attempt 3:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0630_1_20260630T035403Z.log
+Elapsed: 615 seconds
+Result: FAIL strict reference comparison after a complete from-zero run
+```
+
+Issue encountered:
+
+1. The first render/candidate split was still too broad.
+   - Symptom: strict comparison still failed with `overpass_candidate_count`
+     855 vs 517, `risk_score_point_count` 4191 vs 3476, and
+     `risk_ribbon_segment_count` / `calibrated_risk_heatmap_segment_count`
+     4835 vs 3576.
+   - Root cause: the route-evidence adapter used
+     `ROUTE_CORRIDOR_HIGHWAYS`, which includes `service`, `tertiary`, and
+     `unclassified`. Those are useful OSM Carto road-render context, but they
+     are not part of the reference Overpass route basis for this replay.
+     The adapter also allowed `place=*` labels and one `natural=cliff` feature
+     into route/risk evidence; those belong to background context unless the
+     reference evidence explicitly contains them.
+   - Fix applied before retry: add dedicated route-evidence matchers. Full OSM
+     extraction/render may include Carto roads, landcover, water, buildings,
+     and place labels. The Overpass-style candidate adapter may use only
+     `TRAIL_HIGHWAYS` (`path`, `footway`, `track`, `steps`, `bridleway`,
+     `pedestrian`), hiking relations, `scree` / `bare_rock` terrain risk,
+     hazard/risk tags, and reference POI nodes (`peak`, `spring`, shelter,
+     drinking water, parking, huts, water taps).
+   - SOP change: never use a broad renderer highway set as the route/risk
+     candidate basis. A renderer palette or OSM-like style change must be
+     regression-tested against Overpass candidate counts, risk route-base
+     counts, and mileage alignment counts.
+
+Attempt 4:
+
+```text
+Log: /Users/alexwang0315/workspace/scout-local-logs/scout_pretrip_rebuild_chilai_nanhua_day1_scoutAI_test0630_1_20260630T041718Z.log
+Elapsed: completed preparation; wrapper exit failed only on first admin API spec-alignment timeout
+Result: DATA PASS after standalone verification
+```
+
+Validation snapshot:
+
+```text
+Strict reference comparison: PASS (metric_diffs empty; CWA/GEE time-sensitive metrics excluded)
+Overpass candidates: 517
+Risk score points: 3476
+Risk ribbon segments: 3576
+Calibrated risk heatmap segments: 3576
+OSM render context elements: 2033
+OSM candidate-basis elements: 517
+Raster OCR labels: 20
+Route context points: 60
+Spec alignment standalone: PASS (0 errors; 5 existing workspace layout warnings)
+Admin compact API retry: PASS (HTTP 200; 8.8 seconds)
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Focused pretrip/admin/debug/API/page pytest: PASS (141 passed, 8 subtests passed)
+pnpm lint: PASS
+pnpm typecheck: PASS
+pnpm test: PASS
+Admin UI visual smoke: PASS
+```
+
+OSM Carto renderer SOP:
+
+- `config/osm_carto_palette.yaml` is the local simplified palette source for
+  Scout's OSM PBF vector renderer. It intentionally references
+  OpenStreetMap Carto / osm-carto concepts without vendoring the full
+  Mapnik/osm-carto pipeline.
+- Preserve OSM-like draw order: background, landcover, water polygons,
+  building polygons, road casings, road fills, points, then labels.
+- Road rendering must use casing plus fill paths. Labels need a halo and
+  screen-readable sizing; point markers and labels must keep screen-readable
+  scale after zoom and layer toggles.
+- OSM PBF render refs (`osm_pbf_render_geojson_ref`,
+  `osm_pbf_feature_index_ref`) are local OSM vector context only. They must not
+  replace Rudy+TW OCR/cache as the authoritative hiking-map raster source.
+- Do not use the local OSM PBF preview PNG as an admin map layer; render the
+  parsed GeoJSON/vector features.
+- Do not feed full OSM Carto render context into Overpass alignment, risk
+  baseline/calibrated route-base generation, segment projection, or mileage
+  alignment. Those steps use the narrower route-evidence candidate basis.
+
 ## Run Log: 2026-06-29 Overpass Alignment Normal Corridor Regression
 
 Target workspace:

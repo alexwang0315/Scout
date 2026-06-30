@@ -225,6 +225,10 @@ def assess_scout_gee_environment(
             "human_review_required": True,
             "summary": gee_summary,
             "decision_output": decision_output,
+            "interpretation_limit": (
+                "SMAP L4 is coarse route-corridor hydrologic background, "
+                "not a single-slope passability or runtime safety conclusion."
+            ),
         },
         "gee_summary": gee_summary,
         "provenance_summary": _provenance_summary(source_report),
@@ -376,6 +380,9 @@ def _source_report(
         "candidate_only": True,
         "runtime_safety_truth": False,
         "human_review_required": True,
+        "smap_l4_interpretation_limit": (
+            "coarse_route_corridor_background_not_single_slope_safety_truth"
+        ),
     }
     if error:
         report["error"] = error
@@ -449,6 +456,11 @@ def _compact_dataset(item: dict[str, Any]) -> dict[str, Any]:
         "collection_id": item.get("collection_id"),
         "label": item.get("label"),
         "scout_use": item.get("scout_use"),
+        "bands": item.get("bands"),
+        "temporal_resolution": item.get("temporal_resolution"),
+        "spatial_resolution_m": item.get("spatial_resolution_m"),
+        "candidate_only": True,
+        "human_review_required": item.get("human_review_required", True),
         "runtime_safety_truth": False,
     }
 
@@ -675,7 +687,8 @@ def _decision_output(
         "secondLayer": {
             "details": [field_answer],
             "uncertaintyNotes": [
-                "SMAP 約 9km 格網，不可用單一點位值判斷坡面安全。",
+                "SMAP L4 約 11km/3h 格網，只能作粗解析度 route corridor/bbox 水文背景。",
+                "不可用單一 SMAP 點位值判斷坡面落石、崩塌或通行安全。",
                 "GPM/IMERG 是衛星/模式降雨估計，需與 CWA、地形、地質與路況 notes 交叉檢查。",
                 *warnings,
             ],
@@ -710,6 +723,11 @@ def _field_answer(decision_output: dict[str, Any], summary: dict[str, Any]) -> s
     text += (
         f" Collections: {summary['smap_collection_id']}, "
         f"{summary['gpm_collection_id']}."
+    )
+    text += (
+        " SMAP L4 is coarse 11km/3h candidate-only hydrologic background for "
+        "route corridor/bbox review, not a single-slope passability or runtime "
+        "safety conclusion."
     )
     return text
 

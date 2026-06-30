@@ -6,6 +6,7 @@ from pretrip_osm_pbf_ingest import (
     build_osm_pbf_feature_index,
     build_osmium_extraction_plan,
     import_osm_pbf_evidence_candidates,
+    osm_json_to_geojson_feature_collection,
     osm_json_to_overpass_payload,
 )
 
@@ -96,6 +97,93 @@ def test_osm_pbf_json_import_preserves_local_source_and_skips_incomplete_geometr
     )
 
 
+def test_osm_pbf_route_candidate_adapter_does_not_consume_full_carto_context() -> None:
+    payload = {
+        "version": 0.6,
+        "elements": [
+            {
+                "type": "way",
+                "id": 10,
+                "tags": {"highway": "path", "name": "步道"},
+                "geometry": [
+                    {"lat": 23.87, "lon": 121.17},
+                    {"lat": 23.871, "lon": 121.171},
+                ],
+            },
+            {
+                "type": "way",
+                "id": 11,
+                "tags": {"highway": "primary", "name": "公路"},
+                "geometry": [
+                    {"lat": 23.872, "lon": 121.172},
+                    {"lat": 23.873, "lon": 121.173},
+                ],
+            },
+            {
+                "type": "way",
+                "id": 12,
+                "tags": {"landuse": "forest", "name": "林地"},
+                "geometry": [
+                    {"lat": 23.874, "lon": 121.174},
+                    {"lat": 23.875, "lon": 121.175},
+                ],
+            },
+            {
+                "type": "way",
+                "id": 13,
+                "tags": {"highway": "service", "name": "產道背景"},
+                "geometry": [
+                    {"lat": 23.876, "lon": 121.176},
+                    {"lat": 23.877, "lon": 121.177},
+                ],
+            },
+            {
+                "type": "way",
+                "id": 14,
+                "tags": {"natural": "cliff", "name": "崖線背景"},
+                "geometry": [
+                    {"lat": 23.878, "lon": 121.178},
+                    {"lat": 23.879, "lon": 121.179},
+                ],
+            },
+            {
+                "type": "node",
+                "id": 20,
+                "lat": 23.876,
+                "lon": 121.176,
+                "tags": {"place": "locality", "name": "地名背景"},
+            },
+        ],
+    }
+
+    render_geojson = osm_json_to_geojson_feature_collection(payload)
+    evidence = import_osm_pbf_evidence_candidates(
+        payload,
+        query_body="fixture local osm pbf extraction",
+        bbox_wgs84=RouteBBox(
+            min_lat=23.86,
+            min_lon=121.16,
+            max_lat=23.88,
+            max_lon=121.18,
+        ),
+        route_corridor={"route_ref": "fixture.route", "corridor_m": 500},
+        request_timestamp="2026-06-25T00:00:00+00:00",
+        endpoint="local-osm-pbf:///tmp/taiwan.osm.pbf",
+        raw_payload_uri="normalized/map/osm_pbf_raw.osm.json",
+        raw_response_sha256=None,
+        normalized_artifact_path="normalized/map/overpass_vector_evidence.geojson",
+        source_ref="normalized/map/osm_pbf_raw.osm.json",
+        pbf_source_uri="/tmp/taiwan.osm.pbf",
+    )
+
+    assert len(render_geojson["features"]) == 6
+    assert evidence["counts"]["render_context_osm_element_count"] == 6
+    assert evidence["counts"]["candidate_basis_osm_element_count"] == 1
+    assert evidence["counts"]["trail_corridor_candidate"] == 1
+    assert evidence["counts"]["candidates"] == 1
+    assert evidence["candidates"][0]["candidate_type"] == "trail_corridor_candidate"
+
+
 def test_osmium_extraction_plan_uses_route_bbox_and_hiking_filters(tmp_path: Path) -> None:
     plan = build_osmium_extraction_plan(
         pbf_path=Path("/data/osm/taiwan.osm.pbf"),
@@ -113,8 +201,29 @@ def test_osmium_extraction_plan_uses_route_bbox_and_hiking_filters(tmp_path: Pat
     assert plan.bbox_arg == "121.1600000,23.8600000,121.1800000,23.8800000"
     assert plan.commands[0][:4] == ("osmium", "extract", "--overwrite", "--bbox")
     assert len(plan.commands) == 1
-    assert "w/highway=path,footway,track,steps,bridleway,pedestrian" in plan.filter_specs
+    highway_spec = next(item for item in plan.filter_specs if item.startswith("w/highway="))
+    for highway in (
+        "motorway",
+        "trunk",
+        "primary",
+        "secondary",
+        "tertiary",
+        "residential",
+        "path",
+        "footway",
+        "track",
+        "steps",
+    ):
+        assert highway in highway_spec
     assert "n/natural=spring,peak" in plan.filter_specs
+    assert "n/place=locality,hamlet,village,town,city" in plan.filter_specs
+    assert "w/waterway=river,stream,ditch,drain" in plan.filter_specs
+    assert "w/natural=cliff,scree,bare_rock,wood,forest,water,grassland,glacier" in plan.filter_specs
+    assert (
+        "w/landuse=forest,farmland,residential,grass,meadow,orchard,recreation_ground"
+        in plan.filter_specs
+    )
+    assert "w/building" in plan.filter_specs
 
 
 def test_osm_pbf_feature_index_groups_render_features_for_map_risk_timeline() -> None:

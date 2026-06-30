@@ -10,19 +10,47 @@ from pathlib import Path
 from typing import Any
 
 from pretrip_models import RouteBBox
-from pretrip_overpass_ingest import import_overpass_evidence_candidates
+from pretrip_overpass_ingest import (
+    ROUTE_CORRIDOR_HIGHWAYS,
+    ROUTE_CORRIDOR_HIGHWAY_VALUES,
+    TRAIL_HIGHWAYS,
+    import_overpass_evidence_candidates,
+)
 
 
 CONVERSION_RULE_VERSION = "osm-pbf-local-evidence.v1"
 FEATURE_INDEX_VERSION = "osm-pbf-local-feature-index.v1"
+OSM_CARTO_ROAD_HIGHWAY_VALUES = tuple(
+    dict.fromkeys(
+        (
+            "motorway",
+            "trunk",
+            "primary",
+            "secondary",
+            "tertiary",
+            "unclassified",
+            "residential",
+            "living_street",
+            "road",
+            "service",
+            *ROUTE_CORRIDOR_HIGHWAY_VALUES,
+        )
+    )
+)
+OSM_CARTO_ROAD_HIGHWAYS = set(OSM_CARTO_ROAD_HIGHWAY_VALUES)
 OSM_PBF_FILTER_SPECS = (
-    "w/highway=path,footway,track,steps,bridleway,pedestrian",
+    f"w/highway={','.join(OSM_CARTO_ROAD_HIGHWAY_VALUES)}",
     "r/type=route",
     "r/route=hiking",
+    "n/place=locality,hamlet,village,town,city",
     "n/tourism=wilderness_hut,alpine_hut",
     "n/amenity=shelter,drinking_water,parking",
     "n/natural=spring,peak",
-    "w/natural=cliff,scree,bare_rock",
+    "w/waterway=river,stream,ditch,drain",
+    "w/natural=cliff,scree,bare_rock,wood,forest,water,grassland,glacier",
+    "w/landuse=forest,farmland,residential,grass,meadow,orchard,recreation_ground",
+    "w/leisure=park,garden,nature_reserve",
+    "w/building",
     "w/geological=landslide",
 )
 
@@ -68,8 +96,20 @@ OSM_PBF_FEATURE_CATEGORIES: dict[str, dict[str, str]] = {
         "timeline_group": "OSM Other",
     },
 }
-_NODE_MATCH_KEYS = frozenset({"natural", "amenity", "tourism", "man_made"})
-_WAY_MATCH_KEYS = frozenset({"highway", "natural", "geological", "hazard", "risk"})
+_NODE_MATCH_KEYS = frozenset({"natural", "amenity", "tourism", "man_made", "place"})
+_WAY_MATCH_KEYS = frozenset(
+    {
+        "highway",
+        "natural",
+        "geological",
+        "hazard",
+        "risk",
+        "waterway",
+        "landuse",
+        "leisure",
+        "building",
+    }
+)
 _RELATION_MATCH_KEYS = frozenset({"route", "type"})
 _OSM_PBF_NATIVE_FILTER_KEYS = tuple(
     sorted(_NODE_MATCH_KEYS | _WAY_MATCH_KEYS | _RELATION_MATCH_KEYS)
@@ -329,7 +369,8 @@ def import_osm_pbf_evidence_candidates(
     pbf_cache_metadata: dict[str, Any] | None = None,
     extraction_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    hydrated_payload = osm_json_to_overpass_payload(payload)
+    route_evidence_payload = _route_evidence_payload_for_candidate_adapter(payload)
+    hydrated_payload = osm_json_to_overpass_payload(route_evidence_payload)
     raw_hash = raw_response_sha256 or _payload_sha256(payload)
     result = import_overpass_evidence_candidates(
         hydrated_payload,
@@ -378,6 +419,10 @@ def import_osm_pbf_evidence_candidates(
         "candidates": candidates,
         "counts": {
             **result.counts,
+            "render_context_osm_element_count": len(payload.get("elements", [])),
+            "candidate_basis_osm_element_count": len(
+                route_evidence_payload.get("elements", [])
+            ),
             "hydrated_osm_element_count": len(hydrated_payload.get("elements", [])),
             "network_calls_made": 0,
         },
@@ -565,6 +610,75 @@ def osm_json_to_geojson_feature_collection(payload: dict[str, Any]) -> dict[str,
             "candidate_only": True,
             "runtime_safety_truth": False,
         },
+    }
+
+
+def _route_evidence_payload_for_candidate_adapter(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep full OSM Carto context out of route/risk candidate evidence.
+
+    Local PBF extraction can include broad OSM Carto rendering context such as
+    water, landcover, buildings, and major roads. The Overpass-style candidate
+    adapter is narrower: it must stay aligned to route-corridor trail evidence,
+    hiking routes, terrain risk, and relevant POI nodes so risk/mileage baselines
+    do not change merely because the background OSM layer became richer.
+    """
+
+    elements = payload.get("elements")
+    if not isinstance(elements, list):
+        return payload
+    way_ids_required_by_relations: set[int] = set()
+    for element in elements:
+        if not isinstance(element, dict) or element.get("type") != "relation":
+            continue
+        if not _matches_route_evidence_element(element):
+            continue
+        for member in element.get("members", []):
+            if (
+                isinstance(member, dict)
+                and member.get("type") == "way"
+                and isinstance(member.get("ref"), int)
+            ):
+                way_ids_required_by_relations.add(int(member["ref"]))
+
+    kept_way_ids: set[int] = set()
+    needed_node_ids: set[int] = set()
+    filtered_non_nodes: list[dict[str, Any]] = []
+    for element in elements:
+        if not isinstance(element, dict) or element.get("type") == "node":
+            continue
+        osm_type = element.get("type")
+        osm_id = element.get("id")
+        keep = _matches_route_evidence_element(element) or (
+            osm_type == "way"
+            and isinstance(osm_id, int)
+            and osm_id in way_ids_required_by_relations
+        )
+        if not keep:
+            continue
+        filtered_non_nodes.append(element)
+        if osm_type == "way" and isinstance(osm_id, int):
+            kept_way_ids.add(osm_id)
+            for node_id in element.get("nodes", []):
+                if isinstance(node_id, int):
+                    needed_node_ids.add(node_id)
+
+    filtered_nodes = [
+        element
+        for element in elements
+        if (
+            isinstance(element, dict)
+            and element.get("type") == "node"
+            and (
+                _matches_route_evidence_element(element)
+                or element.get("id") in needed_node_ids
+            )
+        )
+    ]
+    filtered = [*filtered_nodes, *filtered_non_nodes]
+    return {
+        **payload,
+        "elements": filtered,
+        "generator": f"{payload.get('generator', 'scout.pretrip_osm_pbf_ingest')}.route_evidence_basis",
     }
 
 
@@ -868,11 +982,13 @@ def _feature_category(tags: dict[str, Any], geometry_type: str) -> str:
     amenity = str(tags.get("amenity") or "")
     tourism = str(tags.get("tourism") or "")
     landuse = str(tags.get("landuse") or "")
+    leisure = str(tags.get("leisure") or "")
+    place = str(tags.get("place") or "")
     if highway == "milestone" or information == "route_marker":
         return "milestone_route_marker"
     if information == "mobile":
         return "mobile_signal"
-    if highway in {"path", "footway", "track", "steps", "bridleway", "pedestrian"}:
+    if highway in ROUTE_CORRIDOR_HIGHWAYS:
         return "trail_network"
     if str(tags.get("route") or "") == "hiking":
         return "trail_network"
@@ -886,8 +1002,15 @@ def _feature_category(tags: dict[str, Any], geometry_type: str) -> str:
         return "amenity_poi"
     if tags.get("power") or tags.get("man_made"):
         return "infrastructure"
-    if tags.get("building") or landuse or natural in {"wood", "forest", "grassland"}:
+    if (
+        tags.get("building")
+        or landuse
+        or leisure in {"park", "garden", "nature_reserve"}
+        or natural in {"wood", "forest", "grassland"}
+    ):
         return "landcover_structure"
+    if place:
+        return "amenity_poi"
     if geometry_type in {"Polygon", "MultiPolygon"}:
         return "landcover_structure"
     return "other_osm_feature"
@@ -902,7 +1025,9 @@ def _feature_type(tags: dict[str, Any], geometry_type: str) -> str:
         "tourism",
         "waterway",
         "landuse",
+        "leisure",
         "building",
+        "place",
         "power",
         "man_made",
         "route",
@@ -1148,15 +1273,59 @@ def _matches_node_tags(tags: dict[str, Any]) -> bool:
         or tags.get("amenity") in {"shelter", "drinking_water", "parking"}
         or tags.get("tourism") in {"wilderness_hut", "alpine_hut"}
         or tags.get("man_made") == "water_tap"
+        or tags.get("place") in {"locality", "hamlet", "village", "town", "city"}
+    )
+
+
+def _matches_route_evidence_element(element: dict[str, Any]) -> bool:
+    osm_type = element.get("type")
+    tags = dict(element.get("tags") or {})
+    if osm_type == "node":
+        return _matches_route_evidence_node_tags(tags)
+    if osm_type == "way":
+        return _matches_route_evidence_way_tags(tags)
+    if osm_type == "relation":
+        return _matches_relation_tags(tags)
+    return False
+
+
+def _matches_route_evidence_way_tags(tags: dict[str, Any]) -> bool:
+    highway = str(tags.get("highway", "")).strip().lower()
+    return (
+        highway in TRAIL_HIGHWAYS
+        or tags.get("natural") in {"scree", "bare_rock"}
+        or tags.get("geological") == "landslide"
+        or "hazard" in tags
+        or "risk" in tags
+    )
+
+
+def _matches_route_evidence_node_tags(tags: dict[str, Any]) -> bool:
+    return (
+        tags.get("natural") == "peak"
+        or tags.get("natural") == "spring"
+        or tags.get("amenity") in {"shelter", "drinking_water", "parking"}
+        or tags.get("tourism") in {"wilderness_hut", "alpine_hut"}
+        or tags.get("man_made") == "water_tap"
     )
 
 
 def _matches_way_tags(tags: dict[str, Any]) -> bool:
     highway = str(tags.get("highway", "")).strip().lower()
     return (
-        highway in {"path", "footway", "track", "steps", "bridleway", "pedestrian"}
-        or tags.get("natural") in {"cliff", "scree", "bare_rock"}
+        highway in OSM_CARTO_ROAD_HIGHWAYS
+        or (
+            tags.get("natural")
+            in {"cliff", "scree", "bare_rock", "wood", "forest", "water", "grassland", "glacier"}
+        )
         or tags.get("geological") == "landslide"
+        or tags.get("waterway") in {"river", "stream", "ditch", "drain"}
+        or (
+            tags.get("landuse")
+            in {"forest", "farmland", "residential", "grass", "meadow", "orchard", "recreation_ground"}
+        )
+        or tags.get("leisure") in {"park", "garden", "nature_reserve"}
+        or "building" in tags
         or "hazard" in tags
         or "risk" in tags
     )
