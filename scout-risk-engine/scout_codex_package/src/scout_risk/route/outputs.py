@@ -9,21 +9,38 @@ from scout_risk.route.risk_profile import RouteRiskProfile
 from scout_risk.route.schemas import RouteRiskSample
 
 
-def route_profile_to_geojson(profile: RouteRiskProfile) -> dict[str, Any]:
-    return {
+def route_profile_to_geojson(
+    profile: RouteRiskProfile,
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = {
         "type": "FeatureCollection",
         "features": [
             _sample_feature(sample)
             for sample in profile.samples
         ],
     }
+    if metadata:
+        payload["metadata"] = metadata
+    return payload
 
 
-def write_route_geojson(profile: RouteRiskProfile, path: str | Path) -> None:
+def write_route_geojson(
+    profile: RouteRiskProfile,
+    path: str | Path,
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
-        json.dumps(route_profile_to_geojson(profile), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(
+            route_profile_to_geojson(profile, metadata=metadata),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
 

@@ -131,7 +131,7 @@ def route_profile(
         sample_interval_m=sample_interval_m,
         terrain_config=loaded_config,
     )
-    write_route_geojson(profile, out)
+    write_route_geojson(profile, out, metadata=metadata)
     if csv_out is not None:
         write_route_csv(profile, csv_out)
     typer.echo(f"wrote {len(profile.samples)} route risk samples to {out}")

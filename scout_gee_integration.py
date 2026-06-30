@@ -34,6 +34,21 @@ GEE_VALUE_COMPUTE_URL_TEMPLATE = (
 GEE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 SCOUT_GEE_FEATURE_PACKAGE_VERSION = "scout_gee_feature_package.v0.1"
 SCOUT_ENVIRONMENT_RISK_DERIVATIVE_VERSION = "scout_environment_risk_derivatives.v0.1"
+SMAP_L4_COLLECTION_ID = "NASA/SMAP/SPL4SMGP/008"
+SMAP_L4_TEMPORAL_RESOLUTION = "3h"
+SMAP_L4_SPATIAL_RESOLUTION_M = 11000
+SMAP_L4_BANDS = (
+    "sm_surface",
+    "sm_rootzone",
+    "sm_profile",
+    "sm_surface_wetness",
+    "sm_rootzone_wetness",
+    "sm_profile_wetness",
+    "surface_temp",
+    "sm_rootzone_pctl",
+    "sm_profile_pctl",
+    "sm_surface_anomaly",
+)
 DEFAULT_GEE_ROUTE_SEGMENT_LENGTH_M = 150.0
 MIN_GEE_ROUTE_SEGMENT_LENGTH_M = 100.0
 MAX_GEE_ROUTE_SEGMENT_LENGTH_M = 250.0
@@ -60,10 +75,15 @@ GEE_ENVIRONMENT_DATASETS: tuple[dict[str, Any], ...] = (
     },
     {
         "dataset_key": "smap_l4_surface_rootzone_soil_moisture",
-        "collection_id": "NASA/SMAP/SPL4SMGP/008",
+        "collection_id": SMAP_L4_COLLECTION_ID,
         "label": "SMAP L4 surface and root-zone soil moisture",
         "label_zh": "SMAP L4 表層與根系層土壤含水量",
         "scout_use": "antecedent wetness trend and route-corridor hydrology review",
+        "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+        "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+        "bands": list(SMAP_L4_BANDS),
+        "candidate_only": True,
+        "human_review_required": True,
         "runtime_safety_truth": False,
     },
     {
@@ -156,6 +176,18 @@ DEFAULT_ROUTE_FEATURE_DATASET_CONFIG: dict[str, Any] = {
             "bands": ["precipitation"],
             "date_range": "recent_72h",
             "confidence": 0.72,
+        },
+        {
+            "key": "smap_l4_soil_moisture",
+            "dataset_id": SMAP_L4_COLLECTION_ID,
+            "role": "route_corridor_soil_moisture_background",
+            "bands": list(SMAP_L4_BANDS),
+            "date_range": "recent_30d",
+            "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+            "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+            "confidence": 0.64,
+            "candidate_only": True,
+            "human_review_required": True,
         },
         {
             "key": "chirps_daily",
@@ -311,8 +343,11 @@ class RestGeeEnvironmentClient:
         requests.append(
             _raw_request_record(
                 dataset_key="smap_l4_surface_rootzone_soil_moisture",
-                collection_id="NASA/SMAP/SPL4SMGP/008",
+                collection_id=SMAP_L4_COLLECTION_ID,
                 window=smap_window,
+                bands=SMAP_L4_BANDS,
+                temporal_resolution=SMAP_L4_TEMPORAL_RESOLUTION,
+                spatial_resolution_m=SMAP_L4_SPATIAL_RESOLUTION_M,
             )
         )
         gpm = self._compute_value(
@@ -421,6 +456,23 @@ class RestGeeRouteFeatureClient:
             payload = dict(result)
         else:
             payload = {}
+        if _is_route_feature_echo_manifest(payload):
+            return {
+                "provider": GEE_PROVIDER_ID,
+                "project_id_ref": "env:SCOUT_GEE_PROJECT_ID",
+                "prepared_at": prepared_at,
+                "endpoint": GEE_VALUE_COMPUTE_URL_TEMPLATE,
+                "http_status": response.get("http_status"),
+                "status": "server_script_not_configured",
+                "blocker_reasons": ["gee_route_feature_script_not_configured"],
+                "result_summary": _route_feature_echo_manifest_summary(payload),
+                "segment_features": [],
+                "source_metadata": {},
+                "stale_data_warnings": [],
+                "secret_value_embedded": False,
+                "external_api_call_performed": True,
+                "runtime_safety_truth": False,
+            }
         return {
             "provider": GEE_PROVIDER_ID,
             "project_id_ref": "env:SCOUT_GEE_PROJECT_ID",
@@ -627,6 +679,26 @@ def normalize_gee_environment_summary(
         "smap_l4_rootzone",
         "rootzone",
     )
+    sm_profile = _first_number(
+        smap_result,
+        "sm_profile",
+        "sm_profile_mean",
+        "smap_l4_profile",
+        "profile",
+    )
+    sm_surface_wetness_raw = _first_number(smap_result, "sm_surface_wetness")
+    sm_rootzone_wetness_raw = _first_number(smap_result, "sm_rootzone_wetness")
+    sm_surface_wetness = (
+        sm_surface_wetness_raw if sm_surface_wetness_raw is not None else sm_surface
+    )
+    sm_rootzone_wetness = (
+        sm_rootzone_wetness_raw if sm_rootzone_wetness_raw is not None else sm_rootzone
+    )
+    sm_profile_wetness = _first_number(smap_result, "sm_profile_wetness")
+    surface_temp = _first_number(smap_result, "surface_temp")
+    sm_rootzone_pctl = _first_number(smap_result, "sm_rootzone_pctl")
+    sm_profile_pctl = _first_number(smap_result, "sm_profile_pctl")
+    sm_surface_anomaly = _first_number(smap_result, "sm_surface_anomaly")
     gpm_precip = _first_number(
         gpm_result,
         "precipitation",
@@ -635,13 +707,39 @@ def normalize_gee_environment_summary(
         "rainfall_mm",
     )
     status = "fetched" if any(
-        value is not None for value in (sm_surface, sm_rootzone, gpm_precip)
+        value is not None
+        for value in (sm_surface, sm_rootzone, sm_profile, gpm_precip)
     ) else "fetched_empty"
     blockers = [] if status == "fetched" else ["gee_response_empty_or_unrecognized"]
+    smap_source = _smap_l4_source_metadata()
+    smap_fetch_window = _request_window_for_collection(
+        raw_summary,
+        SMAP_L4_COLLECTION_ID,
+    )
+    route_scope = {
+        "scope_kind": "route_bbox_or_corridor_background",
+        "bbox_wgs84": dict(bbox_wgs84),
+        "aggregation_geometry": "bbox_wgs84",
+        "route_corridor_m": None,
+        "corridor_geometry_available": False,
+        "note": (
+            "SMAP L4 is summarized over the supplied route bbox/corridor proxy; "
+            "it is coarse hydrologic background evidence."
+        ),
+    }
     smap_sample = {
         "timestamp": prepared_at,
         "sm_surface": sm_surface,
         "sm_rootzone": sm_rootzone,
+        "sm_profile": sm_profile,
+        "sm_surface_wetness": sm_surface_wetness,
+        "sm_rootzone_wetness": sm_rootzone_wetness,
+        "sm_profile_wetness": sm_profile_wetness,
+        "surface_temp": surface_temp,
+        "sm_rootzone_pctl": sm_rootzone_pctl,
+        "sm_profile_pctl": sm_profile_pctl,
+        "sm_surface_anomaly": sm_surface_anomaly,
+        "collection_id": SMAP_L4_COLLECTION_ID,
         "sample_kind": "corridor_period_mean",
     }
     gpm_sample = {
@@ -659,20 +757,51 @@ def normalize_gee_environment_summary(
             "bbox_wgs84": dict(bbox_wgs84),
             "prepared_at": prepared_at,
             "cache_policy": cache_policy,
+            "external_api_calls_made": external_api_calls_made,
+            "candidate_only": True,
+            "human_review_required": True,
             "secret_value_embedded": False,
             "runtime_safety_truth": False,
         },
         smap_summary={
             "dataset_family": "SMAP",
-            "collection_id": "NASA/SMAP/SPL4SMGP/008",
+            "collection_id": SMAP_L4_COLLECTION_ID,
+            "source_collection_id": SMAP_L4_COLLECTION_ID,
+            "layer_id": "soil-moisture",
             "status": status,
-            "sm_surface_wetness": sm_surface,
-            "sm_rootzone_wetness": sm_rootzone,
+            "sm_surface": sm_surface,
+            "sm_rootzone": sm_rootzone,
+            "sm_profile": sm_profile,
+            "sm_surface_wetness": sm_surface_wetness,
+            "sm_rootzone_wetness": sm_rootzone_wetness,
+            "sm_profile_wetness": sm_profile_wetness,
+            "surface_temp": surface_temp,
+            "sm_rootzone_pctl": sm_rootzone_pctl,
+            "sm_profile_pctl": sm_profile_pctl,
+            "sm_surface_anomaly": sm_surface_anomaly,
             "antecedent_wetness_percentile": None,
             "aggregation": "bbox_reduce_region_mean",
-            "sample_count": 1 if sm_surface is not None or sm_rootzone is not None else 0,
+            "sample_count": 1
+            if any(value is not None for value in (sm_surface, sm_rootzone, sm_profile))
+            else 0,
             "samples": [smap_sample],
             "cache_policy": cache_policy,
+            "fetch_window": smap_fetch_window,
+            "prepared_at": prepared_at,
+            "bbox_wgs84": dict(bbox_wgs84),
+            "route_scope": route_scope,
+            "source_metadata": smap_source,
+            "band_names": list(SMAP_L4_BANDS),
+            "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+            "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "human_review_required": True,
+            "external_api_calls_made": external_api_calls_made,
+            "limitation": (
+                "SMAP L4 is coarse route-level hydrologic background; it is not "
+                "a single-slope passability, landslide, or runtime safety conclusion."
+            ),
         },
         gpm_summary={
             "dataset_family": "GPM_IMERG",
@@ -690,12 +819,24 @@ def normalize_gee_environment_summary(
             "artifact_kind": "gee_soil_moisture_timeseries",
             "project_id": project_id,
             "layer_id": "soil-moisture",
+            "collection_id": SMAP_L4_COLLECTION_ID,
+            "source_collection_id": SMAP_L4_COLLECTION_ID,
             "generated_at": prepared_at,
+            "prepared_at": prepared_at,
             "status": status,
             "samples": [smap_sample],
             "cache_policy": cache_policy,
+            "fetch_window": smap_fetch_window,
+            "bbox_wgs84": dict(bbox_wgs84),
+            "route_scope": route_scope,
+            "band_names": list(SMAP_L4_BANDS),
+            "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+            "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+            "source_metadata": smap_source,
+            "external_api_calls_made": external_api_calls_made,
             "candidate_only": True,
             "runtime_safety_truth": False,
+            "human_review_required": True,
         },
         gpm_timeseries={
             "artifact_kind": "gee_antecedent_rain_timeseries",
@@ -738,6 +879,7 @@ def load_gee_dataset_config(path: str | Path | None = None) -> dict[str, Any]:
         "COPERNICUS/S1_GRD",
         "GOOGLE/DYNAMICWORLD/V1",
         "NASA/GPM_L3/IMERG_V07",
+        SMAP_L4_COLLECTION_ID,
         "UCSB-CHG/CHIRPS/DAILY",
         "FIRMS",
     }
@@ -847,9 +989,15 @@ def build_scout_gee_feature_package(
         )
         external_api_calls_made = bool(raw_summary.get("external_api_call_performed"))
     elif allow_live_fetch and status.ready:
+        gee_project_id = _first_present_env_value(
+            active_env,
+            SCOUT_GEE_PROJECT_ID_ENV,
+            LEGACY_SCOUT_GEE_PROJECT_ENV,
+            GOOGLE_CLOUD_PROJECT_ENV,
+        )
         try:
             raw_summary = RestGeeRouteFeatureClient(active_env).fetch_route_feature_package(
-                project_id=project_id,
+                project_id=gee_project_id or project_id,
                 route_polyline=route_polyline,
                 route_buffer=route_buffer,
                 segments=segment_features,
@@ -929,6 +1077,7 @@ def build_scout_gee_feature_package(
         "stale_data_warnings": stale_warnings,
         "confidence_summary": confidence_summary,
         "raw_response_sha256": raw_hash,
+        "raw_failure_summary": _route_feature_raw_failure_summary(raw_summary),
         "blocker_reasons": blockers or list(raw_summary.get("blocker_reasons") or []),
         "counts": {
             "route_point_count": len(route_points),
@@ -2025,6 +2174,51 @@ def _route_feature_job_expression(
     )
 
 
+def _is_route_feature_echo_manifest(payload: Mapping[str, Any]) -> bool:
+    return (
+        payload.get("job_kind") == "scout_gee_route_feature_package"
+        and payload.get("expected_output") == "segment_features"
+        and not isinstance(payload.get("segment_features"), list)
+        and isinstance(payload.get("segments"), list)
+    )
+
+
+def _route_feature_echo_manifest_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "job_kind": payload.get("job_kind"),
+        "job_version": payload.get("job_version"),
+        "expected_output": payload.get("expected_output"),
+        "input_segment_count": len(payload.get("segments") or []),
+        "dataset_count": len((payload.get("dataset_config") or {}).get("datasets") or [])
+        if isinstance(payload.get("dataset_config"), Mapping)
+        else 0,
+    }
+
+
+def _route_feature_raw_failure_summary(raw_summary: Mapping[str, Any]) -> dict[str, Any] | None:
+    status = str(raw_summary.get("status") or "").strip()
+    blockers = raw_summary.get("blocker_reasons")
+    if not status and not blockers:
+        return None
+    summary: dict[str, Any] = {
+        "status": status or None,
+        "blocker_reasons": list(blockers) if isinstance(blockers, list) else [],
+        "http_status": raw_summary.get("http_status"),
+        "external_api_call_performed": bool(
+            raw_summary.get("external_api_call_performed")
+            or raw_summary.get("external_api_calls_made")
+        ),
+        "secret_value_embedded": False,
+    }
+    raw_error = raw_summary.get("raw_error")
+    if isinstance(raw_error, Mapping):
+        summary["raw_error"] = raw_error
+    result_summary = raw_summary.get("result_summary")
+    if isinstance(result_summary, Mapping):
+        summary["result_summary"] = dict(result_summary)
+    return summary
+
+
 def _normalize_route_feature_segments(
     *,
     raw_summary: Mapping[str, Any],
@@ -2666,7 +2860,7 @@ def _smap_l4_mean_expression(
     bbox_wgs84: Mapping[str, float],
     window: GeeFetchWindow,
 ) -> dict[str, Any]:
-    collection = _collection_filtered_by_date("NASA/SMAP/SPL4SMGP/008", window)
+    collection = _collection_filtered_by_date(SMAP_L4_COLLECTION_ID, window)
     image = _fn("reduce.mean", {"collection": collection})
     return _expression_graph(
         _fn(
@@ -2675,7 +2869,7 @@ def _smap_l4_mean_expression(
                 "image": image,
                 "reducer": _fn("Reducer.mean", {}),
                 "geometry": _rectangle_geometry(bbox_wgs84),
-                "scale": _const(9000),
+                "scale": _const(SMAP_L4_SPATIAL_RESOLUTION_M),
                 "bestEffort": _const(True),
                 "maxPixels": _const(100000000),
                 "tileScale": _const(4),
@@ -2766,14 +2960,80 @@ def _raw_request_record(
     dataset_key: str,
     collection_id: str,
     window: GeeFetchWindow,
+    bands: tuple[str, ...] | list[str] | None = None,
+    temporal_resolution: str | None = None,
+    spatial_resolution_m: int | None = None,
 ) -> dict[str, Any]:
-    return {
+    record: dict[str, Any] = {
         "dataset_key": dataset_key,
         "collection_id": collection_id,
         "start": window.start,
         "end": window.end,
         "endpoint": GEE_VALUE_COMPUTE_URL_TEMPLATE,
         "credential_values_embedded": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "human_review_required": True,
+    }
+    if bands is not None:
+        record["bands"] = list(bands)
+    if temporal_resolution is not None:
+        record["temporal_resolution"] = temporal_resolution
+    if spatial_resolution_m is not None:
+        record["spatial_resolution_m"] = spatial_resolution_m
+    return record
+
+
+def _smap_l4_source_metadata() -> dict[str, Any]:
+    return {
+        "provider": GEE_PROVIDER_ID,
+        "collection_id": SMAP_L4_COLLECTION_ID,
+        "official_catalog_url": (
+            "https://developers.google.com/earth-engine/datasets/catalog/"
+            "NASA_SMAP_SPL4SMGP_008"
+        ),
+        "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+        "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+        "bands": list(SMAP_L4_BANDS),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "human_review_required": True,
+        "scout_interpretation": (
+            "Coarse route-level hydrologic background for pretrip review only; "
+            "not a slope-scale safety or passability assertion."
+        ),
+    }
+
+
+def _request_window_for_collection(
+    raw_summary: Mapping[str, Any],
+    collection_id: str,
+) -> dict[str, Any]:
+    requests = raw_summary.get("requests")
+    if isinstance(requests, list):
+        for item in requests:
+            if not isinstance(item, Mapping):
+                continue
+            if item.get("collection_id") == collection_id:
+                return {
+                    "start": item.get("start"),
+                    "end": item.get("end"),
+                    "collection_id": collection_id,
+                }
+    return {"start": None, "end": None, "collection_id": collection_id}
+
+
+def _smap_route_scope(bbox_wgs84: Mapping[str, float]) -> dict[str, Any]:
+    return {
+        "scope_kind": "route_bbox_or_corridor_background",
+        "bbox_wgs84": dict(bbox_wgs84),
+        "aggregation_geometry": "bbox_wgs84",
+        "route_corridor_m": None,
+        "corridor_geometry_available": False,
+        "note": (
+            "SMAP L4 is summarized over the supplied route bbox/corridor proxy; "
+            "it is coarse hydrologic background evidence."
+        ),
     }
 
 
@@ -2788,6 +3048,8 @@ def _blocked_fetch_result(
     external_api_calls_made: bool = False,
 ) -> GeeFetchResult:
     cache_policy = gee_numeric_no_cache_policy()
+    smap_source = _smap_l4_source_metadata()
+    route_scope = _smap_route_scope(bbox_wgs84)
     return GeeFetchResult(
         status=status,
         blocker_reasons=list(blockers),
@@ -2800,20 +3062,48 @@ def _blocked_fetch_result(
             "status": status,
             "blocker_reasons": list(blockers),
             "cache_policy": cache_policy,
+            "external_api_calls_made": external_api_calls_made,
+            "candidate_only": True,
+            "human_review_required": True,
             "secret_value_embedded": False,
             "runtime_safety_truth": False,
             **dict(raw_summary or {}),
         },
         smap_summary={
             "dataset_family": "SMAP",
-            "collection_id": "NASA/SMAP/SPL4SMGP/008",
+            "collection_id": SMAP_L4_COLLECTION_ID,
+            "source_collection_id": SMAP_L4_COLLECTION_ID,
+            "layer_id": "soil-moisture",
             "status": status,
+            "sm_surface": None,
+            "sm_rootzone": None,
+            "sm_profile": None,
             "sm_surface_wetness": None,
             "sm_rootzone_wetness": None,
+            "sm_profile_wetness": None,
+            "surface_temp": None,
+            "sm_rootzone_pctl": None,
+            "sm_profile_pctl": None,
+            "sm_surface_anomaly": None,
             "antecedent_wetness_percentile": None,
             "sample_count": 0,
             "samples": [],
             "cache_policy": cache_policy,
+            "fetch_window": {"start": None, "end": None, "collection_id": SMAP_L4_COLLECTION_ID},
+            "bbox_wgs84": dict(bbox_wgs84),
+            "route_scope": route_scope,
+            "source_metadata": smap_source,
+            "band_names": list(SMAP_L4_BANDS),
+            "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+            "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "human_review_required": True,
+            "external_api_calls_made": external_api_calls_made,
+            "limitation": (
+                "SMAP L4 is coarse route-level hydrologic background; it is not "
+                "a single-slope passability, landslide, or runtime safety conclusion."
+            ),
         },
         gpm_summary={
             "dataset_family": "GPM_IMERG",
@@ -2830,13 +3120,25 @@ def _blocked_fetch_result(
             "artifact_kind": "gee_soil_moisture_timeseries",
             "project_id": project_id,
             "layer_id": "soil-moisture",
+            "collection_id": SMAP_L4_COLLECTION_ID,
+            "source_collection_id": SMAP_L4_COLLECTION_ID,
             "generated_at": prepared_at,
+            "prepared_at": prepared_at,
             "status": status,
             "samples": [],
             "cache_policy": cache_policy,
             "blocker_reasons": list(blockers),
+            "fetch_window": {"start": None, "end": None, "collection_id": SMAP_L4_COLLECTION_ID},
+            "bbox_wgs84": dict(bbox_wgs84),
+            "route_scope": route_scope,
+            "band_names": list(SMAP_L4_BANDS),
+            "temporal_resolution": SMAP_L4_TEMPORAL_RESOLUTION,
+            "spatial_resolution_m": SMAP_L4_SPATIAL_RESOLUTION_M,
+            "source_metadata": smap_source,
+            "external_api_calls_made": external_api_calls_made,
             "candidate_only": True,
             "runtime_safety_truth": False,
+            "human_review_required": True,
         },
         gpm_timeseries={
             "artifact_kind": "gee_antecedent_rain_timeseries",
@@ -2924,6 +3226,17 @@ def _first_present_env_ref(
     for env_name in env_names:
         if str(active_env.get(env_name, "")).strip():
             return f"env:{env_name}"
+    return None
+
+
+def _first_present_env_value(
+    active_env: Mapping[str, str],
+    *env_names: str,
+) -> str | None:
+    for env_name in env_names:
+        value = str(active_env.get(env_name, "")).strip()
+        if value:
+            return value
     return None
 
 

@@ -12,6 +12,20 @@ from pretrip_models import PreTripArtifactKind, PreTripProvenance, PreTripSource
 
 CONVERSION_RULE_VERSION = "overpass-vector-evidence.v1"
 TRAIL_HIGHWAYS = {"path", "footway", "track", "steps", "bridleway", "pedestrian"}
+ROAD_ACCESS_HIGHWAYS = {"service", "tertiary", "unclassified"}
+ROUTE_CORRIDOR_HIGHWAY_VALUES = (
+    "path",
+    "footway",
+    "track",
+    "steps",
+    "bridleway",
+    "pedestrian",
+    "service",
+    "tertiary",
+    "unclassified",
+)
+ROUTE_CORRIDOR_HIGHWAYS = set(ROUTE_CORRIDOR_HIGHWAY_VALUES)
+ROUTE_CORRIDOR_HIGHWAY_PATTERN = f"^({'|'.join(ROUTE_CORRIDOR_HIGHWAY_VALUES)})$"
 
 OverpassOsmType = Literal["node", "way", "relation"]
 OverpassCandidateType = Literal[
@@ -392,7 +406,7 @@ def _classification(osm_type: str, tags: dict[str, Any]) -> dict[str, Any] | Non
     if tags.get("route") == "hiking" or (tags.get("type") == "route" and tags.get("route") == "hiking"):
         return _rule("hiking_route_candidate", "approved_corridor", "medium", "medium")
 
-    if str(tags.get("highway", "")).strip().lower() in TRAIL_HIGHWAYS:
+    if str(tags.get("highway", "")).strip().lower() in ROUTE_CORRIDOR_HIGHWAYS:
         return _rule("trail_corridor_candidate", "approved_corridor", "medium", "medium")
 
     return None

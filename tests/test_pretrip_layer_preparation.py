@@ -211,6 +211,13 @@ def test_layer_preparation_run_writes_planned_overpass_refs_and_allows_live_refr
     assert planned_evidence["boundary"]["runtime_safety_truth"] is False
     assert (project_root / planned_project["overpass_map_context_ref"]).is_file()
     assert (project_root / planned_project["overpass_query_ref"]).is_file()
+    planned_query = (project_root / planned_project["overpass_query_ref"]).read_text(
+        encoding="utf-8"
+    )
+    assert (
+        'way["highway"~"^(path|footway|track|steps|bridleway|pedestrian|service|tertiary|unclassified)$"]'
+        in planned_query
+    )
 
     raw_fixture = ROOT / "tests" / "fixtures" / "maps" / "phase_a_overpass_raw.json"
     fetch_count = 0
@@ -1027,6 +1034,125 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     assert feature_package["segments"][0]["slope_deg"] == 28
     assert feature_package["boundary"]["external_api_calls_made"] is True
     assert feature_package["boundary"]["raspberry_pi_runtime_gee_dependency"] is False
+
+
+def test_layer_preparation_refreshes_gee_derivatives_after_risk_sync(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("numpy")
+    from scout_gee_integration import GeeFetchError
+
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    monkeypatch.setattr(pretrip_layer_preparation, "SCOUT_RISK_OUTPUT_SOURCES", {})
+
+    class FakeGeeFetchResult:
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "status": "fetched",
+                "blocker_reasons": [],
+                "external_api_calls_made": True,
+                "raw_summary": {
+                    "provider": "google_earth_engine",
+                    "responses": {
+                        "smap_l4_surface_rootzone_soil_moisture": {
+                            "http_status": 200,
+                            "result": {"sm_surface": 0.31, "sm_rootzone": 0.38},
+                        },
+                        "gpm_imerg_precipitation": {
+                            "http_status": 200,
+                            "result": {"precipitation": 18.0},
+                        },
+                    },
+                    "secret_value_embedded": False,
+                },
+                "soil_moisture": {
+                    "dataset_family": "SMAP",
+                    "collection_id": "NASA/SMAP/SPL4SMGP/008",
+                    "status": "fetched",
+                    "sm_surface_wetness": 0.31,
+                    "sm_rootzone_wetness": 0.38,
+                    "sample_count": 1,
+                },
+                "antecedent_rain": {
+                    "dataset_family": "GPM_IMERG",
+                    "collection_id": "NASA/GPM_L3/IMERG_V07",
+                    "status": "fetched",
+                    "last_72h_mm": 18.0,
+                    "sample_count": 1,
+                },
+                "smap_timeseries": {
+                    "artifact_kind": "gee_soil_moisture_timeseries",
+                    "samples": [],
+                    "runtime_safety_truth": False,
+                },
+                "gpm_timeseries": {
+                    "artifact_kind": "gee_antecedent_rain_timeseries",
+                    "samples": [],
+                    "runtime_safety_truth": False,
+                },
+            }
+
+    def fake_fetcher(**kwargs):
+        assert kwargs["project_id"] == "test-project"
+        return FakeGeeFetchResult()
+
+    class FailingRouteFeatureClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def fetch_route_feature_package(self, **kwargs):
+            raise GeeFetchError(
+                ["gee_route_feature_http_error:400"],
+                raw_summary={"http_status": 400, "error": {"message": "bad request"}},
+            )
+
+    monkeypatch.setenv("SCOUT_GEE_ENABLED", "true")
+    monkeypatch.setenv("SCOUT_GEE_PROJECT_ID", "test-project")
+    monkeypatch.setenv("EARTHENGINE_TOKEN", "test-token-ref")
+    monkeypatch.setattr(
+        "scout_gee_integration.fetch_gee_environment_evidence",
+        fake_fetcher,
+    )
+    monkeypatch.setattr(
+        "scout_gee_integration.RestGeeRouteFeatureClient",
+        FailingRouteFeatureClient,
+    )
+
+    run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=(
+                "risk-score",
+                "risk-ribbon",
+                "soil-moisture",
+                "antecedent-rain",
+            ),
+            network_mode="explicit-fetch",
+            allow_network_fetch=True,
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+
+    project = _load(project_root / "project.json")
+    feature_package = _load(project_root / project["gee_feature_package_ref"])
+    derivatives = _load(project_root / project["environment_risk_derivatives_ref"])
+    first_segment = feature_package["segments"][0]
+    gap_families = {
+        item["metric_family"] for item in derivatives["source_metric_gaps"]
+    }
+
+    assert project["risk_score_generation_status"] == "completed"
+    assert feature_package["status"] == "fetch_failed"
+    assert feature_package["blocker_reasons"] == ["gee_route_feature_http_error:400"]
+    assert first_segment["slope_deg"] is not None
+    assert first_segment["terrain_ruggedness"] is not None
+    assert first_segment["metric_source_notes"][0]["source_kind"] == (
+        "scout_risk_engine_route_profile"
+    )
+    assert "terrain" not in gap_families
+    assert {"sentinel2", "sentinel1", "dynamic_world", "rainfall"} <= gap_families
 
 
 def test_layer_preparation_ignores_local_imagery_refs_for_wmts_runtime(
@@ -2012,6 +2138,19 @@ def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
     assert route_metadata["route_base"]["sampling_strategy"] == (
         "reference_progress_projected_to_nearest_overpass_segment.v1"
     )
+    assert route_metadata["route_base"]["corridor_m"] == 500.0
+    route_risk_geojson = _load(project_root / project["risk_route_profile_ref"])
+    score_geojson = _load(project_root / project["risk_score_points_ref"])
+    score_metadata = _load(project_root / project["risk_score_points_metadata_ref"])
+    ribbon_metadata = _load(project_root / project["risk_ribbon_metadata_ref"])
+    assert route_risk_geojson["metadata"]["route_base"]["sampling_strategy"] == (
+        "reference_progress_projected_to_nearest_overpass_segment.v1"
+    )
+    assert score_geojson["metadata"]["route_base"]["sampling_strategy"] == (
+        "reference_progress_projected_to_nearest_overpass_segment.v1"
+    )
+    assert score_metadata["route_base"]["corridor_m"] == 500.0
+    assert ribbon_metadata["route_base"]["corridor_m"] == 500.0
 
     layers = {layer["layer_id"]: layer for layer in manifest["layers"]}
     assert layers["risk-score"]["status"] == "ready_from_project_ref"

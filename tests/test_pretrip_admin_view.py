@@ -1651,9 +1651,17 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
             layer_props = {"last_24h_mm": 36.0, "station_name": "CWA sample"}
         elif layer_id == "soil-moisture":
             layer_props = {
+                "collection_id": "NASA/SMAP/SPL4SMGP/008",
+                "source_collection_id": "NASA/SMAP/SPL4SMGP/008",
                 "sm_surface_wetness": 0.37,
                 "sm_rootzone_wetness": 0.44,
+                "band_names": ["sm_surface", "sm_rootzone", "sm_profile"],
+                "spatial_resolution_m": 11000,
+                "temporal_resolution": "3h",
                 "raw_summary_sha256": "a" * 64,
+                "raw_response_hash": f"sha256:{'a' * 64}",
+                "human_review_required": True,
+                "external_api_calls_made": True,
             }
         elif layer_id == "antecedent-rain":
             layer_props = {"last_72h_mm": 22.5, "last_3h_mm": 4.0}
@@ -2071,6 +2079,10 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
     assert soil_item["value_summary"]["sm_surface_wetness"] == 0.37
     assert soil_item["cache_policy"]["cacheable"] is False
     assert soil_item["runtime_safety_truth"] is False
+    soil_point = view["soil_moisture"]["points"][0]
+    assert soil_point["source_collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    assert soil_point["spatial_resolution_m"] == 11000
+    assert soil_point["human_review_required"] is True
     package_item = next(
         item
         for item in view["environment_values"]["items"]
@@ -2139,6 +2151,18 @@ def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp
     )
     assert derivatives_item["value_summary"]["cwa_valid_until_hour"] == (
         "2026-06-26T09:00:00Z"
+    )
+    landslide_collection = derivative_layers["new_landslide_candidates"]
+    assert landslide_collection["empty_state"]["status"] == "ready_with_data_gaps"
+    assert landslide_collection["empty_state"]["missing_metric_families"] == [
+        "sentinel1"
+    ]
+    assert landslide_collection["empty_state"]["note"] == (
+        "ready_with_data_gaps | data gaps: sentinel1"
+    )
+    assert (
+        derivative_layers["wetness_flash_flood_susceptibility"]["empty_state"]
+        is None
     )
     assert debug["environment_values"]["counts"]["item_count"] == 6
     assert debug["environment_risk_derivative_layers"]["counts"][

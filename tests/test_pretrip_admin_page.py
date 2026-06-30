@@ -769,6 +769,15 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function renderOsmBasemap" in html
     assert "function localOsmPbfVectorUrl" in html
     assert "/osm-pbf-vector.geojson" in html
+    assert "/admin/pretrip/osm-carto-palette" in html
+    assert "function applyOsmCartoPalette" in html
+    assert "function loadOsmCartoPalette" in html
+    assert "--osm-carto-track-fill: #996600;" in html
+    assert "var(--osm-carto-track-fill)" in html
+    assert ".osm-pbf-line-core.primary" in html
+    assert "var(--osm-carto-primary-fill)" in html
+    assert "function osmPbfZoomMin" in html
+    assert "data-osm-pbf-zoom-min" in html
     assert "function renderOsmPbfVector" in html
     assert "function osmPbfFeatureTags" in html
     assert "props.tags && typeof props.tags === \"object\"" in html
@@ -780,6 +789,14 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "osm-pbf-line-label" in html
     assert '"data-osm-pbf-line-label": "true"' in html
     assert "class: `osm-pbf-area ${category}`" in html
+    assert "function osmPbfDrawOrder" in html
+    assert '"data-osm-pbf-kind": "line-casings"' in html
+    assert '"data-osm-pbf-kind": "line-fills"' in html
+    assert "lineCasingGroup" in html
+    assert "lineCoreGroup" in html
+    assert ".osm-pbf-area.building" in html
+    assert "var(--osm-carto-water-fill)" in html
+    assert 'return isArea ? "water"' in html
     assert ".osm-pbf-point { fill: #5a5f63;" in html
     assert ".osm-pbf-point.shelter" in html
     assert '"data-osm-pbf-label": "true"' in html
@@ -905,7 +922,9 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function environmentValueTreeSummary" in html
     assert "function environmentRiskMetricGapText" in html
     assert "function environmentRiskEmptyNote" in html
+    assert "tree-summary-note" in html
     assert "options.emptyNote" in html
+    assert "options.headerNote" in html
     assert 'type.includes("environment_risk_derivative")' in html
     assert "new_landslide_candidate_count" in html
     assert "data gaps:" in html

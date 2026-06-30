@@ -38,7 +38,10 @@ from pretrip_osm_pbf_ingest import (
     import_osm_pbf_evidence_candidates,
     osm_json_to_geojson_feature_collection,
 )
-from pretrip_overpass_ingest import import_overpass_evidence_candidates
+from pretrip_overpass_ingest import (
+    ROUTE_CORRIDOR_HIGHWAY_PATTERN,
+    import_overpass_evidence_candidates,
+)
 from pretrip_source_ingest import wgs84_to_twd97
 
 
@@ -405,7 +408,6 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     _maybe_prepare_local_osm_pbf_evidence(request)
     _maybe_fetch_overpass_evidence(request)
     _maybe_seed_imagery_tile_cache(request)
-    _maybe_prepare_environment_evidence(request)
     manifest, project_root, project = _build_layer_preparation_manifest(
         request,
         workspace_file_mutation_allowed=True,
@@ -2150,6 +2152,14 @@ def _build_layer_preparation_manifest(
         )
     if workspace_file_mutation_allowed and "overpass" in normalized_layers:
         _stamp_overpass_evidence_provenance(project_root=project_root, project=project)
+    environment_layers_requested = bool(
+        {"cwa-weather", "cwa-qpf", "soil-moisture", "antecedent-rain"}
+        & set(normalized_layers)
+    )
+    if workspace_file_mutation_allowed and environment_layers_requested:
+        _write_json(project_root / "project.json", project)
+        _maybe_prepare_environment_evidence(request)
+        project = _load_json(project_root / "project.json")
     source_refs = _project_source_refs(project_root, project)
     gpx_filter = _gpx_filter_context(project_root, project)
     route_corridor = _route_corridor_record(
@@ -5266,7 +5276,7 @@ def _generate_scout_risk_outputs_from_workspace(
             route_id=f"{project.get('project_id', 'route')}.overpass_risk_ribbon",
             corridor_m=route_corridor_m,
         )
-        write_route_geojson(profile, route_risk_path)
+        write_route_geojson(profile, route_risk_path, metadata=route_metadata)
         write_route_csv(profile, route_csv_path)
         route_metadata_path.parent.mkdir(parents=True, exist_ok=True)
         route_metadata_path.write_text(
@@ -7877,7 +7887,7 @@ def _build_overpass_query_body(bbox: dict[str, float]) -> str:
         [
             "[out:json][timeout:40];",
             "(",
-            f'  way["highway"~"^(path|footway|track|steps|bridleway|pedestrian)$"]{bbox_expr};',
+            f'  way["highway"~"{ROUTE_CORRIDOR_HIGHWAY_PATTERN}"]{bbox_expr};',
             f'  relation["type"="route"]["route"="hiking"]{bbox_expr};',
             f'  relation["route"="hiking"]{bbox_expr};',
             f'  node["tourism"~"^(wilderness_hut|alpine_hut)$"]{bbox_expr};',

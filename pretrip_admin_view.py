@@ -9934,6 +9934,21 @@ def _environment_risk_candidate_collection_summary(
             if gap.get("metric_family") and float(gap.get("missing_ratio") or 0.0) > 0.0
         ],
     }
+    empty_state = None
+    if candidate_count == 0:
+        missing_families = data_quality["missing_metric_families"]
+        status = source_status or (
+            "ready_empty" if isinstance(payload, dict) else "missing_or_empty_source"
+        )
+        note_parts = [status]
+        if missing_families:
+            note_parts.append("data gaps: " + ", ".join(missing_families[:5]))
+        empty_state = {
+            "status": status,
+            "note": " | ".join(part for part in note_parts if part),
+            "missing_metric_families": missing_families,
+            "source_metric_gaps": metric_gaps,
+        }
     return {
         "source_id": f"{project_id}.{key}",
         "source_path": source_path,
@@ -9969,6 +9984,7 @@ def _environment_risk_candidate_collection_summary(
         "source_status": source_status or "unknown",
         "source_metric_gaps": metric_gaps,
         "data_quality": data_quality,
+        "empty_state": empty_state,
         "bbox_wgs84": _environment_bbox(payload or {}, {}),
         **_cwa_time_projection_fields(resolved_cwa_time_metadata),
         "candidates": candidates,
