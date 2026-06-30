@@ -147,6 +147,23 @@ def test_model_policy_uses_env_model_when_explicit_model_is_absent() -> None:
     assert policy.missing_credential_env == []
 
 
+def test_model_policy_keeps_openai_chat_contract_on_pydantic_ai_v2() -> None:
+    policy = resolve_model_policy("openai:gpt-4o-mini", env={})
+
+    assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+    assert policy.model_for_agent == "openai-chat:gpt-4o-mini"
+    assert policy.required_credential_env == ["OPENAI_API_KEY"]
+    assert policy.missing_credential_env == ["OPENAI_API_KEY"]
+
+    with_key = resolve_model_policy(
+        "openai-chat:gpt-4o-mini",
+        env={"OPENAI_API_KEY": "sk-test-secret"},
+    )
+    assert with_key.model_for_agent == "openai-chat:gpt-4o-mini"
+    assert with_key.missing_credential_env == []
+    assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
+
+
 def test_model_policy_reports_rollout_timeout_budget_and_fallback() -> None:
     policy = resolve_model_policy(
         "openrouter:openai/gpt-4o-mini",

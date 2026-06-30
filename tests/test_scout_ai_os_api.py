@@ -375,7 +375,7 @@ def test_pydantic_smoke_blocks_external_model_when_key_is_missing(
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("SCOUT_AI_OS_MODEL", raising=False)
     env_file = tmp_path / ".env"
-    env_file.write_text("SCOUT_AI_OS_MODEL=openrouter:openai/gpt-4o-mini\n")
+    env_file.write_text("SCOUT_AI_OS_MODEL=openrouter:z-ai/glm-5.2\n")
 
     result = run_smoke(
         user_text="Remind me in 10 minutes.",
@@ -387,7 +387,7 @@ def test_pydantic_smoke_blocks_external_model_when_key_is_missing(
 
     assert result["request_status"] == "model_config_blocked"
     assert result["workflow_count"] == 0
-    assert result["model"] == "openrouter:openai/gpt-4o-mini"
+    assert result["model"] == "openrouter:z-ai/glm-5.2"
     assert result["model_policy"]["source"] == "env"
     assert result["model_policy"]["missing_credential_env"] == [
         "OPENROUTER_API_KEY"

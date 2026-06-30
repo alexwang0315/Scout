@@ -62,6 +62,8 @@ The Mac-side Pydantic AI smoke path uses a typed model policy: explicit
 credentials for external providers return `model_config_blocked` with only
 environment variable names, not secret values. The same redacted policy reports
 configured timeout, max-cost, and fallback model settings.
+The current Scout external-model default is `openrouter:z-ai/glm-5.2` when
+`SCOUT_AI_OS_MODEL` is set in the repo-local `.env`.
 
 The `scout-ai-os-evals` CLI loads `src/scout/evals/workflow_router_cases.json`
 as a `pydantic_evals.Dataset` and runs deterministic API regression cases for

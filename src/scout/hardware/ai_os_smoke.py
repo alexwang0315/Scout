@@ -198,7 +198,7 @@ def build_hardware_smoke_profile(
         "phases": list(HARDWARE_SMOKE_PHASES),
         "default_commands": [
             "./venv/bin/scout-ai-os-hardware-smoke --repo-root /Users/alexwang0315/scout-fusion",
-            "./venv/bin/scout-ai-os-hardware-smoke --repo-root /Users/alexwang0315/scout-fusion --allow-external-model --model gpt-4o-mini",
+            "./venv/bin/scout-ai-os-hardware-smoke --repo-root /Users/alexwang0315/scout-fusion --allow-external-model --model glm-5.2",
             "npm run scout-ui:operation-smoke",
         ],
     }
