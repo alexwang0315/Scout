@@ -33,6 +33,10 @@
     return value === null || value === undefined || value === "" ? "--" : String(value);
   }
 
+  function displayUrl(value) {
+    return text(value).replace(/^https?:\/\//, "");
+  }
+
   function setBusy(value) {
     state.busy = value;
     els.sendButton.disabled = value;
@@ -57,16 +61,18 @@
 
   function renderBoundary(boundary) {
     if (!boundary) return;
-    const rows = Object.entries(boundary).map(([key, value]) => (
-      `<li>${escapeHtml(key)}: ${escapeHtml(value)}</li>`
-    ));
+    const rows = [
+      ["Safety", boundary.model_output_is_runtime_truth === false ? "no runtime mutation" : "operator checked"],
+      ["Transport", boundary.safety_api_called_by_mac_ui === false ? "no outbound send" : "approval required"],
+      ["Hardware", boundary.mac_ui_local_only === true ? "local UI only" : "no direct control"],
+    ].map(([key, value]) => `<li><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</li>`);
     els.boundaryList.innerHTML = rows.join("");
   }
 
   async function loadConfig() {
     state.config = await fetchJson("/api/config");
     state.surface = state.config.default_surface || "pretrip";
-    els.serverUrl.textContent = state.config.target_url;
+    els.serverUrl.textContent = displayUrl(state.config.target_url);
     updateFallbackIndicator(state.config);
     renderBoundary(state.config.boundary);
     updateSegments();
@@ -76,13 +82,13 @@
     setBusy(true);
     try {
       const payload = await fetchJson("/api/server");
-      els.serverUrl.textContent = payload.target_url;
+      els.serverUrl.textContent = displayUrl(payload.target_url);
       els.serverLatency.textContent = payload.latency_ms === null ? "--" : `${payload.latency_ms} ms`;
       els.capabilityCount.textContent = payload.connected ? payload.capability_count : "--";
       els.uiBridgeState.textContent = payload.ui_action_capability_present
         ? "present"
         : (payload.local_fallback_enabled && payload.local_fallback_available ? "fallback" : "missing");
-      els.serverState.textContent = payload.connected ? "server online" : "server offline";
+      els.serverState.textContent = payload.connected ? "online" : "offline";
       els.serverState.className = `state-pill ${payload.connected ? "ok" : "bad"}`;
       updateFallbackIndicator(payload);
       els.chatStatus.textContent = payload.connected
@@ -94,7 +100,7 @@
           );
       if (payload.boundary) renderBoundary(payload.boundary);
     } catch (error) {
-      els.serverState.textContent = "server offline";
+      els.serverState.textContent = "offline";
       els.serverState.className = "state-pill bad";
       updateFallbackIndicator(state.config || {});
       els.chatStatus.textContent = error.message;
@@ -114,20 +120,20 @@
       : null;
 
     if (!enabled) {
-      els.fallbackState.textContent = "fallback off";
+      els.fallbackState.textContent = "off";
       els.fallbackState.className = "state-pill";
       els.fallbackMode.textContent = "disabled";
       return;
     }
 
     if (!available) {
-      els.fallbackState.textContent = "fallback error";
+      els.fallbackState.textContent = "error";
       els.fallbackState.className = "state-pill bad";
       els.fallbackMode.textContent = "enabled / unavailable";
       return;
     }
 
-    els.fallbackState.textContent = used ? "fallback used" : "fallback on";
+    els.fallbackState.textContent = used ? "used" : "fallback";
     els.fallbackState.className = `state-pill ${used ? "warn" : "ok"}`;
     els.fallbackMode.textContent = model ? `enabled / ${model}` : "enabled / ready";
   }

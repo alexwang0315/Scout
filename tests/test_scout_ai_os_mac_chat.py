@@ -71,14 +71,25 @@ def test_mac_chat_serves_static_interface() -> None:
     assert "server-panel" in index.text
     assert "fallbackState" in index.text
     assert "Local fallback" in index.text
+    assert "/static/styles.css?v=compact-20260701" in index.text
+    assert "/static/app.js?v=compact-20260701" in index.text
     assert script.status_code == 200
     assert "/api/chat" in script.text
     assert "updateFallbackIndicator" in script.text
-    assert "fallback used" in script.text
+    assert "no runtime mutation" in script.text
+    assert "no outbound send" in script.text
+    assert "local UI only" in script.text
     assert styles.status_code == 200
     assert ".assistant" in styles.text or ".message.assistant" in styles.text
     assert ".status-lamps" in styles.text
     assert ".state-pill.warn" in styles.text
+    assert "height: 100vh;" in styles.text
+    assert "overflow: hidden;" in styles.text
+    assert "grid-template-rows: auto minmax(0, 1fr) auto;" in styles.text
+    assert "overflow-y: auto;" in styles.text
+    assert "max-height: 82px;" in styles.text
+    assert "resize: none;" in styles.text
+    assert "word-break: break-word;" in styles.text
 
 
 def test_mac_chat_reports_hardware_server_capabilities() -> None:

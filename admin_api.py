@@ -158,6 +158,7 @@ from scout_wearable_validator import validate_wearable_activity_summary_contract
 DEFAULT_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
 DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 DEFAULT_DEBUG_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
+DEFAULT_SCOUT_DASHBOARD_PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
 DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
 DEFAULT_OSM_CARTO_PALETTE = ROOT / "config" / "osm_carto_palette.yaml"
@@ -745,6 +746,16 @@ def create_admin_router(
             raise HTTPException(status_code=404, detail="Debug admin page not found")
         return Response(
             DEFAULT_DEBUG_ADMIN_PAGE.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/dashboard", response_class=HTMLResponse)
+    def scout_dashboard_page() -> Response:
+        if not DEFAULT_SCOUT_DASHBOARD_PAGE.exists():
+            raise HTTPException(status_code=404, detail="Scout dashboard page not found")
+        return Response(
+            DEFAULT_SCOUT_DASHBOARD_PAGE.read_text(encoding="utf-8"),
             media_type="text/html",
             headers={"Cache-Control": "no-store"},
         )

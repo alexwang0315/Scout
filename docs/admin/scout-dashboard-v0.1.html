@@ -1,0 +1,3146 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Scout Dashboard v0.1 alpha admin shell">
+  <title>Scout Dashboard v0.1</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #11161a;
+      --surface: #161d22;
+      --surface-2: #1d252b;
+      --surface-3: #253039;
+      --line: #33404a;
+      --line-strong: #4a5b67;
+      --text: #edf3f5;
+      --muted: #a8b5bd;
+      --subtle: #75858f;
+      --accent: #62b5c4;
+      --accent-2: #bba15e;
+      --ok: #78bf75;
+      --warn: #d5a642;
+      --bad: #d06363;
+      --candidate: #8fb7d7;
+      --reviewed: #7fc18b;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.45;
+      letter-spacing: 0;
+    }
+
+    body { overflow: hidden; }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:focus-visible {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .dashboard-shell {
+      height: 100vh;
+      max-width: 100vw;
+      display: grid;
+      grid-template-columns: 272px minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .dashboard-sidebar {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      border-right: 1px solid var(--line);
+      background: #101519;
+    }
+
+    .brand {
+      padding: 18px 16px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.2;
+    }
+
+    .brand .route {
+      margin-top: 6px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .nav {
+      overflow: auto;
+      padding: 10px 10px 16px;
+      overscroll-behavior: contain;
+    }
+
+    .nav-section {
+      margin: 4px 0 8px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+    }
+
+    .nav-section summary {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      color: var(--muted);
+      cursor: pointer;
+      list-style: none;
+      font-weight: 750;
+    }
+
+    .nav-section summary::-webkit-details-marker { display: none; }
+
+    .nav-section[open] {
+      border-color: rgba(98, 181, 196, .18);
+      background: rgba(98, 181, 196, .04);
+    }
+
+    .nav-section[open] summary {
+      color: var(--text);
+    }
+
+    .nav-subtree {
+      display: grid;
+      gap: 3px;
+      padding: 0 6px 8px 18px;
+    }
+
+    .nav-item {
+      width: 100%;
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 9px;
+      padding: 7px 9px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .nav-item .mark,
+    .nav-section summary .mark {
+      width: 8px;
+      height: 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 2px;
+      flex: 0 0 auto;
+    }
+
+    .nav-item span:last-child,
+    .nav-section summary span:last-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nav-item.is-active {
+      border-color: rgba(98, 181, 196, .42);
+      background: rgba(98, 181, 196, .13);
+      color: var(--text);
+    }
+
+    .nav-item.is-active .mark {
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .sidebar-footer {
+      padding: 12px 14px 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .sidebar-footer strong {
+      display: block;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .dashboard-frame {
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .topbar h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .topbar .subline {
+      margin-top: 5px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .status-strip {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 7px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      max-width: 260px;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .025);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .chip.ok { color: #d7f1dc; border-color: rgba(120, 191, 117, .45); background: rgba(120, 191, 117, .1); }
+    .chip.warn { color: #f2dfae; border-color: rgba(213, 166, 66, .5); background: rgba(213, 166, 66, .12); }
+    .chip.bad { color: #ffd7d7; border-color: rgba(208, 99, 99, .5); background: rgba(208, 99, 99, .12); }
+    .chip.info { color: #d5edf2; border-color: rgba(98, 181, 196, .48); background: rgba(98, 181, 196, .12); }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .content-grid {
+      height: 100%;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+      overflow: hidden;
+    }
+
+    .content-grid.is-frame-full {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .content-grid.is-frame-wide {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .content-grid.is-frame-wide .evidence-drawer {
+      display: none;
+    }
+
+    .content-grid.is-frame-full .workspace {
+      height: 100%;
+      min-height: 0;
+      padding: 0;
+    }
+
+    .content-grid.is-frame-full .evidence-drawer {
+      display: none;
+    }
+
+    .content-grid.is-frame-full .surface-frame-panel {
+      min-height: calc(100vh - 73px);
+      border: 0;
+      border-radius: 0;
+    }
+
+    .content-grid.is-frame-full .surface-frame {
+      min-height: calc(100vh - 147px);
+    }
+
+    .content-grid.is-frame-full .pretrip-map-only-shell,
+    .content-grid.is-frame-full .pretrip-map-only-frame {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border: 0;
+      background: #f6f8fb;
+    }
+
+    .pretrip-map-only-shell {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pretrip-map-only-shell[hidden] {
+      display: none !important;
+    }
+
+    .pretrip-map-only-frame {
+      display: block;
+    }
+
+    .map-evidence-rail {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      bottom: 14px;
+      z-index: 88;
+      width: min(390px, calc(100vw - 76px));
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid rgba(147, 181, 191, .35);
+      border-radius: 8px;
+      background: rgba(9, 18, 22, .92);
+      color: var(--text);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, .32);
+      backdrop-filter: blur(10px);
+    }
+
+    .map-evidence-rail.is-collapsed {
+      bottom: auto;
+      width: min(304px, calc(100vw - 76px));
+      grid-template-rows: auto;
+    }
+
+    .map-evidence-header {
+      display: grid;
+      gap: 7px;
+      padding: 10px;
+      border-bottom: 1px solid rgba(147, 181, 191, .25);
+    }
+
+    .map-evidence-rail.is-collapsed .map-evidence-header {
+      border-bottom: 0;
+    }
+
+    .map-evidence-title-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto 30px;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .map-evidence-header h3 {
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .map-evidence-header p {
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .map-evidence-toggle {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      min-width: 30px;
+      min-height: 30px;
+      padding: 0;
+      border-color: rgba(147, 181, 191, .46);
+      background: rgba(18, 29, 34, .9);
+      color: var(--text);
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .map-evidence-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 10px;
+      scrollbar-gutter: stable;
+    }
+
+    .agent-app-shell {
+      height: 100%;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      background: var(--panel);
+    }
+
+    .agent-app-shell[hidden] {
+      display: none !important;
+    }
+
+    .agent-app-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .agent-app-header p {
+      margin-top: 2px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .agent-app-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .agent-app-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border: 0;
+      background: var(--bg);
+    }
+
+    .workspace {
+      min-width: 0;
+      overflow: auto;
+      padding: 16px;
+      overscroll-behavior: contain;
+    }
+
+    .workspace:focus {
+      outline: none;
+    }
+
+    .evidence-drawer {
+      min-width: 0;
+      overflow: auto;
+      border-left: 1px solid var(--line);
+      background: #12181d;
+      overscroll-behavior: contain;
+    }
+
+    .drawer-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h3,
+    h4,
+    p {
+      margin: 0;
+    }
+
+    h3 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--muted);
+    }
+
+    h4 {
+      font-size: 15px;
+      color: var(--text);
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 13px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .panel-body {
+      padding: 12px 13px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .decision-band {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.1fr) repeat(3, minmax(140px, .8fr));
+      gap: 1px;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--line);
+    }
+
+    .decision-cell {
+      min-width: 0;
+      padding: 12px;
+      background: var(--surface);
+    }
+
+    .decision-cell span {
+      display: block;
+      color: var(--subtle);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .decision-cell strong {
+      display: block;
+      margin-top: 3px;
+      font-size: 16px;
+      overflow-wrap: anywhere;
+    }
+
+    .decision-cell.primary {
+      border-left: 3px solid var(--warn);
+    }
+
+    .force-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .force-row {
+      display: grid;
+      grid-template-columns: minmax(190px, .8fr) minmax(250px, 1fr) minmax(240px, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .force-row button {
+      padding: 0 10px;
+      white-space: nowrap;
+    }
+
+    .label-stack {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .label-stack strong,
+    .label-stack span {
+      overflow-wrap: anywhere;
+    }
+
+    .label-stack span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric-line {
+      display: grid;
+      gap: 7px;
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: minmax(90px, .55fr) minmax(0, 1fr);
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, .06);
+    }
+
+    .metric-row:last-child { border-bottom: 0; }
+
+    .metric-row span:first-child {
+      color: var(--subtle);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .metric-row span:last-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .map-panel {
+      min-height: 420px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .surface-frame-panel {
+      min-height: calc(100vh - 150px);
+      display: grid;
+      grid-template-rows: auto minmax(560px, 1fr);
+    }
+
+    .surface-frame-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 13px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .surface-frame-header p {
+      margin-top: 4px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .surface-frame-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .surface-frame {
+      width: 100%;
+      height: 100%;
+      min-height: 560px;
+      border: 0;
+      background: var(--bg);
+    }
+
+    .map-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .layer-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 26px;
+      padding: 3px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .layer-control input {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .scout-map {
+      position: relative;
+      min-height: 420px;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255,255,255,.04) 1px, transparent 1px),
+        #111b20;
+      background-size: 54px 54px;
+    }
+
+    .scout-map svg {
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+      display: block;
+    }
+
+    .map-layer {
+      transition: opacity .16s ease;
+    }
+
+    [data-layer-hidden="true"] {
+      display: none;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 12px;
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+
+    .timeline-item time {
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .timeline-item strong {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .timeline-item span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .evidence-tabs {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 10px;
+      scrollbar-gutter: stable;
+    }
+
+    .evidence-tab {
+      flex: 0 0 132px;
+      min-width: 132px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--category-color, var(--accent));
+      border-radius: 7px;
+      padding: 6px 8px;
+      background: rgba(255, 255, 255, .025);
+      color: var(--muted);
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .evidence-tab strong,
+    .evidence-tab small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .evidence-tab strong {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .evidence-tab small {
+      margin-top: 2px;
+      font-size: 11px;
+    }
+
+    .evidence-tab.is-active {
+      border-color: rgba(98, 181, 196, .7);
+      background: rgba(98, 181, 196, .12);
+    }
+
+    .pretrip-evidence-groups {
+      display: grid;
+      gap: 9px;
+    }
+
+    .pretrip-evidence-group {
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--category-color, var(--accent));
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .025);
+      overflow: hidden;
+    }
+
+    .pretrip-evidence-group summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 38px;
+      padding: 8px 10px;
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 800;
+    }
+
+    .pretrip-evidence-group summary span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .pretrip-evidence-items {
+      display: grid;
+      gap: 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .pretrip-evidence-item {
+      display: grid;
+      grid-template-columns: minmax(180px, .85fr) minmax(0, 1.15fr);
+      gap: 12px;
+      width: 100%;
+      border: 0;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      color: var(--text);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .pretrip-evidence-item:hover,
+    .pretrip-evidence-item.is-selected {
+      background: rgba(98, 181, 196, .12);
+    }
+
+    .pretrip-evidence-item.is-selected {
+      outline: 1px solid rgba(98, 181, 196, .55);
+      outline-offset: -1px;
+    }
+
+    .pretrip-evidence-item:last-child {
+      border-bottom: 0;
+    }
+
+    .pretrip-evidence-item strong {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .pretrip-evidence-item span {
+      min-width: 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .evidence-empty {
+      padding: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+
+    .action-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .action-chip {
+      padding: 0 10px;
+      border-color: rgba(98, 181, 196, .24);
+      color: var(--muted);
+    }
+
+    .action-chip.is-selected {
+      border-color: var(--accent);
+      color: var(--text);
+      background: rgba(98, 181, 196, .14);
+    }
+
+    .budget-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .budget-row {
+      display: grid;
+      gap: 5px;
+    }
+
+    .budget-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .bar {
+      height: 9px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 99px;
+      background: rgba(255,255,255,.04);
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--warn));
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .table th,
+    .table td {
+      padding: 8px 7px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .table th {
+      color: var(--subtle);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .table td {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .mono {
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .drawer-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .drawer-list .item {
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255,255,255,.025);
+    }
+
+    .drawer-list .item strong {
+      display: block;
+      margin-bottom: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    .drawer-list .item span {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .route-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: 0 0 12px;
+    }
+
+    .route-tabs button {
+      padding: 0 10px;
+    }
+
+    .route-tabs button.is-active {
+      border-color: var(--accent);
+      background: rgba(98, 181, 196, .14);
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    a {
+      color: #9fd3dc;
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus-visible {
+      text-decoration: underline;
+      outline: none;
+    }
+
+    @media (max-width: 1120px) {
+      body { overflow: auto; }
+      .dashboard-shell {
+        height: auto;
+        min-height: 100vh;
+        grid-template-columns: 1fr;
+      }
+      .dashboard-sidebar {
+        grid-template-rows: auto auto auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .nav {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 4px;
+        overflow: visible;
+        padding: 10px;
+      }
+      .nav-section {
+        width: 100%;
+      }
+      .dashboard-frame {
+        min-height: 0;
+      }
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+      .status-strip {
+        justify-content: flex-start;
+      }
+      .content-grid {
+        grid-template-columns: 1fr;
+        overflow: visible;
+      }
+      .workspace,
+      .evidence-drawer {
+        overflow: visible;
+      }
+      .evidence-drawer {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+      .decision-band,
+      .grid-2,
+      .grid-3,
+      .settings-grid {
+        grid-template-columns: 1fr;
+      }
+      .force-row {
+        grid-template-columns: 1fr;
+      }
+      .surface-frame-header {
+        grid-template-columns: 1fr;
+      }
+      .surface-frame-actions {
+        justify-content: flex-start;
+      }
+      .agent-app-header {
+        grid-template-columns: 1fr;
+      }
+      .agent-app-actions {
+        justify-content: flex-start;
+      }
+
+      body.is-frame-full {
+        overflow: hidden;
+      }
+
+      .dashboard-shell.is-frame-full {
+        height: 100vh;
+        min-height: 0;
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1fr);
+      }
+
+      .dashboard-shell.is-frame-full .dashboard-sidebar {
+        display: none;
+      }
+
+      .dashboard-shell.is-frame-full .dashboard-frame {
+        height: 100%;
+        min-height: 0;
+      }
+
+      .dashboard-shell.is-frame-full .content-grid {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      .dashboard-shell.is-frame-full .workspace {
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+        padding: 0;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .workspace {
+        padding: 10px;
+      }
+      .brand,
+      .topbar {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+      .timeline-item {
+        grid-template-columns: 1fr;
+      }
+      .pretrip-evidence-item {
+        grid-template-columns: 1fr;
+        gap: 3px;
+      }
+      .map-evidence-rail {
+        top: auto;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        width: auto;
+        max-height: min(54vh, 430px);
+      }
+      .map-evidence-rail.is-collapsed {
+        left: auto;
+        width: min(304px, calc(100vw - 20px));
+        max-height: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-shell" id="dashboardShell">
+    <aside class="dashboard-sidebar">
+      <header class="brand">
+        <h1>Scout Dashboard v0.1</h1>
+        <div class="route" id="dashboardRouteStatus">chilai_nanhua_day1_scoutAI</div>
+      </header>
+      <nav class="nav" aria-label="Scout dashboard navigation">
+        <button class="nav-item" type="button" data-route="home"><span class="mark"></span><span>Home</span></button>
+        <details class="nav-section" open>
+          <summary><span class="mark"></span><span>Features</span></summary>
+          <div class="nav-subtree">
+            <button class="nav-item" type="button" data-route="features-lbs"><span class="mark"></span><span>LBS</span></button>
+            <button class="nav-item" type="button" data-route="features-workspace"><span class="mark"></span><span>Workspace</span></button>
+          </div>
+        </details>
+        <details class="nav-section" open>
+          <summary><span class="mark"></span><span>Admin Surfaces</span></summary>
+          <div class="nav-subtree">
+            <button class="nav-item" type="button" data-route="surface-pretrip"><span class="mark"></span><span>Pre-trip</span></button>
+            <button class="nav-item" type="button" data-route="surface-admin"><span class="mark"></span><span>Admin</span></button>
+            <button class="nav-item" type="button" data-route="surface-debug"><span class="mark"></span><span>Debug</span></button>
+          </div>
+        </details>
+        <button class="nav-item" type="button" data-route="agent"><span class="mark"></span><span>Agent</span></button>
+        <button class="nav-item" type="button" data-route="map"><span class="mark"></span><span>Map</span></button>
+        <button class="nav-item" type="button" data-route="timeline"><span class="mark"></span><span>Timeline Evidence</span></button>
+        <button class="nav-item" type="button" data-route="emergency"><span class="mark"></span><span>Safety / Emergency</span></button>
+        <details class="nav-section" open>
+          <summary><span class="mark"></span><span>戶外六力</span></summary>
+          <div class="nav-subtree">
+            <button class="nav-item" type="button" data-route="outdoor-route-context"><span class="mark"></span><span>探索力 Route Context</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-pace-fit"><span class="mark"></span><span>自信力 Pace Fit</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-permission"><span class="mark"></span><span>勇氣力 Permission</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-architecture"><span class="mark"></span><span>路線力 Architecture</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-weather"><span class="mark"></span><span>天氣力 Weather</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-navigation"><span class="mark"></span><span>地圖力 Navigation</span></button>
+          </div>
+        </details>
+        <button class="nav-item" type="button" data-route="debug"><span class="mark"></span><span>Debug Message</span></button>
+        <button class="nav-item" type="button" data-route="observer"><span class="mark"></span><span>MQTT / Observer Message</span></button>
+        <button class="nav-item" type="button" data-route="settings"><span class="mark"></span><span>Settings / Configure</span></button>
+      </nav>
+      <footer class="sidebar-footer">
+        <span>Admin server</span>
+        <strong>http://127.0.0.1:9099</strong>
+      </footer>
+    </aside>
+
+    <main class="dashboard-frame">
+      <header class="topbar">
+        <div>
+          <h2 id="pageTitle">Home</h2>
+          <div class="subline" id="pageSubtitle">read-only dashboard shell aligned to chilai_nanhua_day1_scoutAI</div>
+        </div>
+        <div class="status-strip" aria-label="Dashboard boundary status">
+          <span class="chip ok" id="readinessChip">ready</span>
+          <span class="chip info">workable alpha</span>
+          <span class="chip warn">artifact boundary</span>
+          <span class="chip bad">no live safety automation</span>
+        </div>
+      </header>
+
+      <div class="content-grid">
+        <section class="workspace" id="workspace" tabindex="-1" aria-live="polite"></section>
+        <section class="pretrip-map-only-shell" id="dashboardMap" data-map-source="/admin/pretrip" data-map-mode="pretrip-map-only" hidden aria-hidden="true" tabindex="-1">
+          <span class="sr-only" id="dashboardMapStatus" data-map-connected="true">pre-trip map only</span>
+          <iframe class="pretrip-map-only-frame" id="pretripMapFrame" title="Pre-trip map" loading="eager"></iframe>
+          <aside class="map-evidence-rail" id="dashboardMapEvidence" aria-label="Map evidence and timeline context"></aside>
+        </section>
+        <section class="agent-app-shell" id="dashboardAgent" data-agent-source="http://127.0.0.1:8765/?embed=dashboard&ui=compact-20260701" hidden aria-hidden="true" tabindex="-1">
+          <div class="agent-app-header">
+            <div>
+              <h3>Scout AI Agent</h3>
+              <p>Local chat from 127.0.0.1:8765. The frame stays mounted across tabs.</p>
+            </div>
+            <div class="agent-app-actions">
+              <a class="chip info" href="http://127.0.0.1:8765/" target="_blank" rel="noreferrer">Open</a>
+              <span class="chip warn">No live safety</span>
+              <span class="chip ok">Local frame</span>
+            </div>
+          </div>
+          <iframe class="agent-app-frame" id="agentAppFrame" title="Scout AI Mac Chat" loading="eager" referrerpolicy="no-referrer"></iframe>
+        </section>
+        <aside class="evidence-drawer" id="dashboardEvidence" aria-label="Evidence and boundary drawer"></aside>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    "use strict";
+
+    const PROJECT_ID = "chilai_nanhua_day1_scoutAI";
+    const PRETRIP_DATA_PROJECT_ID = "chilai_nanhua_day1";
+    const WORKSPACE_ROOT = "/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI";
+    const AGENT_APP_URL = "http://127.0.0.1:8765/?embed=dashboard&ui=compact-20260701";
+    const FETCH_TIMEOUT_MS = 20000;
+    const MAP_WIDTH = 1000;
+    const MAP_HEIGHT = 640;
+    const MAP_PADDING = 58;
+    const MAX_RENDERED_ROUTE_POINTS = 1400;
+    const DECISIONS = ["GO", "CONDITIONAL_GO", "GUIDED_ONLY", "CHANGE_PLAN", "DELAY", "NO_GO", "ESCALATE"];
+    const EVIDENCE_TREE_TABS = [
+      { id: "default", label: "CP / Timeline", category: "checkpoint" },
+      { id: "map_risk", label: "Map / Risk", category: "risk" },
+      { id: "completed", label: "Completed GPX", category: "reference" },
+      { id: "review", label: "Review / Queue", category: "review" },
+      { id: "info", label: "Info / Other", category: "route" },
+    ];
+    const SCOUT_LAYER_IDS = [
+      "imagery",
+      "rudy",
+      "rudy-twmap",
+      "relief",
+      "geology",
+      "topo-5k",
+      "forest",
+      "osm",
+      "terrain",
+      "corridors",
+      "overpass",
+      "route",
+      "completed-track",
+      "reference-tracks",
+      "retreat",
+      "segments",
+      "risk-ribbon",
+      "risk-heatmap",
+      "risk-delta",
+      "soil-moisture",
+      "antecedent-rain",
+      "cwa-qpf",
+      "risk-score",
+      "checkpoints",
+      "pois",
+      "hazards",
+      "route-notes",
+      "cwa-weather",
+      "mcp",
+      "boss-points",
+      "events",
+      "weather-api",
+    ];
+
+    const SIX_FORCES = [
+      {
+        route: "outdoor-route-context",
+        zh: "探索力",
+        system: "Route Context Intelligence",
+        role: "Experience Guide",
+        decision: "CONDITIONAL_GO",
+        question: "哪裡值得停，停多久才不壓縮行程？",
+        next: "把文化、自然、地形觀察點投影到 CP Graph。",
+        signals: "歷史、文化、自然、季節、觀察點、source refs",
+      },
+      {
+        route: "outdoor-pace-fit",
+        zh: "自信力",
+        system: "Readiness & Pace Fit",
+        role: "Pace Guardian",
+        decision: "CHANGE_PLAN",
+        question: "最慢成員是否能守住安全時間？",
+        next: "提前出發 40 分鐘或縮短山頂停留。",
+        signals: "隊伍腳程、休息頻率、後段衰退、Route Boss Demand",
+      },
+      {
+        route: "outdoor-permission",
+        zh: "勇氣力",
+        system: "Contextual Permissioning",
+        role: "Micro-Decision Agent",
+        decision: "CONDITIONAL_GO",
+        question: "可以停、拍、等、攻頂或撤退嗎？",
+        next: "最多 6 分鐘，13:42 前離開。",
+        signals: "目前 CP、時間差、風險預算、撤退窗口、隊伍狀態",
+      },
+      {
+        route: "outdoor-architecture",
+        zh: "路線力",
+        system: "Route Architecture Intelligence",
+        role: "Route Planner",
+        decision: "CONDITIONAL_GO",
+        question: "難點、撤退點與容錯率如何分布？",
+        next: "11:30 未抵達 CP4 即折返。",
+        signals: "CP Graph、segment、retreat、boss points、補給點",
+      },
+      {
+        route: "outdoor-weather",
+        zh: "天氣力",
+        system: "Weather-to-Decision Intelligence",
+        role: "Risk Sentinel",
+        decision: "CHANGE_PLAN",
+        question: "天氣如何改變路線決策？",
+        next: "避開 13:00 後稜線，保留低風險短版。",
+        signals: "CWA、QPF、前 24 小時降雨、強風、能見度",
+      },
+      {
+        route: "outdoor-navigation",
+        zh: "地圖力",
+        system: "Navigation & Terrain Intelligence",
+        role: "Terrain Navigator",
+        decision: "GUIDED_ONLY",
+        question: "離線導航與撤退方向是否足夠？",
+        next: "補齊 Rudy+TW、GPX、撤退方向與岔路訓練。",
+        signals: "離線地圖、GPX、等高線、岔路、地形風險圖層",
+      },
+    ];
+
+    const state = {
+      route: "home",
+      project: null,
+      adminProjection: null,
+      debugProjection: null,
+      debugEvents: [],
+      selectedAction: "film",
+      activeEvidenceTab: "default",
+      activeMapEvidenceTab: "default",
+      mapEvidenceCollapsed: false,
+      selectedMapEvidenceSourceId: "",
+      pendingMapEvidenceFocusId: "",
+      mapEvidenceRetryTimer: null,
+      evidenceItemsBySource: {},
+      pretripDataProjectId: PROJECT_ID,
+      layerEnabled: Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, true])),
+    };
+
+    const routeMeta = {
+      home: ["Home", "Scout Dashboard v0.1 alpha overview"],
+      "features-lbs": ["Features / LBS", "location-based route projection and map evidence"],
+      "features-workspace": ["Features / Workspace", "pretrip project, importer, edits, export and load tooling"],
+      "surface-pretrip": ["Pre-trip Surface", "full existing /admin/pretrip workspace embedded in dashboard frame"],
+      "surface-admin": ["Admin Surface", "full existing /admin after-action surface embedded in dashboard frame"],
+      "surface-debug": ["Debug Surface", "full existing /admin/debug runtime console embedded in dashboard frame"],
+      agent: ["Agent", "local Scout AI chat frame"],
+      map: ["Map", "32-layer Scout map contract preview"],
+      timeline: ["Timeline Evidence", "pretrip, debug, emergency and workspace evidence stream"],
+      emergency: ["Safety / Emergency", "desktop emergency context preview; mobile remains independent"],
+      debug: ["Debug Message", "read-only runtime and projection messages"],
+      observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
+      settings: ["Settings / Configure", "local alpha route and API settings"],
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+      bindNavigation();
+      setRoute(routeFromHash());
+      loadData().finally(() => {
+        if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route);
+      });
+      window.addEventListener("hashchange", () => setRoute(routeFromHash()));
+    });
+
+    function apiBase() {
+      const stored = localStorage.getItem("scout.dashboardApiBase") || localStorage.getItem("scout.adminApiBase") || "";
+      return stored.replace(/\/$/, "");
+    }
+
+    function projectId() {
+      const paramProjectId = new URLSearchParams(window.location.search).get("projectId") || "";
+      if (/^[A-Za-z0-9_.-]+$/.test(paramProjectId)) return paramProjectId;
+      return localStorage.getItem("scout.dashboardProjectId") || localStorage.getItem("scout.emergencyProjectId") || PROJECT_ID;
+    }
+
+    function surfaceSrc(path) {
+      const delimiter = path.includes("?") ? "&" : "?";
+      return `${path}${delimiter}projectId=${encodeURIComponent(projectId())}`;
+    }
+
+    function pretripDataProjectIds() {
+      const requested = projectId();
+      const normalized = requested.replace(/_scoutAI$/, "");
+      return [...new Set([requested, normalized, PRETRIP_DATA_PROJECT_ID].filter(Boolean))];
+    }
+
+    async function fetchJson(path) {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      try {
+        const response = await fetch(`${apiBase()}${path}`, {
+          headers: { "Accept": "application/json" },
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`${response.status} ${path}`);
+        return response.json();
+      } finally {
+        window.clearTimeout(timer);
+      }
+    }
+
+    async function fetchFirstPretripJson(pathForProjectId) {
+      let lastError = null;
+      for (const candidateProjectId of pretripDataProjectIds()) {
+        try {
+          const data = await fetchJson(pathForProjectId(candidateProjectId));
+          state.pretripDataProjectId = candidateProjectId;
+          return data;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("pretrip project unavailable");
+    }
+
+    async function loadData() {
+      const id = projectId();
+      document.getElementById("dashboardRouteStatus").textContent = id;
+      const tasks = [
+        fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}?compact=1`).then((data) => {
+          state.project = data;
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/admin-projection`).then((data) => {
+          state.adminProjection = data;
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/debug-projection-events`).then((data) => {
+          state.debugEvents = data.events || data.timeline || [];
+          refreshCurrentDataView();
+        }).catch(() => {}),
+      ];
+      await Promise.allSettled(tasks);
+      refreshCurrentDataView();
+    }
+
+    function refreshCurrentDataView() {
+      const readiness = state.project?.readiness?.status || state.project?.readiness_status || "ready";
+      document.getElementById("readinessChip").textContent = readiness;
+      if (state.route === "map") {
+        renderMapEvidenceRail();
+        bindMapEvidenceControls();
+        return;
+      }
+      if (!document.getElementById("workspace") || routeUsesEmbeddedFrame(state.route)) return;
+      render();
+    }
+
+    function routeUsesEmbeddedFrame(route) {
+      return route === "map" || route === "agent" || route.startsWith("surface-");
+    }
+
+    function routeUsesWideFrame(route) {
+      return route === "agent";
+    }
+
+    function routeUsesFullFrame(route) {
+      return route === "map";
+    }
+
+    function bindNavigation() {
+      document.querySelectorAll("[data-route]").forEach((button) => {
+        button.addEventListener("click", () => {
+          window.location.hash = button.dataset.route || "home";
+        });
+      });
+    }
+
+    function routeFromHash() {
+      const raw = (window.location.hash || "#home").slice(1);
+      return raw || "home";
+    }
+
+    function setRoute(route) {
+      state.route = route;
+      document.querySelectorAll("[data-route]").forEach((button) => {
+        button.classList.toggle("is-active", button.dataset.route === route);
+      });
+      const force = SIX_FORCES.find((item) => item.route === route);
+      const meta = force ? [`${force.zh} / ${force.system}`, `${force.role} aligned to SCOUT_OUTDOOR_AI_AGENT_STANDARD`] : (routeMeta[route] || routeMeta.home);
+      document.getElementById("pageTitle").textContent = meta[0];
+      document.getElementById("pageSubtitle").textContent = meta[1];
+      render();
+    }
+
+    function render() {
+      const workspace = document.getElementById("workspace");
+      const evidence = document.getElementById("dashboardEvidence");
+      const contentGrid = document.querySelector(".content-grid");
+      const dashboardShell = document.getElementById("dashboardShell");
+      const dashboardMap = document.getElementById("dashboardMap");
+      const dashboardAgent = document.getElementById("dashboardAgent");
+      const route = state.route;
+      const frameFull = routeUsesFullFrame(route);
+      const frameWide = routeUsesWideFrame(route);
+      contentGrid?.classList.toggle("is-frame-full", frameFull);
+      contentGrid?.classList.toggle("is-frame-wide", frameWide);
+      dashboardShell?.classList.toggle("is-frame-full", frameFull);
+      document.body.classList.toggle("is-frame-full", frameFull);
+      if (route === "map") {
+        workspace.hidden = true;
+        workspace.setAttribute("aria-hidden", "true");
+        dashboardMap.hidden = false;
+        dashboardMap.setAttribute("aria-hidden", "false");
+        dashboardAgent.hidden = true;
+        dashboardAgent.setAttribute("aria-hidden", "true");
+        ensurePretripMapFrame();
+        renderMapEvidenceRail();
+      } else if (route === "agent") {
+        dashboardMap.hidden = true;
+        dashboardMap.setAttribute("aria-hidden", "true");
+        dashboardAgent.hidden = false;
+        dashboardAgent.setAttribute("aria-hidden", "false");
+        workspace.hidden = true;
+        workspace.setAttribute("aria-hidden", "true");
+        ensureAgentAppFrame();
+      } else if (route.startsWith("outdoor-")) {
+        dashboardMap.hidden = true;
+        dashboardMap.setAttribute("aria-hidden", "true");
+        dashboardAgent.hidden = true;
+        dashboardAgent.setAttribute("aria-hidden", "true");
+        workspace.hidden = false;
+        workspace.setAttribute("aria-hidden", "false");
+        workspace.innerHTML = renderOutdoorPage(route);
+      } else {
+        dashboardMap.hidden = true;
+        dashboardMap.setAttribute("aria-hidden", "true");
+        dashboardAgent.hidden = true;
+        dashboardAgent.setAttribute("aria-hidden", "true");
+        workspace.hidden = false;
+        workspace.setAttribute("aria-hidden", "false");
+        workspace.innerHTML = renderStandardPage(route);
+      }
+      evidence.innerHTML = renderEvidenceDrawer(route);
+      bindRenderedControls();
+      if (route === "map") {
+        dashboardMap.focus?.({ preventScroll: true });
+      } else if (route === "agent") {
+        dashboardAgent.focus?.({ preventScroll: true });
+      } else {
+        workspace.focus({ preventScroll: true });
+      }
+    }
+
+    function renderStandardPage(route) {
+      if (route === "map") return renderPretripMapFrame();
+      if (route === "timeline") return `${decisionBand("CONDITIONAL_GO", "evidence stream traceable", "medium", "read-only refs")}${renderTimelinePanel()}`;
+      if (route === "features-lbs") return renderLbsPage();
+      if (route === "features-workspace") return renderWorkspacePage();
+      if (route === "surface-pretrip") {
+        return renderSurfaceFrame({
+          title: "Pre-trip Planning",
+          src: surfaceSrc("/admin/pretrip"),
+          summary: "Existing Phase 4 pre-trip workspace with import, workspace edits, layer preparation, review queues and runtime handoff/export/load tooling.",
+        });
+      }
+      if (route === "surface-admin") {
+        return renderSurfaceFrame({
+          title: "Admin After-Action",
+          src: surfaceSrc("/admin"),
+          summary: "Existing Phase 1 after-action map canvas, evidence tree, mission narrative and raw detail review.",
+        });
+      }
+      if (route === "surface-debug") {
+        return renderSurfaceFrame({
+          title: "Runtime Debug",
+          src: surfaceSrc("/admin/debug"),
+          summary: "Existing Phase 3.5 read-only runtime debug console, timeline, debug map, messages and boundary panels.",
+        });
+      }
+      if (route === "agent") return renderAgentPage();
+      if (route === "emergency") return renderEmergencyPage();
+      if (route === "debug") return renderDebugPage();
+      if (route === "observer") return renderObserverPage();
+      if (route === "settings") return renderSettingsPage();
+      return renderHomePage();
+    }
+
+    function decisionBand(decision, primary, confidence, nextAction) {
+      return `
+        <section class="decision-band" aria-label="Scout decision band">
+          <div class="decision-cell primary"><span>Decision</span><strong>${escapeHtml(decision)}</strong></div>
+          <div class="decision-cell"><span>Primary output</span><strong>${escapeHtml(primary)}</strong></div>
+          <div class="decision-cell"><span>Confidence</span><strong>${escapeHtml(confidence)}</strong></div>
+          <div class="decision-cell"><span>Next action</span><strong>${escapeHtml(nextAction)}</strong></div>
+        </section>
+      `;
+    }
+
+    function renderHomePage() {
+      const counts = projectCounts();
+      return `
+        ${decisionBand("CONDITIONAL_GO", "workable alpha shell", "medium", "review Outdoor Six Forces and workspace readiness")}
+        <div class="grid-2">
+          <section class="panel">
+            <div class="panel-header"><h3>Outdoor Six Forces</h3><span class="chip info">decision system</span></div>
+            <div class="panel-body">
+              <div class="force-list">
+                ${SIX_FORCES.map((force) => renderForceRow(force)).join("")}
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h3>Alpha Workspace</h3><span class="chip ok">${escapeHtml(counts.readiness)}</span></div>
+            <div class="panel-body">
+              <div class="metric-line">
+                <div class="metric-row"><span>Project</span><span class="mono">${escapeHtml(projectId())}</span></div>
+                <div class="metric-row"><span>Workspace root</span><span class="mono">${escapeHtml(WORKSPACE_ROOT)}</span></div>
+                <div class="metric-row"><span>Checkpoints</span><span>${counts.checkpoints}</span></div>
+                <div class="metric-row"><span>Segments</span><span>${counts.segments}</span></div>
+                <div class="metric-row"><span>Terrain tiles</span><span>${counts.terrainTiles}</span></div>
+                <div class="metric-row"><span>Runtime</span><span>handoff/export/load is operator-triggered only</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div style="height:12px"></div>
+        <section class="panel">
+          <div class="panel-header"><h3>Current Admin Surfaces</h3><span class="chip info">embedded frames</span></div>
+          <div class="panel-body">
+            <div class="force-list">
+              ${renderSurfaceRow("Pre-trip", surfaceSrc("/admin/pretrip"), "Import, workspace edits, layer preparation, review queues, handoff/export/load tooling.", "surface-pretrip")}
+              ${renderSurfaceRow("Admin", surfaceSrc("/admin"), "After-action map, evidence drawer, mission narrative and review state.", "surface-admin")}
+              ${renderSurfaceRow("Debug", surfaceSrc("/admin/debug"), "Runtime/debug timeline, projection messages, observer boundaries and diagnostics.", "surface-debug")}
+            </div>
+          </div>
+        </section>
+        <div style="height:12px"></div>
+        ${renderMapPanel()}
+      `;
+    }
+
+    function renderSurfaceRow(label, path, detail, route) {
+      return `
+        <div class="force-row">
+          <div class="label-stack"><strong>${escapeHtml(label)}</strong><span class="mono">${escapeHtml(path)}</span></div>
+          <div class="label-stack"><strong>${escapeHtml(detail)}</strong><span>same-origin dashboard frame</span></div>
+          <div class="label-stack"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
+          <button type="button" data-route="${escapeHtml(route)}">Open</button>
+        </div>
+      `;
+    }
+
+    function renderSurfaceFrame({ title, src, summary }) {
+      return `
+        ${decisionBand("GO", `${title} embedded`, "high", "operate inside dashboard frame")}
+        <section class="panel surface-frame-panel">
+          <div class="surface-frame-header">
+            <div>
+              <h3>${escapeHtml(title)}</h3>
+              <p>${escapeHtml(summary)}</p>
+            </div>
+            <div class="surface-frame-actions">
+              <a class="chip info" href="${escapeHtml(src)}" target="_blank" rel="noreferrer">Open full page</a>
+              <span class="chip warn">same-origin frame</span>
+            </div>
+          </div>
+          <iframe class="surface-frame" id="surfaceFrame" title="${escapeHtml(title)}" src="${escapeHtml(src)}" loading="eager"></iframe>
+        </section>
+      `;
+    }
+
+    function ensurePretripMapFrame() {
+      const frame = document.getElementById("pretripMapFrame");
+      if (!frame) return;
+      const src = surfaceSrc("/admin/pretrip");
+      const currentProjectId = projectId();
+      if (frame.dataset.projectId === currentProjectId && frame.getAttribute("src")) {
+        bindPretripMapOnlyFrame(frame);
+        return;
+      }
+      frame.dataset.mapOnlyReady = "loading";
+      frame.dataset.mapOnlyPoll = "";
+      frame.dataset.projectId = currentProjectId;
+      frame.src = src;
+      bindPretripMapOnlyFrame(frame);
+    }
+
+    function ensureAgentAppFrame() {
+      const frame = document.getElementById("agentAppFrame");
+      if (!frame) return;
+      if (frame.dataset.agentSource === AGENT_APP_URL && frame.getAttribute("src")) return;
+      frame.dataset.agentSource = AGENT_APP_URL;
+      frame.src = AGENT_APP_URL;
+    }
+
+    function renderForceRow(force) {
+      return `
+        <div class="force-row">
+          <div class="label-stack"><strong>${escapeHtml(force.zh)}</strong><span>${escapeHtml(force.system)}</span></div>
+          <div class="label-stack"><strong>${escapeHtml(force.question)}</strong><span>${escapeHtml(force.signals)}</span></div>
+          <div class="label-stack"><strong>${escapeHtml(force.decision)}</strong><span>${escapeHtml(force.next)}</span></div>
+          <button type="button" data-route="${escapeHtml(force.route)}">Open</button>
+        </div>
+      `;
+    }
+
+    function renderLbsPage() {
+      return `
+        ${decisionBand("CONDITIONAL_GO", "route projection available", "medium", "verify map target ids before handoff")}
+        <div class="grid-2">
+          ${renderMetricPanel("LBS Signals", [
+            ["Route projection", "admin-projection + debug-projection"],
+            ["Map target ids", "CP, segment, route-note, mcp, boss-point"],
+            ["Position truth", "candidate projection only in alpha dashboard"],
+            ["Boundary", "no Phase 1 runtime mutation"],
+          ])}
+          ${renderMetricPanel("Location Evidence", [
+            ["Reference route", "Overpass-backed risk ribbon preferred"],
+            ["Current fixture", projectId()],
+            ["Retreat refs", "retreat branches and camp candidates"],
+            ["GIS handling", "record repro and data path; GIS fixes stay in GIS thread"],
+          ])}
+        </div>
+        <div style="height:12px"></div>
+        ${renderMapPanel()}
+      `;
+    }
+
+    function renderWorkspacePage() {
+      return `
+        ${decisionBand("CONDITIONAL_GO", "workspace ready for review", "medium", "import, edit, prepare, export with artifact metadata")}
+        <div class="grid-3">
+          ${renderMetricPanel("Importer", [
+            ["GPX import", "preview/run operator action"],
+            ["Checkpoint policy", "candidate spacing and review"],
+            ["Raw payloads", "summaries only"],
+            ["Workspace root", WORKSPACE_ROOT],
+          ])}
+          ${renderMetricPanel("Workspace Edits", [
+            ["Review decisions", "accepted/corrected/rejected"],
+            ["Route notes", "promote_hint, promote_warning, ignore, field_verify"],
+            ["Expert contribution", "apply plan and workspace result refs"],
+          ])}
+          ${renderMetricPanel("Runtime Handoff", [
+            ["Export", "runtime package candidate"],
+            ["Load tooling", "operator-triggered alpha flow"],
+            ["Boundary", "artifact metadata required"],
+          ])}
+        </div>
+        <div style="height:12px"></div>
+        ${renderTimelinePanel()}
+      `;
+    }
+
+    function renderAgentPage() {
+      return `
+        ${decisionBand("CONDITIONAL_GO", "local Scout AI Mac Chat embedded", "medium", "operator-triggered chat only")}
+        <div class="grid-3">
+          ${renderMetricPanel("Pace Guardian", [["Focus", "pace, delay, slowest member"], ["Output", "bounded next action"]])}
+          ${renderMetricPanel("Risk Sentinel", [["Focus", "weather, terrain, darkness, communication"], ["Output", "Change Plan / Delay / No-Go"]])}
+          ${renderMetricPanel("Experience Guide", [["Focus", "route context and observation points"], ["Output", "where to stop and why"]])}
+        </div>
+      `;
+    }
+
+    function renderEmergencyPage() {
+      return `
+        ${decisionBand("ESCALATE", "Emergency Package Draft only", "low", "mobile approval UI remains independent")}
+        <div class="grid-2">
+          ${renderMetricPanel("Production Path State", [
+            ["SafetyLevel", "L3_DISTRESS sample / not runtime truth"],
+            ["Packet", "pending_approval"],
+            ["Transport", "draft_ready; verified delivery not reported"],
+            ["Boundary", "sent=false, external_send_performed=false"],
+          ])}
+          ${renderMetricPanel("Emergency UI Boundary", [
+            ["Desktop dashboard", "read-only context and dry-run artifact preview"],
+            ["Mobile version", "independent surface"],
+            ["Callout", "message and voice scripts stay local"],
+            ["Link", '<a href="/docs/emergency/scout-emergency-mobile-approval-v0.html">Emergency Mobile Approval UI v0</a>'],
+          ])}
+        </div>
+        <div style="height:12px"></div>
+        ${renderMapPanel("emergency")}
+      `;
+    }
+
+    function renderDebugPage() {
+      return `
+        ${decisionBand("GO", "debug projection loaded", "medium", "inspect selected event without mutation")}
+        ${renderTimelinePanel("debug")}
+      `;
+    }
+
+    function renderObserverPage() {
+      return `
+        ${decisionBand("GO", "observer messages visible", "medium", "review streams without publish controls")}
+        <div class="grid-2">
+          ${renderMetricPanel("MQTT / Observer Message", [
+            ["MQTT", "draft / observer message review only"],
+            ["SensorLogger", "mobile wearable ingress debug"],
+            ["GNSS", "hardware observer evidence when present"],
+            ["Boundary", "no MQTT publish from dashboard"],
+          ])}
+          ${renderMetricPanel("Ingress Evidence", [
+            ["Stream", "transports/ingress_evidence_index.jsonl"],
+            ["Latency", "transports/latency.jsonl"],
+            ["Application routes", "transports/application_routes.jsonl"],
+            ["Filter outputs", "transports/filter_outputs.jsonl"],
+          ])}
+        </div>
+      `;
+    }
+
+    function renderSettingsPage() {
+      return `
+        ${decisionBand("GO", "local configuration", "medium", "store only browser-local admin settings")}
+        <div class="settings-grid">
+          <section class="panel">
+            <div class="panel-header"><h3>API</h3><span class="chip info">browser local</span></div>
+            <div class="panel-body">
+              <div class="metric-line">
+                <label class="metric-row"><span>Admin API base</span><input id="apiBaseInput" value="${escapeHtml(apiBase())}" placeholder="same origin"></label>
+                <label class="metric-row"><span>Project</span><input id="projectInput" value="${escapeHtml(projectId())}"></label>
+              </div>
+              <div style="height:10px"></div>
+              <button type="button" id="saveSettings">Save browser settings</button>
+            </div>
+          </section>
+          ${renderMetricPanel("Configure Boundary", [
+            ["Persistence", "localStorage only"],
+            ["No mutation", "does not modify workspace or runtime"],
+            ["Default port", "http://127.0.0.1:9099"],
+            ["Project", PROJECT_ID],
+            ["Workspace root", WORKSPACE_ROOT],
+          ])}
+        </div>
+      `;
+    }
+
+    function renderOutdoorPage(route) {
+      const force = SIX_FORCES.find((item) => item.route === route) || SIX_FORCES[0];
+      if (route === "outdoor-permission") return renderPermissionPage(force);
+      if (route === "outdoor-weather") return renderWeatherPage(force);
+      if (route === "outdoor-navigation") return renderNavigationPage(force);
+      if (route === "outdoor-architecture") return renderArchitecturePage(force);
+      if (route === "outdoor-pace-fit") return renderPaceFitPage(force);
+      return renderRouteContextPage(force);
+    }
+
+    function outdoorTabs(activeRoute) {
+      return `
+        <div class="route-tabs" role="tablist" aria-label="Outdoor Six Forces">
+          ${SIX_FORCES.map((force) => `<button type="button" class="${force.route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(force.route)}">${escapeHtml(force.zh)}</button>`).join("")}
+        </div>
+      `;
+    }
+
+    function renderPermissionPage(force) {
+      return `
+        ${outdoorTabs(force.route)}
+        ${decisionBand(force.decision, "可以，最多 6 分鐘。13:42 前離開。", "medium", "拍完後直接前往 CP4")}
+        <div class="grid-2">
+          <section class="panel">
+            <div class="panel-header"><h3>Action Selector</h3><span class="chip warn">risk budget</span></div>
+            <div class="panel-body">
+              <div class="action-grid">
+                ${[
+                  ["stop", "停留"],
+                  ["film", "拍影片"],
+                  ["photo", "拍照"],
+                  ["lunch", "午餐"],
+                  ["wait", "等霧"],
+                  ["team", "等隊友"],
+                  ["summit", "攻頂"],
+                  ["reroute", "改線"],
+                  ["retreat", "撤退"],
+                  ["rain", "穿雨衣"],
+                ].map(([value, label]) => `<button type="button" class="action-chip ${state.selectedAction === value ? "is-selected" : ""}" data-action="${value}">${label}</button>`).join("")}
+              </div>
+              <div style="height:12px"></div>
+              ${renderBudgetList([
+                ["Time buffer", 66, "21 min remaining"],
+                ["Daylight buffer", 58, "stable until CP4"],
+                ["Weather window", 44, "wind rising at ridge"],
+                ["Retreat buffer", 51, "branch A available"],
+                ["Team pace", 47, "slowest member basis"],
+              ])}
+            </div>
+          </section>
+          ${renderMapPanel("permission")}
+        </div>
+      `;
+    }
+
+    function renderWeatherPage(force) {
+      return `
+        ${outdoorTabs(force.route)}
+        ${decisionBand(force.decision, "避開 13:00 後稜線與裸露段", "medium", "改成短版或提前出發")}
+        <div class="grid-2">
+          ${renderMapPanel("weather")}
+          <section class="panel">
+            <div class="panel-header"><h3>Weather-to-Decision Timeline</h3><span class="chip warn">CHANGE_PLAN</span></div>
+            <div class="panel-body">
+              <table class="table">
+                <thead><tr><th>Condition</th><th>Route impact</th><th>Required action</th></tr></thead>
+                <tbody>
+                  <tr><td>前 24 小時降雨</td><td>溪谷與濕滑下坡風險上升</td><td>保留撤退 buffer</td></tr>
+                  <tr><td>午後雷雨</td><td>稜線、山頂、裸露地需避開</td><td>13:00 前離開 exposed ridge</td></tr>
+                  <tr><td>強風低溫</td><td>停留與架設腳架成本升高</td><td>縮短拍攝停留</td></tr>
+                  <tr><td>能見度差</td><td>地圖力需求升高</td><td>保持 CP discipline</td></tr>
+                  <tr><td>預報來源不一致</td><td>uncertainty 上升</td><td>保守改判</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function renderNavigationPage(force) {
+      return `
+        ${outdoorTabs(force.route)}
+        ${decisionBand(force.decision, "地圖力需求高於目前自主能力", "low", "補齊離線地圖與撤退方向訓練")}
+        <div class="grid-2">
+          ${renderMapPanel("navigation")}
+          ${renderMetricPanel("Navigation Readiness", [
+            ["Offline maps", "Rudy+TW, imagery, OSM cache"],
+            ["GPX", "route and reference tracks available"],
+            ["Terrain literacy", "contour, ridge, valley, saddle"],
+            ["Fallback", "battery, GPS drift and manual retreat direction"],
+            ["Decision rule", "high map demand + low map skill => GUIDED_ONLY"],
+          ])}
+        </div>
+      `;
+    }
+
+    function renderArchitecturePage(force) {
+      return `
+        ${outdoorTabs(force.route)}
+        ${decisionBand(force.decision, "難點在回程疲勞後段", "medium", "11:30 未抵達 CP4 即折返")}
+        <div class="grid-2">
+          ${renderMetricPanel("CP Graph", [
+            ["Nodes", `${projectCounts().checkpoints} checkpoints`],
+            ["Segments", `${projectCounts().segments} segment frames`],
+            ["Retreat", "branch A + emergency camp candidates"],
+            ["Boss points", "route pressure peaks, not only named MCPs"],
+          ])}
+          ${renderMapPanel("architecture")}
+        </div>
+      `;
+    }
+
+    function renderPaceFitPage(force) {
+      return `
+        ${outdoorTabs(force.route)}
+        ${decisionBand(force.decision, "以最慢成員估算回程 buffer 偏低", "medium", "提前 40 分鐘出發或縮短路線")}
+        <div class="grid-2">
+          ${renderMetricPanel("Readiness & Pace Fit", [
+            ["Basis", "slowest / weakest member"],
+            ["Route Boss Demand", "risk ribbon, MCP, slow-passage evidence"],
+            ["Energy reserve", "advisory planning evidence only"],
+            ["Pace coefficient", "uphill, downhill, technical terrain, rest frequency"],
+          ])}
+          <section class="panel">
+            <div class="panel-header"><h3>Challenge Fit</h3><span class="chip warn">CHANGE_PLAN</span></div>
+            <div class="panel-body">
+              ${renderBudgetList([
+                ["Flat pace", 72, "stable"],
+                ["Uphill pace", 54, "below plan"],
+                ["Technical slowdown", 38, "rope / scree sensitivity"],
+                ["Late-route decline", 42, "watch"],
+                ["Data confidence", 61, "medium"],
+              ])}
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function renderRouteContextPage(force) {
+      return `
+        ${outdoorTabs(force.route)}
+        ${decisionBand(force.decision, "值得停留但需受時間限制", "medium", "把觀察點轉交 Contextual Permissioning")}
+        <div class="grid-2">
+          ${renderMapPanel("route-context")}
+          <section class="panel">
+            <div class="panel-header"><h3>Route Context</h3><span class="chip info">candidate evidence</span></div>
+            <div class="panel-body">
+              <table class="table">
+                <thead><tr><th>Context</th><th>Meaning</th><th>Stop rule</th></tr></thead>
+                <tbody>
+                  <tr><td>歷史層</td><td>警備道、駐在所、舊路線脈絡</td><td>3 min observation</td></tr>
+                  <tr><td>自然層</td><td>林相、地質、風口、溪谷</td><td>avoid long stop at ridge</td></tr>
+                  <tr><td>季節層</td><td>雲海、低溫、雨季與芒草</td><td>check weather window</td></tr>
+                  <tr><td>觀察點</td><td>讓行程不只是攻頂</td><td>permission required</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function renderMetricPanel(title, rows) {
+      return `
+        <section class="panel">
+          <div class="panel-header"><h3>${escapeHtml(title)}</h3></div>
+          <div class="panel-body">
+            <div class="metric-line">
+              ${rows.map(([label, value]) => `<div class="metric-row"><span>${escapeHtml(label)}</span><span>${value.includes("<") ? value : escapeHtml(value)}</span></div>`).join("")}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderBudgetList(rows) {
+      return `
+        <div class="budget-list">
+          ${rows.map(([label, percent, detail]) => `
+            <div class="budget-row">
+              <div class="budget-head"><span>${escapeHtml(label)}</span><span>${escapeHtml(detail)}</span></div>
+              <div class="bar"><span style="width:${Number(percent)}%"></span></div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderMapPanel(mode = "default") {
+      const compact = mode !== "default" && mode !== "weather" && mode !== "navigation";
+      const mapData = buildMapData();
+      const sourceLabel = mapData.connected ? "projection connected" : "fallback geometry";
+      return `
+        <section class="panel map-panel">
+          <div class="panel-header">
+            <h3>Scout Map</h3>
+            <span class="chip ${mapData.connected ? "ok" : "warn"}" id="dashboardMapStatus" data-map-connected="${mapData.connected ? "true" : "false"}">${sourceLabel}</span>
+            <span class="chip info">32 layers</span>
+          </div>
+          <div class="map-toolbar" id="layerToolbar">
+            ${SCOUT_LAYER_IDS.map((layerId) => `
+              <label class="layer-control">
+                <input type="checkbox" data-layer="${escapeHtml(layerId)}" ${state.layerEnabled[layerId] ? "checked" : ""}>
+                <span>${escapeHtml(layerId)}</span>
+              </label>
+            `).join("")}
+          </div>
+          <div class="scout-map" id="dashboardMap" aria-label="Scout dashboard map preview">
+            <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="chilai_nanhua_day1_scoutAI route map">
+              ${SCOUT_LAYER_IDS.map((layerId, index) => mapLayerSvg(layerId, index, mode, compact, mapData)).join("")}
+            </svg>
+          </div>
+        </section>
+      `;
+    }
+
+    function buildMapData() {
+      const route = state.adminProjection?.route || {};
+      const display = route.display_geometry || {};
+      const coordinates = normalizeCoordinates(display.coordinates);
+      const coordinateSegments = normalizeCoordinateSegments(display.coordinate_segments, coordinates);
+      const bounds = normalizeBounds(route.bbox_wgs84) || boundsFromCoordinates(coordinates);
+      const connected = Boolean(bounds && coordinates.length >= 2);
+      const routePath = connected ? pathFromSegments(coordinateSegments, bounds, MAX_RENDERED_ROUTE_POINTS) : "";
+      return {
+        bounds,
+        connected,
+        coordinateSegments,
+        coordinates,
+        routePath,
+        sourceId: display.source_id || "route_display_geometry.fallback",
+        sourcePath: display.source_path || "fallback",
+      };
+    }
+
+    function normalizeCoordinateSegments(rawSegments, fallbackCoordinates) {
+      if (Array.isArray(rawSegments) && rawSegments.length) {
+        return rawSegments
+          .map((segment) => normalizeCoordinates(segment))
+          .filter((segment) => segment.length >= 2);
+      }
+      const fallback = normalizeCoordinates(fallbackCoordinates);
+      return fallback.length >= 2 ? [fallback] : [];
+    }
+
+    function normalizeCoordinates(rawCoordinates) {
+      if (!Array.isArray(rawCoordinates)) return [];
+      return rawCoordinates
+        .map((point) => ({
+          lat: Number(point?.lat),
+          lon: Number(point?.lon),
+          label: point?.label || point?.candidate_id || point?.mcp_id || "",
+        }))
+        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+    }
+
+    function normalizeBounds(rawBounds) {
+      if (!rawBounds) return null;
+      const bounds = {
+        maxLat: Number(rawBounds.max_lat ?? rawBounds.maxLat),
+        maxLon: Number(rawBounds.max_lon ?? rawBounds.maxLon),
+        minLat: Number(rawBounds.min_lat ?? rawBounds.minLat),
+        minLon: Number(rawBounds.min_lon ?? rawBounds.minLon),
+      };
+      if (!Object.values(bounds).every(Number.isFinite)) return null;
+      if (bounds.maxLat === bounds.minLat || bounds.maxLon === bounds.minLon) return null;
+      return bounds;
+    }
+
+    function boundsFromCoordinates(coordinates) {
+      if (!coordinates.length) return null;
+      const lats = coordinates.map((point) => point.lat);
+      const lons = coordinates.map((point) => point.lon);
+      const bounds = {
+        maxLat: Math.max(...lats),
+        maxLon: Math.max(...lons),
+        minLat: Math.min(...lats),
+        minLon: Math.min(...lons),
+      };
+      if (bounds.maxLat === bounds.minLat || bounds.maxLon === bounds.minLon) return null;
+      return bounds;
+    }
+
+    function projectCoordinate(point, bounds) {
+      const xScale = (MAP_WIDTH - MAP_PADDING * 2) / (bounds.maxLon - bounds.minLon);
+      const yScale = (MAP_HEIGHT - MAP_PADDING * 2) / (bounds.maxLat - bounds.minLat);
+      return {
+        x: MAP_PADDING + (point.lon - bounds.minLon) * xScale,
+        y: MAP_HEIGHT - MAP_PADDING - (point.lat - bounds.minLat) * yScale,
+      };
+    }
+
+    function sampleCoordinates(coordinates, maxPoints) {
+      if (coordinates.length <= maxPoints) return coordinates;
+      const step = Math.ceil(coordinates.length / maxPoints);
+      const sampled = coordinates.filter((_, index) => index % step === 0);
+      const last = coordinates[coordinates.length - 1];
+      if (sampled[sampled.length - 1] !== last) sampled.push(last);
+      return sampled;
+    }
+
+    function pathFromSegments(segments, bounds, maxPoints = MAX_RENDERED_ROUTE_POINTS) {
+      const totalPoints = Math.max(1, segments.reduce((sum, segment) => sum + segment.length, 0));
+      const paths = segments.map((segment) => {
+        const segmentMax = Math.max(2, Math.round(maxPoints * (segment.length / totalPoints)));
+        const sampled = sampleCoordinates(segment, segmentMax);
+        return sampled.map((point, index) => {
+          const projected = projectCoordinate(point, bounds);
+          return `${index === 0 ? "M" : "L"}${projected.x.toFixed(1)} ${projected.y.toFixed(1)}`;
+        }).join(" ");
+      }).filter(Boolean);
+      return paths.join(" ");
+    }
+
+    function pointsFromProjection(path) {
+      const items = path.reduce((current, key) => current?.[key], state.adminProjection);
+      return normalizeCoordinates(Array.isArray(items) ? items : []);
+    }
+
+    function fallbackRoutePoints(mapData, count) {
+      if (!mapData.connected) return [];
+      const sampled = sampleCoordinates(mapData.coordinates, count);
+      return sampled.map((point, index) => ({ ...point, label: point.label || `route.${index + 1}` }));
+    }
+
+    function pointCircles(points, bounds, color, radius = 5) {
+      if (!bounds || !points.length) return "";
+      return points.map((point, index) => {
+        const projected = projectCoordinate(point, bounds);
+        const size = index === 0 || index === points.length - 1 ? radius + 1 : radius;
+        return `<circle cx="${projected.x.toFixed(1)}" cy="${projected.y.toFixed(1)}" r="${size}" fill="${color}" stroke="#101519" stroke-width="2"></circle>`;
+      }).join("");
+    }
+
+    function mapLayerSvg(layerId, index, mode, compact, mapData) {
+      const hidden = state.layerEnabled[layerId] ? "false" : "true";
+      const opacity = Math.max(.12, Math.min(.82, .16 + (index % 8) * .055)).toFixed(2);
+      if (["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm"].includes(layerId)) {
+        return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><rect x="${index * 7}" y="${index * 4}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="${basemapColor(layerId)}" opacity="${layerId === "osm" ? ".16" : opacity}"></rect></g>`;
+      }
+      if (layerId === "route") {
+        if (mapData.connected) {
+          return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}" data-map-source="${escapeHtml(mapData.sourcePath)}"><path d="${mapData.routePath}" fill="none" stroke="#75d5df" stroke-width="${compact ? 7 : 10}" stroke-linecap="round" stroke-linejoin="round"></path></g>`;
+        }
+        return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="M96 500 C188 418 222 344 328 304 C424 267 516 214 646 130 C750 61 839 43 920 76" fill="none" stroke="#75d5df" stroke-width="${compact ? 7 : 10}" stroke-linecap="round"></path></g>`;
+      }
+      if (layerId === "completed-track") {
+        if (mapData.connected) {
+          return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="${mapData.routePath}" fill="none" stroke="#f0b85c" stroke-width="3" stroke-dasharray="9 9" opacity=".8"></path></g>`;
+        }
+        return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="M112 504 C194 404 252 360 338 315 C452 258 590 172 705 104" fill="none" stroke="#f0b85c" stroke-width="3" stroke-dasharray="9 9"></path></g>`;
+      }
+      if (["segments", "reference-tracks", "retreat"].includes(layerId)) {
+        const stroke = layerId === "retreat" ? "#d5a642" : layerId === "reference-tracks" ? "#7899b3" : "#9edee5";
+        const dash = layerId === "segments" ? "" : "stroke-dasharray=\"8 8\"";
+        if (mapData.connected) {
+          const path = layerId === "retreat" ? retreatPath(mapData) : mapData.routePath;
+          return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="${path}" fill="none" stroke="${stroke}" stroke-width="${layerId === "segments" ? 3 : 2}" ${dash} opacity=".9"></path></g>`;
+        }
+        return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="M124 506 L300 324 L474 263 L646 130 L902 78" fill="none" stroke="${stroke}" stroke-width="3" ${dash}></path><path d="M474 263 C386 346 274 408 186 542" fill="none" stroke="${stroke}" stroke-width="2" ${dash}></path></g>`;
+      }
+      if (["checkpoints", "mcp", "boss-points", "pois", "hazards", "events", "route-notes"].includes(layerId)) {
+        return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}">${pointSet(layerId, mapData)}</g>`;
+      }
+      if (["risk-ribbon", "risk-heatmap", "risk-delta", "terrain", "corridors", "overpass", "soil-moisture", "antecedent-rain", "cwa-qpf", "risk-score", "cwa-weather", "weather-api"].includes(layerId)) {
+        const fill = riskColor(layerId, mode);
+        if (mapData.connected) {
+          return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="${mapData.routePath}" fill="none" stroke="${fill}" stroke-width="${layerId.includes("risk") ? 24 : 18}" stroke-linecap="round" stroke-linejoin="round" opacity="${layerId.includes("weather") || layerId.includes("cwa") ? ".23" : ".19"}"></path></g>`;
+        }
+        return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="M610 68 C762 86 901 170 876 286 C850 401 695 390 642 279 C595 180 554 98 610 68Z" fill="${fill}" opacity="${layerId.includes("weather") || layerId.includes("cwa") ? ".24" : ".18"}"></path><path d="M256 405 C365 332 476 300 610 238" fill="none" stroke="${fill}" stroke-width="18" opacity=".22"></path></g>`;
+      }
+      return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><circle cx="${120 + index * 22}" cy="${520 - (index % 9) * 36}" r="5" fill="#b6c8d0" opacity=".5"></circle></g>`;
+    }
+
+    function retreatPath(mapData) {
+      if (!mapData.connected) return "";
+      const route = mapData.coordinates;
+      const pivot = route[Math.floor(route.length * .58)];
+      const projected = projectCoordinate(pivot, mapData.bounds);
+      const end = {
+        x: Math.max(MAP_PADDING, projected.x - 160),
+        y: Math.min(MAP_HEIGHT - MAP_PADDING, projected.y + 130),
+      };
+      return `M${projected.x.toFixed(1)} ${projected.y.toFixed(1)} L${end.x.toFixed(1)} ${end.y.toFixed(1)}`;
+    }
+
+    function basemapColor(layerId) {
+      return {
+        imagery: "#34535a",
+        rudy: "#3d5d4f",
+        "rudy-twmap": "#476352",
+        relief: "#6b654b",
+        geology: "#6f554f",
+        "topo-5k": "#415b6f",
+        forest: "#2f5b45",
+        osm: "#d7ded7",
+      }[layerId] || "#33404a";
+    }
+
+    function riskColor(layerId, mode) {
+      if (mode === "weather" || layerId.includes("rain") || layerId.includes("weather") || layerId.includes("cwa")) return "#66b8cf";
+      if (layerId.includes("risk")) return "#d5a642";
+      if (layerId === "terrain") return "#6f8b67";
+      return "#7899b3";
+    }
+
+    function pointSet(layerId, mapData) {
+      const color = {
+        checkpoints: "#f0f5f5",
+        mcp: "#9bd67d",
+        "boss-points": "#d5a642",
+        pois: "#62b5c4",
+        hazards: "#d06363",
+        events: "#9ab0c8",
+        "route-notes": "#c79ad4",
+      }[layerId] || "#f0f5f5";
+      if (mapData.connected) {
+        const sourcePoints = {
+          checkpoints: fallbackRoutePoints(mapData, 28),
+          mcp: pointsFromProjection(["major_critical_points", "preview_candidates"]),
+          "boss-points": pointsFromProjection(["major_critical_points", "preview_candidates"]).slice(0, 5),
+          pois: fallbackRoutePoints(mapData, 10),
+          hazards: fallbackRoutePoints(mapData, 8).slice(2),
+          events: fallbackRoutePoints(mapData, 12),
+          "route-notes": pointsFromProjection(["route_notes", "preview_candidates"]),
+        }[layerId] || [];
+        return pointCircles(sourcePoints, mapData.bounds, color, layerId === "boss-points" ? 7 : 5);
+      }
+      const points = [[124,506], [300,324], [474,263], [646,130], [902,78], [812,210], [690,340], [510,406]];
+      return points.map(([x, y], index) => `<circle cx="${x}" cy="${y}" r="${layerId === "boss-points" && index % 2 === 0 ? 7 : 5}" fill="${color}" stroke="#101519" stroke-width="2"></circle>`).join("");
+    }
+
+    function renderLayerSummary() {
+      return `
+        <div style="height:12px"></div>
+        <section class="panel">
+          <div class="panel-header"><h3>Layer Contract</h3><span class="chip ok">${SCOUT_LAYER_IDS.length} layers</span></div>
+          <div class="panel-body">
+            <table class="table">
+              <thead><tr><th>Layer</th><th>Dashboard use</th><th>Boundary</th></tr></thead>
+              <tbody>
+                ${SCOUT_LAYER_IDS.map((layerId) => `<tr><td class="mono">${escapeHtml(layerId)}</td><td>map preview and evidence alignment</td><td>candidate / review evidence</td></tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderTimelinePanel(kind = "timeline") {
+      if (kind !== "debug") return renderPretripEvidencePanel();
+      const events = normalizedEvents(kind);
+      return `
+        <section class="panel">
+          <div class="panel-header"><h3>Timeline Evidence</h3><span class="chip info">${events.length} events</span></div>
+          <div class="panel-body">
+            <div class="timeline" id="dashboardTimeline">
+              ${events.map((event) => `
+                <article class="timeline-item">
+                  <time>${escapeHtml(event.time)}</time>
+                  <div><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.summary)}</span></div>
+                </article>
+              `).join("")}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderPretripEvidencePanel() {
+      const view = state.project || {};
+      const groups = pretripEvidenceGroups(view);
+      const activeTab = EVIDENCE_TREE_TABS.some((tab) => tab.id === state.activeEvidenceTab) ? state.activeEvidenceTab : "default";
+      const tabCounts = evidenceTabCounts(groups);
+      const visibleGroups = groups.filter((group) => group.tabId === activeTab);
+      const totalItems = groups.reduce((sum, group) => sum + group.count, 0);
+      const sourceProject = state.pretripDataProjectId || projectId();
+      return `
+        <section class="panel" data-pretrip-evidence-source="${escapeHtml(sourceProject)}">
+          <div class="panel-header">
+            <h3>Timeline Evidence</h3>
+            <span class="chip info">${totalItems} pre-trip evidence items</span>
+          </div>
+          <div class="panel-body">
+            <div class="evidence-tabs" role="tablist" aria-label="Pre-trip evidence categories">
+              ${EVIDENCE_TREE_TABS.map((tab) => `
+                <button
+                  class="evidence-tab ${tab.id === activeTab ? "is-active" : ""}"
+                  style="--category-color:${categoryColor(tab.category)}"
+                  type="button"
+                  role="tab"
+                  aria-selected="${tab.id === activeTab ? "true" : "false"}"
+                  data-evidence-tab="${escapeHtml(tab.id)}"
+                >
+                  <strong>${escapeHtml(tab.label)}</strong>
+                  <small>${tabCounts[tab.id] || 0} items</small>
+                </button>
+              `).join("")}
+            </div>
+            <div class="pretrip-evidence-groups" id="dashboardTimeline">
+              ${visibleGroups.length ? visibleGroups.map((group, index) => renderPretripEvidenceGroup(group, index)).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderMapEvidenceRail() {
+      const rail = document.getElementById("dashboardMapEvidence");
+      if (!rail) return;
+      const view = state.project || {};
+      const collapsed = Boolean(state.mapEvidenceCollapsed);
+      rail.classList.toggle("is-collapsed", collapsed);
+      if (!state.project) {
+        rail.innerHTML = `
+          <div class="map-evidence-header">
+            <div class="map-evidence-title-row">
+              <h3>Map Evidence</h3>
+              <span class="chip info">loading</span>
+              <button class="map-evidence-toggle" type="button" data-map-evidence-toggle aria-label="${collapsed ? "Expand Map Evidence" : "Collapse Map Evidence"}" aria-expanded="${collapsed ? "false" : "true"}" aria-controls="dashboardMapEvidenceBody">${collapsed ? "+" : "−"}</button>
+            </div>
+            ${collapsed ? "" : `<p id="dashboardMapEvidenceStatus">Loading pre-trip timeline evidence for map focus.</p>`}
+          </div>
+          ${collapsed ? "" : `<div class="map-evidence-body" id="dashboardMapEvidenceBody">
+            <div class="evidence-empty">Timeline evidence will appear here when the pre-trip project payload is ready.</div>
+          </div>`}
+        `;
+        return;
+      }
+      const groups = pretripEvidenceGroups(view);
+      const activeTab = EVIDENCE_TREE_TABS.some((tab) => tab.id === state.activeMapEvidenceTab) ? state.activeMapEvidenceTab : "default";
+      const tabCounts = evidenceTabCounts(groups);
+      const visibleGroups = groups.filter((group) => group.tabId === activeTab);
+      const totalItems = groups.reduce((sum, group) => sum + group.count, 0);
+      const focusStatus = state.selectedMapEvidenceSourceId ? "Evidence focus ready" : "Select an item to focus the map.";
+      rail.innerHTML = `
+        <div class="map-evidence-header">
+          <div class="map-evidence-title-row">
+            <h3>Map Evidence</h3>
+            <span class="chip info">${totalItems} items</span>
+            <button class="map-evidence-toggle" type="button" data-map-evidence-toggle aria-label="${collapsed ? "Expand Map Evidence" : "Collapse Map Evidence"}" aria-expanded="${collapsed ? "false" : "true"}" aria-controls="dashboardMapEvidenceBody">${collapsed ? "+" : "−"}</button>
+          </div>
+          ${collapsed ? "" : `<p id="dashboardMapEvidenceStatus">${escapeHtml(focusStatus)}</p>`}
+        </div>
+        ${collapsed ? "" : `<div class="map-evidence-body" id="dashboardMapEvidenceBody">
+          <div class="evidence-tabs" role="tablist" aria-label="Map evidence categories">
+            ${EVIDENCE_TREE_TABS.map((tab) => `
+              <button
+                class="evidence-tab ${tab.id === activeTab ? "is-active" : ""}"
+                style="--category-color:${categoryColor(tab.category)}"
+                type="button"
+                role="tab"
+                aria-selected="${tab.id === activeTab ? "true" : "false"}"
+                data-evidence-tab="${escapeHtml(tab.id)}"
+              >
+                <strong>${escapeHtml(tab.label)}</strong>
+                <small>${tabCounts[tab.id] || 0} items</small>
+              </button>
+            `).join("")}
+          </div>
+          <div class="pretrip-evidence-groups" id="dashboardMapEvidenceTimeline">
+            ${visibleGroups.length ? visibleGroups.map((group, index) => renderPretripEvidenceGroup(group, index, {defaultOpen: false})).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
+          </div>
+        </div>`}
+      `;
+    }
+
+    function renderPretripEvidenceGroup(group, index, options = {}) {
+      const defaultOpen = options.defaultOpen ?? pretripEvidenceGroupOpen(group, index);
+      return `
+        <details class="pretrip-evidence-group" style="--category-color:${categoryColor(group.category)}" ${defaultOpen ? "open" : ""}>
+          <summary>${escapeHtml(group.title)} <span>${group.count} items</span></summary>
+          ${group.items.length ? `
+            <div class="pretrip-evidence-items">
+              ${group.items.map((item) => `
+                <button
+                  type="button"
+                  class="pretrip-evidence-item ${item.sourceId === state.selectedMapEvidenceSourceId ? "is-selected" : ""}"
+                  data-evidence-group="${escapeHtml(group.title)}"
+                  data-map-evidence-source="${escapeHtml(item.sourceId)}"
+                  data-pretrip-source-id="${escapeHtml(item.pretripSourceId)}"
+                  data-map-target-ids="${escapeHtml(item.mapTargetIds.join(" "))}"
+                >
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <span>${escapeHtml(item.sublabel)}</span>
+                </button>
+              `).join("")}
+            </div>
+          ` : `<div class="evidence-empty">${escapeHtml(group.emptyNote || "No evidence in this group.")}</div>`}
+        </details>
+      `;
+    }
+
+    function pretripEvidenceGroupOpen(group, index) {
+      return index < 2 || ["Checkpoints", "AI GIS CP", "Major Critical Points"].includes(group.title);
+    }
+
+    function pretripEvidenceGroups(view) {
+      const groups = [];
+      const add = (tabId, title, rawItems, mapper, category = "route", options = {}) => {
+        const sourceItems = asArray(rawItems);
+        const items = sourceItems.map((item, index) => normalizeEvidenceRow(mapper(item), item, `${tabId}:${title}:${index}`));
+        const count = Number.isFinite(Number(options.displayCount)) ? Number(options.displayCount) : sourceItems.length;
+        groups.push({ tabId, title, category, count, items, emptyNote: options.emptyNote || "" });
+      };
+      state.evidenceItemsBySource = {};
+      const overpassGroups = view.overpass_evidence?.category_groups || {};
+      const overpassSummary = (item) => `${item.candidate_type || item.feature_type || "overpass"} | ${item.osm_type || "object"}/${item.osm_id || "-"} | ${item.confidence || item.status || "-"}`;
+      const osmPbfItems = asArray(view.osm_pbf_evidence?.items);
+      const osmPbfCategory = (categoryId) => osmPbfItems.filter((item) => item.category_id === categoryId);
+      const osmPbfSummary = (item) => `${item.feature_type || "osm"} | ${item.geometry_type || "-"} | ${item.osm_type || "object"}/${item.osm_id || "-"}`;
+      const infoSections = Object.entries(view.tabs || {}).flatMap(([tabId, tab]) =>
+        asArray(tab?.sections).map((section) => ({ ...section, tab_id: tabId }))
+      );
+
+      add("default", "Evidence Timeline", view.evidence_timeline?.categories, (item) => ({
+        label: item.label || item.category_id,
+        sublabel: `${item.count || 0} evidence | ${item.available ? "available" : "empty"}`,
+      }), "timeline");
+      add("default", "Reference Segment Timing", view.reference_segment_timing?.segments, (item) => ({
+        label: item.label || item.segment_id,
+        sublabel: `${item.sample_count || 0} samples | min ${valueOrDash(item.duration_minutes?.min)} / p50 ${valueOrDash(item.duration_minutes?.p50)} / p75 ${valueOrDash(item.duration_minutes?.p75)} / max ${valueOrDash(item.duration_minutes?.max)} min`,
+      }), "timeline");
+      add("default", "Checkpoints", view.checkpoints, (item) => ({
+        label: item.label || item.candidate_id,
+        sublabel: `${item.checkpoint_type || "checkpoint"} | ${item.review_state || item.status || "candidate"}`,
+      }), "checkpoint");
+      add("default", "AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates, (item) => ({
+        label: item.display_label || item.map_label || item.route_note_summary || item.candidate_id,
+        sublabel: `${item.checkpoint_type || "checkpoint"} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`,
+      }), "checkpoint");
+      add("default", "GIS CP Areas", view.gis_perception_timeline?.nearby_groups, (item) => ({
+        label: item.display_label || item.map_label || item.nearby_group_id,
+        sublabel: `${item.member_count || 0} CP | ${asArray(item.semantic_keys).join(", ") || "mixed"}`,
+      }), "checkpoint");
+      add("default", "Major Critical Points", view.major_critical_points?.candidates, (item) => ({
+        label: item.label || item.mcp_id,
+        sublabel: `${item.confidence || "-"} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m`,
+      }), "mcp");
+      add("default", "Boss Points", view.boss_points?.boss_points, (item) => ({
+        label: item.label || item.boss_point_id || item.source_id,
+        sublabel: `${item.kind || item.boss_type || "boss"} | ${item.status || item.review_state || "candidate"}`,
+      }), "mcp");
+      add("default", "Mileage Tags", view.mileage_tag_alignment?.timeline_items, (item) => ({
+        label: item.label || item.display_mileage_label || item.source_id,
+        sublabel: `${item.source_kind || "mileage"} | ${item.route_projection_status || "projection-review"} | ${Math.round(item.route_distance_m || 0)}m`,
+      }), "timeline");
+
+      add("map_risk", "Overpass Trail Corridors", overpassGroups.overpass_trail_corridor || view.overpass_evidence?.corridor_candidates, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "route");
+      add("map_risk", "Overpass Hiking Routes", overpassGroups.overpass_hiking_route, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "route");
+      add("map_risk", "Overpass Shelters", overpassGroups.overpass_shelter, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
+      add("map_risk", "Overpass Water Sources", overpassGroups.overpass_water_source, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
+      add("map_risk", "Overpass Parking", overpassGroups.overpass_parking, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
+      add("map_risk", "Overpass Peaks", overpassGroups.overpass_peak, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
+      add("map_risk", "Overpass Terrain Risk", overpassGroups.overpass_terrain_risk || view.overpass_evidence?.hazard_candidates, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "risk");
+      add("map_risk", "Overpass Other POI", overpassGroups.overpass_other_poi, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
+      add("map_risk", "OSM Trail Network", osmPbfCategory("trail_network"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "route");
+      add("map_risk", "OSM Milestones", osmPbfCategory("milestone_route_marker"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "timeline");
+      add("map_risk", "OSM Mobile", osmPbfCategory("mobile_signal"), (item) => ({ label: item.label || "通訊點", sublabel: osmPbfSummary(item) }), "poi");
+      add("map_risk", "OSM Peaks / Terrain", [...osmPbfCategory("peak_terrain"), ...osmPbfCategory("terrain_risk_context")], (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "risk");
+      add("map_risk", "OSM POI / Amenities", osmPbfCategory("amenity_poi"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "poi");
+      add("map_risk", "OSM Water / Hydrology", osmPbfCategory("water_hydrology"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "risk");
+      add("map_risk", "Risk Score", view.risk_score?.points, (item) => ({ label: `${item.score_field || "pretrip_risk"} ${numberText(item.pretrip_risk, 1)}`, sublabel: `L${item.risk_level || "-"} | ${Math.round(item.distance_m || 0)}m` }), "risk");
+      add("map_risk", "Baseline Risk", view.risk_ribbon?.segments, (item) => ({ label: `${item.risk_bucket || "baseline"} ${numberText(item.pretrip_risk, 1)}`, sublabel: `${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m` }), "risk");
+      add("map_risk", "Calibrated Heat", view.risk_heatmap?.segments, (item) => ({ label: `${item.risk_bucket || "heat"} ${numberText(item.pretrip_risk, 1)}`, sublabel: `${item.score_field || "calibrated"} | ${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m` }), "risk");
+      add("map_risk", "Risk Delta", view.risk_delta?.segments, (item) => ({ label: `${item.delta_bucket || "delta"} ${numberText(item.delta_score, 1)}`, sublabel: `baseline ${numberText(item.baseline_pretrip_risk, 1)} | calibrated ${numberText(item.calibrated_risk_candidate, 1)}` }), "risk");
+      add("map_risk", "Environmental Risk Derivatives", view.environment_risk_derivative_layers?.category_items || [], (item) => ({ label: item.label || item.source_id || "Environmental risk derivatives", sublabel: item.status || item.evidence_type || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.counts?.candidate_count });
+      add("map_risk", "New Landslide Candidates", view.environment_risk_derivative_layers?.new_landslide_candidates?.candidates, (item) => ({ label: item.label || "New landslide candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.new_landslide_candidates?.counts?.candidate_count });
+      add("map_risk", "Wetness / Flash Flood Candidates", view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.candidates, (item) => ({ label: item.label || "Wetness / flash-flood candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.counts?.candidate_count });
+      add("map_risk", "Trail Obscurity Candidates", view.environment_risk_derivative_layers?.trail_obscurity_risk?.candidates, (item) => ({ label: item.label || "Trail obscurity candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.trail_obscurity_risk?.counts?.candidate_count });
+      add("map_risk", "Practical Darkness Candidates", view.environment_risk_derivative_layers?.practical_darkness_time?.candidates, (item) => ({ label: item.label || "Practical darkness candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.practical_darkness_time?.counts?.candidate_count });
+      add("map_risk", "Environment Values", view.environment_values?.items, (item) => ({ label: item.label || item.source_id || "Environment value evidence", sublabel: item.evidence_type || item.status || "candidate" }), "risk");
+      add("map_risk", "CWA QPF", view.cwa_qpf?.points, (item) => ({ label: item.label || "CWA QPF", sublabel: `${item.status || "candidate"} | PoP ${valueOrDash(item.rain_probability ?? item.rainProbability)}%` }), "risk");
+      add("map_risk", "CWA Weather", view.cwa_weather?.points, (item) => ({ label: item.label || item.station_name || "CWA weather", sublabel: `${item.evidence_type || "cwa"} | 24h ${valueOrDash(item.last_24h_mm)} mm` }), "risk");
+      add("map_risk", "Soil Moisture", view.soil_moisture?.points, (item) => ({ label: item.label || "SMAP soil moisture", sublabel: `${item.collection_id || "SMAP"} | wetness ${valueOrDash(item.sm_surface_wetness ?? item.antecedent_wetness_percentile)}` }), "risk");
+      add("map_risk", "Antecedent Rain", view.antecedent_rain?.points, (item) => ({ label: item.label || "GPM antecedent rain", sublabel: `${item.collection_id || "GPM IMERG"} | 3h ${valueOrDash(item.last_3h_mm ?? item.precipitation_mm ?? item.precipitation)} mm` }), "risk");
+      add("map_risk", "Segments", view.segments, (item) => ({ label: item.label || item.candidate_id, sublabel: `${item.from_candidate_id || "-"} -> ${item.to_candidate_id || "-"} | ${Math.round(item.distance_m || 0)}m` }), "segment");
+      add("map_risk", "Retreat Routes", view.retreat_routes, (item) => ({ label: item.label || item.candidate_id, sublabel: item.review_state || "candidate" }), "retreat");
+      add("map_risk", "Reference GPX", view.reference_tracks?.reference_tracks, (item) => ({ label: item.label || item.candidate_id, sublabel: `${Math.round((item.route?.distance_m || 0) / 1000)}km | ${item.route?.point_count || 0} pts` }), "reference");
+
+      add("completed", "Capability Timeline", view.capability_timeline_import?.edges, (item) => ({
+        label: item.edge_id || item.source_id,
+        sublabel: `${item.from_node_id || "-"} -> ${item.to_node_id || "-"} | ${Math.round(item.moving_time_s || 0)}s moving | ${Math.round(item.rest_time_s || 0)}s rest`,
+      }), "reference");
+      add("info", "Info Sections", infoSections, (item) => ({ label: item.title || item.id, sublabel: `${item.tab_id || "tab"} | ${item.status || "traceable"}` }), "route");
+      add("review", "Review Groups", view.review_workbench?.category_groups, (item) => ({ label: item.label, sublabel: `${item.item_count || 0} items | ${item.bulk_eligible_count || 0} bulk | ${item.review_action || "review"}` }), "review_group");
+      add("review", "Review Queue", view.review_queue?.items, (item) => ({ label: item.title || item.candidate_ref || item.record_id, sublabel: `${item.severity || "review"} | ${item.category || item.status || "queue"}` }), "review");
+      return groups;
+    }
+
+    function normalizeEvidenceRow(mapped, item, fallbackId) {
+      const pretripSourceId = evidenceSourceId(item);
+      const sourceId = `${fallbackId}:${pretripSourceId || "item"}`;
+      const mapTargetIds = evidenceFocusIds(item);
+      state.evidenceItemsBySource[sourceId] = item;
+      return {
+        sourceId,
+        pretripSourceId,
+        mapTargetIds,
+        label: String(mapped?.label || item?.label || item?.candidate_id || item?.source_id || item?.evidence_type || "evidence"),
+        sublabel: String(mapped?.sublabel || item?.source_path || item?.status || "candidate evidence"),
+      };
+    }
+
+    function evidenceSourceId(item) {
+      return item?.boss_point_id || item?.source_mcp_id || item?.source_candidate_id || item?.source_id || item?.mcp_id || item?.candidate_id || item?.segment_id || item?.poi_id || item?.hazard_id || item?.category_id || "";
+    }
+
+    function evidenceFocusIds(item) {
+      if (!item) return [];
+      return [...new Set([
+        evidenceSourceId(item),
+        item.source_id,
+        item.boss_point_id,
+        item.source_mcp_id,
+        item.source_candidate_id,
+        item.candidate_id,
+        item.item_id,
+        item.segment_id,
+        item.checkpoint_id,
+        item.mcp_id,
+        item.poi_id,
+        item.nearby_group_id,
+        item.candidate_ref,
+        item.from_node_id,
+        item.to_node_id,
+        item.from_candidate_id,
+        item.to_candidate_id,
+        item.map_label,
+        item.display_label,
+        item.short_label,
+        item.label,
+        item.name,
+        item.title,
+        ...asArray(item.map_target_ids),
+        ...asArray(item.review_focus),
+        ...asArray(item.target_ids),
+      ].filter(Boolean))];
+    }
+
+    function evidenceTabCounts(groups) {
+      return groups.reduce((counts, group) => {
+        counts[group.tabId] = (counts[group.tabId] || 0) + group.count;
+        return counts;
+      }, {});
+    }
+
+    function asArray(value) {
+      return Array.isArray(value) ? value : [];
+    }
+
+    function valueOrDash(value) {
+      return value === null || value === undefined || value === "" ? "-" : value;
+    }
+
+    function numberText(value, digits = 1) {
+      const number = Number(value || 0);
+      return Number.isFinite(number) ? number.toFixed(digits) : "-";
+    }
+
+    function categoryColor(category) {
+      const colors = {
+        checkpoint: "#62b5c4",
+        timeline: "#62b5c4",
+        route: "#d5a642",
+        segment: "#8ca2c7",
+        risk: "#d06363",
+        mcp: "#d5a642",
+        poi: "#78bf75",
+        retreat: "#78bf75",
+        reference: "#8ca2c7",
+        review: "#d5a642",
+        review_group: "#d5a642",
+      };
+      return colors[category] || "var(--accent)";
+    }
+
+    function normalizedEvents(kind) {
+      const raw = Array.isArray(state.debugEvents) && state.debugEvents.length ? state.debugEvents.slice(0, 12) : [];
+      if (raw.length) {
+        return raw.map((item, index) => ({
+          time: String(item.timestamp || item.recorded_at || item.time || `phase4 #${index + 1}`),
+          title: String(item.event_kind || item.kind || item.title || item.ref || "debug_projection_event"),
+          summary: String(item.summary || item.description || item.message || "read-only projection event"),
+        }));
+      }
+      const base = [
+        ["pretrip", "import_manifest_loaded", "Importer aligned project route and source refs."],
+        ["workspace", "workspace_edit_candidate", "Workspace edits remain planning evidence."],
+        ["layer", "prepare_layers_preview", "Layer preparation exposes ready / partial refs."],
+        ["runtime", "handoff_export_candidate", "Runtime package candidate requires operator trigger."],
+        ["emergency", "approval_artifact_preview", "Emergency packet remains sent=false."],
+        ["observer", "ingress_evidence_index", "Observer message available for review only."],
+      ];
+      return base.map(([time, title, summary]) => ({ time, title, summary }));
+    }
+
+    function renderEvidenceDrawer(route) {
+      const force = SIX_FORCES.find((item) => item.route === route);
+      const title = force ? `${force.zh} Evidence` : "Evidence Drawer";
+      return `
+        <section class="drawer-section" id="dashboardEvidenceHeader">
+          <h3>${escapeHtml(title)}</h3>
+          <div class="drawer-list">
+            <div class="item"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
+            <div class="item"><strong>Workspace root</strong><span class="mono">${escapeHtml(WORKSPACE_ROOT)}</span></div>
+            <div class="item"><strong>Decision vocabulary</strong><span class="mono">${DECISIONS.join(" / ")}</span></div>
+            <div class="item"><strong>Boundary metadata</strong><span>candidate-only, read-only where possible, no live safety automation, no outbound send.</span></div>
+          </div>
+        </section>
+        <section class="drawer-section">
+          <h3>Source refs</h3>
+          <div class="drawer-list">
+            <div class="item"><strong>Standard</strong><span>docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md</span></div>
+            <div class="item"><strong>Pretrip API</strong><span>/admin/pretrip/projects/${escapeHtml(state.pretripDataProjectId || projectId())}?compact=1</span></div>
+            <div class="item"><strong>Projection</strong><span>/admin/pretrip/projects/${escapeHtml(state.pretripDataProjectId || projectId())}/admin-projection</span></div>
+            <div class="item"><strong>Debug events</strong><span>/admin/pretrip/projects/${escapeHtml(state.pretripDataProjectId || projectId())}/debug-projection-events</span></div>
+          </div>
+        </section>
+        <section class="drawer-section">
+          <h3>Alpha Matrix</h3>
+          <div class="drawer-list">
+            <div class="item"><strong>Blocking</strong><span>no known blocking item from dashboard shell.</span></div>
+            <div class="item"><strong>Major</strong><span>GIS-related issues stay repro-only in this context.</span></div>
+            <div class="item"><strong>Minor</strong><span>copy and visual polish can iterate after smoke test.</span></div>
+            <div class="item"><strong>GIS-related</strong><span>record repro, screenshot, data path, expected and actual result.</span></div>
+          </div>
+        </section>
+      `;
+    }
+
+    function bindRenderedControls() {
+      const pretripMapFrame = document.getElementById("pretripMapFrame");
+      if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
+
+      document.querySelectorAll("[data-route]").forEach((button) => {
+        button.addEventListener("click", () => { window.location.hash = button.dataset.route || "home"; });
+      });
+      document.querySelectorAll("input[data-layer]").forEach((input) => {
+        input.addEventListener("change", () => {
+          state.layerEnabled[input.dataset.layer] = input.checked;
+          document.querySelectorAll(`[data-layer-group="${cssEscape(input.dataset.layer)}"]`).forEach((group) => {
+            group.setAttribute("data-layer-hidden", input.checked ? "false" : "true");
+          });
+        });
+      });
+      document.querySelectorAll("[data-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.selectedAction = button.dataset.action || "film";
+          render();
+        });
+      });
+      bindMapEvidenceControls();
+      const saveSettings = document.getElementById("saveSettings");
+      if (saveSettings) {
+        saveSettings.addEventListener("click", () => {
+          localStorage.setItem("scout.dashboardApiBase", document.getElementById("apiBaseInput").value.trim());
+          localStorage.setItem("scout.dashboardProjectId", document.getElementById("projectInput").value.trim() || PROJECT_ID);
+          loadData().finally(render);
+        });
+      }
+    }
+
+    function bindMapEvidenceControls() {
+      document.querySelectorAll("[data-map-evidence-toggle]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.mapEvidenceCollapsed = !state.mapEvidenceCollapsed;
+          renderMapEvidenceRail();
+          bindMapEvidenceControls();
+          const frame = document.getElementById("pretripMapFrame");
+          if (frame) applyPretripMapOnlyFrame(frame);
+        });
+      });
+      document.querySelectorAll("[data-evidence-tab]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const selectedTab = button.dataset.evidenceTab || "default";
+          if (state.route === "map") {
+            state.activeMapEvidenceTab = selectedTab;
+            renderMapEvidenceRail();
+            bindMapEvidenceControls();
+          } else {
+            state.activeEvidenceTab = selectedTab;
+            render();
+          }
+        });
+      });
+      document.querySelectorAll("[data-map-evidence-source]").forEach((button) => {
+        button.addEventListener("click", () => focusDashboardMapEvidence(button.dataset.mapEvidenceSource || ""));
+      });
+    }
+
+    function focusDashboardMapEvidence(sourceId, attempt = 0) {
+      const status = document.getElementById("dashboardMapEvidenceStatus");
+      const frame = document.getElementById("pretripMapFrame");
+      const item = state.evidenceItemsBySource[sourceId];
+      state.selectedMapEvidenceSourceId = sourceId;
+      markMapEvidenceSelection(sourceId);
+      if (!item) {
+        if (status) status.textContent = "Evidence item not available in the dashboard cache.";
+        return;
+      }
+      const label = item.display_label || item.map_label || item.label || item.candidate_id || item.source_id || "selected evidence";
+      try {
+        const mapWindow = frame?.contentWindow;
+        if (!mapWindow || typeof mapWindow.focusMapFor !== "function") {
+          scheduleMapEvidenceFocusRetry(sourceId, label, attempt);
+          return;
+        }
+        if (typeof mapWindow.selectEvidence === "function") {
+          mapWindow.selectEvidence(item, { timeline: false, expandEvidenceGroup: false });
+        }
+        const focused = Boolean(mapWindow.focusMapFor(item, { label: true, preserveZoom: false }));
+        if (status) {
+          if (focused) {
+            clearMapEvidenceFocusRetry();
+            status.textContent = `Focused map on ${label}.`;
+          } else if (!pretripMapHasRenderedTargets(mapWindow) && attempt < 8) {
+            scheduleMapEvidenceFocusRetry(sourceId, label, attempt);
+          } else {
+            clearMapEvidenceFocusRetry();
+            status.textContent = `${label} has no direct map geometry in the current pre-trip view.`;
+          }
+        }
+      } catch (error) {
+        if (status) status.textContent = `Could not focus map: ${error.message || error}`;
+      }
+    }
+
+    function pretripMapHasRenderedTargets(mapWindow) {
+      try {
+        return Boolean(mapWindow?.document?.querySelector("#map [data-source-id]"));
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function scheduleMapEvidenceFocusRetry(sourceId, label, attempt) {
+      const status = document.getElementById("dashboardMapEvidenceStatus");
+      state.pendingMapEvidenceFocusId = sourceId;
+      if (status) status.textContent = `Map is still loading; selected ${label}.`;
+      clearMapEvidenceFocusRetry(false);
+      state.mapEvidenceRetryTimer = window.setTimeout(() => {
+        if (state.selectedMapEvidenceSourceId === sourceId) focusDashboardMapEvidence(sourceId, attempt + 1);
+      }, 1200);
+    }
+
+    function clearMapEvidenceFocusRetry(clearPending = true) {
+      if (state.mapEvidenceRetryTimer) {
+        window.clearTimeout(state.mapEvidenceRetryTimer);
+        state.mapEvidenceRetryTimer = null;
+      }
+      if (clearPending) state.pendingMapEvidenceFocusId = "";
+    }
+
+    function markMapEvidenceSelection(sourceId) {
+      document.querySelectorAll("[data-map-evidence-source]").forEach((button) => {
+        button.classList.toggle("is-selected", button.dataset.mapEvidenceSource === sourceId);
+      });
+    }
+
+    function bindPretripMapOnlyFrame(frame) {
+      const apply = () => applyPretripMapOnlyFrame(frame);
+      if (frame.dataset.mapOnlyBound !== "true") {
+        frame.dataset.mapOnlyBound = "true";
+        frame.addEventListener("load", apply);
+      }
+      window.setTimeout(apply, 0);
+      window.setTimeout(apply, 150);
+    }
+
+    function applyPretripMapOnlyFrame(frame) {
+      try {
+        const doc = frame.contentDocument;
+        if (!doc?.documentElement || !doc.head) {
+          window.setTimeout(() => applyPretripMapOnlyFrame(frame), 100);
+          return;
+        }
+        let style = doc.getElementById("scout-dashboard-map-only-style");
+        if (!style) {
+          style = doc.createElement("style");
+          style.id = "scout-dashboard-map-only-style";
+          doc.head.appendChild(style);
+        }
+        const mapToolRight = state.mapEvidenceCollapsed ? "14px" : "418px";
+        style.textContent = `
+            html,
+            body {
+              height: 100% !important;
+              min-height: 100% !important;
+              overflow: hidden !important;
+            }
+            body {
+              display: block !important;
+            }
+            #readinessStrip,
+            .toolbar-title,
+            .tool-disclosure,
+            .route-pane,
+            .detail-pane,
+            #hoverHint {
+              display: none !important;
+            }
+            .shell {
+              display: grid !important;
+              grid-template-columns: minmax(0, 1fr) !important;
+              grid-template-areas: "map" !important;
+              grid-template-rows: minmax(0, 1fr) !important;
+              width: 100vw !important;
+              height: 100vh !important;
+              min-height: 0 !important;
+              overflow: hidden !important;
+            }
+            .map-pane {
+              grid-area: map !important;
+              display: block !important;
+              position: relative !important;
+              width: 100vw !important;
+              height: 100vh !important;
+              min-height: 0 !important;
+              border: 0 !important;
+              overflow: hidden !important;
+            }
+            .map-wrap {
+              position: absolute !important;
+              inset: 0 !important;
+              height: auto !important;
+              min-height: 0 !important;
+              padding: 0 !important;
+              background: #071114 !important;
+            }
+            #map {
+              width: 100% !important;
+              height: 100% !important;
+              min-height: 0 !important;
+              border: 0 !important;
+              border-radius: 0 !important;
+              background: #071114 !important;
+            }
+            .toolbar {
+              position: absolute !important;
+              inset: 0 !important;
+              z-index: 60 !important;
+              min-height: 0 !important;
+              padding: 0 !important;
+              border: 0 !important;
+              background: transparent !important;
+              overflow: visible !important;
+              color: #ecf4f6 !important;
+              pointer-events: none !important;
+            }
+            .toolbar-grid,
+            .control-group,
+            .toolbar-row {
+              display: contents !important;
+            }
+            .control-group {
+              border: 0 !important;
+              background: transparent !important;
+              padding: 0 !important;
+            }
+            .control-group-header {
+              display: none !important;
+            }
+            .layer-menu,
+            .map-pan-controls,
+            #zoomIn,
+            #zoomOut,
+            #fitRoute,
+            #boxZoomMode,
+            #zoomLevel {
+              pointer-events: auto !important;
+            }
+            .layer-menu {
+              position: absolute !important;
+              top: 14px !important;
+              left: 14px !important;
+              z-index: 72 !important;
+              width: min(240px, calc(100vw - 96px)) !important;
+              color: #d9e7ea !important;
+            }
+            .layer-menu summary {
+              width: 100% !important;
+              min-height: 36px !important;
+              justify-content: space-between !important;
+              border: 1px solid rgba(122, 151, 160, .48) !important;
+              border-radius: 7px 7px 0 0 !important;
+              background: rgba(9, 17, 20, .9) !important;
+              color: #f3f7f8 !important;
+              padding: 8px 10px !important;
+              box-shadow: 0 10px 26px rgba(0, 0, 0, .24) !important;
+              letter-spacing: 0 !important;
+            }
+            .layer-menu summary strong {
+              color: #f5b62f !important;
+              font-weight: 800 !important;
+            }
+            .layer-menu-panel {
+              position: static !important;
+              width: 100% !important;
+              max-height: min(640px, calc(100vh - 74px)) !important;
+              overflow: auto !important;
+              border: 1px solid rgba(122, 151, 160, .48) !important;
+              border-top: 0 !important;
+              border-radius: 0 0 7px 7px !important;
+              background: rgba(9, 17, 20, .86) !important;
+              color: #cbd9dc !important;
+              padding: 9px !important;
+              box-shadow: 0 18px 40px rgba(0, 0, 0, .36) !important;
+              backdrop-filter: blur(8px) !important;
+            }
+            .layer-menu-header span {
+              color: #f3f7f8 !important;
+            }
+            .layer-menu-header small,
+            .layer-advanced summary {
+              color: #86a2aa !important;
+            }
+            .layer-preset-row {
+              grid-template-columns: 1fr !important;
+            }
+            .layer-preset-button,
+            .filters label {
+              border-color: rgba(122, 151, 160, .34) !important;
+              background: rgba(18, 29, 34, .88) !important;
+              color: #dbe8eb !important;
+            }
+            .layer-preset-button.is-active {
+              border-color: #f5b62f !important;
+              background: rgba(245, 182, 47, .14) !important;
+              color: #ffd36a !important;
+            }
+            .filters {
+              grid-template-columns: 1fr !important;
+              gap: 5px !important;
+            }
+            .filters input[type="checkbox"] {
+              accent-color: #4cc7df !important;
+            }
+            .tool-button,
+            .zoom-level,
+            .map-pan-controls {
+              border: 1px solid rgba(122, 151, 160, .5) !important;
+              border-radius: 6px !important;
+              background: rgba(9, 17, 20, .86) !important;
+              color: #edf5f6 !important;
+              box-shadow: 0 8px 20px rgba(0, 0, 0, .25) !important;
+              backdrop-filter: blur(8px) !important;
+            }
+            .tool-button {
+              width: 36px !important;
+              min-width: 36px !important;
+              min-height: 36px !important;
+              padding: 0 !important;
+              font-size: 15px !important;
+              font-weight: 800 !important;
+            }
+            #boxZoomMode.is-active,
+            .tool-button:hover,
+            .tool-button:focus-visible {
+              border-color: #f5b62f !important;
+              color: #ffd36a !important;
+              outline: none !important;
+            }
+            #fitRoute {
+              font-size: 12px !important;
+            }
+            #zoomIn,
+            #zoomOut,
+            #fitRoute,
+            #boxZoomMode,
+            #zoomLevel,
+            .map-pan-controls {
+              position: absolute !important;
+              right: 14px !important;
+              z-index: 74 !important;
+            }
+            #boxZoomMode { top: 14px !important; }
+            #fitRoute { top: 56px !important; }
+            #zoomIn { top: 98px !important; }
+            #zoomOut { top: 140px !important; }
+            #zoomLevel {
+              top: 182px !important;
+              width: 56px !important;
+              min-width: 56px !important;
+              min-height: 28px !important;
+              padding: 5px 4px !important;
+              font-size: 11px !important;
+              text-align: center !important;
+            }
+            .map-pan-controls {
+              top: 222px !important;
+              display: inline-grid !important;
+              grid-template-columns: repeat(3, 28px) !important;
+              grid-template-rows: repeat(3, 28px) !important;
+              gap: 2px !important;
+              padding: 5px !important;
+            }
+            .map-pan-controls .tool-button {
+              width: 28px !important;
+              min-width: 28px !important;
+              min-height: 28px !important;
+              box-shadow: none !important;
+              background: rgba(18, 29, 34, .9) !important;
+            }
+            @media (min-width: 760px) {
+              #zoomIn,
+              #zoomOut,
+              #fitRoute,
+              #boxZoomMode,
+              #zoomLevel,
+              .map-pan-controls {
+                right: ${mapToolRight} !important;
+              }
+            }
+          `;
+        doc.querySelector(".layer-menu")?.setAttribute("open", "");
+        doc.querySelector(".layer-advanced")?.setAttribute("open", "");
+        doc.documentElement.dataset.dashboardMapOnly = "true";
+        const hasRenderedMap = Boolean(doc.querySelector("#map[viewBox] [data-layer-group]"));
+        if (hasRenderedMap) {
+          frame.dataset.mapOnlyReady = "true";
+          frame.dataset.mapOnlyPoll = "";
+        } else {
+          frame.dataset.mapOnlyReady = "loading";
+          if (frame.dataset.mapOnlyPoll !== "active") {
+            frame.dataset.mapOnlyPoll = "active";
+            window.setTimeout(() => {
+              frame.dataset.mapOnlyPoll = "";
+              applyPretripMapOnlyFrame(frame);
+            }, 250);
+          }
+        }
+      } catch (error) {
+        frame.dataset.mapOnlyReady = "blocked";
+      }
+    }
+
+    function projectCounts() {
+      const project = state.project || {};
+      const layerPrep = project.layer_preparation || project.map_layers || {};
+      return {
+        readiness: project.readiness?.status || project.readiness_status || "ready",
+        checkpoints: Array.isArray(project.checkpoints) ? project.checkpoints.length : (project.counts?.checkpoints || 110),
+        segments: Array.isArray(project.segments) ? project.segments.length : (project.counts?.segments || 109),
+        terrainTiles: layerPrep.terrain_tile_count || project.counts?.terrain_tiles || 48,
+      };
+    }
+
+    function cssEscape(value) {
+      if (window.CSS?.escape) return CSS.escape(value);
+      return String(value).replace(/["\\]/g, "\\$&");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+  </script>
+</body>
+</html>

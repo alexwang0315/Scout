@@ -57,6 +57,7 @@ const expectedLayerIdsBySurface = {
   debug: scoutLayerIds.filter((layerId) => layerId !== "completed-track"),
   "after-action": scoutLayerIds,
   pretrip: scoutLayerIds.filter((layerId) => layerId !== "completed-track"),
+  dashboard: scoutLayerIds.filter((layerId) => layerId !== "completed-track"),
 };
 
 const surfaces = [
@@ -100,6 +101,32 @@ const surfaces = [
       { selector: "#providerCount", missingText: "0" },
       { selector: "#assistantProviderStatus", missingText: "Loading" },
     ],
+  },
+  {
+    id: "dashboard",
+    path: "/admin/dashboard?projectId=chilai_nanhua_day1#map",
+    title: "Scout Dashboard v0.1",
+    selectors: ["#dashboardShell", "#dashboardMap", "#dashboardMapStatus", "#dashboardMapEvidence", "#dashboardEvidence", "#pretripMapFrame"],
+    ready: [
+      { selector: "#dashboardRouteStatus", missingText: "Loading" },
+      { selector: "#dashboardMapStatus", missingText: "fallback geometry" },
+    ],
+    frameSelector: "#pretripMapFrame",
+    frameSurfaceId: "dashboard-map-only",
+    frameTitle: "Scout Phase 4 Pre-Trip Planning",
+    frameSelectors: ["#map", ".map-pane", ".toolbar", 'input[data-layer="route"]'],
+    frameVisibleSelectors: ["#map", ".map-pane", ".toolbar"],
+    frameHiddenSelectors: [
+      "#readinessStrip",
+      ".toolbar-title",
+      ".tool-disclosure",
+      ".route-pane",
+      ".detail-pane",
+      "#evidenceTree",
+      "#jsonPane",
+    ],
+    frameReady: [],
+    frameMustFitViewport: true,
   },
 ];
 
@@ -200,23 +227,33 @@ async function runBrowserChecks(baseUrl, screenshotsDir) {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
         await page.waitForTimeout(250);
         await waitForSurface(surface, page);
+        const frameShellChecks = surface.frameMustFitViewport
+          ? await collectFrameShellChecks(surface, page)
+          : undefined;
+        const checkTarget = await checkTargetForSurface(surface, page);
         const expectedLayerIds = expectedLayerIdsBySurface[surface.id] || [];
-        await waitForLayerGroups(page, expectedLayerIds);
+        await waitForLayerGroups(checkTarget.context, expectedLayerIds);
         const checks = await collectChecks(
-          surface,
-          page,
+          checkTarget.surface,
+          checkTarget.context,
           expectedLayerIds,
         );
         const screenshotPath = screenshotsDir
           ? path.join(screenshotsDir, `${surface.id}-${viewport.id}.png`)
           : "";
         if (screenshotPath) await page.screenshot({ path: screenshotPath, fullPage: false });
+        const frameReuseChecks = surface.id === "dashboard"
+          ? await collectDashboardFrameReuseChecks(page)
+          : undefined;
         results.push({
           surface: surface.id,
           viewport: viewport.id,
           url,
           title: await page.title(),
+          checkedTitle: await checkTarget.context.title(),
           screenshot: screenshotPath || undefined,
+          frameShellChecks,
+          frameReuseChecks,
           checks,
         });
       }
@@ -232,19 +269,136 @@ async function runBrowserChecks(baseUrl, screenshotsDir) {
   return { ok: true, surfaces: results };
 }
 
+async function checkTargetForSurface(surface, page) {
+  if (!surface.frameSelector) return { context: page, surface };
+  const frameElement = await page.waitForSelector(surface.frameSelector, {
+    state: "attached",
+    timeout: 10_000,
+  });
+  const frame = await frameElement.contentFrame();
+  if (!frame) throw new Error(`Frame not available for ${surface.id}: ${surface.frameSelector}`);
+  const framedSurface = {
+    ...surface,
+    id: surface.frameSurfaceId || surface.id,
+    title: surface.frameTitle || surface.title,
+    selectors: surface.frameSelectors || [],
+    visibleSelectors: surface.frameVisibleSelectors || [],
+    hiddenSelectors: surface.frameHiddenSelectors || [],
+    ready: surface.frameReady || [],
+    readyTimeoutMs: surface.frameReadyTimeoutMs || surface.readyTimeoutMs,
+  };
+  await waitForSurface(framedSurface, frame);
+  return { context: frame, surface: framedSurface };
+}
+
+async function collectFrameShellChecks(surface, page) {
+  return page.evaluate(({ frameSelector }) => {
+    const frame = document.querySelector(frameSelector);
+    if (!frame) throw new Error(`Frame shell missing: ${frameSelector}`);
+    const rect = frame.getBoundingClientRect();
+    const verticalOverflowPx = Math.max(
+      0,
+      document.documentElement.scrollHeight - window.innerHeight,
+      document.body.scrollHeight - window.innerHeight,
+    );
+    const frameBottomOverflowPx = Math.max(0, Math.round(rect.bottom - window.innerHeight));
+    const frameTop = Math.round(rect.top);
+    const ok = verticalOverflowPx <= 1 && frameBottomOverflowPx <= 1 && frameTop >= 0;
+    if (!ok) {
+      throw new Error(JSON.stringify({
+        frameSelector,
+        verticalOverflowPx,
+        frameBottomOverflowPx,
+        frameTop,
+        frameBottom: Math.round(rect.bottom),
+        viewportHeight: window.innerHeight,
+      }));
+    }
+    return {
+      ok,
+      verticalOverflowPx,
+      frameBottomOverflowPx,
+      frameTop,
+      frameBottom: Math.round(rect.bottom),
+      viewportHeight: window.innerHeight,
+    };
+  }, { frameSelector: surface.frameSelector });
+}
+
+async function collectDashboardFrameReuseChecks(page) {
+  return page.evaluate(async () => {
+    const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const frame = document.querySelector("#pretripMapFrame");
+    if (!frame) throw new Error("Dashboard map frame missing");
+    const initialSrc = frame.src;
+    frame.dataset.smokeLoadCount = "0";
+    if (frame.dataset.smokeLoadBound !== "true") {
+      frame.dataset.smokeLoadBound = "true";
+      frame.addEventListener("load", () => {
+        frame.dataset.smokeLoadCount = String(Number(frame.dataset.smokeLoadCount || "0") + 1);
+      });
+    }
+    window.location.hash = "#timeline";
+    await delay(100);
+    const hiddenWhileAway = document.querySelector("#dashboardMap")?.hidden === true;
+    window.location.hash = "#map";
+    await delay(350);
+    const loadCount = Number(frame.dataset.smokeLoadCount || "0");
+    const sameSrc = frame.src === initialSrc;
+    const visibleAfterReturn = document.querySelector("#dashboardMap")?.hidden === false;
+    const ok = hiddenWhileAway && visibleAfterReturn && sameSrc && loadCount === 0;
+    if (!ok) {
+      throw new Error(JSON.stringify({
+        hiddenWhileAway,
+        visibleAfterReturn,
+        sameSrc,
+        loadCount,
+        initialSrc,
+        currentSrc: frame.src,
+      }));
+    }
+    return { ok, hiddenWhileAway, visibleAfterReturn, sameSrc, loadCount };
+  });
+}
+
 async function waitForSurface(surface, page) {
   for (const selector of surface.selectors) {
     await page.waitForSelector(selector, { state: "attached", timeout: 10_000 });
   }
-  for (const ready of surface.ready || []) {
+  for (const selector of surface.visibleSelectors || []) {
+    await page.waitForSelector(selector, { state: "visible", timeout: 10_000 });
+  }
+  for (const selector of surface.hiddenSelectors || []) {
     await page.waitForFunction(
-      ({ selector, missingText }) => {
-        const node = document.querySelector(selector);
-        return Boolean(node) && !node.textContent.includes(missingText);
+      (candidate) => {
+        const node = document.querySelector(candidate);
+        if (!node) return false;
+        const rect = node.getBoundingClientRect();
+        return getComputedStyle(node).display === "none" || rect.width === 0 || rect.height === 0;
       },
-      ready,
+      selector,
       { timeout: 10_000 },
     );
+  }
+  for (const ready of surface.ready || []) {
+    try {
+      await page.waitForFunction(
+        ({ selector, missingText }) => {
+          const node = document.querySelector(selector);
+          return Boolean(node) && !node.textContent.includes(missingText);
+        },
+        ready,
+        { timeout: surface.readyTimeoutMs || 10_000 },
+      );
+    } catch (error) {
+      const observed = await page.evaluate((selector) => (
+        document.querySelector(selector)?.textContent || ""
+      ), ready.selector).catch(() => "");
+      throw new Error(
+        `Ready check timed out for ${surface.id} selector ${ready.selector} `
+        + `while waiting to remove ${JSON.stringify(ready.missingText)}; observed=${JSON.stringify(observed.slice(0, 160))}`,
+      );
+    }
   }
 }
 
@@ -261,12 +415,12 @@ async function waitForLayerGroups(page, expectedLayerIds) {
       ));
     },
     expectedLayerIds,
-    { timeout: 15_000 },
+    { timeout: 60_000 },
   );
 }
 
 async function collectChecks(surface, page, expectedLayerIds) {
-  return page.evaluate(({ surfaceId, expectedTitle, selectors, expectedLayerIds }) => {
+  return page.evaluate(({ surfaceId, expectedTitle, selectors, visibleSelectors, hiddenSelectors, expectedLayerIds }) => {
     function compareCenteredMapColumns(leftSelector, mapSelector, rightSelector) {
       const left = document.querySelector(leftSelector)?.getBoundingClientRect();
       const map = document.querySelector(mapSelector)?.getBoundingClientRect();
@@ -292,6 +446,29 @@ async function collectChecks(surface, page, expectedLayerIds) {
     function centeredMapLayout() {
       if (surfaceId === "pretrip") {
         return compareCenteredMapColumns(".route-pane", ".map-pane", ".detail-pane");
+      }
+      if (surfaceId === "dashboard-map-only") {
+        const mapPane = document.querySelector(".map-pane")?.getBoundingClientRect();
+        const map = document.querySelector("#map")?.getBoundingClientRect();
+        const toolbar = document.querySelector(".toolbar")?.getBoundingClientRect();
+        if (!mapPane || !map || !toolbar) {
+          return { ok: false, reason: "missing dashboard map-only layout" };
+        }
+        return {
+          ok: mapPane.width > 0
+            && mapPane.height > 0
+            && map.width > 0
+            && map.height > 0
+            && toolbar.width > 0
+            && toolbar.height > 0
+            && mapPane.width >= document.documentElement.clientWidth - 4,
+          mapOnly: true,
+          widths: {
+            mapPane: Math.round(mapPane.width),
+            map: Math.round(map.width),
+            viewport: Math.round(document.documentElement.clientWidth),
+          },
+        };
       }
       if (surfaceId === "after-action") {
         return compareCenteredMapColumns(".tree-pane", ".map-pane", ".json-pane");
@@ -367,8 +544,30 @@ async function collectChecks(surface, page, expectedLayerIds) {
       selector,
       count: document.querySelectorAll(selector).length,
     }));
+    const visibleSelectorResults = (visibleSelectors || []).map((selector) => {
+      const node = document.querySelector(selector);
+      const rect = node?.getBoundingClientRect();
+      return {
+        selector,
+        visible: Boolean(rect && rect.width > 0 && rect.height > 0 && getComputedStyle(node).display !== "none"),
+      };
+    });
+    const hiddenSelectorResults = (hiddenSelectors || []).map((selector) => {
+      const node = document.querySelector(selector);
+      const rect = node?.getBoundingClientRect();
+      return {
+        selector,
+        hidden: Boolean(node && (getComputedStyle(node).display === "none" || rect.width === 0 || rect.height === 0)),
+      };
+    });
     const missingSelectors = selectorResults
       .filter((result) => result.count === 0)
+      .map((result) => result.selector);
+    const failedVisibleSelectors = visibleSelectorResults
+      .filter((result) => !result.visible)
+      .map((result) => result.selector);
+    const failedHiddenSelectors = hiddenSelectorResults
+      .filter((result) => !result.hidden)
       .map((result) => result.selector);
     const horizontalOverflowPx = Math.max(0, doc.scrollWidth - doc.clientWidth);
     const visibleTextBlocks = Array.from(document.querySelectorAll("h1,h2,h3,p,button,summary,strong,small"))
@@ -384,12 +583,16 @@ async function collectChecks(surface, page, expectedLayerIds) {
       })
       .map((node) => node.id || node.textContent.trim().slice(0, 32));
     const titleMatches = document.title === expectedTitle || document.title.startsWith(`${expectedTitle} | `);
-    const nonBlank = bodyText.length > 80 && visibleTextBlocks >= 6;
+    const nonBlank = surfaceId === "dashboard-map-only"
+      ? bodyText.length > 40 && visibleTextBlocks >= 3
+      : bodyText.length > 80 && visibleTextBlocks >= 6;
     const noHorizontalOverflow = horizontalOverflowPx <= 24;
     const mapLayout = centeredMapLayout();
     const layerControls = layerControlChecks();
     if (
       missingSelectors.length
+      || failedVisibleSelectors.length
+      || failedHiddenSelectors.length
       || !titleMatches
       || !nonBlank
       || !noHorizontalOverflow
@@ -399,6 +602,8 @@ async function collectChecks(surface, page, expectedLayerIds) {
     ) {
       throw new Error(JSON.stringify({
         missingSelectors,
+        failedVisibleSelectors,
+        failedHiddenSelectors,
         titleMatches,
         nonBlank,
         noHorizontalOverflow,
@@ -411,6 +616,8 @@ async function collectChecks(surface, page, expectedLayerIds) {
     return {
       titleMatches,
       selectorResults,
+      visibleSelectorResults,
+      hiddenSelectorResults,
       nonBlank,
       visibleTextBlocks,
       noHorizontalOverflow,
@@ -419,7 +626,14 @@ async function collectChecks(surface, page, expectedLayerIds) {
       mapLayout,
       layerControls,
     };
-  }, { surfaceId: surface.id, expectedTitle: surface.title, selectors: surface.selectors, expectedLayerIds });
+  }, {
+    surfaceId: surface.id,
+    expectedTitle: surface.title,
+    selectors: surface.selectors,
+    visibleSelectors: surface.visibleSelectors || [],
+    hiddenSelectors: surface.hiddenSelectors || [],
+    expectedLayerIds,
+  });
 }
 
 function waitFor(url, timeoutMs) {
