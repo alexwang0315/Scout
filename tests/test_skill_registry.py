@@ -68,6 +68,7 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertFalse(
             route_context_intelligence.activation_gate.requires_human_approval
         )
+        self.assertEqual(route_context_intelligence.version, "0.1.2")
         self.assertIn(
             "route-reference-point-lookup",
             route_context_intelligence.preflight.required_skill_ids,
@@ -75,6 +76,14 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertIn(
             "scout.ai.route_context.assess.v0",
             route_context_intelligence.preflight.required_capabilities,
+        )
+        self.assertIn(
+            "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+            route_context_intelligence.preflight.required_capabilities,
+        )
+        self.assertIn(
+            "pretrip.workspace.normalized.context.route_context.route_context_pack",
+            route_context_intelligence.preflight.required_artifacts,
         )
         self.assertIn(
             "pretrip.workspace.normalized.context.route_context.source_manifest",
@@ -89,6 +98,10 @@ class SkillRegistryTests(unittest.TestCase):
             "research_gap_next_step",
             route_context_intelligence.output_schema.required_fields,
         )
+        self.assertIn(
+            "contextual_permission_boundary",
+            route_context_intelligence.output_schema.required_fields,
+        )
         self.assertIsNotNone(route_context_intelligence.output_schema.layout_contract)
         assert route_context_intelligence.output_schema.layout_contract is not None
         self.assertIn(
@@ -100,11 +113,43 @@ class SkillRegistryTests(unittest.TestCase):
             ["P0", "P1", "P2"],
         )
         self.assertIsNotNone(
+            route_context_intelligence.output_schema.layout_contract.visual_direction
+        )
+        assert route_context_intelligence.output_schema.layout_contract.visual_direction
+        self.assertEqual(
+            route_context_intelligence.output_schema.layout_contract.visual_direction.palette,
+            "bold_expedition_route_context",
+        )
+        self.assertIsNotNone(
+            route_context_intelligence.output_schema.layout_contract.media_quality_gate
+        )
+        assert route_context_intelligence.output_schema.layout_contract.media_quality_gate
+        self.assertTrue(
+            any(
+                "tracking pixels" in item
+                for item in route_context_intelligence.output_schema.layout_contract.media_quality_gate.must_reject
+            )
+        )
+        self.assertIn(
+            "visual evidence gaps",
+            route_context_intelligence.output_schema.layout_contract.media_quality_gate.missing_visual_policy,
+        )
+        self.assertIsNotNone(
             route_context_intelligence.output_schema.layout_contract.safety_boundary
         )
         assert route_context_intelligence.output_schema.layout_contract.safety_boundary
         self.assertFalse(
             route_context_intelligence.output_schema.layout_contract.safety_boundary.runtime_safety_truth
+        )
+        self.assertIsNotNone(route_context_intelligence.application_routing)
+        assert route_context_intelligence.application_routing is not None
+        self.assertEqual(
+            route_context_intelligence.application_routing.route_target,
+            "scout.ai.route_context.assess.v0",
+        )
+        self.assertIn(
+            "route_briefing",
+            route_context_intelligence.application_routing.capability_tags,
         )
         route_reference = registry.get("route-reference-point-lookup")
         self.assertEqual(route_reference.type, "analysis")
