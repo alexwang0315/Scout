@@ -24,7 +24,7 @@ keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
 2026-06-30 update: Scout AI provider compatibility now targets Pydantic AI
-v2.1.x. The assistant and Mac-local fallback paths keep Scout's read-only,
+v2.4.0. The assistant and Mac-local fallback paths keep Scout's read-only,
 typed-output contract by using `end_strategy="early"`, normalizing
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
 provider for `openrouter:<vendor/model>`. Native WebSearch, WebFetch, and
@@ -271,7 +271,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.1.x;
+- supported runtime family: Pydantic AI v2.4.0;
 - default model path: local `FunctionModel`;
 - external OpenRouter model path: `openrouter:<vendor/model>` with
   `OPENROUTER_API_KEY`;

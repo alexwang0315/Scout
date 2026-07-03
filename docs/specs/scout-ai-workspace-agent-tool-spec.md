@@ -63,7 +63,7 @@ Default rules:
 
 Pydantic AI provider rules:
 
-- Scout workspace tools target Pydantic AI v2.1.x.
+- Scout workspace tools target Pydantic AI v2.4.0.
 - Local deterministic tools and local `FunctionModel` remain the default.
 - External OpenRouter calls use `openrouter:<vendor/model>` and
   `OPENROUTER_API_KEY`.
@@ -1079,7 +1079,7 @@ The first tool-coverage slices from this spec are now implemented in this
 checkout:
 
 - Pydantic AI provider compatibility
-  - Runtime target: Pydantic AI v2.1.x.
+  - Runtime target: Pydantic AI v2.4.0.
   - Scout keeps `end_strategy="early"` for typed provider calls.
   - `openrouter:<vendor/model>` uses the Pydantic AI OpenRouter provider.
   - `openai:<model>` is normalized to `openai-chat:<model>`.
