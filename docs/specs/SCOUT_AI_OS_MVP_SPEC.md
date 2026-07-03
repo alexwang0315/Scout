@@ -25,7 +25,7 @@ architecture. The implemented core includes:
 - local notification gateway and runtime tick loop;
 - provider-backed agent facades with a local `FunctionModel` default;
 - model policy, timeout/cost SLA gateway, and external-model fallback handling;
-- Pydantic AI v2.1.x compatibility helpers;
+- Pydantic AI v2.4.0 compatibility helpers;
 - generated capability sandbox verification;
 - FastAPI routes and focused API/runtime tests;
 - Scout AI read-only workspace tool workflow:
@@ -82,7 +82,7 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
-- Pydantic AI v2.1.x model execution with explicit model policy, OpenRouter and
+- Pydantic AI v2.4.0 model execution with explicit model policy, OpenRouter and
   OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
@@ -289,8 +289,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai-slim[openai,openrouter] >= 2.1,<3
-pydantic-evals >= 2.1,<3
+pydantic-ai-slim[openai,openrouter] == 2.4.0
+pydantic-evals == 2.4.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -313,7 +313,7 @@ dbos
 mcp clients
 ```
 
-Pydantic AI v2.1 operating rules:
+Pydantic AI v2.4.0 operating rules:
 
 - Scout's package path uses `pydantic-ai-slim` with `openai` and `openrouter`
   extras for Pi compatibility.
@@ -750,9 +750,9 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Pydantic AI v2.1 Provider Policy
+### 7.6 Pydantic AI v2.4.0 Provider Policy
 
-Scout AI OS uses Pydantic AI v2.1.x as a typed provider facade, not as an
+Scout AI OS uses Pydantic AI v2.4.0 as a typed provider facade, not as an
 unbounded autonomous runtime.
 
 Provider modes:

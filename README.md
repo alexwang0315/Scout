@@ -111,7 +111,7 @@ The smoke command uses `PydanticScoutAgentProvider` and Pydantic AI's local
 outputs without requiring cloud credentials. Pass `--model ...` only when an
 external Pydantic AI model provider is configured in the environment.
 
-Scout pins Pi runtimes to Pydantic AI v2.1.x. The Scout provider keeps
+Scout pins Pi runtimes to Pydantic AI v2.4.0. The Scout provider keeps
 `end_strategy="early"` so model output cannot cause additional same-turn tool
 execution after the typed Scout output is produced.
 
