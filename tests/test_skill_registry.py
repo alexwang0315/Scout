@@ -31,6 +31,7 @@ class SkillRegistryTests(unittest.TestCase):
                 "pretrip-import-preparation",
                 "remote-status-json",
                 "route-briefing-compose",
+                "route-context-intelligence",
                 "route-reference-point-lookup",
                 "team-checkin-summary",
                 "team-rendezvous-beacon",
@@ -61,6 +62,50 @@ class SkillRegistryTests(unittest.TestCase):
             layout.media_quality_gate.missing_visual_policy,
         )
         self.assertEqual(layout.safety_boundary.runtime_safety_truth, False)
+        route_context_intelligence = registry.get("route-context-intelligence")
+        self.assertEqual(route_context_intelligence.type, "analysis")
+        self.assertEqual(route_context_intelligence.activation_gate.mode, "manual")
+        self.assertFalse(
+            route_context_intelligence.activation_gate.requires_human_approval
+        )
+        self.assertIn(
+            "route-reference-point-lookup",
+            route_context_intelligence.preflight.required_skill_ids,
+        )
+        self.assertIn(
+            "scout.ai.route_context.assess.v0",
+            route_context_intelligence.preflight.required_capabilities,
+        )
+        self.assertIn(
+            "pretrip.workspace.normalized.context.route_context.source_manifest",
+            route_context_intelligence.allowed_reads,
+        )
+        self.assertIn("pretrip.workspace", route_context_intelligence.forbidden_writes)
+        self.assertIn(
+            "scout_ai_route_context_intelligence_answer",
+            route_context_intelligence.output_schema.artifact_kinds,
+        )
+        self.assertIn(
+            "research_gap_next_step",
+            route_context_intelligence.output_schema.required_fields,
+        )
+        self.assertIsNotNone(route_context_intelligence.output_schema.layout_contract)
+        assert route_context_intelligence.output_schema.layout_contract is not None
+        self.assertIn(
+            "observation_points",
+            route_context_intelligence.output_schema.layout_contract.required_sections,
+        )
+        self.assertEqual(
+            route_context_intelligence.output_schema.layout_contract.source_tiers_required,
+            ["P0", "P1", "P2"],
+        )
+        self.assertIsNotNone(
+            route_context_intelligence.output_schema.layout_contract.safety_boundary
+        )
+        assert route_context_intelligence.output_schema.layout_contract.safety_boundary
+        self.assertFalse(
+            route_context_intelligence.output_schema.layout_contract.safety_boundary.runtime_safety_truth
+        )
         route_reference = registry.get("route-reference-point-lookup")
         self.assertEqual(route_reference.type, "analysis")
         self.assertEqual(route_reference.activation_gate.mode, "manual")
