@@ -46,6 +46,7 @@
 
     button,
     input,
+    textarea,
     select {
       font: inherit;
     }
@@ -143,6 +144,22 @@
       display: grid;
       gap: 3px;
       padding: 0 6px 8px 18px;
+    }
+
+    .nav-subtree .nav-section {
+      margin: 2px 0;
+      border-color: rgba(255, 255, 255, .055);
+      background: rgba(255, 255, 255, .012);
+    }
+
+    .nav-subtree .nav-section summary {
+      min-height: 32px;
+      padding: 6px 8px;
+      font-size: 14px;
+    }
+
+    .nav-subtree .nav-section .nav-subtree {
+      padding: 0 4px 7px 16px;
     }
 
     .nav-item {
@@ -533,6 +550,10 @@
       gap: 12px;
     }
 
+    .workspace-detail-grid {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    }
+
     .decision-band {
       display: grid;
       grid-template-columns: minmax(220px, 1.1fr) repeat(3, minmax(140px, .8fr));
@@ -673,6 +694,183 @@
       min-height: 560px;
       border: 0;
       background: var(--bg);
+    }
+
+    .route-briefing-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .route-briefing-frame-panel {
+      min-height: calc(100vh - 190px);
+      display: grid;
+      grid-template-rows: auto auto minmax(760px, 1fr);
+      overflow: hidden;
+    }
+
+    .route-briefing-frame {
+      width: 100%;
+      height: 100%;
+      min-height: 760px;
+      border: 0;
+      background: #071014;
+    }
+
+    .route-briefing-ops,
+    .route-briefing-actions,
+    .route-briefing-meta-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .route-briefing-ops {
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .route-briefing-status {
+      min-width: 0;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .route-briefing-actions,
+    .route-briefing-meta-actions {
+      justify-content: flex-start;
+    }
+
+    .route-briefing-action-button,
+    .route-briefing-actions a,
+    .route-briefing-meta-actions a {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-weight: 750;
+      text-decoration: none;
+    }
+
+    .route-briefing-action-button:disabled {
+      opacity: .62;
+      cursor: wait;
+    }
+
+    .route-briefing-action-button.primary {
+      border-color: rgba(213, 166, 66, .7);
+      color: #f6d68d;
+      background: rgba(213, 166, 66, .12);
+    }
+
+    .route-briefing-meta-actions {
+      grid-column: 1 / -1;
+      padding: 0 12px 12px;
+    }
+
+    .route-briefing-actions a:hover,
+    .route-briefing-actions a:focus-visible,
+    .route-briefing-meta-actions a:hover,
+    .route-briefing-meta-actions a:focus-visible {
+      border-color: var(--accent);
+      outline: none;
+      text-decoration: none;
+    }
+
+    .route-briefing-empty {
+      padding: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .route-briefing-meta-drawer {
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .route-briefing-meta-drawer summary {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+      color: var(--muted);
+      list-style: none;
+    }
+
+    .route-briefing-meta-drawer summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .route-briefing-meta-drawer summary::after {
+      content: "+";
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      background: rgba(255, 255, 255, .035);
+      font-weight: 900;
+    }
+
+    .route-briefing-meta-drawer[open] summary::after {
+      content: "-";
+    }
+
+    .route-briefing-meta-drawer summary span {
+      color: var(--text);
+      font-weight: 800;
+    }
+
+    .route-briefing-meta-drawer summary small {
+      margin-left: auto;
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .route-briefing-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 0 12px 12px;
+    }
+
+    .route-briefing-meta-block {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, .085);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, .14);
+    }
+
+    .route-briefing-meta-block h4 {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .route-briefing-meta-block .metric-line {
+      gap: 5px;
     }
 
     .map-toolbar {
@@ -1014,10 +1212,893 @@
       background: rgba(98, 181, 196, .14);
     }
 
+    .debug-runtime-tabs {
+      margin-bottom: 0;
+    }
+
+    .debug-runtime-tabs button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .debug-runtime-tabs small {
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .debug-console {
+      display: grid;
+      gap: 10px;
+    }
+
+    .debug-telemetry-bar {
+      display: grid;
+      grid-template-columns: minmax(150px, 1fr) repeat(6, minmax(118px, .78fr));
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--line);
+    }
+
+    .debug-telemetry-cell {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+      padding: 9px 11px;
+      background: rgba(10, 18, 22, .88);
+    }
+
+    .debug-telemetry-cell span {
+      color: var(--subtle);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .debug-telemetry-cell strong {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .debug-telemetry-cell small {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .debug-telemetry-cell.is-ok strong { color: #8bd98a; }
+    .debug-telemetry-cell.is-warn strong { color: #f5c14f; }
+    .debug-telemetry-cell.is-bad strong { color: #ff8178; }
+    .debug-telemetry-cell.is-info strong { color: #8bd5e3; }
+
+    .debug-tab-shell {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(16, 24, 29, .84);
+      overflow: hidden;
+    }
+
+    .debug-tab-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 11px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .debug-tab-head h3 {
+      color: var(--text);
+    }
+
+    .debug-tab-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      gap: 1px;
+      padding: 1px;
+      background: rgba(255, 255, 255, .055);
+    }
+
+    .debug-tab-strip button {
+      min-width: 0;
+      min-height: 42px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      border: 0;
+      border-radius: 0;
+      background: #121b21;
+      color: var(--muted);
+      padding: 8px 9px;
+      text-align: left;
+    }
+
+    .debug-tab-strip button.is-active {
+      background: linear-gradient(90deg, rgba(98, 181, 196, .22), rgba(98, 181, 196, .07));
+      color: var(--text);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .debug-tab-strip button small {
+      color: var(--warn);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .debug-console-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .debug-main-stack,
+    .debug-drawer-stack,
+    .debug-detail-stack {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .debug-detail-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .debug-table-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .debug-table-wrap {
+      overflow: auto;
+      scrollbar-gutter: stable;
+    }
+
+    .debug-table {
+      min-width: 640px;
+      font-size: 12px;
+    }
+
+    .debug-table th,
+    .debug-table td {
+      padding: 7px 8px;
+    }
+
+    .debug-table tbody tr:hover td {
+      background: rgba(98, 181, 196, .06);
+    }
+
+    .debug-slim-list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .debug-slim-row {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 8px;
+      border: 1px solid rgba(255, 255, 255, .075);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .debug-slim-row strong,
+    .debug-slim-row span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .debug-slim-row span {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .debug-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      max-width: 150px;
+      padding: 2px 6px;
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 900;
+      font-style: normal;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .debug-pill.is-ok { color: #a8e6a6; border-color: rgba(120, 191, 117, .55); background: rgba(120, 191, 117, .12); }
+    .debug-pill.is-warn { color: #ffd15d; border-color: rgba(213, 166, 66, .62); background: rgba(213, 166, 66, .12); }
+    .debug-pill.is-bad { color: #ff9b92; border-color: rgba(208, 99, 99, .62); background: rgba(208, 99, 99, .12); }
+    .debug-pill.is-info { color: #9fd3dc; border-color: rgba(98, 181, 196, .48); background: rgba(98, 181, 196, .1); }
+
+    .debug-visual-panel {
+      display: grid;
+      gap: 12px;
+    }
+
+    .debug-visual-intro {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .debug-node-grid,
+    .debug-api-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+      gap: 10px;
+    }
+
+    .debug-node {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .debug-node.is-ok { border-color: rgba(120, 191, 117, .46); background: rgba(120, 191, 117, .08); }
+    .debug-node.is-warn { border-color: rgba(213, 166, 66, .52); background: rgba(213, 166, 66, .09); }
+    .debug-node.is-bad { border-color: rgba(208, 99, 99, .52); background: rgba(208, 99, 99, .08); }
+    .debug-node.is-info { border-color: rgba(98, 181, 196, .44); background: rgba(98, 181, 196, .08); }
+
+    .debug-node-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .debug-node-icon {
+      width: 32px;
+      height: 32px;
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      color: var(--text);
+      background: rgba(0, 0, 0, .18);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .debug-node h4,
+    .debug-node strong,
+    .debug-node span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .debug-node h4 {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .debug-node strong {
+      font-size: 18px;
+      line-height: 1.15;
+    }
+
+    .debug-node-meta,
+    .debug-node-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .debug-node-chips span,
+    .debug-pin-chip {
+      max-width: 100%;
+      padding: 3px 6px;
+      border: 1px solid rgba(255, 255, 255, .12);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .16);
+      overflow-wrap: anywhere;
+    }
+
+    .debug-flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 138px), 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .debug-flow-node {
+      position: relative;
+      min-height: 74px;
+      display: grid;
+      align-content: center;
+      gap: 4px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(98, 181, 196, .055);
+    }
+
+    .debug-flow-node::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: -8px;
+      width: 8px;
+      border-top: 1px solid rgba(98, 181, 196, .45);
+    }
+
+    .debug-flow-node:last-child::after { display: none; }
+
+    .debug-flow-node span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .debug-flow-node strong {
+      overflow-wrap: anywhere;
+    }
+
+    .debug-level-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .debug-level-box {
+      min-height: 58px;
+      display: grid;
+      place-items: center;
+      gap: 2px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .025);
+      color: var(--muted);
+    }
+
+    .debug-level-box.is-active {
+      border-color: var(--warn);
+      background: rgba(213, 166, 66, .16);
+      color: var(--text);
+    }
+
+    .debug-level-box strong {
+      font-size: 18px;
+    }
+
+    .debug-bus {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 176px), 1fr));
+      gap: 10px;
+    }
+
+    .debug-pin-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+      gap: 6px;
+    }
+
+    .debug-pin-chip {
+      border-radius: 7px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .debug-api-tile {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, .14);
+    }
+
+    .debug-api-tile a {
+      color: var(--accent);
+      overflow-wrap: anywhere;
+    }
+
+    .debug-api-meter {
+      height: 7px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .08);
+    }
+
+    .debug-api-meter span {
+      display: block;
+      height: 100%;
+      max-width: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--warn));
+    }
+
+    .debug-console .panel,
+    .debug-console .debug-tab-shell {
+      border-radius: 6px;
+    }
+
+    .debug-console .panel-header {
+      padding: 9px 11px;
+    }
+
+    .debug-console .panel-body {
+      padding: 10px 11px;
+    }
+
+    .debug-console .debug-node {
+      padding: 9px;
+      border-radius: 6px;
+    }
+
+    .debug-console .debug-node strong {
+      font-size: 16px;
+    }
+
+    .debug-console .debug-node-grid {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 154px), 1fr));
+      gap: 8px;
+    }
+
     .settings-grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 12px;
+    }
+
+    .workspace-ops {
+      display: grid;
+      gap: 12px;
+    }
+
+    .workspace-action-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 8px;
+    }
+
+    .workspace-action-grid button,
+    .workspace-switch-row button,
+    .import-trip-actions button {
+      min-width: 0;
+      padding: 0 9px;
+      white-space: nowrap;
+    }
+
+    .workspace-action-grid button[data-danger="true"] {
+      border-color: rgba(208, 99, 99, .48);
+      color: #ffd7d7;
+    }
+
+    .workspace-switch-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .workspace-field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .workspace-field span {
+      color: var(--subtle);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .workspace-field input,
+    .workspace-field select {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .workspace-field select {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 7px 8px;
+    }
+
+    .workspace-field textarea {
+      width: 100%;
+      min-width: 0;
+      min-height: 58px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 7px 8px;
+    }
+
+    .workspace-status {
+      min-height: 32px;
+      padding: 8px 9px;
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 7px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .025);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .import-trip-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, .62fr);
+      gap: 12px;
+    }
+
+    .import-trip-form {
+      display: grid;
+      gap: 10px;
+    }
+
+    .import-trip-controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+      gap: 10px;
+    }
+
+    .optional-parameters-frame {
+      overflow: hidden;
+    }
+
+    .optional-parameters-frame summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 13px;
+      cursor: pointer;
+      list-style: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    .optional-parameters-frame summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .optional-parameters-frame[open] summary {
+      border-bottom-color: var(--line);
+    }
+
+    .optional-parameters-frame summary strong,
+    .optional-parameters-frame summary small {
+      display: block;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .optional-parameters-frame summary small {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .optional-parameters-body {
+      display: grid;
+      gap: 12px;
+    }
+
+    .optional-parameter-group {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .optional-parameter-group h4 {
+      margin: 0;
+      color: var(--text);
+      font-size: 12px;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .import-context-panel {
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .import-context-chips,
+    .import-guard-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .import-context-path {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255,255,255,.07);
+    }
+
+    .import-context-path span {
+      color: var(--subtle);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .import-context-path strong {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .import-guard-strip {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,.025);
+    }
+
+    .material-pool-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, .42fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .material-pool-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .material-pool-tabs button {
+      min-width: 86px;
+      padding: 0 10px;
+      font-weight: 800;
+    }
+
+    .material-pool-tabs button.is-active {
+      border-color: rgba(98, 181, 196, .62);
+      background: rgba(98, 181, 196, .14);
+      color: var(--text);
+    }
+
+    .material-pool-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+      gap: 8px;
+    }
+
+    .material-pool-cell {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .material-pool-cell span {
+      color: var(--subtle);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .material-pool-cell strong,
+    .material-pool-cell small {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .material-pool-cell strong {
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.22;
+    }
+
+    .material-pool-cell small {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .material-resource-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 188px), 1fr));
+      gap: 8px;
+    }
+
+    .material-resource-card {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .material-resource-card h4 {
+      margin: 0;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }
+
+    .material-resource-card span,
+    .material-resource-card small {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .material-resource-card span {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .material-resource-card small {
+      color: var(--subtle);
+      font-size: 11px;
+    }
+
+    .material-provider-table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .material-provider-table th,
+    .material-provider-table td {
+      padding: 8px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .material-provider-table th {
+      color: var(--subtle);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+
+    .material-provider-table td {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .material-provider-table strong {
+      color: var(--text);
+    }
+
+    .material-pool-note {
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .import-trip-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .import-trip-check-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .import-trip-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 32px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, .025);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .import-trip-check input {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .import-trip-actions button[data-import-trip-action="stage"] {
+      border-color: rgba(213, 166, 66, .48);
+      color: #f2dfae;
+    }
+
+    .import-trip-pipeline {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .import-step {
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .import-step span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 22px;
+      margin-bottom: 8px;
+      border: 1px solid rgba(98, 181, 196, .45);
+      border-radius: 999px;
+      color: #d5edf2;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .import-step strong,
+    .import-step small {
+      display: block;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .import-step small {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     a {
@@ -1077,7 +2158,21 @@
       .decision-band,
       .grid-2,
       .grid-3,
-      .settings-grid {
+      .settings-grid,
+      .debug-telemetry-bar,
+      .debug-console-grid,
+      .debug-detail-grid,
+      .debug-table-grid,
+      .debug-level-strip,
+      .import-trip-grid,
+      .import-trip-pipeline,
+      .material-pool-layout,
+      .route-briefing-layout,
+      .workspace-action-grid,
+      .workspace-switch-row {
+        grid-template-columns: 1fr;
+      }
+      .route-briefing-meta-grid {
         grid-template-columns: 1fr;
       }
       .force-row {
@@ -1175,6 +2270,13 @@
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="features-lbs"><span class="mark"></span><span>LBS</span></button>
             <button class="nav-item" type="button" data-route="features-workspace"><span class="mark"></span><span>Workspace</span></button>
+            <details class="nav-section" open>
+              <summary><span class="mark"></span><span>Import New Trip</span></summary>
+              <div class="nav-subtree">
+                <button class="nav-item" type="button" data-route="features-import-new-trip"><span class="mark"></span><span>Trip Intake</span></button>
+                <button class="nav-item" type="button" data-route="features-country-material-pool"><span class="mark"></span><span>Country Material Pool</span></button>
+              </div>
+            </details>
           </div>
         </details>
         <details class="nav-section" open>
@@ -1190,14 +2292,14 @@
         <button class="nav-item" type="button" data-route="timeline"><span class="mark"></span><span>Timeline Evidence</span></button>
         <button class="nav-item" type="button" data-route="emergency"><span class="mark"></span><span>Safety / Emergency</span></button>
         <details class="nav-section" open>
-          <summary><span class="mark"></span><span>戶外六力</span></summary>
+          <summary><span class="mark"></span><span>Exploring for Six Axis</span></summary>
           <div class="nav-subtree">
-            <button class="nav-item" type="button" data-route="outdoor-route-context"><span class="mark"></span><span>探索力 Route Context</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-pace-fit"><span class="mark"></span><span>自信力 Pace Fit</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-permission"><span class="mark"></span><span>勇氣力 Permission</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-architecture"><span class="mark"></span><span>路線力 Architecture</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-weather"><span class="mark"></span><span>天氣力 Weather</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-navigation"><span class="mark"></span><span>地圖力 Navigation</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-route-context"><span class="mark"></span><span>Route Context</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-pace-fit"><span class="mark"></span><span>Pace Fit</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-permission"><span class="mark"></span><span>Permission</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-architecture"><span class="mark"></span><span>Architecture</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-weather"><span class="mark"></span><span>Weather</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-navigation"><span class="mark"></span><span>Navigation</span></button>
           </div>
         </details>
         <button class="nav-item" type="button" data-route="debug"><span class="mark"></span><span>Debug Message</span></button>
@@ -1270,6 +2372,120 @@
       { id: "review", label: "Review / Queue", category: "review" },
       { id: "info", label: "Info / Other", category: "route" },
     ];
+    const DEBUG_DETAIL_CATEGORIES = [
+      {
+        id: "state",
+        label: "L0-L4",
+        source: "runtime debug state",
+        endpoint: "/debug/state",
+        keywords: ["state", "l0", "l1", "l2", "l3", "l4", "safety", "transition"],
+        fallback: "current L0-L4 runtime state",
+      },
+      {
+        id: "events",
+        label: "Events",
+        source: "debug projection events",
+        endpoint: "/debug/events?limit=200",
+        keywords: ["event", "timeline", "debug_projection", "runtime_debug"],
+        fallback: "timeline event stream",
+      },
+      {
+        id: "hardware",
+        label: "Hardware",
+        source: "hardware-readiness context",
+        endpoint: "/admin/hardware-readiness/context",
+        keywords: ["hardware", "gpio", "i2c", "gnss", "imu", "uart", "provider"],
+        fallback: "hardware readiness projection",
+      },
+      {
+        id: "software",
+        label: "Software",
+        source: "runtime/provider state",
+        endpoint: "/admin/debug",
+        keywords: ["software", "runtime", "provider", "release", "monitor", "phase"],
+        fallback: "runtime software state",
+      },
+      {
+        id: "monitor",
+        label: "Monitor",
+        source: "monitoring center",
+        endpoint: "/debug/monitoring",
+        keywords: ["monitor", "monitoring", "release_check", "map_preparation", "spatial_imprint"],
+        fallback: "cross-domain monitoring summary",
+      },
+      {
+        id: "provider",
+        label: "Provider",
+        source: "provider degraded status",
+        endpoint: "/admin/debug#provider",
+        keywords: ["provider", "degraded", "available", "gps", "map", "model"],
+        fallback: "provider dependency state",
+      },
+      {
+        id: "ingress",
+        label: "Ingress",
+        source: "mobile/wearable ingress",
+        endpoint: "/debug/mobile-wearable/ingress",
+        keywords: ["ingress", "mqtt", "sensorlogger", "wearable", "mobile", "observer"],
+        fallback: "mobile and observer ingress",
+      },
+      {
+        id: "incident",
+        label: "Incident",
+        source: "incident and bridge status",
+        endpoint: "/admin/debug#incident",
+        keywords: ["incident", "bridge", "package", "persisted"],
+        fallback: "incident package and bridge status",
+      },
+      {
+        id: "ln-skill",
+        label: "Ln / Skill",
+        source: "Ln gate and skill runs",
+        endpoint: "/admin/debug#skill",
+        keywords: ["ln", "skill", "gate", "agent_tool", "physiologic", "runtime_safety"],
+        fallback: "Ln gate and skill run projection",
+      },
+      {
+        id: "skills",
+        label: "Skills",
+        source: "Scout agent skills",
+        endpoint: "/admin/debug#skill",
+        keywords: ["skill", "capability", "skill_id", "scout_agent_skills"],
+        fallback: "skill inventory and candidate runs",
+      },
+      {
+        id: "tools",
+        label: "Tools",
+        source: "agent tool traces",
+        endpoint: "/admin/debug#monitor",
+        keywords: ["tool", "tool_id", "agent_tool", "release_check", "map_preparation"],
+        fallback: "tool invocation trace",
+      },
+      {
+        id: "outbound",
+        label: "Outbound",
+        source: "outbound dry-run messages",
+        endpoint: "/admin/debug#outbound",
+        keywords: ["outbound", "message", "voice", "transport", "mock"],
+        fallback: "outbound mock transport",
+      },
+      {
+        id: "boundary",
+        label: "Boundary",
+        source: "runtime safety boundary",
+        endpoint: "/admin/debug#boundary",
+        keywords: ["boundary", "safety", "mutation", "approval", "phase1", "live_safety"],
+        fallback: "runtime boundary and safety guard",
+      },
+      {
+        id: "api",
+        label: "API",
+        source: "debug API endpoints",
+        endpoint: "/admin/debug#api",
+        keywords: ["api", "endpoint", "http", "admin", "debug_projection"],
+        fallback: "debug API source refs",
+      },
+    ];
     const SCOUT_LAYER_IDS = [
       "imagery",
       "rudy",
@@ -1305,10 +2521,146 @@
       "weather-api",
     ];
 
+    const COUNTRY_MATERIAL_POOLS = [
+      {
+        code: "TW",
+        label: "Taiwan",
+        status: "factory default",
+        boundary: "Taiwan-only providers",
+        materialRoot: "/data/scout/materials/country/tw",
+        defaults: {
+          importProfile: "tw-pretrip",
+          materialRoot: "/data/scout/materials/country/tw",
+          dtmDirs: "/data/scout/materials/country/tw/dtm",
+          osmPbfSourceUrl: "https://download.geofabrik.de/asia/taiwan-latest.osm.pbf",
+          weatherProvider: "CWA",
+          geologyProvider: "Central Geological Survey",
+          marineProvider: "CWA Marine / Ocean Affairs Council",
+          baseMapProvider: "NLSC EMAP / TGOS / OSM",
+          ttl: "weather 3h; OSM 30d; DTM manual",
+        },
+        resources: [
+          ["DTM", "MOI DTM bundle", "country material root", "manual refresh"],
+          ["Base Maps", "NLSC EMAP, TGOS, OSM", "tile/material refs", "cache-first"],
+          ["Government Sites", "NLSC, TGOS, CWA, Geological Survey", "factory refs", "operator reviewed"],
+          ["Weather API", "CWA QPF and station weather", "cwa-qpf, cwa-weather", "3h TTL"],
+          ["Geology API", "Central Geological Survey open data", "geology, hazards", "manual review"],
+          ["Marine API", "CWA marine and coastal forecasts", "weather-api", "route dependent"],
+          ["Open Data Entry", "data.gov.tw and agency portals", "source registry", "candidate evidence"],
+        ],
+        providers: [
+          ["weather", "CWA", "Taiwan", "cwa-qpf, cwa-weather, weather-api", "3h", "candidate evidence"],
+          ["terrain", "MOI DTM", "Taiwan", "terrain, relief, topo-5k", "manual", "material cache"],
+          ["base-map", "NLSC / TGOS / OSM", "Taiwan", "imagery, osm, rudy-twmap", "cache-first", "map render"],
+          ["geology", "Central Geological Survey", "Taiwan", "geology, hazards", "manual", "repro evidence"],
+          ["marine", "CWA Marine", "Taiwan coast", "weather-api", "route scoped", "candidate evidence"],
+        ],
+        routeContextSources: [
+          ["P0", "林業及自然保育署自然步道資料", "official_baseline"],
+          ["P0", "台灣山林悠遊網開放資料", "official_baseline"],
+          ["P0", "臺灣登山申請一站式服務網", "official_baseline"],
+          ["P0", "國家公園路線開放狀態", "official_status"],
+          ["P0", "內政部國土測繪中心 DEM / DTM / 地形圖", "terrain_baseline"],
+          ["P0", "中央氣象署 CODiS / 開放資料", "weather_baseline"],
+          ["P0", "NCDR 災害潛勢資料", "hazard_baseline"],
+          ["P0", "消防署山域事故救援案件", "incident_baseline"],
+          ["P0", "地方消防局山域事故與即時災情", "incident_local_baseline"],
+          ["P0", "政府資料開放平臺山域事故清冊 / 消防救援統計", "incident_open_data_baseline"],
+          ["P0", "TBN 台灣生物多樣性網絡", "natural_baseline"],
+          ["P0", "中研院臺灣百年歷史地圖", "historical_map_baseline"],
+          ["P0", "尋路・循路－臺灣原住民族古道空間資訊網", "cultural_trail_baseline"],
+          ["P1", "國家文化記憶庫", "cultural_expansion"],
+          ["P1", "臺灣記憶", "historical_expansion"],
+          ["P1", "原住民族古道空間資訊網", "cultural_spatial_expansion"],
+          ["P1", "地質雲", "geology_expansion"],
+          ["P1", "OpenStreetMap / Overpass / OSM full-history", "map_expansion"],
+          ["P1", "魯地圖", "map_expansion"],
+          ["P1", "地圖產生器 / 山友 GPX", "community_route_seed"],
+          ["P1", "健行筆記", "community_article_evidence"],
+          ["P1", "Hikingbook", "community_route_evidence"],
+          ["P1", "PTT Hiking", "community_article_evidence"],
+          ["P1", "登山補給站", "community_article_evidence"],
+          ["P1", "中華民國山難救助協會 / 山域搜救訓練資料", "rescue_training_reference"],
+          ["P1", "跑山獸 / 山小白 / 公開搜救與登山專家影音", "field_rescue_expert_observation"],
+          ["P1", "公開社群影音與路線貼文", "community_media_evidence"],
+        ],
+      },
+      {
+        code: "JP",
+        label: "Japan",
+        status: "template ready",
+        boundary: "Japan providers; no CWA",
+        materialRoot: "/data/scout/materials/country/jp",
+        defaults: {
+          importProfile: "jp-pretrip",
+          materialRoot: "/data/scout/materials/country/jp",
+          dtmDirs: "/data/scout/materials/country/jp/dtm",
+          osmPbfSourceUrl: "https://download.geofabrik.de/asia/japan-latest.osm.pbf",
+          weatherProvider: "JMA",
+          geologyProvider: "GSJ / AIST",
+          marineProvider: "JMA Marine / JODC",
+          baseMapProvider: "GSI Maps / OSM",
+          ttl: "weather 3h; OSM 30d; DTM manual",
+        },
+        resources: [
+          ["DTM", "GSI elevation materials", "country material root", "manual refresh"],
+          ["Base Maps", "GSI Maps and OSM", "tile/material refs", "cache-first"],
+          ["Government Sites", "GSI, JMA, MLIT, GSJ", "factory refs", "operator reviewed"],
+          ["Weather API", "JMA forecast and risk feeds", "weather-api", "3h TTL"],
+          ["Geology API", "GSJ / AIST geology materials", "geology, hazards", "manual review"],
+          ["Marine API", "JMA Marine / JODC refs", "weather-api", "route dependent"],
+          ["Open Data Entry", "e-Gov and agency portals", "source registry", "candidate evidence"],
+        ],
+        providers: [
+          ["weather", "JMA", "Japan", "weather-api", "3h", "candidate evidence"],
+          ["terrain", "GSI DTM", "Japan", "terrain, relief", "manual", "material cache"],
+          ["base-map", "GSI Maps / OSM", "Japan", "imagery, osm", "cache-first", "map render"],
+          ["geology", "GSJ / AIST", "Japan", "geology, hazards", "manual", "repro evidence"],
+          ["marine", "JMA Marine / JODC", "Japan coast", "weather-api", "route scoped", "candidate evidence"],
+        ],
+        routeContextSources: [],
+      },
+      {
+        code: "GLOBAL",
+        label: "Global Fallback",
+        status: "minimal fallback",
+        boundary: "generic public providers",
+        materialRoot: "/data/scout/materials/country/global",
+        defaults: {
+          importProfile: "global-pretrip",
+          materialRoot: "/data/scout/materials/country/global",
+          dtmDirs: "/data/scout/materials/country/global/dtm",
+          osmPbfSourceUrl: "country-specific Geofabrik extract",
+          weatherProvider: "operator-selected",
+          geologyProvider: "operator-selected open data",
+          marineProvider: "operator-selected coastal source",
+          baseMapProvider: "OSM / local government base map",
+          ttl: "provider-specific",
+        },
+        resources: [
+          ["DTM", "SRTM/Copernicus or local DEM", "material root", "manual refresh"],
+          ["Base Maps", "OSM and local government maps", "tile/material refs", "cache-first"],
+          ["Government Sites", "national open data portals", "factory refs", "operator reviewed"],
+          ["Weather API", "country meteorological agency", "weather-api", "provider TTL"],
+          ["Geology API", "national geology/open hazard data", "geology, hazards", "manual review"],
+          ["Marine API", "national marine/coastal service", "weather-api", "route dependent"],
+          ["Open Data Entry", "catalog links and API descriptors", "source registry", "candidate evidence"],
+        ],
+        providers: [
+          ["weather", "country met agency", "country scoped", "weather-api", "provider TTL", "candidate evidence"],
+          ["terrain", "local DEM / SRTM", "route bbox", "terrain, relief", "manual", "material cache"],
+          ["base-map", "OSM / local base map", "country scoped", "imagery, osm", "cache-first", "map render"],
+          ["geology", "country geology source", "route bbox", "geology, hazards", "manual", "repro evidence"],
+          ["marine", "country marine source", "coastal routes", "weather-api", "route scoped", "candidate evidence"],
+        ],
+        routeContextSources: [],
+      },
+    ];
+
     const SIX_FORCES = [
       {
         route: "outdoor-route-context",
-        zh: "探索力",
+        label: "Route Context",
         system: "Route Context Intelligence",
         role: "Experience Guide",
         decision: "CONDITIONAL_GO",
@@ -1318,7 +2670,7 @@
       },
       {
         route: "outdoor-pace-fit",
-        zh: "自信力",
+        label: "Pace Fit",
         system: "Readiness & Pace Fit",
         role: "Pace Guardian",
         decision: "CHANGE_PLAN",
@@ -1328,7 +2680,7 @@
       },
       {
         route: "outdoor-permission",
-        zh: "勇氣力",
+        label: "Permission",
         system: "Contextual Permissioning",
         role: "Micro-Decision Agent",
         decision: "CONDITIONAL_GO",
@@ -1338,7 +2690,7 @@
       },
       {
         route: "outdoor-architecture",
-        zh: "路線力",
+        label: "Architecture",
         system: "Route Architecture Intelligence",
         role: "Route Planner",
         decision: "CONDITIONAL_GO",
@@ -1348,7 +2700,7 @@
       },
       {
         route: "outdoor-weather",
-        zh: "天氣力",
+        label: "Weather",
         system: "Weather-to-Decision Intelligence",
         role: "Risk Sentinel",
         decision: "CHANGE_PLAN",
@@ -1358,7 +2710,7 @@
       },
       {
         route: "outdoor-navigation",
-        zh: "地圖力",
+        label: "Navigation",
         system: "Navigation & Terrain Intelligence",
         role: "Terrain Navigator",
         decision: "GUIDED_ONLY",
@@ -1374,15 +2726,74 @@
       adminProjection: null,
       debugProjection: null,
       debugEvents: [],
+      runtimeDebugEvents: [],
+      runtimeDebugEventPayload: null,
+      debugRuntimeState: null,
+      debugMessages: [],
+      debugMessagesPayload: null,
+      mobileWearableIngress: null,
+      monitoringCenter: null,
+      hardwareReadiness: null,
       selectedAction: "film",
+      activeDebugDetail: "state",
       activeEvidenceTab: "default",
       activeMapEvidenceTab: "default",
+      activeCountryMaterialPool: "TW",
       mapEvidenceCollapsed: false,
       selectedMapEvidenceSourceId: "",
       pendingMapEvidenceFocusId: "",
       mapEvidenceRetryTimer: null,
       evidenceItemsBySource: {},
       pretripDataProjectId: PROJECT_ID,
+      briefingFrameVersion: "",
+      briefingRegenerationBusy: false,
+      briefingRegenerationStatus: {
+        tone: "info",
+        text: "Scout AI regeneration idle",
+      },
+      importTripDraft: {
+        tripId: "new_trip",
+        goldenRouteGpx: "",
+        countryMaterialPool: "TW",
+        referenceGpxSources: "",
+        targetName: "new_trip_scoutAI",
+        targetWorkspace: "new_trip_scoutAI",
+        workspaceRoot: "/Users/alexwang0315/workspace",
+        templateProjectRoot: "",
+        materialRoot: "",
+        dtmDirs: "",
+        mcpNamedPointEvidence: "",
+        importProfile: "",
+        importStage: "pretrip",
+        checkpointSpacingM: "500",
+        maxReferenceDisplayPoints: "1000",
+        maxReasonableGpxSpeedKmh: "120",
+        maxPreviousGpxSpeedRatio: "8",
+        overwrite: false,
+        prepareLayers: "osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp",
+        prepareWorkspaceRoot: "/Users/alexwang0315/workspace",
+        prepareProjectRoot: "",
+        prepareBBox: "",
+        routeEvidenceBundle: "normalized/routes/route_evidence_bundle.json",
+        routeCorridorM: "500",
+        referenceTrackCorridorM: "300",
+        prepareProfile: "pi-offline",
+        networkMode: "no-network",
+        allowNetworkFetch: false,
+        aiMode: "fixture-or-precomputed",
+        aiOutputPolicy: "hash-and-summary",
+        imageryMinZoom: "12",
+        imageryMaxZoom: "17",
+        seedImageryCache: false,
+        imageryProviderAllowsOfflinePrefetch: false,
+        imagerySeedMaxTiles: "",
+        imageryCacheFallbackProjectIds: "",
+        osmPbfPath: "",
+        osmPbfSourceUrl: "",
+        osmPbfCacheTtlDays: "30",
+        osmiumBin: "osmium",
+        preparedAt: "",
+      },
       layerEnabled: Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, true])),
     };
 
@@ -1390,6 +2801,8 @@
       home: ["Home", "Scout Dashboard v0.1 alpha overview"],
       "features-lbs": ["Features / LBS", "location-based route projection and map evidence"],
       "features-workspace": ["Features / Workspace", "pretrip project, importer, edits, export and load tooling"],
+      "features-import-new-trip": ["Features / Import New Trip", "operator-triggered GPX intake for a new pretrip workspace"],
+      "features-country-material-pool": ["Features / Country Material Pool", "country-scoped material and API provider defaults"],
       "surface-pretrip": ["Pre-trip Surface", "full existing /admin/pretrip workspace embedded in dashboard frame"],
       "surface-admin": ["Admin Surface", "full existing /admin after-action surface embedded in dashboard frame"],
       "surface-debug": ["Debug Surface", "full existing /admin/debug runtime console embedded in dashboard frame"],
@@ -1422,6 +2835,22 @@
       return localStorage.getItem("scout.dashboardProjectId") || localStorage.getItem("scout.emergencyProjectId") || PROJECT_ID;
     }
 
+    function routeContextBriefingProjectId() {
+      const candidate = state.pretripDataProjectId || projectId();
+      return candidate || PRETRIP_DATA_PROJECT_ID;
+    }
+
+    function routeContextBriefingSrc() {
+      const project = encodeURIComponent(routeContextBriefingProjectId());
+      const base = `${apiBase()}/admin/pretrip/projects/${project}/briefings/route-context`;
+      return state.briefingFrameVersion ? `${base}?v=${encodeURIComponent(state.briefingFrameVersion)}` : base;
+    }
+
+    function routeContextBriefingRegeneratePath() {
+      const project = encodeURIComponent(routeContextBriefingProjectId());
+      return `/admin/pretrip/projects/${project}/briefings/route-context/regenerate`;
+    }
+
     function surfaceSrc(path) {
       const delimiter = path.includes("?") ? "&" : "?";
       return `${path}${delimiter}projectId=${encodeURIComponent(projectId())}`;
@@ -1443,6 +2872,30 @@
         });
         if (!response.ok) throw new Error(`${response.status} ${path}`);
         return response.json();
+      } finally {
+        window.clearTimeout(timer);
+      }
+    }
+
+    async function postJson(path, payload) {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      try {
+        const response = await fetch(`${apiBase()}${path}`, {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const detail = data.detail || `${response.status} ${path}`;
+          throw new Error(Array.isArray(detail) ? JSON.stringify(detail) : String(detail));
+        }
+        return data;
       } finally {
         window.clearTimeout(timer);
       }
@@ -1478,6 +2931,32 @@
           state.debugEvents = data.events || data.timeline || [];
           refreshCurrentDataView();
         }).catch(() => {}),
+        fetchJson("/debug/events?limit=200").then((data) => {
+          state.runtimeDebugEventPayload = data;
+          state.runtimeDebugEvents = data.events || [];
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchJson("/debug/state").then((data) => {
+          state.debugRuntimeState = data;
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchJson("/debug/messages").then((data) => {
+          state.debugMessagesPayload = data;
+          state.debugMessages = data.messages || [];
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchJson("/debug/mobile-wearable/ingress").then((data) => {
+          state.mobileWearableIngress = data;
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchJson("/debug/monitoring").then((data) => {
+          state.monitoringCenter = data;
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchJson("/admin/hardware-readiness/context").then((data) => {
+          state.hardwareReadiness = data;
+          refreshCurrentDataView();
+        }).catch(() => {}),
       ];
       await Promise.allSettled(tasks);
       refreshCurrentDataView();
@@ -1500,7 +2979,7 @@
     }
 
     function routeUsesWideFrame(route) {
-      return route === "agent";
+      return route === "agent" || route === "debug" || route === "outdoor-route-context";
     }
 
     function routeUsesFullFrame(route) {
@@ -1526,7 +3005,7 @@
         button.classList.toggle("is-active", button.dataset.route === route);
       });
       const force = SIX_FORCES.find((item) => item.route === route);
-      const meta = force ? [`${force.zh} / ${force.system}`, `${force.role} aligned to SCOUT_OUTDOOR_AI_AGENT_STANDARD`] : (routeMeta[route] || routeMeta.home);
+      const meta = force ? [`${force.label} / ${force.system}`, `${force.role} aligned to SCOUT_OUTDOOR_AI_AGENT_STANDARD`] : (routeMeta[route] || routeMeta.home);
       document.getElementById("pageTitle").textContent = meta[0];
       document.getElementById("pageSubtitle").textContent = meta[1];
       render();
@@ -1596,6 +3075,8 @@
       if (route === "timeline") return `${decisionBand("CONDITIONAL_GO", "evidence stream traceable", "medium", "read-only refs")}${renderTimelinePanel()}`;
       if (route === "features-lbs") return renderLbsPage();
       if (route === "features-workspace") return renderWorkspacePage();
+      if (route === "features-import-new-trip") return renderImportNewTripPage();
+      if (route === "features-country-material-pool") return renderCountryMaterialPoolPage();
       if (route === "surface-pretrip") {
         return renderSurfaceFrame({
           title: "Pre-trip Planning",
@@ -1639,10 +3120,10 @@
     function renderHomePage() {
       const counts = projectCounts();
       return `
-        ${decisionBand("CONDITIONAL_GO", "workable alpha shell", "medium", "review Outdoor Six Forces and workspace readiness")}
+        ${decisionBand("CONDITIONAL_GO", "workable alpha shell", "medium", "review Exploring for Six Axis and workspace readiness")}
         <div class="grid-2">
           <section class="panel">
-            <div class="panel-header"><h3>Outdoor Six Forces</h3><span class="chip info">decision system</span></div>
+            <div class="panel-header"><h3>Exploring for Six Axis</h3><span class="chip info">decision system</span></div>
             <div class="panel-body">
               <div class="force-list">
                 ${SIX_FORCES.map((force) => renderForceRow(force)).join("")}
@@ -1736,7 +3217,7 @@
     function renderForceRow(force) {
       return `
         <div class="force-row">
-          <div class="label-stack"><strong>${escapeHtml(force.zh)}</strong><span>${escapeHtml(force.system)}</span></div>
+          <div class="label-stack"><strong>${escapeHtml(force.label)}</strong><span>${escapeHtml(force.system)}</span></div>
           <div class="label-stack"><strong>${escapeHtml(force.question)}</strong><span>${escapeHtml(force.signals)}</span></div>
           <div class="label-stack"><strong>${escapeHtml(force.decision)}</strong><span>${escapeHtml(force.next)}</span></div>
           <button type="button" data-route="${escapeHtml(force.route)}">Open</button>
@@ -1767,8 +3248,17 @@
     }
 
     function renderWorkspacePage() {
+      const stats = workspaceStats();
       return `
         ${decisionBand("CONDITIONAL_GO", "workspace ready for review", "medium", "import, edit, prepare, export with artifact metadata")}
+        ${renderWorkspaceStatsPanels(stats)}
+        <div style="height:12px"></div>
+        ${renderWorkspaceStructurePanels()}
+        <div style="height:12px"></div>
+        ${renderWorkspaceCachePanels()}
+        <div style="height:12px"></div>
+        ${renderWorkspaceOperationConsole()}
+        <div style="height:12px"></div>
         <div class="grid-3">
           ${renderMetricPanel("Importer", [
             ["GPX import", "preview/run operator action"],
@@ -1790,6 +3280,645 @@
         <div style="height:12px"></div>
         ${renderTimelinePanel()}
       `;
+    }
+
+    function renderWorkspaceStructurePanels() {
+      const rows = workspaceStructureRows();
+      return `
+        <div class="grid-3 workspace-detail-grid" data-workspace-structure="true">
+          ${renderMetricPanel("Workspace Structure", [
+            ["Project root", rows.projectRoot],
+            ["Project manifest", rows.projectManifest],
+            ["Source inbox", rows.sourceInbox],
+            ["Candidates", rows.candidates],
+            ["Normalized route", rows.normalizedRoute],
+          ])}
+          ${renderMetricPanel("Material Index", [
+            ["Import manifest", rows.importManifest],
+            ["Layer manifest", rows.layerManifest],
+            ["Review queue", rows.reviewQueue],
+            ["Route context", rows.routeContext],
+            ["Runtime handoff", rows.runtimeHandoff],
+          ])}
+          ${renderMetricPanel("Workspace Health", [
+            ["Active project", projectId()],
+            ["Resolved data project", state.pretripDataProjectId || projectId()],
+            ["Checkpoints / Segments", `${rows.checkpoints} / ${rows.segments}`],
+            ["Terrain material", rows.terrainTiles],
+            ["Evidence refs", rows.evidenceRefs],
+          ])}
+        </div>
+      `;
+    }
+
+    function renderWorkspaceCachePanels() {
+      const rows = workspaceCacheRows();
+      return `
+        <div class="grid-3 workspace-detail-grid" data-workspace-cache="true">
+          ${renderMetricPanel("Cached Material", [
+            ["Imagery tiles", rows.imageryTiles],
+            ["Raster OCR", rows.rasterOcr],
+            ["OSM PBF", rows.osmPbf],
+            ["Terrain tiles", rows.terrainTiles],
+            ["Local root", rows.cacheRoot],
+          ])}
+          ${renderMetricPanel("Cached TTL", [
+            ["Imagery policy", rows.imageryTtl],
+            ["OSM PBF TTL", rows.osmPbfTtl],
+            ["CWA TTL", rows.cwaTtl],
+            ["GEE TTL", rows.geeTtl],
+            ["Weather cacheable", rows.weatherCacheable],
+          ])}
+          ${renderMetricPanel("Cache Refs", [
+            ["Imagery manifest", rows.imageryManifest],
+            ["Imagery plan", rows.imageryPlan],
+            ["OCR cache", rows.ocrCache],
+            ["OSM render extract", rows.osmRenderExtract],
+            ["Layer source", rows.layerManifest],
+          ])}
+        </div>
+      `;
+    }
+
+    function renderWorkspaceOperationConsole() {
+      return `
+        <section class="panel" data-workspace-operations="true">
+          <div class="panel-header">
+            <h3>Workspace Operations</h3>
+            <span class="chip warn">operator intent only</span>
+          </div>
+          <div class="panel-body">
+            <div class="workspace-ops">
+              <div class="workspace-action-grid" aria-label="Workspace operation actions">
+                <button type="button" data-workspace-action="clone">Clone</button>
+                <button type="button" data-workspace-action="transfer">Transfer</button>
+                <button type="button" data-workspace-action="pack">Pack</button>
+                <button type="button" data-workspace-action="restore">Restore</button>
+                <button type="button" data-workspace-action="delete" data-danger="true">Delete</button>
+                <button type="button" data-route="features-import-new-trip">Import New Trip</button>
+              </div>
+              <div class="workspace-switch-row">
+                <label class="workspace-field" for="workspaceRedirectProjectInput">
+                  <span>Switch dashboard workspace</span>
+                  <input id="workspaceRedirectProjectInput" value="${escapeHtml(projectId())}" placeholder="chilai_nanhua_day1_scoutAI">
+                </label>
+                <button type="button" id="workspaceSwitchProject">Switch workspace</button>
+              </div>
+              <p class="workspace-status" id="workspaceOperationStatus">
+                Clone, transfer, pack, restore and delete are recorded as operator-triggered alpha intents only. No filesystem mutation is performed by this dashboard.
+              </p>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function countryMaterialPools() {
+      return COUNTRY_MATERIAL_POOLS;
+    }
+
+    function countryMaterialPoolByCode(code) {
+      return countryMaterialPools().find((pool) => pool.code === code) || COUNTRY_MATERIAL_POOLS[0];
+    }
+
+    function countryMaterialPoolDefaults(code = state.activeCountryMaterialPool) {
+      return countryMaterialPoolByCode(code).defaults || {};
+    }
+
+    function renderCountryMaterialPoolPage() {
+      const draftCode = state.importTripDraft?.countryMaterialPool || state.activeCountryMaterialPool || "TW";
+      const pool = countryMaterialPoolByCode(draftCode);
+      state.activeCountryMaterialPool = pool.code;
+      const defaults = countryMaterialPoolDefaults(pool.code);
+      return `
+        ${decisionBand("CONDITIONAL_GO", "country-scoped material defaults", "medium", "factory configured; operator selected")}
+        <div class="material-pool-layout" data-country-material-pool="true">
+          <div class="debug-main-stack">
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Country Material Pool</h3>
+                <div class="material-pool-tabs" role="tablist" aria-label="Country material pools">
+                  ${countryMaterialPools().map((candidate) => `
+                    <button
+                      type="button"
+                      class="${candidate.code === pool.code ? "is-active" : ""}"
+                      data-country-material-code="${escapeHtml(candidate.code)}"
+                      role="tab"
+                      aria-selected="${candidate.code === pool.code ? "true" : "false"}"
+                    >${escapeHtml(candidate.label)}</button>
+                  `).join("")}
+                </div>
+              </div>
+              <div class="panel-body">
+                <div class="material-pool-strip" aria-label="Selected country material pool summary">
+                  ${materialPoolCell("Country", pool.label, pool.code)}
+                  ${materialPoolCell("Profile", defaults.importProfile, pool.status)}
+                  ${materialPoolCell("Boundary", pool.boundary, "candidate evidence only")}
+                  ${materialPoolCell("Material root", defaults.materialRoot, "factory default")}
+                  ${materialPoolCell("Route refs", `${(pool.routeContextSources || []).length} P0/P1`, "discovery catalog")}
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Route Context References</h3>
+                <span class="chip warn">discovery scope</span>
+              </div>
+              <div class="panel-body">
+                ${renderRouteContextReferences(pool)}
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Material Classes</h3>
+                <span class="chip info">factory registry</span>
+              </div>
+              <div class="panel-body">
+                <div class="material-resource-grid">
+                  ${pool.resources.map(renderMaterialResourceCard).join("")}
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h3>API / Provider Matrix</h3>
+                <span class="chip warn">country scoped</span>
+              </div>
+              <div class="panel-body debug-table-wrap">
+                <table class="material-provider-table">
+                  <thead>
+                    <tr>
+                      <th>Domain</th>
+                      <th>Provider</th>
+                      <th>Scope</th>
+                      <th>Layers</th>
+                      <th>TTL</th>
+                      <th>Boundary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${pool.providers.map(renderMaterialProviderRow).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <aside class="debug-drawer-stack" aria-label="Country material pool defaults">
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Import Defaults</h3>
+                <span class="chip ok">selected pool</span>
+              </div>
+              <div class="panel-body">
+                <div class="drawer-list">
+                  <div class="item"><strong>material_root</strong><span class="mono">${escapeHtml(defaults.materialRoot)}</span></div>
+                  <div class="item"><strong>dtm_dirs</strong><span class="mono">${escapeHtml(defaults.dtmDirs)}</span></div>
+                  <div class="item"><strong>osm_pbf_source_url</strong><span class="mono">${escapeHtml(defaults.osmPbfSourceUrl)}</span></div>
+                  <div class="item"><strong>weather_provider</strong><span>${escapeHtml(defaults.weatherProvider)}</span></div>
+                  <div class="item"><strong>geology_provider</strong><span>${escapeHtml(defaults.geologyProvider)}</span></div>
+                  <div class="item"><strong>marine_provider</strong><span>${escapeHtml(defaults.marineProvider)}</span></div>
+                  <div class="item"><strong>base_map_provider</strong><span>${escapeHtml(defaults.baseMapProvider)}</span></div>
+                  <div class="item"><strong>cache_ttl</strong><span>${escapeHtml(defaults.ttl)}</span></div>
+                </div>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-header">
+                <h3>Map Preparation Uses</h3>
+                <span class="chip bad">no live safety</span>
+              </div>
+              <div class="panel-body">
+                <div class="drawer-list">
+                  <div class="item"><strong>Weather API</strong><span>${escapeHtml(defaults.weatherProvider)} only inside ${escapeHtml(pool.label)} scope</span></div>
+                  <div class="item"><strong>Terrain</strong><span>DTM and relief derive from this country material root</span></div>
+                  <div class="item"><strong>Base map</strong><span>offline/cache policy derives from country provider rights</span></div>
+                  <div class="item"><strong>Evidence</strong><span>provider output remains candidate/provenance material</span></div>
+                </div>
+                <p class="material-pool-note">
+                  This page sets default hints for import and layer preparation. It does not fetch, mutate workspace files, load runtime packages, or change safety truth.
+                </p>
+              </div>
+            </section>
+          </aside>
+        </div>
+      `;
+    }
+
+    function materialPoolCell(label, value, detail) {
+      return `
+        <div class="material-pool-cell">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value || "--")}</strong>
+          <small>${escapeHtml(detail || "")}</small>
+        </div>
+      `;
+    }
+
+    function renderMaterialResourceCard(resource) {
+      const [kind, label, source, ttl] = resource;
+      return `
+        <article class="material-resource-card">
+          <span>${escapeHtml(kind)}</span>
+          <h4>${escapeHtml(label)}</h4>
+          <small>${escapeHtml(source)}</small>
+          <span>${escapeHtml(ttl)}</span>
+        </article>
+      `;
+    }
+
+    function renderRouteContextReferences(pool) {
+      const sources = pool.routeContextSources || [];
+      if (!sources.length) {
+        return `
+          <p class="material-pool-note">
+            No country-specific route-context source catalog is configured yet. Add national P0/P1 sources before using this country as a route-context discovery baseline.
+          </p>
+        `;
+      }
+      return `
+        <div class="material-resource-grid" data-route-context-references="true">
+          ${sources.map(renderRouteContextReferenceCard).join("")}
+        </div>
+        <p class="material-pool-note">
+          These P0/P1 entries come from specs/scout-route-context-layer and source-catalog.md. They are discovery scope only; concrete URLs must be collected later and catalog entries are not evidence by themselves.
+        </p>
+      `;
+    }
+
+    function renderRouteContextReferenceCard(source) {
+      const [tier, label, family] = source;
+      return `
+        <article class="material-resource-card">
+          <span>${escapeHtml(tier)}</span>
+          <h4>${escapeHtml(label)}</h4>
+          <small>${escapeHtml(family)}</small>
+        </article>
+      `;
+    }
+
+    function renderMaterialProviderRow(provider) {
+      const [domain, providerName, scope, layers, ttl, boundary] = provider;
+      return `
+        <tr>
+          <td><strong>${escapeHtml(domain)}</strong></td>
+          <td>${escapeHtml(providerName)}</td>
+          <td>${escapeHtml(scope)}</td>
+          <td class="mono">${escapeHtml(layers)}</td>
+          <td>${escapeHtml(ttl)}</td>
+          <td>${escapeHtml(boundary)}</td>
+        </tr>
+      `;
+    }
+
+    function renderImportNewTripPage() {
+      const draft = state.importTripDraft || {};
+      const tripId = draft.tripId || "new_trip";
+      const materialPool = countryMaterialPoolByCode(draft.countryMaterialPool || state.activeCountryMaterialPool || "TW");
+      const materialDefaults = countryMaterialPoolDefaults(materialPool.code);
+      const workspaceRoot = importTripWorkspaceRoot(draft.workspaceRoot);
+      const targetName = draft.targetName || draft.targetWorkspace || importTripProjectId(tripId);
+      const derivedProjectRoot = importTripProjectRoot(workspaceRoot, targetName);
+      return `
+        ${decisionBand("CONDITIONAL_GO", "new trip import intake", "medium", "validate before workspace handoff")}
+        <section class="panel" data-import-new-trip="true">
+          <div class="panel-header">
+            <h3>Import New Trip</h3>
+            <span class="chip warn">operator-triggered only</span>
+          </div>
+          <div class="panel-body">
+            <div class="import-trip-grid">
+              <div class="import-trip-form" aria-label="New trip import intake">
+                <label class="workspace-field" for="importTripIdInput">
+                  <span>Trip id</span>
+                  <input id="importTripIdInput" value="${escapeHtml(tripId)}" placeholder="new_route_id">
+                </label>
+                <label class="workspace-field" for="importGoldenRouteGpxPath">
+                  <span>Golden route GPX path</span>
+                  <input id="importGoldenRouteGpxPath" value="${escapeHtml(draft.goldenRouteGpx || "")}" placeholder="/path/to/new_trip.gpx">
+                </label>
+                <label class="workspace-field" for="importWorkspaceRoot">
+                  <span>Workspace root</span>
+                  <input id="importWorkspaceRoot" value="${escapeHtml(workspaceRoot)}" placeholder="/Users/alexwang0315/workspace">
+                </label>
+                <label class="workspace-field" for="importTargetNameInput">
+                  <span>Target name</span>
+                  <input id="importTargetNameInput" value="${escapeHtml(targetName)}" placeholder="new_trip_scoutAI">
+                </label>
+                ${renderImportSelectField(
+                  "importCountryMaterialPool",
+                  "Country material pool",
+                  materialPool.code,
+                  countryMaterialPools().map((pool) => [pool.code, `${pool.label} - ${pool.defaults.weatherProvider}`])
+                )}
+                <div class="import-trip-actions" aria-label="Import new trip actions">
+                  <button type="button" data-import-trip-action="validate">Validate Intake</button>
+                  <button type="button" data-import-trip-action="stage">Stage Import</button>
+                  <button type="button" data-import-trip-action="open">Open Workspace</button>
+                  <button type="button" data-route="features-country-material-pool">Material Pool</button>
+                </div>
+              </div>
+              <div class="import-context-panel" aria-label="Import context">
+                <div class="import-context-chips">
+                  <span class="chip warn">operator-triggered</span>
+                  <span class="chip bad">no live safety</span>
+                  <span class="chip info">boundary metadata</span>
+                  <span class="chip ok">derived routing</span>
+                  <span class="chip info">${escapeHtml(materialPool.code)} material pool</span>
+                </div>
+                <div class="import-context-path">
+                  <span>Project root</span>
+                  <strong>${escapeHtml(derivedProjectRoot)}</strong>
+                </div>
+                <div class="import-context-path">
+                  <span>Pretrip source</span>
+                  <strong>${escapeHtml(state.pretripDataProjectId || projectId())}</strong>
+                </div>
+                <div class="import-context-path">
+                  <span>Weather provider</span>
+                  <strong>${escapeHtml(materialDefaults.weatherProvider)} / ${escapeHtml(materialPool.boundary)}</strong>
+                </div>
+              </div>
+            </div>
+            <p class="workspace-status" id="importTripStatus">
+              Provide a trip id and Golden route GPX path, then validate. Stage Import records operator intent only; import execution stays in the existing admin/import tooling.
+            </p>
+          </div>
+        </section>
+        <div style="height:12px"></div>
+        ${renderImportTripParameterControls(draft, materialPool)}
+        <div style="height:12px"></div>
+        ${renderImportTripPreflight()}
+        <div style="height:12px"></div>
+        ${renderImportTripPipeline()}
+      `;
+    }
+
+    function renderImportTripParameterControls(draft, materialPool = countryMaterialPoolByCode(state.activeCountryMaterialPool)) {
+      const defaults = materialPool.defaults || {};
+      return `
+        <details class="panel optional-parameters-frame" data-import-trip-parameters="true">
+          <summary>
+            <span>
+              <strong>Optional Parameters</strong>
+              <small>Defaults are used when this frame stays collapsed. Expand only for import or map-preparation overrides.</small>
+            </span>
+            <span class="chip info">advanced</span>
+          </summary>
+          <div class="panel-body optional-parameters-body">
+            <div class="grid-2">
+              <div class="optional-parameter-group">
+                <h4>GPX Import Defaults</h4>
+                <div class="import-trip-controls-grid">
+                  ${renderImportTextareaField("importReferenceGpxSources", "Reference GPX directory or paths", draft.referenceGpxSources || "", "/path/to/reference_tracks\n/path/a.gpx, /path/b.gpx")}
+                  ${renderImportTextField("importTemplateProjectRoot", "Template project root", draft.templateProjectRoot || "", "/path/to/template/project")}
+                  ${renderImportTextField("importMaterialRoot", "Material root", draft.materialRoot || defaults.materialRoot || "", defaults.materialRoot || "/data/scout/materials/pretrip/new_trip")}
+                  ${renderImportTextField("importDtmDirs", "DTM directories", draft.dtmDirs || defaults.dtmDirs || "", defaults.dtmDirs || "/path/to/dtm_a, /path/to/dtm_b")}
+                  ${renderImportTextField("importMcpNamedPointEvidence", "MCP named-point evidence", draft.mcpNamedPointEvidence || "", "/path/to/named_point_evidence.json")}
+                  ${renderImportTextField("importProfile", "Import profile", draft.importProfile || defaults.importProfile || "pi-offline", defaults.importProfile || "pi-offline")}
+                  ${renderImportTextField("importStage", "Import stage", draft.importStage || "pretrip", "pretrip")}
+                  ${renderImportNumberField("importCheckpointSpacingM", "Checkpoint spacing (m)", draft.checkpointSpacingM || "500")}
+                  ${renderImportNumberField("importMaxReferenceDisplayPoints", "Max reference display points", draft.maxReferenceDisplayPoints || "1000")}
+                  ${renderImportNumberField("importMaxReasonableGpxSpeedKmh", "Max reasonable GPX speed (km/h)", draft.maxReasonableGpxSpeedKmh || "120")}
+                  ${renderImportNumberField("importMaxPreviousGpxSpeedRatio", "Max previous speed ratio", draft.maxPreviousGpxSpeedRatio || "8")}
+                </div>
+                ${renderImportCheckbox("importOverwriteWorkspace", "Overwrite existing project workspace", Boolean(draft.overwrite))}
+              </div>
+              <div class="optional-parameter-group" data-map-preparation-parameters="true">
+                <h4>Map Preparation Defaults</h4>
+                <div class="import-trip-controls-grid">
+                  ${renderImportTextField("prepareLayersList", "Layer ids", draft.prepareLayers || importTripDefaultLayerIds(), importTripDefaultLayerIds())}
+                  ${renderImportTextField("prepareBBox", "BBox", draft.prepareBBox || "", "south,west,north,east")}
+                  ${renderImportTextField("prepareRouteEvidenceBundle", "Route evidence bundle", draft.routeEvidenceBundle || "", "normalized/routes/route_evidence_bundle.json")}
+                  ${renderImportNumberField("prepareRouteCorridorM", "Route corridor (m)", draft.routeCorridorM || "500")}
+                  ${renderImportNumberField("prepareReferenceTrackCorridorM", "Reference track corridor (m)", draft.referenceTrackCorridorM || "300")}
+                  ${renderImportTextField("prepareLayersProfile", "Prepare profile", draft.prepareProfile || "pi-offline", "pi-offline")}
+                  ${renderImportTextField("prepareLayersNetworkMode", "Network mode", draft.networkMode || "no-network", "no-network")}
+                  ${renderImportTextField("prepareAiMode", "AI mode", draft.aiMode || "fixture-or-precomputed", "fixture-or-precomputed")}
+                  ${renderImportTextField("prepareAiOutputPolicy", "AI output policy", draft.aiOutputPolicy || "hash-and-summary", "hash-and-summary")}
+                  ${renderImportNumberField("prepareImageryMinZoom", "Imagery min zoom", draft.imageryMinZoom || "12")}
+                  ${renderImportNumberField("prepareImageryMaxZoom", "Imagery max zoom", draft.imageryMaxZoom || "17")}
+                  ${renderImportNumberField("prepareImagerySeedMaxTiles", "Imagery seed max tiles", draft.imagerySeedMaxTiles || "")}
+                  ${renderImportTextField("prepareImageryCacheFallbackProjectIds", "Imagery cache fallback project ids", draft.imageryCacheFallbackProjectIds || "", "project_a, project_b")}
+                  ${renderImportTextField("prepareOsmPbfPath", "OSM PBF path", draft.osmPbfPath || "", "/path/to/taiwan-latest.osm.pbf")}
+                  ${renderImportTextField("prepareOsmPbfSourceUrl", "OSM PBF source URL", draft.osmPbfSourceUrl || defaults.osmPbfSourceUrl || "", defaults.osmPbfSourceUrl || "country-specific Geofabrik extract")}
+                  ${renderImportNumberField("prepareOsmPbfCacheTtlDays", "OSM PBF cache TTL days", draft.osmPbfCacheTtlDays || "30")}
+                  ${renderImportTextField("prepareOsmiumBin", "Osmium binary", draft.osmiumBin || "osmium", "osmium")}
+                  ${renderImportTextField("preparePreparedAt", "Prepared at", draft.preparedAt || "", "2026-07-02T10:00:00+08:00")}
+                </div>
+                <div class="import-trip-check-row">
+                  ${renderImportCheckbox("prepareAllowNetworkFetch", "Allow explicit network fetch", Boolean(draft.allowNetworkFetch))}
+                  ${renderImportCheckbox("prepareSeedImageryCache", "Seed imagery cache", Boolean(draft.seedImageryCache))}
+                  ${renderImportCheckbox("prepareImageryProviderAllowsOfflinePrefetch", "Imagery provider allows offline prefetch", Boolean(draft.imageryProviderAllowsOfflinePrefetch))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+      `;
+    }
+
+    function renderImportTextField(id, label, value, placeholder = "") {
+      return `
+        <label class="workspace-field" for="${escapeHtml(id)}">
+          <span>${escapeHtml(label)}</span>
+          <input id="${escapeHtml(id)}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}">
+        </label>
+      `;
+    }
+
+    function renderImportSelectField(id, label, value, options) {
+      return `
+        <label class="workspace-field" for="${escapeHtml(id)}">
+          <span>${escapeHtml(label)}</span>
+          <select id="${escapeHtml(id)}">
+            ${options.map(([optionValue, optionLabel]) => `
+              <option value="${escapeHtml(optionValue)}"${optionValue === value ? " selected" : ""}>${escapeHtml(optionLabel)}</option>
+            `).join("")}
+          </select>
+        </label>
+      `;
+    }
+
+    function renderImportTextareaField(id, label, value, placeholder = "") {
+      return `
+        <label class="workspace-field" for="${escapeHtml(id)}">
+          <span>${escapeHtml(label)}</span>
+          <textarea id="${escapeHtml(id)}" placeholder="${escapeHtml(placeholder)}">${escapeHtml(value)}</textarea>
+        </label>
+      `;
+    }
+
+    function renderImportNumberField(id, label, value) {
+      return `
+        <label class="workspace-field" for="${escapeHtml(id)}">
+          <span>${escapeHtml(label)}</span>
+          <input id="${escapeHtml(id)}" type="number" min="0" step="1" value="${escapeHtml(value)}">
+        </label>
+      `;
+    }
+
+    function renderImportCheckbox(id, label, checked) {
+      return `
+        <label class="import-trip-check" for="${escapeHtml(id)}">
+          <input id="${escapeHtml(id)}" type="checkbox"${checked ? " checked" : ""}>
+          <span>${escapeHtml(label)}</span>
+        </label>
+      `;
+    }
+
+    function renderImportTripPreflight() {
+      return `
+        <div class="import-guard-strip" data-import-trip-preflight="true" aria-label="Import guards">
+          <span class="chip info">GPX required</span>
+          <span class="chip ok">32 layers</span>
+          <span class="chip warn">candidate export</span>
+          <span class="chip bad">no outbound</span>
+          <span class="chip info">GIS repro-only</span>
+        </div>
+      `;
+    }
+
+    function renderImportTripPipeline() {
+      const steps = [
+        ["01", "Select GPX", "operator chooses local GPX or trip folder"],
+        ["02", "Normalize Route", "route id and points are validated"],
+        ["03", "Create Workspace", "project shell is prepared by admin tooling"],
+        ["04", "Prepare Layers", "32-layer contract, terrain and evidence refs"],
+        ["05", "Open Workspace", "dashboard points at the new project id"],
+      ];
+      return `
+        <section class="panel" data-import-trip-pipeline="true">
+          <div class="panel-header">
+            <h3>Import Pipeline</h3>
+            <span class="chip info">manual alpha path</span>
+          </div>
+          <div class="panel-body">
+            <div class="import-trip-pipeline">
+              ${steps.map(([step, title, detail]) => `
+                <div class="import-step">
+                  <span>${escapeHtml(step)}</span>
+                  <strong>${escapeHtml(title)}</strong>
+                  <small>${escapeHtml(detail)}</small>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderWorkspaceStatsPanels(stats) {
+      return `
+        <div class="grid-3" data-workspace-stats="true">
+          ${renderMetricPanel("Route Statistics", [
+            ["Route length", stats.routeLength],
+            ["Route points", stats.routePoints],
+            ["Elevation range", stats.elevationRange],
+            ["Reference tracks", stats.referenceTracks],
+          ])}
+          ${renderMetricPanel("Project Counts", [
+            ["Checkpoints", stats.checkpoints],
+            ["Segments", stats.segments],
+            ["Terrain tiles", stats.terrainTiles],
+            ["Review queue", stats.reviewQueue],
+            ["Evidence refs", stats.evidenceRefs],
+          ])}
+          ${renderMetricPanel("Lifecycle Times", [
+            ["Imported", stats.importedAt],
+            ["Layers prepared", stats.preparedAt],
+            ["Runtime exported", stats.exportedAt],
+            ["Runtime loaded", stats.loadedAt],
+            ["Data source", stats.source],
+          ])}
+        </div>
+      `;
+    }
+
+    function workspaceStats() {
+      const project = state.project || {};
+      const counts = projectCounts();
+      const summaryCounts = project.summary?.counts || {};
+      const importCounts = project.import_manifest?.counts || {};
+      const route = project.route || {};
+      const reviewQueueCount = numberValue(
+        project.review_queue?.counts?.item_count,
+        project.review_queue?.items?.length,
+        summaryCounts.review_queue_item_count
+      );
+      return {
+        routeLength: formatDistanceKm(numberValue(route.distance_m, summaryCounts.route_distance_m)),
+        routePoints: formatInteger(numberValue(route.point_count, importCounts.route_point_count, summaryCounts.route_point_count)),
+        elevationRange: formatElevationRange(route),
+        referenceTracks: formatInteger(numberValue(project.reference_tracks?.reference_tracks?.length, importCounts.reference_track_count, summaryCounts.reference_track_count)),
+        checkpoints: formatInteger(counts.checkpoints),
+        segments: formatInteger(counts.segments),
+        terrainTiles: formatInteger(counts.terrainTiles),
+        reviewQueue: formatInteger(reviewQueueCount),
+        evidenceRefs: formatInteger(workspaceEvidenceRefCount(project)),
+        importedAt: formatDateTime(
+          project.import_manifest?.imported_at
+          || project.import_manifest?.import_timestamp
+          || latestDebugEventTime(["pretrip_import", "route_imported", "import"])
+        ),
+        preparedAt: formatDateTime(project.layer_preparation?.prepared_at || project.map_layers?.prepared_at),
+        exportedAt: formatDateTime(project.runtime_handoff?.exported_at || project.departure_bundle?.package?.exported_at),
+        loadedAt: formatDateTime(project.runtime_handoff?.loaded_at || project.departure_bundle?.package?.loaded_at),
+        source: state.project ? (state.pretripDataProjectId || projectId()) : "loading",
+      };
+    }
+
+    function workspaceStructureRows() {
+      const project = state.project || {};
+      const counts = projectCounts();
+      return {
+        projectRoot: WORKSPACE_ROOT,
+        projectManifest: "project.json",
+        sourceInbox: project.source_inbox_manifest_ref || project.summary?.source_inbox_manifest_ref || "inbox/source_manifest.json",
+        candidates: project.skill_config_manifest_ref || project.summary?.skill_config_manifest_ref || "candidates/skill_config_manifest.json",
+        normalizedRoute: project.route?.source_path || project.route_summary_ref || "normalized/routes/route_summary.json",
+        importManifest: project.import_manifest_ref || project.summary?.import_manifest_ref || "outputs/import_manifest.json",
+        layerManifest: project.layer_preparation_manifest_ref || project.summary?.layer_preparation_manifest_ref || "outputs/layers/layer_preparation_manifest.json",
+        reviewQueue: project.review_queue_manifest_ref || project.summary?.review_queue_manifest_ref || "outputs/review_queue_manifest.json",
+        routeContext: project.route_context_source_manifest_ref || project.summary?.route_context_source_manifest_ref || "normalized/context/route_context/source_manifest.json",
+        runtimeHandoff: project.runtime_handoff?.package_ref || project.departure_bundle?.package?.source_path || "operator export not loaded",
+        checkpoints: formatInteger(counts.checkpoints),
+        segments: formatInteger(counts.segments),
+        terrainTiles: formatInteger(counts.terrainTiles),
+        evidenceRefs: formatInteger(workspaceEvidenceRefCount(project)),
+      };
+    }
+
+    function workspaceCacheRows() {
+      const project = state.project || {};
+      const summaryCounts = project.summary?.counts || {};
+      const imageryPlanTiles = numberValue(project.imagery_tile_cache_plan_tile_count, summaryCounts.imagery_tile_cache_plan_tile_count);
+      const imagerySeen = numberValue(project.imagery_tile_cache_seed_tiles_seen, summaryCounts.imagery_tile_cache_seed_tiles_seen);
+      const imagerySkipped = numberValue(project.imagery_tile_cache_seed_tiles_skipped_existing, summaryCounts.imagery_tile_cache_seed_tiles_skipped_existing);
+      const ocrHits = numberValue(project.raster_label_ocr_cache_hit_count, summaryCounts.raster_label_ocr_cache_hit_count);
+      const ocrMisses = numberValue(project.raster_label_ocr_cache_miss_count, summaryCounts.raster_label_ocr_cache_miss_count);
+      const osmFeatures = numberValue(project.osm_pbf_feature_index_feature_count, summaryCounts.osm_pbf_feature_index_feature_count);
+      const counts = projectCounts();
+      return {
+        imageryTiles: `${formatInteger(imageryPlanTiles || imagerySeen)} planned / ${formatInteger(imagerySkipped)} existing`,
+        rasterOcr: `${formatInteger(ocrHits)} hits / ${formatInteger(ocrMisses)} misses`,
+        osmPbf: `${project.osm_pbf_cache_status || "unknown"}; ${formatInteger(osmFeatures)} features`,
+        terrainTiles: `${formatInteger(counts.terrainTiles)} terrain tiles`,
+        cacheRoot: project.imagery_tile_cache_root || "not declared",
+        imageryTtl: project.imagery_tile_cache_policy || "cache-first policy; TTL not declared",
+        osmPbfTtl: formatTtl(project.osm_pbf_cache_ttl_days ? project.osm_pbf_cache_ttl_days * 86400 : null, project.osm_pbf_cache_expires_at),
+        cwaTtl: formatTtl(project.cwa_ttl_seconds ?? project.cwa_cache_policy?.ttl_seconds, null, project.cwa_cache_policy?.must_refetch_on_prepare),
+        geeTtl: formatTtl(project.gee_numeric_ttl_seconds ?? project.gee_cache_policy?.ttl_seconds, null, project.gee_cache_policy?.must_refetch_on_prepare),
+        weatherCacheable: `CWA ${formatBoolean(project.cwa_cacheable ?? project.cwa_cache_policy?.cacheable)} / GEE ${formatBoolean(project.gee_numeric_cacheable ?? project.gee_cache_policy?.cacheable)}`,
+        imageryManifest: project.imagery_tile_cache_manifest_ref || "not declared",
+        imageryPlan: project.imagery_tile_cache_plan_ref || "not declared",
+        ocrCache: project.raster_label_ocr_cache_ref || "not declared",
+        osmRenderExtract: project.osm_pbf_render_extract_manifest_ref || "not declared",
+        layerManifest: project.layer_preparation_manifest_ref || "outputs/layers/layer_preparation_manifest.json",
+      };
     }
 
     function renderAgentPage() {
@@ -1826,10 +3955,544 @@
     }
 
     function renderDebugPage() {
+      const matrix = debugRuntimeMatrix();
+      const active = activeDebugRuntimeRecord(matrix);
       return `
-        ${decisionBand("GO", "debug projection loaded", "medium", "inspect selected event without mutation")}
-        ${renderTimelinePanel("debug")}
+        <section class="debug-console" data-debug-console="true">
+          ${renderDebugStatusBar(matrix, active)}
+          ${renderDebugRuntimeDetails(matrix)}
+          <div class="debug-console-grid">
+            <div class="debug-main-stack" data-debug-message-details="true">
+              ${renderDebugActiveDetail(active, matrix)}
+              ${renderDebugStreamTables(matrix)}
+            </div>
+            <aside class="debug-drawer-stack" data-debug-message-sources="true" aria-label="Debug evidence drawer">
+              ${renderDebugRuntimeSummary(matrix)}
+            </aside>
+          </div>
+        </section>
       `;
+    }
+
+    function renderDebugRuntimeDetails(matrix) {
+      const active = activeDebugRuntimeRecord(matrix);
+      return `
+        <section class="debug-tab-shell" data-debug-runtime-details="true">
+          <div class="debug-tab-head">
+            <div>
+              <h3>Runtime Details</h3>
+              <p class="debug-visual-intro">Switch grouped debug views without leaving the dashboard.</p>
+            </div>
+            <span class="chip info">${escapeHtml(state.pretripDataProjectId || projectId())}</span>
+          </div>
+          <div class="debug-tab-strip" role="tablist" aria-label="Debug runtime detail categories">
+            ${matrix.map((record) => `
+              <button type="button" class="${record.id === active.id ? "is-active" : ""}" data-debug-detail="${escapeHtml(record.id)}" role="tab" aria-selected="${record.id === active.id ? "true" : "false"}">
+                <span>${escapeHtml(record.label)}</span>
+                <small>${escapeHtml(formatInteger(record.count))}</small>
+              </button>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderDebugRuntimeSummary(matrix) {
+      const events = asArray(state.debugEvents);
+      const latest = latestDebugEvent(events);
+      const runtimeEvents = asArray(state.runtimeDebugEvents);
+      const hardware = state.hardwareReadiness || {};
+      const ingress = state.mobileWearableIngress || {};
+      return `
+        ${renderDebugDrawerPanel("Runtime Sources", `
+          <div class="debug-slim-list">
+            ${debugSlimRow("Full debug", "/admin/debug", "canonical")}
+            ${debugSlimRow("Runtime events", `${formatInteger(runtimeEvents.length)} events`, "/debug/events")}
+            ${debugSlimRow("Pre-trip projection", `${formatInteger(events.length)} projected`, "debug-projection-events")}
+            ${debugSlimRow("Hardware readiness", `${formatInteger((hardware.interface_inventory || []).length)} interfaces`, "/admin/hardware-readiness/context")}
+            ${debugSlimRow("Ingress", ingress.status || "not loaded", ingress.reason || "/debug/mobile-wearable/ingress")}
+          </div>
+        `)}
+        ${renderDebugDrawerPanel("Boundary Notes", `
+          <div class="debug-slim-list">
+            ${debugSlimRow("Live safety", "not triggered from dashboard", "closed", "ok")}
+            ${debugSlimRow("Hardware control", "readiness metadata only", "metadata", "ok")}
+            ${debugSlimRow("Outbound", "mock / dry-run message evidence only", "closed", "ok")}
+            ${debugSlimRow("Latest event", latest ? debugEventLabel(latest) : "not loaded", matrix.map((record) => record.label).join(" / "), latest ? "info" : "warn")}
+          </div>
+        `)}
+        ${renderDebugDrawerPanel("Recent Debug Events", `
+          <div class="debug-slim-list">
+            ${debugAllEvents().slice(0, 5).map((event) => debugSlimRow(debugEventLabel(event), event.summary || event.description || event.message || "projection event", event.source || event.kind || "debug", "info")).join("") || debugSlimRow("No runtime events", "waiting for debug stream", "empty", "warn")}
+          </div>
+        `)}
+      `;
+    }
+
+    function renderDebugStatusBar(matrix, active) {
+      const runtime = state.debugRuntimeState || {};
+      const hardware = state.hardwareReadiness || {};
+      const ingress = state.mobileWearableIngress || {};
+      const boundary = {
+        ...(state.runtimeDebugEventPayload?.debug_boundary || {}),
+        ...(runtime.debug_boundary || {}),
+        ...(state.debugMessagesPayload?.debug_boundary || {}),
+        ...(state.monitoringCenter?.debug_boundary || {}),
+        ...(hardware.boundary || {}),
+        ...(ingress.boundary || {}),
+      };
+      const boundaryClosed = boundary.phase1_mutation_allowed === false && boundary.phase2_writeback_allowed === false;
+      return `
+        <div class="debug-telemetry-bar" aria-label="Debug dashboard telemetry">
+          ${debugTelemetryCell("Route / Workspace", projectId(), state.pretripDataProjectId || "projection", "info")}
+          ${debugTelemetryCell("Selected View", active.label, `${formatInteger(active.count)} refs`, active.count ? "ok" : "info")}
+          ${debugTelemetryCell("Runtime", runtime.runtime_profile || "phase35-debug", `events ${formatInteger(runtime.event_count ?? state.runtimeDebugEvents.length)}`, "info")}
+          ${debugTelemetryCell("Boundary", boundaryClosed ? "read-only" : "review", "no live safety automation", boundaryClosed ? "ok" : "warn")}
+          ${debugTelemetryCell("Hardware", `${formatInteger(hardware.summary?.interface_count ?? asArray(hardware.interface_inventory).length)} interfaces`, `${formatInteger(hardware.summary?.degraded_provider_count || 0)} degraded`, hardware.summary?.degraded_provider_count ? "warn" : "ok")}
+          ${debugTelemetryCell("Outbound", "mock only", `${formatInteger(state.debugMessages.length)} messages`, "ok")}
+          ${debugTelemetryCell("Ingress", ingress.status || "not loaded", ingress.reason || "observer stream", ingress.unavailable ? "warn" : "info")}
+        </div>
+      `;
+    }
+
+    function debugTelemetryCell(label, value, meta, status = "info") {
+      return `
+        <div class="debug-telemetry-cell ${debugToneClass(status)}">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(debugText(value))}</strong>
+          <small>${escapeHtml(debugText(meta))}</small>
+        </div>
+      `;
+    }
+
+    function renderDebugDrawerPanel(title, body) {
+      return `
+        <section class="panel">
+          <div class="panel-header"><h3>${escapeHtml(title)}</h3></div>
+          <div class="panel-body">${body}</div>
+        </section>
+      `;
+    }
+
+    function debugSlimRow(label, value, meta = "", status = "info") {
+      return `
+        <div class="debug-slim-row">
+          <div>
+            <strong>${escapeHtml(debugText(label))}</strong>
+            <span>${escapeHtml(debugText(value))}</span>
+          </div>
+          <em class="debug-pill ${debugToneClass(status)}">${escapeHtml(debugText(meta))}</em>
+        </div>
+      `;
+    }
+
+    function renderDebugStreamTables(matrix) {
+      return `
+        <div class="debug-table-grid" data-debug-stream-tables="true">
+          ${renderDebugEventTable("Debug Message Stream", debugAllEvents())}
+          ${renderDebugApiCompactTable(matrix)}
+        </div>
+      `;
+    }
+
+    function renderDebugEventTable(title, events) {
+      const rows = asArray(events).slice(0, 9);
+      return `
+        <section class="panel">
+          <div class="panel-header"><h3>${escapeHtml(title)}</h3><span class="chip info">${formatInteger(asArray(events).length)} events</span></div>
+          <div class="panel-body debug-table-wrap">
+            <table class="table debug-table">
+              <thead><tr><th>Time</th><th>Event</th><th>Source</th><th>Summary</th></tr></thead>
+              <tbody>
+                ${rows.length ? rows.map((event) => `
+                  <tr>
+                    <td class="mono">${escapeHtml(debugEventTime(event) || "--")}</td>
+                    <td>${escapeHtml(event.kind || event.event_kind || event.title || "debug event")}</td>
+                    <td>${escapeHtml(event.source || event.subject_ref || "debug")}</td>
+                    <td>${escapeHtml(event.summary || event.description || event.message || "read-only projection event")}</td>
+                  </tr>
+                `).join("") : `<tr><td colspan="4">No runtime debug events loaded.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderDebugApiCompactTable(matrix) {
+      const project = encodeURIComponent(state.pretripDataProjectId || projectId());
+      const rows = [
+        ["Runtime events", "/debug/events?limit=200", state.runtimeDebugEventPayload, state.runtimeDebugEvents.length],
+        ["Runtime state", "/debug/state", state.debugRuntimeState, state.debugRuntimeState?.event_count || 0],
+        ["Runtime messages", "/debug/messages", state.debugMessagesPayload, state.debugMessages.length],
+        ["Ingress", "/debug/mobile-wearable/ingress", state.mobileWearableIngress, state.mobileWearableIngress?.message_count || 0],
+        ["Monitoring", "/debug/monitoring", state.monitoringCenter, state.monitoringCenter?.counts?.event_count || 0],
+        ["Hardware", "/admin/hardware-readiness/context", state.hardwareReadiness, asArray(state.hardwareReadiness?.interface_inventory).length],
+        ["Pretrip projection", `/admin/pretrip/projects/${project}/debug-projection-events`, { events: state.debugEvents }, state.debugEvents.length],
+      ];
+      return `
+        <section class="panel">
+          <div class="panel-header"><h3>API Payload Matrix</h3><span class="chip info">${rows.length} endpoints</span></div>
+          <div class="panel-body debug-table-wrap">
+            <table class="table debug-table">
+              <thead><tr><th>Endpoint</th><th>Status</th><th>Refs</th><th>Payload</th></tr></thead>
+              <tbody>
+                ${rows.map(([label, path, payload, count]) => `
+                  <tr>
+                    <td><strong>${escapeHtml(label)}</strong><br><span class="mono">${escapeHtml(path)}</span></td>
+                    <td><span class="debug-pill ${debugToneClass(debugPayloadStatus(payload))}">${escapeHtml(debugPayloadStatus(payload))}</span></td>
+                    <td>${escapeHtml(formatInteger(count || 0))}</td>
+                    <td>${escapeHtml(formatInteger(debugPayloadSize(payload)))} bytes</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderDebugActiveDetail(active, matrix) {
+      if (active.id === "state" || active.id === "events") return renderDebugStateDetail(active, matrix);
+      if (active.id === "monitor") return renderDebugMonitorDetail(active);
+      if (active.id === "provider") return renderDebugSoftwareDetail(active, { providerOnly: true });
+      if (active.id === "hardware") return renderDebugHardwareDetail(active);
+      if (active.id === "software") return renderDebugSoftwareDetail(active);
+      if (active.id === "ingress") return renderDebugIngressDetail(active);
+      if (active.id === "incident") return renderDebugIncidentDetail(active);
+      if (active.id === "ln-skill" || active.id === "skills" || active.id === "tools") return renderDebugSkillToolDetail(active);
+      if (active.id === "outbound") return renderDebugOutboundDetail(active);
+      if (active.id === "boundary") return renderDebugBoundaryDetail(active);
+      if (active.id === "api") return renderDebugApiDetail(active);
+      return renderDebugStateDetail(active, matrix);
+    }
+
+    function renderDebugVisualPanel(title, intro, body, attrs = "") {
+      return `
+        <section class="panel debug-visual-panel" ${attrs}>
+          <div class="panel-header"><h3>${escapeHtml(title)}</h3></div>
+          <div class="panel-body debug-visual-panel">
+            ${intro ? `<p class="debug-visual-intro">${escapeHtml(intro)}</p>` : ""}
+            ${body}
+          </div>
+        </section>
+      `;
+    }
+
+    function debugNode(label, value, status = "info", chips = [], icon = "") {
+      return `
+        <div class="debug-node ${debugToneClass(status)}">
+          <div class="debug-node-head">
+            <span class="debug-node-icon">${escapeHtml(icon || debugIconForLabel(label))}</span>
+            <div>
+              <h4>${escapeHtml(label)}</h4>
+              <strong>${escapeHtml(debugText(value))}</strong>
+            </div>
+          </div>
+          ${debugChipList(chips)}
+        </div>
+      `;
+    }
+
+    function debugFlowNode(label, value, meta = "") {
+      return `
+        <div class="debug-flow-node">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(debugText(value))}</strong>
+          ${meta ? `<small class="mono">${escapeHtml(meta)}</small>` : ""}
+        </div>
+      `;
+    }
+
+    function debugChipList(chips) {
+      const values = asArray(chips).filter((chip) => chip !== null && chip !== undefined && chip !== "");
+      if (!values.length) return "";
+      return `<div class="debug-node-chips">${values.map((chip) => `<span>${escapeHtml(debugText(chip))}</span>`).join("")}</div>`;
+    }
+
+    function renderDebugStateDetail(active, matrix) {
+      const runtime = state.debugRuntimeState || {};
+      const events = debugAllEvents();
+      const level = String(runtime.safety_level || "unknown").toUpperCase();
+      const activeLevel = ["L0", "L1", "L2", "L3", "L4"].find((item) => level.includes(item)) || "";
+      const latest = latestDebugEvent(events);
+      const levels = ["L0", "L1", "L2", "L3", "L4"].map((item) => `
+        <div class="debug-level-box ${item === activeLevel ? "is-active" : ""}">
+          <strong>${item}</strong>
+          <span>${item === activeLevel ? "current" : "standby"}</span>
+        </div>
+      `).join("");
+      return renderDebugVisualPanel(
+        "Current L0-L4 State",
+        "Default debug landing mirrors the /admin/debug L0-L4 tab and keeps runtime mutation closed.",
+        `
+          <div class="debug-level-strip">${levels}</div>
+          <div class="debug-node-grid">
+            ${debugNode("Runtime profile", runtime.runtime_profile || "phase35-debug", "info", [runtime.debug_session_id || "session not loaded"], "RT")}
+            ${debugNode("Safety level", runtime.safety_level || "unknown", activeLevel ? "warn" : "info", [runtime.latest_transition || "no transition"], "L")}
+            ${debugNode("Observations", formatInteger(runtime.observations_processed || 0), "info", ["processed inputs"], "OB")}
+            ${debugNode("Runtime events", formatInteger(runtime.event_count ?? state.runtimeDebugEvents.length), "info", [`projection refs=${formatInteger(state.debugEvents.length)}`], "EV")}
+            ${debugNode("Messages", formatInteger(runtime.message_count ?? state.debugMessages.length), "info", ["mock transport only"], "MS")}
+            ${debugNode("Latest event", latest ? debugEventLabel(latest) : active.latestLabel, latest ? "ok" : "warn", [active.source], "TM")}
+          </div>
+        `
+      );
+    }
+
+    function renderDebugMonitorDetail(active) {
+      const monitoring = state.monitoringCenter || {};
+      const counts = monitoring.counts || {};
+      const hardware = state.hardwareReadiness || {};
+      const hardwareSummary = hardware.summary || {};
+      const transportCount = (counts.voice_event_count || 0) + (counts.outbound_event_count || 0) + (counts.mock_message_count || 0);
+      return renderDebugVisualPanel(
+        "Monitoring Center",
+        "Cross-domain read-only overview from /debug/monitoring, matching the /admin/debug Monitor tab.",
+        `
+          <div class="debug-node-grid">
+            ${debugNode("Agent tools", formatInteger(counts.agent_tool_count || 0), counts.agent_tool_attention_count ? "warn" : "info", [`attention=${formatInteger(counts.agent_tool_attention_count || 0)}`], "AT")}
+            ${debugNode("Release checks", formatInteger(counts.release_check_count || 0), "info", ["release gate traces"], "RC")}
+            ${debugNode("Map prep", formatInteger(counts.map_preparation_count || 0), "info", ["layer preparation traces"], "MP")}
+            ${debugNode("Hardware interfaces", formatInteger(hardwareSummary.interface_count ?? asArray(hardware.interface_inventory).length), hardwareSummary.degraded_provider_count ? "warn" : "ok", [`degraded=${formatInteger(hardwareSummary.degraded_provider_count || 0)}`], "HW")}
+            ${debugNode("Voice / outbound", formatInteger(transportCount), transportCount ? "warn" : "info", ["mock visibility only"], "VO")}
+            ${debugNode("Spatial imprints", formatInteger(counts.spatial_imprint_event_count || 0), "info", ["store / trigger dry-run"], "SP")}
+          </div>
+          <div class="debug-flow">
+            ${debugFlowNode("Agent tools", formatInteger(counts.agent_tool_count || 0), "tool traces")}
+            ${debugFlowNode("Release checks", formatInteger(counts.release_check_count || 0), "gate result")}
+            ${debugFlowNode("Map preparation", formatInteger(counts.map_preparation_count || 0), "layer work")}
+            ${debugFlowNode("Hardware readiness", formatInteger(hardwareSummary.interface_count ?? 0), "context")}
+            ${debugFlowNode("Voice / outbound", formatInteger(transportCount), "mock queue")}
+            ${debugFlowNode("Spatial imprint", formatInteger(counts.spatial_imprint_event_count || 0), "projection")}
+          </div>
+        `
+      );
+    }
+
+    function renderDebugSoftwareDetail(active, options = {}) {
+      const runtime = state.debugRuntimeState || {};
+      const bridge = runtime.phase3_bridge || {};
+      const monitoring = state.monitoringCenter || {};
+      const counts = monitoring.counts || {};
+      const providerEntries = debugProviderEntries();
+      const degraded = providerEntries.filter((provider) => debugIsProblemStatus(provider.status)).length;
+      const providerGraph = providerEntries.length
+        ? `<div class="debug-bus">${providerEntries.map((provider) => debugNode(provider.name, provider.status || "unknown", provider.status, [provider.type || "provider", provider.reason || provider.source || "snapshot"], "PR")).join("")}</div>`
+        : `<div class="debug-node-grid">${debugNode("Provider snapshot", "not seen", "warn", ["No provider status reported"], "PR")}</div>`;
+      if (options.providerOnly) {
+        return renderDebugVisualPanel(
+          "Provider Degraded Status",
+          "Provider graph from /debug/state plus hardware-readiness provider health.",
+          providerGraph
+        );
+      }
+      return `
+        ${renderDebugVisualPanel(
+          "Runtime Software State",
+          "Software view mirrors /admin/debug provider and runtime state, but keeps the dashboard as a visual summary.",
+          `
+          <div class="debug-flow">
+            ${debugFlowNode("Runtime profile", runtime.runtime_profile || "phase35-debug", "debug state")}
+            ${debugFlowNode("Provider state", `${formatInteger(providerEntries.length)} providers`, `${formatInteger(degraded)} degraded`)}
+            ${debugFlowNode("Phase 3 bridge", bridge.enabled === true ? "enabled" : (bridge.enabled === false ? "closed" : "unknown"), bridge.latest_status || bridge.status || "bridge")}
+            ${debugFlowNode("Release checks", formatInteger(counts.release_check_count || 0), "monitoring")}
+            ${debugFlowNode("Map prep", formatInteger(counts.map_preparation_count || 0), "monitoring")}
+          </div>
+          <div class="debug-node-grid">
+            ${debugNode("Agent tool calls", formatInteger(runtime.agent_tool_count || counts.agent_tool_count || 0), "info", [debugText(runtime.latest_agent_tool?.tool_id, "latest not seen")], "TL")}
+            ${debugNode("Runtime event count", formatInteger(runtime.event_count ?? state.runtimeDebugEvents.length), "info", ["runtime debug stream"], "EV")}
+            ${debugNode("Message count", formatInteger(runtime.message_count ?? state.debugMessages.length), "info", ["mock message stream"], "MS")}
+            ${debugNode("Spatial imprints", formatInteger(runtime.spatial_imprint_event_count || counts.spatial_imprint_event_count || 0), "info", [debugText(runtime.latest_spatial_imprint?.imprint_id, "latest not seen")], "SP")}
+          </div>
+          `
+        )}
+        <div style="height:12px"></div>
+        ${renderDebugVisualPanel(
+          "Provider Degraded Status",
+          "Provider graph from /debug/state plus hardware-readiness provider health.",
+          providerGraph
+        )}
+      `;
+    }
+
+    function renderDebugHardwareDetail(active) {
+      const payload = state.hardwareReadiness || {};
+      const summary = payload.summary || {};
+      const interfaces = asArray(payload.interface_inventory);
+      const providers = asArray(payload.provider_health);
+      const degradedCount = summary.degraded_provider_count ?? providers.filter((provider) => debugIsProblemStatus(provider.status)).length;
+      const mockQueue = asArray(payload.mock_transport_queue);
+      const gpio = interfaces.find((item) => String(item.interface_type || "").toLowerCase() === "gpio") || {};
+      const intro = "Hardware Readiness uses /admin/hardware-readiness/context. GPIO/I2C/I2S/TTS/Bluetooth/UART/power/GNSS/IMU/USB/SSD inventory stays metadata-only.";
+      return `
+        ${renderDebugVisualPanel("Hardware Readiness", intro, `
+          <div class="debug-node-grid">
+            ${debugNode("Interfaces", formatInteger(summary.interface_count ?? interfaces.length), degradedCount ? "warn" : "ok", [asArray(summary.interface_statuses).join(" / ") || "inventory"], "IF")}
+            ${debugNode("Providers", formatInteger(summary.provider_count ?? providers.length), degradedCount ? "warn" : "ok", [`degraded=${formatInteger(degradedCount)}`], "PR")}
+            ${debugNode("Debug events", formatInteger(summary.runtime_debug_event_count ?? asArray(payload.runtime_debug_events).length), "info", ["hardware projection"], "EV")}
+            ${debugNode("Mock queue", formatInteger(summary.mock_message_count ?? mockQueue.length), mockQueue.length ? "warn" : "info", ["no real outbound"], "MQ")}
+          </div>
+        `)}
+        <div style="height:12px"></div>
+        ${renderDebugVisualPanel("Hardware Interface Bus", "Interface cards are grouped like the /admin/debug Hardware tab, with status, source and observed line metadata.", `
+          <div class="debug-bus">
+            ${interfaces.length ? interfaces.map(renderDebugHardwareInterfaceNode).join("") : debugNode("Interface inventory", "not loaded", "warn", ["No hardware readiness payload"], "HW")}
+          </div>
+          ${renderDebugHardwarePins(gpio)}
+        `)}
+        <div style="height:12px"></div>
+        ${renderDebugVisualPanel("Hardware Providers", "Provider health graph shows degraded GNSS/IMU style dependencies without driving hardware.", `
+          <div class="debug-bus">
+            ${providers.length ? providers.map(renderDebugHardwareProviderNode).join("") : debugNode("Provider health", "not loaded", "warn", ["No provider health payload"], "PR")}
+          </div>
+        `)}
+        <div style="height:12px"></div>
+        ${renderDebugVisualPanel("Hardware Boundary Gates", "Gate board confirms dashboard rendering does not control providers, GPIO or outbound transport.", `
+          ${renderDebugBoundaryGateGrid(payload.boundary || {}, ["hardware_control_allowed", "provider_control_allowed", "gpio_drive_requires_wiring_manifest", "gpio_drive_operator_confirmation_required", "outbound_send_allowed"])}
+        `)}
+      `;
+    }
+
+    function renderDebugIngressDetail(active) {
+      const payload = state.mobileWearableIngress || {};
+      const ingress = payload.ingress || {};
+      const latest = ingress.latest_record || {};
+      const invalidCount = (payload.invalid_message_count || 0) + (ingress.rejected_count || 0) + (ingress.unrecognized_count || 0);
+      return `
+        ${renderDebugVisualPanel("Mobile/Wearable Ingress", "Ingress mirrors /admin/debug and reads /debug/mobile-wearable/ingress. Raw sensor values stay outside the dashboard.", `
+          <div class="debug-flow">
+            ${debugFlowNode("Mobile / Wearable", formatInteger(payload.message_count || 0), "messages")}
+            ${debugFlowNode("MQTT observer", payload.mqtt_state?.ever_subscribed ? "subscribed" : (payload.mqtt_state?.ever_connected ? "connected" : "not connected"), payload.reason || "state")}
+            ${debugFlowNode("Ingress index", formatInteger(ingress.record_count || 0), "records")}
+            ${debugFlowNode("Dashboard", payload.status || "not loaded", "read-only")}
+          </div>
+          <div class="debug-node-grid">
+            ${debugNode("Ingress records", formatInteger(ingress.record_count || 0), ingress.record_count ? "ok" : "info", [`accepted=${formatInteger(ingress.accepted_count || 0)}`], "IN")}
+            ${debugNode("Invalid / unknown", formatInteger(invalidCount), invalidCount ? "warn" : "ok", [`rejected=${formatInteger(ingress.rejected_count || 0)}`], "ER")}
+            ${debugNode("Sensors", formatInteger(asArray(payload.sensor_names).length), "info", asArray(payload.sensor_names).slice(0, 4), "SN")}
+            ${debugNode("Latest parse", latest.parse_status || "none", latest.parse_status || "info", [latest.source_adapter || payload.status_path || "status path"], "LP")}
+            ${debugNode("Memo", payload.memo || payload.status || "not loaded", payload.unavailable ? "warn" : "info", [payload.reason || "ingress memo"], "MM")}
+          </div>
+        `)}
+        <div style="height:12px"></div>
+        ${renderDebugVisualPanel("Ingress Boundary", "Boundary chips show reset/raw/runtime/safety write guards from the ingress payload.", `
+          ${renderDebugBoundaryGateGrid(payload.boundary || {}, ["debug_projection_reset_applied", "raw_evidence_cleared", "observer_process_restarted", "runtime_admission_performed", "safety_api_called", "phase2_brain_writeback"])}
+        `)}
+      `;
+    }
+
+    function renderDebugIncidentDetail(active) {
+      const runtime = state.debugRuntimeState || {};
+      const bridge = runtime.phase3_bridge || {};
+      const hardware = state.hardwareReadiness || {};
+      const replay = asArray(hardware.sample_replay_timeline);
+      const events = debugEventsForKeywords(["incident", "bridge", "package", "persisted"]);
+      return renderDebugVisualPanel(
+        "Incident And Bridge Status",
+        "Incident view follows /admin/debug bridge/package status and remains read-only.",
+        `
+          <div class="debug-flow">
+            ${debugFlowNode("Runtime event", formatInteger(events.length), "incident window")}
+            ${debugFlowNode("Phase 3 bridge", bridge.enabled === true ? "enabled" : (bridge.enabled === false ? "closed" : "unknown"), bridge.status || "bridge")}
+            ${debugFlowNode("Sample replay", formatInteger(replay.length), "hardware readiness")}
+            ${debugFlowNode("Package view", bridge.latest_status || "not loaded", "projection")}
+          </div>
+          <div class="debug-node-grid">
+            ${debugNode("Bridge latest", bridge.latest_status || bridge.status || "unknown", bridge.latest_status || bridge.status || "info", [bridge.latest_ref || "no latest ref"], "BR")}
+            ${debugNode("Incident events", formatInteger(events.length), events.length ? "warn" : "info", events.slice(0, 3).map(debugEventLabel), "IC")}
+            ${debugNode("Sample replay events", formatInteger(replay.length), replay.length ? "ok" : "info", replay.slice(0, 3).map((item) => item.event_ref || item.kind || "sample"), "SR")}
+          </div>
+        `
+      );
+    }
+
+    function renderDebugSkillToolDetail(active) {
+      const runtime = state.debugRuntimeState || {};
+      const monitoring = state.monitoringCenter || {};
+      const counts = monitoring.counts || {};
+      const lnEvents = debugEventsForKeywords(["ln", "gate", "physiologic", "runtime_safety"]);
+      const skillEvents = debugEventsForKeywords(["skill", "capability", "skill_id"]);
+      const toolEvents = debugEventsForKeywords(["tool", "tool_id", "agent_tool"]);
+      const title = active.id === "tools" ? "Agent Tool Trace" : (active.id === "skills" ? "Scout Skills" : "Ln And Skill Runs");
+      return renderDebugVisualPanel(
+        title,
+        "Ln, skill and tool views follow /admin/debug skill monitoring and render only candidate/debug projection evidence.",
+        `
+          <div class="debug-flow">
+            ${debugFlowNode("Ln gate", formatInteger(lnEvents.length), "gate checks")}
+            ${debugFlowNode("Skill run", formatInteger(skillEvents.length), "skill evidence")}
+            ${debugFlowNode("Agent tool", formatInteger(runtime.agent_tool_count || counts.agent_tool_count || toolEvents.length), "tool calls")}
+            ${debugFlowNode("Spatial imprint", formatInteger(runtime.spatial_imprint_event_count || counts.spatial_imprint_event_count || 0), "projection")}
+            ${debugFlowNode("Runtime snapshot", runtime.runtime_profile || "phase35-debug", "state")}
+          </div>
+          <div class="debug-node-grid">
+            ${debugNode("Latest tool", runtime.latest_agent_tool?.tool_id || "not seen", runtime.latest_agent_tool?.status || "info", [runtime.latest_agent_tool?.mode || "debug snapshot"], "TL")}
+            ${debugNode("Latest spatial imprint", runtime.latest_spatial_imprint?.imprint_id || "not seen", runtime.latest_spatial_imprint?.status || "info", [runtime.latest_spatial_imprint?.kind || "projection"], "SP")}
+            ${debugNode("Ln gate events", formatInteger(lnEvents.length), lnEvents.length ? "ok" : "info", lnEvents.slice(0, 3).map(debugEventLabel), "LN")}
+            ${debugNode("Skill events", formatInteger(skillEvents.length), skillEvents.length ? "ok" : "info", skillEvents.slice(0, 3).map(debugEventLabel), "SK")}
+            ${debugNode("Tool events", formatInteger(toolEvents.length), toolEvents.length ? "ok" : "info", toolEvents.slice(0, 3).map(debugEventLabel), "TO")}
+          </div>
+        `
+      );
+    }
+
+    function renderDebugOutboundDetail(active) {
+      const hardware = state.hardwareReadiness || {};
+      const monitoring = state.monitoringCenter || {};
+      const counts = monitoring.counts || {};
+      const queue = asArray(hardware.mock_transport_queue);
+      const messages = asArray(state.debugMessages);
+      return renderDebugVisualPanel(
+        "Outbound Queue",
+        "Outbound view mirrors /admin/debug mock transport state. The dashboard never sends messages.",
+        `
+          <div class="debug-flow">
+            ${debugFlowNode("Candidate message", formatInteger(messages.length), "/debug/messages")}
+            ${debugFlowNode("Mock queue", formatInteger(queue.length), "hardware context")}
+            ${debugFlowNode("Voice events", formatInteger(counts.voice_event_count || 0), "monitoring")}
+            ${debugFlowNode("Outbound events", formatInteger(counts.outbound_event_count || 0), "monitoring")}
+          </div>
+          <div class="debug-node-grid">
+            ${debugNode("Debug messages", formatInteger(messages.length), messages.length ? "warn" : "info", messages.slice(0, 3).map((item) => item.message_id || item.kind || "message"), "MS")}
+            ${debugNode("Mock messages", formatInteger(counts.mock_message_count || queue.length), queue.length ? "warn" : "info", queue.slice(0, 3).map((item) => item.message_id || item.transport || "mock"), "MQ")}
+            ${debugNode("Transport boundary", "mock only", "ok", ["real outbound closed"], "BD")}
+          </div>
+        `
+      );
+    }
+
+    function renderDebugBoundaryDetail(active) {
+      const boundary = {
+        ...(state.runtimeDebugEventPayload?.debug_boundary || {}),
+        ...(state.debugRuntimeState?.debug_boundary || {}),
+        ...(state.debugMessagesPayload?.debug_boundary || {}),
+        ...(state.monitoringCenter?.debug_boundary || {}),
+        ...(state.hardwareReadiness?.boundary || {}),
+        ...(state.mobileWearableIngress?.boundary || {}),
+      };
+      return renderDebugVisualPanel(
+        "Boundary Snapshot",
+        "Boundary gate board combines runtime, event, messages, monitoring, hardware and ingress snapshots.",
+        renderDebugBoundaryGateGrid(boundary, Object.keys(boundary).sort())
+      );
+    }
+
+    function renderDebugApiDetail(active) {
+      const project = encodeURIComponent(state.pretripDataProjectId || projectId());
+      const endpoints = [
+        ["Runtime events", "/debug/events?limit=200", state.runtimeDebugEventPayload, state.runtimeDebugEvents.length],
+        ["Runtime state", "/debug/state", state.debugRuntimeState, state.debugRuntimeState?.event_count || 0],
+        ["Runtime messages", "/debug/messages", state.debugMessagesPayload, state.debugMessages.length],
+        ["Mobile ingress", "/debug/mobile-wearable/ingress", state.mobileWearableIngress, state.mobileWearableIngress?.message_count || 0],
+        ["Monitoring center", "/debug/monitoring", state.monitoringCenter, state.monitoringCenter?.counts?.event_count || 0],
+        ["Hardware readiness", "/admin/hardware-readiness/context", state.hardwareReadiness, asArray(state.hardwareReadiness?.interface_inventory).length],
+        ["Pretrip projection", `/admin/pretrip/projects/${project}/debug-projection-events`, { events: state.debugEvents }, state.debugEvents.length],
+      ];
+      return renderDebugVisualPanel(
+        "API Payloads",
+        "Endpoint tiles show the same debug payload families used by /admin/debug without dumping full JSON blocks.",
+        `<div class="debug-api-grid">${endpoints.map(([label, path, payload, count]) => renderDebugApiTile(label, path, payload, count)).join("")}</div>`
+      );
     }
 
     function renderObserverPage() {
@@ -1890,8 +4553,8 @@
 
     function outdoorTabs(activeRoute) {
       return `
-        <div class="route-tabs" role="tablist" aria-label="Outdoor Six Forces">
-          ${SIX_FORCES.map((force) => `<button type="button" class="${force.route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(force.route)}">${escapeHtml(force.zh)}</button>`).join("")}
+        <div class="route-tabs" role="tablist" aria-label="Exploring for Six Axis">
+          ${SIX_FORCES.map((force) => `<button type="button" class="${force.route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(force.route)}">${escapeHtml(force.label)}</button>`).join("")}
         </div>
       `;
     }
@@ -1948,7 +4611,7 @@
                   <tr><td>前 24 小時降雨</td><td>溪谷與濕滑下坡風險上升</td><td>保留撤退 buffer</td></tr>
                   <tr><td>午後雷雨</td><td>稜線、山頂、裸露地需避開</td><td>13:00 前離開 exposed ridge</td></tr>
                   <tr><td>強風低溫</td><td>停留與架設腳架成本升高</td><td>縮短拍攝停留</td></tr>
-                  <tr><td>能見度差</td><td>地圖力需求升高</td><td>保持 CP discipline</td></tr>
+                  <tr><td>能見度差</td><td>Navigation demand rises</td><td>保持 CP discipline</td></tr>
                   <tr><td>預報來源不一致</td><td>uncertainty 上升</td><td>保守改判</td></tr>
                 </tbody>
               </table>
@@ -1961,7 +4624,7 @@
     function renderNavigationPage(force) {
       return `
         ${outdoorTabs(force.route)}
-        ${decisionBand(force.decision, "地圖力需求高於目前自主能力", "low", "補齊離線地圖與撤退方向訓練")}
+        ${decisionBand(force.decision, "Navigation demand exceeds current autonomous confidence", "low", "補齊離線地圖與撤退方向訓練")}
         <div class="grid-2">
           ${renderMapPanel("navigation")}
           ${renderMetricPanel("Navigation Readiness", [
@@ -2019,26 +4682,78 @@
     }
 
     function renderRouteContextPage(force) {
+      const briefingProject = routeContextBriefingProjectId();
+      const briefingSrc = routeContextBriefingSrc();
+      const briefingPath = `/admin/pretrip/projects/${briefingProject}/briefings/route-context`;
+      const regeneration = state.briefingRegenerationStatus || { tone: "info", text: "Scout AI regeneration idle" };
       return `
         ${outdoorTabs(force.route)}
-        ${decisionBand(force.decision, "值得停留但需受時間限制", "medium", "把觀察點轉交 Contextual Permissioning")}
-        <div class="grid-2">
-          ${renderMapPanel("route-context")}
-          <section class="panel">
-            <div class="panel-header"><h3>Route Context</h3><span class="chip info">candidate evidence</span></div>
-            <div class="panel-body">
-              <table class="table">
-                <thead><tr><th>Context</th><th>Meaning</th><th>Stop rule</th></tr></thead>
-                <tbody>
-                  <tr><td>歷史層</td><td>警備道、駐在所、舊路線脈絡</td><td>3 min observation</td></tr>
-                  <tr><td>自然層</td><td>林相、地質、風口、溪谷</td><td>avoid long stop at ridge</td></tr>
-                  <tr><td>季節層</td><td>雲海、低溫、雨季與芒草</td><td>check weather window</td></tr>
-                  <tr><td>觀察點</td><td>讓行程不只是攻頂</td><td>permission required</td></tr>
-                </tbody>
-              </table>
+        <div class="route-briefing-layout">
+          <section class="panel route-briefing-frame-panel">
+            <div class="route-briefing-ops">
+              <button
+                class="route-briefing-action-button primary"
+                type="button"
+                data-route-context-briefing-regenerate
+                ${state.briefingRegenerationBusy ? "disabled" : ""}
+              >${state.briefingRegenerationBusy ? "Regenerating..." : "Regenerate with Scout AI"}</button>
+              <span class="route-briefing-status" id="routeBriefingRegenerationStatus">${escapeHtml(regeneration.text)}</span>
             </div>
+            <details class="route-briefing-meta-drawer" data-route-briefing-metadata="collapsed">
+              <summary>
+                <span>Briefing metadata</span>
+                <small>Briefing Source / Artifact Boundary / Load Contract</small>
+              </summary>
+              <div class="route-briefing-meta-grid">
+                ${renderRouteBriefingMetaBlock("Briefing Source", [
+                  ["Project", briefingProject],
+                  ["API", briefingPath],
+                  ["Artifact", "outputs/briefings/route_context_briefing.html"],
+                  ["Generated by", "scout-route-context-briefing skill"],
+                  ["Collector", "pretrip_route_context_collection"],
+                ])}
+                ${renderRouteBriefingMetaBlock("Artifact Boundary", [
+                  ["Use", "route understanding and context-layer evidence"],
+                  ["Allowed", "operator review, trip briefing, candidate notes"],
+                  ["Not authority", "stop permission, route open/closed decision"],
+                  ["Safety truth", "no Phase 1 mutation, no safety endpoint write"],
+                  ["Outbound", "no live safety automation"],
+                ])}
+                <section class="route-briefing-meta-block">
+                  <h4>Load Contract</h4>
+                  <p class="route-briefing-empty">
+                    The dashboard loads the existing pretrip briefing endpoint instead of duplicating the Scout AI briefing renderer. If the frame is empty, regenerate the route-context briefing artifact for ${escapeHtml(briefingProject)} and keep the source ref at outputs/briefings/route_context_briefing.html.
+                  </p>
+                </section>
+              </div>
+              <div class="route-briefing-meta-actions">
+                <a href="${escapeHtml(briefingSrc)}" target="_blank" rel="noreferrer">Open briefing</a>
+                <span class="chip info">candidate-only</span>
+                <span class="chip warn">runtime_safety_truth=false</span>
+                <span class="chip ${escapeHtml(regeneration.tone)}">Scout AI / OpenRouter</span>
+              </div>
+            </details>
+            <iframe
+              class="route-briefing-frame"
+              data-route-context-briefing="true"
+              title="Scout AI route context trip briefing"
+              src="${escapeHtml(briefingSrc)}"
+              loading="eager"
+              referrerpolicy="no-referrer"
+            ></iframe>
           </section>
         </div>
+      `;
+    }
+
+    function renderRouteBriefingMetaBlock(title, rows) {
+      return `
+        <section class="route-briefing-meta-block">
+          <h4>${escapeHtml(title)}</h4>
+          <div class="metric-line">
+            ${rows.map(([label, value]) => `<div class="metric-row"><span>${escapeHtml(label)}</span><span>${value.includes("<") ? value : escapeHtml(value)}</span></div>`).join("")}
+          </div>
+        </section>
       `;
     }
 
@@ -2635,6 +5350,405 @@
       return value === null || value === undefined || value === "" ? "-" : value;
     }
 
+    function numberValue(...values) {
+      for (const value of values) {
+        if (value === null || value === undefined || value === "") continue;
+        const number = Number(value);
+        if (Number.isFinite(number)) return number;
+      }
+      return null;
+    }
+
+    function formatInteger(value) {
+      if (value === null || value === undefined || value === "") return "--";
+      const number = Number(value);
+      return Number.isFinite(number) ? Math.round(number).toLocaleString() : "--";
+    }
+
+    function formatDistanceKm(value) {
+      if (value === null || value === undefined || value === "") return "--";
+      const meters = Number(value);
+      return Number.isFinite(meters) ? `${(meters / 1000).toFixed(2)} km` : "--";
+    }
+
+    function formatElevationRange(route) {
+      const min = numberValue(route?.elevation_min_m);
+      const max = numberValue(route?.elevation_max_m);
+      if (min === null || max === null) return "--";
+      return `${formatInteger(min)} - ${formatInteger(max)} m`;
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "--";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+    }
+
+    function formatTtl(seconds, expiresAt = null, mustRefetch = false) {
+      const ttlSeconds = numberValue(seconds);
+      if (mustRefetch || ttlSeconds === 0) return "0s; refetch on prepare";
+      if (ttlSeconds !== null) {
+        const days = ttlSeconds / 86400;
+        const ttlText = days >= 1 ? `${Number(days.toFixed(1))} days` : `${Math.round(ttlSeconds)}s`;
+        return expiresAt ? `${ttlText}; expires ${formatDateTime(expiresAt)}` : ttlText;
+      }
+      return expiresAt ? `expires ${formatDateTime(expiresAt)}` : "TTL not declared";
+    }
+
+    function formatBoolean(value) {
+      if (value === true) return "yes";
+      if (value === false) return "no";
+      return "unknown";
+    }
+
+    function latestDebugEventTime(needles) {
+      const matches = asArray(state.debugEvents).filter((event) => {
+        const haystack = [
+          event.kind,
+          event.event_kind,
+          event.source,
+          event.summary,
+          event.payload?.import_stage,
+        ].filter(Boolean).join(" ").toLowerCase();
+        return needles.some((needle) => haystack.includes(String(needle).toLowerCase()));
+      });
+      const timestamps = matches.map((event) => event.timestamp || event.recorded_at || event.time).filter(Boolean);
+      return timestamps.sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] || "";
+    }
+
+    function workspaceEvidenceRefCount(project) {
+      const categories = asArray(project.evidence_timeline?.categories);
+      const total = categories.reduce((sum, item) => sum + (numberValue(item.count) || 0), 0);
+      if (total) return total;
+      return categories.length;
+    }
+
+    function debugAllEvents() {
+      return [...asArray(state.debugEvents), ...asArray(state.runtimeDebugEvents)];
+    }
+
+    function debugCategoryCount(category, matches) {
+      const runtime = state.debugRuntimeState || {};
+      const hardware = state.hardwareReadiness || {};
+      const monitoring = state.monitoringCenter || {};
+      const ingress = state.mobileWearableIngress || {};
+      if (category.id === "state") return runtime.event_count ?? state.runtimeDebugEvents.length;
+      if (category.id === "events") return debugAllEvents().length;
+      if (category.id === "hardware") return hardware.summary?.interface_count ?? asArray(hardware.interface_inventory).length;
+      if (category.id === "software") return (runtime.event_count || 0) + Object.keys(runtime.provider_status || {}).length;
+      if (category.id === "monitor") return Object.keys(monitoring.sections || {}).length || Object.keys(monitoring.counts || {}).length;
+      if (category.id === "provider") return debugProviderEntries().length;
+      if (category.id === "ingress") return ingress.ingress?.record_count || ingress.message_count || 0;
+      if (category.id === "incident") return debugEventsForKeywords(["incident", "bridge", "package", "persisted"]).length;
+      if (category.id === "ln-skill") return debugEventsForKeywords(["ln", "skill", "gate", "physiologic", "runtime_safety"]).length;
+      if (category.id === "skills") return debugEventsForKeywords(["skill", "capability", "skill_id"]).length;
+      if (category.id === "tools") return runtime.agent_tool_count || monitoring.counts?.agent_tool_count || debugEventsForKeywords(["tool", "tool_id", "agent_tool"]).length;
+      if (category.id === "outbound") return state.debugMessages.length + asArray(hardware.mock_transport_queue).length;
+      if (category.id === "boundary") return Object.keys({
+        ...(state.runtimeDebugEventPayload?.debug_boundary || {}),
+        ...(runtime.debug_boundary || {}),
+        ...(state.debugMessagesPayload?.debug_boundary || {}),
+        ...(monitoring.debug_boundary || {}),
+        ...(hardware.boundary || {}),
+        ...(ingress.boundary || {}),
+      }).length;
+      if (category.id === "api") return 7;
+      return matches.length;
+    }
+
+    function debugCategoryLatestLabel(category, matches) {
+      if (category.id === "state") return state.debugRuntimeState?.runtime_profile || category.fallback;
+      if (category.id === "hardware") {
+        const summary = state.hardwareReadiness?.summary || {};
+        if (summary.interface_count !== undefined) return `${formatInteger(summary.interface_count)} interfaces`;
+      }
+      if (category.id === "monitor") return state.monitoringCenter?.status || category.fallback;
+      if (category.id === "ingress") return state.mobileWearableIngress?.memo || state.mobileWearableIngress?.status || category.fallback;
+      if (category.id === "outbound") return `${formatInteger(state.debugMessages.length)} debug messages`;
+      const latest = latestDebugEvent(matches);
+      return latest ? debugEventLabel(latest) : category.fallback;
+    }
+
+    function debugRuntimeMatrix() {
+      const events = debugAllEvents();
+      return DEBUG_DETAIL_CATEGORIES.map((category) => {
+        const matches = events.filter((event) => debugEventMatchesCategory(event, category));
+        return {
+          ...category,
+          count: debugCategoryCount(category, matches),
+          latestLabel: debugCategoryLatestLabel(category, matches),
+        };
+      });
+    }
+
+    function activeDebugRuntimeRecord(matrix) {
+      return matrix.find((record) => record.id === state.activeDebugDetail) || matrix[0] || DEBUG_DETAIL_CATEGORIES[0];
+    }
+
+    function debugCountFor(matrix, id) {
+      const record = matrix.find((item) => item.id === id);
+      if (!record) return "--";
+      return `${formatInteger(record.count)} refs`;
+    }
+
+    function debugEventsForKeywords(keywords) {
+      const lowered = keywords.map((keyword) => String(keyword).toLowerCase());
+      return debugAllEvents().filter((event) => {
+        const haystack = [
+          event.kind,
+          event.event_kind,
+          event.source,
+          event.summary,
+          event.description,
+          event.message,
+          event.subject_ref,
+          event.ref,
+          event.payload?.kind,
+          event.payload?.status,
+          event.payload?.tool_id,
+          event.payload?.skill_id,
+          event.payload?.provider,
+          event.payload?.endpoint,
+          event.payload?.boundary,
+        ].filter(Boolean).join(" ").toLowerCase();
+        return lowered.some((keyword) => haystack.includes(keyword));
+      });
+    }
+
+    function debugEventMatchesCategory(event, category) {
+      if (category.id === "events") return true;
+      const haystack = [
+        event.kind,
+        event.event_kind,
+        event.source,
+        event.summary,
+        event.description,
+        event.message,
+        event.subject_ref,
+        event.ref,
+        event.payload?.kind,
+        event.payload?.status,
+        event.payload?.tool_id,
+        event.payload?.skill_id,
+        event.payload?.provider,
+        event.payload?.endpoint,
+        event.payload?.boundary,
+      ].filter(Boolean).join(" ").toLowerCase();
+      return category.keywords.some((keyword) => haystack.includes(String(keyword).toLowerCase()));
+    }
+
+    function latestDebugEvent(events) {
+      const candidates = asArray(events).filter(Boolean);
+      return candidates.sort((left, right) => {
+        const leftTime = new Date(debugEventTime(left) || 0).getTime();
+        const rightTime = new Date(debugEventTime(right) || 0).getTime();
+        return rightTime - leftTime;
+      })[0] || null;
+    }
+
+    function debugEventTime(event) {
+      return event?.timestamp || event?.recorded_at || event?.time || event?.created_at || "";
+    }
+
+    function debugEventLabel(event) {
+      const title = event?.event_kind || event?.kind || event?.title || event?.ref || "debug event";
+      const time = debugEventTime(event);
+      return time ? `${title} @ ${formatDateTime(time)}` : title;
+    }
+
+    function debugEndpointText(endpoint) {
+      if (!endpoint) return "--";
+      if (endpoint.startsWith("/")) return `<a href="${escapeHtml(endpoint)}" target="_blank" rel="noreferrer">${escapeHtml(endpoint)}</a>`;
+      const project = encodeURIComponent(state.pretripDataProjectId || projectId());
+      const path = `/admin/pretrip/projects/${project}/${endpoint}`;
+      return `<a href="${escapeHtml(path)}" target="_blank" rel="noreferrer">${escapeHtml(path)}</a>`;
+    }
+
+    function debugText(value, fallback = "--") {
+      if (value === null || value === undefined || value === "") return fallback;
+      if (typeof value === "boolean") return value ? "true" : "false";
+      if (typeof value === "object") {
+        try {
+          const serialized = JSON.stringify(value);
+          return serialized.length > 80 ? `${serialized.slice(0, 77)}...` : serialized;
+        } catch {
+          return fallback;
+        }
+      }
+      return String(value);
+    }
+
+    function debugToneClass(status) {
+      const value = String(status || "").toLowerCase();
+      if (["ok", "ready", "available", "success", "true", "loaded"].some((item) => value.includes(item))) return "is-ok";
+      if (["warn", "planned", "queued", "unknown", "attention", "degraded"].some((item) => value.includes(item))) return "is-warn";
+      if (["bad", "fail", "error", "unavailable", "blocked", "false"].some((item) => value.includes(item))) return "is-bad";
+      return "is-info";
+    }
+
+    function debugIsProblemStatus(status) {
+      const value = String(status || "").toLowerCase();
+      return ["degraded", "unavailable", "failed", "error", "blocked", "warning"].some((item) => value.includes(item));
+    }
+
+    function debugIconForLabel(label) {
+      return String(label || "")
+        .split(/[\s/_-]+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join("")
+        .toUpperCase() || "D";
+    }
+
+    function hardwareInterfaceIcon(type) {
+      const value = String(type || "").toLowerCase();
+      if (value === "gpio") return "GPIO";
+      if (value === "i2c") return "I2C";
+      if (value.includes("i2s")) return "I2S";
+      if (value === "uart") return "UART";
+      if (value === "gnss") return "GNSS";
+      if (value === "imu") return "IMU";
+      if (value === "usb") return "USB";
+      if (value === "ssd") return "SSD";
+      if (value === "battery") return "PWR";
+      if (value === "bluetooth") return "BT";
+      return debugIconForLabel(type || "HW");
+    }
+
+    function renderDebugHardwareInterfaceNode(item) {
+      const details = item.details || {};
+      const chips = [
+        item.signal_activity,
+        item.source_path,
+        item.last_seen_at ? formatDateTime(item.last_seen_at) : "not seen",
+      ];
+      if (asArray(item.observed_lines).length) chips.push(`${asArray(item.observed_lines).length} GPIO lines`);
+      if (asArray(item.detected_addresses).length) chips.push(`${asArray(item.detected_addresses).length} I2C addr`);
+      if (asArray(item.devices).length) chips.push(`${asArray(item.devices).length} devices`);
+      Object.entries(details).slice(0, 2).forEach(([name, value]) => chips.push(`${name.replace(/_/g, " ")}=${debugText(value)}`));
+      return debugNode(
+        item.interface_ref || item.interface_type || "hardware interface",
+        item.status || "unknown",
+        item.status || "info",
+        chips,
+        hardwareInterfaceIcon(item.interface_type)
+      );
+    }
+
+    function renderDebugHardwareProviderNode(provider) {
+      return debugNode(
+        provider.provider_ref || provider.source_id || "hardware provider",
+        provider.status || "unknown",
+        provider.status || "info",
+        [
+          provider.provider_type || provider.domain || "provider",
+          provider.degraded_reason,
+          provider.source_path,
+          provider.last_seen_at ? formatDateTime(provider.last_seen_at) : "",
+        ],
+        "PR"
+      );
+    }
+
+    function renderDebugHardwarePins(interfaceItem) {
+      const lines = asArray(interfaceItem.observed_lines).slice(0, 16);
+      if (!lines.length) return "";
+      return `
+        <div class="debug-pin-grid" aria-label="GPIO line sample">
+          ${lines.map((line) => `
+            <span class="debug-pin-chip" title="${escapeHtml(debugText(line.line_ref))}">
+              ${escapeHtml(line.header_label || `GPIO${line.gpio ?? ""}`)} · ${escapeHtml(line.physical_pin ? `pin ${line.physical_pin}` : "pin ?")} · ${escapeHtml(line.pull_state || "not sampled")}
+            </span>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function debugProviderEntries() {
+      const runtime = state.debugRuntimeState || {};
+      const runtimeProviders = Object.entries(runtime.provider_status || {}).map(([name, value]) => ({
+        name,
+        status: typeof value === "object" && value !== null ? (value.status || value.state || "unknown") : value,
+        type: "runtime provider",
+        reason: typeof value === "object" && value !== null ? value.reason : "",
+        source: "/debug/state",
+      }));
+      const hardwareProviders = asArray(state.hardwareReadiness?.provider_health).map((provider) => ({
+        name: provider.provider_ref || provider.source_id || "hardware provider",
+        status: provider.status || "unknown",
+        type: provider.provider_type || provider.domain || "hardware",
+        reason: provider.degraded_reason,
+        source: provider.source_path || "/admin/hardware-readiness/context",
+      }));
+      const byName = new Map();
+      [...runtimeProviders, ...hardwareProviders].forEach((provider) => {
+        byName.set(provider.name, provider);
+      });
+      return Array.from(byName.values());
+    }
+
+    function renderDebugBoundaryGateGrid(boundary, preferredKeys = []) {
+      const keys = preferredKeys.length ? preferredKeys : Object.keys(boundary || {});
+      const visible = keys.filter((key) => Object.prototype.hasOwnProperty.call(boundary || {}, key));
+      if (!visible.length) {
+        return `<div class="debug-node-grid">${debugNode("Boundary", "not loaded", "warn", ["No boundary payload"], "BD")}</div>`;
+      }
+      return `
+        <div class="debug-node-grid">
+          ${visible.map((key) => {
+            const value = boundary[key];
+            const positiveClosed = /allowed|enabled|performed|called|writeback|mutation|send|control|exposed|embedded/.test(key) && value === false;
+            const status = positiveClosed || value === true ? "ok" : "warn";
+            return debugNode(key.replace(/_/g, " "), debugText(value), status, ["boundary gate"], "BD");
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderDebugApiTile(label, path, payload, count) {
+      const status = debugPayloadStatus(payload);
+      const size = debugPayloadSize(payload);
+      const width = Math.max(6, Math.min(100, size / 28));
+      return `
+        <section class="debug-api-tile ${debugToneClass(status)}">
+          <div class="debug-node-head">
+            <span class="debug-node-icon">API</span>
+            <div>
+              <h4>${escapeHtml(label)}</h4>
+              <strong>${escapeHtml(status)}</strong>
+            </div>
+          </div>
+          <a href="${escapeHtml(path)}" target="_blank" rel="noreferrer">${escapeHtml(path)}</a>
+          <div class="debug-api-meter" aria-label="${escapeHtml(label)} payload size"><span style="width:${width}%"></span></div>
+          <div class="debug-node-meta"><span>refs=${escapeHtml(formatInteger(count || 0))}</span><span>bytes~${escapeHtml(formatInteger(size))}</span></div>
+        </section>
+      `;
+    }
+
+    function debugPayloadStatus(payload) {
+      if (!payload) return "not loaded";
+      if (payload.unavailable || payload.status === "unavailable") return "unavailable";
+      if (payload.error) return "error";
+      return "loaded";
+    }
+
+    function debugPayloadSize(payload) {
+      if (!payload) return 0;
+      try {
+        return JSON.stringify(payload).length;
+      } catch {
+        return 0;
+      }
+    }
+
     function numberText(value, digits = 1) {
       const number = Number(value || 0);
       return Number.isFinite(number) ? number.toFixed(digits) : "-";
@@ -2679,33 +5793,30 @@
 
     function renderEvidenceDrawer(route) {
       const force = SIX_FORCES.find((item) => item.route === route);
-      const title = force ? `${force.zh} Evidence` : "Evidence Drawer";
+      const title = force ? `${force.label} Evidence` : "Evidence";
       return `
         <section class="drawer-section" id="dashboardEvidenceHeader">
           <h3>${escapeHtml(title)}</h3>
           <div class="drawer-list">
             <div class="item"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
             <div class="item"><strong>Workspace root</strong><span class="mono">${escapeHtml(WORKSPACE_ROOT)}</span></div>
-            <div class="item"><strong>Decision vocabulary</strong><span class="mono">${DECISIONS.join(" / ")}</span></div>
-            <div class="item"><strong>Boundary metadata</strong><span>candidate-only, read-only where possible, no live safety automation, no outbound send.</span></div>
+            <div class="item"><strong>Boundary</strong><span class="mono">candidate-only / no outbound</span></div>
           </div>
         </section>
         <section class="drawer-section">
-          <h3>Source refs</h3>
+          <h3>Refs</h3>
           <div class="drawer-list">
             <div class="item"><strong>Standard</strong><span>docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md</span></div>
             <div class="item"><strong>Pretrip API</strong><span>/admin/pretrip/projects/${escapeHtml(state.pretripDataProjectId || projectId())}?compact=1</span></div>
             <div class="item"><strong>Projection</strong><span>/admin/pretrip/projects/${escapeHtml(state.pretripDataProjectId || projectId())}/admin-projection</span></div>
-            <div class="item"><strong>Debug events</strong><span>/admin/pretrip/projects/${escapeHtml(state.pretripDataProjectId || projectId())}/debug-projection-events</span></div>
           </div>
         </section>
         <section class="drawer-section">
-          <h3>Alpha Matrix</h3>
+          <h3>Issue Tags</h3>
           <div class="drawer-list">
-            <div class="item"><strong>Blocking</strong><span>no known blocking item from dashboard shell.</span></div>
-            <div class="item"><strong>Major</strong><span>GIS-related issues stay repro-only in this context.</span></div>
-            <div class="item"><strong>Minor</strong><span>copy and visual polish can iterate after smoke test.</span></div>
-            <div class="item"><strong>GIS-related</strong><span>record repro, screenshot, data path, expected and actual result.</span></div>
+            <div class="item"><strong>Blocking</strong><span>operator triage</span></div>
+            <div class="item"><strong>Major / Minor</strong><span>dashboard-visible</span></div>
+            <div class="item"><strong>GIS-related</strong><span>repro-only</span></div>
           </div>
         </section>
       `;
@@ -2733,12 +5844,334 @@
         });
       });
       bindMapEvidenceControls();
+      bindWorkspaceControls();
+      bindImportTripControls();
+      bindCountryMaterialPoolControls();
+      bindDebugDetailControls();
+      bindRouteContextBriefingControls();
       const saveSettings = document.getElementById("saveSettings");
       if (saveSettings) {
         saveSettings.addEventListener("click", () => {
           localStorage.setItem("scout.dashboardApiBase", document.getElementById("apiBaseInput").value.trim());
           localStorage.setItem("scout.dashboardProjectId", document.getElementById("projectInput").value.trim() || PROJECT_ID);
           loadData().finally(render);
+        });
+      }
+    }
+
+    function bindRouteContextBriefingControls() {
+      const button = document.querySelector("[data-route-context-briefing-regenerate]");
+      if (!button) return;
+      button.addEventListener("click", async () => {
+        state.briefingRegenerationBusy = true;
+        state.briefingRegenerationStatus = {
+          tone: "warn",
+          text: "Calling Scout AI via OpenRouter, then rebuilding briefing artifact...",
+        };
+        render();
+        try {
+          const payload = await postJson(routeContextBriefingRegeneratePath(), {
+            confirm_regenerate: true,
+            operator_alias: "dashboard_operator",
+          });
+          const model = payload.scout_ai?.model_name || "openrouter";
+          const ref = payload.outputs?.route_context_briefing_ref || "outputs/briefings/route_context_briefing.html";
+          state.briefingRegenerationStatus = {
+            tone: "ok",
+            text: `Regenerated with ${model}; briefing=${ref}`,
+          };
+          state.briefingFrameVersion = String(Date.now());
+          await loadData();
+        } catch (error) {
+          state.briefingRegenerationStatus = {
+            tone: "bad",
+            text: `Regeneration failed: ${error.message || error}`,
+          };
+        } finally {
+          state.briefingRegenerationBusy = false;
+          render();
+        }
+      });
+    }
+
+    function bindDebugDetailControls() {
+      document.querySelectorAll("[data-debug-detail]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.activeDebugDetail = button.dataset.debugDetail || "state";
+          render();
+        });
+      });
+    }
+
+    function importTripProjectId(rawTripId) {
+      const base = String(rawTripId || "").trim();
+      if (!base) return "";
+      return base.endsWith("_scoutAI") ? base : `${base}_scoutAI`;
+    }
+
+    function importTripWorkspaceRoot(rawWorkspaceRoot) {
+      const root = String(rawWorkspaceRoot || "/Users/alexwang0315/workspace").trim();
+      return (root || "/Users/alexwang0315/workspace").replace(/\/+$/, "");
+    }
+
+    function importTripProjectRoot(rawWorkspaceRoot, rawTargetName) {
+      const workspaceRoot = importTripWorkspaceRoot(rawWorkspaceRoot);
+      const targetName = String(rawTargetName || "").trim();
+      return targetName ? `${workspaceRoot}/${targetName}` : workspaceRoot;
+    }
+
+    function importTripDefaultLayerIds() {
+      return "osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp";
+    }
+
+    function setImportTripStatus(message, tone = "info") {
+      const status = document.getElementById("importTripStatus");
+      if (!status) return;
+      status.textContent = message;
+      status.dataset.status = tone;
+    }
+
+    function splitImportReferenceGpxSources(rawValue) {
+      return String(rawValue || "")
+        .split(/[\n,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function classifyImportReferenceGpxSources(rawValue) {
+      const entries = splitImportReferenceGpxSources(rawValue);
+      if (!entries.length) return { mode: "none", entries, label: "no reference GPX sources" };
+      const absoluteEntries = entries.filter((entry) => entry.startsWith("/") || entry.startsWith("~/"));
+      if (absoluteEntries.length !== entries.length) {
+        return {
+          mode: "invalid",
+          entries,
+          label: "invalid reference GPX source",
+          reason: "Reference GPX sources must be absolute paths.",
+        };
+      }
+      const gpxEntries = entries.filter((entry) => /\.gpx$/i.test(entry));
+      if (entries.length === 1) {
+        return {
+          mode: gpxEntries.length ? "explicit_gpx_paths" : "directory",
+          entries,
+          label: gpxEntries.length ? "1 explicit GPX path" : "1 reference GPX directory",
+        };
+      }
+      if (gpxEntries.length === entries.length) {
+        return {
+          mode: "explicit_gpx_paths",
+          entries,
+          label: `${entries.length} explicit GPX paths`,
+        };
+      }
+      return {
+        mode: "invalid",
+        entries,
+        label: "invalid reference GPX source mix",
+        reason: "Use either one directory path or a list of .gpx absolute paths.",
+      };
+    }
+
+    function bindImportTripControls() {
+      const tripInput = document.getElementById("importTripIdInput");
+      const goldenRouteInput = document.getElementById("importGoldenRouteGpxPath");
+      const workspaceRootInput = document.getElementById("importWorkspaceRoot");
+      const targetNameInput = document.getElementById("importTargetNameInput");
+      const countryPoolInput = document.getElementById("importCountryMaterialPool");
+      if (!tripInput || !goldenRouteInput || !workspaceRootInput || !targetNameInput || !countryPoolInput) return;
+
+      const fieldValue = (id) => document.getElementById(id)?.value.trim() || "";
+      const fieldChecked = (id) => Boolean(document.getElementById(id)?.checked);
+      const targetNameValue = () => targetNameInput.value.trim() || importTripProjectId(tripInput.value);
+      const workspaceRootValue = () => importTripWorkspaceRoot(workspaceRootInput.value);
+      const derivedProjectRoot = () => importTripProjectRoot(workspaceRootValue(), targetNameValue());
+
+      const updateDraft = () => {
+        const currentPoolDefaults = countryMaterialPoolDefaults(countryPoolInput.value);
+        state.importTripDraft = {
+          tripId: tripInput.value.trim(),
+          goldenRouteGpx: goldenRouteInput.value.trim(),
+          countryMaterialPool: countryPoolInput.value || "TW",
+          referenceGpxSources: fieldValue("importReferenceGpxSources"),
+          targetName: targetNameValue(),
+          targetWorkspace: targetNameValue(),
+          workspaceRoot: workspaceRootValue(),
+          templateProjectRoot: fieldValue("importTemplateProjectRoot"),
+          materialRoot: fieldValue("importMaterialRoot") || currentPoolDefaults.materialRoot || "",
+          dtmDirs: fieldValue("importDtmDirs") || currentPoolDefaults.dtmDirs || "",
+          mcpNamedPointEvidence: fieldValue("importMcpNamedPointEvidence"),
+          importProfile: fieldValue("importProfile") || currentPoolDefaults.importProfile || "pi-offline",
+          importStage: fieldValue("importStage") || "pretrip",
+          checkpointSpacingM: fieldValue("importCheckpointSpacingM") || "500",
+          maxReferenceDisplayPoints: fieldValue("importMaxReferenceDisplayPoints") || "1000",
+          maxReasonableGpxSpeedKmh: fieldValue("importMaxReasonableGpxSpeedKmh") || "120",
+          maxPreviousGpxSpeedRatio: fieldValue("importMaxPreviousGpxSpeedRatio") || "8",
+          overwrite: fieldChecked("importOverwriteWorkspace"),
+          prepareLayers: fieldValue("prepareLayersList") || importTripDefaultLayerIds(),
+          prepareWorkspaceRoot: workspaceRootValue(),
+          prepareProjectRoot: derivedProjectRoot(),
+          prepareBBox: fieldValue("prepareBBox"),
+          routeEvidenceBundle: fieldValue("prepareRouteEvidenceBundle"),
+          routeCorridorM: fieldValue("prepareRouteCorridorM") || "500",
+          referenceTrackCorridorM: fieldValue("prepareReferenceTrackCorridorM") || "300",
+          prepareProfile: fieldValue("prepareLayersProfile") || "pi-offline",
+          networkMode: fieldValue("prepareLayersNetworkMode") || "no-network",
+          allowNetworkFetch: fieldChecked("prepareAllowNetworkFetch"),
+          aiMode: fieldValue("prepareAiMode") || "fixture-or-precomputed",
+          aiOutputPolicy: fieldValue("prepareAiOutputPolicy") || "hash-and-summary",
+          imageryMinZoom: fieldValue("prepareImageryMinZoom") || "12",
+          imageryMaxZoom: fieldValue("prepareImageryMaxZoom") || "17",
+          seedImageryCache: fieldChecked("prepareSeedImageryCache"),
+          imageryProviderAllowsOfflinePrefetch: fieldChecked("prepareImageryProviderAllowsOfflinePrefetch"),
+          imagerySeedMaxTiles: fieldValue("prepareImagerySeedMaxTiles"),
+          imageryCacheFallbackProjectIds: fieldValue("prepareImageryCacheFallbackProjectIds"),
+          osmPbfPath: fieldValue("prepareOsmPbfPath"),
+          osmPbfSourceUrl: fieldValue("prepareOsmPbfSourceUrl") || currentPoolDefaults.osmPbfSourceUrl || "",
+          osmPbfCacheTtlDays: fieldValue("prepareOsmPbfCacheTtlDays") || "30",
+          osmiumBin: fieldValue("prepareOsmiumBin") || "osmium",
+          preparedAt: fieldValue("preparePreparedAt"),
+        };
+        state.activeCountryMaterialPool = state.importTripDraft.countryMaterialPool;
+      };
+
+      const syncWorkspace = () => {
+        const nextProjectId = importTripProjectId(tripInput.value);
+        if (nextProjectId) targetNameInput.value = nextProjectId;
+        updateDraft();
+        return nextProjectId;
+      };
+
+      tripInput.addEventListener("input", syncWorkspace);
+      countryPoolInput.addEventListener("change", () => {
+        const code = countryPoolInput.value || "TW";
+        state.activeCountryMaterialPool = code;
+        state.importTripDraft = {
+          ...(state.importTripDraft || {}),
+          countryMaterialPool: code,
+          materialRoot: "",
+          dtmDirs: "",
+          importProfile: "",
+          osmPbfSourceUrl: "",
+        };
+        render();
+      });
+      document.querySelectorAll("[data-import-new-trip] input, [data-import-trip-parameters] input, [data-import-trip-parameters] textarea").forEach((input) => {
+        input.addEventListener("input", updateDraft);
+        input.addEventListener("change", updateDraft);
+      });
+
+      document.querySelectorAll("[data-import-trip-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const action = button.dataset.importTripAction || "validate";
+          updateDraft();
+          const tripId = tripInput.value.trim();
+          const suggestedProjectId = importTripProjectId(tripId);
+          const workspaceRoot = workspaceRootValue();
+          const nextProjectId = targetNameInput.value.trim() || suggestedProjectId;
+          const projectRoot = importTripProjectRoot(workspaceRoot, nextProjectId);
+          const goldenRouteGpx = goldenRouteInput.value.trim();
+          const materialPool = countryMaterialPoolByCode(countryPoolInput.value);
+          const referenceSources = classifyImportReferenceGpxSources(fieldValue("importReferenceGpxSources"));
+          const layers = (fieldValue("prepareLayersList") || importTripDefaultLayerIds()).split(",").map((layer) => layer.trim()).filter(Boolean);
+          const checkpointSpacing = Number(fieldValue("importCheckpointSpacingM"));
+          const maxDisplayPoints = Number(fieldValue("importMaxReferenceDisplayPoints"));
+          const routeCorridor = Number(fieldValue("prepareRouteCorridorM"));
+          const referenceTrackCorridor = Number(fieldValue("prepareReferenceTrackCorridorM"));
+          if (!tripId || !/^[A-Za-z0-9_.-]+$/.test(tripId)) {
+            setImportTripStatus("Trip id must use letters, numbers, underscore, dash or dot only.", "warn");
+            return;
+          }
+          if (!nextProjectId || !/^[A-Za-z0-9_.-]+$/.test(nextProjectId)) {
+            setImportTripStatus("Target name must use letters, numbers, underscore, dash or dot only.", "warn");
+            return;
+          }
+          if (!goldenRouteGpx) {
+            setImportTripStatus(`Golden route GPX path is required before staging ${nextProjectId}.`, "warn");
+            return;
+          }
+          if (referenceSources.mode === "invalid") {
+            setImportTripStatus(referenceSources.reason || "Reference GPX source input is invalid.", "warn");
+            return;
+          }
+          if (!layers.length) {
+            setImportTripStatus("At least one map preparation layer id is required.", "warn");
+            return;
+          }
+          if (!Number.isFinite(checkpointSpacing) || checkpointSpacing <= 0 || !Number.isFinite(maxDisplayPoints) || maxDisplayPoints <= 0) {
+            setImportTripStatus("GPX import numeric parameters must be greater than 0.", "warn");
+            return;
+          }
+          if (!Number.isFinite(routeCorridor) || routeCorridor <= 0 || !Number.isFinite(referenceTrackCorridor) || referenceTrackCorridor <= 0) {
+            setImportTripStatus("Map preparation corridor parameters must be greater than 0.", "warn");
+            return;
+          }
+          if (action === "validate") {
+            setImportTripStatus(`Intake validated for ${nextProjectId}: ${materialPool.label} material pool, workspace root ${workspaceRoot}, project root ${projectRoot}, ${referenceSources.label}, and ${layers.length} map preparation layer ids are present. Use existing admin/import tooling to execute with artifact boundary metadata.`, "ok");
+            return;
+          }
+          if (action === "stage") {
+            setImportTripStatus(`Stage Import intent recorded for ${nextProjectId}. No filesystem mutation is performed by this dashboard.`, "warn");
+            return;
+          }
+          if (action === "open") {
+            localStorage.setItem("scout.dashboardProjectId", nextProjectId);
+            const url = new URL(window.location.href);
+            url.searchParams.set("projectId", nextProjectId);
+            url.hash = "features-workspace";
+            window.location.href = url.toString();
+          }
+        });
+      });
+    }
+
+    function bindCountryMaterialPoolControls() {
+      document.querySelectorAll("[data-country-material-code]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const code = button.dataset.countryMaterialCode || "TW";
+          state.activeCountryMaterialPool = code;
+          state.importTripDraft = {
+            ...(state.importTripDraft || {}),
+            countryMaterialPool: code,
+          };
+          render();
+        });
+      });
+    }
+
+    function bindWorkspaceControls() {
+      const status = document.getElementById("workspaceOperationStatus");
+      document.querySelectorAll("[data-workspace-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const action = button.dataset.workspaceAction || "workspace";
+          const labels = {
+            clone: "Clone",
+            transfer: "Transfer",
+            pack: "Pack",
+            restore: "Restore",
+            delete: "Delete",
+          };
+          const destructiveNote = action === "delete" ? " Delete requires an explicit destructive approval outside this dashboard." : "";
+          if (status) {
+            status.textContent = `${labels[action] || action} intent recorded for ${projectId()} at ${WORKSPACE_ROOT}. No filesystem mutation is performed by this dashboard; use the operator tooling surface to execute it.${destructiveNote}`;
+          }
+        });
+      });
+
+      const switchButton = document.getElementById("workspaceSwitchProject");
+      const input = document.getElementById("workspaceRedirectProjectInput");
+      if (switchButton && input) {
+        switchButton.addEventListener("click", () => {
+          const nextProjectId = input.value.trim();
+          if (!/^[A-Za-z0-9_.-]+$/.test(nextProjectId)) {
+            if (status) status.textContent = "Workspace id must use letters, numbers, underscore, dash or dot only.";
+            return;
+          }
+          localStorage.setItem("scout.dashboardProjectId", nextProjectId);
+          const url = new URL(window.location.href);
+          url.searchParams.set("projectId", nextProjectId);
+          url.hash = "features-workspace";
+          window.location.href = url.toString();
         });
       }
     }

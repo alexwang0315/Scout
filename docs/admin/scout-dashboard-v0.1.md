@@ -1,0 +1,1192 @@
+# Scout Dashboard v0.1
+
+## Purpose
+
+This document records the design and implementation process for Scout
+Dashboard v0.1. The dashboard is a desktop alpha operator shell that gathers
+the existing admin surfaces, map, timeline evidence, debug messages, observer
+messages, workspace tooling, and new-trip import intake into one navigation
+frame.
+
+The runtime source remains `docs/admin/scout-dashboard-v0.1.html`.
+
+## Active Recording Rule
+
+Status: active.
+
+Starting on 2026-07-02, every subsequent Scout Dashboard v0.1 UI, navigation,
+import/preparation, workspace, map, timeline, debug, or operator-flow change in
+this thread must add an entry to this file before final reporting.
+
+Stop condition: continue recording until the user explicitly says to stop
+recording.
+
+Each entry should include:
+
+- user request;
+- scope and files changed;
+- implementation steps;
+- boundary and safety notes;
+- verification commands or browser smoke evidence;
+- known remaining gaps.
+
+## Current Boundary
+
+- The dashboard is a session-local operator UI shell.
+- `Import New Trip` validates and records operator intent only.
+- No dashboard action performs live safety automation.
+- No dashboard action mutates Phase 1 runtime safety truth.
+- No dashboard action sends outbound transport.
+- No dashboard action directly writes or deletes workspace files unless the
+  existing operator-approved admin/import tooling is explicitly invoked.
+- GIS-related implementation remains outside this thread unless explicitly
+  reassigned; dashboard GIS findings should record repro, screenshot, data
+  path, expected result, and actual result.
+
+## Implementation Record
+
+### 2026-07-02 - Scout Dashboard v0.1 Initial Integration
+
+User request:
+
+- Build a Vibe-Trading-like Scout Dashboard v0.1 with left navigation and a
+  large content frame.
+- Integrate existing `/admin`, `/admin/debug`, `/admin/pretrip`, map, timeline
+  evidence, debug messages, MQTT/observer messages, settings/configure,
+  safety/emergency context, and Outdoor/Six Axis pages.
+
+Implementation steps:
+
+- Created the dashboard shell at `docs/admin/scout-dashboard-v0.1.html`.
+- Added left navigation sections for Home, Features, Admin Surfaces, Agent,
+  Map, Timeline Evidence, Safety / Emergency, Exploring for Six Axis, Debug
+  Message, MQTT / Observer Message, and Settings / Configure.
+- Embedded existing admin surfaces through dashboard routes rather than
+  replacing their original pages.
+- Added the dashboard route at `/admin/dashboard` through the admin API static
+  shell.
+- Added tests in `tests/test_scout_dashboard_page.py`.
+
+Boundary notes:
+
+- Existing admin pages remain canonical for their own operator workflows.
+- Dashboard surfaces are read-only or operator-intent-only unless explicitly
+  routed to existing admin tooling.
+
+Verification:
+
+- Focused dashboard tests.
+- Browser smoke through the admin server.
+
+### 2026-07-02 - Map Page Uses Pre-trip Map Only
+
+User request:
+
+- The Map page should show only the map; do not embed the full pre-trip page
+  with tabs and lower panels inside the Map page.
+- The map should be scrollable and not clipped.
+- Timeline evidence should be merged into the Map page and collapsible.
+
+Implementation steps:
+
+- Changed the dashboard Map route to keep a persistent `/admin/pretrip`
+  map-only iframe.
+- Hid the non-map pre-trip panels inside the dashboard map frame.
+- Added map frame reuse checks so switching routes does not reload the map.
+- Added collapsible map evidence rail with pre-trip evidence categories
+  collapsed by default.
+- Verified map frame layout on desktop and mobile.
+
+Boundary notes:
+
+- The Map page reuses the existing `/admin/pretrip` map rendering rather than
+  forking GIS rendering logic.
+- Timeline evidence selection remains dashboard/UI state and does not mutate
+  safety truth.
+
+Verification:
+
+- Playwright smoke for dashboard map frame reuse.
+- Admin visual smoke for map layer toggles.
+- Scout layer contract verification for the 32-layer contract.
+
+### 2026-07-02 - Agent Frame Integration
+
+User request:
+
+- Integrate `http://127.0.0.1:8765/` into the Agent tab.
+- Make the embedded agent compact enough that Send is visible without a long
+  scroll.
+
+Implementation steps:
+
+- Added dashboard Agent route and persistent iframe for the local Scout AI Mac
+  Chat.
+- Used compact embed query parameters for the local frame.
+- Adjusted dashboard wide-frame behavior to reduce text overflow and fit the
+  embedded chat.
+
+Boundary notes:
+
+- Agent frame remains local `127.0.0.1`.
+- No live safety automation is connected from the dashboard Agent tab.
+
+Verification:
+
+- Dashboard page tests for agent iframe contract.
+- Browser smoke for visible frame behavior.
+
+### 2026-07-02 - Workspace Statistics, Cache, and Operations
+
+User request:
+
+- Add workspace statistics such as length, counts, imported time, and other
+  lifecycle metrics.
+- Show workspace structure, cached materials, cached TTL, and basic operations
+  such as clone, transfer, pack, restore, delete, and switch workspace.
+
+Implementation steps:
+
+- Added `Workspace` panels for route statistics, project counts, lifecycle
+  times, workspace structure, material index, cached material, cached TTL, and
+  cache refs.
+- Added operator-intent buttons for Clone, Transfer, Pack, Restore, Delete.
+- Added dashboard workspace switching through `scout.dashboardProjectId` and
+  URL `projectId`.
+
+Boundary notes:
+
+- Workspace operations are recorded as operator intent only.
+- Delete requires explicit destructive approval outside the dashboard.
+- No filesystem mutation is performed by these dashboard controls.
+
+Verification:
+
+- Dashboard regression tests for workspace stats, cache, structure, and
+  operations.
+
+### 2026-07-02 - Exploring for Six Axis Rename
+
+User request:
+
+- Rename `戶外六力` to `Exploring for Six Axis`.
+- Remove Chinese subtree names and keep only English labels.
+
+Implementation steps:
+
+- Updated the left navigation group name and six subtree labels.
+- Updated dashboard evidence title generation for six-axis pages.
+- Added tests that removed Chinese labels no longer appear in the dashboard
+  shell.
+
+Boundary notes:
+
+- The underlying `SCOUT_OUTDOOR_AI_AGENT_STANDARD` alignment remains unchanged.
+
+Verification:
+
+- Dashboard regression tests.
+
+### 2026-07-02 - Debug Message Dashboard Redesign
+
+User request:
+
+- Move event, hardware, software, Ln/API/skills/tools and debug information
+  from the existing debug UI into the Debug Message tab.
+- Represent hardware/software/API information graphically rather than as plain
+  text lists.
+- Match the professional dashboard style shown in the provided references.
+
+Implementation steps:
+
+- Added debug telemetry bar, runtime detail tabs, visual nodes, hardware
+  interface bus, provider panels, boundary gates, API payload tiles, and stream
+  tables.
+- Connected dashboard debug panels to `/debug/events`, `/debug/state`,
+  `/debug/messages`, `/debug/mobile-wearable/ingress`,
+  `/debug/monitoring`, and `/admin/hardware-readiness/context`.
+- Added graphical summaries for hardware readiness, GPIO/I2C/UART-style
+  interfaces, providers, API payloads, outbound state, boundary state, skills,
+  and tools.
+
+Boundary notes:
+
+- Debug Message is read-only.
+- Outbound and safety states are evidence/metadata only and do not trigger
+  live transport or safety mutation.
+
+Verification:
+
+- Dashboard debug contract tests.
+- Admin visual smoke for `/admin/debug`.
+
+### 2026-07-02 - Import New Trip Tab Added
+
+User request:
+
+- Add an `Import New Trip` tab under Workspace/Features.
+
+Implementation steps:
+
+- Added `Features / Import New Trip` navigation route.
+- Added `renderImportNewTripPage`, `renderImportTripPreflight`, and
+  `renderImportTripPipeline`.
+- Added basic intake fields for trip id, golden route GPX, and target
+  workspace.
+- Added Validate, Stage Import, and Open Workspace actions.
+- Added draft state so dashboard re-rendering does not reset typed import
+  values.
+- Added Open Workspace behavior that stores `scout.dashboardProjectId` and
+  routes to `Features / Workspace`.
+
+Boundary notes:
+
+- Validate and Stage Import only update dashboard status.
+- Open Workspace only changes dashboard routing state.
+- Import execution stays in the existing admin/import tooling.
+
+Verification:
+
+- `./venv/bin/python -m pytest tests/test_scout_dashboard_page.py -q`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- Playwright Import New Trip smoke.
+
+### 2026-07-02 - GPX Import and Map Preparation Parameters Exposed
+
+User request:
+
+- Confirm whether GPX import and map preparation parameters are open in
+  `Import New Trip`; expose missing parameters.
+
+Implementation steps:
+
+- Compared the new dashboard page against `pretrip_import.py`,
+  `pretrip_layer_preparation.py`, and the existing `/admin/pretrip` Import GPX
+  panel.
+- Added `GPX Import Parameters` for golden route GPX, reference GPX sources,
+  workspace root, template project root, material root, DTM dirs, MCP
+  named-point evidence, import profile, import stage, checkpoint spacing,
+  max reference display points, GPX speed filtering, and overwrite.
+- Added `Map Preparation Parameters` for layer ids, workspace/project root,
+  bbox, route evidence bundle, route/reference corridors, preparation profile,
+  network mode, explicit fetch flag, AI mode and output policy, imagery zoom
+  and cache seed options, OSM PBF settings, osmium binary, and prepared time.
+- Added front-end validation for required golden route GPX, layer ids, import
+  numeric parameters, and map-preparation corridor parameters.
+
+Boundary notes:
+
+- The page prepares and validates parameters only.
+- It does not perform server-side import or layer preparation directly.
+- It preserves the operator-triggered artifact boundary.
+
+Verification:
+
+- Dashboard regression tests.
+- Playwright parameter smoke against `http://127.0.0.1:9099`.
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- Scout layer contract repo/workspace gates.
+- Admin visual smoke on isolated port `9109`.
+
+### 2026-07-02 - Reference GPX Inputs Merged
+
+User request:
+
+- Merge `Reference GPX directory` and `Reference GPX paths` into one input.
+- Accept either a full directory path so the importer can use all GPX files in
+  that directory, or a list of multiple absolute GPX paths.
+
+Implementation steps:
+
+- Replaced the two separate reference fields with one textarea:
+  `Reference GPX directory or paths`.
+- Added `splitImportReferenceGpxSources` to split newline, comma, or semicolon
+  separated entries.
+- Added `classifyImportReferenceGpxSources` to classify the merged input as:
+  `none`, `directory`, `explicit_gpx_paths`, or `invalid`.
+- Allowed one absolute directory path or one/multiple `.gpx` absolute paths.
+- Rejected mixed directory and GPX lists with:
+  `Use either one directory path or a list of .gpx absolute paths.`
+- Rejected relative entries with:
+  `Reference GPX sources must be absolute paths.`
+- Updated regression tests so the old `importReferenceDirectory` and
+  `importReferenceGpxPaths` ids are no longer allowed.
+
+Boundary notes:
+
+- This is still front-end classification only.
+- The backend importer remains responsible for actually expanding a directory
+  through `reference_dir` or consuming explicit `reference_gpx_paths` when the
+  operator-approved admin/import tooling runs.
+
+Verification:
+
+- `./venv/bin/python -m pytest tests/test_scout_dashboard_page.py -q`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- Playwright smoke verified:
+  - old fields are absent;
+  - single directory path is accepted;
+  - multiple absolute `.gpx` paths are accepted;
+  - mixed inputs are rejected.
+- Scout layer contract repo/workspace gates.
+- Full admin visual smoke on isolated port `9109`.
+
+### 2026-07-02 - Documentation Recording Rule Added
+
+User request:
+
+- Record every subsequent modification and supplement process in Scout
+  Dashboard v0.1 documentation until the user says recording may stop.
+
+Implementation steps:
+
+- Added this document as `docs/admin/scout-dashboard-v0.1.md`.
+- Added the active recording rule and stop condition.
+- Backfilled the implementation record for the dashboard work already done in
+  this thread.
+- Added a regression test so the documentation record remains present and
+  names the active logging rule.
+
+Boundary notes:
+
+- This document records process and decisions only.
+- It does not change dashboard runtime behavior.
+
+Verification:
+
+- Dashboard documentation contract test.
+
+### 2026-07-02 - Template Project Root and Material Root Clarified
+
+User request:
+
+- Explain what `Template project root` and `Material root` mean in
+  `Import New Trip`.
+
+Implementation steps:
+
+- Checked `pretrip_import.py` and the Scout workspace/material specs.
+- Confirmed that `template_project_root` is copied into the new project
+  workspace with `shutil.copytree(...)` when the workspace is created.
+- Confirmed that `material_root` is an input material bundle used by importer
+  lookups such as material manifest, DTM source dirs, and MCP named-point
+  evidence.
+- Clarified that template content is a workspace skeleton or existing project
+  baseline, while material content is source material consumed during import
+  and preparation.
+
+Boundary notes:
+
+- This clarification does not change runtime behavior.
+- The dashboard still records/imports these as operator-provided paths only.
+
+Verification:
+
+- Source review of `pretrip_import.py`.
+
+### 2026-07-02 - Material Root Overlap With DTM and MCP Clarified
+
+User request:
+
+- Clarify whether `Material root` overlaps with `DTM directories` and
+  `MCP named-point evidence`.
+
+Implementation steps:
+
+- Rechecked `pretrip_import.py` material resolution logic.
+- Confirmed that `material_root` can provide both DTM directories and MCP
+  named-point evidence through `material_manifest.json` or canonical files
+  under the material bundle.
+- Confirmed that explicit `DTM directories` are additive with material-root
+  DTM dirs, then de-duplicated by resolved path.
+- Confirmed that explicit `MCP named-point evidence` has priority over the
+  material-root manifest/canonical candidates.
+
+Boundary notes:
+
+- `Material root` is the bundled/default source of related material.
+- `DTM directories` and `MCP named-point evidence` are explicit overrides or
+  supplements for targeted runs.
+- This clarification does not change dashboard runtime behavior.
+
+Verification:
+
+- Source review of `_material_root_for_request`, `_dtm_source_dirs`, and
+  `_resolve_mcp_named_point_evidence` in `pretrip_import.py`.
+
+### 2026-07-02 - Optional Import Parameters Marked
+
+User request:
+
+- Add `(optional)` after parameters that have a default action when left blank.
+
+Implementation steps:
+
+- Reviewed `pretrip_import.py` and `pretrip_layer_preparation.py` argument
+  defaults and fallback behavior.
+- Updated `Import New Trip` labels to mark optional/default-backed inputs,
+  including reference GPX sources, template/material overrides, DTM and MCP
+  evidence overrides, import defaults, preparation defaults, optional OSM PBF
+  material, and prepared-at timestamp.
+- Left required identity/source inputs unmarked, including `Trip id`,
+  `Golden route GPX path`, and workspace-root fields that are required by the
+  underlying tooling.
+- Added regression assertions so optional labels stay visible and required GPX
+  source input is not mislabeled.
+
+Boundary notes:
+
+- This is a UI-label clarity change only.
+- No importer, map preparation, workspace mutation, or runtime handoff behavior
+  changed.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` covers the optional labels.
+
+### 2026-07-02 - Workspace Root and BBox Derivation Clarified
+
+User request:
+
+- Clarify whether GPX import `Workspace root` and map preparation
+  `Prepare workspace root` are duplicated.
+- Clarify whether `Project root` and `Target workspace` are duplicated.
+- Clarify whether `BBox` should be derived from reference GPX bbox plus a
+  delta distance instead of manually entered.
+
+Implementation steps:
+
+- Reviewed `pretrip_import.py` workspace creation and import CLI arguments.
+- Reviewed `pretrip_layer_preparation.py` project root resolution, route
+  evidence bundle loading, and bbox fallback logic.
+- Confirmed that dashboard UX should treat GPX import workspace root as the
+  single operator-entered workspace base for this one-trip flow.
+- Confirmed that map preparation workspace root can be derived from the same
+  workspace base, unless an advanced/manual preparation run intentionally
+  targets a different project root.
+- Confirmed that `Target workspace` is a project id/name while `Project root`
+  is the resolved absolute path; they are related but should not both be
+  primary operator inputs.
+- Confirmed that map preparation already treats `BBox` as optional: it uses
+  route evidence bundle scope when available, otherwise route summary bbox
+  expanded by `route_corridor_m`.
+
+Boundary notes:
+
+- Recommended next UI cleanup: show one canonical workspace base and target
+  workspace id, then display derived project root/preparation root as read-only
+  or advanced override values.
+- Recommended bbox UI: replace freeform primary bbox entry with a derived
+  bbox preview plus a delta/corridor control; keep manual bbox only as an
+  advanced override.
+- No runtime behavior changed in this clarification step.
+
+Verification:
+
+- Source review of `run_pretrip_import`, `_resolve_project_root`,
+  `_route_evidence_bundle_context`, and `_bbox_from_route_evidence_bundle`.
+
+### 2026-07-02 - Workspace Root and Target Name Consolidated
+
+User request:
+
+- Consolidate `Workspace root`, `Prepare workspace root`, and
+  `Target workspace (optional)` into the Import New Trip fields.
+- Use only `Workspace root` plus `Target name` to answer those duplicated
+  inputs.
+
+Implementation steps:
+
+- Moved `Workspace root` into the main `Import New Trip` intake panel.
+- Replaced `Target workspace (optional)` with `Target name`.
+- Removed the duplicate map-preparation `Prepare workspace root` input.
+- Removed the manual map-preparation `Project root` input from the form.
+- Added dashboard helpers to derive project root from
+  `Workspace root + Target name`.
+- Kept legacy draft keys populated from the derived values so existing
+  downstream command construction can still map to `workspace_root`,
+  `prepareWorkspaceRoot`, and `prepareProjectRoot`.
+
+Boundary notes:
+
+- This remains operator-triggered dashboard intake only.
+- No importer execution, filesystem mutation, runtime handoff, or live safety
+  behavior changed.
+- `Project root` and `Prepare workspace root` are now derived routing details,
+  not primary operator input fields.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` asserts the new `Target name` field,
+  derived project-root helpers, and absence of the duplicate old input ids.
+
+### 2026-07-02 - Optional Parameters Collapsed Into Advanced Frame
+
+User request:
+
+- Recheck whether the many `(optional)` fields are all optional.
+- If they are optional/default-backed, move them into a separate optional
+  parameter frame because exposing many minor controls is poor dashboard UX.
+
+Implementation steps:
+
+- Confirmed that after the main intake consolidation, the visible import flow
+  only needs `Trip id`, `Golden route GPX path`, `Workspace root`, and
+  `Target name`.
+- Treated the remaining GPX import and map preparation fields as
+  default-backed or advanced override controls.
+- Moved the remaining GPX import and map preparation controls into a collapsed
+  `Optional Parameters` frame.
+- Removed `(optional)` suffixes from individual labels because the containing
+  frame now communicates optionality.
+- Added default fallback for `Layer ids` through the dashboard so clearing or
+  not opening the frame still uses the standard preparation layer set.
+
+Boundary notes:
+
+- The dashboard remains operator-triggered and does not execute import,
+  mutate files, perform runtime handoff, or enable live safety automation.
+- Optional controls remain available for advanced/debug use, but no longer
+  dominate the first screen.
+- This supersedes the earlier label-level optional marker UX while preserving
+  the historical note.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` asserts the collapsed optional frame,
+  removal of `(optional)` label noise, and default layer fallback.
+- Playwright should verify that advanced fields are hidden while the frame is
+  collapsed.
+
+### 2026-07-02 - Low-value Import Panels Condensed
+
+User request:
+
+- Reduce wordy dashboard panels such as `Import Boundary`,
+  `Workspace Routing`, `Evidence Drawer`, `Preflight Checklist`,
+  `Layer Preparation Target`, and `Runtime Handoff Guard`.
+- Preserve useful guardrails while freeing the main work area for actual
+  controls and operator input.
+
+Implementation steps:
+
+- Replaced the large `Import Boundary` and `Workspace Routing` metric panels
+  with a compact import context block using short chips and two derived path
+  rows.
+- Replaced the three preflight/layer/handoff metric panels with one compact
+  guard strip.
+- Shortened the generic evidence drawer title to `Evidence` and reduced long
+  boundary text to short issue/source tags.
+- Updated tests so the old low-value panel titles cannot return unnoticed.
+
+Boundary notes:
+
+- The same safety and artifact boundaries remain visible as compact chips.
+- No import execution, workspace mutation, runtime handoff, outbound send, or
+  live safety behavior changed.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` checks for the compact context/guard
+  markers and asserts the old verbose panel titles are absent.
+
+### 2026-07-02 - Country Material Pool Tab Added
+
+User request:
+
+- Add a country-wise material pool tab under the Import New Trip subtree.
+- Use it for country/global material defaults such as DTM, base maps,
+  government resources, and API pools for weather, geology, marine, and open
+  data.
+- Move country-specific API assumptions out of one-off import/map preparation
+  thinking; for example, CWA is Taiwan-specific and must not be treated as a
+  Japan/default global weather source.
+
+Implementation steps:
+
+- Turned `Import New Trip` into a navigation subtree with `Trip Intake` and
+  `Country Material Pool`.
+- Added a `COUNTRY_MATERIAL_POOLS` registry with Taiwan, Japan, and Global
+  fallback profiles.
+- Added the `Country Material Pool` page with country tabs, material class
+  cards, API/provider matrix, factory defaults, and map-preparation usage
+  summaries.
+- Added a `Country material pool` selector to the Import New Trip intake form.
+- Wired import defaults so `material_root`, `dtm_dirs`, `import_profile`, and
+  `osm_pbf_source_url` can derive from the selected country pool unless an
+  advanced override is explicitly entered.
+- Cleared pool-derived override fields when switching countries so Taiwan
+  defaults do not accidentally persist into Japan/Global profiles.
+- Added regression tests for navigation, import selector wiring, country pool
+  content, provider scope, and safety boundary text.
+
+Boundary notes:
+
+- The country material pool is a factory/default registry view only.
+- It does not fetch data, mutate workspace files, run importer commands, load
+  runtime packages, or change safety truth.
+- Provider outputs remain candidate evidence/provenance material.
+- Country-specific API scope is explicit: Taiwan uses CWA defaults; Japan uses
+  Japan-scoped providers such as JMA/GSI; Global fallback requires
+  operator-selected providers.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` asserts the new route, selectors,
+  provider matrix labels, default derivation helpers, and boundary text.
+
+### 2026-07-02 - Taiwan Route Context References Added To Country Pool
+
+User request:
+
+- `docs/specs/scout-route-context-layer.md` also lists Taiwan reference
+  websites and source families.
+- Include those references inside the country-level material pool instead of
+  leaving them as route/import-specific assumptions.
+
+Implementation steps:
+
+- Reviewed `docs/specs/scout-route-context-layer.md` and the aligned
+  `.agents/skills/scout-route-context-briefing/references/source-catalog.md`.
+- Added the Taiwan P0/P1 route-context source catalog to the Taiwan country
+  material pool.
+- Added a `Route Context References` section to the Country Material Pool page.
+- Kept Japan and Global fallback pools free of Taiwan-specific route-context
+  references.
+- Added tests for representative P0/P1 Taiwan sources and the discovery-only
+  boundary text.
+
+Boundary notes:
+
+- P0/P1 route-context catalog entries are discovery scope only.
+- The catalog entries are not concrete evidence and are not route-specific
+  URLs.
+- Concrete URLs still need later discovery, operator-provided source lists, or
+  source-specific adapters.
+- No import execution, network fetch, workspace mutation, runtime package load,
+  or safety-truth mutation was added.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` asserts the Taiwan source catalog labels
+  and discovery-only wording.
+
+### 2026-07-02 - Route Context Tab Connected To Scout AI Trip Briefing
+
+User request:
+
+- Connect `Exploring for Six Axis / Route Context` to the trip briefing web
+  page generated by the Scout AI route-context skill.
+
+Implementation steps:
+
+- Reviewed the Scout AI route-context briefing skill boundary and the existing
+  pretrip briefing endpoint.
+- Added dashboard helpers to resolve the briefing project id from the current
+  dashboard workspace while preserving the `_scoutAI` workspace project id
+  when that is the active source of the generated briefing artifact.
+- Replaced the hand-written Route Context map/table with an embedded briefing
+  iframe that loads
+  `/admin/pretrip/projects/{project}/briefings/route-context`.
+- Added an `Open briefing` action for opening the same briefing endpoint in a
+  separate tab.
+- Added source and boundary panels that name
+  `outputs/briefings/route_context_briefing.html`,
+  `scout-route-context-briefing skill`, and
+  `pretrip_route_context_collection`.
+- Added dashboard regression coverage so the Route Context tab remains wired
+  to the generated Scout AI briefing endpoint instead of reverting to static
+  copy.
+
+Boundary notes:
+
+- The embedded briefing is candidate-only trip context.
+- The dashboard does not mutate Phase 1 runtime safety truth.
+- The dashboard does not write to safety endpoints.
+- The dashboard does not grant stop permission or route open/closed authority.
+- The dashboard does not trigger live safety automation or outbound transport.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` asserts the iframe, endpoint path,
+  project resolution helper, source artifact path, Scout AI skill labels,
+  and runtime safety boundary text.
+- `./venv/bin/python -m pytest tests/test_scout_dashboard_page.py -q`
+  passed.
+- Playwright smoke on `http://127.0.0.1:9099/admin/dashboard#outdoor-route-context`
+  confirmed the iframe source resolves to
+  `/admin/pretrip/projects/chilai_nanhua_day1_scoutAI/briefings/route-context`,
+  the frame body contains the generated `SCOUT 行前路線簡報`, and no page or
+  console errors were emitted.
+- Screenshot captured at `/tmp/scout-dashboard-route-context-briefing.png`.
+- `PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python
+  tools/verify_scout_layer_contract.py --repo-root .` passed.
+- `PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python
+  tools/verify_scout_layer_contract.py --repo-root . --project-root
+  /Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+  --require-workspace` passed.
+- `pnpm lint`, `pnpm typecheck`, and `pnpm test` passed.
+- `node tools/admin_ui_visual_smoke.js --python ./venv/bin/python` passed.
+
+### 2026-07-02 - Route Context Briefing Metadata Collapsed
+
+User request:
+
+- `Briefing Source`, `Artifact Boundary`, and `Load Contract` are low-signal
+  panels and should not occupy important screen space.
+- The actual briefing is being compressed; hide those metadata panels unless
+  the operator needs to inspect them.
+
+Implementation steps:
+
+- Removed the Route Context right-side metadata column.
+- Changed the Route Context layout to a single primary briefing column.
+- Marked Route Context as a wide-frame dashboard route so the global right-side
+  evidence drawer does not squeeze the generated briefing.
+- Moved `Briefing Source`, `Artifact Boundary`, and `Load Contract` into one
+  collapsed `Briefing metadata` drawer below the briefing header.
+- Increased the briefing iframe minimum height so the generated trip briefing
+  gets the primary screen area by default.
+- Added regression checks that the metadata drawer is present, collapsed by
+  default, and the old right-side metadata stack does not return.
+
+Boundary notes:
+
+- The metadata remains available for source, artifact, and boundary review.
+- The drawer is UI-only and does not change the candidate-only briefing
+  boundary.
+- No live safety automation, outbound transport, workspace mutation, or
+  runtime safety-truth mutation was added.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` asserts the collapsed drawer and
+  Route Context briefing contract.
+- Playwright smoke on `http://127.0.0.1:9099/admin/dashboard#outdoor-route-context`
+  confirmed the global evidence drawer is hidden for this route.
+- Playwright confirmed `Briefing metadata` is collapsed by default and expands
+  to reveal `Briefing Source`, `Artifact Boundary`, and `Load Contract`.
+- Playwright confirmed the briefing iframe width is 1206 px at a 1512 px
+  desktop viewport.
+- Screenshot captured at
+  `/tmp/scout-dashboard-route-context-metadata-collapsed.png`.
+
+### 2026-07-02 - Route Context Briefing Photos Restored
+
+User request:
+
+- The Route Context briefing appeared to have lost many photos.
+
+Diagnosis:
+
+- The dashboard iframe was loading the correct briefing endpoint.
+- The active workspace briefing HTML had zero `<img>` elements and displayed
+  the generated visual gap message.
+- The workspace media manifest had `available_media_count=0`,
+  `selected_media_count=0`, and `visual_kit_ready_count=0`.
+- The workspace `web_case_evidence.json` was `empty_no_network`, so the route
+  context collector had no image refs to curate.
+
+Implementation steps:
+
+- Added `sources/route_context_p0_images.html` inside the active workspace as
+  a P0 official image source list.
+- Imported the image list with `pretrip_p0_p1_source_collection` in no-network
+  mode.
+- Rebuilt route context artifacts with `pretrip_route_context_collection`.
+- The regenerated media manifest now has 6 selected P0 images and all 6 visual
+  kit slots ready.
+- The regenerated briefing HTML now includes route-context photos again.
+
+Boundary notes:
+
+- The photo sources are candidate-only P0 official image evidence.
+- The import used no live network fetch.
+- Raw images were not embedded into JSON artifacts.
+- Runtime safety truth, safety endpoints, outbound transport, and live safety
+  automation were not touched.
+
+Verification:
+
+- `pretrip_p0_p1_source_collection` reported `image_source_count=6`,
+  `network_calls_made=false`, and `runtime_safety_truth=false`.
+- `pretrip_route_context_collection` reported `web_case_evidence loaded_count=6`
+  and `route_context_point_count=66`.
+- The admin briefing endpoint now contains 90 `<img>` matches.
+- The generated workspace briefing file now contains 97 `<img>` elements.
+- Playwright smoke on
+  `http://127.0.0.1:9099/admin/dashboard#outdoor-route-context` confirmed
+  `document.images.length=97`, `loaded=97`, and `brokenCount=0` inside the
+  iframe.
+- Screenshot captured at
+  `/tmp/scout-dashboard-route-context-photos-restored.png`.
+
+### 2026-07-02 - Route Context Decision Band Removed
+
+User request:
+
+- Remove the `Decision`, `Primary output`, `Confidence`, and `Next action`
+  row from the Route Context briefing page because it has low information
+  value and occupies the main briefing area.
+
+Implementation steps:
+
+- Removed the Route Context page `decisionBand(...)` render call.
+- Kept the compact briefing header, candidate-only chip, runtime safety chip,
+  and collapsed `Briefing metadata` drawer.
+- Added a dashboard regression assertion so the Route Context briefing page
+  does not reintroduce that decision-band row.
+
+Boundary notes:
+
+- This is a layout-only dashboard change.
+- Artifact source metadata remains available in the collapsed metadata drawer.
+- Candidate-only, runtime-safety-truth false, no live safety automation, and
+  no outbound transport boundaries remain unchanged.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` asserts the Route Context decision-band
+  call is absent while the briefing iframe contract remains present.
+- Playwright smoke on `http://127.0.0.1:9099/admin/dashboard#outdoor-route-context`
+  confirmed `Decision`, `Primary output`, `Confidence`, and `Next action` are
+  absent from the Route Context workspace text.
+- Playwright confirmed the briefing iframe moved up to `y=231.984375` at a
+  1512 px desktop viewport and still renders with width 1206 px.
+- Screenshot captured at
+  `/tmp/scout-dashboard-route-context-decision-band-removed.png`.
+- `./venv/bin/python -m pytest tests/test_scout_dashboard_page.py -q`
+  passed.
+- `pnpm lint`, `pnpm typecheck`, and `pnpm test` passed.
+- Scout layer contract passed for both repo and
+  `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI`.
+
+### 2026-07-02 - Route Context Briefing Regeneration And Product Copy Cleanup
+
+User request:
+
+- Remove the low-information `Scout AI Trip Briefing` header from the dashboard
+  Route Context page.
+- Remove internal AI/design prompt wording from the generated briefing product
+  page.
+- Add a button that regenerates the briefing through Scout AI, with a real
+  OpenRouter-backed backend call.
+
+Implementation steps:
+
+- Removed the visible Route Context briefing header row from
+  `docs/admin/scout-dashboard-v0.1.html`.
+- Added a compact `Regenerate with Scout AI` operator action bar that posts to
+  `/admin/pretrip/projects/{project}/briefings/route-context/regenerate`.
+- Added iframe cache-busting after successful regeneration so the dashboard
+  reloads the rebuilt briefing without navigating away.
+- Added the admin API regeneration endpoint. The endpoint requires
+  `confirm_regenerate=true`, resolves an OpenRouter model, calls Scout AI, writes
+  `outputs/scout_ai/route_context_briefing_regeneration.json`, and then rebuilds
+  route-context artifacts with `pretrip_route_context_collection`.
+- Updated the briefing renderer so the visual-kit section uses product-facing
+  material readiness copy instead of internal generation/design instructions.
+
+Boundary notes:
+
+- The regenerate action is operator-triggered only.
+- The backend requires an OpenRouter model; without `OPENROUTER_API_KEY` the
+  real runner returns a 503 instead of pretending regeneration happened.
+- The regeneration artifact stores prompt and model-output hashes plus a bounded
+  model-output preview. It does not store API keys or raw prompts.
+- Regeneration remains candidate-only, does not mutate Phase 1 runtime safety
+  truth, does not trigger live safety automation, and does not send outbound
+  transport.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py` asserts the header text is absent, the
+  regenerate button and endpoint are present, and the only dashboard POST path
+  is the operator-triggered briefing regeneration path.
+- `tests/test_pretrip_admin_api.py` covers the backend endpoint with a fake
+  Scout AI runner and verifies the regeneration artifact plus rebuilt briefing.
+- `tests/test_pretrip_route_context_collection.py` and
+  `tests/test_pretrip_p0_p1_source_collection.py` assert the old internal
+  prompt-like copy is absent from generated briefing HTML.
+- The current shell did not have `OPENROUTER_API_KEY`; real OpenRouter smoke was
+  not executed locally. In this state the real endpoint is expected to return
+  503 rather than fake a model call.
+- Live endpoint smoke on the fixed 9099 admin server returned
+  `503 OPENROUTER_API_KEY is required for Scout AI briefing regeneration`,
+  confirming the backend route is registered and will not fake success without
+  real OpenRouter credentials.
+- Rebuilt the current
+  `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI` route-context
+  briefing with `pretrip_route_context_collection` so the visible iframe no
+  longer shows the old prompt-like copy while the new button remains the
+  operator path for Scout AI/OpenRouter regeneration.
+- `node tools/admin_ui_visual_smoke.js --python ./venv/bin/python` returned
+  `ok: true`; dashboard map iframe reuse, desktop/mobile rendering, and Scout
+  layer toggles passed.
+- The fixed admin server was restarted as a detached background process on
+  `http://127.0.0.1:9099` for operator review.
+
+### 2026-07-03 - Persistent Scout Env For Shared API Keys
+
+User request:
+
+- Create a persistent `.env` so later Scout projects can access important API
+  keys instead of depending only on the current repo-local `.env`.
+
+Implementation steps:
+
+- Created `/Users/alexwang0315/.scout/.env` with mode `600`.
+- Merged key names from the repo-local `.env` into the persistent env without
+  printing or recording secret values.
+- Added a shared `scout_env.load_scout_env_files` helper.
+- Admin surfaces now load environment values in this order:
+  shell process env first, repo-local `.env` second, persistent
+  `/Users/alexwang0315/.scout/.env` third.
+- `phase4_admin_runtime` loads Scout env files before it snapshots
+  `os.environ`, so 9099 runtime paths such as route-context briefing
+  regeneration can see persistent API keys.
+- Route-context briefing regeneration now inserts the repo `src` directory into
+  `sys.path` before importing the Scout AI runner, so 9099 no longer depends on
+  the operator manually setting `PYTHONPATH=src`.
+- Route-context briefing regeneration uses a dedicated
+  `SCOUT_DASHBOARD_BRIEFING_MAX_TOKENS` cap, defaulting to 2048, instead of the
+  short-answer 512-token limit.
+
+Boundary notes:
+
+- Secret values are not printed, logged, embedded in dashboard artifacts, or
+  returned by tests.
+- Existing shell env values keep highest priority.
+- Explicit test `environ` inputs remain hermetic and do not load the operator's
+  real persistent env.
+- This only enables operator-triggered Scout AI calls; it does not enable live
+  safety automation, `/safety/*` mutation, hardware control, or outbound
+  transport.
+
+Verification:
+
+- Persistent env file exists at `/Users/alexwang0315/.scout/.env`.
+- File mode is `600`.
+- Current persistent key names are `OPENROUTER_API_KEY`, `SCOUT_CWA_API_KEY`,
+  and `CWA_API_KEY`.
+- Added regression tests for env-file precedence and phase4 runtime env loading.
+- Live regenerate smoke on 9099 completed with `status=completed`,
+  `provider=openrouter`, `model=openrouter:z-ai/glm-5.2`, and
+  `external_model_call_performed=true`.
+- The regeneration artifact was verified with `raw_prompt_embedded=false`,
+  `api_key_embedded=false`, `runtime_safety_truth=false`, and
+  `live_safety_automation_triggered=false`.
+- `pnpm lint`, `pnpm typecheck`, and `pnpm test` passed.
+- Focused env/runtime/regeneration pytest checks passed.
+- Scout layer contract passed for both the repo and
+  `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI`.
+- `node tools/admin_ui_visual_smoke.js --python ./venv/bin/python` returned
+  `ok: true`.
+
+### 2026-07-03 - Route Context Intelligence Spec-Aligned Briefing Generation
+
+User request:
+
+- Generate the Route Context briefing according to
+  `docs/specs/scout-route-context-intelligence-implementation.md`.
+
+Implementation steps:
+
+- Updated the operator-triggered briefing regeneration prompt so Scout AI
+  returns a concise Route Context Intelligence plan, not raw HTML.
+- The prompt now references the Route Context Intelligence implementation spec
+  and asks Scout AI to reason from `route_context_pack.json`,
+  `route_context_points.json`, `source_manifest.json`, route summary, and
+  map/risk artifacts.
+- The regeneration artifact now records
+  `route_context_intelligence_contract` and a parsed
+  `scout_ai_route_context_intelligence_plan` when the model returns JSON.
+- The Scout AI plan parser accepts plain JSON, fenced JSON, or model text with
+  a leading explanation followed by a JSON object, so the artifact remains
+  reviewable when the provider wraps the structured answer.
+- The prompt tells Scout AI not to call tools directly; the backend compiler is
+  responsible for reading workspace cache files after the model returns the
+  plan.
+- Added a visible Route Context Intelligence section to the generated briefing
+  HTML. It shows the workspace cache path, Sec. 6 layer coverage, P0/P1/P2
+  source tier policy, and stop-permission boundary.
+- Product copy now states that Scout AI produces the review plan while
+  `pretrip_route_context_collection` produces the user-visible HTML from
+  deterministic workspace artifacts.
+
+Boundary notes:
+
+- Regeneration remains operator-triggered only.
+- Scout AI output is candidate-only and does not become runtime safety truth.
+- The model is not allowed to authorize stop permission, route open/closed
+  decisions, live safety automation, hardware control, outbound transport, or
+  `/safety/*` mutation.
+- A "worth observing" point remains a 3-minute observation candidate only; stop
+  permission still belongs to Contextual Permissioning.
+- Source tiers remain separated: P0 official baseline, P1 expansion evidence,
+  and P2 Scout-owned review seed.
+
+Verification:
+
+- `tests/test_pretrip_admin_api.py` verifies the regeneration prompt, contract,
+  fenced/parsed Scout AI JSON plan, boundary metadata, and rebuilt briefing.
+- `tests/test_pretrip_route_context_collection.py` verifies the generated
+  briefing contains the Route Context Intelligence section, workspace cache
+  path, Sec. 6 layer names, P0/P1/P2 policy, and stop-permission boundary.
+- `tests/test_scout_dashboard_page.py` verifies this change log entry remains
+  recorded while active recording is enabled.
+- Live 9099 regenerate completed with `provider=openrouter`,
+  `model=openrouter:z-ai/glm-5.2`,
+  `external_model_call_performed=true`, and parsed artifact schema
+  `route_context_intelligence_plan.v1`.
+
+### 2026-07-03 - Route Briefing Trip-Only Product Copy Guard
+
+User request:
+
+- All visible text in the generated trip briefing must describe the itinerary,
+  route, sources, stops, photos, lodging, terrain, weather, or leader review.
+- Product-visible text must not describe how the page is generated, internal
+  wording, model instructions, page layout mechanics, or artifact filenames.
+
+Implementation steps:
+
+- Rewrote the route-context opening section as a route briefing for leader
+  review: route context points, six trip axes, source trust, and short-stop
+  boundaries.
+- Removed product-visible implementation wording from the generated briefing:
+  cache paths, compiler wording, model-output wording, internal artifact names,
+  and machine-readable safety-boundary field names are no longer rendered in
+  the HTML page.
+- Replaced the previous photo/material language with itinerary wording:
+  route photos, maps, lodging nodes, terrain, short stops, weather/seasonal
+  checks, leader notes, and missing photo lists.
+- Changed header/navigation labels from briefing-product wording to trip-facing
+  wording: Scout pre-trip route explanation, pre-trip navigation, and route
+  photo/map checks.
+- Replaced the remaining English page title/navigation copy
+  (`Scout Route Context Briefing`, `Route Context`) with trip-facing route
+  explanation labels.
+- Cleaned expanded detail rows as well, so review notes, source tiers, route
+  point source labels, risk-card boundaries, and short-stop review text are
+  shown as itinerary-facing language rather than raw internal fields.
+- Kept machine-readable metadata in JSON artifacts for auditability, but added
+  regression checks so those terms are not shown in the generated HTML.
+
+Boundary notes:
+
+- Regeneration remains operator-triggered and Scout AI backed.
+- The generated page remains a pre-trip route explanation for human review; it
+  does not authorize departure, stop permission, live safety automation,
+  hardware control, outbound transport, or `/safety/*` mutation.
+- Artifact boundary metadata is preserved in JSON outputs and hidden from the
+  product-visible briefing copy.
+
+Verification:
+
+- `tests/test_pretrip_route_context_collection.py` now asserts the new route
+  photo/map wording and blocks old product-copy phrases such as material-board,
+  speaker-note, compiler, cache-path, model-output, prompt, and artifact-path
+  wording from generated HTML.
+- `tests/test_pretrip_admin_api.py` now checks regenerated Scout AI briefing
+  HTML uses the trip-only copy and does not reintroduce old internal wording.
+- `tests/test_scout_dashboard_page.py` verifies this change log entry remains
+  recorded while active recording is enabled.
+- Live 9099 briefing HTML was fetched from the workspace-backed route context
+  endpoint and scanned for internal generation, prompt, cache, artifact, and
+  old briefing/material wording.
+
+### 2026-07-03 - Route Briefing Visual Kit Itinerary Copy Tightening
+
+User request:
+
+- The route briefing still contained low-value photo/map status language such
+  as `行前照片與地圖狀態`, `已檢查開場...`, and `開場主視覺`.
+- The visible copy should describe the trip and itinerary, not how the page or
+  visual material is organized.
+
+Implementation steps:
+
+- Rewrote the photo/map visual kit header around itinerary sequence:
+  entry, lodging, ridge/terrain, short observation stops, and weather.
+- Replaced status and readiness wording with route-segment wording:
+  photos and maps now map to itinerary segments rather than page-preparation
+  states.
+- Renamed visual slots from product/layout terms to trip terms, including
+  entry/ridge view, full-route direction map, lodging/intermediate points,
+  terrain passage, short observation point, and weather/season conditions.
+- Replaced remaining photo-management labels such as image guide, image index,
+  and available-image layout wording with itinerary photo route and segment
+  checklist wording.
+- Tightened the remaining screenshot panel: `行程畫面覆蓋`, `畫面偏薄`,
+  abstract layer gaps, and `再補 N 張路線照片` now render as trip-facing
+  route-segment review, concrete gap names, and route-condition checks.
+- Added regression checks so the old photo/map status, opening-visual,
+  readiness, and matched-image wording cannot reappear in generated HTML.
+
+Boundary notes:
+
+- This is copy and presentation only.
+- It does not change route safety authority, stop permission, live automation,
+  hardware behavior, outbound transport, or `/safety/*` state.
+
+Verification:
+
+- Route briefing unit tests assert the new itinerary-facing copy and block the
+  old visual-kit status wording.
+- Regenerated fixture and workspace briefing HTML should be scanned for the
+  removed phrases before marking the UI clean.
+
+### 2026-07-03 - Trip Briefing Generation Process Captured As Skill
+
+User request:
+
+- Capture the route-context trip briefing generation process as a reusable
+  skill so future routes can produce a similar result.
+
+Implementation steps:
+
+- Updated `.agents/skills/scout-route-context-briefing/SKILL.md` instead of
+  creating a parallel skill, so future route briefing requests keep using the
+  existing route-context trigger.
+- Added a future-route rule that forbids hardcoding Chilai, Nengao, or any
+  previous route's URLs, image choices, lodging points, or copy into a new
+  route briefing.
+- Documented the Scout AI regeneration contract: OpenRouter/Scout AI can
+  produce only a bounded candidate plan, while the deterministic compiler must
+  render the final briefing from workspace artifacts.
+- Added the trip-only product copy gate: visible HTML text must describe the
+  itinerary, route segment, source, lodging/intermediate point, terrain,
+  weather/season, observation stop, or leader review task.
+- Added blocked visible-copy examples for prompt/model/cache/compiler/artifact
+  wording and the old photo/map status phrases.
+- Added preferred replacements such as route-segment photo checks, full-route
+  direction map, lodging/intermediate points, short observation points, and
+  weather/season conditions.
+- Added a verification gate requiring focused route-context rendering tests,
+  visible-text scans, image-to-route binding checks, and live 9099 endpoint
+  scans when available.
+- Extended the route-context skill regression test so these instructions stay
+  pinned in the repo.
+
+Boundary notes:
+
+- The skill keeps trip briefings candidate-only and human-review oriented.
+- It does not authorize departure, stop permission, live safety automation,
+  hardware control, outbound transport, or `/safety/*` mutation.
+- Secrets such as `OPENROUTER_API_KEY` must be loaded from environment only and
+  never printed or written into briefing artifacts.
+
+Verification:
+
+- Focused route-context skill test passed.
+- `pnpm lint` passed.
+- `pnpm typecheck` passed.
+- `pnpm test` passed.
+- `git diff --check` passed.
