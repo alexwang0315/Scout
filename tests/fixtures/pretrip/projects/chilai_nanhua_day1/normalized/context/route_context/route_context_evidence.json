@@ -71,7 +71,7 @@
     "runtime_safety_truth": false
   },
   "crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
-  "generated_at": "2026-06-17T00:00:00Z",
+  "generated_at": "2026-07-03T00:00:00Z",
   "import_manifest_ref": "outputs/import_manifest.json",
   "import_manifest_summary": {
     "artifact_kind": "pretrip_import_manifest",

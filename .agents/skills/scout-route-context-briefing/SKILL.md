@@ -1,6 +1,6 @@
 ---
 name: scout-route-context-briefing
-description: Generate Scout pretrip route-context briefings from route/workspace inputs, P0/P1 public source discovery, P2 Scout-owned evidence, collected web evidence, and Scout route context artifacts. Use when asked to build hiking route context, major context points, route briefing HTML, source discovery plans, or Scout admin/pretrip route-context outputs from web/search/workspace/evidence data.
+description: Generate Scout pretrip route-context briefings from route/workspace inputs, P0/P1 public source discovery, P2 Scout-owned evidence, Scout AI regeneration plans, collected web evidence, and Scout route context artifacts. Use when asked to build hiking route context, major context points, trip briefing HTML, source discovery plans, Scout AI route briefing regeneration, or Scout admin/pretrip route-context outputs from web/search/workspace/evidence data.
 ---
 
 # Scout Route Context Briefing
@@ -25,6 +25,7 @@ Use this skill to turn a route name, workspace, GPX/import result, completed-tri
    - Prefer an existing Scout pretrip workspace under the configured workspace root.
    - If only a route name is provided, build route keywords first and use source discovery before making conclusions.
    - If the user provides a pasted HTML/source list, use it as concrete source input, not as final truth.
+   - Do not hardcode Chilai, Nengao, or any previous route's URLs, image choices, lodging points, or copy into a new route briefing. Treat previous route artifacts only as examples of structure.
 
 2. Build a P0/P1 source discovery plan.
    - Read `references/source-catalog.md` before choosing source families.
@@ -45,12 +46,17 @@ Use this skill to turn a route name, workspace, GPX/import result, completed-tri
 PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m pretrip_p0_p1_source_collection \
   --project-root <workspace-project-root> \
   --source-list-html <html-with-source-links> \
+  --image-list-html <html-with-route-image-refs> \
   --allow-network-fetch \
   --timeout-seconds 20 \
   --json
 ```
 
    - For known URLs without an HTML file, pass repeated `--source-url <url>`.
+   - If the same operator source file contains route photos or map images, pass it
+     to both `--source-list-html` and `--image-list-html`. Using it only as
+     `--source-list-html` can refresh source provenance while stripping the rich
+     image set from the briefing.
    - For plan-only output, omit `--allow-network-fetch` or add `--dry-run`.
    - If no concrete URLs are provided, expect `planned_requires_source_discovery`; do not treat that as evidence.
 
@@ -71,7 +77,20 @@ PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m pretrip_route_context_collection 
    - `normalized/context/route_context/route_context_pack.json`
    - `outputs/briefings/route_context_briefing.html`
 
-6. Verify the workspace contract when artifacts are written.
+6. Regenerate with Scout AI only as an operator-triggered candidate plan.
+   - Use Scout AI/OpenRouter regeneration only when the operator requests it.
+   - Load `OPENROUTER_API_KEY` from the repo/persistent environment without printing or storing the secret value.
+   - Scout AI should return a bounded JSON plan: route title, route-facing copy candidates, source priorities, visual gap candidates, and review notes.
+   - The deterministic compiler must read workspace artifacts and render the final HTML. Do not let model output directly become runtime safety truth, live navigation authority, or unreviewed product-visible HTML.
+   - Do not let a compact Scout AI rewrite replace the canonical briefing HTML.
+     Canonical output must retain the full briefing architecture: visual agenda,
+     photo essay, visual kit, map atlas, source-tier spine, six context layers,
+     source health, P2 review layer, and source table. If the rewrite loses that
+     structure, keep it as a rejected candidate artifact and rerun the
+     deterministic compiler.
+   - Store regeneration provenance and boundary metadata in machine-readable artifacts such as `outputs/scout_ai/route_context_briefing_regeneration.json`, but hide raw model/prompt/cache/file-path fields from the product-visible page.
+
+7. Verify the workspace contract when artifacts are written.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python tools/verify_pretrip_workspace_spec_alignment.py \
@@ -82,7 +101,7 @@ PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python tools/verify_pretrip_workspace_spec_
   --allow-network-calls
 ```
 
-7. Report results with provenance.
+8. Report results with provenance.
    - Include source counts by tier/family.
    - Include P2 Scout-owned evidence counts by type and review state when present.
    - Include route context point count and briefing path.
@@ -102,6 +121,37 @@ Structure generated route context briefings around:
 - observation points: places worth a short planned observation stop, never automatic stop permission.
 - P2 Scout-owned layer: completed-trip GPX, deviations, dwell/stay points, photos, voice notes, IMU/PDR events, barometric altitude, team spacing, user stop-worthiness feedback, and Scout action logs that explain how the route actually unfolded for this user/team.
 
+## Product Copy Gate
+
+Every visible word in the briefing HTML must describe the trip, itinerary,
+route segment, source, lodging/intermediate point, terrain, weather/season,
+observation stop, or leader review task. Hide implementation details in
+collapsed admin metadata or JSON artifacts.
+
+Block product-visible copy that describes how the briefing was generated,
+organized, or prompted. Do not show words or phrases such as:
+
+- prompt, model output, compiler, cache path, artifact path, load contract,
+  boundary metadata, source tier machine field, candidate-only, runtime safety
+  truth, review_state, JSON plan, material board, image index, image guide,
+  speaker note, visual kit, opening visual, photo readiness, page preparation,
+  or internal AI/design guidance.
+- `行前照片與地圖狀態`, `已檢查開場`, `開場主視覺`, `行程畫面覆蓋`,
+  `畫面偏薄`, `圖像導覽`, `畫面索引`, `把可用圖片一次攤開`,
+  `素材板`, `提示詞`, `產生方式`, `內部查核`, `模型輸出`.
+
+Use trip-facing replacements:
+
+- `出發前補查路段`, `部分路段待補查`,
+  `照片與地圖對應的行程段落`, `入山與稜線遠景`,
+  `路線全段走向圖`, `宿點與中繼點`, `短停觀察點`,
+  `雲霧低溫與季節條件`, `行程照片清單`,
+  `按行程段落檢查哪些路段還缺照片`.
+
+If an image, source, or context layer is missing, state the route segment or
+leader-review task that needs checking. Do not explain the page template or
+apologize for missing media.
+
 ## Visual / Map Briefing Template
 
 Future route briefing HTML should reuse the same high-energy briefing structure,
@@ -115,6 +165,11 @@ not fall back to a source table or engineering report:
 - six context layers: historical, cultural, natural, terrain, seasonal, and observation points must each have a briefing card or an explicit missing-evidence state.
 - color direction: use a bold expedition palette with dark ground, ember/red action accents, signal yellow, and high-contrast map/source panels. Keep Scout safety boundary text clear and do not hide candidate-only status.
 - public/share variants must redact private P2 details, but Scout-local/admin briefings should still show that P2 exists and what category/review state it has.
+
+For product-visible labels, translate those internal slots into itinerary
+language: entry/ridge view, full-route direction map, lodging/intermediate
+points, terrain passage, short observation point, and weather/season
+conditions.
 
 ## Media Quality Gate
 
@@ -149,6 +204,24 @@ If the user asks for a Scout-local HTML/admin briefing instead of workspace arti
 - If this Scout-local document is later exported outside Scout, produce a separate redacted/shareable variant instead of treating the Scout-local file as public.
 - Prefer saving under `docs/admin/` only when the user asks for a repo document.
 
+## Verification Gate
+
+Before handing off a generated or regenerated route briefing:
+
+- Run a focused route-context test that renders the fixture briefing.
+- Scan visible HTML text with `script`, `style`, SVG, and JSON payloads removed.
+- Fail the check if any blocked Product Copy Gate phrase is visible.
+- Confirm every selected image has a route point, route segment, lodging point,
+  context layer, or source relationship.
+- When the 9099 admin server is available, fetch the live
+  `/admin/pretrip/projects/{project}/briefings/route-context` endpoint and run
+  the same visible-text scan against the served page.
+- Run the repo's focused tests plus `pnpm lint`, `pnpm typecheck`, and
+  `pnpm test` when code or tests changed.
+- Run the Scout layer contract and admin UI smoke only when the change affects
+  GPX import, map preparation, GIS/admin surfaces, layer controls, route
+  projection, terrain/risk outputs, or layer artifacts.
+
 ## Common Pitfalls
 
 - Do not use route notes as final context; use them only as crawl/search seeds.
@@ -159,3 +232,6 @@ If the user asks for a Scout-local HTML/admin briefing instead of workspace arti
 - Do not hide empty web evidence behind a fluent narrative; show the missing-source state.
 - Do not collapse P0/P1/P2 provenance into a single generic tier when merging into route context.
 - Do not let site icons, logos, tracking pixels, or generic education graphics become the cover, gallery, or route visual material.
+- Do not ship prompt-writing, design-process, material-board, cache, model,
+  compiler, artifact-boundary, or safety-truth wording as visible trip briefing
+  copy.

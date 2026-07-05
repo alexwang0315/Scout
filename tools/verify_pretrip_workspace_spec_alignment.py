@@ -287,6 +287,7 @@ def main(argv: list[str] | None = None) -> int:
                 project_root,
                 project,
                 errors,
+                allow_network_calls=args.allow_network_calls,
             )
             route_architecture_summary = _check_route_architecture_refs(
                 project_root,
@@ -485,6 +486,8 @@ def _check_route_context_refs(
     project_root: Path,
     project: dict[str, Any],
     errors: list[str],
+    *,
+    allow_network_calls: bool = False,
 ) -> dict[str, Any]:
     present_refs = {
         key: project.get(key)
@@ -585,8 +588,30 @@ def _check_route_context_refs(
         if isinstance(source_manifest, dict)
         else {}
     )
-    if cache_policy.get("live_fetch_performed") is True:
-        errors.append("route context source manifest claims live_fetch_performed=true")
+    if "live_fetch_performed" in cache_policy:
+        errors.append(
+            "route context source manifest uses deprecated live_fetch_performed switch"
+        )
+    if cache_policy.get("network_refresh_required") is not True:
+        errors.append(
+            "route context source manifest missing network_refresh_required=true"
+        )
+    if cache_policy.get("cache_only_answer_allowed") is not False:
+        errors.append(
+            "route context source manifest must set cache_only_answer_allowed=false"
+        )
+    live_source_refresh = (
+        source_manifest.get("live_source_refresh_evidence", {})
+        if isinstance(source_manifest, dict)
+        else {}
+    )
+    if not isinstance(live_source_refresh, dict):
+        live_source_refresh = {}
+    live_source_refresh_status = live_source_refresh.get("status")
+    if allow_network_calls and live_source_refresh_status != "live_network_refreshed":
+        errors.append(
+            "route context source manifest missing live source refresh evidence"
+        )
 
     return {
         "checked": True,
@@ -632,7 +657,12 @@ def _check_route_context_refs(
         else None,
         "briefing_available": briefing_summary["available"],
         "briefing_size_bytes": briefing_summary.get("size_bytes"),
-        "live_fetch_performed": cache_policy.get("live_fetch_performed"),
+        "network_refresh_required": cache_policy.get("network_refresh_required"),
+        "cache_only_answer_allowed": cache_policy.get(
+            "cache_only_answer_allowed"
+        ),
+        "live_source_refresh_status": live_source_refresh_status,
+        "live_source_refresh_ref": live_source_refresh.get("source_ref"),
         "candidate_only": _route_context_candidate_only(points),
         "runtime_safety_truth": _route_context_runtime_truth(points),
     }

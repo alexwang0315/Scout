@@ -66,8 +66,9 @@ Route Context Intelligence 使用三層來源：
 | --- | --- |
 | `.agents/skills/scout-route-context-briefing/SKILL.md` | Codex/operator orchestration skill，規定 live network fetch、P0/P1/P2、candidate-only 與 briefing shape |
 | `.agents/skills/scout-route-context-briefing/references/source-catalog.md` | P0/P1/P2 source catalog 與 Sec. 6 context layers |
+| `skills/scout/route-context-intelligence.yaml` | Scout AI / Pydantic AI read-only skill contract；負責 route-context 問答、P0/P1/P2 source gap、3 分鐘觀察點與 briefing-ready context 的 skill routing/output boundary |
 | `pretrip_p0_p1_source_collection.py` | bounded live web evidence collector；只有 operator 明確允許時才 network fetch |
-| `pretrip_route_context_collection.py` | offline-first route context compiler；不 fetch network，只讀 workspace cache 並輸出 canonical route-context artifacts |
+| `pretrip_route_context_collection.py` | route context compiler；不直接 fetch network，只讀 workspace cache 並輸出 canonical route-context artifacts，同時標示是否已有 live source refresh evidence |
 | `pretrip_route_briefing_compose.py` | 將 research payload compose 成 route briefing HTML 的工具層 |
 | `scout_route_context_tool.py` | Scout AI 可呼叫的 read-only route-context assessor |
 | `tools/scout_agent_tool_manifests/scout.pretrip.route_context_collect.json` | Scout agent tool manifest |
@@ -104,15 +105,25 @@ outputs/briefings/
 
 重點：
 
-- `web_case_evidence.json` 是 live network fetch 後的 bounded web evidence cache。
-- `source_manifest.json` 記錄 source status、hash、missing source、cache policy。
+- `web_case_evidence.json` 是 operator 核准 live network fetch 後的 bounded web evidence cache。
+- `source_manifest.json` 記錄 source status、hash、missing source、cache policy 與
+  `live_source_refresh_evidence`。
 - `route_context_pack.json` 是 Scout AI cache-first 查詢入口。
 - `route_context_points.json` 是地圖、review、Scout AI answer 可用的候選點集合。
 - `route_context_briefing.html` 是 operator-facing HTML 簡報。
 
-`pretrip_route_context_collection.py` 的設計是 offline-first：它不負責 live network
-fetch，而是讀取 workspace 內已存在的 source artifacts，重新產生 pack、points、manifest
-與 HTML。
+`pretrip_route_context_collection.py` 不負責 live network fetch，而是讀取 workspace 內已
+存在的 source artifacts，重新產生 pack、points、manifest 與 HTML。它不得再輸出
+`live_fetch_performed=false` 這種布林開關；route-context 來源新鮮度必須改由
+`live_source_refresh_evidence.status` 表示：
+
+- `live_network_refreshed`：`pretrip_p0_p1_source_collection` 已記錄 live network calls。
+- `cache_only_no_live_refresh`：web evidence 存在，但這次來源收集未做 live network。
+- `legacy_cache_without_network_provenance`：舊 evidence 沒有 network provenance。
+- `missing_web_case_evidence`：workspace 沒有 bounded web evidence。
+
+只要不是 `live_network_refreshed`，Scout AI 可以用它做 route-context 候選說明，但必須
+把「缺 live source refresh evidence」列為資料缺口，不得假裝資訊已更新。
 
 ## 6. Live Network 與離線重產流程
 
@@ -122,10 +133,16 @@ fetch，而是讀取 workspace 內已存在的 source artifacts，重新產生 p
 PYTHONDONTWRITEBYTECODE=1 python -m pretrip_p0_p1_source_collection \
   --project-root /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1 \
   --source-list-html /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1/inputs/live_route_context_sources_20260616.html \
+  --image-list-html /data/scout/admin/pretrip-workspaces/chilai_nanhua_day1/inputs/live_route_context_sources_20260616.html \
   --allow-network-fetch \
   --timeout-seconds 20 \
   --json
 ```
+
+若 operator source HTML 同時包含 route photos 或 map images，必須同時傳給
+`--source-list-html` 與 `--image-list-html`。只傳 `--source-list-html` 會讓
+`network_calls_made=true`，但可能把原本的 route-specific image set 壓縮成少量頁面圖片，
+造成 briefing rich content 退化。
 
 之後 compile route context 與 HTML：
 
@@ -138,7 +155,20 @@ PYTHONDONTWRITEBYTECODE=1 python -m pretrip_route_context_collection \
 
 未來離線、沒有 live network 時，可以直接重跑第二個命令。只要 workspace 仍保有
 `outputs/layers/normalized/web_case_evidence.json`、MCP/named point、route summary
-與 route-context artifacts，Scout 就能重新產生 HTML briefing。
+與 route-context artifacts，Scout 就能重新產生 HTML briefing。但離線重產只能視為
+cache reconstruction；不能宣稱已查到最新官方資訊，也不能支撐出發、停留或安全結論。
+
+有網路、且 operator 正在做行前資料更新時，必須先跑
+`pretrip_p0_p1_source_collection --allow-network-fetch`，讓
+`web_case_evidence.json.boundary.network_calls_made=true`，再跑 route-context compile。
+`verify_pretrip_workspace_spec_alignment.py --allow-network-calls` 會要求
+`live_source_refresh_evidence.status=live_network_refreshed`；否則整體檢查應 FAIL。
+
+Scout AI regeneration 只能產生 bounded candidate plan 或候選 copy。不得用短版模型輸出直接
+覆蓋 canonical `outputs/briefings/route_context_briefing.html`。canonical HTML 必須保留：
+visual agenda、photo essay、visual kit、map atlas、source-tier spine、六個 context layers、
+source health、P2 review layer 與 source table。若 rewrite 失去這些結構，應保存為
+rejected candidate artifact，並重跑 deterministic compiler。
 
 限制：
 
@@ -160,6 +190,29 @@ Scout AI 對 route-context 問題的查詢順序：
 4. route summary / map / risk artifacts
 5. 只有 operator 明確允許時才使用 remote source connector
 6. 若資料不足，回覆 uncertainty 與 missing evidence
+
+`skills/scout/route-context-intelligence.yaml` 是 Scout AI / Pydantic AI 專用的
+read-only skill contract。它不取代 `scout.ai.route_context.assess.v0`，而是告訴
+assistant / skill router 何時該使用 route-context tool、應讀哪些 workspace cache、
+輸出必須有哪些欄位，以及哪些行為仍被禁止。
+
+這個 skill contract 的責任：
+
+- 將「這條路為什麼值得走」、「沿途有哪些歷史/文化/自然/地形/季節觀察」、
+  「哪些點值得停 3 分鐘」等問題 route 到 `scout.ai.route_context.assess.v0`
+  與相關 read-only workspace tools。
+- 將 `route_context_pack.json`、`route_context_points.json`、`source_manifest.json`
+  視為最低必要 cache；缺少時回報 source gap，而不是自由生成敘事。
+- 保留 `P0/P1/P2` source tier、source family、workspace path/URL、hash/provenance、
+  review state 與 `candidate_only` boundary。
+- 若需要產生 briefing-ready HTML 或簡報內容，仍只能從 workspace cache 與
+  route-specific media refs 形成候選輸出；不得使用網站圖示、logo、SVG UI icon、
+  tracking pixel、社群 widget 或 generic placeholder 充當路線照片。
+- 清楚區分「值得觀察」與「現在可以停留」。前者是 Route Context Intelligence，
+  後者仍必須交由 Contextual Permissioning 檢查時間、天候、日照、隊伍距離、
+  疲勞、撤退窗口與風險預算。
+- 不寫 workspace、不觸發 live network、不呼叫 `/safety/*`、不控制硬體、不送出
+  outbound message，也不把模型文字升級成 runtime safety truth。
 
 目前 `scout.ai.route_context.assess.v0` 已可讀 canonical `route_context_pack_ref`，
 因此可回答：
@@ -214,13 +267,14 @@ source_manifest_exists=True
 pack_exists=True
 cached_web_evidence_exists=True
 source_report_count=8
-cache_live_fetch_performed=False
+live_source_refresh_evidence.status=<offline/status only; not live refreshed>
 ```
 
 結論：
 
 - 跑過 route briefing / route-context collection 後，資料確實 cache 在 workspace 內。
-- 未來沒有 live networking 時，可以用 workspace cache 重產 HTML briefing。
+- 未來沒有 live networking 時，可以用 workspace cache 重產 HTML briefing，但必須標示
+  缺 live source refresh evidence。
 - 重產過程不需要呼叫 `/safety/*`，也不會建立 runtime safety truth。
 
 ## 10. Acceptance Criteria
@@ -228,7 +282,9 @@ cache_live_fetch_performed=False
 Route Context Intelligence 應符合：
 
 - `pretrip_p0_p1_source_collection` 只有在 `--allow-network-fetch` 時才做 live network。
-- `pretrip_route_context_collection` 可在 offline/cache-first 模式重產 route-context artifacts。
+- 有網路的行前更新流程必須留下 `network_calls_made=true` provenance。
+- `pretrip_route_context_collection` 可在離線模式重產 route-context artifacts，但 source
+  manifest 不得使用 `live_fetch_performed` switch。
 - `route_context_pack.json` 與 `route_context_points.json` 可供 Scout AI read-only tool 查詢。
 - HTML briefing 顯示 P0/P1/P2 source tier、missing source、candidate-only boundary。
 - 任何「值得停」都必須標成候選觀察點，不得直接變成停留授權。
