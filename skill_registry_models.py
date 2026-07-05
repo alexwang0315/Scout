@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -72,6 +72,7 @@ class SkillLayoutContract(StrictModel):
     source_tiers_required: list[str] = Field(default_factory=list)
     visual_direction: VisualDirection | None = None
     media_quality_gate: MediaQualityGate | None = None
+    variant_generation_gate: dict[str, Any] | None = None
     safety_boundary: SkillSafetyBoundary | None = None
 
 

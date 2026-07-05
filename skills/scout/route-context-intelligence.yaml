@@ -1,5 +1,5 @@
 id: route-context-intelligence
-version: 0.1.2
+version: 0.1.3
 status: experimental
 type: analysis
 priority: 54
@@ -18,6 +18,16 @@ triggers:
       - pretrip.workspace.normalized.context.route_context.route_context_pack
       - pretrip.workspace.candidates.route_context_points
       - pretrip.workspace.normalized.context.route_context.source_manifest
+  - event: assistant.route_context_briefing_variants_requested
+    description: Generate exactly five complete route-content briefing variant specs in one Scout AI/Pydantic AI model call, then let the deterministic renderer place those model-provided specs and workspace evidence into HTML without Codex post-hoc supplement.
+    required_refs:
+      - pretrip.workspace.project
+      - pretrip.workspace.normalized.context.route_context.route_context_pack
+      - pretrip.workspace.candidates.route_context_points
+      - pretrip.workspace.normalized.context.route_context.source_manifest
+      - pretrip.workspace.normalized.context.route_context.media_manifest
+      - pretrip.workspace.outputs.layers.normalized.web_case_evidence
+      - pretrip.workspace.outputs.briefings.route_context_briefing.template_reference
   - event: assistant.route_context_research_gap_detected
     description: Identify missing P0/P1/P2 route-context evidence according to docs/specs/scout-route-context-intelligence-implementation.md and explain whether trusted native research, operator source review, or offline cache regeneration is needed.
     required_refs:
@@ -36,6 +46,11 @@ activation_gate:
     - unreviewed P2 evidence can seed candidates or caveats only; reviewed P2 may support route notes, observation points, pace-fit context, and next-trip pretrip suggestions
     - if workspace evidence is missing, report P0/P1/P2 source gaps and whether trusted native WebSearch/WebFetch could collect candidate evidence when enabled by operator policy
     - route-context HTML or presentation requests may be drafted only from cached route_context_pack, route_context_points, source_manifest, media_manifest, and route-specific media refs
+    - route-context variant-generation requests must use a single Scout AI/Pydantic AI model call to produce exactly five complete variant specs; each spec must include its own title, subtitle, editorial thesis, section/chapter headings, observation prompts, point angles, chart titles, source storyline, leader review focus, and closing copy before rendering starts
+    - deterministic rendering may arrange workspace evidence and model-provided copy into HTML, but it must not add new story copy, hidden rationale, route facts, section meaning, or product-visible explanation after the model response; failed or thin variants must be reported as failed rather than patched by Codex or the renderer
+    - route-context variant artifacts must record the model name, provider-reported token usage when available, prompt content, response content, skill manifest hash, and model response hash in machine-readable Scout AI artifacts; keep those audit fields out of product-visible HTML
+    - every generated variant must be compared against the selected baseline briefing for visible text richness, editorial innovation, chart/diagram ratio, blocked product-copy terms, and media quality before it is presented as a usable route briefing candidate
+    - variant outputs must be visually distinct from each other and from prior dashboard/admin briefings; prior artifacts may define the minimum richness bar, but their copy and layout must not be copied
     - product-visible wording must describe the trip, itinerary, route segment, source, lodging/intermediate point, terrain, weather/season, observation stop, or leader review task; do not expose prompt/model/cache/artifact-boundary implementation wording
     - do not reuse previous route URLs, image choices, lodging points, or copy as route defaults; previous artifacts are structure examples only
     - reject website chrome, logos, SVG icons, tracking pixels, social widgets, and decorative placeholder images; missing visual slots become explicit visual evidence gaps
@@ -120,6 +135,9 @@ output_schema:
     - scout_ai_route_context_intelligence_answer
     - scout_ai_route_context_research_gap
     - scout_ai_route_context_tool_output
+    - scout_ai_route_context_briefing_variants
+    - scout_ai_route_context_briefing_variants_plan
+    - scout_ai_route_context_briefing_variant_comparison
   required_fields:
     - answerability
     - route_context_summary
@@ -136,6 +154,14 @@ output_schema:
     - product_copy_gate
     - visual_evidence_gaps
     - offline_regeneration_boundary
+    - briefing_variants
+    - variant_comparison
+    - one_model_call_complete
+    - no_codex_posthoc_supplement
+    - model_name
+    - token_usage
+    - prompt_content
+    - response_content
     - candidate_only
     - runtime_safety_truth
   layout_contract:
@@ -157,6 +183,8 @@ output_schema:
       - source_tier_summary
       - missing_evidence
       - leader_review_tasks
+      - variant_comparison
+      - token_usage_audit
       - contextual_permission_boundary
       - safety_boundary
     source_tiers_required:
@@ -185,6 +213,33 @@ output_schema:
         - product-visible prompt/model/compiler/cache/path/boundary wording, material-board labels, image-guide labels, and internal AI/design guidance
       missing_visual_policy: Report visual evidence gaps and route-specific shot-list or leader-review items instead of substituting generic graphics, site chrome, or explaining the page template.
       post_render_check: Route-context briefing output should have no selected hero/gallery images from logos, UI chrome, tracking media, or unrelated brand assets.
+    variant_generation_gate:
+      required_variant_count: 5
+      model_call_policy: exactly_one_model_call_for_variant_specs
+      renderer_policy: arrange_model_specs_and_workspace_evidence_without_posthoc_story_supplement
+      minimum_copy_contract:
+        - title
+        - subtitle
+        - editorial_thesis
+        - chapter_titles
+        - observation_prompts
+        - point_angles
+        - chart_titles
+        - source_storyline
+        - leader_review_focus
+      comparison_required:
+        - visible_text_richness_against_baseline
+        - editorial_innovation
+        - chart_or_diagram_ratio
+        - blocked_product_copy_terms
+        - media_quality_gate
+      audit_required:
+        - model_name
+        - token_usage
+        - prompt_content
+        - response_content
+        - skill_manifest_sha256
+        - model_output_sha256
     safety_boundary:
       candidate_only: true
       runtime_safety_truth: false
@@ -216,6 +271,8 @@ application_routing:
     - route_source_gap_question
     - route_visual_gap_question
     - route_context_product_copy_question
+    - route_context_briefing_variants_question
+    - one_pass_route_briefing_generation_question
     - p2_scout_owned_route_context_question
   capability_tags:
     - route_context
@@ -230,6 +287,8 @@ application_routing:
     - p2_scout_owned_evidence
     - media_quality_gate
     - product_copy_gate
+    - one_pass_variant_generation
+    - token_usage_audit
     - offline_regeneration
   profile: pretrip_read_only
   side_effect_policy: no_runtime_safety_mutation_no_outbound
