@@ -68,7 +68,7 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertFalse(
             route_context_intelligence.activation_gate.requires_human_approval
         )
-        self.assertEqual(route_context_intelligence.version, "0.1.2")
+        self.assertEqual(route_context_intelligence.version, "0.1.3")
         self.assertIn(
             "route-reference-point-lookup",
             route_context_intelligence.preflight.required_skill_ids,
@@ -100,6 +100,22 @@ class SkillRegistryTests(unittest.TestCase):
         )
         self.assertIn(
             "contextual_permission_boundary",
+            route_context_intelligence.output_schema.required_fields,
+        )
+        self.assertIn(
+            "briefing_variants",
+            route_context_intelligence.output_schema.required_fields,
+        )
+        self.assertIn(
+            "token_usage",
+            route_context_intelligence.output_schema.required_fields,
+        )
+        self.assertIn(
+            "prompt_content",
+            route_context_intelligence.output_schema.required_fields,
+        )
+        self.assertIn(
+            "response_content",
             route_context_intelligence.output_schema.required_fields,
         )
         self.assertIsNotNone(route_context_intelligence.output_schema.layout_contract)
@@ -134,6 +150,19 @@ class SkillRegistryTests(unittest.TestCase):
             "visual evidence gaps",
             route_context_intelligence.output_schema.layout_contract.media_quality_gate.missing_visual_policy,
         )
+        variant_gate = (
+            route_context_intelligence.output_schema.layout_contract.variant_generation_gate
+        )
+        self.assertIsNotNone(variant_gate)
+        assert variant_gate is not None
+        self.assertEqual(variant_gate["required_variant_count"], 5)
+        self.assertEqual(
+            variant_gate["model_call_policy"],
+            "exactly_one_model_call_for_variant_specs",
+        )
+        self.assertIn("token_usage", variant_gate["audit_required"])
+        self.assertIn("prompt_content", variant_gate["audit_required"])
+        self.assertIn("response_content", variant_gate["audit_required"])
         self.assertIsNotNone(
             route_context_intelligence.output_schema.layout_contract.safety_boundary
         )
@@ -149,6 +178,14 @@ class SkillRegistryTests(unittest.TestCase):
         )
         self.assertIn(
             "route_briefing",
+            route_context_intelligence.application_routing.capability_tags,
+        )
+        self.assertIn(
+            "one_pass_variant_generation",
+            route_context_intelligence.application_routing.capability_tags,
+        )
+        self.assertIn(
+            "token_usage_audit",
             route_context_intelligence.application_routing.capability_tags,
         )
         route_reference = registry.get("route-reference-point-lookup")
