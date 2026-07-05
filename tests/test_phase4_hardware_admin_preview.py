@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -138,6 +139,47 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
     assert status_payload["provider"] == "mock"
     assert status_payload["token_values_exposed"] is False
     assert status_payload["assistant_context_registry"] == registry
+
+
+def test_phase4_admin_runtime_loads_scout_env_before_snapshot(monkeypatch) -> None:
+    calls: list[Path] = []
+
+    def fake_load_scout_env_files(*, repo_root: Path) -> object:
+        calls.append(repo_root)
+        os.environ["OPENROUTER_API_KEY"] = "sk-loaded-from-persistent"
+        return object()
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "phase4_admin_runtime.load_scout_env_files",
+        fake_load_scout_env_files,
+    )
+
+    app = create_phase4_admin_runtime_app()
+
+    assert app.title == "Scout Phase 4 Admin LAN Preview"
+    assert calls == [ROOT]
+
+
+def test_phase4_admin_runtime_explicit_environ_skips_process_env_loader(
+    monkeypatch,
+) -> None:
+    def fail_load_scout_env_files(*, repo_root: Path) -> object:
+        raise AssertionError(f"unexpected env load for {repo_root}")
+
+    monkeypatch.setattr(
+        "phase4_admin_runtime.load_scout_env_files",
+        fail_load_scout_env_files,
+    )
+
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+
+    assert app.title == "Scout Phase 4 Admin LAN Preview"
 
 
 def test_phase4_admin_runtime_status_reports_live_evidence_config_without_path_values(
