@@ -266,7 +266,7 @@ def _boundary(*, local_fallback_enabled: bool = False) -> dict[str, bool]:
 
 def _safe_exception_label(exc: Exception) -> str:
     text = str(exc).replace("\n", " ").strip()
-    for marker in ("OPENROUTER_API_KEY=", "OPENAI_API_KEY="):
+    for marker in ("NVIDIA_API_KEY=", "OPENROUTER_API_KEY=", "OPENAI_API_KEY="):
         if marker in text:
             text = text.split(marker, 1)[0] + f"{marker}<redacted>"
     return f"{type(exc).__name__}: {text}" if text else type(exc).__name__

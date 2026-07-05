@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--fallback-model",
         default=None,
-        help="Mac-local fallback model name, for example openrouter:z-ai/glm-5.2.",
+        help="Mac-local fallback model name, for example z-ai/glm-5.2.",
     )
     parser.add_argument(
         "--fallback-timeout-seconds",

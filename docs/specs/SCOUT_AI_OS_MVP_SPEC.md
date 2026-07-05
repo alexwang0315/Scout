@@ -320,6 +320,9 @@ Pydantic AI v2.4.0 operating rules:
 - `pydantic_ai.Agent` calls must keep `end_strategy="early"` unless a future
   reviewed design proves that continuing same-turn tool execution cannot
   violate Scout's no-side-effect defaults.
+- NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and requires
+  `NVIDIA_API_KEY`. Scout routes the request to NVIDIA's OpenAI-compatible
+  endpoint and sends `z-ai/glm-5.2` as the provider model id.
 - OpenRouter models use `openrouter:<vendor/model>` and require
   `OPENROUTER_API_KEY`.
 - Direct OpenAI chat models use `openai-chat:<model>` and require
@@ -758,6 +761,10 @@ unbounded autonomous runtime.
 Provider modes:
 
 - local `FunctionModel`: default for tests, Mac smoke, and no-credential runs;
+- `z-ai/glm-5.2`: external NVIDIA OpenAI-compatible provider model id, gated
+  by `NVIDIA_API_KEY`;
+- `nvidia:<model-id>`: internal or advanced NVIDIA provider route, gated by
+  `NVIDIA_API_KEY`;
 - `openrouter:<vendor/model>`: external OpenRouter provider, gated by
   `OPENROUTER_API_KEY`;
 - `openai-chat:<model>`: direct OpenAI chat provider, gated by

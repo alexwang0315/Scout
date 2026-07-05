@@ -395,6 +395,38 @@ def test_pydantic_smoke_blocks_external_model_when_key_is_missing(
     assert "OPENROUTER_API_KEY=" not in str(result)
 
 
+def test_pydantic_smoke_blocks_nvidia_model_when_key_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.delenv("SCOUT_AI_OS_MODEL", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "SCOUT_AI_OS_MODEL=nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5\n"
+    )
+
+    result = run_smoke(
+        user_text="Remind me in 10 minutes.",
+        user_id="user-1",
+        now="2026-06-08T00:00:00+00:00",
+        repo_root=Path(__file__).resolve().parents[1],
+        env_file=env_file,
+    )
+
+    assert result["request_status"] == "model_config_blocked"
+    assert result["workflow_count"] == 0
+    assert result["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert result["model_policy"]["provider"] == "nvidia"
+    assert (
+        result["model_policy"]["pydantic_ai_model"]
+        == "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    )
+    assert result["model_policy"]["missing_credential_env"] == ["NVIDIA_API_KEY"]
+    assert result["nvidia_api_key_present"] is False
+    assert "NVIDIA_API_KEY=" not in str(result)
+
+
 def test_pydantic_smoke_reports_ui_router_result_without_workflow(
     tmp_path: Path,
 ) -> None:
