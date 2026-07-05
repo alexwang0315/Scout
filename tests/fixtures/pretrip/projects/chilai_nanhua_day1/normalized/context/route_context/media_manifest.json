@@ -196,7 +196,7 @@
       "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg"
     }
   ],
-  "generated_at": "2026-06-17T00:00:00Z",
+  "generated_at": "2026-07-03T00:00:00Z",
   "hero_image": {
     "alt": "能高越嶺道高山景觀",
     "briefing_media_rank": 1,
@@ -245,7 +245,7 @@
     "missing_image_count_to_target": 6,
     "overflow_media_count": 0,
     "presentation_ready": false,
-    "recommendation": "目前可出簡報，但缺少部分脈絡層圖片，畫面容易重複或偏資料化。",
+    "recommendation": "目前只能對照部分行程段落；缺少的地名、自然環境或地形通過點，出發前要補查。",
     "selected_media_count": 6,
     "target_context_layers": [
       "route_overview",
@@ -262,7 +262,7 @@
       "context_layer_coverage_ratio": 0.0,
       "covered_context_layer_count": 0,
       "covered_context_layers": [],
-      "label": "畫面偏薄",
+      "label": "部分路段待補查",
       "missing_context_layers": [
         "route_overview",
         "historical",
@@ -274,12 +274,12 @@
       ],
       "missing_image_count_to_target": 6,
       "next_actions": [
-        "補齊 路線總覽、歷史層、文化層、自然層、地形層、季節層、觀察點 的可追溯照片",
-        "再補 6 張，讓公開簡報至少有 12 張圖"
+        "出發前補查：路線走向、舊路設施、地名文化等 7 類的照片或地圖",
+        "補查山屋、稜線、短停與天候對應路段"
       ],
       "presentation_ready": false,
       "quality_gate": "warn_missing_layers",
-      "recommendation": "目前可出簡報，但缺少部分脈絡層圖片，畫面容易重複或偏資料化。",
+      "recommendation": "目前只能對照部分行程段落；缺少的地名、自然環境或地形通過點，出發前要補查。",
       "selected_media_count": 6,
       "status": "thin",
       "target_context_layer_count": 7,
@@ -482,7 +482,7 @@
     "slot_count": 6,
     "slots": [
       {
-        "briefing_role": "先讓隊伍看見這趟路的氣質，建立共同方向感。",
+        "briefing_role": "先讓隊伍看見入山後的高山景觀與行進方向。",
         "candidate_only": true,
         "image": {
           "alt": "能高越嶺道高山景觀",
@@ -504,12 +504,12 @@
           "source_tier": "P0",
           "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg"
         },
-        "label": "開場主視覺",
+        "label": "入山與稜線遠景",
         "missing_action": null,
         "requires_human_review": true,
         "runtime_safety_truth": false,
         "slot_id": "route_cover",
-        "speaker_question": "這趟路給隊伍的第一個印象是什麼？",
+        "speaker_question": "隊伍第一眼能否理解這趟路會進入哪種地形？",
         "status": "ready",
         "target_context_layers": [
           "route_overview"
@@ -538,7 +538,7 @@
           "source_tier": "P0",
           "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg"
         },
-        "label": "路線總覽圖",
+        "label": "路線全段走向圖",
         "missing_action": null,
         "requires_human_review": true,
         "runtime_safety_truth": false,
@@ -576,7 +576,7 @@
           "source_tier": "P0",
           "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG"
         },
-        "label": "宿點與中繼節點",
+        "label": "宿點與中繼點",
         "missing_action": null,
         "requires_human_review": true,
         "runtime_safety_truth": false,
@@ -644,7 +644,7 @@
           "source_tier": "P0",
           "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG"
         },
-        "label": "3 分鐘觀察點",
+        "label": "短停觀察點",
         "missing_action": null,
         "requires_human_review": true,
         "runtime_safety_truth": false,
@@ -659,7 +659,7 @@
         "briefing_role": "把雲霧、雨季、低溫、芒草或林相變化連回時間壓力。",
         "candidate_only": true,
         "image": null,
-        "label": "天候與季節畫面",
+        "label": "雲霧低溫與季節條件",
         "missing_action": "補一張季節、雲霧、低溫、雨後或林相變化照片。",
         "requires_human_review": true,
         "runtime_safety_truth": false,
@@ -679,7 +679,7 @@
     "context_layer_coverage_ratio": 0.0,
     "covered_context_layer_count": 0,
     "covered_context_layers": [],
-    "label": "畫面偏薄",
+    "label": "部分路段待補查",
     "missing_context_layers": [
       "route_overview",
       "historical",
@@ -691,12 +691,12 @@
     ],
     "missing_image_count_to_target": 6,
     "next_actions": [
-      "補齊 路線總覽、歷史層、文化層、自然層、地形層、季節層、觀察點 的可追溯照片",
-      "再補 6 張，讓公開簡報至少有 12 張圖"
+      "出發前補查：路線走向、舊路設施、地名文化等 7 類的照片或地圖",
+      "補查山屋、稜線、短停與天候對應路段"
     ],
     "presentation_ready": false,
     "quality_gate": "warn_missing_layers",
-    "recommendation": "目前可出簡報，但缺少部分脈絡層圖片，畫面容易重複或偏資料化。",
+    "recommendation": "目前只能對照部分行程段落；缺少的地名、自然環境或地形通過點，出發前要補查。",
     "selected_media_count": 6,
     "status": "thin",
     "target_context_layer_count": 7,

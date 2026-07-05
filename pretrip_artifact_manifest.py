@@ -303,7 +303,15 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
                 payload.get("optional_missing_source_kinds", [])
             ),
             "cache_mode": cache_policy.get("mode"),
-            "live_fetch_performed": cache_policy.get("live_fetch_performed"),
+            "network_refresh_required": cache_policy.get(
+                "network_refresh_required"
+            ),
+            "cache_only_answer_allowed": cache_policy.get(
+                "cache_only_answer_allowed"
+            ),
+            "live_source_refresh_status": cache_policy.get(
+                "live_source_refresh_status"
+            ),
             "candidate_only": boundary.get("candidate_only"),
             "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }

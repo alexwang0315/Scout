@@ -71,7 +71,7 @@
     "runtime_safety_truth": false
   },
   "crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
-  "generated_at": "2026-06-17T00:00:00Z",
+  "generated_at": "2026-07-03T00:00:00Z",
   "observation_scoring_policy": {
     "candidate_only": true,
     "formula": "observation_value_minus_risk_penalty",
@@ -137,10 +137,10 @@
   },
   "source_manifest_ref": "normalized/context/route_context/source_manifest.json",
   "source_strategy": {
-    "P0": "Scout baseline sources. Use for official route, terrain, weather, hazard, rescue, biodiversity, and historical-map grounding.",
-    "P1": "Expansion sources. Use for public named points, route stories, OSM/Overpass, community articles, and map labels.",
-    "P2": "Scout-owned observations. Use as seeds and review feedback; do not promote to broad route context without corroboration.",
-    "briefing_conclusion_policy": "prefer P0/P1 crawler or official evidence; cite P2 only as Scout-owned observation or seed",
-    "route_note_policy": "route notes are crawler seeds by default, not briefing conclusions"
+    "P0": "官方資料用來確認路線、地形、天氣、危險、救援、生態與歷史地圖基線。",
+    "P1": "延伸資料用來補充公開命名點、路線故事、社群文章與地圖標籤。",
+    "P2": "隊伍觀察只作行前提醒與回顧線索；沒有佐證前不能變成廣泛路線結論。",
+    "briefing_conclusion_policy": "行前結論優先使用官方或可追溯公開資料；隊伍回顧只作已標示來源的提醒。",
+    "route_note_policy": "路線筆記預設只作待查線索，不直接形成行前結論。"
   }
 }

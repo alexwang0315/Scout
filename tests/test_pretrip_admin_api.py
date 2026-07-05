@@ -1,10 +1,16 @@
 import json
 import shutil
+import sys
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from admin_api import _compact_pretrip_project_view, create_admin_app
+from admin_api import (
+    _compact_pretrip_project_view,
+    _ensure_scout_src_on_path,
+    _route_context_briefing_max_tokens,
+    create_admin_app,
+)
 from admin_local_raster_tiles import raster_tile_cache_path
 
 
@@ -575,7 +581,7 @@ def test_pretrip_project_route_context_briefing_api_serves_workspace_html(tmp_pa
     briefing_path = project_root / briefing_ref
     briefing_path.parent.mkdir(parents=True, exist_ok=True)
     briefing_path.write_text(
-        "<!doctype html><html><body><h1>Scout Route Context Briefing</h1></body></html>",
+        "<!doctype html><html><body><h1>Scout 行前路線說明</h1></body></html>",
         encoding="utf-8",
     )
     project_path = project_root / "project.json"
@@ -595,7 +601,7 @@ def test_pretrip_project_route_context_briefing_api_serves_workspace_html(tmp_pa
     assert response.headers["x-scout-runtime-safety-truth"] == "false"
     assert response.headers["x-scout-route-context-briefing"] == "true"
     assert response.headers["x-scout-source-ref"] == briefing_ref
-    assert "Scout Route Context Briefing" in response.text
+    assert "Scout 行前路線說明" in response.text
 
     project["route_context_briefing_ref"] = "../outside.html"
     project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
@@ -603,6 +609,172 @@ def test_pretrip_project_route_context_briefing_api_serves_workspace_html(tmp_pa
         f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context"
     )
     assert unsafe_response.status_code == 422
+
+
+def test_pretrip_project_route_context_briefing_regenerate_calls_scout_ai(
+    tmp_path: Path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    captured: dict[str, object] = {}
+
+    def fake_scout_ai_runner(prompt: str, timeout_seconds: int) -> str:
+        captured["prompt"] = prompt
+        captured["timeout_seconds"] = timeout_seconds
+        plan_payload = json.dumps(
+            {
+                "route_context_intelligence_plan": "use workspace cache and rebuild the deterministic briefing",
+                "sec6_layer_coverage": [
+                    "historical",
+                    "cultural",
+                    "natural",
+                    "terrain",
+                    "seasonal",
+                    "observation_point",
+                ],
+                "source_tier_review": {
+                    "P0": "official baseline",
+                    "P1": "expansion evidence",
+                    "P2": "Scout-owned review seed",
+                },
+                "observation_stop_candidates": [
+                    "3-minute candidates require Contextual Permissioning"
+                ],
+                "missing_evidence": [],
+                "regeneration_notes": ["offline compiler rebuilds HTML"],
+            },
+            ensure_ascii=False,
+        )
+        return f"Candidate-only Route Context Intelligence plan:\n```json\n{plan_payload}\n```"
+
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            route_context_briefing_ai_runner=fake_scout_ai_runner,
+        )
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/regenerate",
+        json={
+            "confirm_regenerate": True,
+            "operator_alias": "dashboard_operator",
+            "model": "openrouter:z-ai/glm-5.2",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["operator_triggered"] is True
+    assert payload["scout_ai"]["provider"] == "openrouter"
+    assert payload["scout_ai"]["model_name"] == "openrouter:z-ai/glm-5.2"
+    assert payload["scout_ai"]["external_model_call_performed"] is True
+    assert payload["boundary"]["runtime_safety_truth"] is False
+    assert payload["boundary"]["live_safety_automation_triggered"] is False
+    assert captured["timeout_seconds"] == 45
+    assert "Scout AI task: operator-triggered Route Context Intelligence briefing plan" in str(
+        captured["prompt"]
+    )
+    assert "docs/specs/scout-route-context-intelligence-implementation.md" in str(
+        captured["prompt"]
+    )
+    assert "route_context_pack.json" in str(captured["prompt"])
+    assert "P0 as official baseline" in str(captured["prompt"])
+    assert "Do not call tools" in str(captured["prompt"])
+    assert "Workspace summary" in str(captured["prompt"])
+    assert (
+        payload["route_context_intelligence_contract"]["generation_mode"]
+        == "scout_ai_plan_plus_offline_workspace_compiler"
+    )
+
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    regeneration_ref = project["route_context_briefing_regeneration_ref"]
+    regeneration_payload = json.loads(
+        (project_root / regeneration_ref).read_text(encoding="utf-8")
+    )
+    assert regeneration_payload["external_model_call_performed"] is True
+    assert regeneration_payload["model_provider"] == "openrouter"
+    assert regeneration_payload["boundary"]["raw_prompt_embedded"] is False
+    assert regeneration_payload["boundary"]["api_key_embedded"] is False
+    assert regeneration_payload["route_context_collection"]["writes_performed"] is True
+    assert (
+        regeneration_payload["route_context_intelligence_contract"][
+            "implementation_spec_ref"
+        ]
+        == "docs/specs/scout-route-context-intelligence-implementation.md"
+    )
+    assert (
+        regeneration_payload["route_context_intelligence_contract"]["boundary"][
+            "runtime_safety_truth"
+        ]
+        is False
+    )
+    scout_ai_plan = regeneration_payload["scout_ai_route_context_intelligence_plan"]
+    assert scout_ai_plan["status"] == "parsed"
+    assert scout_ai_plan["schema"] == "route_context_intelligence_plan.v1"
+    assert (
+        "observation_point"
+        in scout_ai_plan["payload"]["sec6_layer_coverage"]
+    )
+
+    briefing = (
+        project_root / "outputs" / "briefings" / "route_context_briefing.html"
+    ).read_text(encoding="utf-8")
+    assert "照片與地圖對應的行程段落" in briefing
+    assert "行前照片與地圖狀態" not in briefing
+    assert "開場主視覺" not in briefing
+    assert "已檢查開場、路線總覽、宿點、地形、短停與天候季節六類行程畫面" not in briefing
+    assert "圖像導覽" not in briefing
+    assert "畫面索引" not in briefing
+    assert "把可用圖片一次攤開" not in briefing
+    assert "先用照片建立路線感" not in briefing
+    assert "行程畫面覆蓋" not in briefing
+    assert "畫面偏薄" not in briefing
+    assert "補齊 文化層、自然層、地形層 的可追溯照片" not in briefing
+    assert "再補 6 張路線照片，讓山屋、地形、短停與天候都有畫面" not in briefing
+    assert "先看這趟路有哪些必須提醒的點" in briefing
+    assert "先把這趟路的重點拆清楚" in briefing
+    assert "route_context_pack.json" not in briefing
+    assert "Scout Route Context Briefing" not in briefing
+    assert "Route Context" not in briefing
+    assert "Route Context Intelligence implementation" not in briefing
+    assert "Scout AI 產生計畫" not in briefing
+    assert "compiler" not in briefing
+    assert "workspace cache" not in briefing
+    assert "不是增加裝飾圖，而是讓每張圖負責一個行前說明任務" not in briefing
+    assert "避免簡報只剩資料欄位" not in briefing
+    assert "簡報素材" not in briefing
+    assert "素材板" not in briefing
+    assert "講者備註" not in briefing
+    assert "採圖清單" not in briefing
+    assert "review_state=" not in briefing
+    assert "contextual permission" not in briefing
+    assert "pretrip briefing" not in briefing
+    assert "Scout AI" not in briefing
+
+
+def test_route_context_briefing_runner_adds_src_to_python_path(
+    monkeypatch,
+) -> None:
+    src_path = str(ROOT / "src")
+    monkeypatch.setattr(sys, "path", [path for path in sys.path if path != src_path])
+
+    _ensure_scout_src_on_path()
+
+    assert sys.path[0] == src_path
+
+
+def test_route_context_briefing_max_tokens_defaults_above_short_answer_limit(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SCOUT_DASHBOARD_BRIEFING_MAX_TOKENS", raising=False)
+    assert _route_context_briefing_max_tokens() == 2048
+
+    monkeypatch.setenv("SCOUT_DASHBOARD_BRIEFING_MAX_TOKENS", "128")
+    assert _route_context_briefing_max_tokens() == 512
+
+    monkeypatch.setenv("SCOUT_DASHBOARD_BRIEFING_MAX_TOKENS", "99999")
+    assert _route_context_briefing_max_tokens() == 4096
 
 
 def test_pretrip_project_terrain_overlay_api_serves_workspace_png(tmp_path: Path):

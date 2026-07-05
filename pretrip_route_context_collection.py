@@ -235,6 +235,11 @@ def collect_pretrip_route_context(
 
     web_payload, web_ref, _ = _load_source(root, project, "web_case_evidence", source_report)
     points.extend(_points_from_web_case_evidence(web_payload, web_ref))
+    live_source_refresh_evidence = _live_source_refresh_evidence(
+        web_payload,
+        web_ref,
+        collected_at=collected_at,
+    )
 
     raster_payload, raster_ref, _ = _load_source(root, project, "raster_label_evidence", source_report)
     points.extend(_points_from_raster_label_evidence(raster_payload, raster_ref))
@@ -387,15 +392,25 @@ def collect_pretrip_route_context(
             for source in source_report
             if not source["required_by_standard_sec6"] and source["status"] == "missing"
         ],
+        "live_source_refresh_evidence": live_source_refresh_evidence,
         "cache_policy": {
-            "mode": "offline_first_cache_first",
-            "live_fetch_performed": False,
+            "mode": "live_source_refresh_required",
+            "network_refresh_required": True,
+            "cache_only_answer_allowed": False,
+            "offline_regeneration_allowed": True,
+            "offline_regeneration_boundary": (
+                "offline rebuilds may regenerate briefing artifacts from cache, "
+                "but must preserve missing live-source-refresh evidence"
+            ),
             "refresh_required_before_runtime_truth": True,
+            "stale_source_safety_risk": True,
+            "live_source_refresh_status": live_source_refresh_evidence["status"],
+            "live_source_refresh_ref": live_source_refresh_evidence["source_ref"],
             "answer_order": [
-                "local_cache",
+                "live_refreshed_workspace_evidence",
                 "route_context_pack",
                 "local_spatial_index",
-                "remote_source_connector_if_explicitly_allowed",
+                "operator_approved_source_refresh",
                 "fallback_with_uncertainty",
             ],
         },
@@ -1445,6 +1460,45 @@ def _load_source(
     return payload, ref, path
 
 
+def _live_source_refresh_evidence(
+    web_payload: dict[str, Any],
+    web_ref: str,
+    *,
+    collected_at: str,
+) -> dict[str, Any]:
+    boundary = web_payload.get("boundary") if isinstance(web_payload, dict) else {}
+    if not isinstance(boundary, dict):
+        boundary = {}
+    network_calls_made = boundary.get("network_calls_made")
+    network_calls_allowed = boundary.get("network_calls_allowed")
+    status = "missing_web_case_evidence"
+    reason = "No bounded P0/P1 web evidence artifact is available in the workspace."
+    if web_payload:
+        if network_calls_made is True:
+            status = "live_network_refreshed"
+            reason = "The P0/P1 source collector recorded live network calls."
+        elif network_calls_made is False:
+            status = "cache_only_no_live_refresh"
+            reason = "The P0/P1 source artifact was generated without live network calls."
+        else:
+            status = "legacy_cache_without_network_provenance"
+            reason = "The P0/P1 source artifact predates explicit network-call provenance."
+    return {
+        "status": status,
+        "source_ref": web_ref,
+        "checked_at": collected_at,
+        "network_calls_allowed": network_calls_allowed,
+        "network_calls_made": network_calls_made,
+        "source_generated_at": web_payload.get("generated_at") if web_payload else None,
+        "collector_schema_version": web_payload.get("collector_schema_version")
+        if web_payload
+        else None,
+        "reason": reason,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
 def _source_tier_summary(
     source_kind: str,
     payload: dict[str, Any],
@@ -2266,11 +2320,11 @@ def _source_tier_catalog() -> list[dict[str, str]]:
 
 def _source_strategy() -> dict[str, Any]:
     return {
-        "P0": "Scout baseline sources. Use for official route, terrain, weather, hazard, rescue, biodiversity, and historical-map grounding.",
-        "P1": "Expansion sources. Use for public named points, route stories, OSM/Overpass, community articles, and map labels.",
-        "P2": "Scout-owned observations. Use as seeds and review feedback; do not promote to broad route context without corroboration.",
-        "route_note_policy": "route notes are crawler seeds by default, not briefing conclusions",
-        "briefing_conclusion_policy": "prefer P0/P1 crawler or official evidence; cite P2 only as Scout-owned observation or seed",
+        "P0": "官方資料用來確認路線、地形、天氣、危險、救援、生態與歷史地圖基線。",
+        "P1": "延伸資料用來補充公開命名點、路線故事、社群文章與地圖標籤。",
+        "P2": "隊伍觀察只作行前提醒與回顧線索；沒有佐證前不能變成廣泛路線結論。",
+        "route_note_policy": "路線筆記預設只作待查線索，不直接形成行前結論。",
+        "briefing_conclusion_policy": "行前結論優先使用官方或可追溯公開資料；隊伍回顧只作已標示來源的提醒。",
     }
 
 
@@ -2292,7 +2346,7 @@ def _build_briefing_html(
         route_keywords=route_keywords,
         route_summary=route_summary,
     )
-    title = f"Scout Route Context Briefing - {route_label}"
+    title = f"Scout 行前路線說明 - {route_label}"
     route_distance_km = _route_distance_label(route_summary.get("distance_m"))
     point_count = counts.get("route_context_point_count") or len(points)
     source_summary = _briefing_source_summary(source_manifest)
@@ -2316,6 +2370,11 @@ def _build_briefing_html(
     tier_items = _briefing_tier_items()
     source_health_panel = _briefing_source_health_panel(source_manifest, source_summary, boundary)
     source_tier_spine = _briefing_source_tier_spine(source_manifest)
+    route_context_intelligence_panel = _briefing_route_context_intelligence_panel(
+        source_manifest=source_manifest,
+        counts=counts,
+        boundary=boundary,
+    )
     hero_image = _briefing_hero_image(media_manifest)
     hero_media = _briefing_hero_media(hero_image)
     visual_agenda = _briefing_visual_agenda(
@@ -2352,11 +2411,11 @@ def _build_briefing_html(
         number="02",
         eyebrow="路線脈絡",
         title="再把路線讀成故事",
-        body="歷史、文化、自然、地形、季節與 Scout 回顧，應該幫隊伍理解這條路，而不是堆成資料表。",
+        body="歷史、文化、自然、地形、季節與隊伍回顧，應該幫隊伍理解這條路，而不是堆成資料表。",
         bullets=[
             "每層脈絡都要能講給隊伍聽",
             "文化敏感點先標成待查證內容",
-            "Scout 回顧先當線索，不直接變成結論",
+            "隊伍回顧先當線索，不直接變成結論",
         ],
         context_kinds=("resource_context", "natural_context"),
         label_keywords=("雲海保線所", "能高越嶺道", "雲海"),
@@ -2380,11 +2439,11 @@ def _build_briefing_html(
         number="04",
         eyebrow="查證邊界",
         title="最後才看資料能信到哪裡",
-        body="來源追溯、缺口與資料新舊放在最後，但不可省略；Scout AI 必須揭露缺資料，不能把缺資料當安全。",
+        body="來源追溯、缺口與資料新舊放在最後，但不可省略；缺資料就保守說明，不能把缺資料當安全。",
         bullets=[
-            "簡報模式給隊伍看，資料模式給工作人員查",
+            "隊伍先看行程，工作人員再查來源",
             "行前資料不等於現地安全結論",
-            "完整來源與收集線索保留可追溯",
+            "完整來源與待補資料保留可追溯",
         ],
         context_kinds=("route_overview", "visual_context"),
         label_keywords=("導覽圖", "能高越嶺道"),
@@ -5702,9 +5761,9 @@ def _build_briefing_html(
   <header class="hero" id="top">
     {hero_media}
     <div class="wrap">
-      <p class="eyebrow">Scout 行前路線簡報</p>
-      <h1>{_h(route_label)}登山活動簡報</h1>
-      <p class="hero-copy">先看山、再看路，最後才看資料來源。這份簡報把路線節奏、沿途亮點與 3 分鐘觀察點放在前面，讓隊伍先建立共同畫面。</p>
+      <p class="eyebrow">Scout 行前路線說明</p>
+      <h1>{_h(route_label)}行前路線說明</h1>
+      <p class="hero-copy">先看山、再看路，最後才看資料來源。這份行前說明把路線節奏、沿途亮點與 3 分鐘觀察點放在前面，讓隊伍先建立共同畫面。</p>
       <div class="meta-row" aria-label="route summary">
         <span class="pill">路線距離候選 {_h(route_distance_km)}</span>
         <span class="pill">脈絡點 {_h(point_count)}</span>
@@ -5715,12 +5774,13 @@ def _build_briefing_html(
     </div>
   </header>
 
-  <nav aria-label="簡報導覽">
+  <nav aria-label="行前導覽">
     <div class="wrap">
       <a class="nav-primary" href="#days">天數結論</a>
+      <a class="nav-primary" href="#intelligence">路線脈絡</a>
       <a class="nav-detail" href="#status">現況</a>
-      <a class="nav-primary" href="#photo-essay">圖像導覽</a>
-      <a class="nav-primary" href="#visual-kit">素材板</a>
+      <a class="nav-primary" href="#photo-essay">照片路線</a>
+      <a class="nav-primary" href="#visual-kit">照片地圖</a>
       <a class="nav-primary" href="#visual-story">四幕導覽</a>
       <a class="nav-detail" href="#visual-anchors">照片點</a>
       <a class="nav-detail" href="#story-wall">故事牆</a>
@@ -5738,18 +5798,18 @@ def _build_briefing_html(
         <b data-active-section-label>天數結論</b>
         <small data-active-section-count>1 / 6</small>
       </span>
-      <span class="presenter-controls" aria-label="簡報章節控制">
+      <span class="presenter-controls" aria-label="行前章節控制">
         <button class="presenter-button" type="button" data-presenter-step="-1" aria-label="上一章"><span class="presenter-icon prev" aria-hidden="true"></span></button>
         <button class="presenter-button" type="button" data-presenter-step="1" aria-label="下一章"><span class="presenter-icon next" aria-hidden="true"></span></button>
       </span>
       <span class="mode-switch" aria-label="顯示模式">
-        <button class="mode-button" type="button" data-briefing-mode="briefing" aria-pressed="true">簡報</button>
+        <button class="mode-button" type="button" data-briefing-mode="briefing" aria-pressed="true">導覽</button>
         <button class="mode-button" type="button" data-briefing-mode="data" aria-pressed="false">資料</button>
       </span>
     </div>
   </nav>
 
-  <div class="mobile-presenter-dock" aria-label="行動簡報章節控制">
+  <div class="mobile-presenter-dock" aria-label="行動行前章節控制">
     <button class="presenter-button" type="button" data-presenter-step="-1" aria-label="上一章"><span class="presenter-icon prev" aria-hidden="true"></span></button>
     <span class="mobile-presenter-status" aria-live="polite">
       <span>目前章節</span>
@@ -5762,6 +5822,20 @@ def _build_briefing_html(
   {visual_agenda}
 
   <main class="wrap">
+    <section class="slide" id="intelligence">
+      <div class="slide-inner">
+        <div class="slide-head">
+          <div>
+            <p class="kicker">路線脈絡</p>
+            <h2>先看這趟路有哪些必須提醒的點</h2>
+          </div>
+          <div class="stamp">行前<br>脈絡</div>
+        </div>
+        <p class="lead">這份行前說明把官方路況、山屋與地形，沿途地名、自然與季節線索，以及隊伍走過後的回顧分開看。目的只有一件事：讓領隊知道哪些點要講、哪些點要查、哪些點不能停。</p>
+        {route_context_intelligence_panel}
+      </div>
+    </section>
+
     <section class="slide" id="days">
       <div class="slide-inner">
         <div class="slide-head">
@@ -5787,12 +5861,12 @@ def _build_briefing_html(
       <div class="slide-inner">
         <div class="slide-head">
           <div>
-            <p class="kicker">圖像導覽</p>
+            <p class="kicker">照片路線</p>
             <h2>先用一組畫面講完這趟路</h2>
           </div>
-          <div class="stamp">圖像<br>導覽</div>
+          <div class="stamp">照片<br>路線</div>
         </div>
-        <p class="lead">把照片從附件改成簡報主軸：先看路線氣質，再看山屋、展望、日出與導覽圖。這些畫面只協助行前理解，正式安全判斷仍回到天氣、路況與隊伍狀態。</p>
+        <p class="lead">先看這趟路的山屋、展望、日出、稜線與導覽圖，再把每張照片對回行程段落。這些畫面只協助行前理解，正式安全判斷仍回到天氣、路況與隊伍狀態。</p>
         {photo_essay}
         {visual_contact_sheet}
         {visual_readiness_panel}
@@ -5803,12 +5877,12 @@ def _build_briefing_html(
       <div class="slide-inner">
         <div class="slide-head">
           <div>
-            <p class="kicker">簡報素材板</p>
-            <h2>每張圖都要負責一個行前判斷</h2>
+            <p class="kicker">路線照片與地圖</p>
+            <h2>先看入山、宿點、稜線、短停與天候</h2>
           </div>
-          <div class="stamp">素材<br>編排</div>
+          <div class="stamp">行程<br>畫面</div>
         </div>
-        <p class="lead">這一頁把圖片從「附件」改成「講者素材」：開場、路線圖、宿點、地形、短停與天候季節各自負責一個行前問題。缺圖就明確列為採圖缺口，不用文字假裝已經看見。</p>
+        <p class="lead">行前先用路線總覽確認走向，再用宿點、稜線、短停與天候照片確認每一段要提醒隊伍的事。缺少照片或地圖的段落，出發前列入補查，不能用想像代替現地資訊。</p>
         {visual_kit}
       </div>
     </section>
@@ -5817,12 +5891,12 @@ def _build_briefing_html(
       <div class="slide-inner">
         <div class="slide-head">
           <div>
-            <p class="kicker">四幕導覽</p>
-            <h2>把活動講成可以被記住的四幕</h2>
+            <p class="kicker">四段路線</p>
+            <h2>按行程順序看入山、宿點、稜線與短停</h2>
           </div>
-          <div class="stamp">四幕<br>導覽</div>
+          <div class="stamp">路線<br>順序</div>
         </div>
-        <p class="lead">這一頁把照片從素材清單拉回活動語境：入山、宿點、高山段與短停觀察。每一幕只回答一件事：隊伍現在要記住什麼。</p>
+        <p class="lead">隊伍先按行程順序看四段路：從起登與路線總覽，到宿點與補給，再到高山段通過策略，最後看哪些點只適合短暫觀察。</p>
         {visual_story_arc}
       </div>
     </section>
@@ -5832,7 +5906,7 @@ def _build_briefing_html(
         <div class="slide-head">
           <div>
             <p class="kicker">照片路標</p>
-            <h2>把照片綁到路線點與簡報段落</h2>
+            <h2>把照片對回路線點與行程段落</h2>
           </div>
         </div>
         <p class="lead">同一張照片如果沒有位置脈絡，只是裝飾；這裡把圖片註記對到路線點、住宿節點、稜線展望或路線總覽，讓隊伍知道每張圖該支撐哪一段討論。</p>
@@ -5849,7 +5923,7 @@ def _build_briefing_html(
           </div>
           <div class="stamp">故事<br>導覽</div>
         </div>
-        <p class="lead">把同一批行前資料翻成活動簡報語言：每一層只留一張主畫面、一句提醒，以及現地可以問隊伍的問題。</p>
+        <p class="lead">同一批行前資料要回到路段、提醒與現地提問：每一層只留一張主畫面、一句提醒，以及現地可以問隊伍的問題。</p>
         {story_wall}
       </div>
     </section>
@@ -5864,8 +5938,7 @@ def _build_briefing_html(
             <h2>先看來源現況，再排行程</h2>
           </div>
         </div>
-        <p class="lead">這份簡報由 workspace cache 與 operator-approved source collection 組成。Scout AI 回答時應優先揭露來源可用性、缺口與 stale risk，而不是把缺資料解讀成安全。</p>
-        <p class="mode-note">這個區塊預設只在資料模式顯示。</p>
+        <p class="lead">行前資料只能支撐目前的路線討論；出發前仍要重新確認官方路況、山屋、天氣、入園與隊伍狀態。缺資料時要明確列為待查，不可當成安全。</p>
         {source_health_panel}
       </div>
     </section>
@@ -5908,8 +5981,8 @@ def _build_briefing_html(
             <h2>把路線拆成六個脈絡層</h2>
           </div>
         </div>
-        <p class="lead">這個章節對應你的提示詞：歷史層、文化層、自然層、地形層、季節層與觀察點。每張卡只引用已整理進行前包的資料。</p>
-        <p class="deck-hint">簡報節奏：每次只講一層脈絡，避免把六層資料一次塞滿畫面。</p>
+        <p class="lead">這個章節把路線拆成六個行前面向：歷史、文化、自然、地形、季節與觀察點。每張卡只講這趟路上真正需要提醒的內容。</p>
+        <p class="deck-hint">建議一次只看一層脈絡，先抓路段與現地提醒，再回頭查來源。</p>
         <div class="briefing-deck layers" aria-label="六個路線脈絡層">{layer_cards}</div>
       </div>
     </section>
@@ -5918,11 +5991,11 @@ def _build_briefing_html(
       <div class="slide-inner">
         <div class="slide-head">
           <div>
-            <p class="kicker">Scout 自有脈絡</p>
+            <p class="kicker">隊伍回顧</p>
             <h2>把完成旅程變成下一次的路線脈絡</h2>
           </div>
         </div>
-        <p class="lead">公開來源回答外界如何描述這條路線；Scout 回顧回答實際走過後，這條路對這個隊伍代表什麼。未審核的回顧只作內部線索，公開前要再確認。</p>
+        <p class="lead">公開來源回答外界如何描述這條路線；隊伍回顧回答實際走過後，哪些地方消耗時間、哪些地方值得提醒、哪些地方下次要提前查清楚。未審核的回顧只作內部線索，公開前要再確認。</p>
         {p2_cards}
       </div>
     </section>
@@ -5935,7 +6008,7 @@ def _build_briefing_html(
             <h2>把主要點串成行前敘事線</h2>
           </div>
         </div>
-        <p class="lead">若路線距離可用，點位會依距離排序；否則依行前重要性與標籤排序。Scout 不能用這條敘事線取代導航或安全判斷。</p>
+        <p class="lead">若路線距離可用，點位會依距離排序；否則依行前重要性與標籤排序。這條敘事線只幫助行前討論，不能取代導航或安全判斷。</p>
         <p class="deck-hint">路線敘事節奏：一次看一個節點，先抓距離與共同畫面，再講現地提醒。</p>
         <div class="storyline-rail" aria-label="路線敘事節點">{_briefing_story_steps(route_points[:12], media_manifest)}</div>
       </div>
@@ -5952,7 +6025,7 @@ def _build_briefing_html(
           </div>
           <div class="stamp">非停留<br>授權</div>
         </div>
-        <p class="lead">3 分鐘觀察點必須再交給 contextual permission 檢查：當下天氣、能見度、地形暴露、隊伍間距、疲勞與撤退時間不通過時，Scout 應回答快速通過或不要停留。</p>
+        <p class="lead">3 分鐘觀察點仍要看現地條件：當下天氣、能見度、地形暴露、隊伍間距、疲勞與撤退時間不通過時，必須快速通過或不要停留。</p>
         <p class="deck-hint">短停節奏：一次只討論一個點，先看畫面，再看觀察重點、隊伍提問與離開條件。</p>
         <div class="briefing-deck stop-deck" aria-label="三分鐘觀察點">{stop_cards}</div>
       </div>
@@ -5966,7 +6039,7 @@ def _build_briefing_html(
             <h2>風險、缺口與人工審查</h2>
           </div>
         </div>
-        <p class="lead">這個區塊只做行前審查提醒。簡報模式先講行動策略；資料模式才展開候選點、邊界與資料缺口。</p>
+        <p class="lead">這個區塊只做行前審查提醒。先講通過策略，再展開候選點、離開條件與資料缺口。</p>
         <div class="risk-review-grid">{risk_cards}</div>
       </div>
     </section>
@@ -5991,23 +6064,23 @@ def _build_briefing_html(
         <div class="slide-head">
           <div>
             <p class="kicker">來源追溯</p>
-            <h2>這份簡報可以信任到什麼程度？</h2>
+            <h2>這份行前資料可以支撐哪些討論？</h2>
           </div>
         </div>
         <p class="lead">先看資料能支撐哪些結論，再看完整來源追溯。領隊要能看懂哪些內容已整理好、哪些地方還要回頭確認。</p>
         {source_tier_spine}
         {source_trust_panel}
-        <p class="mode-note">完整來源表、收集線索與機器可讀邊界保留在資料模式。</p>
+        <p class="mode-note">完整來源表與待補資料保留給領隊和工作人員查核。</p>
         <details class="source-details">
-          <summary>展開完整來源表與 crawl seed</summary>
+          <summary>展開來源查核表與待補資料</summary>
           <table>
             <thead><tr><th>來源</th><th>層級</th><th>狀態</th><th>數量</th><th>用途</th></tr></thead>
             <tbody>{source_rows}</tbody>
           </table>
-          <h3>路線筆記 seed policy</h3>
-          <p>路線筆記只作為收集線索；簡報結論應來自公開來源收集結果，或已審核的 Scout 自有回顧。</p>
+          <h3>路線筆記使用原則</h3>
+          <p>路線筆記只作為待查資料；行前結論應來自可追溯來源，或已審核的隊伍回顧。</p>
           <ol>{seed_items}</ol>
-          <h3>Source tier catalog</h3>
+          <h3>來源層級說明</h3>
           <ul>{tier_items}</ul>
         </details>
       </div>
@@ -6510,16 +6583,16 @@ def _media_curation_summary(
     selected_count = len(images)
     if selected_count >= BRIEFING_TARGET_MIN_GALLERY_IMAGES and not missing_layers:
         status = "rich"
-        recommendation = "公開簡報已有足夠圖像素材，可優先調整敘事與章節節奏。"
+        recommendation = "路線總覽、宿點、地形、短停與天候都已有照片或地圖可對照。"
     elif selected_count >= len(BRIEFING_CONTEXT_LAYER_ORDER) and not missing_layers:
         status = "usable"
-        recommendation = "圖像已覆蓋主要脈絡層；若要更像活動簡報，建議補到 12 張以上。"
+        recommendation = "主要行程面向已有照片可對照；出發前再補關鍵路段細節。"
     elif selected_count > 0:
         status = "thin"
-        recommendation = "目前可出簡報，但缺少部分脈絡層圖片，畫面容易重複或偏資料化。"
+        recommendation = "目前只能對照部分行程段落；缺少的地名、自然環境或地形通過點，出發前要補查。"
     else:
         status = "missing"
-        recommendation = "缺少可追溯圖片，請先匯入 operator-approved P0/P1 圖片或已審核的 P2 照片。"
+        recommendation = "目前缺少可對照行程段落的照片或地圖；請先補官方照片、路線圖或已審核的隊伍照片。"
     visual_readiness = _media_visual_readiness_summary(
         status=status,
         selected_count=selected_count,
@@ -6563,10 +6636,10 @@ def _media_visual_readiness_summary(
         else 0
     )
     labels = {
-        "rich": "畫面充足",
-        "usable": "脈絡完整",
-        "thin": "畫面偏薄",
-        "missing": "缺少圖片",
+        "rich": "行程照片完整",
+        "usable": "主要路段已可對照",
+        "thin": "部分路段待補查",
+        "missing": "缺少行程照片",
     }
     gates = {
         "rich": "pass",
@@ -6576,12 +6649,12 @@ def _media_visual_readiness_summary(
     }
     next_actions = []
     if missing_layers:
-        missing_labels = "、".join(_context_layer_display_label(layer) for layer in missing_layers)
-        next_actions.append(f"補齊 {missing_labels} 的可追溯照片")
+        missing_labels = _trip_gap_summary(missing_layers)
+        next_actions.append(f"出發前補查：{missing_labels}的照片或地圖")
     if missing_image_count:
-        next_actions.append(f"再補 {missing_image_count} 張，讓公開簡報至少有 {BRIEFING_TARGET_MIN_GALLERY_IMAGES} 張圖")
+        next_actions.append("補查山屋、稜線、短停與天候對應路段")
     if not next_actions:
-        next_actions.append("圖像素材已可支撐公開簡報，下一步可調整章節節奏與講者提示")
+        next_actions.append("照片與地圖已可對照行程；下一步確認官方路況與天氣")
     return {
         "status": status,
         "label": labels.get(status, status),
@@ -6640,17 +6713,17 @@ def _visual_kit_slot_specs() -> list[dict[str, Any]]:
     return [
         {
             "slot_id": "route_cover",
-            "label": "開場主視覺",
-            "briefing_role": "先讓隊伍看見這趟路的氣質，建立共同方向感。",
-            "speaker_question": "這趟路給隊伍的第一個印象是什麼？",
+            "label": "入山與稜線遠景",
+            "briefing_role": "先讓隊伍看見入山後的高山景觀與行進方向。",
+            "speaker_question": "隊伍第一眼能否理解這趟路會進入哪種地形？",
             "context_layers": ("route_overview",),
             "context_kinds": ("route_overview",),
             "keywords": ("能高越嶺", "高山景觀", "稜線", "遠景"),
-            "missing_action": "補一張可公開的路線遠景或入口主視覺。",
+            "missing_action": "補一張可公開的入山口、稜線或高山遠景。",
         },
         {
             "slot_id": "route_map",
-            "label": "路線總覽圖",
+            "label": "路線全段走向圖",
             "briefing_role": "確認路線形狀、方向與主要節點，不讓隊伍只記得照片。",
             "speaker_question": "隊伍能不能用這張圖說出今天的主線方向？",
             "context_layers": ("route_overview",),
@@ -6660,7 +6733,7 @@ def _visual_kit_slot_specs() -> list[dict[str, Any]]:
         },
         {
             "slot_id": "lodging_nodes",
-            "label": "宿點與中繼節點",
+            "label": "宿點與中繼點",
             "briefing_role": "把山屋、保線所、補水或撤退節點先放進共同記憶。",
             "speaker_question": "晚到時，哪個節點會變成第一個重新決策點？",
             "context_layers": ("historical",),
@@ -6680,7 +6753,7 @@ def _visual_kit_slot_specs() -> list[dict[str, Any]]:
         },
         {
             "slot_id": "three_minute_stop",
-            "label": "3 分鐘觀察點",
+            "label": "短停觀察點",
             "briefing_role": "讓漂亮畫面轉成短停目的、站位與離開條件。",
             "speaker_question": "停 3 分鐘後，隊伍要帶走哪個判斷？",
             "context_layers": ("observation_point",),
@@ -6690,7 +6763,7 @@ def _visual_kit_slot_specs() -> list[dict[str, Any]]:
         },
         {
             "slot_id": "weather_season",
-            "label": "天候與季節畫面",
+            "label": "雲霧低溫與季節條件",
             "briefing_role": "把雲霧、雨季、低溫、芒草或林相變化連回時間壓力。",
             "speaker_question": "如果天氣提早變差，這張圖提醒我們哪個條件要重查？",
             "context_layers": ("seasonal", "natural"),
@@ -6758,6 +6831,45 @@ def _context_layer_display_label(layer: str) -> str:
         "observation_point": "觀察點",
     }
     return labels.get(layer, layer or "未分類")
+
+
+def _context_layer_trip_gap_label(layer: str) -> str:
+    labels = {
+        "route_overview": "路線走向",
+        "historical": "舊路與人為設施",
+        "cultural": "地名與文化線索",
+        "natural": "林相、溪流與植被",
+        "terrain": "稜線、坡面與風口",
+        "seasonal": "雲霧、低溫與季節條件",
+        "observation_point": "短停觀察點",
+    }
+    return labels.get(layer, layer or "未分類路段")
+
+
+def _context_layer_trip_gap_short_label(layer: str) -> str:
+    labels = {
+        "route_overview": "路線走向",
+        "historical": "舊路設施",
+        "cultural": "地名文化",
+        "natural": "林相溪流",
+        "terrain": "稜線坡面",
+        "seasonal": "天候季節",
+        "observation_point": "短停點",
+    }
+    return labels.get(layer, layer or "未分類")
+
+
+def _trip_gap_summary(layers: list[str], *, max_items: int = 3) -> str:
+    labels = [
+        _context_layer_trip_gap_short_label(str(layer))
+        for layer in layers
+        if str(layer).strip()
+    ]
+    if not labels:
+        return "無待補查面向"
+    if len(labels) > max_items:
+        return f"{'、'.join(labels[:max_items])}等 {len(labels)} 類"
+    return "、".join(labels)
 
 
 def _media_layer_counts(images: list[dict[str, Any]]) -> dict[str, int]:
@@ -6858,7 +6970,7 @@ def _inferred_media_section_anchor(text: str) -> dict[str, Any]:
         context_kind = "route_overview"
         reason = "caption_or_alt_indicates_route_level_context"
     else:
-        label = "路線視覺素材"
+        label = "路線照片"
         context_kind = "visual_context"
         reason = "media_available_without_route_point_match"
     return {
@@ -6911,7 +7023,7 @@ def _briefing_visual_agenda(
         },
         {
             "href": "#photo-essay",
-            "step": "02 / 圖像導覽",
+            "step": "02 / 照片路線",
             "title": "先看畫面",
             "body": "用照片建立共同記憶，再把住宿、展望、日出與導覽圖放回行程節奏。",
             "context_kinds": ("viewpoint_context", "natural_context", "route_overview"),
@@ -6945,11 +7057,11 @@ def _briefing_visual_agenda(
         for index, item in enumerate(agenda_items)
     )
     return f"""
-  <section class="wrap visual-agenda" aria-label="簡報視覺議程">
+  <section class="wrap visual-agenda" aria-label="行程導覽">
     <div class="visual-agenda-copy">
-      <p class="kicker">視覺議程</p>
-      <h2>先用四張圖抓住簡報順序</h2>
-      <p>這裡不是資料索引，而是帶隊伍進入簡報的入口：先講節奏，再看畫面，接著讀路線，最後才做行程審查。</p>
+      <p class="kicker">行程導覽</p>
+      <h2>先用四張圖抓住行程順序</h2>
+      <p>隊伍先看天數節奏，再看宿點與展望畫面，接著讀路線，最後確認出發前要重查的條件。</p>
     </div>
     <div class="visual-agenda-grid">
       {cards}
@@ -7033,9 +7145,9 @@ def _briefing_media_band(media_manifest: dict[str, Any]) -> str:
     if not images:
         return """
         <div class="media-gap">
-          <p class="kicker">圖像缺口</p>
+          <p class="kicker">行程照片缺口</p>
           <h2>目前缺少可呈現的路線照片</h2>
-          <p>這不是版型限制，而是還缺可追溯照片。請先匯入已核准的官方或可信來源圖片，或已審核的 Scout 自有照片；簡報會自動把可追溯圖片放進版面。</p>
+          <p>目前還缺可追溯路線照片。請先補官方或可信來源圖片，或已審核的隊伍照片。</p>
         </div>
         """
     primary = images[0]
@@ -7050,12 +7162,12 @@ def _briefing_media_band(media_manifest: dict[str, Any]) -> str:
           </figure>
           <div class="media-panel">
             <div>
-              <p class="kicker">照片導覽</p>
-              <h2>先用照片建立路線感</h2>
+              <p class="kicker">照片路線</p>
+              <h2>先看照片中的行進方向</h2>
               <p>第一眼先讓隊伍知道這不是抽象路線：有稜線、山屋、展望、導覽圖與需要人工審查的現地條件。</p>
             </div>
             <div class="status-cues" aria-label="照片導讀重點">
-              <div class="status-cue"><b>路線畫面</b>先看稜線與遠景，建立隊伍共同方向感。</div>
+              <div class="status-cue"><b>路線畫面</b>先看入山後的稜線、遠景與行進方向。</div>
               <div class="status-cue"><b>節點畫面</b>再看山屋、保線所與展望點，連回天數與停留策略。</div>
               <div class="status-cue"><b>安全邊界</b>照片只輔助行前理解；不能取代現地天氣、導航與領隊判斷。</div>
             </div>
@@ -7091,44 +7203,44 @@ def _briefing_visual_readiness_panel(media_manifest: dict[str, Any]) -> str:
     target_layers = int(
         readiness.get("target_context_layer_count") or len(BRIEFING_CONTEXT_LAYER_ORDER)
     )
-    missing_layers = [
-        _context_layer_display_label(str(layer))
+    missing_layer_keys = [
+        str(layer)
         for layer in readiness.get("missing_context_layers", [])
         if str(layer).strip()
     ]
-    missing_text = "、".join(missing_layers) if missing_layers else "脈絡完整"
+    missing_text = _trip_gap_summary(missing_layer_keys)
     actions = readiness.get("next_actions")
     if not isinstance(actions, list) or not actions:
-        actions = ["圖像素材已可支撐公開簡報"]
+        actions = ["照片與地圖已可對照行程；下一步確認官方路況與天氣"]
     action_chips = "".join(
         f"<span>{_h(str(action))}</span>"
         for action in actions[:3]
         if str(action).strip()
     )
     return f"""
-        <aside class="visual-readiness {state_class}" aria-label="圖像準備度">
+        <aside class="visual-readiness {state_class}" aria-label="出發前補查路段">
           <div>
-            <p class="kicker">圖像準備度</p>
-            <h3>{_h(str(readiness.get('label') or '畫面素材'))}</h3>
-            <p>{_h(str(readiness.get('recommendation') or '請補齊可追溯照片，讓簡報更像活動導覽。'))}</p>
+            <p class="kicker">出發前補查路段</p>
+            <h3>{_h(str(readiness.get('label') or '路線照片'))}</h3>
+            <p>{_h(str(readiness.get('recommendation') or '請補查能對照路線、宿點、地形與短停條件的照片或地圖。'))}</p>
             <div class="visual-readiness-actions">{action_chips}</div>
           </div>
-          <div class="visual-readiness-meter" aria-label="圖像素材檢查">
+          <div class="visual-readiness-meter" aria-label="出發前補查摘要">
             <div class="visual-readiness-metric">
-              <span>照片數</span>
+              <span>已對照</span>
               <b>{_h(selected)} / {_h(target_images)}</b>
             </div>
             <div class="visual-readiness-metric">
-              <span>脈絡層</span>
+              <span>行程面向</span>
               <b>{_h(covered_layers)} / {_h(target_layers)}</b>
             </div>
             <div class="visual-readiness-metric">
-              <span>缺口</span>
+              <span>待補查</span>
               <b>{_h(missing_text)}</b>
             </div>
             <div class="visual-readiness-metric">
-              <span>用途</span>
-              <b>行前簡報</b>
+              <span>下一步</span>
+              <b>出發前確認</b>
             </div>
           </div>
         </aside>
@@ -7140,9 +7252,9 @@ def _briefing_photo_essay(media_manifest: dict[str, Any]) -> str:
     if not images:
         return """
         <div class="media-gap">
-          <p class="kicker">圖像缺口</p>
-          <h3>目前沒有可組成圖像導覽的照片</h3>
-          <p>請先補官方或可信來源照片；若是 Scout 自有照片，必須保留來源、位置與人工審查狀態。</p>
+          <p class="kicker">行程照片缺口</p>
+          <h3>目前缺少可說明行程段落的照片</h3>
+          <p>請先補官方或可信來源照片；若是隊伍照片，必須保留來源、位置與人工審查狀態。</p>
         </div>
         """
     feature = images[0]
@@ -7164,7 +7276,7 @@ def _briefing_photo_essay(media_manifest: dict[str, Any]) -> str:
               {_briefing_media_source_chips(feature)}
             </figcaption>
           </figure>
-          <div class="photo-essay-grid" aria-label="路線照片導覽">
+          <div class="photo-essay-grid" aria-label="路線照片與行程段落">
             {cards}
           </div>
         </div>
@@ -7212,12 +7324,12 @@ def _briefing_visual_contact_sheet(media_manifest: dict[str, Any]) -> str:
             "<span>每張新增照片都要標註拍攝位置、來源頁與可公開狀態。</span>"
         )
     return f"""
-        <section class="visual-contact-sheet" aria-label="路線畫面索引">
+        <section class="visual-contact-sheet" aria-label="行程照片清單">
           <div class="visual-contact-copy">
-            <p class="kicker">畫面索引</p>
-            <h3>把可用圖片一次攤開，先看哪裡還薄。</h3>
+            <p class="kicker">行程照片清單</p>
+            <h3>按行程段落檢查哪些路段還缺照片。</h3>
             <p>這一格給工作人員和領隊快速檢查：是否只有漂亮遠景，還是已經有路線總覽、宿點、地形、季節與短停觀察的畫面。</p>
-            <div class="visual-shot-list" aria-label="下一輪採圖清單">
+            <div class="visual-shot-list" aria-label="待補照片清單">
               {shot_list}
             </div>
           </div>
@@ -7264,21 +7376,21 @@ def _briefing_visual_kit(media_manifest: dict[str, Any]) -> str:
     missing_count = int(visual_kit.get("missing_count") or max(0, slot_count - ready_count))
     cards = "\n".join(_briefing_visual_kit_card(slot) for slot in slots)
     status = (
-        "可以用畫面帶簡報，但仍要由領隊人工審查。"
+        "路線總覽、宿點、地形、短停與天候畫面都已對到行程段落。"
         if missing_count == 0
-        else "畫面還不完整，缺口會留在採圖清單，不升級成結論。"
+        else "有些行程段落還缺少可確認來源的照片或地圖，先列為出發前補查。"
     )
     return f"""
-        <div class="visual-kit-board" aria-label="簡報素材板">
+        <div class="visual-kit-board" aria-label="行前照片與地圖">
           <div class="visual-kit-summary">
             <div>
-              <p class="kicker">簡報素材</p>
-              <h3>不是增加裝飾圖，而是讓每張圖負責一個行前說明任務。</h3>
-              <p>{_h(status)} 這個素材板固定檢查開場、路線圖、宿點、地形、短停與天候季節，避免簡報只剩資料欄位。</p>
+              <p class="kicker">行程段落</p>
+              <h3>照片與地圖對應的行程段落</h3>
+              <p>{_h(status)} 領隊可依入山、路線走向、宿點、中高山地形、短停觀察與天候季節逐段檢查。</p>
             </div>
-            <div class="visual-kit-score" aria-label="素材板準備度">
+            <div class="visual-kit-score" aria-label="照片與地圖對應行程段落">
               <b>{_h(ready_count)} / {_h(slot_count)}</b>
-              <span>已配對簡報素材</span>
+              <span>已對應行程段落</span>
             </div>
           </div>
           <div class="visual-kit-grid">
@@ -7289,8 +7401,8 @@ def _briefing_visual_kit(media_manifest: dict[str, Any]) -> str:
 
 
 def _briefing_visual_kit_card(slot: dict[str, Any]) -> str:
-    label = _first_text(slot.get("label"), "簡報素材")
-    role = _first_text(slot.get("briefing_role"), "行前簡報素材")
+    label = _first_text(slot.get("label"), "行程畫面")
+    role = _first_text(slot.get("briefing_role"), "行前路線照片")
     question = _first_text(slot.get("speaker_question"), "這張圖要支撐哪個行前判斷？")
     image = slot.get("image")
     if isinstance(image, dict) and image.get("url"):
@@ -7302,7 +7414,7 @@ def _briefing_visual_kit_card(slot: dict[str, Any]) -> str:
             f"<figcaption>{_h(caption)}{_briefing_media_source_chips(image)}</figcaption>"
             "</figure>"
         )
-        status_label = "已配對"
+        status_label = "已對應"
         card_class = "ready"
         missing = ""
     else:
@@ -7320,10 +7432,10 @@ def _briefing_visual_kit_card(slot: dict[str, Any]) -> str:
         f"<p class=\"visual-kit-role\">{_h(role)}</p>"
         f"<p class=\"visual-kit-question\">{_h(question)}</p>"
         f"{missing}"
-        "<div class=\"visual-kit-boundary\" aria-label=\"素材使用邊界\">"
-        "<span>行前候選素材</span>"
-        "<span>需人工審查</span>"
-        "<span>非安全真值</span>"
+        "<div class=\"visual-kit-boundary\" aria-label=\"照片行程邊界\">"
+        "<span>行程參考照片</span>"
+        "<span>領隊人工審查</span>"
+        "<span>出發前再確認</span>"
         "</div>"
         "</div>"
         "</article>"
@@ -7374,9 +7486,9 @@ def _briefing_visual_story_arc(media_manifest: dict[str, Any]) -> str:
     if not images:
         return """
         <div class="media-gap">
-          <p class="kicker">視覺故事缺口</p>
-          <h3>目前還不能組成四幕式活動簡報</h3>
-          <p>請先匯入已核准來源照片，或有來源紀錄的 Scout 自有照片。</p>
+          <p class="kicker">路線照片缺口</p>
+          <h3>目前缺少足夠的路線照片</h3>
+          <p>請先補齊起登、宿點、稜線、短停與天候相關照片，讓領隊能看圖確認行程重點。</p>
         </div>
         """
     story_steps = [
@@ -7421,21 +7533,21 @@ def _briefing_visual_story_arc(media_manifest: dict[str, Any]) -> str:
         if image:
             panels.append(_briefing_visual_story_panel(image, step))
     if not panels:
-        return '<p class="muted">目前沒有可呈現四幕導覽的圖片 metadata。</p>'
+        return '<p class="muted">目前沒有可呈現四段路線的照片。</p>'
     return f"""
         <div class="visual-story-arc">
           <div class="visual-story-lead">
             <div>
-              <h3>不是把照片貼上去，而是讓照片負責開場。</h3>
-              <p>公開簡報先用畫面建立活動感；來源與查核邊界留給資料頁確認。</p>
+              <h3>入山、宿點、稜線與短停先分開看。</h3>
+              <p>這四段畫面幫領隊確認隊伍會經過什麼地形、在哪裡休息、哪裡只能快速通過。</p>
             </div>
             <div class="visual-story-stat">
               <span>可用路線圖像</span>
               <b>{_h(len(images))}</b>
-              <p>最多保留 {_h(BRIEFING_MEDIA_GALLERY_LIMIT)} 張，讓章節依歷史、自然、地形與觀察點取用。</p>
+              <p>優先使用能對到路段、宿點、地形、天候或短停條件的照片。</p>
             </div>
           </div>
-          <div class="visual-story-grid" aria-label="四幕式活動簡報">
+          <div class="visual-story-grid" aria-label="四段路線照片">
             {"".join(panels)}
           </div>
         </div>
@@ -7467,7 +7579,7 @@ def _briefing_visual_anchor_cards(media_manifest: dict[str, Any]) -> str:
         if isinstance(image, dict) and image.get("url")
     ]
     if not images:
-        return '<p class="muted">目前沒有可建立照片路標的 media metadata。</p>'
+        return '<p class="muted">目前沒有可建立照片路標的照片資料。</p>'
     cards = []
     for image in images[:BRIEFING_VISUAL_ANCHOR_LIMIT]:
         anchor = image.get("presentation_anchor")
@@ -7581,7 +7693,7 @@ def _briefing_story_wall(
                 f"<p class=\"story-cue\">{_h(cue)}</p>"
                 f"<p class=\"story-point\"><b>可帶到</b>{_h(names)}</p>"
                 f"<p class=\"story-question\"><b>現場問</b>{_h(question)}</p>"
-                f"<details class=\"story-speaker-note\"><summary>講者備註</summary>"
+                f"<details class=\"story-speaker-note\"><summary>領隊備註</summary>"
                 f"<p>{_h(note)}</p></details>"
                 f"{chips}"
                 "</div>"
@@ -7597,7 +7709,7 @@ def _briefing_story_wall(
             f"<p class=\"story-cue\">{_h(cue)}</p>"
             f"<p class=\"story-point\"><b>可帶到</b>{_h(names)}</p>"
             f"<p class=\"story-question\"><b>現場問</b>{_h(question)}</p>"
-            f"<details class=\"story-speaker-note\"><summary>講者備註</summary>"
+            f"<details class=\"story-speaker-note\"><summary>領隊備註</summary>"
             f"<p>{_h(note)}</p></details>"
             f"{chips}"
             "</div>"
@@ -7647,7 +7759,7 @@ def _visual_anchor_kind_label(anchor_kind: Any) -> str:
         "route_point": "路線點照片",
         "route_section": "路線段照片",
     }
-    return labels.get(str(anchor_kind or ""), "照片素材")
+    return labels.get(str(anchor_kind or ""), "路線照片")
 
 
 def _briefing_photo_figure(image: dict[str, Any]) -> str:
@@ -7673,13 +7785,13 @@ def _briefing_media_source_chips(image: dict[str, Any]) -> str:
     if family:
         chips.append(("source-badge source-family", _source_family_display_label(family)))
     if image.get("candidate_only") is True:
-        chips.append(("source-badge boundary", "候選證據"))
+        chips.append(("source-badge boundary", "行前資料"))
     if image.get("requires_human_review") is True:
         chips.append(("source-badge review", "需人工審查"))
     if image.get("runtime_safety_truth") is False:
-        chips.append(("source-badge boundary", "非安全真值"))
+        chips.append(("source-badge boundary", "現地再確認"))
     return (
-        "<span class=\"source-chips\" aria-label=\"media provenance\">"
+        "<span class=\"source-chips\" aria-label=\"照片來源\">"
         + "".join(
             f"<span class=\"{_h(class_name)}\">{_h(label)}</span>"
             for class_name, label in chips
@@ -7693,9 +7805,9 @@ def _source_tier_display_label(tier: str) -> str:
     labels = {
         "P0": "官方來源",
         "P1": "可信參考",
-        "P2": "Scout 回顧",
+        "P2": "隊伍回顧",
     }
-    return labels.get(normalized, normalized or "未知來源")
+    return labels.get(normalized, "未知來源")
 
 
 def _source_family_display_label(family: str) -> str:
@@ -7705,7 +7817,7 @@ def _source_family_display_label(family: str) -> str:
         "official_status": "官方狀態",
         "official_forest_notice": "官方公告",
         "web_case_evidence": "網路參考",
-        "scout_owned_observation": "Scout 自有資料",
+        "scout_owned_observation": "隊伍回顧資料",
         "route_context": "路線脈絡",
         "historical_expansion": "歷史參考",
         "historical_map_baseline": "歷史地圖",
@@ -7720,7 +7832,7 @@ def _source_family_display_label(family: str) -> str:
         "community_route_seed": "路線種子",
         "community_or_reference_source": "參考來源",
     }
-    return labels.get(normalized, normalized.replace("_", " ")[:26])
+    return labels.get(normalized, "參考來源")
 
 
 def _source_tier_badge_class(tier: str) -> str:
@@ -7944,7 +8056,7 @@ def _briefing_route_map_atlas(
             <div class="map-atlas-copy">
               <p class="kicker">地圖深度</p>
               <h3>先用地圖建立廣度，再用節點建立深度。</h3>
-              <p>這一頁把官方圖、候選路線點與 Scout 自有回顧放在同一個閱讀框架：隊伍先知道整條路有多長、跨多遠、爬升到哪裡，再決定哪些段落要慢看、哪些段落要快通過。</p>
+              <p>這一頁把官方圖、路線點與隊伍回顧放在同一個閱讀框架：隊伍先知道整條路有多長、跨多遠、爬升到哪裡，再決定哪些段落要慢看、哪些段落要快通過。</p>
               <div class="map-atlas-stats" aria-label="地圖尺度摘要">
                 <div class="map-atlas-stat"><span>路線尺度</span><b>{_h(distance_label)}</b></div>
                 <div class="map-atlas-stat"><span>高度感</span><b>{_h(elevation_range)}</b></div>
@@ -7954,19 +8066,19 @@ def _briefing_route_map_atlas(
           </div>
           <div class="map-atlas-layers" aria-label="地圖證據三層">
             <article class="map-layer-card">
-              <b>P0 官方底圖</b>
+              <b>官方底圖</b>
               <p>官方圖、路線狀態、地形與天候資料負責建立基本方向，不能被山友敘事取代。</p>
-              <small>已載入 {_h(p0_count)} 類 P0 資料</small>
+              <small>已載入 {_h(p0_count)} 類官方資料</small>
             </article>
             <article class="map-layer-card">
-              <b>P1 擴展地圖</b>
-              <p>OSM/Overpass、社群路線與命名點負責補足山屋、展望、地名與地形脈絡。</p>
-              <small>已載入 {_h(p1_count)} 類 P1 資料；目前路線點：{_h(point_names)}</small>
+              <b>延伸地圖</b>
+              <p>延伸地圖、社群路線與命名點負責補足山屋、展望、地名與地形脈絡。</p>
+              <small>已載入 {_h(p1_count)} 類延伸資料；目前路線點：{_h(point_names)}</small>
             </article>
             <article class="map-layer-card">
-              <b>P2 走過的痕跡</b>
-              <p>Scout 自有 route notes 與完成旅程資料只當內部回顧，提醒下一次要補哪些停留與延誤線索。</p>
-              <small>已載入 {_h(p2_count)} 類 P2 資料，仍維持 candidate-only。</small>
+              <b>走過的痕跡</b>
+              <p>隊伍筆記與完成旅程資料只當內部回顧，提醒下一次要補哪些停留與延誤線索。</p>
+              <small>已載入 {_h(p2_count)} 類隊伍回顧資料，出發前仍需人工審查。</small>
             </article>
           </div>
         </section>
@@ -7979,7 +8091,7 @@ def _briefing_map_atlas_figure(image: dict[str, Any] | None) -> str:
             '<div class="media-gap map-atlas-figure" aria-label="缺官方路線圖">'
             "<p class=\"kicker\">地圖缺口</p>"
             "<h3>缺少可追溯的路線圖</h3>"
-            "<p>請補官方導覽圖、GPX 總覽圖或 operator-approved map image。</p>"
+            "<p>請補官方導覽圖、路線總覽圖或已審查的路線圖。</p>"
             "</div>"
         )
     caption = _first_text(image.get("caption"), image.get("alt"), "路線地圖")
@@ -8095,8 +8207,8 @@ def _briefing_route_visual(
             </div>
             {route_photo_strip}
             <details class="route-data-details">
-              <summary>資料邊界</summary>
-              <p>路線總覽來自 bounded point metadata，距離候選 {_h(route_distance_km)}；HTML 不嵌入 raw GPX。</p>
+              <summary>路線總覽使用提醒</summary>
+              <p>這張總覽只幫隊伍看節奏與距離候選 {_h(route_distance_km)}；現地仍要用離線地圖、定位紀錄與天氣路況確認。</p>
             </details>
           </div>
         </div>
@@ -8170,26 +8282,12 @@ def _briefing_profile_legend(profile_points: list[dict[str, Any]]) -> str:
 def _elevation_label(value: Any) -> str:
     elevation = _float_or_none(value)
     if elevation is None:
-        return "unknown"
+        return "待補"
     return f"{elevation:.0f} m"
 
 
 def _briefing_boundary_status(boundary: dict[str, Any]) -> str:
-    raw = "; ".join(
-        (
-            f"candidate_only={str(boundary.get('candidate_only')).lower()}",
-            f"runtime_safety_truth={str(boundary.get('runtime_safety_truth')).lower()}",
-            f"live_safety_api_called={str(boundary.get('safety_api_called')).lower()}",
-            f"source_fulltext_embedded={str(boundary.get('source_fulltext_embedded')).lower()}",
-        )
-    )
-    return (
-        "這份簡報只供行前討論與人工審查；它不會寫入 runtime safety，也不會取代現地判斷。"
-        "<details class=\"audit-details\">"
-        "<summary>顯示機器可讀邊界</summary>"
-        f"<code>{_h(raw)}</code>"
-        "</details>"
-    )
+    return "這份行前說明只供領隊和工作人員審查；現地仍要重新確認天氣、路況、隊伍狀態與撤退時間。"
 
 
 def _briefing_route_label(
@@ -8211,7 +8309,7 @@ def _briefing_route_label(
 def _route_distance_label(distance_m: Any) -> str:
     distance = _float_or_none(distance_m)
     if distance is None:
-        return "unknown"
+        return "待補"
     return f"{distance / 1000.0:.1f} km"
 
 
@@ -8289,19 +8387,39 @@ def _point_label(point: dict[str, Any]) -> str:
 def _point_distance_label(point: dict[str, Any]) -> str:
     distance = _float_or_none(point.get("distance_m"))
     if distance is None:
-        return "距離 unknown"
+        return "距離待補"
     return f"{distance / 1000.0:.1f}K"
 
 
 def _point_source_label(point: dict[str, Any]) -> str:
     parts = [
-        str(point.get("source_tier") or "unknown"),
-        str(point.get("evidence_type") or "candidate"),
+        _source_tier_display_label(str(point.get("source_tier") or "")),
+        _briefing_evidence_type_label(point.get("evidence_type")),
     ]
     families = _str_list(point.get("source_families"))
     if families:
-        parts.append("/".join(families[:3]))
+        parts.append("、".join(_source_family_display_label(family) for family in families[:3]))
     return " · ".join(part for part in parts if part)
+
+
+def _briefing_evidence_type_label(evidence_type: Any) -> str:
+    labels = {
+        "major_critical_point": "主要檢查點",
+        "named_point": "命名點",
+        "ocr_label": "地圖文字標籤",
+        "raster_label": "地圖標籤",
+        "web_case": "公開網頁資料",
+        "route_note_candidate": "隊伍路線筆記",
+        "trail_mileage_k_anchor": "里程標記",
+        "road_mileage_stone": "道路里程標記",
+        "import_manifest": "匯入記錄",
+        "route_summary": "路線摘要",
+        "candidate": "待審查資料",
+    }
+    normalized = str(evidence_type or "").strip()
+    if not normalized:
+        return "路線資料"
+    return labels.get(normalized, "路線資料")
 
 
 def _briefing_context_kind_label(context_kind: Any) -> str:
@@ -8320,7 +8438,7 @@ def _briefing_context_kind_label(context_kind: Any) -> str:
         "route_overview": "路線總覽",
         "visual_context": "視覺脈絡",
     }
-    return labels.get(str(context_kind or ""), str(context_kind or "路線脈絡"))
+    return labels.get(str(context_kind or ""), "路線脈絡")
 
 
 def _stop_advisory_text(point: dict[str, Any]) -> str:
@@ -8338,7 +8456,7 @@ def _stop_advisory_text(point: dict[str, Any]) -> str:
     }
     return mapping.get(
         advisory,
-        "此點是 route-context candidate，需人工審查後才能放入正式行前包。",
+        "此點只作行前討論線索，需由領隊確認後才能納入正式路線說明。",
     )
 
 
@@ -8430,7 +8548,7 @@ def _briefing_highlight_cards(
     media_manifest: dict[str, Any],
 ) -> str:
     if not points:
-        return '<p class="muted">No representative route context points yet.</p>'
+        return '<p class="muted">目前還沒有代表性路線脈絡點。</p>'
     images = [
         image
         for image in media_manifest.get("gallery_images", [])
@@ -8445,7 +8563,10 @@ def _briefing_highlight_cards(
                 f"<img loading=\"lazy\" src=\"{_h(image.get('url'))}\" "
                 f"alt=\"{_h(image.get('alt') or image.get('caption') or _point_label(point))}\">"
             )
-        layers = ", ".join(_str_list(point.get("sec6_layers"))) or "route_context"
+        layers = "、".join(
+            _context_layer_display_label(layer)
+            for layer in _str_list(point.get("sec6_layers"))
+        ) or "路線脈絡"
         source_detail = (
             f"脈絡層：{layers}; 來源：{_point_source_label(point)}; "
             f"觀察分數：{_briefing_observation_score(point)}"
@@ -8503,13 +8624,16 @@ def _sight_question_for_point(point: dict[str, Any]) -> str:
 
 def _briefing_point_cards(points: list[dict[str, Any]]) -> str:
     if not points:
-        return '<p class="muted">No representative route context points yet.</p>'
+        return '<p class="muted">目前還沒有代表性路線脈絡點。</p>'
     cards = []
     for point in points:
-        layers = ", ".join(_str_list(point.get("sec6_layers"))) or "route_context"
+        layers = "、".join(
+            _context_layer_display_label(layer)
+            for layer in _str_list(point.get("sec6_layers"))
+        ) or "路線脈絡"
         cards.append(
             "<article class=\"point\">"
-            f"<span class=\"tag\">{_h(point.get('source_tier') or 'unknown')}</span>"
+            f"<span class=\"tag\">{_h(_source_tier_display_label(str(point.get('source_tier') or '')))}</span>"
             f"<h3>{_h(_point_label(point))}</h3>"
             f"<p>{_h(_point_distance_label(point))} · {_h(_briefing_context_kind_label(point.get('context_kind')))}</p>"
             f"<p>{_h(_point_source_label(point))}</p>"
@@ -8684,7 +8808,7 @@ def _layer_talk_track(layer_id: str, names: str) -> dict[str, str]:
             "headline": "讓地名與使用方式保持尊重",
             "talk": f"用 {names} 說明地名、舊路徑與土地使用變遷，但不放大敏感位置。",
             "ask": "這個點需要公開精確位置嗎？還是只需要理解脈絡？",
-            "boundary": "文化敏感點只作 review candidate；未核准前不公開精確座標。",
+            "boundary": "文化敏感點只作待審查線索；未經領隊確認前不公開精確座標。",
         },
         "natural": {
             "headline": "把林相與季節變成觀察線索",
@@ -8696,13 +8820,13 @@ def _layer_talk_track(layer_id: str, names: str) -> dict[str, str]:
             "headline": "把地形說成通過策略",
             "talk": f"用 {names} 指出稜線、崩壁、風口、溪谷或固定繩段的通過重點。",
             "ask": "這一段要拉開距離、快速通過，還是可以短停觀察？",
-            "boundary": "地形層只能提示 review priority，不可直接宣稱可通行或不可通行。",
+            "boundary": "地形線索只能提醒優先審查；不能直接宣稱可通行或不可通行。",
         },
         "seasonal": {
             "headline": "把季節變成時間與裝備檢查",
             "talk": f"用 {names} 討論雲海、低溫、雨季、濕滑與日照時間如何改變節奏。",
             "ask": "現在季節條件是否要求提早出發、加衣、補水或縮短停留？",
-            "boundary": "季節線索需要搭配 CWA/weather evidence；缺資料時不能假設低風險。",
+            "boundary": "季節線索需要搭配官方天氣與現地觀察；缺資料時不能假設低風險。",
         },
         "observation_point": {
             "headline": "把值得停變成有條件的短停",
@@ -8717,7 +8841,7 @@ def _layer_talk_track(layer_id: str, names: str) -> dict[str, str]:
             "headline": "把候選脈絡轉成隊伍共同畫面",
             "talk": f"用 {names} 說明這層脈絡如何影響行程理解。",
             "ask": "這個脈絡是否需要在行前或現地重新確認？",
-            "boundary": "所有脈絡層都是 candidate-only，需要人工審查。",
+            "boundary": "所有脈絡都要在出發前再查證，不能直接變成出發或停留結論。",
         },
     )
 
@@ -8736,7 +8860,7 @@ def _briefing_p2_cards(source_manifest: dict[str, Any], media_manifest: dict[str
     )
     visual = ""
     if image:
-        caption = _first_text(image.get("caption"), image.get("alt"), "Scout 回顧需要綁回真實路線畫面")
+        caption = _first_text(image.get("caption"), image.get("alt"), "隊伍回顧需要對回真實路線畫面")
         visual = (
             "<figure class=\"p2-visual\">"
             f"<img loading=\"lazy\" src=\"{_h(image.get('url'))}\" "
@@ -8747,11 +8871,11 @@ def _briefing_p2_cards(source_manifest: dict[str, Any], media_manifest: dict[str
     else:
         visual = (
             "<div class=\"p2-visual p2-empty\">"
-            "目前缺少可和 Scout 回顧一起呈現的照片；請先匯入有來源紀錄的公開來源或 Scout 自有照片。"
+            "目前缺少可和隊伍回顧一起呈現的照片；請先補齊有來源紀錄的路線照片。"
             "</div>"
         )
     if not p2_sources:
-        source_cards = '<div class="p2-empty">目前還沒有載入 Scout 自有回顧資料。</div>'
+        source_cards = '<div class="p2-empty">目前還沒有載入隊伍回顧資料。</div>'
     else:
         cards = []
         for source in p2_sources:
@@ -8764,11 +8888,10 @@ def _briefing_p2_cards(source_manifest: dict[str, Any], media_manifest: dict[str
                 f"<b>{count}</b><span>回顧筆數</span>"
                 "</div>"
                 "<div>"
-                f"<span class=\"tag gold\">Scout 回顧</span>"
+                f"<span class=\"tag gold\">隊伍回顧</span>"
                 f"<h3>{_h(_briefing_source_name(source.get('source_kind')))}</h3>"
                 f"<p><b>目前狀態</b>：{_h(status)}。</p>"
-                f"<p><b>簡報用法</b>：{_h(role)}；先用來提醒下一次行前討論，不當作公開結論。</p>"
-                f"<details class=\"audit-details\"><summary>來源路徑</summary><code>{_h(source.get('source_path'))}</code></details>"
+                f"<p><b>行前用法</b>：{_h(role)}；先用來提醒下一次行前討論，不當作公開結論。</p>"
                 "</div>"
                 "</article>"
             )
@@ -8777,12 +8900,12 @@ def _briefing_p2_cards(source_manifest: dict[str, Any], media_manifest: dict[str
         <div class="p2-review-board">
           {visual}
           <div class="p2-panel">
-            <div class="p2-lens" aria-label="Scout 回顧判讀方式">
-              <span><b>先當回顧</b>把隊伍走過、延誤、停留與疑問整理成下一次 briefing 的線索。</span>
+            <div class="p2-lens" aria-label="隊伍回顧判讀方式">
+              <span><b>先當回顧</b>把隊伍走過、延誤、停留與疑問整理成下一次行前討論的線索。</span>
               <span><b>再找佐證</b>需要公開來源、地形、天氣或現地觀察交叉確認後，才進入結論層。</span>
-              <span><b>保留邊界</b>Scout 回顧是自有線索；公開前需人工審查，不取代現地安全判斷。</span>
+              <span><b>保留邊界</b>隊伍回顧是自有線索；公開前需人工審查，不取代現地安全判斷。</span>
             </div>
-            <div class="p2-source-stack" aria-label="Scout-owned review sources">
+            <div class="p2-source-stack" aria-label="隊伍回顧來源">
               {source_cards}
             </div>
           </div>
@@ -8836,7 +8959,10 @@ def _briefing_story_steps(
             previous_image_url=previous_image_url,
         )
         previous_image_url = str((image or {}).get("url") or "")
-        layers = ", ".join(_str_list(point.get("sec6_layers"))) or "route_context"
+        layers = "、".join(
+            _context_layer_display_label(layer)
+            for layer in _str_list(point.get("sec6_layers"))
+        ) or "路線脈絡"
         cards.append(
             "<article class=\"storyline-card\">"
             f"{_briefing_storyline_thumb(image, point)}"
@@ -8852,10 +8978,10 @@ def _briefing_story_steps(
             f"<b>{_h(_storyline_action_label(point))}</b>{_h(_stop_advisory_text(point))}"
             "</p>"
             "<details class=\"storyline-data-details\">"
-            "<summary>資料與邊界</summary>"
+            "<summary>行前提醒</summary>"
             f"<p>來源：{_h(_point_source_label(point))}</p>"
             f"<p>脈絡層：{_h(layers)}</p>"
-            "<p>candidate-only; runtime_safety_truth=false; human_review_required=true</p>"
+            "<p>這是行前討論線索；出發與停留仍由領隊依現地條件判斷。</p>"
             "</details>"
             "</article>"
         )
@@ -8961,6 +9087,7 @@ def _briefing_stop_cards(
     cards = []
     for index, point in enumerate(points):
         prompt = _observation_prompt_for_point(point)
+        review_note = _briefing_point_review_note(point)
         media = _briefing_field_media(
             _briefing_media_for_point(media_manifest, point, fallback_index=index),
             caption_prefix="短停畫面",
@@ -8984,13 +9111,25 @@ def _briefing_stop_cards(
             "</div>"
             "<details class=\"audit-details\">"
             "<summary>現地審查資訊</summary>"
-            f"<code>review_state={_h(point.get('review_state'))}; "
-            f"sensitivity={_h(point.get('sensitivity_level'))}; "
-            f"advisory={_h(point.get('stop_advisory_candidate'))}</code>"
+            f"<p>{_h(review_note)}</p>"
             "</details>"
             "</article>"
         )
     return "\n".join(cards)
+
+
+def _briefing_point_review_note(point: dict[str, Any]) -> str:
+    sensitivity = str(point.get("sensitivity_level") or "")
+    advisory = str(point.get("stop_advisory_candidate") or "")
+    if sensitivity in {"restricted", "cultural_review"}:
+        return (
+            "這個點含文化或敏感位置脈絡，只保留必要概念；未經領隊確認前不公開精確位置。"
+        )
+    if advisory == "pass_through_or_minimize_exposure":
+        return "這個點以快速通過為原則；若天氣、路幅或隊伍距離不佳，不安排停留。"
+    if advisory == "short_stop_requires_contextual_permission":
+        return "這個點最多只作短停觀察；是否停留要同時看天氣、地形暴露、隊伍間距與撤退時間。"
+    return "這個點只供行前討論；出發與停留仍由領隊依現地條件確認。"
 
 
 def _observation_prompt_for_point(point: dict[str, Any]) -> dict[str, str]:
@@ -9059,11 +9198,11 @@ def _briefing_risk_cards(
             "tag": "邊界提醒",
             "scene": "先看路線場景",
             "title": "先守住安全邊界",
-            "cue": "這份簡報只能提示人工審查，不會自動判定可通行或不可通行。",
+            "cue": "這份行前說明只能提示人工審查，不會自動判定可通行或不可通行。",
             "action_label": "通過前",
-            "action": "把任何模型文字都當成討論提示；現地安全仍以實際天氣、導航與領隊判斷為準。",
-            "operator_note": "簡報只建立共同語言，真正的出發或撤退決定要回到人工審查。",
-            "detail": "不得寫入 /safety/*，不得改 Phase 1 runtime safety，也不得把模型文字升級成 safety truth。",
+            "action": "把任何未審核文字都當成討論提示；現地安全仍以實際天氣、導航與領隊判斷為準。",
+            "operator_note": "行前說明只建立共同語言，真正的出發或撤退決定要回到人工審查。",
+            "detail": "不得把行前提醒當成現地安全結論；真正決定要回到天氣、路況、隊伍狀態與撤退時間。",
             "context_kinds": ("route_overview", "visual_context"),
             "label_keywords": ("導覽圖", "能高越嶺道"),
         },
@@ -9087,7 +9226,7 @@ def _briefing_risk_cards(
             "action_label": "停留前",
             "action": "只允許有目的的短停；任何一項條件不通過，就改成快速通過。",
             "operator_note": "先問現地條件，再決定是否停；不要先決定要拍照再找理由。",
-            "detail": "這些停留條件只作 pretrip briefing；現地仍需 contextual permission 檢查。",
+            "detail": "這些停留條件只供行前討論；現地仍需由領隊確認天氣、地形、隊伍距離與撤退時間。",
             "context_kinds": ("viewpoint_context", "resource_context"),
             "label_keywords": ("日出", "雲海", "展望"),
         },
@@ -9098,8 +9237,8 @@ def _briefing_risk_cards(
             "cue": "官方狀態、天氣、山屋、道路或地形資料缺失時，不要把缺資料解讀成安全。",
             "action_label": "回答方式",
             "action": "明確說資料缺口，請領隊補查；必要時把出發或撤退決定提升到人工審查。",
-            "operator_note": "這張卡提醒 Scout AI：不知道不是安全，而是需要補證據。",
-            "detail": "Scout AI 應回報資料缺口，而不是假裝安全。",
+            "operator_note": "缺資料不是安全，而是需要補查官方資訊與現地條件。",
+            "detail": "遇到資料缺口時，領隊要先補查，不可把未知當作可通行。",
             "context_kinds": ("route_overview", "resource_context"),
             "label_keywords": ("導覽圖", "天池山莊", "山屋"),
         },
@@ -9231,7 +9370,7 @@ def _briefing_schedule_cards(
             "duration": "3 天 2 夜",
             "decision": "觀察主案",
             "class_name": "slow",
-            "summary": "把歷史、文化、自然、地形、季節與 Scout 回顧拆開，不把所有觀察壓在第二天。",
+            "summary": "把歷史、文化、自然、地形、季節與隊伍回顧拆開，不把所有觀察壓在第二天。",
             "gate": "活動目標包含教學、攝影、隊伍節奏保守，或需要更多緩衝時間。",
             "days": [
                 (
@@ -9246,8 +9385,8 @@ def _briefing_schedule_cards(
                 ),
                 (
                     "D3",
-                    "回程整理與 Scout 回顧",
-                    "下山途中補足未看的歷史/自然點，並收集照片點、停留點、語音註記給下一次簡報。",
+                    "回程整理與隊伍回顧",
+                    "下山途中補足未看的歷史/自然點，並收集照片點、停留點、語音註記給下一次行前說明。",
                 ),
             ],
         },
@@ -9374,17 +9513,116 @@ def _briefing_source_tier_spine(source_manifest: dict[str, Any]) -> str:
         for tier in ("P0", "P1", "P2")
     )
     return f"""
-        <section class="source-tier-spine" aria-label="P0 P1 P2 來源脊柱">
+        <section class="source-tier-spine" aria-label="官方、延伸與隊伍回顧來源">
           <div>
-            <p class="kicker">P0 / P1 / P2 來源脊柱</p>
-            <h3>官方、擴展、自有回顧要分開看，不能混成一團可信度。</h3>
-            <p>這三欄是未來所有路線 briefing 的固定模板：P0 立底線，P1 補廣度，P2 補這支隊伍走過後的深度；全部都維持行前 candidate-only。</p>
+            <p class="kicker">來源可信度</p>
+            <h3>官方資料、延伸資料與隊伍回顧要分開看。</h3>
+            <p>官方資料用來確認路線與狀態，延伸資料補充地名、自然與文化脈絡，隊伍回顧只用來提醒這支隊伍走過後發現的問題。</p>
           </div>
           <div class="source-tier-grid">
             {cards}
           </div>
         </section>
         """
+
+
+def _briefing_route_context_intelligence_panel(
+    *,
+    source_manifest: dict[str, Any],
+    counts: dict[str, Any],
+    boundary: dict[str, Any],
+) -> str:
+    source_summary = _briefing_source_summary(source_manifest)
+    point_count = counts.get("route_context_point_count") or 0
+    loaded_count = source_summary.get("loaded_source_count") or 0
+    p0_count = source_summary.get("p0_count") or 0
+    p1_count = source_summary.get("p1_count") or 0
+    p2_count = source_summary.get("p2_count") or 0
+    cards = [
+        {
+            "style": "good",
+            "label": "路線脈絡點",
+            "metric": str(point_count),
+            "cue": "沿途地名、宿點、展望、風口、地形轉折與短停候選都要能對回這趟路。",
+            "action_label": "領隊先看",
+            "action": (
+                "哪些點要講清楚，哪些點要快速通過，哪些點出發前還要補查。"
+            ),
+        },
+        {
+            "style": "good",
+            "label": "六個行前面向",
+            "metric": "6",
+            "cue": "歷史、文化、自然、地形、季節與短停觀察分開看，避免把不同問題混在一起。",
+            "action_label": "行程順序",
+            "action": (
+                "先看整體路線，再看宿點、稜線、風險路段與可觀察但不一定能停留的點。"
+            ),
+        },
+        {
+            "style": "warn" if loaded_count == 0 else "good",
+            "label": "資料可信度",
+            "metric": f"官方 {p0_count} / 延伸 {p1_count} / 回顧 {p2_count}",
+            "cue": (
+                "官方資料確認狀態與路線，延伸資料補充背景，隊伍回顧只提醒曾經遇到的狀況。"
+            ),
+            "action_label": "審查規則",
+            "action": (
+                "隊伍回顧不能覆蓋官方狀態；出發前仍要重查最新公告與天氣。"
+            ),
+        },
+        {
+            "style": "boundary",
+            "label": "短停邊界",
+            "metric": "現地再判斷",
+            "cue": (
+                "值得看不等於可以停；風雨、路幅、坡度、隊伍間距和撤退時間都要通過才停。"
+            ),
+            "action_label": "不能做",
+            "action": (
+                "不能因為照片漂亮或地名有故事，就在暴露路段或時間不足時停留。"
+            ),
+        },
+    ]
+    return (
+        '<div class="source-health-board route-context-intelligence-board">'
+        '<div class="source-health-summary">'
+        '<span class="schedule-decision-tag">行前路線脈絡</span>'
+        "<h3>先把這趟路的重點拆清楚</h3>"
+        "<p>領隊先看路線脈絡、資料可信度與短停邊界；不在同一張頁面混成出發結論。</p>"
+        '<div class="source-health-score" aria-label="路線脈絡摘要">'
+        f"<span><b>{_h(point_count)}</b>脈絡點</span>"
+        f"<span><b>{_h(loaded_count)}</b>已載入來源</span>"
+        f"<span><b>{_h(p0_count)}</b>官方資料</span>"
+        "</div>"
+        "</div>"
+        '<div class="trust-board source-brief-grid source-path" '
+        'aria-label="路線脈絡檢查">'
+        + "\n".join(
+            "<article class=\"trust-card "
+            + _h(str(card["style"]))
+            + " source-brief-card\">"
+            + f"<span class=\"source-step-index\">{index:02d}</span>"
+            + "<div class=\"source-card-body\">"
+            + f"<span class=\"tag\">{_h(card['label'])}</span>"
+            + f"<b>{_h(card['metric'])}</b>"
+            + f"<p class=\"source-cue\">{_h(card['cue'])}</p>"
+            + f"<p class=\"source-action\"><b>{_h(card['action_label'])}</b>{_h(card['action'])}</p>"
+            + "</div>"
+            + "</article>"
+            for index, card in enumerate(cards, 1)
+        )
+        + "</div>"
+        "</div>"
+    )
+
+
+def _briefing_source_refresh_label(source_manifest: dict[str, Any]) -> str:
+    cache_policy = source_manifest.get("cache_policy")
+    if not isinstance(cache_policy, dict):
+        return "source_refresh=unknown"
+    status = str(cache_policy.get("live_source_refresh_status") or "unknown")
+    return f"source_refresh={status}"
 
 
 def _briefing_source_tier_card(source_manifest: dict[str, Any], tier: str) -> str:
@@ -9400,22 +9638,27 @@ def _briefing_source_tier_card(source_manifest: dict[str, Any], tier: str) -> st
         items = "<li>目前缺資料，不能假裝已查證。</li>"
     copy = {
         "P0": (
-            "官方底線",
-            "路線、狀態、地形、天候與救援等 baseline；簡報先用它建立基本可信度。",
+            "官方資料",
+            "官方路線、路況、天候、山屋、入園與救援資訊，用來建立行前查核底線。",
         ),
         "P1": (
-            "擴展脈絡",
-            "社群路線、OSM/Overpass、地名、地質、文化與文章補足深度和廣度。",
+            "延伸資料",
+            "沿線地名、地質、文化、自然與文章資料，用來補足這趟路的理解深度。",
         ),
         "P2": (
-            "Scout 回顧",
-            "完成旅程、route notes、停留、偏航與隊伍資料只作 Scout-local 回顧。",
+            "隊伍回顧",
+            "完成旅程、停留、偏航與隊伍狀況，只作下一次行前提醒，不覆蓋官方資訊。",
         ),
     }
     title, body = copy.get(tier, (tier, "來源資料"))
+    badge = {
+        "P0": "官方",
+        "P1": "延伸",
+        "P2": "回顧",
+    }.get(tier, title)
     return (
         f"<article class=\"source-tier-card {tier.lower()}\">"
-        f"<span>{_h(tier)}</span>"
+        f"<span>{_h(badge)}</span>"
         f"<b>{_h(title)}</b>"
         f"<p>{_h(body)}</p>"
         f"<small>已載入 {_h(count)} 類資料</small>"
@@ -9449,8 +9692,10 @@ def _briefing_source_health_panel(
     cache_policy = source_manifest.get("cache_policy")
     if not isinstance(cache_policy, dict):
         cache_policy = {}
-    live_fetch = bool(cache_policy.get("live_fetch_performed"))
+    refresh_status = str(cache_policy.get("live_source_refresh_status") or "unknown")
+    live_refreshed = refresh_status == "live_network_refreshed"
     refresh_required = bool(cache_policy.get("refresh_required_before_runtime_truth"))
+    network_required = cache_policy.get("network_refresh_required") is True
     source_report = [
         source
         for source in source_manifest.get("source_report", [])
@@ -9462,14 +9707,6 @@ def _briefing_source_health_panel(
         else "必要缺口：" + "、".join(required)
     )
     optional_label = "可補強：" + "、".join(optional) if optional else "無可補強缺口"
-    boundary_raw = "; ".join(
-        (
-            f"candidate_only={str(boundary.get('candidate_only')).lower()}",
-            f"runtime_safety_truth={str(boundary.get('runtime_safety_truth')).lower()}",
-            f"live_safety_api_called={str(boundary.get('safety_api_called')).lower()}",
-            f"source_fulltext_embedded={str(boundary.get('source_fulltext_embedded')).lower()}",
-        )
-    )
     source_status = "、".join(
         f"{_briefing_source_name(source.get('source_kind'))}:{_briefing_source_status_label(source.get('status'))}"
         for source in source_report
@@ -9477,24 +9714,24 @@ def _briefing_source_health_panel(
     return f"""
         <div class="source-health-board">
           <div class="source-health-summary">
-            <span class="schedule-decision-tag">operator data mode</span>
-            <h3>來源健康先讀，再給 Scout AI 回答</h3>
-            <p>這個區塊用來快速判斷：哪些資料可以支撐簡報，哪些只是 seed，哪些缺口需要在回答時明講。</p>
+            <span class="schedule-decision-tag">行前資料查核</span>
+            <h3>先看哪些行程資訊已可支撐討論</h3>
+            <p>這個區塊用來快速判斷：哪些資料可以支撐路線、宿點、天候與短停討論，哪些還要在出發前補查。</p>
             <div class="source-health-score" aria-label="來源摘要">
               <span><b>{_h(source_summary['loaded_source_count'])}</b>已載入來源</span>
-              <span><b>{_h(source_summary['p0_count'])}</b>P0 官方訊號</span>
-              <span><b>{_h(source_summary['p2_count'])}</b>P2 自有 seed</span>
+              <span><b>{_h(source_summary['p0_count'])}</b>官方資料</span>
+              <span><b>{_h(source_summary['p2_count'])}</b>隊伍回顧</span>
             </div>
           </div>
           <div class="source-health-grid">
             <article class="source-health-card">
               <div class="health-pill-row">
-                <span class="health-pill">P0 {_h(source_summary['p0_count'])}</span>
-                <span class="health-pill">P1 {_h(source_summary['p1_count'])}</span>
-                <span class="health-pill">P2 {_h(source_summary['p2_count'])}</span>
+                <span class="health-pill">官方 {_h(source_summary['p0_count'])}</span>
+                <span class="health-pill">延伸 {_h(source_summary['p1_count'])}</span>
+                <span class="health-pill">回顧 {_h(source_summary['p2_count'])}</span>
               </div>
               <h3>可回答範圍</h3>
-              <p>已載入來源可支撐行前脈絡、照片導覽、路線故事與候選停留點；仍不得當作 runtime safety truth。</p>
+              <p>已載入來源可支撐行前脈絡、行程照片、路線故事與候選短停點；現地安全仍要當天重新判斷。</p>
               <details class="source-health-details"><summary>來源狀態列表</summary><code>{_h(source_status)}</code></details>
             </article>
             <article class="source-health-card warning">
@@ -9508,21 +9745,20 @@ def _briefing_source_health_panel(
             </article>
             <article class="source-health-card">
               <div class="health-pill-row">
-                <span class="health-pill">{_h(str(cache_policy.get('mode') or 'cache_first'))}</span>
-                <span class="health-pill {'warning' if live_fetch else ''}">live fetch {_h('on' if live_fetch else 'off')}</span>
+                <span class="health-pill {'warning' if not live_refreshed else ''}">{_h('已完成來源更新' if live_refreshed else '缺 live 來源更新')}</span>
+                <span class="health-pill {'warning' if refresh_required else ''}">{_h('需要再次確認' if refresh_required else '仍需人工確認')}</span>
               </div>
-              <h3>快取策略</h3>
-              <p>這份簡報來自 workspace cache 與 operator-approved collection；不在 runtime 自動 live search。</p>
-              <small>{_h('runtime truth 前需 refresh' if refresh_required else '未標示 refresh requirement')}</small>
+              <h3>更新提醒</h3>
+              <p>有網路時必須重新取得官方路況、天氣、山屋、入園與交通資訊；不能用舊 cache 假裝已更新。</p>
+              <small>{_h('必須刷新來源' if network_required else '離線重產只能標成資料缺口')}</small>
             </article>
             <article class="source-health-card locked">
               <div class="health-pill-row">
-                <span class="health-pill">candidate-only</span>
-                <span class="health-pill">非安全真值</span>
+                <span class="health-pill">行前討論</span>
+                <span class="health-pill">現地再判斷</span>
               </div>
-              <h3>安全邊界</h3>
-              <p>這份簡報只供行前討論與人工審查；不寫入 /safety/*，也不取代現地判斷。</p>
-              <details class="source-health-details"><summary>機器可讀邊界</summary><code>{_h(boundary_raw)}</code></details>
+              <h3>人工審查</h3>
+              <p>這份資料只供領隊和工作人員行前討論；不能取代當天風雨、路況、體力與撤退時間判斷。</p>
             </article>
           </div>
         </div>
@@ -9569,7 +9805,7 @@ def _briefing_source_trust_panel(
     if len(briefing_sources) > 3:
         briefing_names += f" 等 {len(briefing_sources)} 類"
     if not briefing_names:
-        briefing_names = "尚未載入可支撐簡報的 P0/P1 來源"
+        briefing_names = "尚未載入可支撐行程說明的官方或延伸來源"
 
     seed_count = sum(int(source.get("loaded_count") or 0) for source in seed_sources)
     missing_text = (
@@ -9581,14 +9817,19 @@ def _briefing_source_trust_panel(
         missing_text += " 可補強：" + "、".join(
             _briefing_source_name(kind) for kind in optional_missing
         )
-    live_fetch = "沒有 live fetch" if cache_policy.get("live_fetch_performed") is False else "需確認 live fetch 狀態"
+    refresh_status = str(cache_policy.get("live_source_refresh_status") or "unknown")
+    live_refresh = (
+        "已記錄 live 來源更新"
+        if refresh_status == "live_network_refreshed"
+        else "缺 live 來源更新證據"
+    )
     refresh = (
-        "出發前仍需 refresh"
+        "出發前仍需更新"
         if cache_policy.get("refresh_required_before_runtime_truth")
-        else "未標示 refresh requirement"
+        else "仍需人工確認"
     )
     source_table_action = (
-        "切到資料模式可看完整來源表、crawl seed 與 source tier catalog。"
+        "展開來源查核表可看官方資料、延伸資料與待補線索。"
     )
 
     cards = [
@@ -9596,9 +9837,9 @@ def _briefing_source_trust_panel(
             "style": "good",
             "label": "信任摘要",
             "metric": str(len(briefing_sources)),
-            "cue": f"{briefing_names} 可支撐這份行前簡報。",
-            "action_label": "簡報時",
-            "action": "可以先引用這些來源建立共同畫面，但仍要在出發前 refresh 官方狀態。",
+            "cue": f"{briefing_names} 可支撐這份行前路線說明。",
+            "action_label": "領隊說明時",
+            "action": "可以先引用這些來源建立共同畫面，但仍要在出發前重查官方狀態。",
         },
         {
             "style": "warn" if required_missing or optional_missing else "good",
@@ -9612,7 +9853,7 @@ def _briefing_source_trust_panel(
             "style": "warn",
             "label": "可追溯資料",
             "metric": str(seed_count),
-            "cue": "路線筆記與 Scout 自有回顧可提出線索，但不能單獨形成結論。",
+            "cue": "路線筆記與隊伍回顧可提出線索，但不能單獨形成出發或停留結論。",
             "action_label": "要查證",
             "action": source_table_action,
         },
@@ -9620,9 +9861,9 @@ def _briefing_source_trust_panel(
             "style": "boundary",
             "label": "安全邊界",
             "metric": "行前",
-            "cue": f"{live_fetch}；{refresh}。",
+            "cue": f"{live_refresh}；{refresh}。",
             "action_label": "不可做",
-            "action": "不得把這份簡報、模型文字或 P2 筆記升級為現地安全真值。",
+            "action": "不得把行前資料或未審核回顧當成現地安全結論。",
         },
     ]
     return (
@@ -9658,7 +9899,7 @@ def _briefing_source_trust_visual(media_manifest: dict[str, Any]) -> str:
     if not image:
         return (
             '<div class="source-trust-visual">'
-            '<div class="source-trust-caption">目前沒有可用的來源代表圖；請切到資料模式查看來源表。</div>'
+            '<div class="source-trust-caption">目前沒有可用的來源代表圖；請展開來源查核表確認缺口。</div>'
             "</div>"
         )
     caption = _first_text(image.get("caption"), image.get("alt"), "來源代表圖")
@@ -9693,24 +9934,24 @@ def _briefing_source_status_label(status: Any) -> str:
         "loaded": "已載入",
         "missing": "尚缺",
         "ready": "可用",
-        "ready_from_p0_p1_sources": "已由 P0/P1 來源建立",
-        "metadata_only_fixture": "metadata fixture",
+        "ready_from_p0_p1_sources": "已由官方與延伸來源建立",
+        "metadata_only_fixture": "待補來源資料",
     }
     return labels.get(str(status or ""), str(status or "未知"))
 
 
 def _briefing_source_role_label(role: Any) -> str:
     labels = {
-        "candidate_input": "候選輸入",
+        "candidate_input": "待審查輸入",
         "source_discovery": "來源探索",
-        "context_seed": "脈絡 seed",
-        "provenance_only": "僅作 provenance",
+        "context_seed": "行前脈絡線索",
+        "provenance_only": "僅作來源追溯",
         "summary_reference": "摘要參照",
-        "workspace_baseline": "workspace 基礎資料",
-        "representative_candidate": "代表性候選",
-        "representative_candidate_after_review": "審查後代表性候選",
-        "primary_briefing_evidence": "主要簡報證據",
-        "seed_only": "僅作 seed",
+        "workspace_baseline": "行前基礎資料",
+        "representative_candidate": "代表性待審查資料",
+        "representative_candidate_after_review": "審查後代表資料",
+        "primary_briefing_evidence": "主要行前資料",
+        "seed_only": "僅作待查線索",
         "route_scope": "路線範圍",
     }
     return labels.get(str(role or ""), str(role or "未標示"))
@@ -9733,7 +9974,7 @@ def _briefing_source_rows(source_manifest: dict[str, Any]) -> str:
     rows = [
         "<tr>"
         f"<td>{_h(_briefing_source_name(source.get('source_kind')))}</td>"
-        f"<td>{_h(source.get('source_tier'))}</td>"
+        f"<td>{_h(_source_tier_display_label(str(source.get('source_tier') or '')))}</td>"
         f"<td>{_h(_briefing_source_status_label(source.get('status')))}</td>"
         f"<td>{_h(source.get('loaded_count'))}</td>"
         f"<td>{_h(_briefing_source_role_label(source.get('conclusion_role')))}</td>"
@@ -9748,9 +9989,9 @@ def _briefing_source_rows(source_manifest: dict[str, Any]) -> str:
 def _briefing_seed_items(crawl_seed_plan: dict[str, Any]) -> str:
     seeds = crawl_seed_plan.get("seeds", [])
     if not isinstance(seeds, list) or not seeds:
-        return "<li>目前沒有可用的 crawl seed。</li>"
+        return "<li>目前沒有可用的待查線索。</li>"
     return "\n".join(
-        f"<li>{_h(seed.get('query'))} <span>{_h(seed.get('seed_kind'))}</span></li>"
+        f"<li>{_h(seed.get('query'))} <span>待查線索</span></li>"
         for seed in seeds[:24]
         if isinstance(seed, dict)
     )
@@ -9758,8 +9999,8 @@ def _briefing_seed_items(crawl_seed_plan: dict[str, Any]) -> str:
 
 def _briefing_tier_items() -> str:
     return "\n".join(
-        f"<li><strong>{_h(source['tier'])}</strong> {_h(source['label'])} "
-        f"<span>{_h(source['role'])}</span></li>"
+        f"<li><strong>{_h(_source_tier_display_label(source['tier']))}</strong> "
+        f"{_h(source['label'])}</li>"
         for source in SOURCE_TIER_CATALOG
     )
 
@@ -9960,7 +10201,8 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 def _write_text(path: Path, payload: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_name(f".{path.name}.tmp")
-    temp_path.write_text(payload, encoding="utf-8")
+    normalized_payload = "\n".join(line.rstrip() for line in payload.splitlines())
+    temp_path.write_text(normalized_payload + "\n", encoding="utf-8")
     temp_path.replace(path)
 
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 from xml.etree.ElementTree import ParseError
 
 import yaml
@@ -127,6 +129,7 @@ from scout_runtime_physiologic_integration import (
     run_physio_integration_replay,
     write_physio_review_from_health_auto_export,
 )
+from scout_env import load_scout_env_files
 from scout_wearable_daily_home import build_daily_home_preview
 from scout_wearable_provider_transport import (
     write_provider_live_connector_reference,
@@ -161,6 +164,12 @@ DEFAULT_DEBUG_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.ht
 DEFAULT_SCOUT_DASHBOARD_PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
 DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
+DEFAULT_ROUTE_CONTEXT_BRIEFING_REGENERATION_REF = (
+    "outputs/scout_ai/route_context_briefing_regeneration.json"
+)
+ROUTE_CONTEXT_INTELLIGENCE_SPEC_REF = (
+    "docs/specs/scout-route-context-intelligence-implementation.md"
+)
 DEFAULT_OSM_CARTO_PALETTE = ROOT / "config" / "osm_carto_palette.yaml"
 
 
@@ -291,6 +300,21 @@ class PreTripPrepareLayersRequest(BaseModel):
 
 class PreTripPrepareLayersRunRequest(PreTripPrepareLayersRequest):
     confirm_prepare: bool = False
+
+
+class PreTripRouteContextBriefingRegenerateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm_regenerate: bool = False
+    operator_alias: str = Field(default="dashboard_operator", min_length=1)
+    route_keyword: str | None = Field(default=None, min_length=1)
+    include_route_notes: bool = True
+    limit_route_notes: int = Field(default=80, ge=0, le=500)
+    route_note_point_policy: Literal["seed_only", "promote_representative"] = (
+        "seed_only"
+    )
+    model: str | None = Field(default=None, min_length=1)
+    timeout_seconds: int = Field(default=45, ge=1, le=180)
 
 
 class WearableImportRequest(BaseModel):
@@ -700,12 +724,14 @@ def create_admin_app(
     *,
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
+    route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Scout Fusion Admin API")
     app.include_router(
         create_admin_router(
             incident_store_path=incident_store_path,
             pretrip_workspace_root=pretrip_workspace_root,
+            route_context_briefing_ai_runner=route_context_briefing_ai_runner,
         )
     )
     return app
@@ -715,7 +741,9 @@ def create_admin_router(
     *,
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
+    route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
 ) -> APIRouter:
+    load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
     resolved_incident_store_path = incident_store_path or _incident_store_from_env()
     resolved_wearable_inventory_root = wearable_inventory_root(_data_root_from_env())
@@ -2030,6 +2058,149 @@ def create_admin_router(
                 "X-Scout-Source-Ref": str(briefing_ref),
             },
         )
+
+    @router.post("/pretrip/projects/{project_id}/briefings/route-context/regenerate")
+    def pretrip_project_regenerate_route_context_briefing(
+        project_id: str,
+        request: PreTripRouteContextBriefingRegenerateRequest,
+    ) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if not request.confirm_regenerate:
+            raise HTTPException(
+                status_code=422,
+                detail="confirm_regenerate=true is required",
+            )
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(
+                status_code=422,
+                detail="route context briefing regeneration writes only workspace projects",
+            )
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+            if not isinstance(project, dict):
+                raise ValueError("project.json must contain an object")
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+
+        try:
+            model_name = _route_context_briefing_openrouter_model_name(request.model)
+            if route_context_briefing_ai_runner is None:
+                _ensure_route_context_briefing_model_credentials(model_name)
+            prompt = _route_context_briefing_regeneration_prompt(
+                project_id=project_id,
+                project_root=project_root,
+                project=project,
+                operator_alias=request.operator_alias,
+            )
+            model_output = _run_route_context_briefing_scout_ai(
+                prompt,
+                model_name=model_name,
+                timeout_seconds=request.timeout_seconds,
+                runner=route_context_briefing_ai_runner,
+            )
+            regenerated_at = _admin_utc_now()
+
+            from pretrip_route_context_collection import collect_pretrip_route_context
+
+            collection = collect_pretrip_route_context(
+                project_root,
+                include_route_notes=request.include_route_notes,
+                limit_route_notes=request.limit_route_notes,
+                route_note_point_policy=request.route_note_point_policy,
+                route_keyword=request.route_keyword,
+                write_briefing=True,
+                collected_at=regenerated_at,
+            )
+            regeneration_ref = str(
+                project.get("route_context_briefing_regeneration_ref")
+                or DEFAULT_ROUTE_CONTEXT_BRIEFING_REGENERATION_REF
+            )
+            regeneration_path = _safe_pretrip_project_ref_path(
+                project_root,
+                regeneration_ref,
+            )
+            if regeneration_path is None:
+                raise ValueError("unsafe route context briefing regeneration path")
+            model_output_hash = hashlib.sha256(
+                str(model_output).encode("utf-8")
+            ).hexdigest()
+            prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+            route_context_intelligence_contract = _route_context_intelligence_contract()
+            scout_ai_plan = _briefing_regeneration_json(model_output)
+            regeneration_payload = {
+                "artifact_kind": "scout_ai_route_context_briefing_regeneration",
+                "schema_version": "scout_dashboard_route_context_briefing_regeneration.v1",
+                "project_id": project_id,
+                "operator_alias": request.operator_alias,
+                "generated_at": regenerated_at,
+                "operator_triggered": True,
+                "scout_ai_required": True,
+                "external_model_call_performed": True,
+                "model_provider": "openrouter",
+                "model_name": model_name,
+                "prompt_sha256": prompt_hash,
+                "model_output_sha256": model_output_hash,
+                "model_output_preview": _briefing_regeneration_preview(model_output),
+                "route_context_intelligence_contract": route_context_intelligence_contract,
+                "scout_ai_route_context_intelligence_plan": scout_ai_plan,
+                "route_context_collection": collection,
+                "outputs": collection.get("outputs", {}),
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "phase1_runtime_mutation_allowed": False,
+                    "live_safety_automation_triggered": False,
+                    "outbound_transport_performed": False,
+                    "raw_prompt_embedded": False,
+                    "api_key_embedded": False,
+                    "workspace_file_mutation_allowed": True,
+                },
+            }
+            _write_admin_json(regeneration_path, regeneration_payload)
+            _update_admin_project_refs(
+                project_root / "project.json",
+                {
+                    "route_context_briefing_regeneration_ref": regeneration_ref,
+                    "route_context_briefing_regenerated_at": regenerated_at,
+                    "route_context_briefing_regenerated_by": "scout_ai_openrouter",
+                },
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except TimeoutError as exc:
+            raise HTTPException(status_code=504, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:  # pragma: no cover - defensive provider wrapper.
+            raise HTTPException(
+                status_code=502,
+                detail=f"Scout AI briefing regeneration failed: {type(exc).__name__}",
+            ) from exc
+
+        return {
+            "project_id": project_id,
+            "artifact_kind": "scout_ai_route_context_briefing_regeneration_result",
+            "status": "completed",
+            "operator_triggered": True,
+            "scout_ai": {
+                "provider": "openrouter",
+                "model_name": model_name,
+                "external_model_call_performed": True,
+                "model_output_sha256": model_output_hash,
+            },
+            "regeneration_ref": regeneration_ref,
+            "route_context_intelligence_contract": route_context_intelligence_contract,
+            "route_context_collection": collection,
+            "outputs": collection.get("outputs", {}),
+            "boundary": regeneration_payload["boundary"],
+        }
 
     @router.get("/pretrip/projects/{project_id}/terrain-overlays/{mode}.png")
     def pretrip_project_terrain_overlay(project_id: str, mode: str) -> Response:
@@ -4971,6 +5142,331 @@ def _load_admin_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"JSON object expected: {path}")
     return payload
+
+
+def _admin_utc_now() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _write_admin_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.tmp")
+    temp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temp_path.replace(path)
+
+
+def _update_admin_project_refs(project_path: Path, updates: dict[str, Any]) -> None:
+    project = _load_admin_json(project_path)
+    project.update({key: value for key, value in updates.items() if value is not None})
+    _write_admin_json(project_path, project)
+
+
+def _route_context_briefing_openrouter_model_name(requested: str | None) -> str:
+    selected = (
+        requested
+        or os.getenv("SCOUT_DASHBOARD_BRIEFING_MODEL")
+        or os.getenv("SCOUT_AI_ASSISTANT_MODEL")
+        or os.getenv("SCOUT_AI_OS_MODEL")
+        or "z-ai/glm-5.2"
+    )
+    model_name = _normalize_route_context_briefing_model_name(selected)
+    if not (
+        model_name.startswith("openrouter:")
+        or model_name.startswith("nvidia:")
+    ):
+        raise ValueError(
+            "route context briefing regeneration requires an OpenRouter or NVIDIA model"
+        )
+    return model_name
+
+
+def _normalize_route_context_briefing_model_name(value: str) -> str:
+    normalized = value.strip()
+    aliases = {
+        "gpt-4o-mini": "openrouter:openai/gpt-4o-mini",
+        "openai/gpt-4o-mini": "openrouter:openai/gpt-4o-mini",
+        "nemotron-super": "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "nvidia/nemotron-super": "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "nvidia/llama-3.3-nemotron-super-49b-v1.5": "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "glm-5.2": "nvidia:z-ai/glm-5.2",
+        "z-ai/glm-5.2": "nvidia:z-ai/glm-5.2",
+        "gemma-3-27b": "openrouter:google/gemma-3-27b-it",
+        "gemma3-27b": "openrouter:google/gemma-3-27b-it",
+        "google/gemma-3-27b-it": "openrouter:google/gemma-3-27b-it",
+    }
+    return aliases.get(normalized.casefold(), normalized)
+
+
+def _ensure_route_context_briefing_model_credentials(model_name: str) -> None:
+    if model_name.startswith("openrouter:"):
+        required_env = "OPENROUTER_API_KEY"
+    elif model_name.startswith("nvidia:"):
+        required_env = "NVIDIA_API_KEY"
+    else:
+        raise ValueError(
+            "route context briefing regeneration requires an OpenRouter or NVIDIA model"
+        )
+    if not os.getenv(required_env):
+        raise RuntimeError(
+            f"{required_env} is required for Scout AI briefing regeneration"
+        )
+
+
+def _run_route_context_briefing_scout_ai(
+    prompt: str,
+    *,
+    model_name: str,
+    timeout_seconds: int,
+    runner: Callable[[str, int], str] | None,
+) -> str:
+    if runner is not None:
+        return runner(prompt, timeout_seconds)
+
+    _ensure_scout_src_on_path()
+    from assistant_pydantic_provider import PydanticAIEnvRunner
+
+    return PydanticAIEnvRunner(
+        model_name=model_name,
+        workspace_model_max_tokens=_route_context_briefing_max_tokens(),
+    ).run(
+        prompt,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _ensure_scout_src_on_path() -> None:
+    src_path = ROOT / "src"
+    if not src_path.exists():
+        return
+    src_path_text = str(src_path)
+    if src_path_text not in sys.path:
+        sys.path.insert(0, src_path_text)
+
+
+def _route_context_briefing_max_tokens() -> int:
+    raw_value = os.getenv("SCOUT_DASHBOARD_BRIEFING_MAX_TOKENS", "2048").strip()
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        parsed = 2048
+    return max(512, min(parsed, 4096))
+
+
+def _route_context_briefing_regeneration_prompt(
+    *,
+    project_id: str,
+    project_root: Path,
+    project: dict[str, Any],
+    operator_alias: str,
+) -> str:
+    route_summary = _safe_pretrip_project_json_ref(
+        project_root,
+        project.get("route_summary_ref") or "normalized/routes/route_summary.json",
+    )
+    source_manifest = _safe_pretrip_project_json_ref(
+        project_root,
+        project.get("route_context_source_manifest_ref"),
+    )
+    media_manifest = _safe_pretrip_project_json_ref(
+        project_root,
+        project.get("route_context_media_manifest_ref"),
+    )
+    pack = _safe_pretrip_project_json_ref(
+        project_root,
+        project.get("route_context_pack_ref"),
+    )
+    source_report = source_manifest.get("source_report", [])
+    source_counts = {
+        "loaded": len(
+            [
+                item
+                for item in source_report
+                if isinstance(item, dict) and item.get("status") == "loaded"
+            ]
+        ),
+        "missing": len(
+            [
+                item
+                for item in source_report
+                if isinstance(item, dict) and item.get("status") == "missing"
+            ]
+        ),
+    }
+    workspace_summary = {
+        "project_id": project_id,
+        "operator_alias": operator_alias,
+        "implementation_spec_ref": ROUTE_CONTEXT_INTELLIGENCE_SPEC_REF,
+        "route_name": route_summary.get("route_name"),
+        "distance_m": route_summary.get("distance_m"),
+        "route_context_point_count": project.get("route_context_point_count")
+        or pack.get("point_count"),
+        "source_counts": source_counts,
+        "media_count": media_manifest.get("media_count"),
+        "visual_kit_ready_count": media_manifest.get("visual_kit_ready_count"),
+        "visual_kit_missing_count": media_manifest.get("visual_kit_missing_count"),
+        "briefing_ref": project.get("route_context_briefing_ref")
+        or DEFAULT_ROUTE_CONTEXT_BRIEFING_REF,
+        "route_context_pack_ref": project.get("route_context_pack_ref"),
+        "route_context_points_ref": project.get("route_context_points_ref"),
+        "route_context_source_manifest_ref": project.get(
+            "route_context_source_manifest_ref"
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    return (
+        "Scout AI task: operator-triggered Route Context Intelligence briefing "
+        "plan per docs/specs/scout-route-context-intelligence-implementation.md.\n"
+        "Return concise JSON with keys: route_context_intelligence_plan, "
+        "sec6_layer_coverage, source_tier_review, observation_stop_candidates, "
+        "missing_evidence, regeneration_notes.\n"
+        "Use the workspace cache path: route_context_pack.json, "
+        "route_context_points.json, source_manifest.json, route summary, map/risk "
+        "artifacts. Treat P0 as official baseline, P1 as expansion evidence, and "
+        "P2 as Scout-owned review seed.\n"
+        "Do not call tools or ask for additional evidence. The backend "
+        "deterministic compiler will read those workspace files after your JSON "
+        "plan; your role is to return the spec-aligned plan and explicit "
+        "evidence gaps from this summary.\n"
+        "Do not provide raw HTML. Do not include internal design rationale, "
+        "implementation prompts, or generator instructions as user-visible copy.\n"
+        "Keep all statements candidate-only. Do not authorize stop permission, "
+        "route open or closed decisions, live safety automation, outbound sends, "
+        "hardware control, or runtime safety truth mutation.\n"
+        f"Workspace summary: {json.dumps(workspace_summary, ensure_ascii=False, sort_keys=True)}"
+    )
+
+
+def _safe_pretrip_project_json_ref(project_root: Path, ref: Any) -> dict[str, Any]:
+    path = _safe_pretrip_project_ref_path(project_root, ref)
+    if path is None or not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _briefing_regeneration_preview(model_output: Any) -> str:
+    text = str(model_output or "").strip()
+    return text[:2000]
+
+
+def _briefing_regeneration_json(model_output: Any) -> dict[str, Any]:
+    text = str(model_output or "").strip()
+    parsed = _extract_briefing_regeneration_json(text)
+    if not isinstance(parsed, dict):
+        return {
+            "status": "unparsed",
+            "expected_shape": "route_context_intelligence_plan.v1",
+        }
+    return {
+        "status": "parsed",
+        "schema": "route_context_intelligence_plan.v1",
+        "payload": parsed,
+    }
+
+
+def _extract_briefing_regeneration_json(text: str) -> Any:
+    candidates = _fenced_json_candidates(text)
+    candidates.append(text)
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        payload = candidate.strip()
+        if not payload:
+            continue
+        try:
+            return json.loads(payload)
+        except json.JSONDecodeError:
+            pass
+        first_brace = payload.find("{")
+        if first_brace < 0:
+            continue
+        try:
+            parsed, _end = decoder.raw_decode(payload[first_brace:])
+        except json.JSONDecodeError:
+            continue
+        return parsed
+    return None
+
+
+def _fenced_json_candidates(text: str) -> list[str]:
+    candidates: list[str] = []
+    collecting = False
+    collected: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if collecting:
+                candidates.append("\n".join(collected).strip())
+                collected = []
+                collecting = False
+                continue
+            fence_language = stripped[3:].strip().lower()
+            if fence_language in {"", "json"}:
+                collecting = True
+                collected = []
+            continue
+        if collecting:
+            collected.append(line)
+    if collecting and collected:
+        candidates.append("\n".join(collected).strip())
+    return candidates
+
+
+def _route_context_intelligence_contract() -> dict[str, Any]:
+    return {
+        "implementation_spec_ref": ROUTE_CONTEXT_INTELLIGENCE_SPEC_REF,
+        "standard_alignment": (
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD Sec. 6 Route Context Intelligence"
+        ),
+        "generation_mode": "scout_ai_plan_plus_offline_workspace_compiler",
+        "scout_ai_role": (
+            "produce a concise route-context intelligence plan from workspace "
+            "cache; never generate raw briefing HTML"
+        ),
+        "deterministic_compiler": (
+            "pretrip_route_context_collection.collect_pretrip_route_context"
+        ),
+        "workspace_cache_order": [
+            "route_context_pack.json",
+            "route_context_points.json",
+            "source_manifest.json",
+            "route_summary/map/risk artifacts",
+        ],
+        "source_tier_policy": {
+            "P0": "official baseline/status/terrain/weather/hazard/history/culture",
+            "P1": "route context expansion/community/map/geology/cultural evidence",
+            "P2": "Scout-owned workspace evidence used as private review seed",
+        },
+        "sec6_layers": [
+            "historical",
+            "cultural",
+            "natural",
+            "terrain",
+            "seasonal",
+            "observation_point",
+        ],
+        "stop_policy": (
+            "worth observing is not stop permission; stop permission belongs to "
+            "Contextual Permissioning"
+        ),
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "live_safety_automation_allowed": False,
+            "raw_html_from_model_allowed": False,
+        },
+    }
 
 
 def _provider_live_output_dir(value: str | None, *, root: Path, default: Path) -> Path:

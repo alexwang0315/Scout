@@ -316,7 +316,7 @@ def test_p0_p1_source_collection_imports_operator_image_list_without_network(
     ]
     assert curation["missing_context_layers"] == []
     assert curation["visual_readiness"]["status"] == "usable"
-    assert curation["visual_readiness"]["label"] == "脈絡完整"
+    assert curation["visual_readiness"]["label"] == "主要路段已可對照"
     assert curation["visual_readiness"]["quality_gate"] == "warn_top_up_images"
     assert curation["visual_readiness"]["missing_image_count_to_target"] == 5
     assert media_manifest["visual_readiness"] == curation["visual_readiness"]
@@ -349,18 +349,21 @@ def test_p0_p1_source_collection_imports_operator_image_list_without_network(
     assert "可信參考" in briefing
     assert "photo-essay" in briefing
     assert "先用一組畫面講完這趟路" in briefing
-    assert "圖像準備度" in briefing
-    assert "照片數" in briefing
+    assert "出發前補查路段" in briefing
+    assert "已對照" in briefing
     assert "7 / 12" in briefing
-    assert "四幕導覽" in briefing
+    assert "四段路線" in briefing
     assert "visual-story-arc" in briefing
     assert media_manifest["visual_kit"]["slot_count"] == 6
     assert media_manifest["visual_kit_ready_count"] >= 5
     assert media_manifest["visual_kit_missing_count"] <= 1
-    assert "簡報素材板" in briefing
+    assert "路線照片與地圖" in briefing
     assert "visual-kit-board" in briefing
-    assert "每張圖都要負責一個行前判斷" in briefing
-    assert "不是增加裝飾圖，而是讓每張圖負責一個行前說明任務" in briefing
+    assert "照片與地圖對應的行程段落" in briefing
+    assert "入山與稜線遠景" in briefing
+    assert "領隊可依入山、路線走向、宿點、中高山地形、短停觀察與天候季節逐段檢查" in briefing
+    assert "不是增加裝飾圖，而是讓每張圖負責一個行前說明任務" not in briefing
+    assert "避免簡報只剩資料欄位" not in briefing
 
 
 def test_p0_p1_source_collection_imports_operator_image_html_without_network(
@@ -452,7 +455,7 @@ def test_p0_p1_source_collection_imports_operator_image_html_without_network(
     assert media_manifest["visual_readiness"] == curation["visual_readiness"]
     assert media_manifest["available_media_count"] == 7
     assert media_manifest["deduped_media_count"] == 7
-    assert "圖像準備度" in briefing
+    assert "出發前補查路段" in briefing
     assert "7 / 12" in briefing
     assert "奇萊南華路線總覽與行程節奏" in briefing
     assert "高山植被與林相變化" in briefing
