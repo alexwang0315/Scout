@@ -13,6 +13,7 @@ DEFAULT_LOCAL_MODEL_LABEL = "local FunctionModel"
 SCOUT_MODEL_ENV = "SCOUT_AI_OS_MODEL"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
+NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
 MODEL_TIMEOUT_ENV = "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS"
 MODEL_MAX_COST_ENV = "SCOUT_AI_OS_MODEL_MAX_COST_USD"
 MODEL_ESTIMATED_CALL_COST_ENV = "SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD"
@@ -48,6 +49,8 @@ class ModelPolicy(SchemaModel):
     source: ModelPolicySource
     requested_model: str | None = None
     pydantic_ai_model: str | None = None
+    provider: str | None = None
+    provider_model_id: str | None = None
     display_name: str
     requires_network: bool
     required_credential_env: list[str] = []
@@ -121,6 +124,8 @@ def resolve_model_policy(
         )
 
     normalized_model = _normalize_external_model(requested)
+    provider = _provider_for_model(normalized_model)
+    provider_model_id = _provider_model_id(normalized_model)
     required_credential_env = _required_credential_env(normalized_model)
     missing_credential_env = [
         name for name in required_credential_env if not env_map.get(name)
@@ -130,6 +135,8 @@ def resolve_model_policy(
         source=source,
         requested_model=requested,
         pydantic_ai_model=normalized_model,
+        provider=provider,
+        provider_model_id=provider_model_id,
         display_name=normalized_model,
         requires_network=True,
         required_credential_env=required_credential_env,
@@ -165,8 +172,11 @@ def _normalize_external_model(value: str) -> str:
         "openai/gpt-4o-mini": "openrouter:openai/gpt-4o-mini",
         "openai:gpt-4o-mini": "openai-chat:gpt-4o-mini",
         "openai-chat:gpt-4o-mini": "openai-chat:gpt-4o-mini",
-        "glm-5.2": "openrouter:z-ai/glm-5.2",
-        "z-ai/glm-5.2": "openrouter:z-ai/glm-5.2",
+        "nemotron-super": "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "nvidia/nemotron-super": "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "nvidia/llama-3.3-nemotron-super-49b-v1.5": "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "glm-5.2": "nvidia:z-ai/glm-5.2",
+        "z-ai/glm-5.2": "nvidia:z-ai/glm-5.2",
         "gemma-3-27b": "openrouter:google/gemma-3-27b-it",
         "gemma3-27b": "openrouter:google/gemma-3-27b-it",
         "google/gemma-3-27b-it": "openrouter:google/gemma-3-27b-it",
@@ -180,9 +190,31 @@ def _normalize_external_model(value: str) -> str:
 def _required_credential_env(model: str) -> list[str]:
     if model.startswith("openrouter:"):
         return [OPENROUTER_KEY_ENV]
+    if model.startswith("nvidia:"):
+        return [NVIDIA_KEY_ENV]
     if model.startswith("openai-chat:"):
         return [OPENAI_KEY_ENV]
     return []
+
+
+def _provider_for_model(model: str) -> str | None:
+    if model.startswith("openrouter:"):
+        return "openrouter"
+    if model.startswith("nvidia:"):
+        return "nvidia"
+    if model.startswith("openai-chat:"):
+        return "openai-chat"
+    return None
+
+
+def _provider_model_id(model: str) -> str:
+    if model.startswith("openrouter:"):
+        return model.removeprefix("openrouter:")
+    if model.startswith("nvidia:"):
+        return model.removeprefix("nvidia:")
+    if model.startswith("openai-chat:"):
+        return model.removeprefix("openai-chat:")
+    return model
 
 
 def _float_env(
@@ -308,6 +340,7 @@ __all__ = [
     "ModelPolicy",
     "ModelPolicyMode",
     "ModelPolicySource",
+    "NVIDIA_KEY_ENV",
     "OPENAI_KEY_ENV",
     "OPENROUTER_KEY_ENV",
     "SCOUT_MODEL_ENV",

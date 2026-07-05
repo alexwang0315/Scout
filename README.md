@@ -115,23 +115,29 @@ Scout pins Pi runtimes to Pydantic AI v2.4.0. The Scout provider keeps
 `end_strategy="early"` so model output cannot cause additional same-turn tool
 execution after the typed Scout output is produced.
 
-For OpenRouter, put `OPENROUTER_API_KEY=...` in the repo-local `.env` file.
+For NVIDIA-hosted models, put `NVIDIA_API_KEY=...` in the repo-local `.env`
+file and select `SCOUT_AI_OS_MODEL=z-ai/glm-5.2`. Scout routes that model to
+the NVIDIA OpenAI-compatible endpoint while preserving the provider model id
+`z-ai/glm-5.2` in the outbound request. For OpenRouter, put
+`OPENROUTER_API_KEY=...` in `.env` and use `openrouter:<vendor/model>`, for
+example `openrouter:z-ai/glm-5.2`.
 The smoke command loads `<repo-root>/.env` by default and reports only whether
 the key is present, never the key value. Model selection precedence is
-`--model`, then `SCOUT_AI_OS_MODEL`, then local `FunctionModel`. Scout's current
-OpenRouter default is `openrouter:z-ai/glm-5.2`; common aliases such as
-`glm-5.2`, `gpt-4o-mini`, and `gemma3-27b` normalize to model strings:
+`--model`, then `SCOUT_AI_OS_MODEL`, then local `FunctionModel`. Common aliases
+such as `nemotron-super`, `glm-5.2`, `gpt-4o-mini`, and `gemma3-27b` normalize
+to model strings:
 
 ```bash
-./venv/bin/scout-ai-os-pydantic-smoke --model glm-5.2
+./venv/bin/scout-ai-os-pydantic-smoke --model nemotron-super
+./venv/bin/scout-ai-os-pydantic-smoke --model z-ai/glm-5.2
 ```
 
 For direct OpenAI, use `openai-chat:<model>` or the compatibility alias
 `openai:<model>`. Scout normalizes `openai:` to `openai-chat:` because Pydantic
 AI v2 uses the OpenAI Responses API for the raw `openai:` model string, while
 Scout's current tool and typed-output contract is Chat-Completions-like. Direct
-OpenAI calls require `OPENAI_API_KEY`; OpenRouter calls require
-`OPENROUTER_API_KEY`.
+OpenAI calls require `OPENAI_API_KEY`; NVIDIA calls require `NVIDIA_API_KEY`;
+OpenRouter calls require `OPENROUTER_API_KEY`.
 
 Native WebSearch and WebFetch are not enabled implicitly. Operators can enable
 trusted no-per-query-approval research mode with:

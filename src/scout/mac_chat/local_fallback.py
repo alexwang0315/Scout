@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 
-DEFAULT_MAC_LOCAL_FALLBACK_MODEL = "openrouter:z-ai/glm-5.2"
+DEFAULT_MAC_LOCAL_FALLBACK_MODEL = "z-ai/glm-5.2"
 
 
 @dataclass
@@ -103,6 +103,10 @@ class PydanticAIV2MacLocalFallback:
             raise RuntimeError(
                 "OPENROUTER_API_KEY is required for Mac local Pydantic AI fallback"
             )
+        if _requires_nvidia_key(self.model_name) and not api_key:
+            raise RuntimeError(
+                "NVIDIA_API_KEY is required for Mac local Pydantic AI fallback"
+            )
 
         runner = PydanticAIEnvRunner(
             model_name=self.model_name,
@@ -168,11 +172,22 @@ def load_env_file(path: str | Path, *, override: bool = False) -> int:
 
 def _api_key_for_model(model_name: str, environ: Mapping[str, str]) -> str | None:
     if _requires_openrouter_key(model_name):
-        return environ.get("OPENROUTER_API_KEY") or environ.get("SCOUT_OPENROUTER_API_KEY")
+        return (
+            environ.get("SCOUT_AI_ASSISTANT_API_KEY")
+            or environ.get("OPENROUTER_API_KEY")
+            or environ.get("SCOUT_OPENROUTER_API_KEY")
+        )
+    if _requires_nvidia_key(model_name):
+        return (
+            environ.get("SCOUT_AI_ASSISTANT_API_KEY")
+            or environ.get("NVIDIA_API_KEY")
+            or environ.get("SCOUT_NVIDIA_API_KEY")
+        )
     if model_name.startswith("openai:") or model_name.startswith("openai/"):
         return environ.get("OPENAI_API_KEY")
     return (
         environ.get("SCOUT_AI_ASSISTANT_API_KEY")
+        or environ.get("NVIDIA_API_KEY")
         or environ.get("OPENROUTER_API_KEY")
         or environ.get("OPENAI_API_KEY")
     )
@@ -180,6 +195,14 @@ def _api_key_for_model(model_name: str, environ: Mapping[str, str]) -> str | Non
 
 def _requires_openrouter_key(model_name: str) -> bool:
     return model_name.startswith("openrouter:")
+
+
+def _requires_nvidia_key(model_name: str) -> bool:
+    normalized = model_name.strip().casefold()
+    return normalized.startswith("nvidia:") or normalized in {
+        "z-ai/glm-5.2",
+        "glm-5.2",
+    }
 
 
 def _int_from_environ(environ: Mapping[str, str], key: str, default: int) -> int:

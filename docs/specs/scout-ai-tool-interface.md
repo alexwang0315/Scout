@@ -15,8 +15,11 @@ tracks. Tool execution remains deterministic and read-only by default:
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
   continuation from executing extra same-turn tools after Scout has produced a
   typed output.
+- NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and
+  `NVIDIA_API_KEY`. Scout routes it to the OpenAI-compatible NVIDIA endpoint
+  while preserving `z-ai/glm-5.2` as the outbound model id.
 - OpenRouter model strings use the dedicated Pydantic AI OpenRouter provider
-  through the `openrouter:<vendor/model>` prefix.
+  through the `openrouter:<vendor/model>` prefix and `OPENROUTER_API_KEY`.
 - Direct OpenAI model strings must use `openai-chat:<model>`. If an operator
   supplies `openai:<model>`, Scout normalizes it to `openai-chat:<model>` to
   preserve the existing Chat-Completions-like Scout tool/output contract rather
@@ -30,8 +33,8 @@ tracks. Tool execution remains deterministic and read-only by default:
 - Provider-native MCP remains disabled until the matching Pydantic AI optional
   dependency and a Scout-owned connector boundary are added.
 - Environment secrets remain server-side. Tool artifacts, admin/debug payloads,
-  and logs may report missing credential env names such as `OPENROUTER_API_KEY`
-  or `OPENAI_API_KEY`, but never their values.
+  and logs may report missing credential env names such as `NVIDIA_API_KEY`,
+  `OPENROUTER_API_KEY`, or `OPENAI_API_KEY`, but never their values.
 
 Recent workspace tool coverage also includes route-context mileage and raster
 OCR evidence:

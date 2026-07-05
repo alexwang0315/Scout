@@ -2161,7 +2161,7 @@ class PydanticAIEnvRunner:
     ):
         self.model_name = model_name or os.getenv(
             "SCOUT_AI_ASSISTANT_MODEL",
-            "google/gemma-4-31b-it",
+            os.getenv("SCOUT_AI_OS_MODEL", "google/gemma-4-31b-it"),
         )
         self.base_url = base_url
         self.token_id = token_id
@@ -2235,9 +2235,10 @@ class PydanticAIEnvRunner:
     def _run_model(self, prompt: str) -> str:
         from pydantic_ai import Agent
 
+        chat_model_name = self.model_policy.model_for_agent or self.model_name
         agent = Agent(
             build_chat_model(
-                model_name=self.model_name,
+                model_name=chat_model_name,
                 base_url=self.base_url,
                 api_key=self.api_key,
             ),
@@ -2245,7 +2246,10 @@ class PydanticAIEnvRunner:
             capabilities=pydantic_native_research_capabilities(self.model_policy),
             **pydantic_agent_runtime_kwargs(),
         )
-        result = agent.run_sync(prompt, model_settings={"max_tokens": 512})
+        result = agent.run_sync(
+            prompt,
+            model_settings={"max_tokens": self.workspace_model_max_tokens},
+        )
         return str(pydantic_result_output(result))
 
     def _run_model_with_workspace_tools(
@@ -2255,9 +2259,10 @@ class PydanticAIEnvRunner:
     ) -> str:
         from pydantic_ai import Agent
 
+        chat_model_name = self.model_policy.model_for_agent or self.model_name
         agent = Agent(
             build_chat_model(
-                model_name=self.model_name,
+                model_name=chat_model_name,
                 base_url=self.base_url,
                 api_key=self.api_key,
             ),

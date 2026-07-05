@@ -937,6 +937,7 @@ def _redact_smoke_result(result: dict[str, Any]) -> dict[str, Any]:
             "model_sla",
             "env_file_loaded",
             "openrouter_api_key_present",
+            "nvidia_api_key_present",
             "request_status",
             "workflow_id",
             "workflow_name",

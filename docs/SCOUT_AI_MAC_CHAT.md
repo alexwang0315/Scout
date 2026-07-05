@@ -60,14 +60,15 @@ cd /Users/alexwang0315/scout-fusion
 ./venv/bin/scout-ai-os-mac-chat \
   --target-url http://scout.local:9120 \
   --local-fallback \
-  --fallback-model openrouter:z-ai/glm-5.2 \
+  --fallback-model z-ai/glm-5.2 \
   --fallback-project-id chilai_nanhua_day1 \
   --fallback-workspace-root /path/to/pretrip/workspace
 ```
 
 The CLI loads `.env` by default before constructing the fallback provider. It
-does not print token values. For OpenRouter-backed models, `.env` or the shell
-must provide `OPENROUTER_API_KEY`.
+does not print token values. For NVIDIA-backed models, `.env` or the shell must
+provide `NVIDIA_API_KEY`; for OpenRouter-backed models, provide
+`OPENROUTER_API_KEY`.
 
 Fallback behavior:
 

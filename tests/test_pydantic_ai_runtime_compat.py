@@ -52,6 +52,22 @@ def test_packaged_openrouter_helper_matches_root_helper() -> None:
     assert model.model_name == "openai/gpt-4o-mini"
 
 
+def test_nvidia_prefix_builds_openai_compatible_chat_model() -> None:
+    model = build_chat_model(
+        model_name="nvidia:z-ai/glm-5.2",
+        api_key="test-token",
+    )
+    packaged_model = build_packaged_chat_model(
+        model_name="nvidia:z-ai/glm-5.2",
+        api_key="test-token",
+    )
+
+    assert type(model).__name__ == "OpenAIChatModel"
+    assert type(packaged_model).__name__ == "OpenAIChatModel"
+    assert model.model_name == "z-ai/glm-5.2"
+    assert packaged_model.model_name == model.model_name
+
+
 def test_native_research_capabilities_are_off_by_default() -> None:
     policy = resolve_model_policy("openrouter:z-ai/glm-5.2", env={})
 

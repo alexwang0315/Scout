@@ -11,6 +11,8 @@ from scout.agents.model_policy import ModelPolicy
 
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
+NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 
 def pydantic_ai_runtime_version() -> str:
@@ -102,6 +104,10 @@ def build_chat_model(
         except ImportError:
             model_name = normalized_name
             base_url = base_url or "https://openrouter.ai/api/v1"
+    if _is_nvidia_model(model_name=model_name, base_url=base_url):
+        model_name = _strip_nvidia_prefix(model_name)
+        base_url = base_url or NVIDIA_BASE_URL
+        api_key = api_key or os.getenv(NVIDIA_KEY_ENV)
 
     try:
         from pydantic_ai.models.openai import OpenAIChatModel
@@ -135,9 +141,21 @@ def _is_openrouter_model(*, model_name: str, base_url: str | None) -> bool:
     )
 
 
+def _is_nvidia_model(*, model_name: str, base_url: str | None) -> bool:
+    return model_name.startswith("nvidia:") or bool(
+        base_url and "integrate.api.nvidia.com" in base_url
+    )
+
+
 def _strip_openrouter_prefix(model_name: str) -> str:
     if model_name.startswith("openrouter:"):
         return model_name.removeprefix("openrouter:")
+    return model_name
+
+
+def _strip_nvidia_prefix(model_name: str) -> str:
+    if model_name.startswith("nvidia:"):
+        return model_name.removeprefix("nvidia:")
     return model_name
 
 

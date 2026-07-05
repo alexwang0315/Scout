@@ -273,6 +273,8 @@ Current Pydantic AI provider policy:
 
 - supported runtime family: Pydantic AI v2.4.0;
 - default model path: local `FunctionModel`;
+- external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
+  `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;
 - external OpenRouter model path: `openrouter:<vendor/model>` with
   `OPENROUTER_API_KEY`;
 - direct OpenAI chat path: `openai-chat:<model>` with `OPENAI_API_KEY`;

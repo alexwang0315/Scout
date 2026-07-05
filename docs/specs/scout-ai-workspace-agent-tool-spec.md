@@ -65,6 +65,8 @@ Pydantic AI provider rules:
 
 - Scout workspace tools target Pydantic AI v2.4.0.
 - Local deterministic tools and local `FunctionModel` remain the default.
+- External NVIDIA GLM calls use `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and
+  `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id.
 - External OpenRouter calls use `openrouter:<vendor/model>` and
   `OPENROUTER_API_KEY`.
 - Direct OpenAI chat calls use `openai-chat:<model>` and `OPENAI_API_KEY`;
@@ -1081,6 +1083,9 @@ checkout:
 - Pydantic AI provider compatibility
   - Runtime target: Pydantic AI v2.4.0.
   - Scout keeps `end_strategy="early"` for typed provider calls.
+  - `z-ai/glm-5.2` uses the NVIDIA OpenAI-compatible endpoint with the same
+    provider model id.
+  - `nvidia:<model-id>` remains an advanced/internal NVIDIA provider route.
   - `openrouter:<vendor/model>` uses the Pydantic AI OpenRouter provider.
   - `openai:<model>` is normalized to `openai-chat:<model>`.
   - WebSearch/WebFetch remain unavailable by default, but
