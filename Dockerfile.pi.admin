@@ -198,6 +198,8 @@ COPY \
     scout_safety_boundary_tool.py \
     scout_sensor_vitals_record.py \
     scout_sensorlogger_mqtt_observer.py \
+    scout_lorawan_client_observer.py \
+    scout_sx1303_gateway_observer.py \
     scout_survival_incident_playbook_tool.py \
     scout_team_status_tool.py \
     scout_terrain_score_tool.py \
@@ -226,7 +228,16 @@ COPY pretrip_*.py ./
 COPY tools/pydantic_ai_cloud_latency_benchmark.py ./tools/
 COPY tools/pi_grove_led_bar_smoke.py ./tools/
 COPY tools/pi_oled_i2c_smoke.py ./tools/
+COPY tools/pi_sx1303_gateway_smoke.py ./tools/
+COPY tools/pi_sx1303_gateway_rx_smoke.py ./tools/
+COPY tools/pi_sx1303_gateway_uplink_mqtt_tail.py ./tools/
 COPY tools/pi_sx1303_gateway_gps_nmea_smoke.py ./tools/
+COPY tools/pi_wio_e5_lorawan_uplink_trial_plan.py ./tools/
+COPY tools/pi_wio_e5_lorawan_rf_trial.py ./tools/
+COPY tools/pi_wio_e5_chirpstack_join_audit.py ./tools/
+COPY tools/pi_wio_e5_chirpstack_as9232_profile_provision.py ./tools/
+COPY tools/pi_wio_e5_chirpstack_key_sync.py ./tools/
+COPY tools/pi_wio_e5_chirpstack_join_state_reset.py ./tools/
 COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
 COPY .agents/skills/scout-route-context-briefing/ ./.agents/skills/scout-route-context-briefing/
 COPY skills/scout/ ./skills/scout/

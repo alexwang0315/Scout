@@ -102,10 +102,31 @@ Implementation rules:
 - Treat "915M" hardware as band-capable hardware, not as an approved channel
   plan.
 - Configure LoRaWAN for a Taiwan-compatible AS923 plan before any RF transmit.
+- Alpha ChirpStack tests use an `AS923_2`-only profile unless a later compliance
+  review replaces it.
 - Do not run `AT+TEST`, continuous TX, uplink, join, or packet-forwarder TX
   during early diagnostic slices.
 - Keep a config validator that rejects frequencies outside `920000000` to
   `925000000` for Taiwan field tests.
+
+### Alpha AS923_2 ChirpStack Profile
+
+Current Pi alpha bench profile:
+
+```text
+stack root: /data/scout/providers/lora/chirpstack-docker
+ChirpStack enabled_regions=["as923_2"]
+UDP bridge MQTT topic prefix: as923_2
+Basic Station bridge config: chirpstack-gateway-bridge-basicstation-as923_2.toml
+ChirpStack region config: region_as923_2.toml
+```
+
+The stack must not leave the upstream example regions enabled for Scout field
+tests. In particular, `EU868`, `US915`, `AU915`, `CN470`, `KR920`, `IN865`, and
+`RU864` must be absent from active `enabled_regions` before any RF test. The
+resident `sx1303-gateway` observer may report
+`gateway_control_plane_reachable_rf_unknown` while the control plane is healthy
+but no SX1303 RF receive evidence has been observed yet.
 
 Useful references:
 
@@ -267,6 +288,9 @@ Early gateway payloads should be append-only JSONL:
   "hardware_kind": "sx1303_lorawan_gateway_hat",
   "region_profile": "AS923_TW_920_925",
   "gateway_eui": "0000000000000000",
+  "chip_version": "0x12",
+  "rf_receive_path_checked": true,
+  "rf_read_scope": "spi_chip_id_only",
   "gateway_location_source": "manual_or_gnss",
   "rf_tx_allowed": false,
   "packet_forwarder_started": false,
@@ -392,6 +416,303 @@ Outcome:
 - prove team member beacon path;
 - observe range, RSSI, SNR, and packet loss;
 - compare phone GPS / Scout GNSS / LoRa metadata.
+
+### Alpha Plus Guard: Operator-Approved Uplink Trial Plan
+
+Before the first real Wio-E5 / LoRa-E5 client uplink, Scout must produce an
+auditable local trial plan:
+
+```bash
+python3 tools/pi_wio_e5_lorawan_uplink_trial_plan.py \
+  --wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl \
+  --gateway-rx-jsonl /data/scout/providers/lora/sx1303-gateway-rx-readiness.jsonl \
+  --uplink-jsonl /data/scout/providers/lora/sx1303-gateway-uplink.jsonl \
+  --frequency-hz 923200000 \
+  --region-profile AS923_2 \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl
+```
+
+這個 planning slice 只讀既有 evidence：Wio-E5 read-only AT smoke、SX1303 RX
+readiness、以及目前 passive uplink JSONL。它不開 serial、不送 `AT+JOIN`、不送
+`AT+MSG`、不做 downlink、不發射 RF，也不接 `/safety/*`。若 Wio-E5 DevEUI 不是
+non-zero、gateway RX stack 未 ready，或 operator 尚未輸入明確 approval phrase，
+狀態必須停在 `blocked_missing_readiness` 或 `waiting_for_operator_approval`。
+
+唯一可被記錄的人工批准字串是
+`I_ACCEPT_RF_TX_AS923_2_TW_920_925`，而且工具只記錄
+`operator_approval_recorded=true`，不可把 approval token 原文寫入 JSONL。即使 plan
+進入 `ready_for_manual_uplink_trial`，`rf_tx_allowed=false`、
+`lorawan_uplink_allowed=false`、`rf_tx_executed=false`、
+`lorawan_uplink_executed=false` 仍然固定；真正的 client uplink 必須在另一個明確、
+人工觸發、可審計的 RF trial step 執行。
+
+### Alpha Plus RF Trial Executor
+
+真正的第一筆 Wio-E5 client uplink 只能透過雙閘門執行，且必須先通過
+Join-only RF check：
+
+```bash
+python3 tools/pi_wio_e5_lorawan_rf_trial.py \
+  --plan-jsonl /data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl \
+  --port /dev/ttyUSB0 \
+  --frequency-hz 923200000 \
+  --region-profile AS923_2 \
+  --operator-approval-token I_ACCEPT_RF_TX_AS923_2_TW_920_925 \
+  --execute-rf-tx \
+  --join-only \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-rf-trial.jsonl
+```
+
+Only after Join-only evidence reports `rf_trial_join_confirmed_no_uplink` may
+Scout run the single uplink trial:
+
+```bash
+python3 tools/pi_wio_e5_lorawan_rf_trial.py \
+  --plan-jsonl /data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl \
+  --port /dev/ttyUSB0 \
+  --frequency-hz 923200000 \
+  --region-profile AS923_2 \
+  --payload-text SCOUT \
+  --operator-approval-token I_ACCEPT_RF_TX_AS923_2_TW_920_925 \
+  --execute-rf-tx \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-rf-trial.jsonl
+```
+
+The executor must refuse RF unless all of these are true:
+
+- latest trial plan status is `ready_for_manual_uplink_trial`;
+- latest trial plan has `operator_approval_recorded=true`;
+- frequency and region match the ready plan;
+- approval token equals `I_ACCEPT_RF_TX_AS923_2_TW_920_925`;
+- `--execute-rf-tx` is present;
+- `--dry-run` is not present.
+
+When those checks pass, the executor may send a bounded Join-only sequence:
+`AT` and `AT+JOIN` when `--join-only` is present. Join-only success must report
+`rf_trial_join_confirmed_no_uplink` and keep
+`lorawan_uplink_executed=false`. The full uplink trial may then send exactly
+one bounded sequence: `AT`, `AT+JOIN`, and `AT+MSG="SCOUT"` by default. If join
+is not confirmed, the executor stops before `AT+MSG` unless the operator
+explicitly sets `--continue-after-join-failure`. `--skip-join` is allowed only
+for a module that is already known to be joined and cannot be combined with
+`--join-only`. This executor does not configure AppKey, DevEUI, AppEUI,
+channel masks, or network-server state; those remain separate provisioning
+tasks.
+
+RF execution evidence must set truthfully:
+
+- `rf_tx_allowed=true` only after both gates pass;
+- `rf_tx_executed=true` only after an RF AT command is attempted;
+- `join_executed=true` only after `AT+JOIN` is attempted;
+- `lorawan_uplink_executed=true` only after `AT+MSG` is attempted.
+
+It must still keep `phase1_safety_decision_change_allowed=false`,
+`phase1_l0_l4_state_mutated=false`, `safety_api_called=false`,
+`downlink_allowed=false`, and `remote_outbound_allowed=false`.
+
+### Alpha Plus Join Provisioning Audit
+
+If the RF trial reports join failure or no application uplink, Scout should not
+repeat RF blindly. The next step is a read-only provisioning audit:
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_join_audit.py \
+  --wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl \
+  --rf-trial-jsonl /data/scout/providers/lora/wio-e5-rf-trial.jsonl \
+  --uplink-jsonl /data/scout/providers/lora/sx1303-gateway-uplink.jsonl \
+  --tail-status-jsonl /data/scout/providers/lora/sx1303-gateway-uplink-tail-status.jsonl \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-join-audit.jsonl
+```
+
+The audit compares:
+
+- Wio-E5 `AT+ID` identity evidence;
+- latest non-dry-run RF trial result;
+- passive SX1303 uplink JSONL and tail status;
+- ChirpStack and gateway-bridge logs;
+- optional read-only Postgres device table lookup.
+
+It may classify failures as `client_dev_eui_not_registered_in_chirpstack`,
+`client_join_failed_no_gateway_join_hint`,
+`client_join_failed_network_server_rejected`,
+`client_join_failed_join_seen_check_keys_profile`, or `uplink_observed`.
+
+The audit is not a provisioning writer. It must not create devices, modify
+AppKey / JoinEUI / device profile, publish MQTT, send RF, perform downlink, or
+call `/safety/*`. DevEUI and AppEUI are hashed; raw log lines and raw device
+identifiers are not persisted. Boundary fields remain
+`rf_tx_allowed=false`, `lorawan_uplink_allowed=false`,
+`chirpstack_config_changed=false`, `device_registry_changed=false`,
+`postgres_write_performed=false`, and `safety_api_called=false`.
+
+2026-07-06 Scout Pi bench finding:
+
+- Without `lora_pkt_fwd` or LoRa Basics Station packet forwarder running, the
+  gateway bridge and ChirpStack containers can be healthy while no RF join
+  request reaches the network server.
+- The existing `global_conf.scout-as9232-lns.spi.no-tx.json` profile starts the
+  SX1303 concentrator in RX-only mode and sends UDP upstream to
+  `127.0.0.1:1700`. In a controlled window it received one CRC-valid Wio-E5 RF
+  packet and forwarded it upstream with zero RF downlink packets sent.
+- The first controlled Join-only retry exposed two network-server issues rather
+  than a receive-path failure: ChirpStack needed the bench channels used by the
+  Wio-E5, and an RX-only packet-forwarder cannot deliver the JoinAccept
+  downlink.
+- The live Pi ChirpStack `region_as923_2.toml` was amended for this alpha bench
+  with Taiwan-window channels `921.8`, `922.8`, `923.0`, `923.2`, and
+  `923.4 MHz`, all inside `920-925 MHz`.
+- A separate temporary packet-forwarder config,
+  `global_conf.scout-as9232-lns.spi.join-tx.json`, enables radio 0 TX only for
+  bounded AS923_2 / Taiwan `920-925 MHz` JoinAccept and MAC-command downlink
+  tests. The original `no-tx` config remains the safer RX-only default.
+- After explicit key sync, profile provisioning, and approved
+  ChirpStack join-state reset, Join-only evidence reported
+  `rf_trial_join_confirmed_no_uplink`; Wio-E5 returned `Network joined` and
+  ChirpStack published the join event.
+- A later approved single-uplink trial used `--skip-join` on the already joined
+  Wio-E5 module and sent `AT+MSG="SCOUT"`. Evidence recorded
+  `rf_trial_status=rf_trial_uplink_command_sent`,
+  `rf_tx_executed=true`, and `lorawan_uplink_executed=true`.
+- The passive MQTT tail observed a ChirpStack application uplink and wrote
+  sanitized JSONL evidence with `raw_topic_embedded=false`, a redacted topic
+  shape `application/<redacted>/device/<redacted>/event/up`, no raw payload
+  embedding, and `tail_status=uplink_observed`.
+- Current resident observer state is `sx1303-gateway:
+  gateway_receiving_uplinks` and `lorawan-client: uplink_observed`. This is
+  still evidence only: no Phase 1 safety state, SOS path, or remote outbound
+  behavior is connected.
+
+### Alpha Plus AS923_2 Profile Provisioning
+
+When the read-only audit proves that the RF receive path works and the Wio-E5
+device is registered but bound to the wrong ChirpStack region profile, Scout may
+run one explicit provisioning mutation:
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_as9232_profile_provision.py \
+  --wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl \
+  --allow-in-place-profile-update \
+  --operator-approval-token I_ACCEPT_CHIRPSTACK_PROFILE_MUTATION_AS923_2 \
+  --execute \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-profile-provision.jsonl
+```
+
+The tool is dry-run by default. It may write ChirpStack/Postgres only when both
+`--execute` and `I_ACCEPT_CHIRPSTACK_PROFILE_MUTATION_AS923_2` are present. It
+does not send RF, send downlinks, publish MQTT, change AppKey, change JoinEUI,
+create devices, or call `/safety/*`.
+
+Allowed mutation scopes:
+
+- `device_profile_switch`: if an AS923_2 profile already exists, switch only the
+  matching Wio-E5 device to that profile.
+- `device_profile_in_place_update`: if no AS923_2 profile exists and the
+  current profile is used by exactly one device, update that dedicated profile
+  to `AS923_2` / `as923_2`.
+
+Blocked conditions:
+
+- Wio-E5 identity evidence is missing;
+- device is not registered;
+- JoinEUI/AppEUI does not match;
+- device keys are missing;
+- device is disabled;
+- current profile is shared and no AS923_2 target profile exists;
+- operator approval token is absent.
+
+Provisioning evidence must record `postgres_write_performed`,
+`chirpstack_config_changed`, `device_registry_changed`,
+`profile_mutation_scope`, and `approval_token_stored=false`. It must keep
+`rf_tx_allowed=false`, `lorawan_uplink_allowed=false`, `downlink_allowed=false`,
+`safety_api_called=false`, and `phase1_safety_decision_change_allowed=false`.
+Raw DevEUI, AppEUI, AppKey, and NwkKey values must not be persisted or printed.
+
+### Alpha Plus Join-State Reset
+
+When profile/key evidence is already aligned but Join-only still fails and
+read-only diagnostics classify `stale_join_state_suspected`, Scout may reset
+only ChirpStack join/session state:
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_join_state_reset.py \
+  --device-name scout-wio-e5-client \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-join-state-reset.jsonl
+```
+
+The dry-run must show exactly one matching device and exactly one matching
+device key before any mutation. The mutation requires explicit approval:
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_join_state_reset.py \
+  --device-name scout-wio-e5-client \
+  --execute \
+  --operator-approval-token I_ACCEPT_CHIRPSTACK_JOIN_STATE_RESET_AS923_2 \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-join-state-reset.jsonl
+```
+
+This reset may clear only server-side `device_session`, `dev_addr`,
+`secondary_dev_addr`, `f_cnt_up`, `dev_nonces`, and `join_nonce`. It must not
+change DevEUI, JoinEUI/AppEUI, AppKey, NwkKey, device profile, application, or
+gateway config. It must not open Wio-E5 serial, transmit RF, publish MQTT,
+perform downlink, or call `/safety/*`. Evidence must record
+`postgres_write_performed`, `device_session_cleared`, `dev_nonces_cleared`,
+`join_nonce_reset`, and `approval_token_stored=false`; raw identities and raw
+keys must not be persisted.
+
+### Alpha Plus OTAA Key Sync
+
+If the gateway receive path is good and the AS923_2 profile is aligned, but the
+join still fails with a network-server rejection, the next controlled step is
+OTAA root-key synchronization. This step is not an RF trial and does not run
+`AT+JOIN`.
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_key_sync.py \
+  --wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl \
+  --use-existing-chirpstack-key \
+  --operator-approval-token I_ACCEPT_LORAWAN_KEY_SYNC_AS923_2 \
+  --execute \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-key-sync.jsonl
+```
+
+Preferred field-recovery mode is `--use-existing-chirpstack-key`: read the
+existing ChirpStack `nwk_key` / `app_key` and reapply it to the Wio-E5 APPKEY
+through `AT+KEY=APPKEY,"..."`. The tool must redact the raw key from stdout,
+JSONL, and OLED/LED status. It may record only `target_key_fingerprint`.
+
+If a full reset is required, `--generate-key` or `--key-file` may be used to
+create a new 16-byte root key and write it to both ChirpStack `device_keys` and
+the Wio-E5 APPKEY. This requires `--execute` plus
+`I_ACCEPT_LORAWAN_KEY_SYNC_AS923_2`.
+
+Required boundaries:
+
+- `rf_tx_allowed=false`;
+- `join_executed=false`;
+- `lorawan_uplink_allowed=false`;
+- `downlink_allowed=false`;
+- `mqtt_publish_performed=false`;
+- `safety_api_called=false`;
+- `phase1_safety_decision_change_allowed=false`;
+- `root_key_printed=false`;
+- `raw_key_embedded=false`;
+- `operator_approval_token_stored=false`.
+
+The tool must expose `serial_write_performed`, `wio_module_state_changed`,
+`postgres_write_performed`, `device_keys_changed`, and `mutation_scope` so the
+next join trial can be audited as a separate RF event.
 
 ### Beta: Local Network Server
 
@@ -584,6 +905,50 @@ Acceptance:
 - no packet forwarder TX;
 - no LoRaWAN join/uplink;
 - no `/safety/*` mutation.
+
+Live Scout preflight result captured during the Alpha AS923_2 setup:
+
+- `tools/pi_sx1303_gateway_smoke.py` is the repeatable diagnostic wrapper for
+  this slice.
+- The wrapper calls `sx1302_hal` `util_chip_id` against `/dev/spidev0.0` and
+  appends `/data/scout/providers/lora/sx1303-gateway-smoke.jsonl`.
+- On Scout Pi, `util_chip_id` returned concentrator EUI
+  `0x0016c001f11f5f46`, chip version `0x12`, and temperature-sensor evidence.
+- This proves SPI plus SX1303 concentrator access. It does not prove client
+  uplink reception yet.
+- The resident `sx1303-gateway` observer reads this JSONL via
+  `SCOUT_SX1303_GATEWAY_RF_PREFLIGHT_JSONL` and may report
+  `gateway_rf_hardware_detected_no_uplink`.
+- OLED status for this intermediate state is `RF OK NO UL`.
+
+Next receive-side readiness slice:
+
+- `tools/pi_sx1303_gateway_rx_smoke.py` passively inspects local Docker
+  container status, TCP/UDP listening ports, and bounded gateway log summaries.
+- It appends `/data/scout/providers/lora/sx1303-gateway-rx-readiness.jsonl`.
+- It does not run `AT+JOIN`, does not send a LoRaWAN uplink, does not transmit
+  RF, does not start packet forwarders, and does not embed raw log lines by
+  default.
+- The resident `sx1303-gateway` observer reads this JSONL via
+  `SCOUT_SX1303_GATEWAY_RX_READINESS_JSONL` and may report
+  `gateway_rx_stack_ready_no_uplink`.
+- OLED status for this intermediate state is `RX READY NO UL`.
+
+Passive uplink evidence slice:
+
+- `tools/pi_sx1303_gateway_uplink_mqtt_tail.py` passively subscribes to local
+  ChirpStack MQTT uplink topics using `mosquitto_sub`.
+- It appends structured records to
+  `/data/scout/providers/lora/sx1303-gateway-uplink.jsonl` only when an uplink
+  event is observed.
+- No-uplink waits append only
+  `/data/scout/providers/lora/sx1303-gateway-uplink-tail-status.jsonl`, so the
+  resident observer does not misclassify a wait as an uplink.
+- DevEUI and gateway IDs are hashed by default. Raw payload data is not embedded
+  by default; only `payload_bytes`, frequency, spreading factor, bandwidth,
+  RSSI, SNR, and frame counters are retained.
+- It does not publish MQTT, transmit RF, join a LoRaWAN network, send an uplink,
+  send downlink, or call `/safety/*`.
 
 ### Slice L2: Taiwan Frequency Config Validator
 
