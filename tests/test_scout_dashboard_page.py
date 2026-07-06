@@ -49,6 +49,17 @@ def test_scout_dashboard_documentation_records_active_change_log() -> None:
     assert "Route Context Briefing Regeneration And Product Copy Cleanup" in doc
     assert "Route Context Intelligence Spec-Aligned Briefing Generation" in doc
     assert "Route Briefing Trip-Only Product Copy Guard" in doc
+    assert "Future LoRaWAN Sender Dashboard Placement" in doc
+    assert "scout_lorawan_sender.py" in doc
+    assert "Primary dashboard integration should be `MQTT / Observer Message`." in doc
+    assert "sender/action lane" in doc
+    assert "command candidates, queue state, dry-run/live send" in doc
+    assert "it should not own the sender workbench" in doc
+    assert "`Debug Message` may show sender status" in doc
+    assert "must remain status-only and must not own the send button" in doc
+    assert "send_sos" in doc
+    assert "trigger_l4" in doc
+    assert "change_safety_level" in doc
 
 
 def test_scout_dashboard_contains_requested_navigation_contract() -> None:

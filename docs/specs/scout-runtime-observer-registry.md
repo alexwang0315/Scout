@@ -62,6 +62,14 @@ not resident Scout ingress observers unless this registry and
 resident evidence observer for Wio-E5 / LoRaWAN client status; it is not the RF
 executor.
 
+A future LoRaWAN sender / transport service is also intentionally outside this
+resident observer list. It will be an explicit action path for approved local
+commands, not a background listener. Its primary dashboard placement should be
+the `MQTT / Observer Message` page, in a visually separated sender/action lane
+that can show command candidates, queue state, readiness, and audit links.
+`Safety / Emergency` may link to that sender lane when the pending candidate is
+emergency-relevant, but it is not the primary sender workbench.
+
 ## Runtime Boundary
 
 All resident observers in this registry are evidence producers and diagnostic
@@ -602,6 +610,7 @@ coverage.
 | UPS HAT telemetry | Smoke, soak, and monitor tooling exists | Power monitor has been treated as a separate heartbeat/systemd/admin diagnostic, not an ingress observer | Decide whether UPS becomes resident observer, systemd monitor, or admin status adapter; define write cadence and low-battery local feedback |
 | Wi-Fi/OLED boot status and phone uplink recovery | systemd services and tools exist for boot display and Bluetooth PAN recovery | Recovery services are boot/network helpers, not evidence-ingress observers | Keep in network recovery docs unless converted to resident network observer with evidence-only contract |
 | Wio-E5 / LoRa-E5 serial writer/RF executor | USB serial AT smoke tooling, Join-only RF trial, and single uplink RF executor exist as manual tools | Serial access and RF join/uplink commands are not resident; only `lorawan-client` evidence observation is resident | Keep RF execution behind explicit operator approval; do not promote serial/RF writers into resident observer lifecycle |
+| Future LoRaWAN sender / transport service | Planned future `scout_lorawan_sender.py` action path for approved local command candidates | It is not a resident observer; it may transmit RF only after explicit operator confirmation, legal AS923_2/TW validation, rate limiting, and bounded payload checks | Integrate the primary sender/action lane into `MQTT / Observer Message`; keep `Safety / Emergency` as emergency summary/link-out and `Debug Message` as read-only mirror |
 | ChirpStack join-state reset helper | Manual operator-approved reset tool exists for stale OTAA Join/session repair | It performs bounded PostgreSQL writes only after an exact approval token; it is not an observer and must not run continuously | Keep as a manual repair tool; never autostart; require evidence JSONL, approval token, dry-run first, and post-reset Join-only validation |
 | Grove smoke tools | Manual hardware verification tools for OLED, LED Bar, PIR, GPS, IMU, LoRa, keypad | Manual or one-shot by design | Promote only after each tool has a resident lifecycle, evidence schema, resource limits, and safety boundary tests |
 

@@ -516,6 +516,69 @@ It must still keep `phase1_safety_decision_change_allowed=false`,
 `phase1_l0_l4_state_mutated=false`, `safety_api_called=false`,
 `downlink_allowed=false`, and `remote_outbound_allowed=false`.
 
+### Future Scout LoRaWAN Sender / Transport Service
+
+Scout will need a sender, but it must be designed as an explicit local action
+and transport service, not as a resident observer. The working name for that
+future slice is `scout_lorawan_sender.py`.
+
+Purpose:
+
+- turn an approved local command candidate into one bounded LoRaWAN uplink;
+- preserve a complete sender audit trail before and after every send attempt;
+- keep legal AS923_2 / Taiwan `920-925 MHz` validation in the send path;
+- expose sender readiness, queue state, and audit state to dashboard surfaces;
+- stay separate from `sx1303-gateway` and `lorawan-client`, which remain
+  read-only evidence observers.
+
+Initial allowed sender message types:
+
+- `diagnostic_ping`;
+- `check_in`;
+- `last_known_position`.
+
+Initially blocked message types:
+
+- `send_sos`;
+- `trigger_l4`;
+- `change_safety_level`;
+- arbitrary text broadcast;
+- downlink command execution.
+
+The future sender must require all of these before any RF transmit:
+
+- an approved local command candidate with `operator_confirmed=true`;
+- a legal frequency plan check for `AS923_2` / Taiwan `920-925 MHz`;
+- a bounded payload schema and size check;
+- rate limiting and duplicate suppression;
+- dry-run evidence before live RF execution;
+- JSONL audit fields for `rf_tx_allowed`, `rf_tx_executed`,
+  `lorawan_uplink_executed`, `remote_outbound_allowed`, and
+  `outbound_send_performed`;
+- fixed `phase1_safety_decision_change_allowed=false`,
+  `phase1_l0_l4_state_mutated=false`, and `safety_api_called=false`.
+
+Future dashboard placement:
+
+- primary operator surface: `MQTT / Observer Message`;
+- the sender panel in `MQTT / Observer Message` should show command
+  candidates, queue state, dry-run/live send readiness, latest RF audit,
+  gateway/client observer status, and the explicit operator confirmation
+  control for bounded sends;
+- `Safety / Emergency` may summarize emergency-relevant sender readiness and
+  link to the sender panel, but must not be the primary sender workbench;
+- `Debug Message` may mirror read-only sender status, queue, and audit links,
+  but must not own the send button;
+- post-replay / incident package views may attach sender audit as evidence
+  after the fact.
+
+Even though the dashboard page is named `MQTT / Observer Message`, the sender
+section must be visually and architecturally separated as a local action lane.
+This deliberately keeps the current read-only observer boundary intact. A future
+SOS-capable transport requires a separate Safety Arbiter / operator approval
+design and cannot be implemented by simply enabling sender behavior in
+`lorawan-client`.
+
 ### Alpha Plus Join Provisioning Audit
 
 If the RF trial reports join failure or no application uplink, Scout should not
