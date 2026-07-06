@@ -16,6 +16,38 @@ DEFAULT_GNSS_HARDWARE_EVIDENCE_DIR = Path("/data/scout/admin/ingress/gnss_hardwa
 DEFAULT_GNSS_HARDWARE_LOG_PATH = Path("/data/scout/admin/ingress/gnss-hardware-observer.log")
 DEFAULT_GNSS_HARDWARE_GATEWAY_JSONL = Path("/data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl")
 DEFAULT_GNSS_HARDWARE_GROVE_JSONL = Path("/data/scout/providers/gnss/manual-smoke.jsonl")
+DEFAULT_SX1303_GATEWAY_EVIDENCE_DIR = Path("/data/scout/admin/ingress/sx1303_gateway")
+DEFAULT_SX1303_GATEWAY_LOG_PATH = Path("/data/scout/admin/ingress/sx1303-gateway-observer.log")
+DEFAULT_SX1303_GATEWAY_UPLINK_JSONL = Path("/data/scout/providers/lora/sx1303-gateway-uplink.jsonl")
+DEFAULT_SX1303_GATEWAY_GPS_JSONL = DEFAULT_GNSS_HARDWARE_GATEWAY_JSONL
+DEFAULT_SX1303_GATEWAY_RF_PREFLIGHT_JSONL = Path("/data/scout/providers/lora/sx1303-gateway-smoke.jsonl")
+DEFAULT_SX1303_GATEWAY_RX_READINESS_JSONL = Path("/data/scout/providers/lora/sx1303-gateway-rx-readiness.jsonl")
+DEFAULT_SX1303_GATEWAY_CONFIG_PATHS = (
+    "/data/scout/lora/global_conf.json,"
+    "/data/scout/lora/station.conf,"
+    "/data/scout/lora/chirpstack-gateway-bridge.toml,"
+    "/data/scout/lora/chirpstack.toml,"
+    "/data/scout/chirpstack/chirpstack.toml,"
+    "/data/scout/chirpstack/regions/as923_2.toml,"
+    "/data/scout/chirpstack/regions/as923.toml,"
+    "/data/scout/providers/lora/chirpstack-docker/configuration/chirpstack/chirpstack.toml,"
+    "/data/scout/providers/lora/chirpstack-docker/configuration/chirpstack/region_as923_2.toml,"
+    "/data/scout/providers/lora/chirpstack-docker/configuration/chirpstack-gateway-bridge/"
+    "chirpstack-gateway-bridge-basicstation-as923_2.toml"
+)
+DEFAULT_LORAWAN_CLIENT_EVIDENCE_DIR = Path("/data/scout/admin/ingress/lorawan_client")
+DEFAULT_LORAWAN_CLIENT_LOG_PATH = Path("/data/scout/admin/ingress/lorawan-client-observer.log")
+DEFAULT_LORAWAN_CLIENT_KEY_SYNC_JSONL = Path("/data/scout/providers/lora/wio-e5-chirpstack-key-sync.jsonl")
+DEFAULT_LORAWAN_CLIENT_PROFILE_PROVISION_JSONL = Path("/data/scout/providers/lora/wio-e5-chirpstack-profile-provision.jsonl")
+DEFAULT_LORAWAN_CLIENT_TRIAL_PLAN_JSONL = Path("/data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl")
+DEFAULT_LORAWAN_CLIENT_RF_TRIAL_JSONL = Path("/data/scout/providers/lora/wio-e5-rf-trial.jsonl")
+DEFAULT_LORAWAN_CLIENT_JOIN_AUDIT_JSONL = Path("/data/scout/providers/lora/wio-e5-chirpstack-join-audit.jsonl")
+DEFAULT_LORAWAN_CLIENT_JOIN_STATE_DIAGNOSTIC_JSONL = Path(
+    "/data/scout/providers/lora/wio-e5-chirpstack-join-state-diagnostic.jsonl"
+)
+DEFAULT_LORAWAN_CLIENT_UPLINK_JSONL = Path("/data/scout/providers/lora/sx1303-gateway-uplink.jsonl")
+DEFAULT_LORAWAN_CLIENT_TAIL_STATUS_JSONL = Path("/data/scout/providers/lora/sx1303-gateway-uplink-tail-status.jsonl")
+DEFAULT_LORAWAN_CLIENT_WIO_AT_JSONL = Path("/data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl")
 DEFAULT_PHYSIOLOGIC_GATE_EVIDENCE_DIR = Path("/data/scout/admin/ingress/physiologic_gate")
 DEFAULT_PHYSIOLOGIC_GATE_LOG_PATH = Path("/data/scout/admin/ingress/physiologic-gate-observer.log")
 DEFAULT_PHYSIOLOGIC_GATE_SENSORLOGGER_VITALS_JSONL = (
@@ -74,6 +106,12 @@ class IngressObserverSupervisor:
         gnss_hardware = _gnss_hardware_spec(resolved_env, app_root=app_root)
         if gnss_hardware is not None:
             specs.append(gnss_hardware)
+        sx1303_gateway = _sx1303_gateway_spec(resolved_env, app_root=app_root)
+        if sx1303_gateway is not None:
+            specs.append(sx1303_gateway)
+        lorawan_client = _lorawan_client_spec(resolved_env, app_root=app_root)
+        if lorawan_client is not None:
+            specs.append(lorawan_client)
         physiologic_gate = _physiologic_gate_spec(resolved_env, app_root=app_root)
         if physiologic_gate is not None:
             specs.append(physiologic_gate)
@@ -154,6 +192,9 @@ class IngressObserverSupervisor:
                     "phase1_l0_l4_state_mutated": False,
                     "safety_api_called": False,
                     "phase2_brain_writeback": False,
+                    "rf_tx_allowed": False,
+                    "lorawan_uplink_allowed": False,
+                    "downlink_allowed": False,
                 }
             )
         return {
@@ -168,6 +209,9 @@ class IngressObserverSupervisor:
                 "phase1_l0_l4_state_mutated": False,
                 "safety_api_called": False,
                 "phase2_brain_writeback": False,
+                "rf_tx_allowed": False,
+                "lorawan_uplink_allowed": False,
+                "downlink_allowed": False,
                 "credential_value_exposed": False,
             },
         }
@@ -313,6 +357,233 @@ def _append_gnss_hardware_display_args(command: list[str], env: Mapping[str, str
         _append_arg_from_env(command, "--led-blink-count", env, "SCOUT_GNSS_HARDWARE_LED_BLINK_COUNT")
         _append_arg_from_env(command, "--led-blink-seconds", env, "SCOUT_GNSS_HARDWARE_LED_BLINK_SECONDS")
     if _is_true_like(env.get("SCOUT_GNSS_HARDWARE_LED_DRY_RUN")):
+        command.append("--led-dry-run")
+
+
+def _sx1303_gateway_spec(
+    env: Mapping[str, str],
+    *,
+    app_root: Path | str | None,
+) -> ObserverProcessSpec | None:
+    explicit_autostart = "SCOUT_SX1303_GATEWAY_AUTOSTART" in env
+    autostart_requested = _is_true_like(env.get("SCOUT_SX1303_GATEWAY_AUTOSTART", "false"))
+    explicit_source_config = any(
+        key in env
+        for key in (
+            "SCOUT_SX1303_GATEWAY_EVIDENCE_DIR",
+            "SCOUT_SX1303_GATEWAY_UPLINK_JSONL",
+            "SCOUT_SX1303_GATEWAY_GATEWAY_GPS_JSONL",
+            "SCOUT_SX1303_GATEWAY_RF_PREFLIGHT_JSONL",
+            "SCOUT_SX1303_GATEWAY_RX_READINESS_JSONL",
+            "SCOUT_SX1303_GATEWAY_CONFIG_PATHS",
+            "SCOUT_SX1303_GATEWAY_HOST",
+        )
+    )
+    if not autostart_requested and not explicit_source_config:
+        return None
+
+    root = Path(app_root or Path(__file__).resolve().parent)
+    observer_script = root / "scout_sx1303_gateway_observer.py"
+    evidence_dir = Path(
+        env.get("SCOUT_SX1303_GATEWAY_EVIDENCE_DIR", str(DEFAULT_SX1303_GATEWAY_EVIDENCE_DIR))
+    ).expanduser()
+    log_path = Path(
+        env.get("SCOUT_SX1303_GATEWAY_LOG_PATH", str(DEFAULT_SX1303_GATEWAY_LOG_PATH))
+    ).expanduser()
+    uplink_jsonl = Path(
+        env.get("SCOUT_SX1303_GATEWAY_UPLINK_JSONL", str(DEFAULT_SX1303_GATEWAY_UPLINK_JSONL))
+    ).expanduser()
+    gateway_gps_jsonl = Path(
+        env.get("SCOUT_SX1303_GATEWAY_GATEWAY_GPS_JSONL", str(DEFAULT_SX1303_GATEWAY_GPS_JSONL))
+    ).expanduser()
+    rf_preflight_jsonl = Path(
+        env.get("SCOUT_SX1303_GATEWAY_RF_PREFLIGHT_JSONL", str(DEFAULT_SX1303_GATEWAY_RF_PREFLIGHT_JSONL))
+    ).expanduser()
+    rx_readiness_jsonl = Path(
+        env.get("SCOUT_SX1303_GATEWAY_RX_READINESS_JSONL", str(DEFAULT_SX1303_GATEWAY_RX_READINESS_JSONL))
+    ).expanduser()
+    command = [
+        sys.executable,
+        str(observer_script),
+        "--evidence-dir",
+        str(evidence_dir),
+        "--uplink-jsonl",
+        str(uplink_jsonl),
+        "--gateway-gps-jsonl",
+        str(gateway_gps_jsonl),
+        "--rf-preflight-jsonl",
+        str(rf_preflight_jsonl),
+        "--rx-readiness-jsonl",
+        str(rx_readiness_jsonl),
+        "--config-paths",
+        env.get("SCOUT_SX1303_GATEWAY_CONFIG_PATHS", DEFAULT_SX1303_GATEWAY_CONFIG_PATHS),
+        "--expected-region-tokens",
+        env.get("SCOUT_SX1303_GATEWAY_EXPECTED_REGION_TOKENS", "AS923,AS923_2,AS923_TW_920_925"),
+        "--forbidden-region-tokens",
+        env.get("SCOUT_SX1303_GATEWAY_FORBIDDEN_REGION_TOKENS", "EU868,US915,AU915,CN470,KR920,IN865,RU864"),
+        "--host",
+        env.get("SCOUT_SX1303_GATEWAY_HOST", "127.0.0.1"),
+        "--tcp-ports",
+        env.get("SCOUT_SX1303_GATEWAY_TCP_PORTS", "1883,3001,8080,8090"),
+        "--udp-ports",
+        env.get("SCOUT_SX1303_GATEWAY_UDP_PORTS", "1700"),
+        "--poll-seconds",
+        env.get("SCOUT_SX1303_GATEWAY_POLL_SECONDS", "10.0"),
+        "--max-jsonl-records",
+        env.get("SCOUT_SX1303_GATEWAY_MAX_JSONL_RECORDS", "200"),
+        "--command-timeout-seconds",
+        env.get("SCOUT_SX1303_GATEWAY_COMMAND_TIMEOUT_SECONDS", "2.0"),
+        "--print-ready",
+    ]
+    _append_sx1303_gateway_display_args(command, env)
+    reason = "explicit_autostart" if explicit_autostart and autostart_requested else "explicit_source_config"
+    return ObserverProcessSpec(
+        name="sx1303-gateway",
+        command=command,
+        evidence_dir=evidence_dir,
+        status_path=evidence_dir / "sx1303_gateway_observer_status.json",
+        log_path=log_path,
+        reason=reason,
+    )
+
+
+def _append_sx1303_gateway_display_args(command: list[str], env: Mapping[str, str]) -> None:
+    if _is_true_like(env.get("SCOUT_SX1303_GATEWAY_OLED_STATUS")):
+        command.append("--oled-status")
+        _append_arg_from_env(command, "--oled-bus", env, "SCOUT_SX1303_GATEWAY_OLED_BUS")
+        _append_arg_from_env(command, "--oled-address", env, "SCOUT_SX1303_GATEWAY_OLED_ADDRESS")
+        _append_arg_from_env(command, "--oled-driver", env, "SCOUT_SX1303_GATEWAY_OLED_DRIVER")
+    if _is_true_like(env.get("SCOUT_SX1303_GATEWAY_OLED_DRY_RUN")):
+        command.append("--oled-dry-run")
+
+    if _is_true_like(env.get("SCOUT_SX1303_GATEWAY_LED_STATUS")):
+        command.append("--led-status")
+        _append_arg_from_env(command, "--led-port", env, "SCOUT_SX1303_GATEWAY_LED_PORT")
+        _append_arg_from_env(command, "--led-data-gpio", env, "SCOUT_SX1303_GATEWAY_LED_DATA_GPIO")
+        _append_arg_from_env(command, "--led-clock-gpio", env, "SCOUT_SX1303_GATEWAY_LED_CLOCK_GPIO")
+        _append_arg_from_env(command, "--led-ok-bit", env, "SCOUT_SX1303_GATEWAY_LED_OK_BIT")
+        _append_arg_from_env(command, "--led-warn-bit", env, "SCOUT_SX1303_GATEWAY_LED_WARN_BIT")
+        _append_arg_from_env(command, "--led-fail-bit", env, "SCOUT_SX1303_GATEWAY_LED_FAIL_BIT")
+        _append_arg_from_env(command, "--led-blink-count", env, "SCOUT_SX1303_GATEWAY_LED_BLINK_COUNT")
+        _append_arg_from_env(command, "--led-blink-seconds", env, "SCOUT_SX1303_GATEWAY_LED_BLINK_SECONDS")
+    if _is_true_like(env.get("SCOUT_SX1303_GATEWAY_LED_DRY_RUN")):
+        command.append("--led-dry-run")
+
+
+def _lorawan_client_spec(
+    env: Mapping[str, str],
+    *,
+    app_root: Path | str | None,
+) -> ObserverProcessSpec | None:
+    explicit_autostart = "SCOUT_LORAWAN_CLIENT_AUTOSTART" in env
+    autostart_requested = _is_true_like(env.get("SCOUT_LORAWAN_CLIENT_AUTOSTART", "false"))
+    explicit_source_config = any(
+        key in env
+        for key in (
+            "SCOUT_LORAWAN_CLIENT_EVIDENCE_DIR",
+            "SCOUT_LORAWAN_CLIENT_KEY_SYNC_JSONL",
+            "SCOUT_LORAWAN_CLIENT_PROFILE_PROVISION_JSONL",
+            "SCOUT_LORAWAN_CLIENT_TRIAL_PLAN_JSONL",
+            "SCOUT_LORAWAN_CLIENT_RF_TRIAL_JSONL",
+            "SCOUT_LORAWAN_CLIENT_JOIN_AUDIT_JSONL",
+            "SCOUT_LORAWAN_CLIENT_JOIN_STATE_DIAGNOSTIC_JSONL",
+            "SCOUT_LORAWAN_CLIENT_UPLINK_JSONL",
+            "SCOUT_LORAWAN_CLIENT_TAIL_STATUS_JSONL",
+            "SCOUT_LORAWAN_CLIENT_WIO_AT_JSONL",
+        )
+    )
+    default_sources = (
+        DEFAULT_LORAWAN_CLIENT_KEY_SYNC_JSONL,
+        DEFAULT_LORAWAN_CLIENT_PROFILE_PROVISION_JSONL,
+        DEFAULT_LORAWAN_CLIENT_TRIAL_PLAN_JSONL,
+        DEFAULT_LORAWAN_CLIENT_RF_TRIAL_JSONL,
+        DEFAULT_LORAWAN_CLIENT_JOIN_AUDIT_JSONL,
+        DEFAULT_LORAWAN_CLIENT_JOIN_STATE_DIAGNOSTIC_JSONL,
+        DEFAULT_LORAWAN_CLIENT_UPLINK_JSONL,
+        DEFAULT_LORAWAN_CLIENT_TAIL_STATUS_JSONL,
+        DEFAULT_LORAWAN_CLIENT_WIO_AT_JSONL,
+    )
+    if not autostart_requested and not explicit_source_config and not any(path.exists() for path in default_sources):
+        return None
+
+    root = Path(app_root or Path(__file__).resolve().parent)
+    observer_script = root / "scout_lorawan_client_observer.py"
+    evidence_dir = Path(
+        env.get("SCOUT_LORAWAN_CLIENT_EVIDENCE_DIR", str(DEFAULT_LORAWAN_CLIENT_EVIDENCE_DIR))
+    ).expanduser()
+    log_path = Path(env.get("SCOUT_LORAWAN_CLIENT_LOG_PATH", str(DEFAULT_LORAWAN_CLIENT_LOG_PATH))).expanduser()
+    command = [
+        sys.executable,
+        str(observer_script),
+        "--evidence-dir",
+        str(evidence_dir),
+        "--key-sync-jsonl",
+        env.get("SCOUT_LORAWAN_CLIENT_KEY_SYNC_JSONL", str(DEFAULT_LORAWAN_CLIENT_KEY_SYNC_JSONL)),
+        "--profile-provision-jsonl",
+        env.get(
+            "SCOUT_LORAWAN_CLIENT_PROFILE_PROVISION_JSONL",
+            str(DEFAULT_LORAWAN_CLIENT_PROFILE_PROVISION_JSONL),
+        ),
+        "--trial-plan-jsonl",
+        env.get("SCOUT_LORAWAN_CLIENT_TRIAL_PLAN_JSONL", str(DEFAULT_LORAWAN_CLIENT_TRIAL_PLAN_JSONL)),
+        "--rf-trial-jsonl",
+        env.get("SCOUT_LORAWAN_CLIENT_RF_TRIAL_JSONL", str(DEFAULT_LORAWAN_CLIENT_RF_TRIAL_JSONL)),
+        "--join-audit-jsonl",
+        env.get("SCOUT_LORAWAN_CLIENT_JOIN_AUDIT_JSONL", str(DEFAULT_LORAWAN_CLIENT_JOIN_AUDIT_JSONL)),
+        "--join-state-diagnostic-jsonl",
+        env.get(
+            "SCOUT_LORAWAN_CLIENT_JOIN_STATE_DIAGNOSTIC_JSONL",
+            str(DEFAULT_LORAWAN_CLIENT_JOIN_STATE_DIAGNOSTIC_JSONL),
+        ),
+        "--uplink-jsonl",
+        env.get("SCOUT_LORAWAN_CLIENT_UPLINK_JSONL", str(DEFAULT_LORAWAN_CLIENT_UPLINK_JSONL)),
+        "--tail-status-jsonl",
+        env.get("SCOUT_LORAWAN_CLIENT_TAIL_STATUS_JSONL", str(DEFAULT_LORAWAN_CLIENT_TAIL_STATUS_JSONL)),
+        "--wio-at-jsonl",
+        env.get("SCOUT_LORAWAN_CLIENT_WIO_AT_JSONL", str(DEFAULT_LORAWAN_CLIENT_WIO_AT_JSONL)),
+        "--poll-seconds",
+        env.get("SCOUT_LORAWAN_CLIENT_POLL_SECONDS", "10.0"),
+        "--max-jsonl-records",
+        env.get("SCOUT_LORAWAN_CLIENT_MAX_JSONL_RECORDS", "200"),
+        "--print-ready",
+    ]
+    _append_lorawan_client_display_args(command, env)
+    if explicit_autostart and autostart_requested:
+        reason = "explicit_autostart"
+    elif explicit_source_config:
+        reason = "explicit_source_config"
+    else:
+        reason = "configured_sources"
+    return ObserverProcessSpec(
+        name="lorawan-client",
+        command=command,
+        evidence_dir=evidence_dir,
+        status_path=evidence_dir / "lorawan_client_observer_status.json",
+        log_path=log_path,
+        reason=reason,
+    )
+
+
+def _append_lorawan_client_display_args(command: list[str], env: Mapping[str, str]) -> None:
+    if _is_true_like(env.get("SCOUT_LORAWAN_CLIENT_OLED_STATUS")):
+        command.append("--oled-status")
+        _append_arg_from_env(command, "--oled-bus", env, "SCOUT_LORAWAN_CLIENT_OLED_BUS")
+        _append_arg_from_env(command, "--oled-address", env, "SCOUT_LORAWAN_CLIENT_OLED_ADDRESS")
+        _append_arg_from_env(command, "--oled-driver", env, "SCOUT_LORAWAN_CLIENT_OLED_DRIVER")
+    if _is_true_like(env.get("SCOUT_LORAWAN_CLIENT_OLED_DRY_RUN")):
+        command.append("--oled-dry-run")
+
+    if _is_true_like(env.get("SCOUT_LORAWAN_CLIENT_LED_STATUS")):
+        command.append("--led-status")
+        _append_arg_from_env(command, "--led-port", env, "SCOUT_LORAWAN_CLIENT_LED_PORT")
+        _append_arg_from_env(command, "--led-data-gpio", env, "SCOUT_LORAWAN_CLIENT_LED_DATA_GPIO")
+        _append_arg_from_env(command, "--led-clock-gpio", env, "SCOUT_LORAWAN_CLIENT_LED_CLOCK_GPIO")
+        _append_arg_from_env(command, "--led-ok-bit", env, "SCOUT_LORAWAN_CLIENT_LED_OK_BIT")
+        _append_arg_from_env(command, "--led-warn-bit", env, "SCOUT_LORAWAN_CLIENT_LED_WARN_BIT")
+        _append_arg_from_env(command, "--led-fail-bit", env, "SCOUT_LORAWAN_CLIENT_LED_FAIL_BIT")
+        _append_arg_from_env(command, "--led-blink-count", env, "SCOUT_LORAWAN_CLIENT_LED_BLINK_COUNT")
+        _append_arg_from_env(command, "--led-blink-seconds", env, "SCOUT_LORAWAN_CLIENT_LED_BLINK_SECONDS")
+    if _is_true_like(env.get("SCOUT_LORAWAN_CLIENT_LED_DRY_RUN")):
         command.append("--led-dry-run")
 
 

@@ -217,7 +217,9 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_wearable_validator.py
 !scout_workspace_search_tools.py
 !scout_gnss_hardware_observer.py
+!scout_lorawan_client_observer.py
 !scout_sensorlogger_mqtt_observer.py
+!scout_sx1303_gateway_observer.py
 !skill_registry.py
 !spatial_imprint_debug_projection.py
 !spatial_imprint_models.py
@@ -233,7 +235,16 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !tools/
 !tools/pi_grove_led_bar_smoke.py
 !tools/pi_oled_i2c_smoke.py
+!tools/pi_sx1303_gateway_smoke.py
+!tools/pi_sx1303_gateway_rx_smoke.py
+!tools/pi_sx1303_gateway_uplink_mqtt_tail.py
 !tools/pi_sx1303_gateway_gps_nmea_smoke.py
+!tools/pi_wio_e5_lorawan_uplink_trial_plan.py
+!tools/pi_wio_e5_lorawan_rf_trial.py
+!tools/pi_wio_e5_chirpstack_join_audit.py
+!tools/pi_wio_e5_chirpstack_as9232_profile_provision.py
+!tools/pi_wio_e5_chirpstack_key_sync.py
+!tools/pi_wio_e5_chirpstack_join_state_reset.py
 !tools/pydantic_ai_cloud_latency_benchmark.py
 !tools/scout_agent_tool_manifests/
 !tools/scout_agent_tool_manifests/*.json
