@@ -195,6 +195,16 @@ RECOMMENDED_TOOLS = {
             "field-case taxonomy",
         ],
     },
+    "scout.ai.route_architecture.assess.v0": {
+        "label": "route architecture and CP Graph assessment",
+        "evidence_required": [
+            "candidate CP Graph",
+            "hard-point segments",
+            "retreat and turn-back checkpoints",
+            "route risk and terrain overlays",
+            "daylight and pace window when the question asks about night travel",
+        ],
+    },
     "scout.ai.ins_dr_trace.analyze.v0": {
         "label": "INS/DR trace and trajectory-diff analyzer",
         "evidence_required": [
@@ -538,11 +548,11 @@ _CURRENT_TOOL_TERMS = (
     ("pydantic_ai.tool.search_scout_route_structure.v0", ("cp", "checkpoint", "檢查點", "路線", "路段", "segment", "總距離", "轉彎", "主路", "official", "官方", "corridor", "路徑寬度")),
     ("pydantic_ai.tool.search_scout_major_points.v0", ("黑水塘", "天池", "山莊", "水源", "營地", "地名", "mcp", "major critical")),
     ("pydantic_ai.tool.search_scout_evidence_fulltext.v0", ("歷史", "gpx", "路跡", "review", "spec", "field case", "incident package", "案例", "證據")),
-    ("pydantic_ai.tool.search_scout_risk_scores.v0", ("risk score", "risk", "風險", "危險", "低容錯", "出事", "滑墜", "落石", "崩塌", "墜崖")),
-    ("pydantic_ai.tool.search_scout_terrain_scores.v0", ("坡度", "地形", "稜線", "崩壁", "碎石", "乾溝", "溪谷", "下切", "等高線", "slope", "terrain")),
-    ("pydantic_ai.tool.search_scout_map_perception.v0", ("ocr", "annotation", "標註", "圖磚", "影像", "景觀點", "拍照", "contour", "被看見")),
+    ("pydantic_ai.tool.search_scout_risk_scores.v0", ("risk score", "risk", "風險", "危險", "低容錯", "出事", "滑墜", "落石", "崩塌", "崩溝", "乾溝", "乾溪溝", "溪溝", "墜崖", "摸黑", "避免停留")),
+    ("pydantic_ai.tool.search_scout_terrain_scores.v0", ("坡度", "地形", "稜線", "崩壁", "碎石", "乾溝", "乾溪溝", "崩溝", "溪溝", "溪谷", "下切", "等高線", "摸黑", "slope", "terrain")),
+    ("pydantic_ai.tool.search_scout_map_perception.v0", ("ocr", "annotation", "標註", "圖磚", "影像", "景觀點", "拍照", "容許路徑寬度", "路徑寬度", "路廊", "corridor width", "contour", "被看見")),
     ("scout.ai.live_navigation_state.assess.v0", ("我現在", "現在是不是", "目前", "前方", "gps", "gnss", "imu", "pdr", "方向", "偏離", "轉彎點", "精確導航", "主線", "下切", "岔路", "走對", "回主線")),
-    ("scout.ai.navigation_terrain.assess.v0", ("地圖力", "地圖需求", "離線地圖熟悉", "熟悉離線地圖", "等高線", "地形判讀", "撤退方向", "定位備援", "第二套定位", "第二套導航", "自主前往", "backup positioning", "map readiness", "navigation readiness")),
+    ("scout.ai.navigation_terrain.assess.v0", ("地圖力", "地圖需求", "離線地圖熟悉", "熟悉離線地圖", "等高線", "地形判讀", "乾溝", "乾溪溝", "崩溝", "溪溝", "溪谷", "撤退方向", "定位備援", "第二套定位", "第二套導航", "自主前往", "backup positioning", "map readiness", "navigation readiness")),
     ("scout.ai.route_readiness.assess.v0", ("go/no-go", "gono", "出發前", "行前", "可以出發", "能出發", "要不要出發", "是否出發", "出發決策", "departure gate", "departure readiness", "route readiness", "pretrip readiness", "go no go", "gonogo")),
     ("scout.ai.cwa_environment.assess.v0", ("cwa", "中央氣象署", "氣象署", "警特報", "豪大雨", "豪雨", "大雨", "颱風警報", "qpf", "定量降水", "降水預報", "雨量站", "逐時氣象", "鄉鎮預報", "日出", "日沒", "月出", "月沒", "潮汐", "海象", "cwa opendata")),
     ("scout.ai.gee_environment.assess.v0", ("gee", "google earth engine", "earth engine", "smap", "smap l4", "土壤含水", "土壤濕度", "rootzone", "soil moisture", "gpm", "imerg", "antecedent rain", "累積雨量", "前期雨量", "水文背景", "衛星降雨")),
@@ -551,6 +561,10 @@ _CURRENT_TOOL_TERMS = (
         (
             "值得看",
             "觀察點",
+            "停留",
+            "拍照",
+            "停留拍照",
+            "避免停留",
             "適合拍攝",
             "大景",
             "地名故事",
@@ -574,27 +588,28 @@ _CURRENT_TOOL_TERMS = (
     ),
     ("scout.ai.energy_vitals.assess.v0", ("心率", "心跳", "高山症", "自評", "補水", "補給", "太累", "很累", "疲勞", "速度下降", "決策品質", "決策風險", "休息", "下撤", "體能", "體力", "vitals", "health evidence", "source value", "body battery", "privacy boundary")),
     ("scout.ai.pace_guardian.assess.v0", ("pace guardian", "team pace fit", "readiness pace fit", "最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "需要加快", "落後", "晚了", "縮短行程", "改短版", "直接撤退", "能準時抵達", "下一個 cp", "隊友很累", "後隊", "快慢組")),
-    ("scout.ai.equipment_resource.assess.v0", ("手機電量", "手機只剩", "電量", "手錶電量", "頭燈", "備用燈", "行動電源", "離線地圖", "gpx", "第二套導航", "裝備", "水剩", "水還剩", "水量", "食物", "行動糧", "瓦斯", "雨衣", "保暖層", "急救包")),
+    ("scout.ai.equipment_resource.assess.v0", ("手機電量", "手機只剩", "電量", "手錶電量", "頭燈", "備用燈", "行動電源", "離線地圖", "gpx", "第二套導航", "裝備", "水剩", "水還剩", "水量", "多少水", "水和補給", "補給", "食物", "行動糧", "瓦斯", "雨衣", "保暖層", "急救包")),
     ("scout.ai.team_status.assess.v0", ("隊友在哪", "後隊在哪", "隊友不見", "隊友走散", "隊伍走散", "脫隊", "留守", "回報", "最後一次有效位置", "最後聯絡", "集合", "集合點", "約定山屋", "checkin", "rendezvous")),
     ("scout.ai.post_trip_review.assess.v0", ("行後", "回顧", "覆盤", "事後", "完成行程", "實際cp", "實際通過", "實際耗時", "停留時間", "比預期慢", "路段比預期", "體感難度", "near miss", "nearmiss", "裝備缺口", "天氣與路況", "下次行前", "下一次規劃", "模型更新", "能力摘要", "capability timeline", "capability capsule", "incident package", "field case")),
-    ("scout.ai.route_architecture.assess.v0", ("route architecture", "cp graph", "checkpoint graph", "路線結構", "行程結構", "cp圖", "撤退點", "撤退路線", "折返點", "最晚折返", "難點位置", "難點在哪", "容錯率", "低容錯", "替代路線", "短版路線", "岔路可以切", "回頭成本")),
+    ("scout.ai.route_architecture.assess.v0", ("route architecture", "cp graph", "checkpoint graph", "路線結構", "行程結構", "cp圖", "設 checkpoint", "設 cp", "一定要設", "checkpoint", "檢查點", "撤退點", "撤退路線", "折返點", "最晚折返", "難點位置", "難點在哪", "摸黑", "容錯率", "低容錯", "替代路線", "短版路線", "岔路可以切", "回頭成本")),
     ("scout.ai.media_literacy.assess.v0", ("ig", "instagram", "網紅", "美照", "熱門照片", "打卡", "朝聖", "攻略說", "網路上都說", "影片看起來", "照片看起來", "成功者", "乾季照片", "晴天影片", "輕裝", "專業帶隊", "嚮導", "媒體偏誤", "社群", "checkin", "social photo", "media bias", "survivorship bias")),
     ("scout.ai.survival_incident_playbook.explain.v0", ("不確定自己在哪", "原地等待", "停止移動", "等待救援", "待援", "開闊處", "開闊地方", "開闊的地方", "更開闊", "開闊地", "找路", "下切溪谷", "找訊號", "可視標記", "保存哪些證據", "分享給誰", "求救", "救援", "報座標", "地標", "直升機", "傷者", "撐過夜", "報案", "迷路", "失溫", "sos", "rescue")),
 )
 
 
 _RECOMMENDED_TOOL_TERMS = (
-    ("scout.ai.route_readiness.assess.v0", ("體能", "配速", "buffer", "晚出發", "水", "補給", "checkpoint", "摸黑", "低容錯", "停留拍照", "延後出發")),
+    ("scout.ai.route_readiness.assess.v0", ("配速", "buffer", "晚出發", "延後出發")),
     ("scout.ai.live_navigation_state.assess.v0", ("我現在", "現在是不是", "目前", "前方", "gps", "imu", "pdr", "方向", "偏離", "轉彎點", "精確導航", "主線", "下切")),
     ("scout.ai.navigation_terrain.assess.v0", ("地圖力", "地圖需求", "離線地圖熟悉", "等高線", "地形判讀", "撤退方向", "定位備援", "第二套定位", "第二套導航", "自主前往")),
-    ("scout.ai.weather_window.assess.v0", ("天氣", "下雨", "白牆", "風雨", "日落", "起霧", "溪水", "風寒", "濕衣", "撤退", "暴漲", "落石區", "紮營", "延後出發", "有效期限", "變冷")),
+    ("scout.ai.weather_window.assess.v0", ("天氣", "下雨", "白牆", "風雨", "日落", "摸黑", "起霧", "溪水", "風寒", "濕衣", "撤退", "暴漲", "落石區", "紮營", "延後出發", "有效期限", "變冷")),
     ("scout.ai.cwa_environment.assess.v0", ("cwa", "中央氣象署", "氣象署", "警特報", "qpf", "定量降水", "雨量站", "鄉鎮預報", "潮汐", "海象")),
     ("scout.ai.gee_environment.assess.v0", ("gee", "smap", "土壤含水", "soil moisture", "gpm", "imerg", "累積雨量", "前期雨量", "水文背景")),
     ("scout.ai.energy_vitals.assess.v0", ("心率", "心跳", "太累", "很累", "疲勞", "速度下降", "補水", "補給", "高山症", "自評", "上升", "休息", "下撤", "決策品質", "決策風險", "體能", "體力", "vitals", "health evidence", "source value", "body battery", "privacy boundary")),
     ("scout.ai.team_status.assess.v0", ("隊友", "後隊", "隊伍", "留守", "回報", "最後一次有效位置", "集合", "約定山屋")),
-    ("scout.ai.equipment_resource.assess.v0", ("手機電量", "手機只剩", "5%", "手錶", "頭燈", "行動電源", "離線地圖", "第二套導航", "裝備", "水剩", "瓦斯", "食物")),
+    ("scout.ai.equipment_resource.assess.v0", ("手機電量", "手機只剩", "5%", "手錶", "頭燈", "行動電源", "離線地圖", "第二套導航", "裝備", "水剩", "多少水", "水和補給", "補給", "瓦斯", "食物")),
     ("scout.ai.survival_incident_playbook.explain.v0", ("不確定自己在哪", "原地等待", "停止移動", "等待救援", "待援", "開闊處", "開闊地方", "開闊的地方", "更開闊", "開闊地", "找路", "下切溪谷", "找訊號", "可視標記", "保存哪些證據", "分享給誰", "求救", "救援", "報座標", "地標", "直升機", "傷者", "撐過夜", "報案")),
     ("scout.ai.post_trip_review.assess.v0", ("事後", "最早的風險", "warning", "設錯", "漏設", "gpx corridor", "field case", "下次行前", "incident package")),
+    ("scout.ai.route_architecture.assess.v0", ("route architecture", "cp graph", "checkpoint graph", "路線結構", "行程結構", "cp圖", "設 checkpoint", "設 cp", "一定要設", "checkpoint", "檢查點", "撤退點", "撤退路線", "折返點", "最晚折返", "難點位置", "難點在哪", "摸黑", "容錯率", "低容錯", "替代路線", "短版路線", "回頭成本")),
     ("scout.ai.ins_dr_trace.analyze.v0", ("ins/dr", "pdr", "imu", "gps-only", "軌跡", "z 字形", "zigzag", "解析度", "anchor", "map matching", "vendor-fused", "raw imu", "estimate", "trajectory", "uncertainty")),
     ("scout.ai.runtime_ingress_status.search.v0", ("mqtt", "sensor logger", "sensor/vitals", "apple watch", "timestamp", "封包", "message", "routing", "router", "pipeline", "loss package", "latency", "pydantic ai", "assistant", "provider", "context", "派發", "接入", "outbound packet")),
     ("scout.ai.safety_boundary.explain.v0", ("ln", "safety", "/safety", "phase 1", "l0", "l1", "l2", "l3", "l4", "operator", "觸發警報", "告警", "誤判", "墜崖", "候選", "admission", "persistence")),
@@ -613,6 +628,7 @@ _WEATHER_TERMS = (
     "白牆",
     "風雨",
     "日落",
+    "摸黑",
     "起霧",
     "溪水",
     "風寒",
@@ -637,11 +653,11 @@ _WEATHER_TERMS = (
 )
 _ROUTE_READINESS_TERMS = ("go/no-go", "gono", "出發前", "行前", "可以出發", "能出發", "要不要出發", "是否出發", "出發決策", "departure gate", "departure readiness", "route readiness", "pretrip readiness", "go no go", "gonogo")
 _MEDIA_LITERACY_TERMS = ("ig", "instagram", "網紅", "美照", "熱門照片", "打卡", "朝聖", "攻略說", "網路上都說", "影片看起來", "照片看起來", "成功者", "乾季照片", "晴天影片", "輕裝", "專業帶隊", "嚮導", "媒體偏誤", "社群", "checkin", "social photo", "media bias", "survivorship bias")
-_PRIVATE_PROFILE_TERMS = ("我的體能", "我的速度", "我今天", "我需要", "我晚出發", "我補", "我是不是", "我該")
+_PRIVATE_PROFILE_TERMS = ("我的體能", "我的速度", "我今天", "我需要", "我晚出發", "我補", "我該")
 _PACE_PROFILE_TERMS = ("最慢者", "最慢成員", "腳程差", "隊伍腳程", "隊伍速度", "隊伍節奏", "休息節奏", "午餐點", "午餐前移", "縮短行程", "改短版", "能準時抵達", "下一個 cp")
 _VITALS_TERMS = ("心率", "心跳", "高山症", "自評", "補水", "補給", "太累", "很累", "疲勞", "速度下降", "決策品質", "決策風險", "休息", "下撤", "體能", "體力", "vitals", "health evidence", "source value", "body battery", "privacy boundary")
 _TEAM_TERMS = ("隊友", "後隊", "隊伍", "留守", "回報", "約定山屋", "集合")
-_EQUIPMENT_TERMS = ("手機電量", "手機只剩", "5%", "手錶", "頭燈", "行動電源", "離線地圖", "第二套導航", "裝備", "水剩", "瓦斯", "食物")
+_EQUIPMENT_TERMS = ("手機電量", "手機只剩", "5%", "手錶", "頭燈", "行動電源", "離線地圖", "第二套導航", "裝備", "水剩", "多少水", "水和補給", "補給", "瓦斯", "食物")
 _INCIDENT_CONTEXT_TERMS = ("受傷", "救援", "搜救", "直升機", "傷者", "求救", "報案", "等待救援", "待援", "開闊處", "開闊地方", "開闊的地方", "更開闊", "開闊地", "停止移動", "留守人轉報")
 _POST_TRIP_TERMS = (
     "行後",
