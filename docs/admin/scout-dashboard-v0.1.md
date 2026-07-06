@@ -1190,3 +1190,132 @@ Verification:
 - `pnpm typecheck` passed.
 - `pnpm test` passed.
 - `git diff --check` passed.
+
+### 2026-07-05 - Route Context Intelligence Variants Integrated
+
+User request:
+
+- Connect the dashboard Route Context / Route Context Intelligence surface to
+  `skills/scout/route-context-intelligence.yaml`.
+- Use Scout AI to generate a complete route briefing result from that skill.
+
+Implementation steps:
+
+- Added a route-context variants API flow:
+  `POST /admin/pretrip/projects/{project_id}/briefings/route-context/variants/generate`.
+- Added a read endpoint for current variants status:
+  `GET /admin/pretrip/projects/{project_id}/briefings/route-context/variants`.
+- Added a safe artifact file endpoint for the generated index, comparison,
+  model audit, failure artifact, and each variant HTML file.
+- Routed generation through
+  `tools/scout_ai_route_context_briefing_variants.py`, which reads
+  `skills/scout/route-context-intelligence.yaml` and performs the single Scout
+  AI / Pydantic AI call required by the skill contract.
+- Kept generated variants under
+  `outputs/briefings/route_context_variants_ai_once` and did not overwrite the
+  canonical `outputs/briefings/route_context_briefing.html`.
+- Added dashboard Route Context controls to trigger five variants with Scout
+  AI and show a compact, collapsible variants drawer with links to the index,
+  comparison, model audit, and generated pages.
+- Added regression coverage for the admin API flow and dashboard route-context
+  UI contract.
+
+Boundary notes:
+
+- The variants flow is operator-triggered only.
+- It does not mutate Phase 1 runtime safety truth.
+- It does not trigger live safety automation, outbound transport, hardware
+  control, or `/safety/*` writes.
+- Model prompt, model response, token usage, skill hash, and model output hash
+  are preserved in machine-readable audit artifacts, not in product-visible
+  variant HTML.
+
+Verification:
+
+- Focused admin API and dashboard tests cover the fake Scout AI runner path and
+  artifact serving path.
+- Live generation against
+  `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI` used Scout AI via
+  `nvidia:z-ai/glm-5.2` and recorded provider token usage:
+  `input_tokens=7804`, `output_tokens=4043`, `total_tokens=11847`,
+  `requests=1`, `tool_calls=0`.
+- The generated workspace outputs are:
+  `index.html`, `01-magazine_atlas.html`, `02-command_wall.html`,
+  `03-field_notebook.html`, `04-topographic_feature.html`,
+  `05-night_navigation.html`, `route_context_variant_comparison.json`,
+  `route_context_variant_comparison.md`, and
+  `scout_ai_route_context_variant_model_plan.json`.
+- Desktop and mobile Playwright smoke verified the dashboard Route Context
+  variants drawer, five artifact links, no 4xx responses, no console errors,
+  and no horizontal overflow.
+
+### 2026-07-05 - Route Context Variants Reference Gate And Re-Generation
+
+User request:
+
+- Generate another five Route Context Intelligence briefings and ensure they
+  are not more than 60% similar to the existing dashboard five.
+- Challenge whether the previous dashboard view came from a real Scout AI
+  call, because it still matched the existing
+  `route_context_variants_ai_once/index.html` output.
+
+Implementation steps:
+
+- Confirmed the previous visible dashboard was still pointing to the existing
+  `outputs/briefings/route_context_variants_ai_once` artifact set.
+- Added reference-aware generation support to
+  `tools/scout_ai_route_context_briefing_variants.py`:
+  `--reference-variants-dir` and `--max-reference-similarity`.
+- Added a local similarity gate that compares Scout AI generated visible
+  briefing copy, concepts, headings, chapter titles, observation prompts, and
+  point-angle wording with a 4-gram cosine metric.
+- Excluded fixed route evidence from the gate because the full HTML necessarily
+  repeats the same route points, source tables, and renderer structure.
+- Added reference avoidance prompt content so Scout AI does not reuse the old
+  five frames: magazine atlas, command wall, field notebook, topographic
+  feature, and night navigation.
+- Changed reference-aware output filenames to use the generated variant slug
+  instead of the old fixed filenames.
+- Exposed `reference_similarity_gate`, per-variant
+  `max_reference_similarity`, and gate pass/fail metadata through the admin API.
+- Updated the dashboard variants drawer to show the reference gate result and
+  to send `max_reference_similarity: 0.6` on future variant generation.
+- Updated
+  `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI/project.json` to
+  point the dashboard at
+  `outputs/briefings/route_context_variants_ai_second_pass_20260705T082948Z`.
+
+Final generated variants:
+
+- `01-rehearsal-runthrough-v1.html`
+- `02-ridge-valley-transect-v2.html`
+- `03-hut-summit-ledger-v3.html`
+- `04-weather-checkpoint-v4.html`
+- `05-evidence-courtroom-v5.html`
+
+Scout AI evidence:
+
+- Final model: `nvidia:z-ai/glm-5.2`
+- Provider-reported usage:
+  `input_tokens=11278`, `output_tokens=4171`, `total_tokens=15449`.
+- Reference gate: `passed`.
+- Maximum observed reference similarity: `0.2605`.
+- Maximum allowed reference similarity: `0.6`.
+
+Boundary notes:
+
+- This remains operator-triggered pretrip candidate output.
+- Canonical `outputs/briefings/route_context_briefing.html` is unchanged.
+- The flow does not mutate Phase 1 runtime safety truth, call `/safety/*`,
+  trigger live safety automation, send outbound transport, or control hardware.
+
+Verification:
+
+- Focused generator, admin API, and dashboard tests passed.
+- `pnpm lint` passed.
+- `pnpm typecheck` passed.
+- `pnpm test` passed.
+- 9099 variants API returned the new output dir, five variants,
+  provider-reported token usage, and `reference_similarity_gate.status=passed`.
+- Playwright verified the dashboard Route Context page shows the new five
+  slugs, `15449 tokens`, and `reference passed max 0.2605/0.6`.

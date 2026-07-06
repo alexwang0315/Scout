@@ -803,6 +803,24 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "data-route-context-briefing-regenerate" in html
     assert "Regenerate with Scout AI" in html
     assert "/briefings/route-context/regenerate" in html
+    assert "function routeContextBriefingVariantsPath()" in html
+    assert "function routeContextBriefingVariantsGeneratePath()" in html
+    assert "function routeContextBriefingVariantFileSrc(ref)" in html
+    assert "/briefings/route-context/variants" in html
+    assert "/briefings/route-context/variants/generate" in html
+    assert "data-route-context-briefing-variants-generate" in html
+    assert "Generate 5 variants with Scout AI" in html
+    assert "Calling Scout AI route-context-intelligence skill for five variants" in html
+    assert "model: \"nvidia:z-ai/glm-5.2\"" in html
+    assert "model_max_tokens: 7000" in html
+    assert "reference_variants_dir_ref" in html
+    assert "max_reference_similarity: 0.6" in html
+    assert "reference similarity" in html
+    assert "reference_similarity_gate" in html
+    assert "Open variants index" in html
+    assert "Model audit" in html
+    assert "single Scout AI model call" in html
+    assert "canonical briefing unchanged" in html
     assert "Calling Scout AI via OpenRouter" in html
     assert "Open briefing" in html
     assert "outputs/briefings/route_context_briefing.html" in html

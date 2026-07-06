@@ -753,6 +753,189 @@ def test_pretrip_project_route_context_briefing_regenerate_calls_scout_ai(
     assert "Scout AI" not in briefing
 
 
+def test_pretrip_project_route_context_briefing_variants_generate_calls_scout_ai(
+    tmp_path: Path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    canonical_briefing = (
+        project_root / "outputs" / "briefings" / "route_context_briefing.html"
+    )
+    canonical_before = canonical_briefing.read_text(encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeVariantsRunner:
+        def __init__(self, model_name: str) -> None:
+            self.model_name = model_name
+            self.last_prompt: str | None = None
+            self.last_response: str | None = None
+            self.last_usage = {
+                "provider_reported": True,
+                "input_tokens": 7804,
+                "output_tokens": 4700,
+                "total_tokens": 12504,
+                "requests": 1,
+                "tool_calls": 0,
+            }
+
+        def run(self, prompt: str, *, timeout_seconds: int) -> str:
+            captured["prompt"] = prompt
+            captured["timeout_seconds"] = timeout_seconds
+            self.last_prompt = prompt
+            self.last_response = json.dumps(
+                _route_context_briefing_variants_plan(),
+                ensure_ascii=False,
+            )
+            return self.last_response
+
+    def fake_variants_runner_factory(model_name: str, model_max_tokens: int):
+        captured["model_name"] = model_name
+        captured["model_max_tokens"] = model_max_tokens
+        return FakeVariantsRunner(model_name)
+
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            route_context_briefing_variants_runner_factory=(
+                fake_variants_runner_factory
+            ),
+        )
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/generate",
+        json={
+            "confirm_generate": True,
+            "model": "nvidia:z-ai/glm-5.2",
+            "timeout_seconds": 300,
+            "model_max_tokens": 7000,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["variant_count"] == 5
+    assert payload["model"] == "nvidia:z-ai/glm-5.2"
+    assert payload["skill_id"] == "route-context-intelligence"
+    assert payload["token_usage"]["total_tokens"] == 12504
+    assert [item["file_ref"] for item in payload["variants"]] == [
+        "01-magazine_atlas.html",
+        "02-command_wall.html",
+        "03-field_notebook.html",
+        "04-topographic_feature.html",
+        "05-night_navigation.html",
+    ]
+    assert payload["one_model_call_complete"] is True
+    assert payload["no_codex_posthoc_supplement"] is True
+    assert payload["boundary"]["workspace_canonical_briefing_overwritten"] is False
+    assert captured["model_name"] == "nvidia:z-ai/glm-5.2"
+    assert captured["model_max_tokens"] == 7000
+    assert captured["timeout_seconds"] == 300
+    assert "Generate exactly five complete route-content briefing variant specs" in str(
+        captured["prompt"]
+    )
+    assert "route-context-intelligence" in str(captured["prompt"])
+
+    output_dir = (
+        project_root / "outputs" / "briefings" / "route_context_variants_ai_once"
+    )
+    plan_payload = json.loads(
+        (output_dir / "scout_ai_route_context_variant_model_plan.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert plan_payload["prompt_content"]
+    assert plan_payload["response_content"]
+    assert plan_payload["skill_manifest_sha256"]
+    assert plan_payload["model_output_sha256"]
+    assert plan_payload["token_usage"]["total_tokens"] == 12504
+    assert plan_payload["boundary"]["workspace_canonical_briefing_overwritten"] is False
+    assert canonical_briefing.read_text(encoding="utf-8") == canonical_before
+
+    status_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants"
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["variant_count"] == 5
+
+    index_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/file",
+        params={"ref": "index.html"},
+    )
+    assert index_response.status_code == 200
+    assert index_response.headers["x-scout-candidate-only"] == "true"
+    assert index_response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert index_response.headers["x-scout-route-context-briefing-variants"] == "true"
+    assert "Scout AI 一次產生的 5 版 Route Briefing" in index_response.text
+
+
+def _route_context_briefing_variants_plan() -> dict[str, object]:
+    return {
+        "artifact_kind": "scout_ai_route_context_briefing_variants_plan",
+        "schema_version": "scout_ai_route_context_briefing_variants_plan.v1",
+        "skill_id": "route-context-intelligence",
+        "one_model_call_complete": True,
+        "no_codex_posthoc_supplement": True,
+        "variants": [
+            _route_context_briefing_variant(index)
+            for index in range(1, 6)
+        ],
+    }
+
+
+def _route_context_briefing_variant(index: int) -> dict[str, object]:
+    slugs = [
+        "magazine-atlas",
+        "command-wall",
+        "field-notebook",
+        "topographic-feature",
+        "night-navigation",
+    ]
+    tones = [
+        "山岳雜誌",
+        "隊伍作戰牆",
+        "領隊野帳",
+        "地形特刊",
+        "夜航簡報",
+    ]
+    return {
+        "slug": slugs[index - 1],
+        "title": f"{tones[index - 1]}奇萊南華",
+        "subtitle": "林道、山莊、稜線與短停題目",
+        "tone": tones[index - 1],
+        "concept": f"{tones[index - 1]}路線閱讀",
+        "editorial_thesis": "把沿線地形、來源與觀察點排成領隊出發前能審查的段落。",
+        "hero_caption": "能高越嶺道與南華山稜線景觀。",
+        "nav_labels": ["路線", "照片", "比例", "章節", "觀察", "來源"],
+        "layer_headlines": {
+            "historical": "保線與舊路痕跡提示路線背景。",
+            "cultural": "地名與通行記憶連回隊伍說明。",
+            "natural": "林相、水線與雲霧補足路感。",
+            "terrain": "崩壁、啞口與稜線是閱讀重點。",
+            "seasonal": "午後雲霧與低溫放進行前提醒。",
+            "observation": "短停題目只用於討論與審查。",
+        },
+        "chapter_titles": [f"路段閱讀 {index}-{i}" for i in range(1, 9)],
+        "observation_prompts": [
+            f"觀察題 {index}-{i}：確認上下路段關係。"
+            for i in range(1, 11)
+        ],
+        "point_angles": [
+            {
+                "label": f"路線點 {i}",
+                "angle": f"從隊伍節奏看地形與視野轉換 {i}。",
+                "question": f"先確認哪個方向線索 {i}？",
+                "route_reading": f"這個點只作行前脈絡討論 {i}。",
+            }
+            for i in range(1, 19)
+        ],
+        "chart_titles": [f"比例圖 {index}-{i}" for i in range(1, 7)],
+        "source_storyline": "官方路線圖、行程點與影像分開確認，再排成行前討論順序。",
+        "leader_review_focus": "領隊先確認照片、短停提問與資料來源是否支撐隊伍說明。",
+        "closing_note": "這份版本是行前閱讀，不取代現地停留或安全決策。",
+    }
+
+
 def test_route_context_briefing_runner_adds_src_to_python_path(
     monkeypatch,
 ) -> None:
