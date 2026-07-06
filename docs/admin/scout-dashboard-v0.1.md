@@ -1319,3 +1319,39 @@ Verification:
   provider-reported token usage, and `reference_similarity_gate.status=passed`.
 - Playwright verified the dashboard Route Context page shows the new five
   slugs, `15449 tokens`, and `reference passed max 0.2605/0.6`.
+
+### 2026-07-06 - Future LoRaWAN Sender Dashboard Placement
+
+User request:
+
+- Record that Scout will need a future sender, and decide where it should
+  integrate with the dashboard.
+
+Planning decision:
+
+- The future sender is a transport/action service, not an observer.
+- Working name: `scout_lorawan_sender.py`.
+- Primary dashboard integration should be `MQTT / Observer Message`.
+- The `MQTT / Observer Message` page should add a visually separated
+  sender/action lane for command candidates, queue state, dry-run/live send
+  readiness, latest RF audit, gateway/client observer status, and explicit
+  operator confirmation for bounded sends.
+- The top-level `Safety / Emergency` route may summarize emergency-relevant
+  sender readiness and link to the `MQTT / Observer Message` sender lane, but
+  it should not own the sender workbench.
+- `Debug Message` may show sender status, queue, readiness, and JSONL audit
+  links, but it must remain status-only and must not own the send button.
+
+Boundary notes:
+
+- No sender was implemented in this recording slice.
+- No dashboard button was wired to RF, LoRaWAN uplink, remote outbound, or
+  `/safety/*`.
+- The page name `MQTT / Observer Message` does not convert the resident
+  observers into senders; the future sender lane is a separate action path.
+- The current `sx1303-gateway` and `lorawan-client` resident observers remain
+  read-only evidence producers.
+- Initial future allowed message types should be `diagnostic_ping`, `check_in`,
+  and `last_known_position`.
+- `send_sos`, `trigger_l4`, and `change_safety_level` stay blocked until a
+  separate Safety Arbiter / operator confirmation design exists.
