@@ -787,6 +787,53 @@
       text-decoration: none;
     }
 
+    .route-briefing-variant-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      padding: 0 12px 12px;
+    }
+
+    .route-briefing-variant-card {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, .085);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, .14);
+    }
+
+    .route-briefing-variant-card h4 {
+      margin: 0;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .route-briefing-variant-card a {
+      justify-content: center;
+      min-height: 28px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: #f6d68d;
+      background: rgba(213, 166, 66, .09);
+      font-size: 11px;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .route-briefing-variant-card small,
+    .route-briefing-variant-status {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
     .route-briefing-empty {
       padding: 12px;
       color: var(--muted);
@@ -2175,6 +2222,9 @@
       .route-briefing-meta-grid {
         grid-template-columns: 1fr;
       }
+      .route-briefing-variant-grid {
+        grid-template-columns: 1fr;
+      }
       .force-row {
         grid-template-columns: 1fr;
       }
@@ -2751,6 +2801,12 @@
         tone: "info",
         text: "Scout AI regeneration idle",
       },
+      briefingVariants: null,
+      briefingVariantsBusy: false,
+      briefingVariantsStatus: {
+        tone: "info",
+        text: "Scout AI variants idle",
+      },
       importTripDraft: {
         tripId: "new_trip",
         goldenRouteGpx: "",
@@ -2851,6 +2907,21 @@
       return `/admin/pretrip/projects/${project}/briefings/route-context/regenerate`;
     }
 
+    function routeContextBriefingVariantsPath() {
+      const project = encodeURIComponent(routeContextBriefingProjectId());
+      return `/admin/pretrip/projects/${project}/briefings/route-context/variants`;
+    }
+
+    function routeContextBriefingVariantsGeneratePath() {
+      const project = encodeURIComponent(routeContextBriefingProjectId());
+      return `/admin/pretrip/projects/${project}/briefings/route-context/variants/generate`;
+    }
+
+    function routeContextBriefingVariantFileSrc(ref) {
+      const project = encodeURIComponent(routeContextBriefingProjectId());
+      return `${apiBase()}/admin/pretrip/projects/${project}/briefings/route-context/variants/file?ref=${encodeURIComponent(ref || "index.html")}`;
+    }
+
     function surfaceSrc(path) {
       const delimiter = path.includes("?") ? "&" : "?";
       return `${path}${delimiter}projectId=${encodeURIComponent(projectId())}`;
@@ -2929,6 +3000,16 @@
         }).catch(() => {}),
         fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/debug-projection-events`).then((data) => {
           state.debugEvents = data.events || data.timeline || [];
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/briefings/route-context/variants`).then((data) => {
+          state.briefingVariants = data;
+          if (data.status === "completed") {
+            state.briefingVariantsStatus = {
+              tone: "ok",
+              text: `${data.variant_count || 0} variants ready via ${data.model || "Scout AI"}`,
+            };
+          }
           refreshCurrentDataView();
         }).catch(() => {}),
         fetchJson("/debug/events?limit=200").then((data) => {
@@ -4686,19 +4767,32 @@
       const briefingSrc = routeContextBriefingSrc();
       const briefingPath = `/admin/pretrip/projects/${briefingProject}/briefings/route-context`;
       const regeneration = state.briefingRegenerationStatus || { tone: "info", text: "Scout AI regeneration idle" };
+      const variantsStatus = state.briefingVariantsStatus || { tone: "info", text: "Scout AI variants idle" };
       return `
         ${outdoorTabs(force.route)}
         <div class="route-briefing-layout">
           <section class="panel route-briefing-frame-panel">
             <div class="route-briefing-ops">
-              <button
-                class="route-briefing-action-button primary"
-                type="button"
-                data-route-context-briefing-regenerate
-                ${state.briefingRegenerationBusy ? "disabled" : ""}
-              >${state.briefingRegenerationBusy ? "Regenerating..." : "Regenerate with Scout AI"}</button>
-              <span class="route-briefing-status" id="routeBriefingRegenerationStatus">${escapeHtml(regeneration.text)}</span>
+              <div class="route-briefing-actions">
+                <button
+                  class="route-briefing-action-button primary"
+                  type="button"
+                  data-route-context-briefing-regenerate
+                  ${state.briefingRegenerationBusy ? "disabled" : ""}
+                >${state.briefingRegenerationBusy ? "Regenerating..." : "Regenerate with Scout AI"}</button>
+                <button
+                  class="route-briefing-action-button"
+                  type="button"
+                  data-route-context-briefing-variants-generate
+                  ${state.briefingVariantsBusy ? "disabled" : ""}
+                >${state.briefingVariantsBusy ? "Generating 5 variants..." : "Generate 5 variants with Scout AI"}</button>
+              </div>
+              <div class="route-briefing-variant-status">
+                <div id="routeBriefingRegenerationStatus">${escapeHtml(regeneration.text)}</div>
+                <div id="routeBriefingVariantsStatus">${escapeHtml(variantsStatus.text)}</div>
+              </div>
             </div>
+            ${renderRouteBriefingVariantsDrawer(state.briefingVariants)}
             <details class="route-briefing-meta-drawer" data-route-briefing-metadata="collapsed">
               <summary>
                 <span>Briefing metadata</span>
@@ -4743,6 +4837,54 @@
             ></iframe>
           </section>
         </div>
+      `;
+    }
+
+    function renderRouteBriefingVariantsDrawer(payload) {
+      const variants = payload?.variants || [];
+      const usage = payload?.token_usage || payload?.failure?.token_usage || {};
+      const tokenLine = usage.total_tokens ? `${usage.total_tokens} tokens · ${usage.requests || 1} request` : "token usage pending";
+      const model = payload?.model || "nvidia:z-ai/glm-5.2";
+      const status = payload?.status || "missing";
+      const gate = payload?.reference_similarity_gate || null;
+      const gateTone = gate?.status === "passed" ? "ok" : gate?.status === "failed" ? "bad" : "info";
+      const gateLine = gate?.enabled ? `reference ${gate.status} · max ${gate.max_observed}/${gate.max_allowed}` : "reference gate pending";
+      const links = [];
+      if (payload?.index_ref) links.push(`<a href="${escapeHtml(routeContextBriefingVariantFileSrc(payload.index_ref))}" target="_blank" rel="noreferrer">Open variants index</a>`);
+      if (payload?.comparison_md_ref) links.push(`<a href="${escapeHtml(routeContextBriefingVariantFileSrc(payload.comparison_md_ref))}" target="_blank" rel="noreferrer">Comparison</a>`);
+      if (payload?.plan_ref) links.push(`<a href="${escapeHtml(routeContextBriefingVariantFileSrc(payload.plan_ref))}" target="_blank" rel="noreferrer">Model audit</a>`);
+      if (payload?.failure_ref) links.push(`<a href="${escapeHtml(routeContextBriefingVariantFileSrc(payload.failure_ref))}" target="_blank" rel="noreferrer">Failure artifact</a>`);
+      const cards = variants.length ? variants.map((variant) => `
+        <article class="route-briefing-variant-card">
+          <h4>${escapeHtml(variant.slug || variant.file_ref || "variant")}</h4>
+          <small>${escapeHtml(variant.concept || variant.tone || "route briefing candidate")}</small>
+          <small>${escapeHtml(`${variant.visible_chars || 0} chars · ${variant.images || 0} images · chart ${variant.chart_ratio ?? "n/a"}`)}</small>
+          <small>${escapeHtml(`rich ${variant.richness_score ?? "n/a"} · innovation ${variant.innovation_score ?? "n/a"}`)}</small>
+          <small>${escapeHtml(`reference similarity ${variant.max_reference_similarity ?? "n/a"}`)}</small>
+          <a href="${escapeHtml(routeContextBriefingVariantFileSrc(variant.file_ref))}" target="_blank" rel="noreferrer">Open</a>
+        </article>
+      `).join("") : `
+        <section class="route-briefing-meta-block">
+          <h4>Variants pending</h4>
+          <p class="route-briefing-empty">Generate once to create five route briefing candidates from the route-context-intelligence skill without overwriting the canonical briefing.</p>
+        </section>
+      `;
+      return `
+        <details class="route-briefing-meta-drawer" data-route-briefing-variants="collapsed">
+          <summary>
+            <span>Route briefing variants</span>
+            <small>${escapeHtml(`${status} · ${model} · ${tokenLine} · ${gateLine}`)}</small>
+          </summary>
+          <div class="route-briefing-meta-actions">
+            ${links.join("") || '<span class="chip warn">no variant artifacts yet</span>'}
+            <span class="chip info">single Scout AI model call</span>
+            <span class="chip warn">canonical briefing unchanged</span>
+            <span class="chip ${escapeHtml(gateTone)}">${escapeHtml(gateLine)}</span>
+          </div>
+          <div class="${variants.length ? "route-briefing-variant-grid" : "route-briefing-meta-grid"}">
+            ${cards}
+          </div>
+        </details>
       `;
     }
 
@@ -5861,8 +6003,7 @@
 
     function bindRouteContextBriefingControls() {
       const button = document.querySelector("[data-route-context-briefing-regenerate]");
-      if (!button) return;
-      button.addEventListener("click", async () => {
+      if (button) button.addEventListener("click", async () => {
         state.briefingRegenerationBusy = true;
         state.briefingRegenerationStatus = {
           tone: "warn",
@@ -5889,6 +6030,40 @@
           };
         } finally {
           state.briefingRegenerationBusy = false;
+          render();
+        }
+      });
+      const variantsButton = document.querySelector("[data-route-context-briefing-variants-generate]");
+      if (variantsButton) variantsButton.addEventListener("click", async () => {
+        state.briefingVariantsBusy = true;
+        state.briefingVariantsStatus = {
+          tone: "warn",
+          text: "Calling Scout AI route-context-intelligence skill for five variants...",
+        };
+        render();
+        try {
+          const payload = await postJson(routeContextBriefingVariantsGeneratePath(), {
+            confirm_generate: true,
+            model: "nvidia:z-ai/glm-5.2",
+            timeout_seconds: 300,
+            model_max_tokens: 7000,
+            reference_variants_dir_ref: state.briefingVariants?.output_dir_ref || "outputs/briefings/route_context_variants_ai_once",
+            max_reference_similarity: 0.6,
+          });
+          state.briefingVariants = payload;
+          const tokens = payload.token_usage?.total_tokens ? ` · ${payload.token_usage.total_tokens} tokens` : "";
+          state.briefingVariantsStatus = {
+            tone: "ok",
+            text: `Generated ${payload.variant_count || 0} variants with ${payload.model || "Scout AI"}${tokens}`,
+          };
+          await loadData();
+        } catch (error) {
+          state.briefingVariantsStatus = {
+            tone: "bad",
+            text: `Variant generation failed: ${error.message || error}`,
+          };
+        } finally {
+          state.briefingVariantsBusy = false;
           render();
         }
       });

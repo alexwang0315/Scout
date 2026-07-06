@@ -6,7 +6,7 @@ import html
 import json
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -41,6 +41,7 @@ DEFAULT_BASELINE_REF = "outputs/briefings/route_context_briefing.template_backup
 DEFAULT_SKILL_REF = "skills/scout/route-context-intelligence.yaml"
 DEFAULT_MAX_POINTS = 72
 DEFAULT_MAX_IMAGES = 8
+DEFAULT_REFERENCE_SIMILARITY_NGRAM = 4
 
 BLOCKED_VISIBLE_TERMS = (
     "candidate_only",
@@ -102,6 +103,13 @@ THEME_CLASSES = (
     "field-notebook",
     "topographic-magazine",
     "night-navigation",
+)
+VARIANT_OUTPUT_REFS = (
+    "01-magazine_atlas.html",
+    "02-command_wall.html",
+    "03-field_notebook.html",
+    "04-topographic_feature.html",
+    "05-night_navigation.html",
 )
 
 
@@ -187,6 +195,8 @@ def generate_route_context_briefing_variants(
     output_dir: Path,
     runner: ModelRunner,
     timeout_seconds: int,
+    reference_variants_dir: Path | None = None,
+    max_reference_similarity: float | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     generated_at = generated_at or _utc_now()
@@ -194,11 +204,14 @@ def generate_route_context_briefing_variants(
     skill_text = skill_path.read_text(encoding="utf-8")
     skill_manifest = yaml.safe_load(skill_text)
     output_dir.mkdir(parents=True, exist_ok=True)
+    reference_variants = _load_reference_variant_specs(reference_variants_dir)
     prompt = build_variants_prompt(
         workspace=workspace,
         skill_manifest=skill_manifest,
         skill_text=skill_text,
         baseline_html=baseline_html,
+        reference_variants=reference_variants,
+        max_reference_similarity=max_reference_similarity,
     )
     raw_output = runner.run(prompt, timeout_seconds=timeout_seconds)
     try:
@@ -237,7 +250,11 @@ def generate_route_context_briefing_variants(
         raw_model_output=raw_output,
         plan=plan,
         generated_at=generated_at,
+        reference_variants=reference_variants,
+        reference_variants_dir=reference_variants_dir,
+        max_reference_similarity=max_reference_similarity,
     )
+    comparison = _read_json(output_dir / written.comparison_json_ref)
     return {
         "artifact_kind": ARTIFACT_KIND,
         "schema_version": ARTIFACT_VERSION,
@@ -253,6 +270,7 @@ def generate_route_context_briefing_variants(
         "comparison_md_ref": written.comparison_md_ref,
         "index_ref": written.index_ref,
         "variant_refs": list(written.variant_refs),
+        "reference_similarity_gate": comparison.get("reference_similarity_gate"),
     }
 
 
@@ -262,6 +280,8 @@ def build_variants_prompt(
     skill_manifest: dict[str, Any],
     skill_text: str,
     baseline_html: Path,
+    reference_variants: list[dict[str, Any]] | None = None,
+    max_reference_similarity: float | None = None,
 ) -> str:
     skill_summary = {
         "id": skill_manifest.get("id"),
@@ -291,6 +311,44 @@ def build_variants_prompt(
         "skill_summary": skill_summary,
         "skill_contract_excerpt": skill_text[:2000],
     }
+    if reference_variants:
+        prompt_payload["reference_variants_to_avoid"] = [
+            {
+                "slug": item.get("slug"),
+                "title": item.get("title"),
+                "tone": item.get("tone"),
+                "concept": item.get("concept"),
+                "copy_excerpt": item.get("copy_excerpt"),
+            }
+            for item in reference_variants[:5]
+        ]
+        prompt_payload["reference_similarity_gate"] = {
+            "metric": "visible briefing copy 4-gram cosine",
+            "max_allowed": max_reference_similarity,
+            "note": (
+                "Avoid matching reference titles, tones, concepts, section frames, "
+                "chapter naming patterns, observation prompts, and point-angle wording."
+            ),
+        }
+    if reference_variants:
+        concept_instruction = (
+            "Reference variants are supplied in workspace evidence. Generate five NEW versions that are "
+            "not magazine atlas, command-wall expedition board, field notebook, topographic feature issue, "
+            "or night-navigation briefing. Use five different route-facing frames instead: "
+            "one leader rehearsal run-through, one ridge-and-valley transect board, one hut-to-summit "
+            "itinerary ledger, one weather-season checkpoint review, and one source-evidence courtroom. "
+            "Do not reuse reference titles, tones, section metaphors, chart names, chapter naming patterns, "
+            "or observation prompt wording. The deterministic gate will compare your visible briefing copy "
+            f"against the reference set and fail any variant above {max_reference_similarity or 0.6:.2f} cosine similarity. "
+            "Do not invent route facts outside the supplied workspace evidence.\n\n"
+        )
+    else:
+        concept_instruction = (
+            "Make the five versions substantially different in editorial concept: one magazine atlas, "
+            "one command-wall expedition board, one field notebook, one topographic feature issue, "
+            "and one night-navigation briefing. Do not copy prior briefing text. Do not invent route facts "
+            "outside the supplied workspace evidence.\n\n"
+        )
     return (
         "You are Scout AI executing the route-context-intelligence skill. "
         "Generate exactly five complete route-content briefing variant specs in one model call. "
@@ -327,10 +385,7 @@ def build_variants_prompt(
         "compiler, cache, JSON plan, artifact path, Scout AI, source tier machine field, visual kit, "
         "image guide, material board, opening visual, photo readiness, or page preparation in any "
         "visible copy field. Use normal Traditional Chinese route-briefing language.\n\n"
-        "Make the five versions substantially different in editorial concept: one magazine atlas, "
-        "one command-wall expedition board, one field notebook, one topographic feature issue, "
-        "and one night-navigation briefing. Do not copy prior briefing text. Do not invent route facts "
-        "outside the supplied workspace evidence.\n\n"
+        f"{concept_instruction}"
         f"Workspace evidence JSON: {json.dumps(prompt_payload, ensure_ascii=False, sort_keys=True)}"
     )
 
@@ -371,6 +426,9 @@ def write_variant_outputs(
     raw_model_output: str,
     plan: dict[str, Any],
     generated_at: str,
+    reference_variants: list[dict[str, Any]] | None = None,
+    reference_variants_dir: Path | None = None,
+    max_reference_similarity: float | None = None,
 ) -> WrittenOutputs:
     skill_hash = hashlib.sha256(skill_text.encode("utf-8")).hexdigest()
     raw_output_hash = hashlib.sha256(raw_model_output.encode("utf-8")).hexdigest()
@@ -401,6 +459,12 @@ def write_variant_outputs(
         },
     }
     plan_ref = "scout_ai_route_context_variant_model_plan.json"
+    comparison_json_ref = "route_context_variant_comparison.json"
+    comparison_md_ref = "route_context_variant_comparison.md"
+    index_ref = "index.html"
+    failure_ref = "scout_ai_route_context_variant_model_failure.json"
+    _remove_stale_variant_html(output_dir, keep={index_ref, *VARIANT_OUTPUT_REFS})
+    _remove_stale_failure_artifact(output_dir / failure_ref)
     (output_dir / plan_ref).write_text(
         json.dumps(plan_payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -422,7 +486,15 @@ def write_variant_outputs(
             skill_id=str(skill_manifest.get("id") or "route-context-intelligence"),
             generated_at=generated_at,
         )
-        file_name = f"{slug}.html"
+        file_name = (
+            f"{slug}.html"
+            if reference_variants
+            else (
+                VARIANT_OUTPUT_REFS[index - 1]
+                if index <= len(VARIANT_OUTPUT_REFS)
+                else f"{slug}.html"
+            )
+        )
         html_path = output_dir / file_name
         html_path.write_text(html_text, encoding="utf-8")
         report = analyze_html(html_path, slug=slug)
@@ -440,9 +512,26 @@ def write_variant_outputs(
                 "codex_posthoc_supplement": False,
             }
         )
+        reference_similarity = _reference_similarity_report(
+            variant,
+            reference_variants=reference_variants or [],
+            max_reference_similarity=max_reference_similarity,
+        )
+        if reference_similarity is not None:
+            report["reference_similarity"] = reference_similarity
+            report["max_reference_similarity"] = reference_similarity["max_score"]
+            report["passes_reference_similarity_gate"] = reference_similarity[
+                "passes_gate"
+            ]
         variant_refs.append(file_name)
         variant_reports.append(report)
 
+    reference_gate = _reference_similarity_gate_summary(
+        reference_variants=reference_variants or [],
+        reference_variants_dir=reference_variants_dir,
+        max_reference_similarity=max_reference_similarity,
+        variant_reports=variant_reports,
+    )
     comparison = {
         "artifact_kind": "scout_ai_route_context_briefing_variant_comparison",
         "schema_version": "scout_ai_route_context_briefing_variant_comparison.v1",
@@ -457,9 +546,8 @@ def write_variant_outputs(
         "no_codex_posthoc_supplement": bool(plan.get("no_codex_posthoc_supplement")),
         "variants": variant_reports,
     }
-    comparison_json_ref = "route_context_variant_comparison.json"
-    comparison_md_ref = "route_context_variant_comparison.md"
-    index_ref = "index.html"
+    if reference_gate is not None:
+        comparison["reference_similarity_gate"] = reference_gate
     (output_dir / comparison_json_ref).write_text(
         json.dumps(comparison, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -472,6 +560,16 @@ def write_variant_outputs(
         _index_html(comparison),
         encoding="utf-8",
     )
+    if reference_gate is not None and reference_gate["status"] == "failed":
+        failures = [
+            f"{item['slug']}={item['max_reference_similarity']:.3f}"
+            for item in variant_reports
+            if item.get("passes_reference_similarity_gate") is False
+        ]
+        raise ValueError(
+            "Scout AI route-context variants failed reference similarity gate: "
+            + ", ".join(failures)
+        )
     return WrittenOutputs(
         output_dir=output_dir,
         plan_ref=plan_ref,
@@ -480,6 +578,17 @@ def write_variant_outputs(
         index_ref=index_ref,
         variant_refs=tuple(variant_refs),
     )
+
+
+def _remove_stale_variant_html(output_dir: Path, *, keep: set[str]) -> None:
+    for html_path in output_dir.glob("*.html"):
+        if html_path.name not in keep:
+            html_path.unlink()
+
+
+def _remove_stale_failure_artifact(path: Path) -> None:
+    if path.exists():
+        path.unlink()
 
 
 def write_failure_artifact(
@@ -636,6 +745,183 @@ def analyze_html(path: Path, *, slug: str) -> dict[str, Any]:
         "unrelated_terms": terms,
         "bad_image_refs": bad_images,
     }
+
+
+def _load_reference_variant_specs(reference_variants_dir: Path | None) -> list[dict[str, Any]]:
+    if reference_variants_dir is None:
+        return []
+    reference_dir = reference_variants_dir.expanduser().resolve()
+    plan_path = reference_dir / "scout_ai_route_context_variant_model_plan.json"
+    plan_payload = _read_json(plan_path)
+    parsed_plan = plan_payload.get("parsed_plan") if isinstance(plan_payload, dict) else {}
+    variants = parsed_plan.get("variants") if isinstance(parsed_plan, dict) else None
+    if not isinstance(variants, list):
+        return []
+    specs: list[dict[str, Any]] = []
+    for index, variant in enumerate(variants, start=1):
+        if not isinstance(variant, dict):
+            continue
+        copy_text = _variant_copy_text(variant)
+        specs.append(
+            {
+                "slug": str(variant.get("slug") or f"reference-{index:02d}"),
+                "title": variant.get("title"),
+                "tone": variant.get("tone"),
+                "concept": variant.get("concept"),
+                "copy_text": copy_text,
+                "copy_excerpt": copy_text[:700],
+                "source_plan_ref": str(plan_path),
+            }
+        )
+    return specs[:5]
+
+
+def _reference_similarity_report(
+    variant: dict[str, Any],
+    *,
+    reference_variants: list[dict[str, Any]],
+    max_reference_similarity: float | None,
+) -> dict[str, Any] | None:
+    if not reference_variants:
+        return None
+    copy_text = _variant_copy_text(variant)
+    scores = []
+    for reference in reference_variants:
+        score = _ngram_cosine_similarity(
+            copy_text,
+            str(reference.get("copy_text") or ""),
+            n=DEFAULT_REFERENCE_SIMILARITY_NGRAM,
+        )
+        scores.append(
+            {
+                "reference_slug": reference.get("slug"),
+                "score": round(score, 4),
+            }
+        )
+    most_similar = max(scores, key=lambda item: float(item["score"]), default=None)
+    max_score = float(most_similar["score"]) if most_similar else 0.0
+    return {
+        "metric": f"model_copy_{DEFAULT_REFERENCE_SIMILARITY_NGRAM}gram_cosine",
+        "max_allowed": max_reference_similarity,
+        "max_score": round(max_score, 4),
+        "most_similar_reference": most_similar.get("reference_slug") if most_similar else None,
+        "scores": scores,
+        "passes_gate": (
+            True
+            if max_reference_similarity is None
+            else max_score <= max_reference_similarity
+        ),
+        "fixed_route_evidence_excluded": True,
+    }
+
+
+def _reference_similarity_gate_summary(
+    *,
+    reference_variants: list[dict[str, Any]],
+    reference_variants_dir: Path | None,
+    max_reference_similarity: float | None,
+    variant_reports: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not reference_variants:
+        return None
+    failures = [
+        item
+        for item in variant_reports
+        if item.get("passes_reference_similarity_gate") is False
+    ]
+    max_score = max(
+        [float(item.get("max_reference_similarity") or 0.0) for item in variant_reports]
+        or [0.0]
+    )
+    return {
+        "enabled": True,
+        "status": "failed" if failures else "passed",
+        "metric": f"model_copy_{DEFAULT_REFERENCE_SIMILARITY_NGRAM}gram_cosine",
+        "max_allowed": max_reference_similarity,
+        "max_observed": round(max_score, 4),
+        "reference_variant_count": len(reference_variants),
+        "reference_variants_dir": str(reference_variants_dir) if reference_variants_dir else None,
+        "fixed_route_evidence_excluded": True,
+        "reason": (
+            "The full HTML repeats mandatory route points, source tables, and renderer structure; "
+            "this gate compares Scout AI generated visible briefing copy, concepts, headings, "
+            "chapter titles, observation prompts, and point-angle wording."
+        ),
+        "failed_variants": [
+            {
+                "slug": item.get("slug"),
+                "max_reference_similarity": item.get("max_reference_similarity"),
+                "most_similar_reference": (
+                    item.get("reference_similarity", {}).get("most_similar_reference")
+                    if isinstance(item.get("reference_similarity"), dict)
+                    else None
+                ),
+            }
+            for item in failures
+        ],
+    }
+
+
+def _variant_copy_text(variant: dict[str, Any]) -> str:
+    keys = (
+        "slug",
+        "title",
+        "subtitle",
+        "tone",
+        "concept",
+        "editorial_thesis",
+        "hero_caption",
+        "nav_labels",
+        "layer_headlines",
+        "chapter_titles",
+        "observation_prompts",
+        "point_angles",
+        "chart_titles",
+        "source_storyline",
+        "leader_review_focus",
+        "closing_note",
+    )
+    chunks: list[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                chunks.append(stripped)
+        elif isinstance(value, dict):
+            for nested in value.values():
+                walk(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                walk(nested)
+        elif value is not None:
+            chunks.append(str(value))
+
+    for key in keys:
+        walk(variant.get(key))
+    return " ".join(chunks)
+
+
+def _ngram_cosine_similarity(left: str, right: str, *, n: int) -> float:
+    left_counts = _ngram_counts(left, n=n)
+    right_counts = _ngram_counts(right, n=n)
+    if not left_counts or not right_counts:
+        return 0.0
+    dot = sum(count * right_counts.get(token, 0) for token, count in left_counts.items())
+    left_norm = sum(count * count for count in left_counts.values()) ** 0.5
+    right_norm = sum(count * count for count in right_counts.values()) ** 0.5
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return dot / (left_norm * right_norm)
+
+
+def _ngram_counts(text: str, *, n: int) -> Counter[str]:
+    normalized = re.sub(r"\s+", "", text.casefold())
+    if not normalized:
+        return Counter()
+    if len(normalized) < n:
+        return Counter({normalized: 1})
+    return Counter(normalized[index : index + n] for index in range(len(normalized) - n + 1))
 
 
 def _load_workspace_evidence(project_root: Path) -> dict[str, Any]:
@@ -1111,6 +1397,7 @@ section{padding:clamp(28px,5vw,70px);position:relative}h1,h2,h3,p{margin-top:0}h
 
 def _comparison_markdown(comparison: dict[str, Any]) -> str:
     baseline = comparison["baseline"]
+    reference_gate = comparison.get("reference_similarity_gate")
     lines = [
         "# Scout AI Route Context Briefing Variants",
         "",
@@ -1118,22 +1405,36 @@ def _comparison_markdown(comparison: dict[str, Any]) -> str:
         f"- skill: `{comparison['skill_id']}` v`{comparison['skill_version']}`",
         f"- one_model_call_complete: `{comparison['one_model_call_complete']}`",
         f"- no_codex_posthoc_supplement: `{comparison['no_codex_posthoc_supplement']}`",
-        "",
-        "| 版本 | visible chars | sections/articles | images | chart ratio | richness | innovation | unrelated terms |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-        (
-            f"| baseline | {baseline['visible_chars']} | "
-            f"{baseline['sections']}/{baseline['articles']} | {baseline['images']} | "
-            f"{baseline['chart_ratio']} | {baseline['richness_score']} | "
-            f"{baseline['innovation_score']} | {len(baseline['unrelated_terms'])} |"
-        ),
     ]
+    if isinstance(reference_gate, dict):
+        lines.extend(
+            [
+                f"- reference_similarity_gate: `{reference_gate['status']}`",
+                f"- reference_similarity_metric: `{reference_gate['metric']}`",
+                f"- max_reference_similarity_observed: `{reference_gate['max_observed']}`",
+                f"- max_reference_similarity_allowed: `{reference_gate['max_allowed']}`",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "| 版本 | visible chars | sections/articles | images | chart ratio | richness | innovation | reference max | unrelated terms |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            (
+                f"| baseline | {baseline['visible_chars']} | "
+                f"{baseline['sections']}/{baseline['articles']} | {baseline['images']} | "
+                f"{baseline['chart_ratio']} | {baseline['richness_score']} | "
+                f"{baseline['innovation_score']} | n/a | {len(baseline['unrelated_terms'])} |"
+            ),
+        ]
+    )
     for item in comparison["variants"]:
         lines.append(
             f"| [{item['slug']}]({item['relative_ref']}) | {item['visible_chars']} | "
             f"{item['sections']}/{item['articles']} | {item['images']} | "
             f"{item['chart_ratio']} | {item['richness_score']} | "
-            f"{item['innovation_score']} | {len(item['unrelated_terms'])} |"
+            f"{item['innovation_score']} | {item.get('max_reference_similarity', 'n/a')} | "
+            f"{len(item['unrelated_terms'])} |"
         )
     lines.append("")
     lines.append("## Gate Results")
@@ -1142,6 +1443,7 @@ def _comparison_markdown(comparison: dict[str, Any]) -> str:
             f"- `{item['slug']}`: richness={item['passes_richness_gate']}, "
             f"unrelated_terms={item['passes_unrelated_terms_gate']}, "
             f"bad_images={item['passes_bad_image_gate']}, "
+            f"reference_similarity={item.get('passes_reference_similarity_gate', 'n/a')}, "
             f"codex_posthoc_supplement={item['codex_posthoc_supplement']}."
         )
     lines.append("")
@@ -1151,6 +1453,11 @@ def _comparison_markdown(comparison: dict[str, Any]) -> str:
 def _index_html(comparison: dict[str, Any]) -> str:
     cards = []
     for item in comparison["variants"]:
+        reference_line = ""
+        if "max_reference_similarity" in item:
+            reference_line = (
+                f"<li>reference similarity {item['max_reference_similarity']}</li>"
+            )
         cards.append(
             "<article>"
             f'<h2><a href="{_esc(item["relative_ref"])}">{_esc(item["slug"])}</a></h2>'
@@ -1158,8 +1465,19 @@ def _index_html(comparison: dict[str, Any]) -> str:
             f"<ul><li>richness {item['richness_score']}</li>"
             f"<li>innovation {item['innovation_score']}</li>"
             f"<li>chart ratio {item['chart_ratio']}</li>"
+            f"{reference_line}"
             f"<li>unrelated terms {len(item['unrelated_terms'])}</li></ul>"
             "</article>"
+        )
+    reference_gate = comparison.get("reference_similarity_gate")
+    gate_html = ""
+    if isinstance(reference_gate, dict):
+        gate_html = (
+            '<p class="gate">'
+            f"Reference similarity gate: {_esc(reference_gate['status'])}; "
+            f"max observed {_esc(reference_gate['max_observed'])} / "
+            f"allowed {_esc(reference_gate['max_allowed'])}."
+            "</p>"
         )
     return (
         "<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\">"
@@ -1168,6 +1486,7 @@ def _index_html(comparison: dict[str, Any]) -> str:
         "<style>body{margin:0;background:#121610;color:#f6ecd8;font-family:'Avenir Next','PingFang TC',sans-serif;padding:42px}h1{font-size:clamp(36px,6vw,72px);font-family:'Iowan Old Style',serif}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}article{border:1px solid #6f765a;padding:20px;background:#1b2118}a{color:#ffd76a}</style>"
         "</head><body><h1>Scout AI 一次產生的 5 版 Route Briefing</h1>"
         "<p>這組頁面由 route-context-intelligence skill 的單次模型 plan 驅動，renderer 只使用 workspace evidence 排版。</p>"
+        f"{gate_html}"
         f'<div class="grid">{"".join(cards)}</div>'
         '<p><a href="route_context_variant_comparison.md">comparison markdown</a> · '
         '<a href="route_context_variant_comparison.json">comparison json</a></p>'
@@ -1356,6 +1675,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baseline-html", type=Path, default=None)
     parser.add_argument("--skill-path", type=Path, default=ROOT / DEFAULT_SKILL_REF)
     parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument("--reference-variants-dir", type=Path, default=None)
+    parser.add_argument("--max-reference-similarity", type=float, default=None)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--model-max-tokens", type=int, default=16384)
@@ -1379,6 +1700,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.output_dir
         else (project_root / DEFAULT_OUTPUT_DIR).resolve()
     )
+    reference_variants_dir = (
+        args.reference_variants_dir.expanduser().resolve()
+        if args.reference_variants_dir
+        else None
+    )
     runner = UsageRecordingPydanticAIRunner(
         model_name=args.model,
         model_max_tokens=args.model_max_tokens,
@@ -1390,6 +1716,8 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=output_dir,
         runner=runner,
         timeout_seconds=args.timeout_seconds,
+        reference_variants_dir=reference_variants_dir,
+        max_reference_similarity=args.max_reference_similarity,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

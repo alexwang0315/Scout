@@ -167,6 +167,16 @@ DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.h
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REGENERATION_REF = (
     "outputs/scout_ai/route_context_briefing_regeneration.json"
 )
+DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_MODEL = "nvidia:z-ai/glm-5.2"
+DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_OUTPUT_DIR_REF = (
+    "outputs/briefings/route_context_variants_ai_once"
+)
+DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_BASELINE_REF = (
+    "outputs/briefings/route_context_briefing.template_backup.20260705T051214Z.html"
+)
+DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_SKILL_REF = (
+    "skills/scout/route-context-intelligence.yaml"
+)
 ROUTE_CONTEXT_INTELLIGENCE_SPEC_REF = (
     "docs/specs/scout-route-context-intelligence-implementation.md"
 )
@@ -315,6 +325,21 @@ class PreTripRouteContextBriefingRegenerateRequest(BaseModel):
     )
     model: str | None = Field(default=None, min_length=1)
     timeout_seconds: int = Field(default=45, ge=1, le=180)
+
+
+class PreTripRouteContextBriefingVariantsGenerateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm_generate: bool = False
+    model: str = Field(
+        default=DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_MODEL,
+        min_length=1,
+    )
+    timeout_seconds: int = Field(default=300, ge=1, le=600)
+    model_max_tokens: int = Field(default=7000, ge=1024, le=20000)
+    baseline_ref: str | None = Field(default=None, min_length=1)
+    reference_variants_dir_ref: str | None = Field(default=None, min_length=1)
+    max_reference_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class WearableImportRequest(BaseModel):
@@ -725,6 +750,9 @@ def create_admin_app(
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
+    route_context_briefing_variants_runner_factory: (
+        Callable[[str, int], Any] | None
+    ) = None,
 ) -> FastAPI:
     app = FastAPI(title="Scout Fusion Admin API")
     app.include_router(
@@ -732,6 +760,9 @@ def create_admin_app(
             incident_store_path=incident_store_path,
             pretrip_workspace_root=pretrip_workspace_root,
             route_context_briefing_ai_runner=route_context_briefing_ai_runner,
+            route_context_briefing_variants_runner_factory=(
+                route_context_briefing_variants_runner_factory
+            ),
         )
     )
     return app
@@ -742,6 +773,9 @@ def create_admin_router(
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
+    route_context_briefing_variants_runner_factory: (
+        Callable[[str, int], Any] | None
+    ) = None,
 ) -> APIRouter:
     load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
@@ -2026,7 +2060,7 @@ def create_admin_router(
         response_class=HTMLResponse,
     )
     def pretrip_project_route_context_briefing(project_id: str) -> Response:
-        project_root = _pretrip_workspace_project_root(
+        project_root = _pretrip_project_root_for_read(
             pretrip_workspace_root,
             project_id=project_id,
         )
@@ -2058,6 +2092,206 @@ def create_admin_router(
                 "X-Scout-Source-Ref": str(briefing_ref),
             },
         )
+
+    @router.get("/pretrip/projects/{project_id}/briefings/route-context/variants")
+    def pretrip_project_route_context_briefing_variants(
+        project_id: str,
+    ) -> dict[str, Any]:
+        project_root = _pretrip_project_root_for_read(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = _load_admin_json(project_root / "project.json")
+        except (json.JSONDecodeError, OSError) as exc:
+            raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+        return _route_context_briefing_variants_payload(
+            project_id=project_id,
+            project_root=project_root,
+            project=project,
+        )
+
+    @router.get("/pretrip/projects/{project_id}/briefings/route-context/variants/file")
+    def pretrip_project_route_context_briefing_variants_file(
+        project_id: str,
+        ref: str,
+    ) -> Response:
+        project_root = _pretrip_project_root_for_read(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = _load_admin_json(project_root / "project.json")
+        except (json.JSONDecodeError, OSError) as exc:
+            raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+        output_dir_ref, output_dir = _route_context_briefing_variants_output_dir(
+            project_root,
+            project,
+        )
+        path = _safe_route_context_briefing_variants_file(output_dir, ref)
+        if path is None:
+            raise HTTPException(status_code=422, detail="unsafe route context variant ref")
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail="route context variant not found")
+        media_type = _route_context_briefing_variant_media_type(path)
+        return Response(
+            path.read_text(encoding="utf-8"),
+            media_type=media_type,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+                "X-Scout-Route-Context-Briefing-Variants": "true",
+                "X-Scout-Source-Ref": f"{output_dir_ref}/{ref}",
+            },
+        )
+
+    @router.post("/pretrip/projects/{project_id}/briefings/route-context/variants/generate")
+    def pretrip_project_generate_route_context_briefing_variants(
+        project_id: str,
+        request: PreTripRouteContextBriefingVariantsGenerateRequest,
+    ) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if not request.confirm_generate:
+            raise HTTPException(
+                status_code=422,
+                detail="confirm_generate=true is required",
+            )
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(
+                status_code=422,
+                detail="route context briefing variants write only workspace projects",
+            )
+        try:
+            project = _load_admin_json(project_root / "project.json")
+            if not isinstance(project, dict):
+                raise ValueError("project.json must contain an object")
+            output_dir_ref, output_dir = _route_context_briefing_variants_output_dir(
+                project_root,
+                project,
+            )
+            baseline_ref, baseline_html = _route_context_briefing_variants_baseline(
+                project_root,
+                project,
+                requested_ref=request.baseline_ref,
+            )
+            reference_dir_ref = (
+                request.reference_variants_dir_ref
+                or project.get("route_context_briefing_variants_output_dir_ref")
+                or DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_OUTPUT_DIR_REF
+            )
+            reference_variants_dir = None
+            if isinstance(reference_dir_ref, str) and reference_dir_ref.strip():
+                reference_variants_dir = _safe_pretrip_project_ref_path(
+                    project_root,
+                    reference_dir_ref.strip(),
+                )
+                if reference_variants_dir is None:
+                    raise ValueError("unsafe route context briefing variants reference path")
+            model_name = _route_context_briefing_openrouter_model_name(request.model)
+
+            from tools.scout_ai_route_context_briefing_variants import (
+                UsageRecordingPydanticAIRunner,
+                generate_route_context_briefing_variants,
+            )
+            from scout.agents.model_policy import resolve_model_policy
+
+            if route_context_briefing_variants_runner_factory is None:
+                policy = resolve_model_policy(model_name)
+                if policy.missing_credential_env:
+                    raise RuntimeError(
+                        "missing required model credential env: "
+                        + ", ".join(policy.missing_credential_env)
+                    )
+                runner = UsageRecordingPydanticAIRunner(
+                    model_name=model_name,
+                    model_max_tokens=request.model_max_tokens,
+                )
+            else:
+                runner = route_context_briefing_variants_runner_factory(
+                    model_name,
+                    request.model_max_tokens,
+                )
+            result = generate_route_context_briefing_variants(
+                project_root=project_root,
+                baseline_html=baseline_html,
+                skill_path=ROOT / DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_SKILL_REF,
+                output_dir=output_dir,
+                runner=runner,
+                timeout_seconds=request.timeout_seconds,
+                reference_variants_dir=reference_variants_dir,
+                max_reference_similarity=request.max_reference_similarity,
+            )
+            generated_at = str(result.get("generated_at") or _admin_utc_now())
+            _update_admin_project_refs(
+                project_root / "project.json",
+                {
+                    "route_context_briefing_variants_output_dir_ref": output_dir_ref,
+                    "route_context_briefing_variants_index_ref": (
+                        f"{output_dir_ref}/{result['index_ref']}"
+                    ),
+                    "route_context_briefing_variants_comparison_ref": (
+                        f"{output_dir_ref}/{result['comparison_json_ref']}"
+                    ),
+                    "route_context_briefing_variants_plan_ref": (
+                        f"{output_dir_ref}/{result['plan_ref']}"
+                    ),
+                    "route_context_briefing_variants_baseline_ref": baseline_ref,
+                    "route_context_briefing_variants_reference_output_dir_ref": (
+                        reference_dir_ref
+                    ),
+                    "route_context_briefing_variants_generated_at": generated_at,
+                    "route_context_briefing_variants_model": model_name,
+                    "route_context_briefing_variants_skill_ref": (
+                        DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_SKILL_REF
+                    ),
+                },
+            )
+            project = _load_admin_json(project_root / "project.json")
+            payload = _route_context_briefing_variants_payload(
+                project_id=project_id,
+                project_root=project_root,
+                project=project,
+                generation_result=result,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except TimeoutError as exc:
+            raise HTTPException(status_code=504, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError) as exc:
+            try:
+                project = _load_admin_json(project_root / "project.json")
+                failure_payload = _route_context_briefing_variants_payload(
+                    project_id=project_id,
+                    project_root=project_root,
+                    project=project,
+                    error=str(exc),
+                )
+            except Exception:
+                failure_payload = None
+            detail: Any = str(exc)
+            if failure_payload is not None:
+                detail = failure_payload
+            raise HTTPException(status_code=422, detail=detail) from exc
+        except Exception as exc:  # pragma: no cover - defensive provider wrapper.
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Scout AI route-context variants generation failed: "
+                    f"{type(exc).__name__}"
+                ),
+            ) from exc
+
+        return payload
 
     @router.post("/pretrip/projects/{project_id}/briefings/route-context/regenerate")
     def pretrip_project_regenerate_route_context_briefing(
@@ -5356,6 +5590,227 @@ def _safe_pretrip_project_json_ref(project_root: Path, ref: Any) -> dict[str, An
     return payload if isinstance(payload, dict) else {}
 
 
+def _route_context_briefing_variants_output_dir(
+    project_root: Path,
+    project: dict[str, Any],
+) -> tuple[str, Path]:
+    output_dir_ref = str(
+        project.get("route_context_briefing_variants_output_dir_ref")
+        or DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_OUTPUT_DIR_REF
+    )
+    output_dir = _safe_pretrip_project_ref_path(project_root, output_dir_ref)
+    if output_dir is None:
+        raise ValueError("unsafe route context briefing variants output path")
+    return output_dir_ref, output_dir
+
+
+def _route_context_briefing_variants_baseline(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    requested_ref: str | None,
+) -> tuple[str, Path]:
+    candidates = [
+        requested_ref,
+        project.get("route_context_briefing_variants_baseline_ref"),
+        DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_BASELINE_REF,
+        project.get("route_context_briefing_ref"),
+        DEFAULT_ROUTE_CONTEXT_BRIEFING_REF,
+    ]
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not isinstance(candidate, str) or not candidate.strip():
+            continue
+        ref = candidate.strip()
+        if ref in seen:
+            continue
+        seen.add(ref)
+        path = _safe_pretrip_project_ref_path(project_root, ref)
+        if path is not None and path.exists() and path.is_file():
+            return ref, path
+    raise ValueError("route context briefing variants baseline not found")
+
+
+def _safe_route_context_briefing_variants_file(
+    output_dir: Path,
+    ref: str,
+) -> Path | None:
+    candidate = Path(ref)
+    if (
+        not ref
+        or candidate.is_absolute()
+        or any(part in {"..", "."} for part in candidate.parts)
+    ):
+        return None
+    resolved_root = output_dir.resolve()
+    resolved_path = (output_dir / candidate).resolve()
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError:
+        return None
+    return resolved_path
+
+
+def _route_context_briefing_variant_media_type(path: Path) -> str:
+    suffix = path.suffix.casefold()
+    if suffix == ".html":
+        return "text/html"
+    if suffix == ".json":
+        return "application/json"
+    if suffix == ".md":
+        return "text/markdown"
+    return "text/plain"
+
+
+def _route_context_briefing_variants_payload(
+    *,
+    project_id: str,
+    project_root: Path,
+    project: dict[str, Any],
+    generation_result: dict[str, Any] | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    output_dir_ref, output_dir = _route_context_briefing_variants_output_dir(
+        project_root,
+        project,
+    )
+    plan_ref = "scout_ai_route_context_variant_model_plan.json"
+    comparison_json_ref = "route_context_variant_comparison.json"
+    comparison_md_ref = "route_context_variant_comparison.md"
+    index_ref = "index.html"
+    failure_ref = "scout_ai_route_context_variant_model_failure.json"
+    plan = _load_admin_json(output_dir / plan_ref) if (output_dir / plan_ref).exists() else {}
+    comparison = (
+        _load_admin_json(output_dir / comparison_json_ref)
+        if (output_dir / comparison_json_ref).exists()
+        else {}
+    )
+    failure = (
+        _load_admin_json(output_dir / failure_ref)
+        if (output_dir / failure_ref).exists()
+        else {}
+    )
+    status = "missing"
+    if comparison and (output_dir / index_ref).exists():
+        status = "completed"
+    elif failure:
+        status = "failed"
+    if generation_result is not None:
+        status = str(generation_result.get("status") or status)
+    if error is not None and status == "missing":
+        status = "failed"
+
+    variants: list[dict[str, Any]] = []
+    for item in comparison.get("variants", []) if isinstance(comparison, dict) else []:
+        if not isinstance(item, dict):
+            continue
+        ref = str(item.get("relative_ref") or item.get("file") or "")
+        variants.append(
+            {
+                "slug": item.get("slug"),
+                "tone": item.get("tone"),
+                "concept": item.get("concept"),
+                "file_ref": ref,
+                "file_url": (
+                    f"/admin/pretrip/projects/{project_id}"
+                    f"/briefings/route-context/variants/file?ref={ref}"
+                    if ref
+                    else None
+                ),
+                "visible_chars": item.get("visible_chars"),
+                "sections": item.get("sections"),
+                "articles": item.get("articles"),
+                "images": item.get("images"),
+                "chart_ratio": item.get("chart_ratio"),
+                "richness_score": item.get("richness_score"),
+                "innovation_score": item.get("innovation_score"),
+                "passes_richness_gate": item.get("passes_richness_gate"),
+                "passes_unrelated_terms_gate": item.get("passes_unrelated_terms_gate"),
+                "passes_bad_image_gate": item.get("passes_bad_image_gate"),
+                "max_reference_similarity": item.get("max_reference_similarity"),
+                "passes_reference_similarity_gate": item.get(
+                    "passes_reference_similarity_gate"
+                ),
+                "reference_similarity": item.get("reference_similarity"),
+                "generated_by_single_model_plan": item.get(
+                    "generated_by_single_model_plan"
+                ),
+                "codex_posthoc_supplement": item.get("codex_posthoc_supplement"),
+                "unrelated_terms_count": len(item.get("unrelated_terms") or []),
+                "bad_image_refs_count": len(item.get("bad_image_refs") or []),
+            }
+        )
+
+    return {
+        "project_id": project_id,
+        "artifact_kind": "scout_dashboard_route_context_briefing_variants_result",
+        "schema_version": "scout_dashboard_route_context_briefing_variants_result.v1",
+        "status": status,
+        "operator_triggered": True,
+        "scout_ai_required": True,
+        "skill_ref": DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_SKILL_REF,
+        "skill_id": comparison.get("skill_id") or plan.get("parsed_plan", {}).get("skill_id"),
+        "skill_version": comparison.get("skill_version"),
+        "model": (
+            comparison.get("model")
+            or plan.get("model")
+            or project.get("route_context_briefing_variants_model")
+        ),
+        "generated_at": (
+            comparison.get("generated_at")
+            or plan.get("generated_at")
+            or project.get("route_context_briefing_variants_generated_at")
+        ),
+        "output_dir_ref": output_dir_ref,
+        "reference_output_dir_ref": project.get(
+            "route_context_briefing_variants_reference_output_dir_ref"
+        ),
+        "index_ref": index_ref if (output_dir / index_ref).exists() else None,
+        "index_url": (
+            f"/admin/pretrip/projects/{project_id}"
+            f"/briefings/route-context/variants/file?ref={index_ref}"
+            if (output_dir / index_ref).exists()
+            else None
+        ),
+        "comparison_json_ref": (
+            comparison_json_ref if (output_dir / comparison_json_ref).exists() else None
+        ),
+        "comparison_md_ref": (
+            comparison_md_ref if (output_dir / comparison_md_ref).exists() else None
+        ),
+        "plan_ref": plan_ref if (output_dir / plan_ref).exists() else None,
+        "failure_ref": failure_ref if (output_dir / failure_ref).exists() else None,
+        "baseline": comparison.get("baseline") if isinstance(comparison, dict) else None,
+        "token_usage": plan.get("token_usage") if isinstance(plan, dict) else None,
+        "model_output_sha256": (
+            comparison.get("model_output_sha256")
+            or plan.get("model_output_sha256")
+        ),
+        "one_model_call_complete": comparison.get("one_model_call_complete"),
+        "no_codex_posthoc_supplement": comparison.get("no_codex_posthoc_supplement"),
+        "reference_similarity_gate": comparison.get("reference_similarity_gate"),
+        "variants": variants,
+        "variant_count": len(variants),
+        "failure": {
+            "error": failure.get("error"),
+            "token_usage": failure.get("token_usage"),
+            "model": failure.get("model"),
+        }
+        if failure
+        else None,
+        "error": error,
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "live_safety_automation_triggered": False,
+            "outbound_transport_performed": False,
+            "workspace_canonical_briefing_overwritten": False,
+            "product_visible_internal_metadata_allowed": False,
+        },
+    }
+
+
 def _briefing_regeneration_preview(model_output: Any) -> str:
     text = str(model_output or "").strip()
     return text[:2000]
@@ -5621,6 +6076,29 @@ def _pretrip_workspace_project_root(
         if candidate.exists():
             return candidate.parent
     return None
+
+
+def _pretrip_project_root_for_read(
+    pretrip_workspace_root: Path | None,
+    *,
+    project_id: str,
+) -> Path | None:
+    project_root = _pretrip_workspace_project_root(
+        pretrip_workspace_root,
+        project_id=project_id,
+    )
+    if project_root is not None:
+        return project_root
+    fixture_project = (
+        ROOT
+        / "tests"
+        / "fixtures"
+        / "pretrip"
+        / "projects"
+        / project_id
+        / "project.json"
+    )
+    return fixture_project.parent if fixture_project.exists() else None
 
 
 def _pretrip_project_root_is_repo_fixture(project_root: Path) -> bool:
