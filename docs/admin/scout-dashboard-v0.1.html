@@ -466,13 +466,181 @@
       gap: 8px;
     }
 
-    .agent-app-frame {
-      display: block;
-      width: 100%;
-      height: 100%;
+    .agent-context-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .agent-fallback-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      padding: 0 9px;
+      border: 1px solid rgba(147, 181, 191, .32);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      background: rgba(255, 255, 255, .025);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .agent-fallback-toggle input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      margin: 0;
+    }
+
+    .agent-fallback-toggle:has(input:checked) {
+      border-color: rgba(213, 166, 66, .72);
+      color: #f1d08a;
+      background: rgba(213, 166, 66, .11);
+    }
+
+    .agent-chat-panel {
       min-height: 0;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      background: #0f1519;
+    }
+
+    .agent-chat-transcript {
+      min-height: 0;
+      overflow: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      scrollbar-gutter: stable;
+    }
+
+    .agent-chat-empty {
+      max-width: 720px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .agent-message {
+      width: 100%;
+      max-width: none;
       border: 0;
-      background: var(--bg);
+      border-radius: 0;
+      padding: 4px 2px;
+      background: transparent;
+      color: var(--text);
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      line-height: 1.38;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .agent-message.user {
+      align-items: flex-end;
+    }
+
+    .agent-message.assistant {
+      align-items: flex-start;
+    }
+
+    .agent-message.system {
+      color: var(--muted);
+      align-items: center;
+    }
+
+    .agent-message-body {
+      width: fit-content;
+      max-width: min(900px, 86%);
+      min-width: 0;
+    }
+
+    .agent-message.user .agent-message-body {
+      max-width: min(520px, 58%);
+      padding: 5px 9px;
+      border: 1px solid rgba(101, 199, 174, .36);
+      border-radius: 8px;
+      background: rgba(101, 199, 174, .09);
+    }
+
+    .agent-message.system .agent-message-body {
+      max-width: min(680px, 76%);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .agent-message-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1.2;
+      opacity: .62;
+    }
+
+    .agent-message-meta strong {
+      font-weight: 800;
+    }
+
+    .agent-composer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .agent-composer textarea {
+      width: 100%;
+      min-height: 44px;
+      max-height: 132px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #10181d;
+      color: var(--text);
+      font: inherit;
+      line-height: 1.45;
+    }
+
+    .agent-composer button {
+      min-width: 92px;
+      align-self: end;
+    }
+
+    .agent-composer button:disabled,
+    .agent-composer textarea:disabled {
+      opacity: .58;
+      cursor: not-allowed;
+    }
+
+    .agent-status-dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--warn);
+      box-shadow: 0 0 0 3px rgba(235, 190, 100, .12);
+    }
+
+    .agent-status-dot.ok {
+      background: var(--ok);
+      box-shadow: 0 0 0 3px rgba(101, 199, 174, .12);
+    }
+
+    .agent-status-dot.fail {
+      background: var(--danger);
+      box-shadow: 0 0 0 3px rgba(234, 120, 120, .12);
     }
 
     .workspace {
@@ -552,42 +720,6 @@
 
     .workspace-detail-grid {
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-    }
-
-    .decision-band {
-      display: grid;
-      grid-template-columns: minmax(220px, 1.1fr) repeat(3, minmax(140px, .8fr));
-      gap: 1px;
-      margin-bottom: 14px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      overflow: hidden;
-      background: var(--line);
-    }
-
-    .decision-cell {
-      min-width: 0;
-      padding: 12px;
-      background: var(--surface);
-    }
-
-    .decision-cell span {
-      display: block;
-      color: var(--subtle);
-      font-size: 11px;
-      font-weight: 800;
-      text-transform: uppercase;
-    }
-
-    .decision-cell strong {
-      display: block;
-      margin-top: 3px;
-      font-size: 16px;
-      overflow-wrap: anywhere;
-    }
-
-    .decision-cell.primary {
-      border-left: 3px solid var(--warn);
     }
 
     .force-list {
@@ -1257,6 +1389,992 @@
     .route-tabs button.is-active {
       border-color: var(--accent);
       background: rgba(98, 181, 196, .14);
+    }
+
+    .pace-subtabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: -2px 0 12px;
+    }
+
+    .pace-subtabs button {
+      padding: 0 10px;
+    }
+
+    .pace-subtabs button.is-active {
+      border-color: rgba(213, 166, 66, .72);
+      background: rgba(213, 166, 66, .13);
+      color: #f5d27d;
+    }
+
+    .pace-emergency-shell {
+      display: grid;
+      grid-template-rows: auto minmax(720px, 1fr);
+      min-height: calc(100vh - 190px);
+    }
+
+    .pace-emergency-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 13px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .pace-emergency-header p {
+      margin-top: 4px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .pace-emergency-boundary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      justify-content: flex-end;
+    }
+
+    .pace-emergency-toolbar {
+      padding: 8px 13px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .pace-emergency-frame {
+      width: 100%;
+      height: 100%;
+      min-height: 720px;
+      border: 0;
+      background: #111315;
+    }
+
+    .pace-fit-dashboard {
+      display: grid;
+      gap: 12px;
+    }
+
+    .pace-fit-status-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--line);
+    }
+
+    .pace-fit-status-cell {
+      min-width: 0;
+      padding: 10px 12px;
+      background: var(--surface);
+    }
+
+    .pace-fit-status-cell span {
+      display: block;
+      color: var(--subtle);
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .pace-fit-status-cell strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--text);
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .pace-fit-status-cell em {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-style: normal;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .pace-fit-workbench {
+      display: grid;
+      grid-template-columns: minmax(260px, .78fr) minmax(420px, 1.25fr) minmax(320px, .86fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .pace-fit-stack {
+      min-width: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .pace-fit-card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .pace-fit-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .pace-fit-card-head h3 {
+      color: var(--text);
+    }
+
+    .pace-fit-card-body {
+      padding: 12px;
+    }
+
+    .pace-action-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .pace-action-tile {
+      min-height: 54px;
+      display: grid;
+      place-items: center;
+      gap: 2px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .025);
+      text-align: center;
+    }
+
+    .pace-action-tile.is-active {
+      border-color: rgba(98, 181, 196, .74);
+      background: rgba(98, 181, 196, .13);
+      color: #d9f6fb;
+    }
+
+    .pace-action-tile strong {
+      font-size: 13px;
+    }
+
+    .pace-action-tile span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .pace-stat-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .pace-stat-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, .06);
+    }
+
+    .pace-stat-row:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .pace-stat-row span {
+      display: block;
+      color: var(--subtle);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .pace-stat-row strong {
+      display: block;
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .pace-stat-row em {
+      color: var(--warn);
+      font-style: normal;
+      font-weight: 850;
+    }
+
+    .pace-budget-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .pace-budget-table th,
+    .pace-budget-table td {
+      padding: 8px 7px;
+      border-bottom: 1px solid rgba(255, 255, 255, .07);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .pace-budget-table th {
+      color: var(--subtle);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .pace-meter {
+      min-width: 112px;
+      display: grid;
+      grid-template-columns: minmax(64px, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pace-meter .bar {
+      height: 8px;
+    }
+
+    .pace-status-ok,
+    .pace-status-watch,
+    .pace-status-risk {
+      display: inline-flex;
+      justify-content: center;
+      min-width: 44px;
+      padding: 2px 6px;
+      border: 1px solid rgba(120, 191, 117, .45);
+      border-radius: 5px;
+      color: #9ee49b;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .pace-status-watch {
+      border-color: rgba(213, 166, 66, .56);
+      color: #f5cf70;
+    }
+
+    .pace-status-risk {
+      border-color: rgba(208, 99, 99, .58);
+      color: #ff9c95;
+    }
+
+    .pace-cp-timeline {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(9, minmax(0, 1fr));
+      gap: 7px;
+      padding: 18px 0 8px;
+    }
+
+    .pace-cp-timeline::before {
+      content: "";
+      position: absolute;
+      top: 33px;
+      left: 4%;
+      right: 4%;
+      height: 2px;
+      background: rgba(255, 255, 255, .18);
+    }
+
+    .pace-cp-node {
+      position: relative;
+      min-width: 0;
+      display: grid;
+      justify-items: center;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .pace-cp-dot {
+      z-index: 1;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, .72);
+      border-radius: 999px;
+      background: var(--surface-2);
+      box-shadow: 0 0 0 3px var(--surface);
+    }
+
+    .pace-cp-node.is-done .pace-cp-dot {
+      border-color: var(--ok);
+      background: rgba(120, 191, 117, .85);
+    }
+
+    .pace-cp-node.is-current .pace-cp-dot {
+      width: 28px;
+      height: 28px;
+      border-color: #69aef4;
+      background: rgba(105, 174, 244, .38);
+      box-shadow: 0 0 0 4px rgba(105, 174, 244, .18);
+    }
+
+    .pace-cp-node.is-risk .pace-cp-dot {
+      border-color: var(--warn);
+      background: rgba(213, 166, 66, .72);
+    }
+
+    .pace-cp-node strong {
+      color: var(--text);
+      font-size: 11px;
+    }
+
+    .pace-delay-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .pace-delay-card {
+      display: grid;
+      gap: 4px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, .13);
+    }
+
+    .pace-delay-card strong {
+      color: var(--warn);
+      font-size: 15px;
+    }
+
+    .pace-delay-card span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pace-output {
+      display: grid;
+      gap: 10px;
+      padding: 13px;
+      border: 1px solid rgba(120, 191, 117, .42);
+      border-radius: 8px;
+      background: rgba(120, 191, 117, .075);
+    }
+
+    .pace-output strong {
+      color: var(--text);
+      font-size: 20px;
+    }
+
+    .pace-output-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      color: var(--muted);
+    }
+
+    .pace-evidence-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pace-evidence-tags span {
+      display: inline-flex;
+      min-height: 24px;
+      align-items: center;
+      padding: 3px 7px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--candidate);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .pace-json-preview {
+      margin: 0;
+      max-height: 154px;
+      overflow: auto;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, .2);
+      color: #cde4e8;
+      font-family: var(--mono);
+      font-size: 11px;
+      white-space: pre-wrap;
+    }
+
+    .pace-mini-map {
+      min-height: 210px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #0a1418;
+    }
+
+    .pace-mini-map svg {
+      width: 100%;
+      height: 210px;
+      display: block;
+    }
+
+    .body-index-dashboard {
+      display: grid;
+      gap: 12px;
+    }
+
+    .body-index-summary {
+      display: grid;
+      grid-template-columns: 1.15fr repeat(3, minmax(0, .75fr));
+      gap: 12px;
+    }
+
+    .body-index-score-card,
+    .body-index-panel,
+    .body-index-metric {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .body-index-score-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+      padding: 14px;
+    }
+
+    .body-index-ring {
+      width: 104px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: conic-gradient(var(--accent) var(--value), rgba(255, 255, 255, .08) 0);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+    }
+
+    .body-index-ring span {
+      width: 74px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border-radius: inherit;
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    .body-index-score-copy {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+    }
+
+    .body-index-score-copy h3 {
+      font-size: 16px;
+    }
+
+    .body-index-score-copy p,
+    .body-index-mini span,
+    .body-index-metric small {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .body-index-mini {
+      display: grid;
+      gap: 8px;
+      padding: 13px;
+    }
+
+    .body-index-mini strong {
+      color: var(--text);
+      font-size: 20px;
+    }
+
+    .body-index-mini em {
+      color: var(--warn);
+      font-style: normal;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .body-index-metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .body-index-metric {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      min-height: 154px;
+      padding: 12px;
+      gap: 10px;
+    }
+
+    .body-index-metric-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .body-index-metric-head h3 {
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .body-index-metric-head strong {
+      color: var(--warn);
+      font-family: var(--mono);
+      font-size: 16px;
+      white-space: nowrap;
+    }
+
+    .body-index-meter {
+      height: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .04);
+    }
+
+    .body-index-meter span {
+      display: block;
+      height: 100%;
+      width: var(--value);
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--warn));
+    }
+
+    .body-index-foot {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .body-index-layout {
+      display: grid;
+      grid-template-columns: minmax(420px, 1.15fr) minmax(320px, .85fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .body-index-panel-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .body-index-panel-title {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .body-index-panel-actions {
+      min-width: 0;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .body-index-import-button {
+      min-height: 32px;
+      border: 1px solid rgba(240, 184, 92, .7);
+      border-radius: 7px;
+      padding: 0 12px;
+      color: var(--warn);
+      background: rgba(240, 184, 92, .08);
+      font: 800 12px var(--mono);
+      cursor: pointer;
+    }
+
+    .body-index-import-button:disabled {
+      cursor: wait;
+      opacity: .62;
+    }
+
+    .body-index-import-status {
+      max-width: 380px;
+      white-space: normal;
+      text-align: right;
+      line-height: 1.35;
+    }
+
+    .body-index-watch-controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .body-index-watch-controls label {
+      color: var(--subtle);
+      font: 800 10px var(--mono);
+      text-transform: uppercase;
+    }
+
+    .body-index-watch-controls input {
+      width: 76px;
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 8px;
+      color: var(--text);
+      background: rgba(0, 0, 0, .18);
+      font: 800 12px var(--mono);
+    }
+
+    .body-index-watch-button {
+      min-height: 32px;
+      border: 1px solid rgba(98, 181, 196, .52);
+      border-radius: 7px;
+      padding: 0 10px;
+      color: var(--accent);
+      background: rgba(98, 181, 196, .08);
+      font: 800 12px var(--mono);
+      cursor: pointer;
+    }
+
+    .body-index-watch-button.stop {
+      border-color: rgba(208, 99, 99, .55);
+      color: var(--bad);
+      background: rgba(208, 99, 99, .08);
+    }
+
+    .body-index-watch-button:disabled {
+      cursor: wait;
+      opacity: .62;
+    }
+
+    .body-index-panel-body {
+      padding: 12px;
+    }
+
+    .body-index-source-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .body-index-source {
+      padding: 9px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, .13);
+    }
+
+    .body-index-source strong,
+    .body-index-source span {
+      display: block;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-source span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .body-index-impact-row {
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, .07);
+    }
+
+    .body-index-impact-row:last-child {
+      border-bottom: 0;
+    }
+
+    .body-index-impact-row span {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-impact-row strong {
+      color: var(--text);
+    }
+
+    .body-index-health-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .body-index-coverage-card {
+      min-width: 0;
+      display: grid;
+      gap: 5px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .body-index-coverage-card span,
+    .body-index-signal-card span,
+    .body-index-pressure-cell span {
+      color: var(--subtle);
+      font-size: 10px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .body-index-coverage-card strong {
+      color: var(--text);
+      font-size: 20px;
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-coverage-card em {
+      color: var(--muted);
+      font-style: normal;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-health-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .body-index-signal-card {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+      padding: 11px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, .13);
+    }
+
+    .body-index-signal-card h4 {
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.24;
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-signal-card strong {
+      color: var(--warn);
+      font-family: var(--mono);
+      font-size: 15px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-signal-card em {
+      width: fit-content;
+      border: 1px solid rgba(98, 181, 196, .35);
+      border-radius: 999px;
+      padding: 2px 7px;
+      color: var(--accent);
+      background: rgba(98, 181, 196, .08);
+      font: 800 10px var(--mono);
+      font-style: normal;
+      text-transform: uppercase;
+    }
+
+    .body-index-signal-card small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-signal-trend {
+      display: grid;
+      gap: 5px;
+      padding-top: 2px;
+    }
+
+    .body-index-trend-axis {
+      position: relative;
+      height: 24px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, rgba(120, 191, 117, .2), rgba(240, 184, 92, .22), rgba(208, 99, 99, .2));
+    }
+
+    .body-index-trend-marker {
+      position: absolute;
+      top: 50%;
+      left: var(--position);
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border: 1px solid rgba(255, 255, 255, .2);
+      border-radius: 999px;
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, .35);
+      font: 900 14px var(--mono);
+      transform: translate(-50%, -50%);
+    }
+
+    .body-index-trend-marker.is-low {
+      color: var(--ok);
+      border-color: rgba(120, 191, 117, .55);
+    }
+
+    .body-index-trend-marker.is-mid {
+      color: var(--warn);
+      border-color: rgba(240, 184, 92, .55);
+    }
+
+    .body-index-trend-marker.is-high {
+      color: var(--bad);
+      border-color: rgba(208, 99, 99, .55);
+    }
+
+    .body-index-trend-labels {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      color: var(--subtle);
+      font: 800 10px var(--mono);
+    }
+
+    .body-index-trend-labels span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-transform: none;
+    }
+
+    .body-index-trend-labels span:nth-child(2) {
+      text-align: center;
+      color: var(--text);
+    }
+
+    .body-index-trend-labels span:last-child {
+      text-align: right;
+    }
+
+    .body-index-pressure-timeline {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .body-index-pressure-cell {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, .13);
+    }
+
+    .body-index-pressure-bar {
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .06);
+    }
+
+    .body-index-pressure-bar span {
+      display: block;
+      width: var(--value);
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--warn));
+    }
+
+    .body-index-provider-drawer {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .body-index-provider-drawer summary {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 12px;
+      cursor: pointer;
+      list-style: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    .body-index-provider-drawer[open] summary {
+      border-bottom-color: var(--line);
+    }
+
+    .body-index-provider-drawer summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .body-index-provider-drawer summary span {
+      color: var(--text);
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .body-index-provider-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .body-index-provider-chip {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+      padding: 8px;
+      border: 1px solid rgba(98, 181, 196, .28);
+      border-radius: 7px;
+      background: rgba(98, 181, 196, .055);
+    }
+
+    .body-index-provider-chip strong {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-provider-chip span {
+      color: var(--subtle);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
     }
 
     .debug-runtime-tabs {
@@ -2202,7 +3320,6 @@
         border-left: 0;
         border-top: 1px solid var(--line);
       }
-      .decision-band,
       .grid-2,
       .grid-3,
       .settings-grid,
@@ -2215,9 +3332,26 @@
       .import-trip-pipeline,
       .material-pool-layout,
       .route-briefing-layout,
+      .pace-fit-status-grid,
+      .pace-fit-workbench,
+      .pace-action-grid,
+      .pace-delay-grid,
+      .pace-output-grid,
+      .body-index-summary,
+      .body-index-metric-grid,
+      .body-index-layout,
+      .body-index-source-grid,
+      .body-index-health-strip,
+      .body-index-health-grid,
+      .body-index-pressure-timeline,
+      .body-index-provider-grid,
+      .pace-emergency-header,
       .workspace-action-grid,
       .workspace-switch-row {
         grid-template-columns: 1fr;
+      }
+      .pace-emergency-boundary {
+        justify-content: flex-start;
       }
       .route-briefing-meta-grid {
         grid-template-columns: 1fr;
@@ -2345,7 +3479,14 @@
           <summary><span class="mark"></span><span>Exploring for Six Axis</span></summary>
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="outdoor-route-context"><span class="mark"></span><span>Route Context</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-pace-fit"><span class="mark"></span><span>Pace Fit</span></button>
+            <details class="nav-section" open>
+              <summary><span class="mark"></span><span>Pace Fit</span></summary>
+              <div class="nav-subtree">
+                <button class="nav-item" type="button" data-route="outdoor-pace-fit"><span class="mark"></span><span>Pace Dashboard</span></button>
+                <button class="nav-item" type="button" data-route="outdoor-pace-fit-body-index"><span class="mark"></span><span>Body Index</span></button>
+                <button class="nav-item" type="button" data-route="outdoor-pace-fit-emergency"><span class="mark"></span><span>Emergency UI</span></button>
+              </div>
+            </details>
             <button class="nav-item" type="button" data-route="outdoor-permission"><span class="mark"></span><span>Permission</span></button>
             <button class="nav-item" type="button" data-route="outdoor-architecture"><span class="mark"></span><span>Architecture</span></button>
             <button class="nav-item" type="button" data-route="outdoor-weather"><span class="mark"></span><span>Weather</span></button>
@@ -2366,13 +3507,9 @@
       <header class="topbar">
         <div>
           <h2 id="pageTitle">Home</h2>
-          <div class="subline" id="pageSubtitle">read-only dashboard shell aligned to chilai_nanhua_day1_scoutAI</div>
         </div>
         <div class="status-strip" aria-label="Dashboard boundary status">
           <span class="chip ok" id="readinessChip">ready</span>
-          <span class="chip info">workable alpha</span>
-          <span class="chip warn">artifact boundary</span>
-          <span class="chip bad">no live safety automation</span>
         </div>
       </header>
 
@@ -2383,19 +3520,40 @@
           <iframe class="pretrip-map-only-frame" id="pretripMapFrame" title="Pre-trip map" loading="eager"></iframe>
           <aside class="map-evidence-rail" id="dashboardMapEvidence" aria-label="Map evidence and timeline context"></aside>
         </section>
-        <section class="agent-app-shell" id="dashboardAgent" data-agent-source="http://127.0.0.1:8765/?embed=dashboard&ui=compact-20260701" hidden aria-hidden="true" tabindex="-1">
+        <section class="agent-app-shell" id="dashboardAgent" data-agent-query-path="/assistant/query" hidden aria-hidden="true" tabindex="-1">
           <div class="agent-app-header">
             <div>
               <h3>Scout AI Agent</h3>
-              <p>Local chat from 127.0.0.1:8765. The frame stays mounted across tabs.</p>
+              <p>Same-origin Scout AI conversation through /assistant/query. Answers stay read-only and cite local Scout evidence.</p>
+              <div class="agent-context-strip" aria-label="Agent context">
+                <span class="chip info" id="agentProjectChip">project=chilai_nanhua_day1_scoutAI</span>
+                <span class="chip info">surface=pretrip</span>
+                <label class="agent-fallback-toggle" title="Request AI HAT+2 local fallback for the next answers">
+                  <input type="checkbox" id="agentFallbackToggle">
+                  <span>AI HAT+2 fallback</span>
+                </label>
+              </div>
             </div>
             <div class="agent-app-actions">
-              <a class="chip info" href="http://127.0.0.1:8765/" target="_blank" rel="noreferrer">Open</a>
+              <span class="chip info" id="agentProviderChip">provider checking</span>
               <span class="chip warn">No live safety</span>
-              <span class="chip ok">Local frame</span>
+              <span class="chip ok"><span class="agent-status-dot" id="agentStatusDot"></span> <span id="agentStatusText">checking</span></span>
             </div>
           </div>
-          <iframe class="agent-app-frame" id="agentAppFrame" title="Scout AI Mac Chat" loading="eager" referrerpolicy="no-referrer"></iframe>
+          <div class="agent-chat-panel">
+            <div class="agent-chat-transcript" id="agentTranscript" aria-live="polite">
+              <div class="agent-chat-empty">
+                Scout AI is connected through this dashboard when the 9099 server has
+                <span class="mono">SCOUT_AI_ASSISTANT_ENABLED=1</span>. Ask route, weather,
+                navigation, rescue handoff, workspace, or tool questions for
+                <span class="mono">chilai_nanhua_day1_scoutAI</span>.
+              </div>
+            </div>
+            <form class="agent-composer" id="agentComposer">
+              <textarea id="agentQuestionInput" rows="2" placeholder="Ask Scout AI..." aria-label="Ask Scout AI"></textarea>
+              <button type="submit" id="agentAskButton">Send</button>
+            </form>
+          </div>
         </section>
         <aside class="evidence-drawer" id="dashboardEvidence" aria-label="Evidence and boundary drawer"></aside>
       </div>
@@ -2408,8 +3566,17 @@
     const PROJECT_ID = "chilai_nanhua_day1_scoutAI";
     const PRETRIP_DATA_PROJECT_ID = "chilai_nanhua_day1";
     const WORKSPACE_ROOT = "/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI";
-    const AGENT_APP_URL = "http://127.0.0.1:8765/?embed=dashboard&ui=compact-20260701";
+    const ASSISTANT_STATUS_PATH = "/assistant/status";
+    const ASSISTANT_QUERY_PATH = "/assistant/query";
+    const ASSISTANT_QUERY_TIMEOUT_MS = 240000;
     const FETCH_TIMEOUT_MS = 20000;
+    const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
+    const BODY_INDEX_FETCH_TIMEOUT_MS = 180000;
+    const BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index";
+    const BODY_INDEX_IMPORT_PATH = "/admin/dashboard/body-index/import";
+    const BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status";
+    const BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start";
+    const BODY_INDEX_WATCH_STOP_PATH = "/admin/dashboard/body-index/watch/stop";
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 640;
     const MAP_PADDING = 58;
@@ -2721,7 +3888,7 @@
       {
         route: "outdoor-pace-fit",
         label: "Pace Fit",
-        system: "Readiness & Pace Fit",
+        system: "Pace Fit",
         role: "Pace Guardian",
         decision: "CHANGE_PLAN",
         question: "最慢成員是否能守住安全時間？",
@@ -2807,6 +3974,27 @@
         tone: "info",
         text: "Scout AI variants idle",
       },
+      bodyIndexData: null,
+      bodyIndexImportBusy: false,
+      bodyIndexImportStatus: {
+        tone: "info",
+        text: "HealthExport import idle",
+      },
+      bodyIndexWatchStatus: null,
+      bodyIndexWatchBusy: false,
+      bodyIndexWatchIntervalSeconds: 300,
+      bodyIndexWatchRefreshTimer: null,
+      agentMessages: [],
+      agentResponses: [],
+      agentBusy: false,
+      agentUseAiHatFallback: false,
+      agentStatus: {
+        checked: false,
+        ok: false,
+        provider: "unknown",
+        providerClass: "unknown",
+        text: "checking",
+      },
       importTripDraft: {
         tripId: "new_trip",
         goldenRouteGpx: "",
@@ -2862,10 +4050,12 @@
       "surface-pretrip": ["Pre-trip Surface", "full existing /admin/pretrip workspace embedded in dashboard frame"],
       "surface-admin": ["Admin Surface", "full existing /admin after-action surface embedded in dashboard frame"],
       "surface-debug": ["Debug Surface", "full existing /admin/debug runtime console embedded in dashboard frame"],
-      agent: ["Agent", "local Scout AI chat frame"],
+      agent: ["Agent", "same-origin Scout AI conversation"],
       map: ["Map", "32-layer Scout map contract preview"],
       timeline: ["Timeline Evidence", "pretrip, debug, emergency and workspace evidence stream"],
       emergency: ["Safety / Emergency", "desktop emergency context preview; mobile remains independent"],
+      "outdoor-pace-fit-body-index": ["Pace Fit / Body Index", "Scout Pace Coefficient dashboard"],
+      "outdoor-pace-fit-emergency": ["Pace Fit / Emergency UI", "multi-gate approval surface embedded for local review only"],
       debug: ["Debug Message", "read-only runtime and projection messages"],
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
@@ -2873,6 +4063,7 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       bindNavigation();
+      bindAgentChatControls();
       setRoute(routeFromHash());
       loadData().finally(() => {
         if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route);
@@ -2917,6 +4108,14 @@
       return `/admin/pretrip/projects/${project}/briefings/route-context/variants/generate`;
     }
 
+    function bodyIndexStatusPath() {
+      return `${BODY_INDEX_STATUS_PATH}?project_id=${encodeURIComponent(projectId())}`;
+    }
+
+    function bodyIndexWatchStatusPath() {
+      return `${BODY_INDEX_WATCH_STATUS_PATH}?project_id=${encodeURIComponent(projectId())}`;
+    }
+
     function routeContextBriefingVariantFileSrc(ref) {
       const project = encodeURIComponent(routeContextBriefingProjectId());
       return `${apiBase()}/admin/pretrip/projects/${project}/briefings/route-context/variants/file?ref=${encodeURIComponent(ref || "index.html")}`;
@@ -2933,9 +4132,10 @@
       return [...new Set([requested, normalized, PRETRIP_DATA_PROJECT_ID].filter(Boolean))];
     }
 
-    async function fetchJson(path) {
+    async function fetchJson(path, options = {}) {
+      const timeoutMs = Number(options.timeoutMs) || FETCH_TIMEOUT_MS;
       const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await fetch(`${apiBase()}${path}`, {
           headers: { "Accept": "application/json" },
@@ -2948,9 +4148,10 @@
       }
     }
 
-    async function postJson(path, payload) {
+    async function postJson(path, payload, options = {}) {
+      const timeoutMs = Number(options.timeoutMs) || FETCH_TIMEOUT_MS;
       const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await fetch(`${apiBase()}${path}`, {
           method: "POST",
@@ -2967,16 +4168,21 @@
           throw new Error(Array.isArray(detail) ? JSON.stringify(detail) : String(detail));
         }
         return data;
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          throw new Error(`request timed out after ${Math.round(timeoutMs / 1000)}s: ${path}`);
+        }
+        throw error;
       } finally {
         window.clearTimeout(timer);
       }
     }
 
-    async function fetchFirstPretripJson(pathForProjectId) {
+    async function fetchFirstPretripJson(pathForProjectId, options = {}) {
       let lastError = null;
       for (const candidateProjectId of pretripDataProjectIds()) {
         try {
-          const data = await fetchJson(pathForProjectId(candidateProjectId));
+          const data = await fetchJson(pathForProjectId(candidateProjectId), options);
           state.pretripDataProjectId = candidateProjectId;
           return data;
         } catch (error) {
@@ -2986,11 +4192,41 @@
       throw lastError || new Error("pretrip project unavailable");
     }
 
+    function scheduleBodyIndexWatchRefresh() {
+      if (state.bodyIndexWatchRefreshTimer) {
+        window.clearTimeout(state.bodyIndexWatchRefreshTimer);
+        state.bodyIndexWatchRefreshTimer = null;
+      }
+      const status = state.bodyIndexWatchStatus;
+      if (!status?.running) return;
+      const delayMs = Math.min(30000, Math.max(3000, Number(status.interval_seconds || 300) * 1000));
+      state.bodyIndexWatchRefreshTimer = window.setTimeout(async () => {
+        state.bodyIndexWatchRefreshTimer = null;
+        try {
+          const watch = await fetchJson(bodyIndexWatchStatusPath());
+          state.bodyIndexWatchStatus = watch;
+          if (Number(watch.interval_seconds) > 0) {
+            state.bodyIndexWatchIntervalSeconds = Number(watch.interval_seconds);
+          }
+          const bodyIndex = await fetchJson(bodyIndexStatusPath(), { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS });
+          state.bodyIndexData = bodyIndex;
+        } catch {
+          // Keep the last visible watch state; the operator can retry or stop.
+        } finally {
+          render();
+          scheduleBodyIndexWatchRefresh();
+        }
+      }, delayMs);
+    }
+
     async function loadData() {
       const id = projectId();
       document.getElementById("dashboardRouteStatus").textContent = id;
       const tasks = [
-        fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}?compact=1`).then((data) => {
+        fetchFirstPretripJson(
+          (candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}?compact=1`,
+          { timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS },
+        ).then((data) => {
           state.project = data;
           refreshCurrentDataView();
         }).catch(() => {}),
@@ -3010,6 +4246,18 @@
               text: `${data.variant_count || 0} variants ready via ${data.model || "Scout AI"}`,
             };
           }
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchJson(bodyIndexStatusPath(), { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS }).then((data) => {
+          state.bodyIndexData = data;
+          refreshCurrentDataView();
+        }).catch(() => {}),
+        fetchJson(bodyIndexWatchStatusPath()).then((data) => {
+          state.bodyIndexWatchStatus = data;
+          if (Number(data.interval_seconds) > 0) {
+            state.bodyIndexWatchIntervalSeconds = Number(data.interval_seconds);
+          }
+          scheduleBodyIndexWatchRefresh();
           refreshCurrentDataView();
         }).catch(() => {}),
         fetchJson("/debug/events?limit=200").then((data) => {
@@ -3060,7 +4308,7 @@
     }
 
     function routeUsesWideFrame(route) {
-      return route === "agent" || route === "debug" || route === "outdoor-route-context";
+      return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";
     }
 
     function routeUsesFullFrame(route) {
@@ -3086,9 +4334,10 @@
         button.classList.toggle("is-active", button.dataset.route === route);
       });
       const force = SIX_FORCES.find((item) => item.route === route);
-      const meta = force ? [`${force.label} / ${force.system}`, `${force.role} aligned to SCOUT_OUTDOOR_AI_AGENT_STANDARD`] : (routeMeta[route] || routeMeta.home);
+      const meta = force
+        ? [force.route === "outdoor-pace-fit" ? force.label : `${force.label} / ${force.system}`, `${force.role} aligned to SCOUT_OUTDOOR_AI_AGENT_STANDARD`]
+        : (routeMeta[route] || routeMeta.home);
       document.getElementById("pageTitle").textContent = meta[0];
-      document.getElementById("pageSubtitle").textContent = meta[1];
       render();
     }
 
@@ -3122,7 +4371,7 @@
         dashboardAgent.setAttribute("aria-hidden", "false");
         workspace.hidden = true;
         workspace.setAttribute("aria-hidden", "true");
-        ensureAgentAppFrame();
+        ensureAgentChat();
       } else if (route.startsWith("outdoor-")) {
         dashboardMap.hidden = true;
         dashboardMap.setAttribute("aria-hidden", "true");
@@ -3153,7 +4402,7 @@
 
     function renderStandardPage(route) {
       if (route === "map") return renderPretripMapFrame();
-      if (route === "timeline") return `${decisionBand("CONDITIONAL_GO", "evidence stream traceable", "medium", "read-only refs")}${renderTimelinePanel()}`;
+      if (route === "timeline") return renderTimelinePanel();
       if (route === "features-lbs") return renderLbsPage();
       if (route === "features-workspace") return renderWorkspacePage();
       if (route === "features-import-new-trip") return renderImportNewTripPage();
@@ -3162,21 +4411,21 @@
         return renderSurfaceFrame({
           title: "Pre-trip Planning",
           src: surfaceSrc("/admin/pretrip"),
-          summary: "Existing Phase 4 pre-trip workspace with import, workspace edits, layer preparation, review queues and runtime handoff/export/load tooling.",
+          summary: "Import, edits, layers, review, handoff.",
         });
       }
       if (route === "surface-admin") {
         return renderSurfaceFrame({
           title: "Admin After-Action",
           src: surfaceSrc("/admin"),
-          summary: "Existing Phase 1 after-action map canvas, evidence tree, mission narrative and raw detail review.",
+          summary: "Map, evidence, narrative, review state.",
         });
       }
       if (route === "surface-debug") {
         return renderSurfaceFrame({
           title: "Runtime Debug",
           src: surfaceSrc("/admin/debug"),
-          summary: "Existing Phase 3.5 read-only runtime debug console, timeline, debug map, messages and boundary panels.",
+          summary: "Runtime state, timeline, messages, boundary.",
         });
       }
       if (route === "agent") return renderAgentPage();
@@ -3187,24 +4436,12 @@
       return renderHomePage();
     }
 
-    function decisionBand(decision, primary, confidence, nextAction) {
-      return `
-        <section class="decision-band" aria-label="Scout decision band">
-          <div class="decision-cell primary"><span>Decision</span><strong>${escapeHtml(decision)}</strong></div>
-          <div class="decision-cell"><span>Primary output</span><strong>${escapeHtml(primary)}</strong></div>
-          <div class="decision-cell"><span>Confidence</span><strong>${escapeHtml(confidence)}</strong></div>
-          <div class="decision-cell"><span>Next action</span><strong>${escapeHtml(nextAction)}</strong></div>
-        </section>
-      `;
-    }
-
     function renderHomePage() {
       const counts = projectCounts();
       return `
-        ${decisionBand("CONDITIONAL_GO", "workable alpha shell", "medium", "review Exploring for Six Axis and workspace readiness")}
         <div class="grid-2">
           <section class="panel">
-            <div class="panel-header"><h3>Exploring for Six Axis</h3><span class="chip info">decision system</span></div>
+            <div class="panel-header"><h3>Exploring for Six Axis</h3></div>
             <div class="panel-body">
               <div class="force-list">
                 ${SIX_FORCES.map((force) => renderForceRow(force)).join("")}
@@ -3227,7 +4464,7 @@
         </div>
         <div style="height:12px"></div>
         <section class="panel">
-          <div class="panel-header"><h3>Current Admin Surfaces</h3><span class="chip info">embedded frames</span></div>
+          <div class="panel-header"><h3>Admin Surfaces</h3></div>
           <div class="panel-body">
             <div class="force-list">
               ${renderSurfaceRow("Pre-trip", surfaceSrc("/admin/pretrip"), "Import, workspace edits, layer preparation, review queues, handoff/export/load tooling.", "surface-pretrip")}
@@ -3245,7 +4482,7 @@
       return `
         <div class="force-row">
           <div class="label-stack"><strong>${escapeHtml(label)}</strong><span class="mono">${escapeHtml(path)}</span></div>
-          <div class="label-stack"><strong>${escapeHtml(detail)}</strong><span>same-origin dashboard frame</span></div>
+          <div class="label-stack"><strong>${escapeHtml(detail)}</strong></div>
           <div class="label-stack"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
           <button type="button" data-route="${escapeHtml(route)}">Open</button>
         </div>
@@ -3254,7 +4491,6 @@
 
     function renderSurfaceFrame({ title, src, summary }) {
       return `
-        ${decisionBand("GO", `${title} embedded`, "high", "operate inside dashboard frame")}
         <section class="panel surface-frame-panel">
           <div class="surface-frame-header">
             <div>
@@ -3287,12 +4523,412 @@
       bindPretripMapOnlyFrame(frame);
     }
 
-    function ensureAgentAppFrame() {
-      const frame = document.getElementById("agentAppFrame");
-      if (!frame) return;
-      if (frame.dataset.agentSource === AGENT_APP_URL && frame.getAttribute("src")) return;
-      frame.dataset.agentSource = AGENT_APP_URL;
-      frame.src = AGENT_APP_URL;
+    function ensureAgentChat() {
+      renderAgentStatus();
+      renderAgentTranscript();
+      if (!state.agentStatus.checked) {
+        refreshAgentStatus();
+      }
+    }
+
+    function bindAgentChatControls() {
+      const form = document.getElementById("agentComposer");
+      const input = document.getElementById("agentQuestionInput");
+      if (!form || !input) return;
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        submitAgentQuestion();
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.shiftKey) return;
+        event.preventDefault();
+        submitAgentQuestion();
+      });
+      const fallbackToggle = document.getElementById("agentFallbackToggle");
+      fallbackToggle?.addEventListener("change", () => {
+        state.agentUseAiHatFallback = Boolean(fallbackToggle.checked);
+        renderAgentStatus();
+      });
+    }
+
+    async function refreshAgentStatus() {
+      state.agentStatus = {
+        ...state.agentStatus,
+        checked: true,
+        ok: false,
+        text: "checking",
+      };
+      renderAgentStatus();
+      try {
+        const status = await fetchJson(ASSISTANT_STATUS_PATH);
+        state.agentStatus = {
+          checked: true,
+          ok: true,
+          provider: String(status.provider || "unknown"),
+          providerClass: String(status.provider_class || "unknown"),
+          text: status.startup_connection_status ? String(status.startup_connection_status) : "connected",
+          raw: status,
+        };
+      } catch (error) {
+        state.agentStatus = {
+          checked: true,
+          ok: false,
+          provider: "unavailable",
+          providerClass: "not mounted",
+          text: `disconnected: ${error.message || error}`,
+        };
+      }
+      renderAgentStatus();
+    }
+
+    function renderAgentStatus() {
+      const dot = document.getElementById("agentStatusDot");
+      const statusText = document.getElementById("agentStatusText");
+      const providerChip = document.getElementById("agentProviderChip");
+      const projectChip = document.getElementById("agentProjectChip");
+      const fallbackToggle = document.getElementById("agentFallbackToggle");
+      const input = document.getElementById("agentQuestionInput");
+      const button = document.getElementById("agentAskButton");
+      const status = state.agentStatus || {};
+      dot?.classList.toggle("ok", Boolean(status.ok));
+      dot?.classList.toggle("fail", status.checked && !status.ok);
+      if (statusText) statusText.textContent = status.text || "unknown";
+      if (providerChip) {
+        providerChip.textContent = status.ok
+          ? `${status.provider || "provider"} / ${status.providerClass || "provider class"}`
+          : status.provider || "assistant unavailable";
+      }
+      if (projectChip) projectChip.textContent = `project=${projectId()}`;
+      if (fallbackToggle) fallbackToggle.checked = Boolean(state.agentUseAiHatFallback);
+      if (input) input.disabled = state.agentBusy;
+      if (button) button.disabled = state.agentBusy;
+    }
+
+    async function submitAgentQuestion() {
+      const input = document.getElementById("agentQuestionInput");
+      if (!input || state.agentBusy) return;
+      const question = input.value.trim();
+      if (!question) return;
+      input.value = "";
+      state.agentMessages.push({
+        role: "user",
+        text: question,
+        meta: state.agentUseAiHatFallback ? ["AI HAT+2 fallback requested"] : [],
+      });
+      state.agentBusy = true;
+      state.agentMessages.push({
+        role: "system",
+        text: "Scout AI is reading workspace context and tool registry evidence...",
+        pending: true,
+        meta: ["pending"],
+      });
+      renderAgentStatus();
+      renderAgentTranscript();
+      try {
+        const payload = {
+          surface: "pretrip",
+          question,
+          project_id: projectId(),
+          runtime_preference: "cloud",
+        };
+        if (state.agentUseAiHatFallback) {
+          payload.runtime_preference = "ai_hat_plus_2_fallback";
+        }
+        const response = await postJson(
+          ASSISTANT_QUERY_PATH,
+          payload,
+          { timeoutMs: ASSISTANT_QUERY_TIMEOUT_MS },
+        );
+        state.agentMessages = state.agentMessages.filter((message) => !message.pending);
+        state.agentResponses.push({
+          question,
+          response,
+          receivedAt: new Date().toISOString(),
+        });
+        window.scoutDashboardAgentResponses = state.agentResponses;
+        state.agentMessages.push({
+          role: "assistant",
+          text: formatAgentEvalAnswer(question, response),
+          meta: agentResponseMeta(response),
+        });
+        if (!state.agentStatus.ok) {
+          refreshAgentStatus();
+        }
+      } catch (error) {
+        state.agentMessages = state.agentMessages.filter((message) => !message.pending);
+        state.agentMessages.push({
+          role: "system",
+          text: `Scout AI unavailable: ${error.message || error}`,
+          meta: ["disconnected", ASSISTANT_QUERY_PATH],
+        });
+        state.agentStatus = {
+          ...state.agentStatus,
+          checked: true,
+          ok: false,
+          provider: "unavailable",
+          providerClass: "request failed",
+          text: `request failed: ${error.message || error}`,
+        };
+      } finally {
+        state.agentBusy = false;
+        renderAgentStatus();
+        renderAgentTranscript();
+        input.focus({ preventScroll: true });
+      }
+    }
+
+    function agentResponseMeta(response) {
+      const observability = response.observability || {};
+      const parts = [`${observability.latency_ms ?? "n/a"}ms`];
+      if (observability.model_profile_used === "local") {
+        parts.unshift(
+          observability.local_model_name
+            ? `AI HAT+2 ${observability.local_model_name}`
+            : "local",
+        );
+      } else if (observability.model_profile_used) {
+        parts.unshift(observability.model_profile_used);
+      }
+      if (observability.safe_failure) parts.push("safe_failure=true");
+      return parts;
+    }
+
+    function displayAgentAnswer(answer) {
+      return String(answer || "")
+        .replace(/^Pydantic AI read-only model interpretation:\s*/i, "")
+        .replace(/^結論[:：]\s*/u, "")
+        .trim();
+    }
+
+    function formatAgentEvalAnswer(question, response) {
+      const evidenceAnswer = displayAgentAnswer(response?.evidence_backed_answer || "");
+      const rawAnswer = displayAgentAnswer(response?.local_model_answer || "");
+      const guard = agentGroundingGuard(response);
+      const aiHatGenerationMode = agentAiHatGenerationMode(response);
+      const modelAnswer = displayAgentAnswer(response?.answer || "(empty assistant answer)");
+      const isAiHatRun = Boolean(rawAnswer) || agentLimitations(response).some((item) =>
+        item.includes("AI HAT+2 local fallback was requested")
+      );
+      const deterministicFallbackOnly = agentDeterministicFallbackOnly(response);
+      const guardFailed = guard.startsWith("failed");
+      const answer = deterministicFallbackOnly
+        ? "模型未成功回答；下方 Scout grounding reference 是 deterministic 工具摘要，只能用於 debug / evidence review，不能算作模型答題成功。"
+        : rawAnswer || modelAnswer;
+      const referenceCopyLike = agentAnswerLooksLikeReferenceCopy(answer, evidenceAnswer);
+      let answerLabel = "回答";
+      if (deterministicFallbackOnly) {
+        answerLabel = "模型未成功回答（工具摘要另列）";
+      } else if (isAiHatRun) {
+        if (referenceCopyLike) {
+          answerLabel = "模型未產生獨立回答（AI HAT+2 copied grounding reference）";
+        } else if (guardFailed) {
+          answerLabel = "模型回答未通過 grounding（AI HAT+2 raw output）";
+        } else if (aiHatGenerationMode === "repaired_from_grounding_failure") {
+          answerLabel = "回答（AI HAT+2 grounded repair）";
+        } else if (aiHatGenerationMode === "synthesized_from_workspace_facts") {
+          answerLabel = "回答（AI HAT+2 synthesized from workspace facts）";
+        } else {
+          answerLabel = "回答（AI HAT+2 evidence-prompted）";
+        }
+      }
+      const lines = [
+        `問題：${question}`,
+        `tool using：${agentToolUsing(response).join(", ") || "-"}`,
+        `missing tool：${agentMissingTools(response).join(", ") || "-"}`,
+        `Missing evidence：${agentMissingEvidence(response).join(", ") || "-"}`,
+        `grounding guard：${guard}`,
+        `${answerLabel}：${answer}`,
+      ];
+      if (guardFailed && rawAnswer && rawAnswer !== answer) {
+        lines.push(`AI HAT+2 raw output（未通過 grounding，不計成功）：${rawAnswer}`);
+      }
+      if (evidenceAnswer) {
+        lines.push(`Scout grounding reference（工具摘要，不取代本地模型回答）：${evidenceAnswer}`);
+      }
+      if (guard.startsWith("failed")) {
+        lines.push("quality verdict：AI HAT+2 evidence-prompted answer did not preserve required Scout evidence; count this as a local-model quality failure.");
+      }
+      if (referenceCopyLike) {
+        lines.push("quality verdict：AI HAT+2 answer is a near-copy/subset of the deterministic Scout grounding reference; do not count this as strong local-model reasoning quality.");
+      }
+      return lines.join("\n");
+    }
+
+    function agentAnswerLooksLikeReferenceCopy(answer, reference) {
+      const answerCompact = String(answer || "")
+        .replace(/^結論[:：]\s*/u, "")
+        .replace(/\s+/g, "");
+      const referenceCompact = String(reference || "")
+        .replace(/^結論[:：]\s*/u, "")
+        .replace(/\s+/g, "");
+      if (answerCompact.length < 48 || referenceCompact.length < 80) return false;
+      return referenceCompact.includes(answerCompact) || answerCompact.includes(referenceCompact);
+    }
+
+    function agentDeterministicFallbackOnly(response) {
+      return agentLimitations(response).some((item) =>
+        String(item || "").includes("deterministic_tool_fallback_only=true")
+      );
+    }
+
+    function agentGroundingGuard(response) {
+      const guard = agentLimitations(response)
+        .map((item) => String(item || ""))
+        .find((item) => item.startsWith("ai_hat_grounding_guard="));
+      if (!guard) return "-";
+      return guard.split("=").slice(1).join("=") || "-";
+    }
+
+    function agentAiHatGenerationMode(response) {
+      const mode = agentLimitations(response)
+        .map((item) => String(item || ""))
+        .find((item) => item.startsWith("ai_hat_generation_mode="));
+      if (!mode) return "-";
+      return mode.split("=").slice(1).join("=") || "-";
+    }
+
+    function agentLimitations(response) {
+      return Array.isArray(response?.limitations) ? response.limitations : [];
+    }
+
+    function agentToolUsing(response) {
+      const sourceIds = Array.isArray(response?.sources)
+        ? response.sources
+            .filter((source) => source && (source.selected || agentLooksLikeToolSource(source.source_id)))
+            .map((source) => String(source.source_id || ""))
+            .filter(Boolean)
+        : [];
+      const limitationIds = String((response?.limitations || []).join("\n"))
+        .split(/workspace_tool_ids=|registry_tool_source_ids=/)
+        .slice(1)
+        .flatMap((part) => part.split(/\s|;/)[0].split(","))
+        .filter(Boolean);
+      return dedupe([...sourceIds, ...limitationIds]).filter(agentLooksLikeToolSource);
+    }
+
+    function agentMissingTools(response) {
+      const raw = JSON.stringify(response || {});
+      const matches = [...raw.matchAll(/missing(?:_|\\s)?tool(?:s|_ids)?[\"':\\s=]+([^\\]\\n;}]+)/gi)]
+        .flatMap((match) => String(match[1] || "").split(/[,\\s]+/))
+        .map((item) => item.replace(/[\"'\\[\\]]/g, "").trim())
+        .filter((item) => item && item !== "-" && item !== "0");
+      return dedupe(matches);
+    }
+
+    function agentMissingEvidence(response) {
+      const fields = [];
+      const activeToolIds = new Set(agentToolUsing(response));
+      for (const source of response?.sources || []) {
+        const sourceId = String(source?.source_id || "");
+        if (sourceId === "assistant_skill.pretrip.full_workflow.v0") continue;
+        if (
+          activeToolIds.size
+          && agentLooksLikeToolSource(sourceId)
+          && !activeToolIds.has(sourceId)
+        ) {
+          continue;
+        }
+        collectMissingEvidence(fields, sourceId, source?.context_summary);
+      }
+      for (const limitation of response?.limitations || []) {
+        const text = String(limitation || "");
+        if (text.includes("assistant_skill.pretrip.full_workflow.v0")) continue;
+        if (
+          /(?:^|[\\s:])missing(?:[_\\s-]fields?|[:=]|$)/i.test(text)
+          || /(?:^|[\\s:])stale(?:[_\\s-]risk|[:=]|$)/i.test(text)
+          || /(?:缺少|過期|过期)/i.test(text)
+        ) {
+          fields.push(text);
+        }
+      }
+      return dedupe(fields).slice(0, 16);
+    }
+
+    function collectMissingEvidence(fields, sourceId, value) {
+      if (!value || typeof value !== "object") return;
+      const id = sourceId || value.tool_id || value.source_id || "source";
+      for (const key of ["missing", "missing_fields", "missing_required_fields", "missing_evidence", "evidence_gaps"]) {
+        const list = value[key];
+        if (Array.isArray(list)) {
+          for (const item of list) fields.push(`${id}:${formatMissingEvidenceItem(item)}`);
+        }
+      }
+      if (value.status && /missing|stale|unavailable/i.test(String(value.status))) {
+        fields.push(`${id}:status=${value.status}`);
+      }
+      for (const key of [
+        "segment_missing_display_geometry_count",
+        "segment_missing_distance_count",
+        "checkpoint_duplicate_label_group_count",
+      ]) {
+        const count = Number(value[key] ?? 0);
+        if (Number.isFinite(count) && count > 0) {
+          fields.push(`${id}:${key}=${count}`);
+        }
+      }
+      for (const childKey of ["latest", "answerability", "payload", "summary", "summaries"]) {
+        if (value[childKey] && typeof value[childKey] === "object") {
+          collectMissingEvidence(fields, id, value[childKey]);
+        }
+      }
+    }
+
+    function agentLooksLikeToolSource(sourceId) {
+      const id = String(sourceId || "");
+      return id.includes(".tool.") || id.startsWith("scout.ai.") || id.startsWith("assistant_skill.");
+    }
+
+    function formatMissingEvidenceItem(item) {
+      if (item == null) return "unknown";
+      if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+        return String(item);
+      }
+      if (typeof item === "object") {
+        const compact = {};
+        for (const key of ["tool_id", "source_id", "field", "missing_field", "status", "reason", "category", "severity"]) {
+          if (item[key] != null) compact[key] = item[key];
+        }
+        return Object.keys(compact).length
+          ? JSON.stringify(compact)
+          : JSON.stringify(item).slice(0, 240);
+      }
+      return String(item);
+    }
+
+    function dedupe(items) {
+      return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))];
+    }
+
+    function renderAgentTranscript() {
+      const transcript = document.getElementById("agentTranscript");
+      if (!transcript) return;
+      if (!state.agentMessages.length) {
+        transcript.innerHTML = `
+          <div class="agent-chat-empty">
+            Scout AI is connected through this dashboard when the 9099 server has
+            <span class="mono">SCOUT_AI_ASSISTANT_ENABLED=1</span>. Ask route, weather,
+            navigation, rescue handoff, workspace, or tool questions for
+            <span class="mono">${escapeHtml(projectId())}</span>.
+          </div>
+        `;
+        return;
+      }
+      transcript.innerHTML = state.agentMessages.map((message) => `
+        <article class="agent-message ${escapeHtml(message.role)}">
+          <div class="agent-message-body">${escapeHtml(message.text || "")}</div>
+          <div class="agent-message-meta">
+            <strong>${escapeHtml(agentRoleLabel(message.role))}</strong>
+            ${(message.meta || []).map((item) => `<span>${escapeHtml(String(item))}</span>`).join("")}
+          </div>
+        </article>
+      `).join("");
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    function agentRoleLabel(role) {
+      if (role === "user") return "You";
+      if (role === "assistant") return "Scout AI";
+      return "System";
     }
 
     function renderForceRow(force) {
@@ -3308,7 +4944,6 @@
 
     function renderLbsPage() {
       return `
-        ${decisionBand("CONDITIONAL_GO", "route projection available", "medium", "verify map target ids before handoff")}
         <div class="grid-2">
           ${renderMetricPanel("LBS Signals", [
             ["Route projection", "admin-projection + debug-projection"],
@@ -3331,7 +4966,6 @@
     function renderWorkspacePage() {
       const stats = workspaceStats();
       return `
-        ${decisionBand("CONDITIONAL_GO", "workspace ready for review", "medium", "import, edit, prepare, export with artifact metadata")}
         ${renderWorkspaceStatsPanels(stats)}
         <div style="height:12px"></div>
         ${renderWorkspaceStructurePanels()}
@@ -3472,7 +5106,6 @@
       state.activeCountryMaterialPool = pool.code;
       const defaults = countryMaterialPoolDefaults(pool.code);
       return `
-        ${decisionBand("CONDITIONAL_GO", "country-scoped material defaults", "medium", "factory configured; operator selected")}
         <div class="material-pool-layout" data-country-material-pool="true">
           <div class="debug-main-stack">
             <section class="panel">
@@ -3579,9 +5212,6 @@
                   <div class="item"><strong>Base map</strong><span>offline/cache policy derives from country provider rights</span></div>
                   <div class="item"><strong>Evidence</strong><span>provider output remains candidate/provenance material</span></div>
                 </div>
-                <p class="material-pool-note">
-                  This page sets default hints for import and layer preparation. It does not fetch, mutate workspace files, load runtime packages, or change safety truth.
-                </p>
               </div>
             </section>
           </aside>
@@ -3664,7 +5294,6 @@
       const targetName = draft.targetName || draft.targetWorkspace || importTripProjectId(tripId);
       const derivedProjectRoot = importTripProjectRoot(workspaceRoot, targetName);
       return `
-        ${decisionBand("CONDITIONAL_GO", "new trip import intake", "medium", "validate before workspace handoff")}
         <section class="panel" data-import-new-trip="true">
           <div class="panel-header">
             <h3>Import New Trip</h3>
@@ -4004,7 +5633,6 @@
 
     function renderAgentPage() {
       return `
-        ${decisionBand("CONDITIONAL_GO", "local Scout AI Mac Chat embedded", "medium", "operator-triggered chat only")}
         <div class="grid-3">
           ${renderMetricPanel("Pace Guardian", [["Focus", "pace, delay, slowest member"], ["Output", "bounded next action"]])}
           ${renderMetricPanel("Risk Sentinel", [["Focus", "weather, terrain, darkness, communication"], ["Output", "Change Plan / Delay / No-Go"]])}
@@ -4015,7 +5643,6 @@
 
     function renderEmergencyPage() {
       return `
-        ${decisionBand("ESCALATE", "Emergency Package Draft only", "low", "mobile approval UI remains independent")}
         <div class="grid-2">
           ${renderMetricPanel("Production Path State", [
             ["SafetyLevel", "L3_DISTRESS sample / not runtime truth"],
@@ -4027,7 +5654,7 @@
             ["Desktop dashboard", "read-only context and dry-run artifact preview"],
             ["Mobile version", "independent surface"],
             ["Callout", "message and voice scripts stay local"],
-            ["Link", '<a href="/docs/emergency/scout-emergency-mobile-approval-v0.html">Emergency Mobile Approval UI v0</a>'],
+            ["Link", '<a href="/admin/dashboard/emergency-approval-desktop-v0">Emergency approval console</a>'],
           ])}
         </div>
         <div style="height:12px"></div>
@@ -4128,7 +5755,7 @@
           ${debugTelemetryCell("Route / Workspace", projectId(), state.pretripDataProjectId || "projection", "info")}
           ${debugTelemetryCell("Selected View", active.label, `${formatInteger(active.count)} refs`, active.count ? "ok" : "info")}
           ${debugTelemetryCell("Runtime", runtime.runtime_profile || "phase35-debug", `events ${formatInteger(runtime.event_count ?? state.runtimeDebugEvents.length)}`, "info")}
-          ${debugTelemetryCell("Boundary", boundaryClosed ? "read-only" : "review", "no live safety automation", boundaryClosed ? "ok" : "warn")}
+          ${debugTelemetryCell("Boundary", boundaryClosed ? "read-only" : "review", "closed", boundaryClosed ? "ok" : "warn")}
           ${debugTelemetryCell("Hardware", `${formatInteger(hardware.summary?.interface_count ?? asArray(hardware.interface_inventory).length)} interfaces`, `${formatInteger(hardware.summary?.degraded_provider_count || 0)} degraded`, hardware.summary?.degraded_provider_count ? "warn" : "ok")}
           ${debugTelemetryCell("Outbound", "mock only", `${formatInteger(state.debugMessages.length)} messages`, "ok")}
           ${debugTelemetryCell("Ingress", ingress.status || "not loaded", ingress.reason || "observer stream", ingress.unavailable ? "warn" : "info")}
@@ -4578,7 +6205,6 @@
 
     function renderObserverPage() {
       return `
-        ${decisionBand("GO", "observer messages visible", "medium", "review streams without publish controls")}
         <div class="grid-2">
           ${renderMetricPanel("MQTT / Observer Message", [
             ["MQTT", "draft / observer message review only"],
@@ -4598,7 +6224,6 @@
 
     function renderSettingsPage() {
       return `
-        ${decisionBand("GO", "local configuration", "medium", "store only browser-local admin settings")}
         <div class="settings-grid">
           <section class="panel">
             <div class="panel-header"><h3>API</h3><span class="chip info">browser local</span></div>
@@ -4624,6 +6249,8 @@
 
     function renderOutdoorPage(route) {
       const force = SIX_FORCES.find((item) => item.route === route) || SIX_FORCES[0];
+      if (route === "outdoor-pace-fit-body-index") return renderPaceFitBodyIndexPage();
+      if (route === "outdoor-pace-fit-emergency") return renderPaceFitEmergencyPage();
       if (route === "outdoor-permission") return renderPermissionPage(force);
       if (route === "outdoor-weather") return renderWeatherPage(force);
       if (route === "outdoor-navigation") return renderNavigationPage(force);
@@ -4640,10 +6267,21 @@
       `;
     }
 
+    function paceFitSubTabs(activeRoute) {
+      return `
+        <div class="pace-subtabs" role="tablist" aria-label="Pace Fit subtree">
+          ${[
+            ["outdoor-pace-fit", "Pace Dashboard"],
+            ["outdoor-pace-fit-body-index", "Body Index"],
+            ["outdoor-pace-fit-emergency", "Emergency UI"],
+          ].map(([route, label]) => `<button type="button" class="${route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(route)}">${escapeHtml(label)}</button>`).join("")}
+        </div>
+      `;
+    }
+
     function renderPermissionPage(force) {
       return `
         ${outdoorTabs(force.route)}
-        ${decisionBand(force.decision, "可以，最多 6 分鐘。13:42 前離開。", "medium", "拍完後直接前往 CP4")}
         <div class="grid-2">
           <section class="panel">
             <div class="panel-header"><h3>Action Selector</h3><span class="chip warn">risk budget</span></div>
@@ -4680,7 +6318,6 @@
     function renderWeatherPage(force) {
       return `
         ${outdoorTabs(force.route)}
-        ${decisionBand(force.decision, "避開 13:00 後稜線與裸露段", "medium", "改成短版或提前出發")}
         <div class="grid-2">
           ${renderMapPanel("weather")}
           <section class="panel">
@@ -4705,7 +6342,6 @@
     function renderNavigationPage(force) {
       return `
         ${outdoorTabs(force.route)}
-        ${decisionBand(force.decision, "Navigation demand exceeds current autonomous confidence", "low", "補齊離線地圖與撤退方向訓練")}
         <div class="grid-2">
           ${renderMapPanel("navigation")}
           ${renderMetricPanel("Navigation Readiness", [
@@ -4722,7 +6358,6 @@
     function renderArchitecturePage(force) {
       return `
         ${outdoorTabs(force.route)}
-        ${decisionBand(force.decision, "難點在回程疲勞後段", "medium", "11:30 未抵達 CP4 即折返")}
         <div class="grid-2">
           ${renderMetricPanel("CP Graph", [
             ["Nodes", `${projectCounts().checkpoints} checkpoints`],
@@ -4736,29 +6371,822 @@
     }
 
     function renderPaceFitPage(force) {
+      const budgetRows = [
+        ["Time buffer", "+28 min", "6 min", "+22 min", "OK", 72],
+        ["Daylight buffer", "+7h 19m", "0 min", "+7h 19m", "OK", 83],
+        ["Weather window", "+1h 47m", "6 min", "+1h 41m", "OK", 64],
+        ["Retreat buffer", "+2h 03m", "0 min", "+2h 03m", "OK", 76],
+        ["Team pace buffer", "+19 min", "6 min", "+13 min", "WATCH", 58],
+      ];
+      const timelineNodes = [
+        ["CP085", "09:22", "done"],
+        ["CP086", "09:54", "done"],
+        ["CP087", "10:24", "current"],
+        ["CP088", "11:06", ""],
+        ["CP089", "11:48", ""],
+        ["CP091", "12:52", ""],
+        ["CP092", "13:26", "risk"],
+        ["CP093", "14:08", "risk"],
+        ["FINISH", "15:20", ""],
+      ];
       return `
         ${outdoorTabs(force.route)}
-        ${decisionBand(force.decision, "以最慢成員估算回程 buffer 偏低", "medium", "提前 40 分鐘出發或縮短路線")}
-        <div class="grid-2">
-          ${renderMetricPanel("Readiness & Pace Fit", [
-            ["Basis", "slowest / weakest member"],
-            ["Route Boss Demand", "risk ribbon, MCP, slow-passage evidence"],
-            ["Energy reserve", "advisory planning evidence only"],
-            ["Pace coefficient", "uphill, downhill, technical terrain, rest frequency"],
-          ])}
-          <section class="panel">
-            <div class="panel-header"><h3>Challenge Fit</h3><span class="chip warn">CHANGE_PLAN</span></div>
-            <div class="panel-body">
-              ${renderBudgetList([
-                ["Flat pace", 72, "stable"],
-                ["Uphill pace", 54, "below plan"],
-                ["Technical slowdown", 38, "rope / scree sensitivity"],
-                ["Late-route decline", 42, "watch"],
-                ["Data confidence", 61, "medium"],
-              ])}
+        ${paceFitSubTabs("outdoor-pace-fit")}
+        <section class="pace-fit-dashboard" data-pace-fit-dashboard="true">
+          <div class="pace-fit-status-grid" aria-label="Pace fit route status">
+            <div class="pace-fit-status-cell"><span>Route</span><strong>chilai_nanhua_day1</strong><em>day 1 projection</em></div>
+            <div class="pace-fit-status-cell"><span>Current CP</span><strong>CP 087</strong><em>2,842 m elevation</em></div>
+            <div class="pace-fit-status-cell"><span>Leave-by</span><strong>13:42</strong><em>UTC+8 local</em></div>
+            <div class="pace-fit-status-cell"><span>Team pace</span><strong>slowest member</strong><em>B02 basis</em></div>
+            <div class="pace-fit-status-cell"><span>Boundary</span><strong>advisory / dry-run</strong><em>no safety mutation</em></div>
+          </div>
+
+          <div class="pace-fit-workbench">
+            <div class="pace-fit-stack">
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Pace Controls</h3><span class="chip warn">operator-triggered</span></div>
+                <div class="pace-fit-card-body">
+                  <div class="pace-action-grid" aria-label="Pace fit action selector">
+                    ${[
+                      ["Stay", "6 min", "is-active"],
+                      ["Short Break", "3 min", ""],
+                      ["Lunch", "15 min", ""],
+                      ["Wait Fog", "10 min", ""],
+                      ["Team Wait", "8 min", ""],
+                      ["Reroute", "shorter line", ""],
+                      ["Retreat", "branch A", ""],
+                      ["Rain Gear", "2 min", ""],
+                      ["Photo Stop", "4 min", ""],
+                    ].map(([label, detail, active]) => `<div class="pace-action-tile ${active}"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></div>`).join("")}
+                  </div>
+                </div>
+              </section>
+
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Current CP Status</h3><span class="pace-status-ok">STAYING</span></div>
+                <div class="pace-fit-card-body pace-stat-list">
+                  ${[
+                    ["CP location", "CP 087", "23.120456, 120.832156"],
+                    ["Elevation", "2,842 m", "ridge shoulder"],
+                    ["Planned ETA", "11:18", "baseline plan"],
+                    ["Actual ETA", "11:34", "+16 min"],
+                    ["Mobile signal", "4G good", "last report 10:22:31"],
+                    ["Slowest member", "B02", "420 m behind"],
+                  ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
+                </div>
+              </section>
+
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Next Segment Risk</h3><span class="pace-status-watch">MODERATE</span></div>
+                <div class="pace-fit-card-body pace-stat-list">
+                  ${[
+                    ["Segment", "CP 087 -> CP 088", "1.84 km"],
+                    ["Key terrain", "crosswind / gusts", "ridge bend"],
+                    ["Estimated time", "00:32", "slow member basis"],
+                  ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
+                </div>
+              </section>
+            </div>
+
+            <div class="pace-fit-stack">
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Risk Budget Calculator</h3><span class="chip info">pace fit</span></div>
+                <div class="pace-fit-card-body">
+                  <table class="pace-budget-table">
+                    <thead><tr><th>Factor</th><th>Available</th><th>Used</th><th>Reserve</th><th>Status</th></tr></thead>
+                    <tbody>
+                      ${budgetRows.map(([factor, available, used, reserve, status, percent]) => `
+                        <tr>
+                          <td>${escapeHtml(factor)}</td>
+                          <td>${escapeHtml(available)}</td>
+                          <td>
+                            <div class="pace-meter"><div class="bar"><span style="width:${Number(percent)}%"></span></div><span>${escapeHtml(used)}</span></div>
+                          </td>
+                          <td>${escapeHtml(reserve)}</td>
+                          <td><span class="${status === "OK" ? "pace-status-ok" : "pace-status-watch"}">${escapeHtml(status)}</span></td>
+                        </tr>
+                      `).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>CP Timeline</h3><span class="pace-status-watch">Leave 13:42</span></div>
+                <div class="pace-fit-card-body">
+                  <div class="pace-cp-timeline" aria-label="Pace checkpoint timeline">
+                    ${timelineNodes.map(([cp, time, stateClass]) => `
+                      <div class="pace-cp-node ${stateClass ? `is-${stateClass}` : ""}">
+                        <span class="pace-cp-dot"></span>
+                        <strong>${escapeHtml(cp)}</strong>
+                        <span>${escapeHtml(time)}</span>
+                      </div>
+                    `).join("")}
+                  </div>
+                  <div class="pace-delay-grid">
+                    ${[
+                      ["+5 min", "reserve remains +17 min"],
+                      ["+10 min", "reserve remains +12 min"],
+                      ["+15 min", "reserve remains +7 min"],
+                    ].map(([delay, reserve]) => `<div class="pace-delay-card"><strong>${escapeHtml(delay)}</strong><span>${escapeHtml(reserve)}</span></div>`).join("")}
+                  </div>
+                </div>
+              </section>
+
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Pace Output</h3><span class="pace-status-ok">usable</span></div>
+                <div class="pace-fit-card-body">
+                  <div class="pace-output">
+                    <strong>最多停留 6 分鐘，13:42 前離開 CP 087。</strong>
+                    <div class="pace-output-grid">
+                      <div>
+                        <h4>Reasons</h4>
+                        <ul>
+                          <li>時間與日照緩衝仍足夠。</li>
+                          <li>後段爬升與稜線風會吃掉隊伍速度。</li>
+                          <li>最慢成員落後 420 m，需要保留追趕空間。</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h4>Adjustment</h4>
+                        <ul>
+                          <li>13:42 離開 CP 087。</li>
+                          <li>前往 CP 088，預估 11:06 到達。</li>
+                          <li>若延遲超過 20 分鐘，改用 shorter line。</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <aside class="pace-fit-stack" aria-label="Pace fit evidence">
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Pace Evidence</h3><span class="chip ok">traceable</span></div>
+                <div class="pace-fit-card-body pace-stat-list">
+                  ${[
+                    ["Weather", "多雲，側風 18 km/h", "CWA + forecast refs"],
+                    ["Team state", "全面可行", "slowest member basis"],
+                    ["Gear state", "電量 78%", "offline maps cached"],
+                    ["Route pressure", "MCP + risk ribbon", "CP087-CP088"],
+                  ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
+                  <div class="pace-evidence-tags">
+                    <span>GPX Route v3.2</span>
+                    <span>OSM 2026-05-15</span>
+                    <span>Weather API</span>
+                    <span>Team telemetry</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Artifact Metadata</h3><span class="chip warn">dry-run</span></div>
+                <div class="pace-fit-card-body">
+                  <div class="metric-line">
+                    ${[
+                      ["Case", "pretrip_projection"],
+                      ["Workspace", "pretrip_project"],
+                      ["Model profile", "pace_fit_agent.v0.4.1"],
+                      ["Boundary mode", "advisory / dry-run"],
+                    ].map(([label, value]) => `<div class="metric-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join("")}
+                  </div>
+                </div>
+              </section>
+
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Residual Risk</h3><span class="pace-status-watch">LOW-MEDIUM</span></div>
+                <div class="pace-fit-card-body">
+                  <div class="metric-line">
+                    <div class="metric-row"><span>Primary</span><span>側風、延遲累積、能見度變化</span></div>
+                    <div class="metric-row"><span>Uncertainty</span><span>午後雲量與隊伍後段衰退</span></div>
+                    <div class="metric-row"><span>Guard</span><span>每 10 分鐘更新 ETA 與隊伍距離</span></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="pace-fit-card">
+                <div class="pace-fit-card-head"><h3>Pace Object Preview</h3><span class="chip info">read-only</span></div>
+                <div class="pace-fit-card-body">
+                  <pre class="pace-json-preview">{
+  "allowedMinutes": 6,
+  "leaveBy": "13:42",
+  "currentCp": "CP087",
+  "slowestMemberBasis": "B02",
+  "bufferRemainingMinutes": 22,
+  "boundaryMode": "advisory_dry_run"
+}</pre>
+                </div>
+              </section>
+
+              ${renderPaceFitMiniMap()}
+            </aside>
+          </div>
+        </section>
+      `;
+    }
+
+    function bodyIndexMetrics() {
+      return [
+        {
+          id: "flat_ground_speed",
+          label: "Flat Ground Speed",
+          spec: "平地移動速度",
+          value: "3.8 km/h",
+          coeff: "1.00",
+          score: 84,
+          effect: "baseline walking ability",
+          source: "completed GPX p50",
+        },
+        {
+          id: "ascent_speed",
+          label: "Ascent Speed",
+          spec: "上坡速度",
+          value: "410 m/h",
+          coeff: "0.78",
+          score: 68,
+          effect: "climb tolerance",
+          source: "elevation-time model",
+        },
+        {
+          id: "descent_speed",
+          label: "Descent Speed",
+          spec: "下坡速度",
+          value: "3.1 km/h",
+          coeff: "0.74",
+          score: 64,
+          effect: "knee / technique / fatigue",
+          source: "downhill GPX splits",
+        },
+        {
+          id: "technical_slowdown",
+          label: "Technical Terrain Slowdown",
+          spec: "技術地形降速率",
+          value: "-34%",
+          coeff: "0.66",
+          score: 56,
+          effect: "rope, scree, mud, scramble",
+          source: "MCP + terrain tags",
+        },
+        {
+          id: "rest_frequency",
+          label: "Rest Frequency",
+          spec: "休息頻率",
+          value: "8 min / 55 min",
+          coeff: "0.72",
+          score: 62,
+          effect: "recovery rhythm",
+          source: "stop pattern",
+        },
+        {
+          id: "late_trip_decay",
+          label: "Late-trip Decay",
+          spec: "行程後段速度衰退",
+          value: "-18%",
+          coeff: "0.70",
+          score: 59,
+          effect: "endurance / pacing",
+          source: "last-third splits",
+        },
+        {
+          id: "load_impact",
+          label: "Load Impact",
+          spec: "負重影響",
+          value: "-11%",
+          coeff: "0.82",
+          score: 72,
+          effect: "pack weight penalty",
+          source: "gear weight estimate",
+        },
+        {
+          id: "weather_impact",
+          label: "Weather Impact",
+          spec: "天候影響",
+          value: "-9%",
+          coeff: "0.86",
+          score: 76,
+          effect: "heat, cold, rain, wind",
+          source: "CWA + forecast refs",
+        },
+        {
+          id: "experience_confidence",
+          label: "Experience Confidence",
+          spec: "經驗可信度",
+          value: "0.71",
+          coeff: "0.71",
+          score: 71,
+          effect: "self-report vs records",
+          source: "completed trips + claims",
+        },
+      ];
+    }
+
+    function renderBodyIndexMetric(metric) {
+      const score = Math.max(0, Math.min(100, Number(metric.score) || 0));
+      const tone = score >= 75 ? "ok" : score >= 60 ? "warn" : "bad";
+      return `
+        <article class="body-index-metric" data-body-index-metric="${escapeHtml(metric.id)}">
+          <div class="body-index-metric-head">
+            <div>
+              <h3>${escapeHtml(metric.label)}</h3>
+              <small>${escapeHtml(metric.spec)}</small>
+            </div>
+            <strong>${escapeHtml(metric.coeff)}</strong>
+          </div>
+          <div>
+            <div class="body-index-meter"><span style="--value:${score}%"></span></div>
+            <div class="body-index-foot">
+              <span>${escapeHtml(metric.effect)}</span>
+              <span class="chip ${tone}">${score}</span>
+            </div>
+          </div>
+          <div class="body-index-foot">
+            <span>${escapeHtml(metric.source)}</span>
+            <strong>${escapeHtml(metric.value)}</strong>
+          </div>
+        </article>
+      `;
+    }
+
+    function bodyIndexRows(key, fallbackRows) {
+      const rows = state.bodyIndexData?.[key];
+      if (Array.isArray(rows) && rows.length) return rows;
+      return fallbackRows;
+    }
+
+    function bodyIndexSummary() {
+      return state.bodyIndexData?.summary || {
+        scout_pace_coefficient: "0.82",
+        energy_reserve: "0.62",
+        vulnerability: "0.38",
+        experience_trust: "0.71",
+        score_percent: 82,
+      };
+    }
+
+    function bodyIndexScorePercent(summary) {
+      const explicit = Number(summary.score_percent);
+      if (Number.isFinite(explicit) && explicit > 0) return Math.max(0, Math.min(100, explicit));
+      const coefficient = Number(summary.scout_pace_coefficient || 0.82);
+      return Math.max(0, Math.min(100, Math.round(coefficient * 100)));
+    }
+
+    function bodyIndexCoverageValue(label, fallback) {
+      const row = bodyIndexHealthCoverage().find((item) => item[0] === label);
+      return row ? row[1] : fallback;
+    }
+
+    function bodyIndexImportStatus() {
+      return state.bodyIndexImportStatus || {
+        tone: "info",
+        text: "HealthExport import idle",
+      };
+    }
+
+    function bodyIndexWatchStatus() {
+      return state.bodyIndexWatchStatus || {
+        running: false,
+        scan_count: 0,
+        import_count: 0,
+        last_result: null,
+      };
+    }
+
+    function bodyIndexWatchSummary() {
+      const status = bodyIndexWatchStatus();
+      if (state.bodyIndexWatchBusy) return "watch request running";
+      if (status.running) {
+        const result = status.last_result || {};
+        return `watching every ${status.interval_seconds || state.bodyIndexWatchIntervalSeconds}s · scans ${status.scan_count || 0} · new ${result.new_source_count || 0}`;
+      }
+      const error = status.last_error;
+      if (error) return `watch stopped · ${error.error_type || "error"}: ${error.error || ""}`;
+      return "watch stopped";
+    }
+
+    function bodyIndexWatchTone() {
+      const status = bodyIndexWatchStatus();
+      if (state.bodyIndexWatchBusy) return "warn";
+      if (status.last_error) return "bad";
+      return status.running ? "ok" : "info";
+    }
+
+    function bodyIndexDefaultTrend() {
+      return {
+        direction: "mid",
+        position_percent: 50,
+        summary: "baseline position unavailable",
+        min_label: "min --",
+        baseline_label: "baseline --",
+        average_label: "avg --",
+        max_label: "max --",
+      };
+    }
+
+    function bodyIndexHealthCoverage() {
+      return bodyIndexRows("coverage_cards", [
+        ["Health exports", "3", "HealthAutoExport zip files"],
+        ["Walking sessions", "23", "parser-ready walking workouts"],
+        ["GPX tracks", "40", "route traces available"],
+        ["15-min windows", "49", "sanitized pressure windows"],
+        ["Provider metrics", "10", "source-value metric families"],
+      ]);
+    }
+
+    function bodyIndexHealthSignals() {
+      return bodyIndexRows("health_signals", [
+        ["VO2max Baseline", "available", "median --", "cardio baseline only; not live oxygen uptake", "Energy Reserve", bodyIndexDefaultTrend()],
+        ["Resting HR", "available", "median -- bpm", "provider metric trend for baseline context", "Vulnerability", bodyIndexDefaultTrend()],
+        ["HRV Baseline", "available", "median -- ms", "recovery readiness context; source value only", "Vulnerability", bodyIndexDefaultTrend()],
+        ["Walking HR Average", "available", "median -- bpm", "walking effort baseline without raw samples", "Rest Frequency", bodyIndexDefaultTrend()],
+        ["Active Energy Reset Cue", "computable", "median -- kJ", "active energy budget and reset threshold", "Energy Reserve", bodyIndexDefaultTrend()],
+        ["Recovery Debt Windows", "computable", "-- windows", "post-pressure rest cost from 15-min windows", "Late-trip Decay", bodyIndexDefaultTrend()],
+        ["HR Pressure Windows", "computable", "-- windows", "high effort / low efficiency windows", "Vulnerability", bodyIndexDefaultTrend()],
+        ["Step + Distance Pattern", "available", "steps + distance", "step count and walking distance coverage", "Flat Speed", bodyIndexDefaultTrend()],
+      ]);
+    }
+
+    function bodyIndexPressureTimeline() {
+      return bodyIndexRows("pressure_timeline", [
+        ["2018 long walk", "16 windows", "single GPX session", 33],
+        ["2020 walking day", "7 windows", "two GPX sessions", 14],
+        ["2026 recent baseline", "26 windows", "20 walking sessions", 53],
+      ]);
+    }
+
+    function bodyIndexProviderMetrics() {
+      const metrics = state.bodyIndexData?.provider_metrics;
+      if (Array.isArray(metrics) && metrics.length) return metrics;
+      return [
+        "vo2_max",
+        "blood_oxygen_saturation",
+        "heart_rate_variability",
+        "resting_heart_rate",
+        "walking_heart_rate_average",
+        "heart_rate",
+        "step_count",
+        "active_energy",
+        "flights_climbed",
+        "walking_running_distance",
+      ];
+    }
+
+    function normalizeBodyIndexHealthSignal(signal) {
+      const row = Array.isArray(signal) ? signal : [];
+      if (row.length >= 6) {
+        return {
+          label: row[0],
+          stateLabel: row[1],
+          value: row[2],
+          detail: row[3],
+          updates: row[4],
+          trend: row[5],
+        };
+      }
+      if (row.length >= 5) {
+        return {
+          label: row[0],
+          stateLabel: row[1],
+          value: row[2],
+          detail: row[3],
+          updates: row[4],
+          trend: null,
+        };
+      }
+      return {
+        label: row[0] || "Health Signal",
+        stateLabel: row[1] || "pending",
+        value: row[1] || "pending",
+        detail: row[2] || "source value unavailable",
+        updates: row[3] || "Body Index",
+        trend: null,
+      };
+    }
+
+    function bodyIndexTrendArrow(direction) {
+      if (direction === "high") return "↗";
+      if (direction === "low") return "↘";
+      return "→";
+    }
+
+    function bodyIndexTrendPercent(trend) {
+      const value = Number(trend?.position_percent);
+      if (!Number.isFinite(value)) return 50;
+      return Math.max(0, Math.min(100, value));
+    }
+
+    function renderBodyIndexSignalTrend(trend) {
+      if (!trend || typeof trend !== "object") return "";
+      const direction = ["low", "mid", "high"].includes(trend.direction) ? trend.direction : "mid";
+      const position = bodyIndexTrendPercent(trend);
+      const arrow = bodyIndexTrendArrow(direction);
+      const summary = trend.summary || "baseline position";
+      const minLabel = trend.min_label || "min --";
+      const baselineLabel = trend.baseline_label || "baseline --";
+      const averageLabel = trend.average_label || baselineLabel;
+      const maxLabel = trend.max_label || "max --";
+      return `
+        <div class="body-index-signal-trend" data-body-index-trend="${escapeHtml(direction)}" title="${escapeHtml(summary)}">
+          <div class="body-index-trend-axis" aria-label="${escapeHtml(summary)}">
+            <span class="body-index-trend-marker is-${escapeHtml(direction)}" style="--position:${position}%" aria-label="${escapeHtml(baselineLabel)}">${escapeHtml(arrow)}</span>
+          </div>
+          <div class="body-index-trend-labels">
+            <span>${escapeHtml(minLabel)}</span>
+            <span>${escapeHtml(averageLabel)}</span>
+            <span>${escapeHtml(maxLabel)}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderBodyIndexHealthSignal(signal) {
+      const { label, stateLabel, value, detail, updates, trend } = normalizeBodyIndexHealthSignal(signal);
+      return `
+        <article class="body-index-signal-card" data-body-index-health-signal="${escapeHtml(label)}">
+          <span>${escapeHtml(updates)}</span>
+          <h4>${escapeHtml(label)}</h4>
+          <strong>${escapeHtml(value)}</strong>
+          <em>${escapeHtml(stateLabel)}</em>
+          <small>${escapeHtml(detail)}</small>
+          ${renderBodyIndexSignalTrend(trend)}
+        </article>
+      `;
+    }
+
+    function renderBodyIndexProviderDrawer() {
+      return `
+        <details class="body-index-provider-drawer" data-body-index-provider-metrics="collapsed">
+          <summary>
+            <span>Health Provider Metrics</span>
+            <small>collapsed by default · source_provider only</small>
+          </summary>
+          <div class="body-index-provider-grid">
+            ${bodyIndexProviderMetrics().map((metric) => `
+              <div class="body-index-provider-chip">
+                <strong>${escapeHtml(metric)}</strong>
+                <span>source value only</span>
+              </div>
+            `).join("")}
+          </div>
+        </details>
+      `;
+    }
+
+    function renderPaceFitBodyIndexPage() {
+      const metrics = bodyIndexMetrics();
+      const summary = bodyIndexSummary();
+      const scorePercent = bodyIndexScorePercent(summary);
+      const coefficient = summary.scout_pace_coefficient || "0.82";
+      const energyReserve = summary.energy_reserve || "0.62";
+      const vulnerability = summary.vulnerability || "0.38";
+      const experienceTrust = summary.experience_trust || "0.71";
+      const importStatus = bodyIndexImportStatus();
+      const importTone = ["ok", "warn", "bad", "info"].includes(importStatus.tone) ? importStatus.tone : "info";
+      const watchTone = bodyIndexWatchTone();
+      const watchSummary = bodyIndexWatchSummary();
+      const watchStatus = bodyIndexWatchStatus();
+      const healthExports = bodyIndexCoverageValue("Health exports", "3");
+      const walkingSessions = bodyIndexCoverageValue("Walking sessions", "23");
+      const pressureWindows = bodyIndexCoverageValue("15-min windows", "49");
+      const healthExportEvidence = state.bodyIndexData ? `${healthExports} local exports / ${walkingSessions} walking sessions` : "3 local exports / 23 walking sessions";
+      const pressureWindowEvidence = state.bodyIndexData ? `${pressureWindows} sanitized 15-min windows` : "49 sanitized 15-min windows";
+      const impactRows = [
+        ["Boss demand", "CP087-CP093 ridge section", "route pressure 0.68"],
+        ["Energy Reserve", `${energyReserve} retained for slowest member basis`, "planning evidence"],
+        ["Pace gate input", "Scout Pace Coefficient feeds schedule buffer", "source_provider only"],
+        ["Challenge Fit", "route demand x pace vulnerability", "advisory only"],
+        ["Boundary", "no diagnosis, no Phase 1 mutation, no safety endpoint", "no outbound"],
+      ];
+      const evidenceRows = [
+        ["completed_trip_gpx", "speed split history"],
+        ["HealthAutoExport", healthExportEvidence],
+        ["physiologic_windowed_replay", pressureWindowEvidence],
+        ["route_progress_frame", "current CP and delay"],
+        ["terrain_time_model", "ascent/descent/technical penalty"],
+        ["rest_stop_pattern", "rest frequency and recovery"],
+        ["weather_overlay", "CWA forecast impact"],
+        ["team_slowest_member", "vulnerable-member basis"],
+      ];
+      return `
+        ${outdoorTabs("outdoor-pace-fit")}
+        ${paceFitSubTabs("outdoor-pace-fit-body-index")}
+        <section class="body-index-dashboard" data-body-index-dashboard="true" data-scout-pace-coefficient="true">
+          <div class="body-index-summary" aria-label="Scout Pace Coefficient summary">
+            <section class="body-index-score-card">
+              <div class="body-index-ring" style="--value:${scorePercent}%"><span>${escapeHtml(coefficient)}</span></div>
+              <div class="body-index-score-copy">
+                <h3>Scout Pace Coefficient</h3>
+                <p>Route pace estimate for Chilai Nanhua day 1, calculated as planning evidence for the slowest member basis.</p>
+                <div class="body-index-chip-row">
+                  <span class="chip info">spec 7.2</span>
+                  <span class="chip info">HealthExport-aware</span>
+                  <span class="chip warn">advisory planning</span>
+                  <span class="chip warn">source_provider only</span>
+                  <span class="chip bad">no diagnosis</span>
+                  <span class="chip bad">no Phase 1 mutation</span>
+                </div>
+              </div>
+            </section>
+            <section class="body-index-mini">
+              <span>Energy Reserve</span>
+              <strong>${escapeHtml(energyReserve)}</strong>
+              <em>medium reserve</em>
+            </section>
+            <section class="body-index-mini">
+              <span>Vulnerability</span>
+              <strong>${escapeHtml(vulnerability)}</strong>
+              <em>pace + terrain</em>
+            </section>
+            <section class="body-index-mini">
+              <span>Experience Trust</span>
+              <strong>${escapeHtml(experienceTrust)}</strong>
+              <em>records weighted</em>
+            </section>
+          </div>
+
+          <section class="body-index-panel" data-health-export-body-index-ui="true">
+            <div class="body-index-panel-head">
+              <div class="body-index-panel-title">
+                <h3>Body Index Overview</h3>
+                <span class="chip info">HealthExport local aggregate</span>
+              </div>
+              <div class="body-index-panel-actions">
+                <button
+                  class="body-index-import-button"
+                  type="button"
+                  data-body-index-import
+                  ${state.bodyIndexImportBusy ? "disabled" : ""}
+                >${state.bodyIndexImportBusy ? "Importing..." : "Import HealthExport"}</button>
+                <div class="body-index-watch-controls" data-body-index-watch-controls="true">
+                  <label for="bodyIndexWatchInterval">Scan sec</label>
+                  <input
+                    id="bodyIndexWatchInterval"
+                    type="number"
+                    min="1"
+                    max="86400"
+                    step="1"
+                    value="${escapeHtml(state.bodyIndexWatchIntervalSeconds || watchStatus.interval_seconds || 300)}"
+                    ${watchStatus.running || state.bodyIndexWatchBusy ? "disabled" : ""}
+                  />
+                  <button
+                    class="body-index-watch-button"
+                    type="button"
+                    data-body-index-watch-start
+                    ${watchStatus.running || state.bodyIndexWatchBusy ? "disabled" : ""}
+                  >Start Watch</button>
+                  <button
+                    class="body-index-watch-button stop"
+                    type="button"
+                    data-body-index-watch-stop
+                    ${!watchStatus.running || state.bodyIndexWatchBusy ? "disabled" : ""}
+                  >Stop</button>
+                </div>
+                <span id="bodyIndexImportStatus" class="chip ${importTone} body-index-import-status">${escapeHtml(importStatus.text)}</span>
+                <span id="bodyIndexWatchStatus" class="chip ${watchTone} body-index-import-status">${escapeHtml(watchSummary)}</span>
+              </div>
+            </div>
+            <div class="body-index-panel-body">
+              <div class="body-index-health-strip" aria-label="HealthExport coverage">
+                ${bodyIndexHealthCoverage().map(([label, value, detail]) => `
+                  <div class="body-index-coverage-card">
+                    <span>${escapeHtml(label)}</span>
+                    <strong>${escapeHtml(value)}</strong>
+                    <em>${escapeHtml(detail)}</em>
+                  </div>
+                `).join("")}
+              </div>
             </div>
           </section>
-        </div>
+
+          <div class="body-index-layout">
+            <section class="body-index-panel">
+              <div class="body-index-panel-head">
+                <h3>Health Baseline Signals</h3>
+                <span class="chip warn">not diagnosis</span>
+              </div>
+              <div class="body-index-panel-body">
+                <div class="body-index-health-grid">
+                  ${bodyIndexHealthSignals().map(renderBodyIndexHealthSignal).join("")}
+                </div>
+              </div>
+            </section>
+            <section class="body-index-panel">
+              <div class="body-index-panel-head">
+                <h3>Window Pressure Timeline</h3>
+                <span class="chip info">15-min windows</span>
+              </div>
+              <div class="body-index-panel-body">
+                <div class="body-index-pressure-timeline">
+                  ${bodyIndexPressureTimeline().map(([label, value, detail, percent]) => `
+                    <div class="body-index-pressure-cell">
+                      <span>${escapeHtml(label)}</span>
+                      <strong>${escapeHtml(value)}</strong>
+                      <div class="body-index-pressure-bar"><span style="--value:${Number(percent)}%"></span></div>
+                      <small>${escapeHtml(detail)}</small>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="body-index-metric-grid" aria-label="Scout Pace Coefficient indicators">
+            ${metrics.map(renderBodyIndexMetric).join("")}
+          </div>
+
+          <div class="body-index-layout">
+            <section class="body-index-panel">
+              <div class="body-index-panel-head">
+                <h3>Route Impact Mapping</h3>
+                <span class="chip warn">operator review</span>
+              </div>
+              <div class="body-index-panel-body">
+                ${impactRows.map(([label, value, state]) => `
+                  <div class="body-index-impact-row">
+                    <span>${escapeHtml(label)}</span>
+                    <strong>${escapeHtml(value)}</strong>
+                    <span>${escapeHtml(state)}</span>
+                  </div>
+                `).join("")}
+              </div>
+            </section>
+            <section class="body-index-panel">
+              <div class="body-index-panel-head">
+                <h3>Evidence Matrix</h3>
+                <span class="chip info">traceable</span>
+              </div>
+              <div class="body-index-panel-body">
+                <div class="body-index-source-grid">
+                  ${evidenceRows.map(([label, value]) => `
+                    <div class="body-index-source">
+                      <strong>${escapeHtml(label)}</strong>
+                      <span>${escapeHtml(value)}</span>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            </section>
+          </div>
+          ${renderBodyIndexProviderDrawer()}
+        </section>
+      `;
+    }
+
+    function renderPaceFitEmergencyPage() {
+      return `
+        ${outdoorTabs("outdoor-pace-fit")}
+        ${paceFitSubTabs("outdoor-pace-fit-emergency")}
+        <section class="panel pace-emergency-shell" data-pace-fit-emergency-ui="true">
+          <div class="pace-emergency-boundary pace-emergency-toolbar" aria-label="Emergency UI boundary">
+            <span class="chip info">desktop only</span>
+            <span class="chip warn">pending approval</span>
+            <span class="chip bad">sent=false</span>
+            <span class="chip bad">no safety endpoint</span>
+            <span class="chip bad">no outbound transport</span>
+            <a class="chip info" href="/admin/dashboard/emergency-approval-desktop-v0" target="_blank" rel="noreferrer">Open desktop</a>
+          </div>
+          <iframe
+            class="pace-emergency-frame"
+            title="Emergency approval desktop frame"
+            src="/admin/dashboard/emergency-approval-desktop-v0"
+            loading="eager"
+            data-emergency-approval-frame="desktop"
+          ></iframe>
+        </section>
+      `;
+    }
+
+    function renderPaceFitMiniMap() {
+      return `
+        <section class="pace-fit-card">
+          <div class="pace-fit-card-head"><h3>Synchronized Map</h3><span class="chip info">CP087</span></div>
+          <div class="pace-fit-card-body">
+            <div class="pace-mini-map" aria-label="Pace fit synchronized route map">
+              <svg viewBox="0 0 420 240" role="img" aria-label="CP087 pace fit mini map">
+                <defs>
+                  <pattern id="paceGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+                    <path d="M24 0H0V24" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="1"></path>
+                  </pattern>
+                </defs>
+                <rect width="420" height="240" fill="#0b1519"></rect>
+                <rect width="420" height="240" fill="url(#paceGrid)"></rect>
+                <path d="M24 190 C74 154 102 160 146 126 C190 93 226 88 268 72 C317 53 353 40 396 28" fill="none" stroke="#4ed3d8" stroke-width="4" stroke-linecap="round"></path>
+                <path d="M247 82 C223 113 206 139 188 176" fill="none" stroke="#f0b85c" stroke-width="2" stroke-dasharray="6 5"></path>
+                <path d="M228 58 L285 42 L308 88 L262 124 L218 108 Z" fill="rgba(98,181,196,.15)" stroke="rgba(98,181,196,.55)" stroke-width="1.5"></path>
+                <circle cx="24" cy="190" r="5" fill="#78bf75"></circle>
+                <circle cx="146" cy="126" r="5" fill="#78bf75"></circle>
+                <circle cx="246" cy="80" r="11" fill="rgba(105,174,244,.38)" stroke="#69aef4" stroke-width="3"></circle>
+                <circle cx="268" cy="72" r="5" fill="#f0b85c"></circle>
+                <circle cx="396" cy="28" r="5" fill="#d06363"></circle>
+                <text x="232" y="58" fill="#dff8fb" font-size="13" font-family="monospace">CP087</text>
+                <text x="262" y="136" fill="#f0b85c" font-size="12" font-family="monospace">shorter line</text>
+                <text x="20" y="220" fill="#a8b5bd" font-size="11" font-family="monospace">0</text>
+                <path d="M42 218H112" stroke="#dff8fb" stroke-width="3"></path>
+                <text x="118" y="222" fill="#a8b5bd" font-size="11" font-family="monospace">1 km</text>
+              </svg>
+            </div>
+          </div>
+        </section>
       `;
     }
 
@@ -4811,7 +7239,7 @@
                   ["Allowed", "operator review, trip briefing, candidate notes"],
                   ["Not authority", "stop permission, route open/closed decision"],
                   ["Safety truth", "no Phase 1 mutation, no safety endpoint write"],
-                  ["Outbound", "no live safety automation"],
+                  ["Outbound", "closed"],
                 ])}
                 <section class="route-briefing-meta-block">
                   <h4>Load Contract</h4>
@@ -5991,6 +8419,7 @@
       bindCountryMaterialPoolControls();
       bindDebugDetailControls();
       bindRouteContextBriefingControls();
+      bindBodyIndexControls();
       const saveSettings = document.getElementById("saveSettings");
       if (saveSettings) {
         saveSettings.addEventListener("click", () => {
@@ -5999,6 +8428,101 @@
           loadData().finally(render);
         });
       }
+    }
+
+    function bindBodyIndexControls() {
+      const button = document.querySelector("[data-body-index-import]");
+      if (button) button.addEventListener("click", async () => {
+        state.bodyIndexImportBusy = true;
+        state.bodyIndexImportStatus = {
+          tone: "warn",
+          text: "Importing local HealthExport zip files and merging deduped body metrics...",
+        };
+        render();
+        try {
+          const payload = await postJson(BODY_INDEX_IMPORT_PATH, {
+            project_id: projectId(),
+            confirm_import: true,
+            operator_alias: "dashboard_operator",
+          }, { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS });
+          state.bodyIndexData = payload;
+          const result = payload.import_result || {};
+          const newCount = Number(result.new_source_count || 0);
+          const duplicateCount = Number(result.duplicate_source_count || 0);
+          const errorCount = Number(result.error_count || 0);
+          state.bodyIndexImportStatus = {
+            tone: errorCount > 0 ? "warn" : "ok",
+            text: `merged ${newCount} new / skipped ${duplicateCount} duplicates / ${errorCount} errors`,
+          };
+        } catch (error) {
+          state.bodyIndexImportStatus = {
+            tone: "bad",
+            text: `HealthExport import failed: ${error.message || error}`,
+          };
+        } finally {
+          state.bodyIndexImportBusy = false;
+          render();
+        }
+      });
+      const intervalInput = document.getElementById("bodyIndexWatchInterval");
+      if (intervalInput) intervalInput.addEventListener("change", () => {
+        const value = Number(intervalInput.value || 300);
+        state.bodyIndexWatchIntervalSeconds = Math.max(1, Math.min(86400, Math.round(value || 300)));
+      });
+      const startButton = document.querySelector("[data-body-index-watch-start]");
+      if (startButton) startButton.addEventListener("click", async () => {
+        const intervalSeconds = Math.max(1, Math.min(86400, Math.round(Number(intervalInput?.value || state.bodyIndexWatchIntervalSeconds || 300))));
+        state.bodyIndexWatchBusy = true;
+        state.bodyIndexWatchIntervalSeconds = intervalSeconds;
+        render();
+        try {
+          const payload = await postJson(BODY_INDEX_WATCH_START_PATH, {
+            confirm_watch: true,
+            project_id: projectId(),
+            interval_seconds: intervalSeconds,
+            operator_alias: "dashboard_operator",
+          }, { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS });
+          state.bodyIndexWatchStatus = payload;
+          scheduleBodyIndexWatchRefresh();
+          window.setTimeout(() => loadData().finally(render), 1200);
+        } catch (error) {
+          state.bodyIndexWatchStatus = {
+            running: false,
+            last_error: {
+              error_type: "watch_start_failed",
+              error: error.message || String(error),
+            },
+          };
+        } finally {
+          state.bodyIndexWatchBusy = false;
+          render();
+        }
+      });
+      const stopButton = document.querySelector("[data-body-index-watch-stop]");
+      if (stopButton) stopButton.addEventListener("click", async () => {
+        state.bodyIndexWatchBusy = true;
+        render();
+        try {
+          const payload = await postJson(BODY_INDEX_WATCH_STOP_PATH, {
+            project_id: projectId(),
+            interval_seconds: state.bodyIndexWatchIntervalSeconds || 300,
+            operator_alias: "dashboard_operator",
+          });
+          state.bodyIndexWatchStatus = payload;
+          scheduleBodyIndexWatchRefresh();
+        } catch (error) {
+          state.bodyIndexWatchStatus = {
+            running: false,
+            last_error: {
+              error_type: "watch_stop_failed",
+              error: error.message || String(error),
+            },
+          };
+        } finally {
+          state.bodyIndexWatchBusy = false;
+          render();
+        }
+      });
     }
 
     function bindRouteContextBriefingControls() {
@@ -6282,7 +8806,7 @@
             return;
           }
           if (action === "validate") {
-            setImportTripStatus(`Intake validated for ${nextProjectId}: ${materialPool.label} material pool, workspace root ${workspaceRoot}, project root ${projectRoot}, ${referenceSources.label}, and ${layers.length} map preparation layer ids are present. Use existing admin/import tooling to execute with artifact boundary metadata.`, "ok");
+            setImportTripStatus(`Validated ${nextProjectId}: ${materialPool.label}, workspace ${workspaceRoot}, ${layers.length} layers.`, "ok");
             return;
           }
           if (action === "stage") {

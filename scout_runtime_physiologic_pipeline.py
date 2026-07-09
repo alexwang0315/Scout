@@ -538,6 +538,7 @@ class ProviderMetricAggregate(BaseModel):
     metric_name: str
     sample_count: int = Field(ge=0)
     min_value: float | None = None
+    mean_value: float | None = None
     median_value: float | None = None
     max_value: float | None = None
     source_value_only: bool = True
@@ -2775,6 +2776,7 @@ def _provider_metric_summaries_from_payload(
                 metric_name=name,
                 sample_count=len(values),
                 min_value=round(min(values), 3),
+                mean_value=round(sum(values) / len(values), 3),
                 median_value=round(float(median(values)), 3),
                 max_value=round(max(values), 3),
             )

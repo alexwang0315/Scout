@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+import time
+import zipfile
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+import admin_api
 from admin_api import create_admin_app
 
 
@@ -24,6 +28,231 @@ def test_scout_dashboard_page_serves_static_shell() -> None:
     assert 'id="dashboardMap"' in response.text
     assert 'id="dashboardAgent"' in response.text
     assert 'id="dashboardEvidence"' in response.text
+
+
+def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source_dir = tmp_path / "HealthExport"
+    source_dir.mkdir()
+    _write_body_index_health_export_zip(
+        source_dir / "HealthAutoExport-body-index-a.zip",
+        day="2026-06-02",
+        workout_id="walk-body-index-a",
+        hour=8,
+    )
+    _write_body_index_health_export_zip(
+        source_dir / "HealthAutoExport-body-index-b.zip",
+        day="2026-06-03",
+        workout_id="walk-body-index-b",
+        hour=9,
+    )
+    monkeypatch.setattr(
+        admin_api,
+        "DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT",
+        tmp_path / "store",
+    )
+    client = TestClient(create_admin_app())
+
+    rejected = client.post(
+        "/admin/dashboard/body-index/import",
+        json={"project_id": "test_body_index", "source_dir": str(source_dir)},
+    )
+    assert rejected.status_code == 400
+
+    response = client.post(
+        "/admin/dashboard/body-index/import",
+        json={
+            "project_id": "test_body_index",
+            "source_dir": str(source_dir),
+            "confirm_import": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["schema_version"] == "scout_dashboard_body_index.v1"
+    assert payload["project_id"] == "test_body_index"
+    assert payload["import_status"] == "imported"
+    assert payload["import_result"]["new_source_count"] == 2
+    assert payload["import_result"]["duplicate_source_count"] == 0
+    assert payload["import_result"]["processed_source_count"] == 2
+    assert payload["import_result"]["error_count"] == 0
+    coverage = {row[0]: row[1] for row in payload["coverage_cards"]}
+    assert coverage["Health exports"] == "2"
+    assert coverage["Walking sessions"] == "2"
+    assert coverage["GPX tracks"] == "2"
+    assert int(coverage["15-min windows"]) > 0
+    assert int(coverage["Provider metrics"]) >= 4
+    assert "vo2_max" in payload["provider_metrics"]
+    assert "walking_heart_rate_average" in payload["provider_metrics"]
+    provider_metric_summaries = {
+        metric["metric_name"]: metric for metric in payload["provider_metric_summaries"]
+    }
+    assert provider_metric_summaries["vo2_max"]["median_value"] == 37.0
+    assert provider_metric_summaries["vo2_max"]["mean_value"] == 37.0
+    assert provider_metric_summaries["vo2_max"]["sample_count"] == 4
+    assert provider_metric_summaries["resting_heart_rate"]["median_value"] == 72.0
+    health_signals = {row[0]: row for row in payload["health_signals"]}
+    assert health_signals["VO2max Baseline"][2] == "median 37.0 / n=4"
+    assert health_signals["Resting HR"][2] == "median 72.0 bpm / n=2"
+    assert health_signals["HRV Baseline"][2].startswith("median ")
+    assert health_signals["HR Pressure Windows"][2].endswith("windows")
+    vo2_trend = health_signals["VO2max Baseline"][5]
+    assert vo2_trend["direction"] == "mid"
+    assert vo2_trend["position_percent"] == 50
+    assert vo2_trend["min_label"] == "min 36.9"
+    assert vo2_trend["baseline_label"] == "baseline 37.0"
+    assert vo2_trend["average_label"] == "avg 37.0"
+    assert vo2_trend["max_label"] == "max 37.1"
+    assert "min-max range" in vo2_trend["summary"]
+    pressure_trend = health_signals["HR Pressure Windows"][5]
+    assert pressure_trend["min_label"] == "min 0"
+    assert pressure_trend["max_label"].startswith("max ")
+    assert payload["boundary"]["raw_health_payload_shared"] is False
+    assert payload["boundary"]["raw_gpx_shared"] is False
+    assert payload["boundary"]["exact_timestamps_shared"] is False
+    assert payload["boundary"]["phase1_runtime_safety_truth"] is False
+    assert payload["boundary"]["safety_api_called"] is False
+    assert payload["boundary"]["outbound_alert_sent"] is False
+
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert "heartRateData" not in serialized
+    assert "latitude" not in serialized
+    assert "longitude" not in serialized
+    assert "<trkpt" not in serialized
+    assert "HealthAutoExport-body-index-a.zip" not in serialized
+    assert "2026-06-02 08:00:00 +0800" not in serialized
+
+    second_response = client.post(
+        "/admin/dashboard/body-index/import",
+        json={
+            "project_id": "test_body_index",
+            "source_dir": str(source_dir),
+            "confirm_import": True,
+        },
+    )
+    assert second_response.status_code == 200, second_response.text
+    second_payload = second_response.json()
+    assert second_payload["import_result"]["new_source_count"] == 0
+    assert second_payload["import_result"]["duplicate_source_count"] == 2
+    assert second_payload["import_result"]["processed_source_count"] == 2
+
+    read_response = client.get("/admin/dashboard/body-index?project_id=test_body_index")
+    assert read_response.status_code == 200
+    assert read_response.json()["coverage_cards"] == second_payload["coverage_cards"]
+
+
+def test_scout_dashboard_body_index_watch_imports_new_zip(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "test_body_index_watch"
+    source_dir = tmp_path / "HealthExportWatch"
+    source_dir.mkdir()
+    monkeypatch.setattr(
+        admin_api,
+        "DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT",
+        tmp_path / "watch_store",
+    )
+    client = TestClient(create_admin_app())
+
+    rejected = client.post(
+        "/admin/dashboard/body-index/watch/start",
+        json={
+            "project_id": project_id,
+            "source_dir": str(source_dir),
+            "interval_seconds": 1,
+        },
+    )
+    assert rejected.status_code == 400
+
+    response = client.post(
+        "/admin/dashboard/body-index/watch/start",
+        json={
+            "confirm_watch": True,
+            "project_id": project_id,
+            "source_dir": str(source_dir),
+            "interval_seconds": 1,
+            "operator_alias": "watch_test",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["running"] is True
+
+    try:
+        _write_body_index_health_export_zip(
+            source_dir / "HealthAutoExport-watch-new.zip",
+            day="2026-06-04",
+            workout_id="walk-body-index-watch",
+            hour=7,
+        )
+        deadline = time.monotonic() + 12
+        payload: dict[str, object] | None = None
+        status: dict[str, object] | None = None
+        while time.monotonic() < deadline:
+            status_response = client.get(
+                f"/admin/dashboard/body-index/watch/status?project_id={project_id}"
+            )
+            assert status_response.status_code == 200
+            status = status_response.json()
+            read_response = client.get(
+                f"/admin/dashboard/body-index?project_id={project_id}"
+            )
+            assert read_response.status_code == 200
+            payload = read_response.json()
+            coverage = {row[0]: row[1] for row in payload["coverage_cards"]}
+            if coverage.get("Health exports") == "1":
+                break
+            time.sleep(0.25)
+        assert payload is not None
+        assert status is not None
+        coverage = {row[0]: row[1] for row in payload["coverage_cards"]}
+        assert coverage["Health exports"] == "1"
+        assert coverage["Walking sessions"] == "1"
+        assert status["running"] is True
+        assert int(status["scan_count"]) >= 1
+        assert int(status["import_count"]) >= 1
+        assert status["last_result"]["new_source_count"] == 1
+        serialized = json.dumps(payload, ensure_ascii=False)
+        assert "heartRateData" not in serialized
+        assert "HealthAutoExport-watch-new.zip" not in serialized
+        assert "<trkpt" not in serialized
+    finally:
+        stop_response = client.post(
+            "/admin/dashboard/body-index/watch/stop",
+            json={"project_id": project_id},
+        )
+        assert stop_response.status_code == 200
+        assert stop_response.json()["running"] is False
+
+
+def test_scout_dashboard_serves_pace_fit_emergency_desktop_approval_ui() -> None:
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/dashboard/emergency-approval-desktop-v0")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert 'data-emergency-ui-version="v0"' in response.text
+    assert 'data-dashboard-emergency-mode="desktop-only"' in response.text
+    assert '<section class="mobile-device"' not in response.text
+    assert 'data-emergency-surface="mobile"' not in response.text
+    assert 'data-map-surface="mobile"' not in response.text
+    assert 'data-evidence-frame="mobile"' not in response.text
+    assert 'data-emergency-surface="desktop"' in response.text
+    assert '<header class="desktop-header">' not in response.text
+    assert "Scout Emergency Approval Console" not in response.text
+    assert "Emergency Approval Desktop UI v0" not in response.text
+    assert 'data-dashboard-sent-state="sent=false"' in response.text
+    assert "sent=false" in response.text
+    assert "safety_api_called: false" in response.text
+
+    legacy_response = client.get("/admin/dashboard/emergency-mobile-approval-v0")
+    assert legacy_response.status_code == 200
+    assert 'data-dashboard-emergency-mode="desktop-only"' in legacy_response.text
+    assert 'data-emergency-surface="mobile"' not in legacy_response.text
 
 
 def test_scout_dashboard_documentation_records_active_change_log() -> None:
@@ -60,6 +289,11 @@ def test_scout_dashboard_documentation_records_active_change_log() -> None:
     assert "send_sos" in doc
     assert "trigger_l4" in doc
     assert "change_safety_level" in doc
+    assert "Pace Fit Body Index Dashboard" in doc
+    assert "HealthExport Body Index UX Implemented" in doc
+    assert "Body Index HealthExport Import Merge Button" in doc
+    assert "Body Index Baseline Trend Arrows" in doc
+    assert "Body Index Directory Watch Import" in doc
 
 
 def test_scout_dashboard_contains_requested_navigation_contract() -> None:
@@ -82,6 +316,9 @@ def test_scout_dashboard_contains_requested_navigation_contract() -> None:
         "Timeline Evidence",
         "Safety / Emergency",
         "Exploring for Six Axis",
+        "Pace Dashboard",
+        "Body Index",
+        "Emergency UI",
         "Debug Message",
         "MQTT / Observer Message",
         "Settings / Configure",
@@ -95,6 +332,8 @@ def test_scout_dashboard_contains_requested_navigation_contract() -> None:
     assert 'data-route="surface-pretrip"' in html
     assert 'data-route="surface-admin"' in html
     assert 'data-route="surface-debug"' in html
+    assert 'data-route="outdoor-pace-fit-body-index"' in html
+    assert 'data-route="outdoor-pace-fit-emergency"' in html
 
 
 def test_scout_dashboard_points_to_current_chilai_workspace() -> None:
@@ -121,7 +360,8 @@ def test_scout_dashboard_embeds_existing_admin_surfaces() -> None:
     assert 'src: surfaceSrc("/admin")' in html
     assert 'src: surfaceSrc("/admin/debug")' in html
     assert "projectId=${encodeURIComponent(projectId())}" in html
-    assert "Current Admin Surfaces" in html
+    assert "Admin Surfaces" in html
+    assert "Current Admin Surfaces" not in html
     assert "Open full page" in html
 
 
@@ -129,38 +369,96 @@ def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     assert "const FETCH_TIMEOUT_MS = 20000;" in html
+    assert "const ASSISTANT_QUERY_TIMEOUT_MS = 240000;" in html
+    assert "const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;" in html
     assert "new AbortController()" in html
+    assert "const timeoutMs = Number(options.timeoutMs) || FETCH_TIMEOUT_MS;" in html
     assert "signal: controller.signal" in html
     assert "window.clearTimeout(timer)" in html
+    assert "{ timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS }" in html
     assert "setRoute(routeFromHash());" in html
     assert "loadData().finally(() =>" in html
     assert "routeUsesEmbeddedFrame(state.route)" in html
     assert 'return route === "map" || route === "agent" || route.startsWith("surface-");' in html
     assert "routeUsesWideFrame(route)" in html
-    assert 'return route === "agent" || route === "debug" || route === "outdoor-route-context";' in html
+    assert 'return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";' in html
     assert "routeUsesFullFrame(route)" in html
     assert 'return route === "map";' in html
     assert "/debug-projection`" not in html
 
 
-def test_scout_dashboard_agent_tab_embeds_local_mac_chat_without_reload() -> None:
+def test_scout_dashboard_agent_tab_posts_to_same_origin_assistant_api() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
-    assert 'const AGENT_APP_URL = "http://127.0.0.1:8765/?embed=dashboard&ui=compact-20260701";' in html
     assert 'id="dashboardAgent"' in html
-    assert 'data-agent-source="http://127.0.0.1:8765/?embed=dashboard&ui=compact-20260701"' in html
-    assert 'id="agentAppFrame"' in html
-    assert 'class="agent-app-frame"' in html
-    assert 'title="Scout AI Mac Chat"' in html
-    assert "function ensureAgentAppFrame()" in html
-    assert "frame.dataset.agentSource === AGENT_APP_URL" in html
-    assert "frame.src = AGENT_APP_URL;" in html
-    assert 'href="http://127.0.0.1:8765/"' in html
-    assert "no live safety automation" in html
-    assert "Local chat from 127.0.0.1:8765" in html
+    assert 'data-agent-query-path="/assistant/query"' in html
+    assert 'const ASSISTANT_STATUS_PATH = "/assistant/status";' in html
+    assert 'const ASSISTANT_QUERY_PATH = "/assistant/query";' in html
+    assert 'id="agentTranscript"' in html
+    assert 'id="agentComposer"' in html
+    assert 'id="agentQuestionInput"' in html
+    assert 'id="agentAskButton"' in html
+    assert 'id="agentProjectChip"' in html
+    assert 'id="agentFallbackToggle"' in html
+    assert "AI HAT+2 fallback" in html
+    assert "agentUseAiHatFallback" in html
+    assert "width: fit-content;" in html
+    assert "max-width: min(900px, 86%);" in html
+    assert "border: 0;" in html
+    assert ".agent-message.user .agent-message-body" in html
+    assert 'class="agent-message-body"' in html
+    assert "function displayAgentAnswer(answer)" in html
+    assert ".replace(/^結論[:：]\\s*/u, \"\")" in html
+    assert "response?.evidence_backed_answer" in html
+    assert "response?.local_model_answer" in html
+    assert "模型回答未通過 grounding（AI HAT+2 raw output）" in html
+    assert "回答（AI HAT+2 grounded repair）" in html
+    assert "回答（AI HAT+2 synthesized from workspace facts）" in html
+    assert "模型未產生獨立回答（AI HAT+2 copied grounding reference）" in html
+    assert "AI HAT+2 raw output（未通過 grounding，不計成功）" in html
+    assert "模型未成功回答（工具摘要另列）" in html
+    assert "不能算作模型答題成功" in html
+    assert "function agentAiHatGenerationMode(response)" in html
+    assert "function agentAnswerLooksLikeReferenceCopy(answer, reference)" in html
+    assert "ai_hat_generation_mode=" in html
+    assert "function agentDeterministicFallbackOnly(response)" in html
+    assert "deterministic_tool_fallback_only=true" in html
+    assert "segment_missing_display_geometry_count" in html
+    assert "segment_missing_distance_count" in html
+    assert "Scout grounding reference（工具摘要，不取代本地模型回答）" in html
+    assert "Scout grounding reference" in html
+    assert "quality verdict：AI HAT+2 evidence-prompted answer did not preserve required Scout evidence" in html
+    assert "near-copy/subset of the deterministic Scout grounding reference" in html
+    assert "transparent Scout evidence lock" not in html
+    assert "missing|缺|stale|過期" not in html
+    assert "(?:缺少|過期|过期)" in html
+    assert "AI HAT+2 raw answer（未採用：grounding failed）" not in html
+    assert "useEvidenceAsAnswer" not in html
+    assert (
+        'displayAgentAnswer(response?.answer || "(empty assistant answer)")'
+        in html
+    )
+    assert "response?.evidence_backed_answer || response?.answer" not in html
+    assert "Pydantic AI read-only model interpretation" in html
+    assert "AI HAT+2 ${observability.local_model_name}" in html
+    assert "observability.provider_class" not in html
+    assert "function bindAgentChatControls()" in html
+    assert "function ensureAgentChat()" in html
+    assert "function submitAgentQuestion()" in html
+    assert "postJson(" in html
+    assert "ASSISTANT_QUERY_PATH," in html
+    assert "{ timeoutMs: ASSISTANT_QUERY_TIMEOUT_MS }" in html
+    assert "request timed out after" in html
+    assert 'surface: "pretrip"' in html
+    assert "project_id: projectId()" in html
+    assert 'runtime_preference: "cloud"' in html
+    assert 'payload.runtime_preference = "ai_hat_plus_2_fallback";' in html
+    assert "meta: state.agentUseAiHatFallback ? [\"AI HAT+2 fallback requested\"] : []" in html
+    assert "meta: [`project=${projectId()}`, \"surface=pretrip\"]" not in html
+    assert "Same-origin Scout AI conversation through /assistant/query" in html
     assert "No live safety" in html
-    assert "Local frame" in html
-    assert "local Scout AI Mac Chat embedded" in html
+    assert "SCOUT_AI_ASSISTANT_ENABLED=1" in html
+    assert "127.0.0.1:8765" not in html
     assert 'contentGrid?.classList.toggle("is-frame-wide", frameWide);' in html
     assert ".content-grid.is-frame-wide .evidence-drawer" in html
     assert "dashboardAgent.hidden = false;" in html
@@ -524,8 +822,8 @@ def test_scout_dashboard_country_material_pool_contract() -> None:
     assert "routeContextSources" in html
     assert "These P0/P1 entries come from specs/scout-route-context-layer and source-catalog.md." in html
     assert "catalog entries are not evidence by themselves" in html
-    assert "This page sets default hints for import and layer preparation." in html
-    assert "It does not fetch, mutate workspace files, load runtime packages, or change safety truth." in html
+    assert "This page sets default hints for import and layer preparation." not in html
+    assert "It does not fetch, mutate workspace files, load runtime packages, or change safety truth." not in html
 
 
 def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> None:
@@ -614,6 +912,7 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert "focusDashboardMapEvidence" in html
     assert "pretripEvidenceGroupOpen" in html
     assert "renderPretripEvidenceGroup(group, index, {defaultOpen: false})" in html
+    assert 'add("map_risk", "Segments", view.segments' in html
     assert "scheduleMapEvidenceFocusRetry" in html
     assert "pretripMapHasRenderedTargets" in html
     assert "Loading pre-trip timeline evidence for map focus." in html
@@ -768,7 +1067,7 @@ def test_scout_dashboard_outdoor_six_forces_subtree_contract() -> None:
 
     for route, label, system_name in (
         ("outdoor-route-context", "Route Context", "Route Context Intelligence"),
-        ("outdoor-pace-fit", "Pace Fit", "Readiness & Pace Fit"),
+        ("outdoor-pace-fit", "Pace Fit", "Pace Fit"),
         ("outdoor-permission", "Permission", "Contextual Permissioning"),
         ("outdoor-architecture", "Architecture", "Route Architecture Intelligence"),
         ("outdoor-weather", "Weather", "Weather-to-Decision Intelligence"),
@@ -793,6 +1092,234 @@ def test_scout_dashboard_outdoor_six_forces_subtree_contract() -> None:
         assert decision in html
 
 
+def test_scout_dashboard_pace_fit_removes_low_information_blocks() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "Readiness & Pace Fit" not in html
+    assert 'decisionBand(force.decision, "以最慢成員估算回程 buffer 偏低"' not in html
+    assert 'renderMetricPanel("Readiness & Pace Fit"' not in html
+    assert 'force.route === "outdoor-pace-fit" ? force.label' in html
+    assert 'data-pace-fit-dashboard="true"' in html
+    assert '<div class="pace-fit-card-head"><h3>Challenge Fit</h3></div>' not in html
+    assert "Pace Controls" in html
+    assert "Pace Evidence" in html
+    assert "Risk Budget Calculator" in html
+    assert "Current CP Status" in html
+    assert "CP Timeline" in html
+    assert "Pace Object Preview" in html
+    assert "Synchronized Map" in html
+    assert "slowestMemberBasis" in html
+    assert "pace-fit-workbench" in html
+    assert "pace-budget-table" in html
+    assert "pace-cp-timeline" in html
+    assert "pace-mini-map" in html
+    assert "Data confidence" not in html
+
+
+def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    for function_name in (
+        "bodyIndexMetrics",
+        "bodyIndexHealthCoverage",
+        "bodyIndexHealthSignals",
+        "bodyIndexPressureTimeline",
+        "bodyIndexProviderMetrics",
+        "bodyIndexStatusPath",
+        "bodyIndexWatchStatusPath",
+        "bodyIndexImportStatus",
+        "bodyIndexWatchStatus",
+        "bodyIndexWatchSummary",
+        "bodyIndexWatchTone",
+        "bodyIndexSummary",
+        "bodyIndexRows",
+        "bodyIndexScorePercent",
+        "bodyIndexDefaultTrend",
+        "normalizeBodyIndexHealthSignal",
+        "bodyIndexTrendArrow",
+        "bodyIndexTrendPercent",
+        "renderBodyIndexSignalTrend",
+        "scheduleBodyIndexWatchRefresh",
+        "bindBodyIndexControls",
+        "renderBodyIndexMetric",
+        "renderBodyIndexHealthSignal",
+        "renderBodyIndexProviderDrawer",
+        "renderPaceFitBodyIndexPage",
+    ):
+        assert f"function {function_name}" in html
+
+    for marker in (
+        'data-route="outdoor-pace-fit-body-index"',
+        'if (route === "outdoor-pace-fit-body-index") return renderPaceFitBodyIndexPage();',
+        'paceFitSubTabs("outdoor-pace-fit-body-index")',
+        'data-body-index-dashboard="true"',
+        'data-scout-pace-coefficient="true"',
+        'data-body-index-metric="${escapeHtml(metric.id)}"',
+        "body-index-dashboard",
+        "body-index-summary",
+        "body-index-metric-grid",
+        "body-index-layout",
+        "body-index-ring",
+        "body-index-impact-row",
+        "body-index-health-strip",
+        "body-index-health-grid",
+        "body-index-pressure-timeline",
+        "body-index-provider-drawer",
+        "body-index-provider-grid",
+        "body-index-import-button",
+        "body-index-import-status",
+        "body-index-watch-controls",
+        "body-index-watch-button",
+        ".body-index-signal-card em",
+        "body-index-signal-trend",
+        "body-index-trend-axis",
+        "body-index-trend-marker",
+        "body-index-trend-labels",
+        'data-body-index-trend="${escapeHtml(direction)}"',
+        'data-health-export-body-index-ui="true"',
+        'data-body-index-provider-metrics="collapsed"',
+        "BODY_INDEX_FETCH_TIMEOUT_MS = 180000",
+        'BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index"',
+        'BODY_INDEX_IMPORT_PATH = "/admin/dashboard/body-index/import"',
+        'BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status"',
+        'BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start"',
+        'BODY_INDEX_WATCH_STOP_PATH = "/admin/dashboard/body-index/watch/stop"',
+        "fetchJson(bodyIndexStatusPath(), { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS })",
+        "fetchJson(bodyIndexWatchStatusPath())",
+        'data-body-index-import',
+        'data-body-index-watch-start',
+        'data-body-index-watch-stop',
+        'data-body-index-watch-controls="true"',
+        "state.bodyIndexData = payload",
+        "bodyIndexImportBusy",
+        "bodyIndexWatchBusy",
+        "confirm_import: true",
+        "confirm_watch: true",
+        "merged ${newCount} new / skipped ${duplicateCount} duplicates",
+    ):
+        assert marker in html
+
+    for metric_id, english_label, spec_label in (
+        ("flat_ground_speed", "Flat Ground Speed", "平地移動速度"),
+        ("ascent_speed", "Ascent Speed", "上坡速度"),
+        ("descent_speed", "Descent Speed", "下坡速度"),
+        ("technical_slowdown", "Technical Terrain Slowdown", "技術地形降速率"),
+        ("rest_frequency", "Rest Frequency", "休息頻率"),
+        ("late_trip_decay", "Late-trip Decay", "行程後段速度衰退"),
+        ("load_impact", "Load Impact", "負重影響"),
+        ("weather_impact", "Weather Impact", "天候影響"),
+        ("experience_confidence", "Experience Confidence", "經驗可信度"),
+    ):
+        assert metric_id in html
+        assert english_label in html
+        assert spec_label in html
+
+    for label in (
+        "Scout Pace Coefficient",
+        "Energy Reserve",
+        "Vulnerability",
+        "Experience Trust",
+        "Route Impact Mapping",
+        "Evidence Matrix",
+        "Challenge Fit",
+        "slowest member basis",
+        "advisory planning",
+        "planning evidence",
+        "source_provider only",
+        "no diagnosis",
+        "no Phase 1 mutation",
+        "no safety endpoint",
+        "no outbound",
+        "completed_trip_gpx",
+        "route_progress_frame",
+        "terrain_time_model",
+        "rest_stop_pattern",
+        "weather_overlay",
+        "team_slowest_member",
+        "Body Index Overview",
+        "Health Baseline Signals",
+        "Window Pressure Timeline",
+        "Health Provider Metrics",
+        "HealthExport local aggregate",
+        "HealthExport-aware",
+        "HealthExport import idle",
+        "Import HealthExport",
+        "Start Watch",
+        "watch stopped",
+        "Scan sec",
+        "Importing local HealthExport zip files",
+        "median -- bpm",
+        "median -- ms",
+        "-- windows",
+        "baseline position unavailable",
+        "min --",
+        "baseline --",
+        "avg --",
+        "max --",
+        "↗",
+        "↘",
+        "→",
+        "HealthAutoExport",
+        "Health exports",
+        "Walking sessions",
+        "GPX tracks",
+        "15-min windows",
+        "Provider metrics",
+        "3 local exports / 23 walking sessions",
+        "49 sanitized 15-min windows",
+        "parser-ready walking workouts",
+        "source value only",
+        "not live oxygen uptake",
+        "VO2max Baseline",
+        "Resting HR",
+        "HRV Baseline",
+        "Walking HR Average",
+        "Active Energy Reset Cue",
+        "Recovery Debt Windows",
+        "HR Pressure Windows",
+        "Step + Distance Pattern",
+        "2018 long walk",
+        "2020 walking day",
+        "2026 recent baseline",
+        "vo2_max",
+        "blood_oxygen_saturation",
+        "heart_rate_variability",
+        "resting_heart_rate",
+        "walking_heart_rate_average",
+        "active_energy",
+        "walking_running_distance",
+    ):
+        assert label in html
+
+
+def test_scout_dashboard_pace_fit_emergency_ui_subtree_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert 'data-route="outdoor-pace-fit-emergency"' in html
+    assert "function paceFitSubTabs(activeRoute)" in html
+    assert "function renderPaceFitEmergencyPage()" in html
+    assert 'if (route === "outdoor-pace-fit-emergency") return renderPaceFitEmergencyPage();' in html
+    assert 'paceFitSubTabs("outdoor-pace-fit-emergency")' in html
+    assert 'data-pace-fit-emergency-ui="true"' in html
+    assert 'data-emergency-approval-frame="desktop"' in html
+    assert 'src="/admin/dashboard/emergency-approval-desktop-v0"' in html
+    assert 'href="/admin/dashboard/emergency-approval-desktop-v0"' in html
+    assert "Emergency Approval Desktop UI v0" not in html
+    assert "Scout Emergency Approval Console" not in html
+    assert "Emergency approval desktop frame" in html
+    assert "desktop only" in html
+    assert "pace-emergency-toolbar" in html
+    assert "sent=false" in html
+    assert "no safety endpoint" in html
+    assert "no outbound transport" in html
+    assert "pending approval" in html
+    assert 'return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";' in html
+    assert "decisionBand(" not in html
+    assert ".decision-band" not in html
+    assert "Primary output" not in html
+    assert "Next action" not in html
+
+
 def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
@@ -800,7 +1327,7 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "function routeContextBriefingSrc()" in html
     assert "function renderRouteBriefingMetaBlock" in html
     assert "return candidate || PRETRIP_DATA_PROJECT_ID;" in html
-    assert 'return route === "agent" || route === "debug" || route === "outdoor-route-context";' in html
+    assert 'return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";' in html
     assert 'decisionBand(force.decision, "Scout AI route-context trip briefing loaded"' not in html
     assert "/admin/pretrip/projects/${project}/briefings/route-context" in html
     assert "data-route-context-briefing=\"true\"" in html
@@ -841,19 +1368,18 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "runtime_safety_truth=false" in html
     assert "stop permission, route open/closed decision" in html
     assert "no Phase 1 mutation, no safety endpoint write" in html
-    assert "no live safety automation" in html
+    assert '["Outbound", "closed"]' in html
+    assert "no live safety automation" not in html
     assert '<div class="debug-main-stack">\n            ${renderMetricPanel("Briefing Source"' not in html
 
 
 def test_scout_dashboard_emergency_boundary_and_mobile_independence_contract() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
-    assert "Emergency Package Draft only" in html
-    assert "mobile approval UI remains independent" in html
+    assert "Emergency Package Draft only" not in html
+    assert "mobile approval UI remains independent" not in html
     assert "sent=false" in html
     assert "external_send_performed=false" in html
-    assert "no live safety automation" in html
-    assert "mobile remains independent" in html
     assert "/safety/" not in html
     assert "fetch(`${apiBase()}${path}`" in html
     assert 'method: "POST"' in html
@@ -903,3 +1429,129 @@ def test_scout_dashboard_layer_contract_ids_are_present() -> None:
     assert "SCOUT_LAYER_IDS" in html
     assert "input type=\"checkbox\" data-layer" in html
     assert "data-layer-group" in html
+
+
+def _write_body_index_health_export_zip(
+    path: Path,
+    *,
+    day: str,
+    workout_id: str,
+    hour: int,
+) -> Path:
+    payload = {
+        "data": {
+            "workouts": [
+                _body_index_walk_workout(
+                    workout_id,
+                    day=day,
+                    hour=hour,
+                    distances_km=[0.72, 0.89, 0.8],
+                    step_counts=[1072, 1250, 1260],
+                    active_energy_kj=[100, 110, 100],
+                    heart_rates=[100] * 15 + [101] * 15 + [94] * 15,
+                )
+            ],
+            "metrics": [
+                _body_index_metric("vo2_max", [36.9, 37.1]),
+                _body_index_metric("heart_rate_variability", [42.4, 34.1]),
+                _body_index_metric("resting_heart_rate", [72]),
+                _body_index_metric("walking_heart_rate_average", [106]),
+            ],
+        }
+    }
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("HealthAutoExport-body-index.json", json.dumps(payload, ensure_ascii=False))
+        archive.writestr(
+            "private-route.gpx",
+            '<gpx><trk><trkseg><trkpt lat="40.0" lon="116.0" /></trkseg></trk></gpx>',
+        )
+    return path
+
+
+def _body_index_walk_workout(
+    workout_id: str,
+    *,
+    day: str,
+    hour: int,
+    distances_km: list[float],
+    step_counts: list[int],
+    active_energy_kj: list[int],
+    heart_rates: list[int],
+) -> dict[str, object]:
+    duration_min = len(distances_km) * 15
+    end_hour = hour + duration_min // 60
+    end_min = duration_min % 60
+    distance_rows: list[dict[str, object]] = []
+    step_rows: list[dict[str, object]] = []
+    energy_rows: list[dict[str, object]] = []
+    hr_rows: list[dict[str, object]] = []
+    for minute in range(duration_min):
+        window = minute // 15
+        row_date = f"{day} {hour + minute // 60:02d}:{minute % 60:02d}:00 +0800"
+        distance_rows.append(
+            {
+                "date": row_date,
+                "qty": distances_km[window] / 15.0,
+                "units": "km",
+                "source": "fixture.watch",
+            }
+        )
+        step_rows.append(
+            {
+                "date": row_date,
+                "qty": step_counts[window] / 15.0,
+                "units": "count",
+                "source": "fixture.watch",
+            }
+        )
+        energy_rows.append(
+            {
+                "date": row_date,
+                "qty": active_energy_kj[window] / 15.0,
+                "units": "kJ",
+                "source": "fixture.watch",
+            }
+        )
+        hr_rows.append(
+            {
+                "date": row_date,
+                "Avg": heart_rates[minute],
+                "Max": heart_rates[minute],
+                "Min": heart_rates[minute],
+                "units": "bpm",
+                "source": "fixture.watch",
+            }
+        )
+    return {
+        "id": workout_id,
+        "name": "步行",
+        "start": f"{day} {hour:02d}:00:00 +0800",
+        "end": f"{day} {end_hour:02d}:{end_min:02d}:00 +0800",
+        "duration": duration_min * 60,
+        "distance": {"qty": sum(distances_km), "units": "km"},
+        "avgHeartRate": {
+            "qty": round(sum(heart_rates) / len(heart_rates), 1),
+            "units": "bpm",
+        },
+        "maxHeartRate": {"qty": max(heart_rates), "units": "bpm"},
+        "activeEnergyBurned": {"qty": sum(active_energy_kj), "units": "kJ"},
+        "walkingAndRunningDistance": distance_rows,
+        "stepCount": step_rows,
+        "activeEnergy": energy_rows,
+        "heartRateData": hr_rows,
+        "route": [
+            {
+                "latitude": 40.0,
+                "longitude": 116.0,
+                "altitude": 600,
+                "timestamp": f"{day}T{hour:02d}:00:00+08:00",
+            }
+        ],
+    }
+
+
+def _body_index_metric(name: str, values: list[float]) -> dict[str, object]:
+    return {
+        "name": name,
+        "data": [{"qty": value, "source": "fixture.watch"} for value in values],
+    }

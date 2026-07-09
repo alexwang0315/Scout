@@ -4,6 +4,9 @@ import hashlib
 import json
 import os
 import sys
+import threading
+import time
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
@@ -129,6 +132,7 @@ from scout_runtime_physiologic_integration import (
     run_physio_integration_replay,
     write_physio_review_from_health_auto_export,
 )
+from scout_runtime_physiologic_pipeline import build_health_auto_export_physio_analysis
 from scout_env import load_scout_env_files
 from scout_wearable_daily_home import build_daily_home_preview
 from scout_wearable_provider_transport import (
@@ -162,6 +166,9 @@ DEFAULT_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
 DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 DEFAULT_DEBUG_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
 DEFAULT_SCOUT_DASHBOARD_PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
+DEFAULT_EMERGENCY_MOBILE_APPROVAL_PAGE = (
+    ROOT / "docs" / "emergency" / "scout-emergency-mobile-approval-v0.html"
+)
 DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REGENERATION_REF = (
@@ -181,6 +188,1162 @@ ROUTE_CONTEXT_INTELLIGENCE_SPEC_REF = (
     "docs/specs/scout-route-context-intelligence-implementation.md"
 )
 DEFAULT_OSM_CARTO_PALETTE = ROOT / "config" / "osm_carto_palette.yaml"
+DEFAULT_BODY_INDEX_SOURCE_DIR = Path.home() / "downloads" / "HealthExport"
+DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT = ROOT / "outputs" / "dashboard" / "body_index"
+DASHBOARD_BODY_INDEX_SCHEMA_VERSION = "scout_dashboard_body_index.v1"
+
+
+def _dashboard_emergency_desktop_approval_html() -> str:
+    html = DEFAULT_EMERGENCY_MOBILE_APPROVAL_PAGE.read_text(encoding="utf-8")
+    mobile_start = (
+        '    <section class="mobile-device" '
+        'aria-label="Emergency mobile approval">\n'
+    )
+    desktop_start = (
+        '    <section class="desktop-console" data-emergency-surface="desktop" '
+        'aria-label="Emergency desktop approval console">'
+    )
+    mobile_index = html.find(mobile_start)
+    desktop_index = html.find(desktop_start)
+    if mobile_index < 0 or desktop_index < 0 or desktop_index <= mobile_index:
+        raise HTTPException(
+            status_code=500,
+            detail="Emergency desktop approval UI transform failed",
+        )
+    html = html[:mobile_index] + html[desktop_index:]
+    html = html.replace(
+        '<main class="workspace" data-emergency-ui-version="v0">',
+        (
+            '<main class="workspace dashboard-emergency-desktop-only" '
+            'data-emergency-ui-version="v0" '
+            'data-dashboard-emergency-mode="desktop-only">'
+        ),
+        1,
+    )
+    header_start = html.find('      <header class="desktop-header">')
+    header_end = html.find("      </header>", header_start)
+    if header_start < 0 or header_end < 0:
+        raise HTTPException(
+            status_code=500,
+            detail="Emergency desktop approval header transform failed",
+        )
+    html = html[:header_start] + html[header_end + len("      </header>\n\n") :]
+    html = html.replace(
+        '            <div class="transport-row"><span>SMS bridge</span>',
+        (
+            '            <div class="transport-row" '
+            'data-dashboard-sent-state="sent=false"><span>Outbound send</span>'
+            '<span class="state-chip off">sent=false</span></div>\n'
+            '            <div class="transport-row"><span>SMS bridge</span>'
+        ),
+        1,
+    )
+    desktop_only_style = """
+  <style id="dashboard-emergency-desktop-only-style">
+    .workspace.dashboard-emergency-desktop-only {
+      min-width: 0;
+      display: block;
+      padding: 0;
+      background: var(--bg);
+    }
+
+    .dashboard-emergency-desktop-only .desktop-console {
+      min-width: 0;
+      border: 0;
+      border-radius: 0;
+    }
+
+    .dashboard-emergency-desktop-only .desktop-body {
+      grid-template-columns: minmax(360px, 0.9fr) minmax(500px, 1.1fr);
+    }
+
+    @media (max-width: 980px) {
+      .dashboard-emergency-desktop-only .desktop-body {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+"""
+    return html.replace("</head>", f"{desktop_only_style}</head>", 1)
+
+
+def _dashboard_body_index_project_id(value: str) -> bool:
+    candidate = value.strip()
+    return bool(candidate) and all(
+        char.isalnum() or char in "_.-" for char in candidate
+    )
+
+
+def _dashboard_body_index_store_path(project_id: str) -> Path:
+    if not _dashboard_body_index_project_id(project_id):
+        raise HTTPException(
+            status_code=422,
+            detail="project_id may only contain letters, numbers, dot, underscore, and dash",
+        )
+    return DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT / f"{project_id}.json"
+
+
+def _dashboard_body_index_source_dir(source_dir: str | None) -> Path:
+    if source_dir:
+        return Path(source_dir).expanduser()
+    if DEFAULT_BODY_INDEX_SOURCE_DIR.exists():
+        return DEFAULT_BODY_INDEX_SOURCE_DIR
+    downloads_candidate = Path.home() / "Downloads" / "HealthExport"
+    if downloads_candidate.exists():
+        return downloads_candidate
+    return DEFAULT_BODY_INDEX_SOURCE_DIR
+
+
+def _dashboard_body_index_boundary() -> dict[str, Any]:
+    return {
+        "advisory_only": True,
+        "source_provider_only": True,
+        "raw_health_payload_shared": False,
+        "raw_gpx_shared": False,
+        "exact_timestamps_shared": False,
+        "phase1_runtime_safety_truth": False,
+        "safety_api_called": False,
+        "outbound_alert_sent": False,
+    }
+
+
+def _dashboard_body_index_default_provider_metrics() -> list[str]:
+    return [
+        "vo2_max",
+        "blood_oxygen_saturation",
+        "heart_rate_variability",
+        "resting_heart_rate",
+        "walking_heart_rate_average",
+        "heart_rate",
+        "step_count",
+        "active_energy",
+        "flights_climbed",
+        "walking_running_distance",
+    ]
+
+
+def _dashboard_body_index_default_signal_trend() -> dict[str, Any]:
+    return {
+        "direction": "mid",
+        "position_percent": 50,
+        "summary": "baseline position unavailable",
+        "min_label": "min --",
+        "baseline_label": "baseline --",
+        "average_label": "avg --",
+        "max_label": "max --",
+    }
+
+
+def _dashboard_body_index_default_health_signals() -> list[list[Any]]:
+    return [
+        [
+            "VO2max Baseline",
+            "available",
+            "median --",
+            "cardio baseline only; not live oxygen uptake",
+            "Energy Reserve",
+            _dashboard_body_index_default_signal_trend(),
+        ],
+        [
+            "Resting HR",
+            "available",
+            "median -- bpm",
+            "provider metric trend for baseline context",
+            "Vulnerability",
+            _dashboard_body_index_default_signal_trend(),
+        ],
+        [
+            "HRV Baseline",
+            "available",
+            "median -- ms",
+            "recovery readiness context; source value only",
+            "Vulnerability",
+            _dashboard_body_index_default_signal_trend(),
+        ],
+        [
+            "Walking HR Average",
+            "available",
+            "median -- bpm",
+            "walking effort baseline without raw samples",
+            "Rest Frequency",
+            _dashboard_body_index_default_signal_trend(),
+        ],
+        [
+            "Active Energy Reset Cue",
+            "computable",
+            "median -- kJ",
+            "active energy budget and reset threshold",
+            "Energy Reserve",
+            _dashboard_body_index_default_signal_trend(),
+        ],
+        [
+            "Recovery Debt Windows",
+            "computable",
+            "-- windows",
+            "post-pressure rest cost from 15-min windows",
+            "Late-trip Decay",
+            _dashboard_body_index_default_signal_trend(),
+        ],
+        [
+            "HR Pressure Windows",
+            "computable",
+            "-- windows",
+            "high effort / low efficiency windows",
+            "Vulnerability",
+            _dashboard_body_index_default_signal_trend(),
+        ],
+        [
+            "Step + Distance Pattern",
+            "available",
+            "steps + distance",
+            "step count and walking distance coverage",
+            "Flat Speed",
+            _dashboard_body_index_default_signal_trend(),
+        ],
+    ]
+
+
+def _dashboard_body_index_default_snapshot(project_id: str) -> dict[str, Any]:
+    return {
+        "schema_version": DASHBOARD_BODY_INDEX_SCHEMA_VERSION,
+        "project_id": project_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "import_status": "not_imported",
+        "source_dir": None,
+        "summary": {
+            "scout_pace_coefficient": "0.82",
+            "energy_reserve": "0.62",
+            "vulnerability": "0.38",
+            "experience_trust": "0.71",
+            "score_percent": 82,
+        },
+        "coverage_cards": [
+            ["Health exports", "3", "HealthAutoExport zip files"],
+            ["Walking sessions", "23", "parser-ready walking workouts"],
+            ["GPX tracks", "40", "route traces available"],
+            ["15-min windows", "49", "sanitized pressure windows"],
+            ["Provider metrics", "10", "source-value metric families"],
+        ],
+        "health_signals": _dashboard_body_index_default_health_signals(),
+        "pressure_timeline": [
+            ["2018 long walk", "16 windows", "single GPX session", 33],
+            ["2020 walking day", "7 windows", "two GPX sessions", 14],
+            ["2026 recent baseline", "26 windows", "20 walking sessions", 53],
+        ],
+        "provider_metrics": _dashboard_body_index_default_provider_metrics(),
+        "provider_metric_summaries": [],
+        "source_index": [],
+        "import_result": {
+            "new_source_count": 0,
+            "duplicate_source_count": 0,
+            "error_count": 0,
+            "processed_source_count": 0,
+        },
+        "boundary": _dashboard_body_index_boundary(),
+    }
+
+
+def _load_dashboard_body_index_snapshot(project_id: str) -> dict[str, Any]:
+    path = _dashboard_body_index_store_path(project_id)
+    if not path.exists():
+        return _dashboard_body_index_default_snapshot(project_id)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return _dashboard_body_index_default_snapshot(project_id)
+    if not isinstance(data, dict):
+        return _dashboard_body_index_default_snapshot(project_id)
+    if data.get("schema_version") != DASHBOARD_BODY_INDEX_SCHEMA_VERSION:
+        return _dashboard_body_index_default_snapshot(project_id)
+    sources = data.get("source_index", [])
+    if isinstance(sources, list):
+        data["source_index"] = [
+            _dashboard_body_index_sanitize_source_entry(source)
+            for source in sources
+            if isinstance(source, dict) and source.get("sha256")
+        ]
+    data.setdefault("boundary", _dashboard_body_index_boundary())
+    return data
+
+
+def _dashboard_body_index_sanitize_source_entry(source: dict[str, Any]) -> dict[str, Any]:
+    allowed_keys = {
+        "source_id",
+        "source_label",
+        "sha256",
+        "gpx_count",
+        "walking_sessions",
+        "analysis_windows",
+        "hr_pressure_windows",
+        "recovery_debt_windows",
+        "total_distance_km",
+        "total_duration_min",
+        "provider_metric_names",
+        "provider_metric_summaries",
+        "imported_at",
+    }
+    sanitized = {key: source[key] for key in allowed_keys if key in source}
+    source_sha = str(sanitized.get("sha256") or source.get("sha256") or "")
+    if source_sha:
+        sanitized["sha256"] = source_sha
+        sanitized.setdefault("source_id", source_sha[:16])
+        sanitized.setdefault("source_label", f"HealthExport source {source_sha[:8]}")
+    return sanitized
+
+
+def _write_dashboard_body_index_snapshot(snapshot: dict[str, Any]) -> None:
+    project_id = str(snapshot.get("project_id") or "").strip()
+    path = _dashboard_body_index_store_path(project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _dashboard_body_index_zip_gpx_count(path: Path) -> int:
+    with zipfile.ZipFile(path) as archive:
+        return sum(1 for name in archive.namelist() if name.lower().endswith(".gpx"))
+
+
+def _dashboard_body_index_provider_metric_summary(metric: Any) -> dict[str, Any]:
+    payload = metric.model_dump(mode="json") if hasattr(metric, "model_dump") else {}
+    metric_name = str(payload.get("metric_name") or "")
+    return {
+        "metric_name": metric_name,
+        "sample_count": _dashboard_body_index_int(payload, "sample_count"),
+        "min_value": payload.get("min_value"),
+        "mean_value": payload.get("mean_value"),
+        "median_value": payload.get("median_value"),
+        "max_value": payload.get("max_value"),
+        "source_value_only": payload.get("source_value_only", True),
+        "scout_truth": payload.get("scout_truth", False),
+    }
+
+
+def _dashboard_body_index_provider_metric_summaries_by_name(
+    sources: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for source in sources:
+        for metric in source.get("provider_metric_summaries", []):
+            if not isinstance(metric, dict):
+                continue
+            name = str(metric.get("metric_name") or "")
+            if not name:
+                continue
+            buckets.setdefault(name, []).append(metric)
+
+    merged: dict[str, dict[str, Any]] = {}
+    for name, rows in buckets.items():
+        sample_count = sum(_dashboard_body_index_int(row, "sample_count") for row in rows)
+        min_values = [
+            _dashboard_body_index_float(row, "min_value")
+            for row in rows
+            if row.get("min_value") is not None
+        ]
+        max_values = [
+            _dashboard_body_index_float(row, "max_value")
+            for row in rows
+            if row.get("max_value") is not None
+        ]
+        weighted_total = 0.0
+        weighted_count = 0
+        mean_weighted_total = 0.0
+        mean_weighted_count = 0
+        for row in rows:
+            median_value = row.get("median_value")
+            if median_value is not None:
+                count = max(1, _dashboard_body_index_int(row, "sample_count"))
+                weighted_total += _dashboard_body_index_float(row, "median_value") * count
+                weighted_count += count
+            mean_value = row.get("mean_value")
+            if mean_value is None:
+                continue
+            mean_count = max(1, _dashboard_body_index_int(row, "sample_count"))
+            mean_weighted_total += _dashboard_body_index_float(row, "mean_value") * mean_count
+            mean_weighted_count += mean_count
+        merged[name] = {
+            "metric_name": name,
+            "sample_count": sample_count,
+            "min_value": round(min(min_values), 3) if min_values else None,
+            "mean_value": (
+                round(mean_weighted_total / mean_weighted_count, 3)
+                if mean_weighted_count > 0
+                else None
+            ),
+            "median_value": (
+                round(weighted_total / weighted_count, 3)
+                if weighted_count > 0
+                else None
+            ),
+            "max_value": round(max(max_values), 3) if max_values else None,
+            "source_value_only": True,
+            "scout_truth": False,
+        }
+    return merged
+
+
+def _dashboard_body_index_metric_value(
+    metrics_by_name: dict[str, dict[str, Any]],
+    metric_name: str,
+    *,
+    unit: str = "",
+) -> str:
+    metric = metrics_by_name.get(metric_name)
+    if not metric or metric.get("median_value") is None:
+        return "no source value"
+    suffix = f" {unit}" if unit else ""
+    sample_count = _dashboard_body_index_int(metric, "sample_count")
+    value = metric["median_value"]
+    if sample_count > 0:
+        return f"median {value}{suffix} / n={sample_count}"
+    return f"median {value}{suffix}"
+
+
+def _dashboard_body_index_metric_range(
+    metrics_by_name: dict[str, dict[str, Any]],
+    metric_name: str,
+    *,
+    unit: str = "",
+) -> str:
+    metric = metrics_by_name.get(metric_name)
+    if not metric:
+        return "range unavailable"
+    min_value = metric.get("min_value")
+    max_value = metric.get("max_value")
+    if min_value is None or max_value is None:
+        return "range unavailable"
+    suffix = f" {unit}" if unit else ""
+    return f"range {min_value}-{max_value}{suffix}"
+
+
+def _dashboard_body_index_trend_direction(position_percent: float) -> str:
+    if position_percent < 35:
+        return "low"
+    if position_percent > 65:
+        return "high"
+    return "mid"
+
+
+def _dashboard_body_index_metric_trend(
+    metrics_by_name: dict[str, dict[str, Any]],
+    metric_name: str,
+    *,
+    unit: str = "",
+) -> dict[str, Any]:
+    metric = metrics_by_name.get(metric_name)
+    suffix = f" {unit}" if unit else ""
+    if not metric or metric.get("median_value") is None:
+        return _dashboard_body_index_default_signal_trend()
+    median_value = _dashboard_body_index_float(metric, "median_value")
+    mean_value = (
+        _dashboard_body_index_float(metric, "mean_value")
+        if metric.get("mean_value") is not None
+        else median_value
+    )
+    min_value = metric.get("min_value")
+    max_value = metric.get("max_value")
+    if min_value is None or max_value is None:
+        return {
+            **_dashboard_body_index_default_signal_trend(),
+            "baseline_label": f"baseline {median_value}{suffix}",
+            "average_label": f"avg {mean_value}{suffix}",
+        }
+    min_number = _dashboard_body_index_float(metric, "min_value")
+    max_number = _dashboard_body_index_float(metric, "max_value")
+    if max_number > min_number:
+        position = ((median_value - min_number) / (max_number - min_number)) * 100
+    else:
+        position = 50.0
+    position = max(0.0, min(100.0, position))
+    rounded_position = round(position)
+    return {
+        "direction": _dashboard_body_index_trend_direction(position),
+        "position_percent": rounded_position,
+        "summary": f"baseline at {rounded_position}% of min-max range",
+        "min_label": f"min {min_number}{suffix}",
+        "baseline_label": f"baseline {median_value}{suffix}",
+        "average_label": f"avg {mean_value}{suffix}",
+        "max_label": f"max {max_number}{suffix}",
+    }
+
+
+def _dashboard_body_index_window_trend(
+    count: int,
+    total_windows: int,
+    *,
+    label: str,
+) -> dict[str, Any]:
+    if total_windows <= 0:
+        return _dashboard_body_index_default_signal_trend()
+    position = max(0.0, min(100.0, (count / total_windows) * 100))
+    rounded_position = round(position)
+    return {
+        "direction": _dashboard_body_index_trend_direction(position),
+        "position_percent": rounded_position,
+        "summary": f"{label} at {rounded_position}% of evaluated windows",
+        "min_label": "min 0",
+        "baseline_label": f"current {count}",
+        "max_label": f"max {total_windows}",
+    }
+
+
+def _dashboard_body_index_source_from_zip(path: Path, imported_at: str) -> dict[str, Any]:
+    source_sha = sha256_file(path)
+    analysis = build_health_auto_export_physio_analysis(path, activity_type="walking")
+    provider_metric_names = sorted(
+        metric.metric_name for metric in analysis.provider_metric_summaries
+    )
+    provider_metric_summaries = [
+        _dashboard_body_index_provider_metric_summary(metric)
+        for metric in analysis.provider_metric_summaries
+    ]
+    return {
+        "source_id": source_sha[:16],
+        "source_label": f"HealthExport source {source_sha[:8]}",
+        "sha256": source_sha,
+        "gpx_count": _dashboard_body_index_zip_gpx_count(path),
+        "walking_sessions": analysis.session_count,
+        "analysis_windows": analysis.overall.total_windows,
+        "hr_pressure_windows": analysis.overall.total_hr_pressure_windows,
+        "recovery_debt_windows": (
+            analysis.overall.total_recovery_debt_candidate_windows
+        ),
+        "total_distance_km": analysis.overall.total_distance_km,
+        "total_duration_min": analysis.overall.total_duration_min,
+        "provider_metric_names": provider_metric_names,
+        "provider_metric_summaries": provider_metric_summaries,
+        "imported_at": imported_at,
+    }
+
+
+def _dashboard_body_index_int(source: dict[str, Any], key: str) -> int:
+    try:
+        return int(source.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _dashboard_body_index_float(source: dict[str, Any], key: str) -> float:
+    try:
+        return float(source.get(key) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _dashboard_body_index_signal_state(
+    provider_metrics: set[str],
+    *,
+    metric: str | None = None,
+    condition: bool = False,
+) -> str:
+    if condition or (metric is not None and metric in provider_metrics):
+        return "available" if metric else "computable"
+    return "pending"
+
+
+def _dashboard_body_index_health_signals(
+    provider_metrics: set[str],
+    metrics_by_name: dict[str, dict[str, Any]],
+    total_windows: int,
+    total_hr_pressure_windows: int,
+    total_recovery_debt_windows: int,
+) -> list[list[str]]:
+    active_energy = _dashboard_body_index_signal_state(
+        provider_metrics,
+        metric="active_energy",
+        condition=total_windows > 0,
+    )
+    step_distance = "available" if {
+        "step_count",
+        "walking_running_distance",
+    } & provider_metrics else "pending"
+    return [
+        [
+            "VO2max Baseline",
+            _dashboard_body_index_signal_state(provider_metrics, metric="vo2_max"),
+            _dashboard_body_index_metric_value(metrics_by_name, "vo2_max"),
+            _dashboard_body_index_metric_range(metrics_by_name, "vo2_max"),
+            "Energy Reserve",
+            _dashboard_body_index_metric_trend(metrics_by_name, "vo2_max"),
+        ],
+        [
+            "Resting HR",
+            _dashboard_body_index_signal_state(
+                provider_metrics,
+                metric="resting_heart_rate",
+            ),
+            _dashboard_body_index_metric_value(
+                metrics_by_name,
+                "resting_heart_rate",
+                unit="bpm",
+            ),
+            _dashboard_body_index_metric_range(
+                metrics_by_name,
+                "resting_heart_rate",
+                unit="bpm",
+            ),
+            "Vulnerability",
+            _dashboard_body_index_metric_trend(
+                metrics_by_name,
+                "resting_heart_rate",
+                unit="bpm",
+            ),
+        ],
+        [
+            "HRV Baseline",
+            _dashboard_body_index_signal_state(
+                provider_metrics,
+                metric="heart_rate_variability",
+            ),
+            _dashboard_body_index_metric_value(
+                metrics_by_name,
+                "heart_rate_variability",
+                unit="ms",
+            ),
+            _dashboard_body_index_metric_range(
+                metrics_by_name,
+                "heart_rate_variability",
+                unit="ms",
+            ),
+            "Vulnerability",
+            _dashboard_body_index_metric_trend(
+                metrics_by_name,
+                "heart_rate_variability",
+                unit="ms",
+            ),
+        ],
+        [
+            "Walking HR Average",
+            _dashboard_body_index_signal_state(
+                provider_metrics,
+                metric="walking_heart_rate_average",
+            ),
+            _dashboard_body_index_metric_value(
+                metrics_by_name,
+                "walking_heart_rate_average",
+                unit="bpm",
+            ),
+            _dashboard_body_index_metric_range(
+                metrics_by_name,
+                "walking_heart_rate_average",
+                unit="bpm",
+            ),
+            "Rest Frequency",
+            _dashboard_body_index_metric_trend(
+                metrics_by_name,
+                "walking_heart_rate_average",
+                unit="bpm",
+            ),
+        ],
+        [
+            "Active Energy Reset Cue",
+            active_energy,
+            _dashboard_body_index_metric_value(
+                metrics_by_name,
+                "active_energy",
+                unit="kJ",
+            ),
+            _dashboard_body_index_metric_range(
+                metrics_by_name,
+                "active_energy",
+                unit="kJ",
+            ),
+            "Energy Reserve",
+            _dashboard_body_index_metric_trend(
+                metrics_by_name,
+                "active_energy",
+                unit="kJ",
+            ),
+        ],
+        [
+            "Recovery Debt Windows",
+            "computable" if total_windows > 0 else "pending",
+            f"{total_recovery_debt_windows} windows",
+            f"{total_windows} sanitized windows evaluated",
+            "Late-trip Decay",
+            _dashboard_body_index_window_trend(
+                total_recovery_debt_windows,
+                total_windows,
+                label="recovery debt",
+            ),
+        ],
+        [
+            "HR Pressure Windows",
+            "computable" if total_windows > 0 else "pending",
+            f"{total_hr_pressure_windows} windows",
+            f"{total_windows} sanitized windows evaluated",
+            "Vulnerability",
+            _dashboard_body_index_window_trend(
+                total_hr_pressure_windows,
+                total_windows,
+                label="HR pressure",
+            ),
+        ],
+        [
+            "Step + Distance Pattern",
+            step_distance,
+            (
+                f"{_dashboard_body_index_metric_value(metrics_by_name, 'step_count')} / "
+                f"{_dashboard_body_index_metric_value(metrics_by_name, 'walking_running_distance', unit='km')}"
+            ),
+            "step count and walking distance coverage",
+            "Flat Speed",
+            _dashboard_body_index_metric_trend(
+                metrics_by_name,
+                "walking_running_distance",
+                unit="km",
+            ),
+        ],
+    ]
+
+
+def _dashboard_body_index_pressure_timeline(
+    sources: list[dict[str, Any]],
+) -> list[list[Any]]:
+    total_windows = sum(
+        _dashboard_body_index_int(source, "analysis_windows") for source in sources
+    )
+    if total_windows <= 0:
+        return []
+    timeline: list[list[Any]] = []
+    for index, source in enumerate(sources[-6:], start=max(1, len(sources) - 5)):
+        windows = _dashboard_body_index_int(source, "analysis_windows")
+        sessions = _dashboard_body_index_int(source, "walking_sessions")
+        gpx_count = _dashboard_body_index_int(source, "gpx_count")
+        percent = round((windows / total_windows) * 100) if total_windows else 0
+        timeline.append(
+            [
+                f"HealthExport source {index}",
+                f"{windows} windows",
+                f"{sessions} walking sessions / {gpx_count} GPX",
+                percent,
+            ]
+        )
+    return timeline
+
+
+def _dashboard_body_index_snapshot_from_sources(
+    *,
+    project_id: str,
+    source_dir: Path,
+    sources: list[dict[str, Any]],
+    import_result: dict[str, Any],
+    import_errors: list[dict[str, str]],
+) -> dict[str, Any]:
+    provider_metrics = sorted(
+        {
+            metric
+            for source in sources
+            for metric in source.get("provider_metric_names", [])
+            if isinstance(metric, str) and metric
+        }
+    )
+    metrics_by_name = _dashboard_body_index_provider_metric_summaries_by_name(sources)
+    provider_metric_summaries = [
+        metrics_by_name[name] for name in sorted(metrics_by_name)
+    ]
+    total_exports = len(sources)
+    total_sessions = sum(
+        _dashboard_body_index_int(source, "walking_sessions") for source in sources
+    )
+    total_gpx = sum(_dashboard_body_index_int(source, "gpx_count") for source in sources)
+    total_windows = sum(
+        _dashboard_body_index_int(source, "analysis_windows") for source in sources
+    )
+    total_hr_pressure_windows = sum(
+        _dashboard_body_index_int(source, "hr_pressure_windows") for source in sources
+    )
+    total_recovery_debt_windows = sum(
+        _dashboard_body_index_int(source, "recovery_debt_windows") for source in sources
+    )
+    total_distance_km = round(
+        sum(_dashboard_body_index_float(source, "total_distance_km") for source in sources),
+        2,
+    )
+    total_duration_min = round(
+        sum(
+            _dashboard_body_index_float(source, "total_duration_min")
+            for source in sources
+        ),
+        1,
+    )
+    provider_metric_count = len(provider_metrics)
+    experience = min(
+        0.92,
+        0.55
+        + (total_sessions * 0.01)
+        + (total_gpx * 0.002)
+        + (provider_metric_count * 0.005),
+    )
+    energy = min(0.86, 0.54 + (total_sessions * 0.004) + (provider_metric_count * 0.003))
+    vulnerability = max(0.18, 0.48 - (total_sessions * 0.003) - (provider_metric_count * 0.004))
+    pace_coefficient = min(0.9, 0.7 + (experience * 0.12) + (energy * 0.08) - (vulnerability * 0.04))
+    return {
+        "schema_version": DASHBOARD_BODY_INDEX_SCHEMA_VERSION,
+        "project_id": project_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "import_status": "imported" if sources else "not_imported",
+        "source_dir": str(source_dir),
+        "summary": {
+            "scout_pace_coefficient": f"{pace_coefficient:.2f}",
+            "energy_reserve": f"{energy:.2f}",
+            "vulnerability": f"{vulnerability:.2f}",
+            "experience_trust": f"{experience:.2f}",
+            "score_percent": round(pace_coefficient * 100),
+            "total_distance_km": total_distance_km,
+            "total_duration_min": total_duration_min,
+        },
+        "coverage_cards": [
+            ["Health exports", str(total_exports), "deduped local zip files"],
+            [
+                "Walking sessions",
+                str(total_sessions),
+                "parser-ready walking workouts",
+            ],
+            ["GPX tracks", str(total_gpx), "route traces counted only"],
+            ["15-min windows", str(total_windows), "sanitized pressure windows"],
+            [
+                "Provider metrics",
+                str(provider_metric_count),
+                "source-value metric families",
+            ],
+        ],
+        "health_signals": _dashboard_body_index_health_signals(
+            set(provider_metrics),
+            metrics_by_name,
+            total_windows,
+            total_hr_pressure_windows,
+            total_recovery_debt_windows,
+        ),
+        "pressure_timeline": _dashboard_body_index_pressure_timeline(sources),
+        "provider_metrics": provider_metrics,
+        "provider_metric_summaries": provider_metric_summaries,
+        "source_index": sources,
+        "import_result": {
+            **import_result,
+            "processed_source_count": total_exports,
+            "error_count": len(import_errors),
+            "errors": import_errors,
+        },
+        "boundary": _dashboard_body_index_boundary(),
+    }
+
+
+def _import_dashboard_body_index(
+    request: DashboardBodyIndexImportRequest,
+) -> dict[str, Any]:
+    source_dir = _dashboard_body_index_source_dir(request.source_dir)
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail=f"HealthExport source directory not found: {source_dir}",
+        )
+    zip_paths = sorted(source_dir.glob("*.zip"))
+    if not zip_paths:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No HealthExport zip files found in {source_dir}",
+        )
+
+    current_snapshot = _load_dashboard_body_index_snapshot(request.project_id)
+    current_sources = [
+        source
+        for source in current_snapshot.get("source_index", [])
+        if isinstance(source, dict) and source.get("sha256")
+    ]
+    current_by_sha = {str(source["sha256"]): source for source in current_sources}
+    source_order = [str(source["sha256"]) for source in current_sources]
+    seen_shas = set(source_order)
+    new_sources: list[dict[str, Any]] = []
+    import_errors: list[dict[str, str]] = []
+    duplicate_source_count = 0
+    imported_at = datetime.now(timezone.utc).isoformat()
+
+    for source_index, zip_path in enumerate(zip_paths, start=1):
+        try:
+            source_sha = sha256_file(zip_path)
+        except OSError as exc:
+            import_errors.append(
+                {
+                    "source_candidate": f"HealthExport zip {source_index}",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            )
+            continue
+        if source_sha in seen_shas:
+            duplicate_source_count += 1
+            existing_source = current_by_sha.get(source_sha)
+            existing_summaries = (
+                existing_source.get("provider_metric_summaries", [])
+                if existing_source is not None
+                else []
+            )
+            needs_summary_refresh = (
+                existing_source is not None
+                and (
+                    (
+                        bool(existing_source.get("provider_metric_names"))
+                        and not existing_summaries
+                    )
+                    or any(
+                        isinstance(summary, dict)
+                        and summary.get("mean_value") is None
+                        for summary in existing_summaries
+                    )
+                )
+            )
+            if needs_summary_refresh:
+                try:
+                    current_by_sha[source_sha] = _dashboard_body_index_source_from_zip(
+                        zip_path,
+                        str(existing_source.get("imported_at") or imported_at),
+                    )
+                except (OSError, ValueError, zipfile.BadZipFile, ValidationError) as exc:
+                    import_errors.append(
+                        {
+                            "source_id": source_sha[:16],
+                            "error_type": type(exc).__name__,
+                            "error": str(exc),
+                        }
+                    )
+            continue
+        try:
+            source = _dashboard_body_index_source_from_zip(zip_path, imported_at)
+        except (OSError, ValueError, zipfile.BadZipFile, ValidationError) as exc:
+            import_errors.append(
+                {
+                    "source_id": source_sha[:16],
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            )
+            continue
+        new_sources.append(source)
+        current_by_sha[source_sha] = source
+        source_order.append(source_sha)
+        seen_shas.add(source_sha)
+
+    sources = [current_by_sha[source_sha] for source_sha in source_order]
+    snapshot = _dashboard_body_index_snapshot_from_sources(
+        project_id=request.project_id,
+        source_dir=source_dir,
+        sources=sources,
+        import_result={
+            "new_source_count": len(new_sources),
+            "duplicate_source_count": duplicate_source_count,
+            "operator_alias": request.operator_alias,
+        },
+        import_errors=import_errors,
+    )
+    _write_dashboard_body_index_snapshot(snapshot)
+    return snapshot
+
+
+class _DashboardBodyIndexDirectoryWatcher:
+    def __init__(
+        self,
+        *,
+        project_id: str,
+        source_dir: Path,
+        interval_seconds: int,
+        operator_alias: str,
+    ) -> None:
+        self.project_id = project_id
+        self.source_dir = source_dir
+        self.interval_seconds = interval_seconds
+        self.operator_alias = operator_alias
+        self._stop_event = threading.Event()
+        self._status_lock = threading.Lock()
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"scout-body-index-watch-{project_id}",
+            daemon=True,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        self._status: dict[str, Any] = {
+            "running": False,
+            "project_id": project_id,
+            "source_dir": str(source_dir),
+            "interval_seconds": interval_seconds,
+            "operator_alias": operator_alias,
+            "started_at": now,
+            "stopped_at": None,
+            "scan_count": 0,
+            "import_count": 0,
+            "last_scan_at": None,
+            "last_import_at": None,
+            "last_seen_zip_count": 0,
+            "last_known_source_count": 0,
+            "last_new_candidate_count": 0,
+            "last_result": None,
+            "last_error": None,
+            "boundary": _dashboard_body_index_boundary(),
+        }
+
+    def start(self) -> None:
+        with self._status_lock:
+            self._status["running"] = True
+        self._thread.start()
+
+    def stop(self) -> dict[str, Any]:
+        self._stop_event.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=5)
+        with self._status_lock:
+            self._status["running"] = False
+            self._status["stopped_at"] = datetime.now(timezone.utc).isoformat()
+            return dict(self._status)
+
+    def status(self) -> dict[str, Any]:
+        with self._status_lock:
+            snapshot = dict(self._status)
+        snapshot["running"] = self._thread.is_alive() and not self._stop_event.is_set()
+        return snapshot
+
+    def _update_status(self, updates: dict[str, Any]) -> None:
+        with self._status_lock:
+            self._status.update(updates)
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            self.scan_once()
+            self._stop_event.wait(self.interval_seconds)
+        self._update_status(
+            {
+                "running": False,
+                "stopped_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+    def scan_once(self) -> dict[str, Any]:
+        scanned_at = datetime.now(timezone.utc).isoformat()
+        try:
+            if not self.source_dir.exists() or not self.source_dir.is_dir():
+                raise FileNotFoundError(f"HealthExport source directory not found: {self.source_dir}")
+            zip_paths = sorted(self.source_dir.glob("*.zip"))
+            current_shas: set[str] = set()
+            for zip_path in zip_paths:
+                current_shas.add(sha256_file(zip_path))
+            snapshot = _load_dashboard_body_index_snapshot(self.project_id)
+            known_shas = {
+                str(source.get("sha256"))
+                for source in snapshot.get("source_index", [])
+                if isinstance(source, dict) and source.get("sha256")
+            }
+            new_shas = current_shas - known_shas
+            scan_update = {
+                "scan_count": int(self.status().get("scan_count") or 0) + 1,
+                "last_scan_at": scanned_at,
+                "last_seen_zip_count": len(zip_paths),
+                "last_known_source_count": len(known_shas),
+                "last_new_candidate_count": len(new_shas),
+                "last_error": None,
+            }
+            if new_shas:
+                payload = _import_dashboard_body_index(
+                    DashboardBodyIndexImportRequest(
+                        project_id=self.project_id,
+                        source_dir=str(self.source_dir),
+                        confirm_import=True,
+                        operator_alias=self.operator_alias,
+                    )
+                )
+                result = payload.get("import_result", {})
+                scan_update.update(
+                    {
+                        "import_count": int(self.status().get("import_count") or 0) + 1,
+                        "last_import_at": datetime.now(timezone.utc).isoformat(),
+                        "last_result": {
+                            "new_source_count": result.get("new_source_count", 0),
+                            "duplicate_source_count": result.get(
+                                "duplicate_source_count",
+                                0,
+                            ),
+                            "error_count": result.get("error_count", 0),
+                            "processed_source_count": result.get(
+                                "processed_source_count",
+                                0,
+                            ),
+                        },
+                    }
+                )
+            else:
+                scan_update["last_result"] = {
+                    "new_source_count": 0,
+                    "duplicate_source_count": 0,
+                    "error_count": 0,
+                    "processed_source_count": len(known_shas),
+                    "message": "no new zip sha detected",
+                }
+            self._update_status(scan_update)
+        except Exception as exc:  # noqa: BLE001 - monitor must keep running after scan errors.
+            self._update_status(
+                {
+                    "scan_count": int(self.status().get("scan_count") or 0) + 1,
+                    "last_scan_at": scanned_at,
+                    "last_error": {
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                }
+            )
+        return self.status()
+
+
+_BODY_INDEX_WATCHERS_LOCK = threading.Lock()
+_BODY_INDEX_WATCHERS: dict[str, _DashboardBodyIndexDirectoryWatcher] = {}
+
+
+def _dashboard_body_index_watch_status(project_id: str) -> dict[str, Any]:
+    with _BODY_INDEX_WATCHERS_LOCK:
+        watcher = _BODY_INDEX_WATCHERS.get(project_id)
+    if watcher is None:
+        return {
+            "running": False,
+            "project_id": project_id,
+            "source_dir": str(_dashboard_body_index_source_dir(None)),
+            "interval_seconds": None,
+            "scan_count": 0,
+            "import_count": 0,
+            "last_scan_at": None,
+            "last_import_at": None,
+            "last_result": None,
+            "last_error": None,
+            "boundary": _dashboard_body_index_boundary(),
+        }
+    return watcher.status()
+
+
+def _start_dashboard_body_index_watcher(
+    request: DashboardBodyIndexWatchRequest,
+) -> dict[str, Any]:
+    source_dir = _dashboard_body_index_source_dir(request.source_dir)
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail=f"HealthExport source directory not found: {source_dir}",
+        )
+    with _BODY_INDEX_WATCHERS_LOCK:
+        old_watcher = _BODY_INDEX_WATCHERS.pop(request.project_id, None)
+        if old_watcher is not None:
+            old_watcher.stop()
+        watcher = _DashboardBodyIndexDirectoryWatcher(
+            project_id=request.project_id,
+            source_dir=source_dir,
+            interval_seconds=request.interval_seconds,
+            operator_alias=request.operator_alias,
+        )
+        _BODY_INDEX_WATCHERS[request.project_id] = watcher
+        watcher.start()
+    return watcher.status()
+
+
+def _stop_dashboard_body_index_watcher(project_id: str) -> dict[str, Any]:
+    with _BODY_INDEX_WATCHERS_LOCK:
+        watcher = _BODY_INDEX_WATCHERS.pop(project_id, None)
+    if watcher is None:
+        return _dashboard_body_index_watch_status(project_id)
+    return watcher.stop()
 
 
 class PreTripReviewDecisionCorrectionRequest(BaseModel):
@@ -340,6 +1503,47 @@ class PreTripRouteContextBriefingVariantsGenerateRequest(BaseModel):
     baseline_ref: str | None = Field(default=None, min_length=1)
     reference_variants_dir_ref: str | None = Field(default=None, min_length=1)
     max_reference_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class DashboardBodyIndexImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str = Field(default="chilai_nanhua_day1_scoutAI", min_length=1)
+    source_dir: str | None = Field(default=None, min_length=1)
+    confirm_import: bool = False
+    operator_alias: str = Field(default="dashboard_operator", min_length=1)
+
+    @model_validator(mode="after")
+    def normalize_dashboard_body_index_import(
+        self,
+    ) -> "DashboardBodyIndexImportRequest":
+        self.project_id = self.project_id.strip()
+        if not _dashboard_body_index_project_id(self.project_id):
+            raise ValueError("project_id may only contain letters, numbers, dot, underscore, and dash")
+        self.source_dir = self.source_dir.strip() or None if self.source_dir else None
+        self.operator_alias = self.operator_alias.strip()
+        return self
+
+
+class DashboardBodyIndexWatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm_watch: bool = False
+    project_id: str = Field(default="chilai_nanhua_day1_scoutAI", min_length=1)
+    source_dir: str | None = Field(default=None, min_length=1)
+    interval_seconds: int = Field(default=300, ge=1, le=86_400)
+    operator_alias: str = Field(default="dashboard_operator", min_length=1)
+
+    @model_validator(mode="after")
+    def normalize_dashboard_body_index_watch(
+        self,
+    ) -> "DashboardBodyIndexWatchRequest":
+        self.project_id = self.project_id.strip()
+        if not _dashboard_body_index_project_id(self.project_id):
+            raise ValueError("project_id may only contain letters, numbers, dot, underscore, and dash")
+        self.source_dir = self.source_dir.strip() or None if self.source_dir else None
+        self.operator_alias = self.operator_alias.strip()
+        return self
 
 
 class WearableImportRequest(BaseModel):
@@ -818,6 +2022,99 @@ def create_admin_router(
             raise HTTPException(status_code=404, detail="Scout dashboard page not found")
         return Response(
             DEFAULT_SCOUT_DASHBOARD_PAGE.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/dashboard/body-index")
+    def scout_dashboard_body_index(
+        project_id: str = "chilai_nanhua_day1_scoutAI",
+    ) -> Response:
+        project_id = project_id.strip()
+        snapshot = _load_dashboard_body_index_snapshot(project_id)
+        return Response(
+            json.dumps(snapshot, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/dashboard/body-index/import")
+    def scout_dashboard_body_index_import(
+        request: DashboardBodyIndexImportRequest,
+    ) -> Response:
+        if not request.confirm_import:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_import=true is required for Body Index import",
+            )
+        snapshot = _import_dashboard_body_index(request)
+        return Response(
+            json.dumps(snapshot, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/dashboard/body-index/watch/status")
+    def scout_dashboard_body_index_watch_status(
+        project_id: str = "chilai_nanhua_day1_scoutAI",
+    ) -> Response:
+        project_id = project_id.strip()
+        status = _dashboard_body_index_watch_status(project_id)
+        return Response(
+            json.dumps(status, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/dashboard/body-index/watch/start")
+    def scout_dashboard_body_index_watch_start(
+        request: DashboardBodyIndexWatchRequest,
+    ) -> Response:
+        if not request.confirm_watch:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_watch=true is required to start Body Index directory monitoring",
+            )
+        status = _start_dashboard_body_index_watcher(request)
+        return Response(
+            json.dumps(status, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/dashboard/body-index/watch/stop")
+    def scout_dashboard_body_index_watch_stop(
+        request: DashboardBodyIndexWatchRequest,
+    ) -> Response:
+        status = _stop_dashboard_body_index_watcher(request.project_id)
+        return Response(
+            json.dumps(status, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/dashboard/emergency-approval-desktop-v0", response_class=HTMLResponse)
+    def scout_dashboard_emergency_desktop_approval_page() -> Response:
+        if not DEFAULT_EMERGENCY_MOBILE_APPROVAL_PAGE.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Emergency mobile approval UI not found",
+            )
+        return Response(
+            _dashboard_emergency_desktop_approval_html(),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/dashboard/emergency-mobile-approval-v0", response_class=HTMLResponse)
+    def scout_dashboard_emergency_mobile_approval_page() -> Response:
+        if not DEFAULT_EMERGENCY_MOBILE_APPROVAL_PAGE.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Emergency mobile approval UI not found",
+            )
+        return Response(
+            _dashboard_emergency_desktop_approval_html(),
             media_type="text/html",
             headers={"Cache-Control": "no-store"},
         )
