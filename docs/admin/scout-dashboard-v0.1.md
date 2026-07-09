@@ -136,6 +136,39 @@ Verification:
 - Dashboard page tests for agent iframe contract.
 - Browser smoke for visible frame behavior.
 
+### 2026-07-08 - Agent Tab Same-Origin Scout AI Chat
+
+User request:
+
+- Connect `http://127.0.0.1:9099/admin/dashboard?projectId=chilai_nanhua_day1_scoutAI#agent`
+  directly to Scout AI so the dashboard can be used as the conversation surface.
+
+Implementation steps:
+
+- Replaced the old `127.0.0.1:8765` Mac chat iframe with a native dashboard
+  chat panel.
+- The Agent tab now checks `/assistant/status` and sends questions to
+  `/assistant/query` on the same 9099 server.
+- The request uses `surface=pretrip` and preserves the dashboard
+  `projectId` as the Scout AI `project_id`.
+- Added provider/status chips, read-only boundary display, transcript rendering,
+  Enter-to-send, Shift+Enter newline, and clear-on-submit behavior.
+
+Boundary notes:
+
+- The dashboard does not call `/safety/*`, send outbound messages, or control
+  hardware.
+- `/assistant/query` must be mounted by launching the 9099 server with
+  `SCOUT_AI_ASSISTANT_ENABLED=1`.
+- If the assistant API is not mounted, the Agent tab shows a disconnected state
+  instead of silently falling back to another server.
+
+Verification:
+
+- Dashboard page tests for same-origin Assistant API wiring.
+- Manual smoke should use the 9099 dashboard URL and confirm one visible
+  assistant answer from `/assistant/query`.
+
 ### 2026-07-02 - Workspace Statistics, Cache, and Operations
 
 User request:
@@ -218,7 +251,231 @@ Boundary notes:
 Verification:
 
 - Dashboard debug contract tests.
-- Admin visual smoke for `/admin/debug`.
+
+### 2026-07-06 - Map Evidence Payload Timeout Fix
+
+User request:
+
+- Map evidence appeared to lose Segment and CP evidence while MCP still
+  appeared available.
+
+Implementation steps:
+
+- Verified direct `/admin/pretrip?projectId=chilai_nanhua_day1_scoutAI`
+  still rendered the map layer SVG groups for route, segments, checkpoints,
+  MCP, and boss points.
+- Verified the dashboard map iframe also retained visible SVG layer groups for
+  route, segments, checkpoints, MCP, and boss points.
+- Found the dashboard outer shell was aborting its own 35MB
+  `/admin/pretrip/projects/... ?compact=1` evidence payload after the generic
+  20 second fetch timeout, leaving the Map Evidence rail stuck at loading.
+- Added a dedicated 180 second timeout only for the pretrip project compact
+  payload while keeping ordinary dashboard/debug API requests at 20 seconds.
+- Kept existing Map Evidence group placement unchanged; `Segments` remains in
+  its prior dashboard tab unless an operator explicitly asks for a layout
+  change.
+
+Boundary notes:
+
+- This change only affects dashboard evidence loading.
+- It does not rebuild GIS data, mutate workspace files, trigger live safety
+  automation, or send outbound messages.
+- The canonical `/admin/pretrip` map rendering remains unchanged.
+
+Verification:
+
+- Browser inspection confirmed direct pretrip and dashboard iframe retained
+  `segments`, `checkpoints`, `mcp`, `boss-points`, and `route` layer groups.
+- Focused dashboard tests cover the dedicated pretrip evidence timeout and
+  preserve the existing `Segments` group placement.
+- Admin visual smoke returned `ok: true` for `/admin/debug`, `/admin`,
+  `/admin/pretrip`, and the dashboard map-only shell.
+
+### 2026-07-06 - Pace Fit Low-Information Blocks Removed
+
+User request:
+
+- Remove low-information Pace Fit content, including `Readiness & Pace Fit`,
+  `Decision`, `Confidence`, and `Next action`.
+
+Implementation steps:
+
+- Removed the Pace Fit page decision band.
+- Removed the `Readiness & Pace Fit` metric panel.
+- Changed the Pace Fit topbar and six-axis summary system label so
+  `Readiness & Pace Fit` no longer appears in the dashboard UI.
+- Kept the Pace Fit page focused on the `Challenge Fit` pace budget panel.
+- Removed the `CHANGE_PLAN` chip and `Data confidence` row from Pace Fit.
+
+Boundary notes:
+
+- This is a dashboard layout/content cleanup only.
+- No map data, GIS layers, workspace files, safety truth, live safety
+  automation, or outbound transport behavior changed.
+
+Verification:
+
+- Dashboard regression tests assert the removed Pace Fit blocks stay absent.
+
+### 2026-07-06 - Pace Fit Dashboard Information Added
+
+User request:
+
+- Add Pace Fit information using the professional dense dashboard style shown
+  in the provided reference image.
+
+Implementation steps:
+
+- Expanded Pace Fit into a three-column operator dashboard.
+- Added route/current CP/leave-by/team pace/boundary status cells.
+- Added Pace Controls, Current CP Status, Next Segment Risk, Risk Budget
+  Calculator, CP Timeline, Pace Output, Pace Evidence, Artifact Metadata,
+  Residual Risk, Pace Object Preview, and Synchronized Map sections.
+- Used compact visual tables, bars, status chips, checkpoint dots, and a small
+  route map instead of long explanatory prose.
+- Set Pace Fit to wide-frame mode so its built-in right-side Pace Evidence
+  drawer is not squeezed by the dashboard's generic evidence drawer.
+- Preserved the prior removal of low-information `Decision`, `Confidence`,
+  and `Next action` style header content.
+
+Boundary notes:
+
+- Pace Fit remains advisory/dry-run dashboard content.
+- The page does not mutate safety truth, publish outbound messages, or change
+  workspace files.
+
+Verification:
+
+- Dashboard regression tests assert the Pace Fit dashboard blocks and visual
+  classes exist while the removed low-information blocks remain absent.
+
+### 2026-07-06 - Pace Fit Emergency UI Subtree
+
+User request:
+
+- Integrate the Emergency UI from
+  `docs/specs/scout-runtime-multi-gate-safety-reducer.md` into the Pace Fit
+  subtree.
+
+Implementation steps:
+
+- Added a Pace Fit subtree under Exploring for Six Axis with `Pace Dashboard`
+  and `Emergency UI` child routes.
+- Added `outdoor-pace-fit-emergency` as a dashboard route.
+- Embedded the Emergency UI in a wide-frame Pace Fit emergency page through
+  the read-only dashboard route. The current embedded route is the
+  desktop-only `/admin/dashboard/emergency-approval-desktop-v0` variant.
+- Added local review boundary chips for `pending approval`, `sent=false`,
+  `no safety endpoint`, and `no outbound transport`.
+- Kept the mobile emergency approval surface as an independent static file and
+  provided an `Open standalone` link.
+
+Boundary notes:
+
+- This dashboard integration is local review only.
+- It does not call `/safety/*`, mutate Phase 1 runtime safety truth, invoke
+  SMS/LoRa/MQTT/satellite transport, or claim verified delivery.
+- Approval artifacts remain preview/dry-run unless a future production
+  transport and authenticated approval workflow are added.
+
+Verification:
+
+- Dashboard regression tests assert the Pace Fit emergency subtree, iframe
+  source, and boundary chips are present.
+
+### 2026-07-06 - Pace Fit Emergency Desktop-only Frame
+
+User request:
+
+- In the Pace Fit emergency page, keep only the right-side emergency approval
+  console and remove the left-side mobile version from the dashboard frame.
+
+Implementation steps:
+
+- Kept the standalone `docs/emergency/scout-emergency-mobile-approval-v0.html`
+  file unchanged so the independent mobile artifact remains available outside
+  the dashboard.
+- Added a dashboard-serving desktop-only variant at
+  `/admin/dashboard/emergency-approval-desktop-v0`.
+- Removed the mobile `<section>` from the dashboard route response before it is
+  embedded.
+- Updated the Pace Fit emergency iframe to use the desktop-only route and
+  added a `desktop only` boundary chip.
+- Kept `/admin/dashboard/emergency-mobile-approval-v0` as a compatibility
+  route, but it now returns the same desktop-only dashboard variant.
+
+Boundary notes:
+
+- This is a dashboard display change only.
+- No safety endpoint, Phase 1 safety truth, SMS/LoRa/MQTT/satellite transport,
+  or verified delivery behavior was added.
+
+Verification:
+
+- Dashboard regression tests assert the embedded route contains the desktop
+  emergency surface and omits the mobile surface.
+
+### 2026-07-06 - Pace Fit Emergency Header Cleanup
+
+User request:
+
+- Remove the low-value Pace Fit emergency header text from both the dashboard
+  frame and the embedded desktop console.
+
+Implementation steps:
+
+- Removed the dashboard frame title and explanatory sentence above the
+  emergency iframe.
+- Kept only the compact boundary chip toolbar for `desktop only`,
+  `pending approval`, `sent=false`, `no safety endpoint`, and
+  `no outbound transport`.
+- Removed the embedded desktop console header from the dashboard-served
+  desktop-only variant.
+- Moved `sent=false` into the Transport Readiness section so the boundary is
+  still visible without taking header space.
+
+Boundary notes:
+
+- Display cleanup only.
+- No safety endpoint, Phase 1 safety truth, outbound transport, or verified
+  delivery behavior changed.
+
+Verification:
+
+- Dashboard regression tests assert the removed header text is absent and the
+  desktop-only emergency surface still exposes `sent=false`.
+
+### 2026-07-06 - Dashboard Low-value Information Cleanup
+
+User request:
+
+- Clear invalid or low-value information from Scout Dashboard v0.1.
+
+Implementation steps:
+
+- Removed the global page subtitle from the top bar.
+- Removed repeated global status chips for `workable alpha`,
+  `artifact boundary`, and long safety-boundary prose from the top bar.
+- Removed the dashboard-wide decision band pattern and its unused CSS.
+- Removed low-value decision/status bands from Home, timeline, LBS, Workspace,
+  Import New Trip, Country Material Pool, Agent, Emergency, Observer,
+  Settings, and non-Pace outdoor six-axis pages.
+- Shortened admin surface labels and route summaries to direct operational
+  labels.
+- Shortened safety/outbound boundary copy to compact `closed` labels where the
+  boundary still matters.
+
+Boundary notes:
+
+- Dashboard display cleanup only.
+- No workspace mutation, map layer change, safety endpoint, Phase 1 safety
+  truth mutation, or outbound transport behavior changed.
+
+Verification:
+
+- Dashboard regression tests assert removed low-value text and decision band
+  structures stay absent while functional controls, frames, and boundary
+  markers remain.
 
 ### 2026-07-02 - Import New Trip Tab Added
 
@@ -1355,3 +1612,322 @@ Boundary notes:
   and `last_known_position`.
 - `send_sos`, `trigger_l4`, and `change_safety_level` stay blocked until a
   separate Safety Arbiter / operator confirmation design exists.
+
+### 2026-07-09 - Pace Fit Body Index Dashboard
+
+User request:
+
+- Add a `Body Index Dashboard` under the Pace Fit subtree.
+- Design the dashboard UI to show the Scout Pace Coefficient indicators listed
+  in `specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD` section 7.2.
+
+Implementation steps:
+
+- Added `Body Index` as a Pace Fit child route:
+  `outdoor-pace-fit-body-index`.
+- Added a wide-frame Body Index dashboard surface with a compact coefficient
+  summary, three reserve/trust tiles, nine metric cards, route impact mapping,
+  and a traceable evidence matrix.
+- Mapped the nine section 7.2 indicators into dedicated UI cards:
+  flat ground speed, ascent speed, descent speed, technical terrain slowdown,
+  rest frequency, late-trip decay, load impact, weather impact, and experience
+  confidence.
+- Kept the visual style aligned with the engineering dashboard direction:
+  dense dark panels, meters, coefficient chips, source tags, and minimal prose.
+- Added dashboard contract tests so the route, metric ids, spec labels, CSS
+  hooks, and safety boundary language remain visible in the static shell.
+
+Boundary notes:
+
+- Body Index is planning evidence only.
+- It is not a diagnosis, medical inference, or runtime safety authority.
+- Provider values remain `source_provider` evidence and do not become Scout
+  safety truth.
+- The page does not call `/safety/*`, mutate Phase 1 L0-L4 state, send
+  outbound transport, control hardware, or trigger live safety automation.
+
+Verification:
+
+- PASS: focused dashboard tests:
+  `tests/test_scout_dashboard_page.py` and
+  `tests/test_scout_emergency_mobile_approval_ui.py`.
+- PASS: `pnpm lint`, `pnpm typecheck`, and `pnpm test`.
+- PASS: Playwright visual smoke on the 9099 dashboard route for desktop and
+  mobile widths; nine Body Index metric cards were visible, no horizontal
+  overflow was detected, and no safety or outbound requests were observed.
+
+### 2026-07-09 - HealthExport Body Index UX Implemented
+
+User request:
+
+- Turn the Body Index UX template into an actual dashboard UI.
+- Use the local `~/downloads/HealthExport` export inventory to show additional
+  Body Index context without exposing raw personal health records.
+
+Implementation steps:
+
+- Added a `Body Index Overview` section to the Pace Fit Body Index route.
+- Added aggregate HealthExport coverage cards for export count, parsed walking
+  sessions, GPX tracks, 15-minute windows, and provider metric families.
+- Added `Health Baseline Signals` cards for VO2max baseline, resting HR, HRV,
+  walking HR average, active energy reset cue, recovery debt windows, HR
+  pressure windows, and step/distance pattern.
+- Added a `Window Pressure Timeline` panel that summarizes available sanitized
+  15-minute window coverage by export period.
+- Added a collapsed `Health Provider Metrics` drawer for provider metric names
+  such as `vo2_max`, `blood_oxygen_saturation`,
+  `heart_rate_variability`, `resting_heart_rate`,
+  `walking_heart_rate_average`, `active_energy`, and
+  `walking_running_distance`.
+- Extended dashboard contract tests to lock the HealthExport-aware UI
+  structure, metric labels, drawer behavior, and boundary copy.
+
+Boundary notes:
+
+- The UI uses aggregate availability and translated planning signals only.
+- It does not embed raw HealthExport rows, GPX coordinates, raw heart-rate
+  samples, exact timestamps, home/work traces, or private health payloads.
+- Provider values remain `source_provider only`; they are not medical
+  diagnosis, route approval, Scout safety truth, Phase 1 mutation, live safety
+  automation, hardware control, or outbound transport.
+
+Verification:
+
+- PASS: focused dashboard tests:
+  `tests/test_scout_dashboard_page.py` and
+  `tests/test_scout_emergency_mobile_approval_ui.py`.
+- PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check`.
+- PASS: Playwright visual smoke on the 9099 Body Index route for desktop and
+  mobile widths; HealthExport overview, eight health baseline signal cards,
+  the 15-minute window pressure timeline, and collapsed provider metrics drawer
+  rendered without horizontal overflow, console errors, safety requests, or
+  outbound requests.
+
+### 2026-07-09 - Body Index HealthExport Import Merge Button
+
+User request:
+
+- Add an import button that can import new local HealthExport data, deduplicate
+  it, merge it into the existing Body Index metrics, and update the Body Index
+  dashboard values.
+
+Implementation steps:
+
+- Added dashboard Body Index API endpoints:
+  `/admin/dashboard/body-index` for reading the current sanitized snapshot and
+  `/admin/dashboard/body-index/import` for operator-triggered import.
+- Reused the deterministic `build_health_auto_export_physio_analysis`
+  pipeline to parse local HealthExport zip files.
+- Added a dashboard-local Body Index snapshot store under
+  `outputs/dashboard/body_index/`, keyed by project id.
+- Deduplicated imported sources by source zip SHA-256, not filename, so copied
+  or renamed identical exports are skipped.
+- Stored only sanitized source counters and metric names: source id, SHA-256,
+  dashboard source label, GPX count, walking session count, analysis window
+  count, pressure window counts, aggregate distance/duration, and provider
+  metric names.
+- Added an `Import HealthExport` action to the Body Index overview header.
+  The button posts `confirm_import: true`, waits with a longer import timeout,
+  then refreshes `state.bodyIndexData` from the returned snapshot without a
+  page reload.
+- Converted Body Index summary, coverage cards, health signals, pressure
+  timeline, and provider metrics drawer from static values to snapshot-backed
+  values with the previous design values as fallback.
+- Added tests for the import API, duplicate detection, coverage updates, and
+  raw payload redaction.
+
+Boundary notes:
+
+- Import is operator-triggered only.
+- The dashboard does not call a safety endpoint, mutate Phase 1 safety truth,
+  trigger live safety automation, control hardware, or send outbound transport.
+- API output excludes raw HealthExport rows, GPX XML, coordinates, raw
+  heart-rate sample arrays, and exact source timestamps.
+
+Verification:
+
+- PASS: focused dashboard/API tests:
+  `tests/test_scout_dashboard_page.py` and
+  `tests/test_scout_emergency_mobile_approval_ui.py`.
+- PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check`.
+- PASS: browser smoke on
+  `http://127.0.0.1:9099/admin/dashboard?projectId=chilai_nanhua_day1_scoutAI#outdoor-pace-fit-body-index`.
+  The first operator-triggered import processed 3 local HealthExport zip
+  sources, merged 3 new sources, skipped 0 duplicates, and reported 0 errors.
+- PASS: duplicate verification. Re-running the import against the same
+  directory merged 0 new sources, skipped 3 duplicates, and kept 3 processed
+  sources in the Body Index snapshot.
+- PASS: privacy boundary check. The API response, page text, and persisted
+  sanitized snapshot did not contain `heartRateData`, GPX XML, coordinates,
+  or exact source timestamps.
+- Evidence screenshot:
+  `/tmp/scout-dashboard-body-index-import-desktop.png`.
+- Duplicate-pass screenshot:
+  `/tmp/scout-dashboard-body-index-import-deduped-desktop.png`.
+
+### 2026-07-09 - Body Index Health Baseline Signal Values
+
+User request:
+
+- Health Baseline Signals should not only say `available`; VO2max Baseline,
+  Resting HR, HRV Baseline, Walking HR Average, and related cards need
+  numeric values.
+
+Implementation steps:
+
+- Extended the Body Index source snapshot with sanitized provider metric
+  summaries: `metric_name`, `sample_count`, `min_value`, `median_value`, and
+  `max_value`.
+- Kept the provider summaries as source-provider aggregates only. No raw
+  HealthExport rows, exact timestamps, coordinates, or GPX XML are embedded.
+- Added top-level `provider_metric_summaries` to the Body Index API response.
+- Updated Health Baseline Signals from four columns to five columns:
+  label, state, value, detail, and affected pace coefficient dimension.
+- Added numeric signal values such as `median ... / n=...` for VO2max,
+  resting HR, HRV, walking HR average, active energy, step count, and walking
+  distance.
+- Added explicit window counts for Recovery Debt Windows and HR Pressure
+  Windows.
+- Updated the dashboard signal cards so the numeric value is the primary
+  display and the status is a smaller engineering chip.
+- Added backward-compatible rendering for older four-column signal snapshots.
+
+Boundary notes:
+
+- Values are advisory planning evidence only.
+- Values remain `source_provider only`; they are not diagnosis, route approval,
+  Scout safety truth, Phase 1 mutation, live safety automation, hardware
+  control, or outbound transport.
+
+Verification:
+
+- PASS: focused dashboard/API tests:
+  `tests/test_scout_dashboard_page.py` and
+  `tests/test_scout_emergency_mobile_approval_ui.py`.
+- PASS: regenerated the local sanitized Body Index snapshot from the 3
+  deduped HealthExport sources. The import merged 0 new sources, skipped 3
+  duplicates, and added provider metric summaries for 10 metric families.
+- PASS: browser smoke on the 9099 Body Index route. Health Baseline Signals
+  rendered numeric values including VO2max median, resting HR median, HRV
+  median, walking HR average median, active energy median, HR pressure windows,
+  recovery debt windows, and step/distance medians.
+- PASS: privacy boundary check. The API response, page text, and persisted
+  sanitized snapshot did not contain raw HealthExport rows, GPX XML,
+  coordinates, original HealthExport zip names, or exact source timestamps.
+- PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check`.
+- Evidence screenshot:
+  `/tmp/scout-dashboard-body-index-values-desktop.png`.
+
+### 2026-07-09 - Body Index Baseline Trend Arrows
+
+User request:
+
+- Add trend arrows to each Health Baseline Signal card so the card shows how
+  the baseline value relates to the average/baseline range and the minimum and
+  maximum points.
+
+Implementation steps:
+
+- Added a sixth Health Baseline Signal field containing trend metadata.
+- Added sanitized `mean_value` to provider metric summaries so the trend axis
+  can show minimum, average, and maximum values without embedding raw samples.
+- For provider metric cards, calculated the baseline marker position from the
+  sanitized provider metric range: `(median - min) / (max - min)`.
+- Classified the marker as `low`, `mid`, or `high`, then rendered the matching
+  trend arrow on the card.
+- For HR Pressure Windows and Recovery Debt Windows, calculated the trend
+  marker from `window_count / total_sanitized_windows`.
+- Added a compact min-average-max axis to each signal card. The arrow marker
+  represents the baseline median position relative to that range.
+- Kept backward-compatible rendering for older Body Index snapshots that do
+  not yet include trend metadata.
+- Extended dashboard contract tests to cover the trend metadata and UI hooks.
+
+Boundary notes:
+
+- Trend arrows are source-provider planning evidence only.
+- The calculation uses sanitized aggregate min, median, max, and window counts.
+- No raw HealthExport rows, raw GPX, coordinates, exact timestamps, safety
+  mutation, live safety automation, hardware control, or outbound transport are
+  introduced.
+
+Verification:
+
+- PASS: focused dashboard/API tests:
+  `tests/test_scout_dashboard_page.py` and
+  `tests/test_scout_emergency_mobile_approval_ui.py`.
+- PASS: regenerated the local sanitized Body Index snapshot from the 3
+  deduped HealthExport sources. The import merged 0 new sources, skipped 3
+  duplicates, and added trend metadata to all 8 Health Baseline Signal cards.
+- PASS: browser smoke on the 9099 Body Index route. The page rendered 8 trend
+  axes and arrow markers across VO2max, resting HR, HRV, walking HR average,
+  active energy, recovery debt windows, HR pressure windows, and step/distance
+  pattern cards. Provider metric cards displayed min-average-max axis labels;
+  the arrow marker represented the baseline median position.
+- PASS: privacy boundary check. The API response, page text, and persisted
+  sanitized snapshot did not contain raw HealthExport rows, GPX XML,
+  coordinates, original HealthExport zip names, or exact source timestamps.
+- PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check`.
+- Evidence screenshot:
+  `/tmp/scout-dashboard-body-index-trends-avg-desktop.png`.
+
+### 2026-07-09 - Body Index Directory Watch Import
+
+User request:
+
+- Add a directory monitoring mechanism that scans the HealthExport directory
+  on a fixed interval, automatically imports new files into the Body Index
+  pool, and recalculates the baseline.
+
+Implementation steps:
+
+- Added operator-triggered Body Index watch APIs:
+  `/admin/dashboard/body-index/watch/status`,
+  `/admin/dashboard/body-index/watch/start`, and
+  `/admin/dashboard/body-index/watch/stop`.
+- Required `confirm_watch: true` to start a watcher because this is background
+  monitoring of a private local health export directory.
+- Implemented a per-project daemon watcher that scans the configured
+  HealthExport directory at `interval_seconds`.
+- The watcher compares current zip SHA-256 values against the persisted Body
+  Index source pool. When a new zip SHA appears, it calls the existing
+  sanitized Body Index import pipeline and recalculates the baseline snapshot.
+- The watcher status records running state, interval, scan count, import
+  count, last scan time, last import time, zip count, new candidate count,
+  last sanitized import result, and last sanitized error.
+- Added dashboard controls to the Body Index overview header:
+  interval input, `Start Watch`, `Stop`, and a watch status chip.
+- Added automatic dashboard refresh while the watcher is running so imported
+  values and baseline cards update without a full page reload.
+- Added regression tests that start the watcher, add a new HealthExport zip,
+  wait for automatic import, verify the Body Index pool updates, and stop the
+  watcher.
+
+Boundary notes:
+
+- The watcher is off by default and starts only after explicit operator action.
+- It remains local to the admin server process and does not survive process
+  restart unless the operator starts it again.
+- The watcher reuses the same sanitized import path: no raw HealthExport rows,
+  raw GPX XML, coordinates, original HealthExport zip names, exact timestamps,
+  safety mutation, live safety automation, hardware control, or outbound
+  transport are introduced.
+
+Verification:
+
+- PASS: focused dashboard/API tests:
+  `tests/test_scout_dashboard_page.py`,
+  `tests/test_scout_emergency_mobile_approval_ui.py`, and
+  `tests/test_scout_runtime_physiologic_pipeline.py`.
+- PASS: watcher regression test started a project-scoped watcher, added a new
+  HealthExport zip, waited for automatic import into the Body Index pool,
+  verified recalculated coverage, and stopped the watcher.
+- PASS: browser smoke on the 9099 Body Index route. The `Start Watch`,
+  `Stop`, interval input, and watch status chip rendered; watcher status API
+  returned stopped by default.
+- PASS: no safety, SMS/outbound, raw HealthExport, GPX XML, coordinate, zip
+  filename, or exact timestamp leakage was observed in the tested watch/import
+  outputs.
+- PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check`.
+- Evidence screenshot:
+  `/tmp/scout-dashboard-body-index-watch-controls-desktop.png`.
