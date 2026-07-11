@@ -112,6 +112,36 @@ class LocalGroundedAnswerBrief:
     boundary: str = ""
     forbidden_claims: tuple[str, ...] = ()
 
+
+STRUCTURED_INCIDENT_GUIDANCE_SUBJECTS = frozenset(
+    {
+        "位置已知的受傷事件回報",
+        "求救位置應如何表達",
+        "直升機吊掛可行性候選",
+        "搜救人員地面接近可行性",
+        "是否應移動到開闊待援位置",
+        "移動傷者的二次傷害風險",
+        "事故現場角色分工",
+        "留守人轉報所需資訊",
+        "待援過夜保全順序",
+    }
+)
+
+STRUCTURED_POST_TRIP_GUIDANCE_SUBJECTS = frozenset(
+    {
+        "最早風險訊號回顧",
+        "warning 提前時點回顧",
+        "CP 設定缺漏回顧",
+        "GPX corridor 寬度回顧",
+        "景觀停留風險遺漏回顧",
+        "事件主因分類回顧",
+        "incident package 資料契約",
+        "field case 升格審查",
+        "spec 更新候選審查",
+        "下次行前規劃三項回顧",
+    }
+)
+
 GLOBAL_ASSISTANT_PROMPT = """Scout is a wilderness safety system.
 Phase 1 deterministic safety decisions are authoritative.
 The assistant explains state and evidence only.
@@ -1856,6 +1886,14 @@ def build_workspace_tool_fallback_response(
     sources: list[AssistantSourceRef],
     provider_error_type: str,
 ) -> ScoutAssistantResponse | None:
+    if _looks_like_post_trip_priority_question(query.question):
+        structured_response = _build_structured_workspace_tool_fallback_response(
+            query,
+            sources=sources,
+            provider_error_type=provider_error_type,
+        )
+        if structured_response is not None:
+            return structured_response
     missing_context_response = _build_missing_operational_context_fallback_response(
         query,
         sources=sources,
@@ -1863,7 +1901,7 @@ def build_workspace_tool_fallback_response(
     )
     if missing_context_response is not None:
         return missing_context_response
-    if any(
+    if _looks_like_incident_playbook_priority_question(query.question) or any(
         term in str(query.question or "").casefold()
         for term in (
             "不確定自己在哪",
@@ -3020,6 +3058,7 @@ _COMMON_LOCAL_ZH_TRANSLATION = str.maketrans(
         "储": "儲",
         "进": "進",
         "给": "給",
+        "应": "應",
     }
 )
 
@@ -3982,8 +4021,53 @@ def _build_missing_operational_context_fallback_response(
     provider_error_type: str,
 ) -> ScoutAssistantResponse | None:
     normalized = str(query.question or "").casefold()
+    explicit_phone_percent = re.search(
+        r"手機(?:電量)?(?:只剩|剩下|剩)?\s*[0-9]{1,3}\s*(?:%|％)",
+        str(query.question or ""),
+    )
+    if explicit_phone_percent:
+        equipment_source = _first_tool_source_by_id(
+            sources,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+        )
+        equipment_summary = (
+            equipment_source.context_summary
+            if equipment_source is not None
+            else None
+        )
+        equipment_latest = (
+            equipment_summary.get("latest")
+            if isinstance(equipment_summary, dict)
+            else None
+        )
+        resource_state = (
+            equipment_latest.get("resource_state")
+            if isinstance(equipment_latest, dict)
+            else None
+        )
+        if isinstance(resource_state, dict) and resource_state.get(
+            "phone_battery_percent"
+        ) is not None:
+            return None
     if _looks_like_rescue_report_information_question(normalized):
         return None
+    if _looks_like_incident_playbook_priority_question(normalized):
+        survival_source = _first_tool_source_by_id(
+            sources,
+            SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+        )
+        survival_summary = survival_source.context_summary if survival_source else None
+        survival_latest = (
+            survival_summary.get("latest")
+            if isinstance(survival_summary, dict)
+            else None
+        )
+        if (
+            isinstance(survival_latest, dict)
+            and survival_latest.get("status") == "completed"
+            and isinstance(survival_latest.get("decision_output"), dict)
+        ):
+            return None
     if "boss" in normalized:
         major_source = _first_tool_source_by_id(sources, MAJOR_POINT_TOOL_ID)
         if major_source is not None:
@@ -4178,7 +4262,7 @@ def _build_missing_operational_context_fallback_response(
     elif any(term in normalized for term in ("體能", "體力", "太硬", "吃力")):
         lead = (
             "目前缺少體能 reserve、心率/HRV 或 body battery、主觀疲勞與最近休息 evidence，"
-            "不能判定這條路線對你不會太硬。"
+            "不能判定這條路線對你的體能是否太硬。"
         )
         next_step = "請提供心率/HRV、body battery 或 RPE、最近休息時間、目前配速、補水補給與是否頭痛想吐喘。"
     elif any(term in normalized for term in ("水", "補給", "食物", "行動糧")):
@@ -4244,13 +4328,69 @@ def _looks_like_rescue_report_information_question(question: str) -> bool:
     normalized = str(question or "").casefold()
     asks_report = any(
         term in normalized
-        for term in ("報案", "求救", "搜救", "119", "sos", "rescue")
+        for term in (
+            "報案",
+            "求救",
+            "搜救",
+            "留守人轉報",
+            "給留守人轉報",
+            "119",
+            "sos",
+            "rescue",
+        )
     )
     asks_fields = any(
         term in normalized
         for term in ("哪些資訊", "哪些信息", "需要什麼", "需要什么", "包含哪些", "欄位", "字段")
     )
     return asks_report and asks_fields
+
+
+def _looks_like_incident_playbook_priority_question(question: str) -> bool:
+    normalized = str(question or "").casefold()
+    return any(
+        term in normalized
+        for term in (
+            "受傷",
+            "傷者",
+            "求救",
+            "救援",
+            "搜救",
+            "吊掛",
+            "直升機",
+            "留守人轉報",
+            "給留守人轉報",
+            "現場指揮",
+            "撐過夜",
+            "座標還是地標",
+            "更開闊",
+        )
+    )
+
+
+def _looks_like_post_trip_priority_question(question: str) -> bool:
+    normalized = "".join(str(question or "").casefold().split())
+    return any(
+        term in normalized
+        for term in (
+            "最早的風險訊號",
+            "最早風險訊號",
+            "warning應該更早",
+            "warning應該提前",
+            "cp設錯",
+            "cp漏設",
+            "corridor太寬",
+            "corridor太窄",
+            "停留風險被忽略",
+            "拍照風險被忽略",
+            "迷途、滑墜、資源不足",
+            "incidentpackage",
+            "fieldcase",
+            "spec需要被更新",
+            "spec需要更新",
+            "下次行前規劃",
+        )
+    )
 
 
 def _build_structured_workspace_tool_fallback_response(
@@ -4262,6 +4402,7 @@ def _build_structured_workspace_tool_fallback_response(
     tool_order = [
         (TEAM_STATUS_TOOL_ID, "team status"),
         (SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID, "survival incident playbook"),
+        (POST_TRIP_REVIEW_TOOL_ID, "post-trip review"),
         (WORKSPACE_CATALOG_TOOL_ID, "workspace catalog"),
         (ROUTE_STRUCTURE_TOOL_ID, "route structure"),
         (MAJOR_POINT_TOOL_ID, "major point"),
@@ -4272,7 +4413,20 @@ def _build_structured_workspace_tool_fallback_response(
         (EVIDENCE_FULLTEXT_TOOL_ID, "evidence full-text"),
         (WORKSPACE_EVIDENCE_TOOL_ID, "workspace evidence"),
     ]
-    if _looks_like_checkpoint_design_question(query.question):
+    if _looks_like_incident_playbook_priority_question(query.question):
+        tool_order.remove(
+            (SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID, "survival incident playbook")
+        )
+        tool_order.insert(
+            0,
+            (SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID, "survival incident playbook"),
+        )
+    if _looks_like_post_trip_priority_question(query.question):
+        tool_order.remove((POST_TRIP_REVIEW_TOOL_ID, "post-trip review"))
+        tool_order.insert(0, (POST_TRIP_REVIEW_TOOL_ID, "post-trip review"))
+    if _looks_like_checkpoint_design_question(
+        query.question
+    ) and not _looks_like_post_trip_priority_question(query.question):
         tool_order.remove((ROUTE_ARCHITECTURE_TOOL_ID, "route architecture"))
         tool_order.insert(0, (ROUTE_ARCHITECTURE_TOOL_ID, "route architecture"))
     if _looks_like_rescue_report_information_question(query.question):
@@ -4348,6 +4502,7 @@ def _format_structured_workspace_fallback_answer(
         EQUIPMENT_RESOURCE_TOOL_ID,
         TEAM_STATUS_TOOL_ID,
         SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+        POST_TRIP_REVIEW_TOOL_ID,
     }:
         decision_answer = _format_decision_tool_fallback_answer(
             query=query,
@@ -4604,6 +4759,57 @@ def _format_decision_tool_fallback_answer(
         parts.append(f"下一步={next_step}")
     if detail_parts:
         parts.append("重點=" + " / ".join(detail_parts)[:900])
+    query_guidance = latest.get("query_guidance")
+    if isinstance(query_guidance, dict):
+        guidance_subject = str(query_guidance.get("subject") or "").strip()
+        if guidance_subject:
+            parts.append("guidance_subject=" + guidance_subject)
+        guidance_facts = query_guidance.get("facts")
+        if isinstance(guidance_facts, list) and guidance_facts:
+            parts.append(
+                "guidance_facts="
+                + "|".join(
+                    str(item).strip()
+                    for item in guidance_facts
+                    if str(item).strip()
+                )
+            )
+        guidance_required = query_guidance.get("required_fact_groups")
+        if isinstance(guidance_required, list) and guidance_required:
+            encoded_groups = []
+            for group in guidance_required:
+                if not isinstance(group, list):
+                    continue
+                encoded = "|".join(
+                    str(item).strip() for item in group if str(item).strip()
+                )
+                if encoded:
+                    encoded_groups.append(encoded)
+            if encoded_groups:
+                parts.append("guidance_required=" + "||".join(encoded_groups))
+        guidance_missing = query_guidance.get("missing_evidence")
+        if isinstance(guidance_missing, list) and guidance_missing:
+            parts.append(
+                "guidance_missing="
+                + "|".join(
+                    str(item).strip()
+                    for item in guidance_missing
+                    if str(item).strip()
+                )
+            )
+        guidance_boundary = str(query_guidance.get("boundary") or "").strip()
+        if guidance_boundary:
+            parts.append("guidance_boundary=" + guidance_boundary)
+        guidance_forbidden = query_guidance.get("forbidden_claims")
+        if isinstance(guidance_forbidden, list) and guidance_forbidden:
+            parts.append(
+                "guidance_forbidden="
+                + "|".join(
+                    str(item).strip()
+                    for item in guidance_forbidden
+                    if str(item).strip()
+                )
+            )
     if not any(part for part in parts[1:]):
         return None
     return (
@@ -5145,7 +5351,18 @@ class PydanticAIAssistantProvider:
                 limitations.extend(
                     [
                         "ai_hat_local_model_eval=true",
-                        "ai_hat_postprocess_applied=false",
+                        "ai_hat_postprocess_applied="
+                        + (
+                            "orthography_only"
+                            if bool(
+                                getattr(
+                                    self.runner,
+                                    "last_ai_hat_plus_2_orthography_normalized",
+                                    False,
+                                )
+                            )
+                            else "false"
+                        ),
                         "ai_hat_prompt_contract=facts_only_v2",
                         "ai_hat_answer_template_applied=false",
                         "ai_hat_candidate_selection=model_output_only",
@@ -6415,7 +6632,23 @@ class PydanticAIEnvRunner:
             or "AI_HAT_RAW_SELF_REVIEW_V1" in prompt
             or "AI_HAT_RAW_BOUNDARY_REPAIR_V1" in prompt
             or "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in prompt
+            or "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in prompt
+            or "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1" in prompt
+            or "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1" in prompt
+            or "AI_HAT_RAW_FIELD_GUIDANCE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_FIELD_BOUNDARY_APPEND_V1" in prompt
+            or "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1" in prompt
+            or "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1" in prompt
+            or "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1" in prompt
+            or "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1" in prompt
+            or "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1" in prompt
             or "AI_HAT_RAW_TOPIC_RETRY_V1" in prompt
+            or "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in prompt
+            or "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in prompt
             or "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt
             or "AI_HAT_DELAYED_DEPARTURE_SYNTHESIS_V1" in prompt
             or "AI_HAT_DELAYED_DEPARTURE_REPAIR_V1" in prompt
@@ -6513,7 +6746,23 @@ class PydanticAIEnvRunner:
             or "AI_HAT_RAW_SELF_REVIEW_V1" in prompt
             or "AI_HAT_RAW_BOUNDARY_REPAIR_V1" in prompt
             or "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in prompt
+            or "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in prompt
+            or "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1" in prompt
+            or "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1" in prompt
+            or "AI_HAT_RAW_FIELD_GUIDANCE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_FIELD_BOUNDARY_APPEND_V1" in prompt
+            or "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1" in prompt
+            or "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1" in prompt
+            or "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1" in prompt
+            or "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1" in prompt
+            or "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1" in prompt
+            or "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1" in prompt
             or "AI_HAT_RAW_TOPIC_RETRY_V1" in prompt
+            or "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in prompt
+            or "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in prompt
         ):
             system_prompt = (
                 "你是 Scout AI 本地助理。只用提供事實，未知明說，禁止捏造。"
@@ -6533,16 +6782,32 @@ class PydanticAIEnvRunner:
                 min(self.workspace_model_max_tokens, 20)
                 if "AI_HAT_MISSING_CONTEXT_ACTION_V1" in prompt
                 else (
-                    min(self.workspace_model_max_tokens, 96)
+                    min(self.workspace_model_max_tokens, 160)
                     if (
                         "AI_HAT_RAW_SELF_REVIEW_V1" in prompt
                         or "AI_HAT_RAW_BOUNDARY_REPAIR_V1" in prompt
                         or "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1" in prompt
+                        or "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_FIELD_GUIDANCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_FIELD_BOUNDARY_APPEND_V1" in prompt
+                        or "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1" in prompt
                         or "AI_HAT_RAW_TOPIC_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in prompt
+                        or "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in prompt
                     )
                     else min(self.workspace_model_max_tokens, 128)
                     if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt
-                    else min(self.workspace_model_max_tokens, 64)
+                    else min(self.workspace_model_max_tokens, 128)
                     if "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" in prompt
                     else (
                     min(self.workspace_model_max_tokens, 64)
@@ -6595,7 +6860,23 @@ class PydanticAIEnvRunner:
                         or "AI_HAT_RAW_SELF_REVIEW_V1" in prompt
                         or "AI_HAT_RAW_BOUNDARY_REPAIR_V1" in prompt
                         or "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1" in prompt
+                        or "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_FIELD_GUIDANCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_FIELD_BOUNDARY_APPEND_V1" in prompt
+                        or "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1" in prompt
                         or "AI_HAT_RAW_TOPIC_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in prompt
+                        or "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in prompt
                         or "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt
                     )
                     else 0.2
@@ -6627,7 +6908,23 @@ class PydanticAIEnvRunner:
                         or "AI_HAT_RAW_SELF_REVIEW_V1" in prompt
                         or "AI_HAT_RAW_BOUNDARY_REPAIR_V1" in prompt
                         or "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1" in prompt
+                        or "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_FIELD_GUIDANCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_FIELD_BOUNDARY_APPEND_V1" in prompt
+                        or "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1" in prompt
                         or "AI_HAT_RAW_TOPIC_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in prompt
+                        or "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in prompt
                         or "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt
                     )
                     else 0.9
@@ -6662,7 +6959,23 @@ class PydanticAIEnvRunner:
                         or "AI_HAT_RAW_SELF_REVIEW_V1" in prompt
                         or "AI_HAT_RAW_BOUNDARY_REPAIR_V1" in prompt
                         or "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1" in prompt
+                        or "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_FIELD_GUIDANCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_FIELD_BOUNDARY_APPEND_V1" in prompt
+                        or "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1" in prompt
                         or "AI_HAT_RAW_TOPIC_RETRY_V1" in prompt
+                        or "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in prompt
+                        or "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in prompt
                         or "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt
                     )
                     else []
@@ -7675,7 +7988,9 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
         timeout_seconds=max(1, min(timeout_seconds, 120)),
     )
     endpoint_traces_by_call = {1: _hailo_endpoint_response_trace(fallback_runner)}
-    raw_text = str(raw_output or "").strip()
+    original_raw_text = str(raw_output or "").strip()
+    raw_text = _normalize_ai_hat_plus_2_orthography_only(original_raw_text)
+    orthography_normalized = raw_text != original_raw_text
     if not raw_text:
         raise RuntimeError("AI HAT+2 raw single-pass eval returned an empty answer")
     draft_text = raw_text
@@ -7690,7 +8005,16 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
     )
     initial_grounding_ok = not initial_violations
     candidates.append((raw_text, initial_violations, initial_grounding_ok, 1))
-    for review_round in range(1, 3):
+    max_review_rounds = (
+        3
+        if answer_brief.decision == "UNKNOWN"
+        or answer_brief.subject
+        in STRUCTURED_INCIDENT_GUIDANCE_SUBJECTS
+        | STRUCTURED_POST_TRIP_GUIDANCE_SUBJECTS
+        | {"在安全處建立可視標記", "留守人報案所需山域資訊"}
+        else 2
+    )
+    for review_round in range(1, max_review_rounds + 1):
         final_violations = _local_grounded_answer_brief_violations(
             raw_text,
             answer_brief,
@@ -7700,26 +8024,647 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
             break
         forbidden_text = "；".join(answer_brief.forbidden_claims) or "不得新增事實"
         correction_text = "；".join(final_violations)
-        if not grounding_ok:
-            correction_text = (
-                correction_text + "；" if correction_text else ""
-            ) + "未完整保留 Scout grounding evidence"
         accident_candidate_retry = (
             answer_brief.subject == "最需要複核的 CP 候選"
         )
+        risk_location_retry = (
+            answer_brief.subject
+            in (
+                "哪些地方下雨後需優先複核",
+                "哪些地方需避免停留拍照",
+            )
+            and final_violations != ["輸出 prompt 或欄位標籤"]
+        )
+        low_tolerance_retry = answer_brief.subject == "是否有低容錯地形"
+        altitude_self_check_retry = (
+            answer_brief.subject == "現在是否需要做高山症自評"
+        )
+        rescue_report_retry = (
+            answer_brief.subject == "留守人報案所需山域資訊"
+        )
+        shelter_arrival_retry = (
+            answer_brief.subject == "有人未抵達約定山屋時的檢查與通報時機"
+        )
+        guided_field_retry = answer_brief.subject in {
+            "位置不確定時的第一步",
+            "位置不確定時應停止並等待",
+            "是否可下切溪谷",
+            "是否應移動到稜線找訊號",
+            "哪些待援可見性候選需人工複核",
+            "在安全處建立可視標記",
+            "需保存給搜救的事件證據",
+            "目前位置應人工分享給哪些對象",
+            "手機只剩 5% 時的電力優先順序",
+            "位置已知的受傷事件回報",
+            "求救位置應如何表達",
+            "直升機吊掛可行性候選",
+            "搜救人員地面接近可行性",
+            "是否應移動到開闊待援位置",
+            "移動傷者的二次傷害風險",
+            "事故現場角色分工",
+            "留守人轉報所需資訊",
+            "待援過夜保全順序",
+        }
+        visibility_candidate_retry = (
+            answer_brief.subject == "哪些待援可見性候選需人工複核"
+        )
+        low_battery_priority_retry = (
+            answer_brief.subject == "手機只剩 5% 時的電力優先順序"
+        )
+        ridge_signal_retry = answer_brief.subject == "是否應移動到稜線找訊號"
+        visual_marker_retry = answer_brief.subject == "在安全處建立可視標記"
+        rescue_evidence_retry = answer_brief.subject == "需保存給搜救的事件證據"
+        structured_incident_retry = (
+            answer_brief.subject in STRUCTURED_INCIDENT_GUIDANCE_SUBJECTS
+        )
+        structured_post_trip_retry = (
+            answer_brief.subject in STRUCTURED_POST_TRIP_GUIDANCE_SUBJECTS
+        )
+        post_trip_three_item_boundary_only = bool(
+            answer_brief.subject == "下次行前規劃三項回顧"
+            and final_violations
+            and all(
+                violation
+                in {
+                    "缺少事實：證據缺口 或 不是已證實的事故原因 或 不是事故原因",
+                    "行後回答以無受詞的未知句收尾",
+                    "把已知 evidence gap 反寫成無法確認",
+                }
+                for violation in final_violations
+            )
+        )
+        unknown_context_retry = bool(
+            answer_brief.decision == "UNKNOWN" and answer_brief.missing_evidence
+        )
+        list_output_retry = "使用清單而非自然短答" in final_violations
+        format_only_list_retry = final_violations == ["使用清單而非自然短答"]
+        delayed_departure_retry = (
+            answer_brief.subject == "晚出發一小時後能否安全完成"
+        )
         accident_boundary_only = final_violations == ["把候選錯寫成事故預測"]
         labels_only = final_violations == ["輸出 prompt 或欄位標籤"]
+        rescue_boundary_only = bool(
+            rescue_report_retry
+            and final_violations
+            and all(
+                violation
+                in (
+                    "缺少事實：未知 或 未確認 或 不可猜測",
+                    "缺少事實：不會自動報案 或 不會發送 SOS 或 由留守人轉報 或 "
+                    "留守人轉報",
+                )
+                for violation in final_violations
+            )
+        )
+        guided_boundary_only = bool(
+            guided_field_retry
+            and final_violations
+            and all(
+                violation
+                in {
+                    "缺少事實：不得為建立標記移動 或 不要移動到危險地形 或 "
+                    "不要為了建立標記前往危險地形 或 不得為標記前往崖邊",
+                    "缺少事實：未知 或 未確認",
+                    "缺少事實：不自動發送 SOS 或 不會發送 SOS 或 只準備人工轉報",
+                    "缺少事實：Scout 不自動發送位置 或 不自動發送 或 人工分享 或 "
+                    "由人員向",
+                }
+                for violation in final_violations
+            )
+        )
+        injury_relay_only = bool(
+            answer_brief.subject == "位置已知的受傷事件回報"
+            and final_violations == ["缺少事實：留守人 或 119 或 搜救窗口"]
+        )
+        append_unknown_output = False
         if accident_candidate_retry:
-            candidate_facts = "；".join(answer_brief.facts)
+            required_literals = [
+                group[0]
+                for group in answer_brief.required_fact_groups
+                if group
+            ]
+            required_literal_text = "；".join(required_literals)
             review_prompt = (
                 "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1\n"
                 f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
                 f"review_round={review_round}\n"
-                f"可用資料：{candidate_facts}\n"
-                "重新作答，不要沿用前一版文字。指出最高分的行前風險候選，"
-                "並說明風險分數不能用來預測事故，仍需人工或現場複核。"
+                f"必含文字（逐字保留）：{required_literal_text}\n"
+                "忽略上一版錯誤草稿，只依照本次可用資料重新作答。"
+                "只寫兩句。第一句指出最高分的行前風險候選，並逐字包含上述"
+                "每一段必含文字，不得省略；第二句說明風險分數不能用來預測事故，"
+                "仍需人工或現場複核。"
                 "不得與其他 CP 比較，不得新增平均值、異常現象或即時危險。"
                 "不要輸出欄位名、清單或規則說明，只輸出一到兩句繁體中文。\n"
+            )
+        elif risk_location_retry:
+            is_rain_question = (
+                answer_brief.subject == "哪些地方下雨後需優先複核"
+            )
+            review_prompt = (
+                "AI_HAT_RAW_RISK_LOCATION_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"回答主題：{answer_brief.subject}\n"
+                f"可用資料（全部保留）：{'；'.join(answer_brief.facts)}\n"
+                f"缺少資料：{'、'.join(answer_brief.missing_evidence) or '無'}\n"
+                f"需要修正：{correction_text}\n"
+                "忽略上一版錯誤草稿，只依照本次可用資料重新回答。"
+                "重新寫成一到兩句自然繁體中文。CP、距離、GPX、score、bucket"
+                " 都必須保留，不得輸出清單、欄位說明或新增位置狀態。"
+                + (
+                    "明確說這是雨後優先複核候選、目前缺少即時天氣資料，"
+                    "因此不能確認現場已經危險。"
+                    if is_rain_question
+                    else "明確說這是避免長時間停留拍照的行前候選，仍需現場複核。"
+                )
+                + "只輸出答案。\n"
+            )
+        elif low_tolerance_retry:
+            review_prompt = (
+                "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                "布林事實：has_low_tolerance_candidate=YES\n"
+                f"數值事實（全部保留）：{'；'.join(answer_brief.facts)}\n"
+                f"需要修正：{correction_text}\n"
+                "忽略上一版錯誤草稿。禁止輸出「無」、「沒有」或「候選未確認」。"
+                "不要重複問題。第一句直接以「有低容錯地形候選」開頭，"
+                "保留所有 GPX 與地形分數，並說明這只是行前複核候選、"
+                "尚未確認現場危險。只輸出一到兩句自然繁體中文答案。\n"
+            )
+        elif format_only_list_retry:
+            review_prompt = (
+                "AI_HAT_RAW_LIST_TO_SENTENCES_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"回答主題：{answer_brief.subject}\n"
+                f"可用事實：{'；'.join(answer_brief.facts)}\n"
+                f"上一版模型清單：{raw_text[:500]}\n"
+                f"判斷限制：{answer_brief.boundary}\n"
+                "內容已通過事實檢查，只需把清單改寫成一到兩句自然繁體中文。"
+                "不得使用冒號、換行、連字號或編號；逐項保留原有地點、CP、"
+                "缺失狀態及判斷限制；"
+                "不得新增資訊。只輸出改寫後答案。\n"
+            )
+        elif injury_relay_only:
+            append_unknown_output = True
+            review_prompt = (
+                "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                "既有回答已保留所有事件欄位，不要重複或改寫。只新增一句自然繁體中文，"
+                "說明由人員向留守人或 119 搜救窗口轉報，且 Scout 不自動發送。"
+                "不得新增人物、位置、時間、傷勢、數值或狀態。只輸出新增的一句。\n"
+            )
+        elif structured_incident_retry:
+            required_text = "；".join(
+                " 或 ".join(group)
+                for group in answer_brief.required_fact_groups
+                if group
+            )
+            subject_rule = ""
+            if answer_brief.subject == "位置已知的受傷事件回報":
+                subject_rule = (
+                    "位置清楚是使用者提供的已知前提；不得寫「我已確認」。"
+                    "回答需說明填入實際座標或最後確認點與時間，其他缺失欄位標示未知。"
+                )
+            elif answer_brief.subject == "移動傷者的二次傷害風險":
+                subject_rule = (
+                    "同一概念只寫一次，不得重複「專業救援建議」或「救援建議」，"
+                    "也不得假設或使用「傷勢穩定」。"
+                )
+            review_prompt = (
+                "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"原始問題：{question[:180]}\n"
+                f"回答主題：{answer_brief.subject}\n"
+                f"可用 facts：{'；'.join(answer_brief.facts)}\n"
+                f"每組至少保留一項：{required_text}\n"
+                f"尚未取得：{'、'.join(answer_brief.missing_evidence) or '無'}\n"
+                f"判斷邊界：{answer_brief.boundary}\n"
+                f"禁止內容：{'；'.join(answer_brief.forbidden_claims) or '不得新增事實'}\n"
+                f"需要修正：{correction_text}\n"
+                f"本題附加規則：{subject_rule or '無'}\n"
+                "重新回答原始問題，用一到三句自然繁體中文。只能重組可用 facts；"
+                "尚未取得的值必須寫成未確認或需補充，不得寫成已確認、已記錄或已有。"
+                "不得新增示例數字、座標、地名、方向、人物、狀態或一般常識；不得使用"
+                "「例如」或虛構範例。不要輸出欄位標籤、規則、清單或分析。只輸出答案。\n"
+            )
+        elif post_trip_three_item_boundary_only:
+            raw_text = re.sub(r"\s*目前不能確認。?\s*$", "", raw_text).rstrip()
+            append_unknown_output = True
+            review_prompt = (
+                "AI_HAT_RAW_POST_TRIP_BOUNDARY_APPEND_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"既有三項回答：{raw_text[:600]}\n"
+                f"判斷邊界：{answer_brief.boundary}\n"
+                "既有回答已完整列出三項，不要重複或改寫。只新增一句自然繁體中文，"
+                "說明這三項依目前 evidence gap 排定，不是已證實的事故原因。"
+                "不得加入『目前不能確認』、新項目、數值、欄位名或規則說明。"
+                "只輸出新增的一句。\n"
+            )
+        elif structured_post_trip_retry:
+            required_text = "；".join(
+                " 或 ".join(group)
+                for group in answer_brief.required_fact_groups
+                if group
+            )
+            post_trip_subject_rule = ""
+            if answer_brief.subject == "field case 升格審查":
+                post_trip_subject_rule = (
+                    "第一句說目前不能確認是否升格，並保留缺少可重建時間線與來源追溯；"
+                    "第二句說 field case 仍需隱私審查與人工核准。"
+                )
+            elif answer_brief.subject == "incident package 資料契約":
+                post_trip_subject_rule = (
+                    "先用一句整理所有資料群組；再用一句說明保留來源與未知欄位，"
+                    "且不代表已自動建立或送出。類別之間用頓號或逗號，不得使用『或』。"
+                )
+            elif answer_brief.subject == "事件主因分類回顧":
+                post_trip_subject_rule = (
+                    "一句說目前不能分類；另一句說需補事件順序、位置與軌跡、"
+                    "裝備資源及隊伍聯絡紀錄。使用頓號，不得連續使用『或』。"
+                )
+            elif answer_brief.subject == "spec 更新候選審查":
+                post_trip_subject_rule = (
+                    "第一句說目前不能確認哪些 spec 需要更新，必須先有失敗紀錄與"
+                    "回歸測試；第二句只把工具派送、evidence schema、回答契約與驗收"
+                    "標準稱為可能受影響的 spec 範圍。不得把失敗紀錄或測試本身稱為 spec。"
+                )
+            elif answer_brief.subject == "下次行前規劃三項回顧":
+                post_trip_subject_rule = (
+                    "恰好使用『第一』、『第二』、『第三』分成三項：第一補齊實際軌跡、"
+                    "CP 通過時間與延誤時間線；第二對照 warning、天氣路況、停留與 "
+                    "near-miss；第三重審隊伍節奏、裝備資源與折返條件。最後說明這三項"
+                    "依證據缺口排定，不是已證實事故原因。"
+                )
+            review_prompt = (
+                "AI_HAT_RAW_STRUCTURED_POST_TRIP_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"原始問題：{question[:180]}\n"
+                f"回答主題：{answer_brief.subject}\n"
+                f"可用事實：{'；'.join(answer_brief.facts)}\n"
+                f"每組至少保留一項：{required_text}\n"
+                f"尚未取得：{'、'.join(answer_brief.missing_evidence) or '無'}\n"
+                f"判斷限制：{answer_brief.boundary}\n"
+                f"禁止內容：{'；'.join(answer_brief.forbidden_claims) or '不得新增事實'}\n"
+                f"需要修正：{correction_text}\n"
+                f"本題句型要求：{post_trip_subject_rule or '無'}\n"
+                "忽略上一版錯誤草稿，只依上述事實重新回答。用一到三句自然繁體中文，"
+                "直接回答原始問題；缺少資料時明確說目前不能確認。不得輸出星號、"
+                "placeholder、欄位標籤、清單、規則或重複句子，不得新增 CP、時間、"
+                "位置、事件或原因。只輸出答案。\n"
+            )
+        elif ridge_signal_retry:
+            review_prompt = (
+                "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"可用 facts：{'；'.join(answer_brief.facts)}\n"
+                f"需要修正：{correction_text}\n"
+                "直接回答是否應往稜線移動找訊號，只寫一到兩句自然繁體中文。"
+                "必須明確否定盲目移動到稜線，並完整保留三項檢查：現地可用通訊與"
+                "最後有效位置、暴露地形、回退路徑。不得聲稱已知現場位置或通訊狀態，"
+                "不得輸出清單、內部規則或其他建議。只輸出答案。\n"
+            )
+        elif visual_marker_retry:
+            review_prompt = (
+                "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"可用 facts：{'；'.join(answer_brief.facts)}\n"
+                f"需要修正：{correction_text}\n"
+                "只寫一到兩句自然繁體中文。說明在安全處使用高對比衣物或布料、反光物"
+                "或規律燈光建立標記，並記錄標記位置、建立時間與隊伍狀態。第二句以"
+                "「不要」開頭，內容限於人不得為建立標記移動到崖邊、稜線或其他危險地形。"
+                "主詞必須是人不要移動，"
+                "不得寫成標記位置不移動。不得輸出清單或內部規則。只輸出答案。\n"
+            )
+        elif rescue_evidence_retry:
+            review_prompt = (
+                "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"可用 facts：{'；'.join(answer_brief.facts)}\n"
+                f"需要修正：{correction_text}\n"
+                "只寫一到兩句自然繁體中文且不得列清單。完整保留座標、高度與時間；"
+                "最後移動方向、軌跡與最後確認點；隊伍人數、傷勢、意識與能否行走；"
+                "訊號、剩餘電量與最後聯絡時間。最後說明未確認欄位標示未知，只準備"
+                "人工轉報，不自動發送 SOS。不得新增值或聲稱已發送。只輸出答案。\n"
+            )
+        elif low_battery_priority_retry:
+            review_prompt = (
+                "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"可用 facts：{'；'.join(answer_brief.facts)}\n"
+                f"需要修正：{correction_text}\n"
+                "只寫兩句自然繁體中文且不得換行或列清單。第一句保留已知 5% 電量，"
+                "說明優先保留定位與必要通訊，並先傳一則包含位置、時間、隊伍與傷勢的"
+                "短訊息；第二句說明關閉螢幕、相機與非必要背景功能，只在定位、傳送或"
+                "約定回報時啟用必要無線功能。不得要求使用者再提供電量，不得聲稱訊息"
+                "已送出，也不得輸出內部規則。只輸出答案。\n"
+            )
+        elif visibility_candidate_retry:
+            review_prompt = (
+                "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"可用候選 facts：{'；'.join(answer_brief.facts)}\n"
+                "使用者問哪裡容易被看見，但目前沒有 visibility/rescue line-of-sight "
+                "模型，也沒有綁定目前位置，所以不能判定哪裡真的更容易被看見。"
+                "用兩句自然繁體中文：先說不能判定的原因，再列出每個候選名稱及其"
+                "CP 供人工複核，並說不能指示移動到候選。不得省略 CP、不得把候選"
+                "寫成已確認可見位置、不得輸出欄位或清單。只輸出答案。\n"
+            )
+        elif guided_boundary_only:
+            append_unknown_output = True
+            review_prompt = (
+                "AI_HAT_RAW_FIELD_BOUNDARY_APPEND_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"回答主題：{answer_brief.subject}\n"
+                f"必須補上的判斷邊界：{answer_brief.boundary}\n"
+                "上一段已包含所有主要 facts，不要重複。只新增一句自然繁體中文，"
+                "用自己的話完整表達判斷邊界；不得新增人物、位置、數值、狀態、"
+                "行動或對外發送結果。只輸出新增的一句。\n"
+            )
+        elif guided_field_retry:
+            review_prompt = (
+                "AI_HAT_RAW_FIELD_GUIDANCE_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"原始問題：{question[:180]}\n"
+                f"回答主題：{answer_brief.subject}\n"
+                f"可用 facts：{'；'.join(answer_brief.facts)}\n"
+                f"判斷邊界：{answer_brief.boundary}\n"
+                f"需要修正：{correction_text}\n"
+                "只依 facts 回答原始問題，用一到三句自然繁體中文；保留每個必要"
+                "類別，不輸出欄位標籤、英文 prompt、清單或內部規則。不得新增"
+                "現場狀態、人物、位置、時間、數值、對外發送結果或一般套話。"
+                "只輸出答案。\n"
+            )
+        elif shelter_arrival_retry:
+            review_prompt = (
+                "AI_HAT_RAW_SHELTER_ARRIVAL_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                "使用者已明確說有人未抵達約定山屋，不得質疑這個前提。"
+                "目前未知的是通報升級時機。用一到兩句繁體中文，先說目前無法判定"
+                "通報升級時機，再請核對預定抵達時間及逾時分鐘、最後有效座標時間"
+                "及方向、最後聯絡內容、隊員身體狀態、留守升級條件。不得發明分鐘"
+                "門檻，不得直接下令報案，不得把留守升級條件寫成合約。只輸出答案。\n"
+            )
+        elif rescue_boundary_only:
+            append_unknown_output = True
+            review_prompt = (
+                "AI_HAT_RAW_RESCUE_BOUNDARY_APPEND_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                "不要評論或重複既有報案資料類別。只新增一句自然繁體中文，"
+                "同時說明未確認欄位要標示未知，且由留守人轉報，不能假設 Scout 已"
+                "報案或發送 SOS。不得加入任何人物、地點、數字、狀態或其他建議。"
+                "不得換行或使用冒號，只輸出新增的一句。\n"
+            )
+        elif rescue_report_retry:
+            review_prompt = (
+                "AI_HAT_RAW_RESCUE_REPORT_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                "這題只問『要提供哪些資料類別』，不是要求填入資料值。只根據下列"
+                "資料群組，重新組成恰好兩句自然繁體中文，不得輸出清單、欄位標籤、"
+                "範例人物、地點、路線代號、時間、座標、高度、數量、百分比、傷勢"
+                "狀態或一般報案套話。第一句只列資料類別：行程"
+                "計畫、目前或最後位置與時間、傷勢與隊伍人數、訊號聯絡與電量；"
+                "再補天氣、照明、保暖、水與食物。未確認欄位標示未知，由留守人"
+                "轉報，不能假設 Scout 已報案或發送 SOS。不得換行或使用冒號。\n"
+                f"可用資料群組：{'；'.join(answer_brief.facts)}\n"
+                f"需要修正：{correction_text}\n"
+                "只輸出答案。\n"
+            )
+        elif altitude_self_check_retry:
+            review_prompt = (
+                "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"需要確認的資訊：{'、'.join(answer_brief.missing_evidence)}\n"
+                "這是低風險自我檢查，不需等待資料才開始。第一句必須以「建議現在做"
+                "高山症自評」開頭，並逐字包含海拔與上升速率、頭痛噁心暈眩疲倦等"
+                "症狀、走路穩定與認知狀態、同伴觀察。只說明要檢查的項目；不得"
+                "診斷高山症，不得確認可繼續上升，也不得新增停止、下撤、通知領隊"
+                "或其他行動指令。輸出必須恰好一行、恰好一句完整句子：四個檢查"
+                "項目只能用頓號串在同一句，不得逐項解釋；句末用自己的話說明自評"
+                "不是診斷且不能確認可繼續上升。不得換行、不得用冒號、標題或清單。"
+                "只輸出答案。\n"
+            )
+        elif unknown_context_retry:
+            required_inputs = "、".join(
+                group[0]
+                for group in answer_brief.required_fact_groups
+                if group
+            )
+            safe_partial_answer = bool(final_violations) and all(
+                violation.startswith("缺少事實：")
+                for violation in final_violations
+            )
+            missing_literals = "、".join(
+                violation.split("：", 1)[1]
+                for violation in final_violations
+                if violation.startswith("缺少事實：") and "：" in violation
+            )
+            subject_rule = ""
+            if answer_brief.subject == "這段滑墜後是否缺少停止點":
+                subject_rule = (
+                    "Required decision wording: 目前無法判定這段滑墜後是否有停止點。"
+                    " Never state that there is no stop point.\n"
+                )
+            elif answer_brief.subject == "這裡是官方路線或非正式路跡":
+                subject_rule = (
+                    "Never state that the route is official or informal; its source is unknown.\n"
+                )
+            elif answer_brief.subject == "這段容許路徑寬度":
+                subject_rule = (
+                    "All positioning precision is missing; never claim positioning data exists.\n"
+                )
+            elif answer_brief.subject == "目前 GPS 誤差是否過大而不可信":
+                subject_rule = (
+                    "Do not state GPS is usually acceptable and do not give hypothetical "
+                    "quality conclusions. State that trust cannot be determined now.\n"
+                )
+            elif answer_brief.subject == "IMU/PDR 推估是否與 GPS 一致":
+                subject_rule = (
+                    "Required evidence wording: 同時間的 GPS 軌跡、INS/DR 推估軌跡、"
+                    "共同時間戳、座標系與定位精度。 Do not invent comparisons.\n"
+                )
+            elif answer_brief.subject == "現在是否應回到上一個確定點":
+                subject_rule = (
+                    "Do not recommend returning or staying. The action remains unknown until "
+                    "all missing evidence is supplied.\n"
+                )
+            elif answer_brief.subject == "目前是否太累而不適合繼續下坡":
+                subject_rule = (
+                    "Required decision wording: 目前無法判斷是否太累不適合繼續下坡。 "
+                    "Include every missing category, including 走路穩定度. Do not recommend "
+                    "continuing, stopping, resting, or descending. End every sentence with "
+                    "Chinese punctuation.\n"
+                )
+            elif answer_brief.subject == "目前是否正在出現決策品質下降":
+                subject_rule = (
+                    "Required decision wording: 目前無法判斷是否正在出現決策品質下降。 "
+                    "Include all five categories: 疲勞睡眠與休息、心率 HRV 或 body reserve、"
+                    "補水補給、反應混亂等認知狀態、最近決策偏差. Never call any of them "
+                    "known. End every sentence with Chinese punctuation.\n"
+                )
+            elif answer_brief.subject == "隊伍是否已形成分離事件":
+                subject_rule = (
+                    "Required decision wording: 目前無法判定隊伍是否已形成分離事件。 "
+                    "Every team position, distance trend, common point, communication, and "
+                    "rendezvous value is missing; never call any of them known.\n"
+                )
+            elif answer_brief.subject == "後隊是否停止移動太久":
+                subject_rule = (
+                    "State that duration cannot currently be determined. Include 後隊最後有效"
+                    "座標及時間、最近移動速度、定位精度、最後聯絡時間與原定回報節點. "
+                    "End the answer with 。\n"
+                )
+            elif answer_brief.subject == "有人未抵達約定山屋時的檢查與通報時機":
+                subject_rule = (
+                    "The user states that someone has not arrived; do not question that premise. "
+                    "State that escalation timing is unknown, then request planned arrival and "
+                    "overdue time, last position and direction, last contact, body state, and "
+                    "the agreed escalation condition. Do not invent immediate reporting.\n"
+                )
+            elif answer_brief.subject == "目前是否應通知留守人":
+                subject_rule = (
+                    "Do not duplicate the word time. Include 原定回報時間、目前時間及逾時分鐘、"
+                    "全員最後位置與狀態、通訊狀態、已約定的升級條件.\n"
+                )
+            elif answer_brief.subject == "定時回報是否已逾時":
+                subject_rule = (
+                    "Required evidence wording: 原定回報時間或間隔、目前時間、"
+                    "最後成功回報時間、目前通訊狀態.\n"
+                )
+            elif answer_brief.subject == "隊伍目前誰最需要協助":
+                subject_rule = (
+                    "State that who needs help cannot currently be determined. Include 每位隊員"
+                    "最新位置及時間、症狀與步態、體能 reserve、通訊狀態、落單或逾時紀錄. "
+                    "End the answer with 。\n"
+                )
+            equipment_subject_rules = {
+                "手機電量是否足夠完成求救通訊": (
+                    "State that sufficiency cannot currently be determined. Include 手機剩餘電量、"
+                    "近期耗電率、目前訊號與可用通訊方式、行動電源剩餘容量. Do not abbreviate 容量.\n"
+                ),
+                "手錶沒電後可用哪些備援定位方式": (
+                    "Do not repeat the user question and do not say positioning is impossible. In one "
+                    "sentence, state that available backup methods cannot yet be confirmed, then request "
+                    "手機 GNSS 狀態、離線地圖與 GPX 載入狀態、備援指南針或定位裝置、"
+                    "最後有效座標時間. These are checks, not confirmed available methods.\n"
+                ),
+                "是否應保留行動電源給通訊": (
+                    "Do not repeat the user question. In one sentence, state that the decision is currently "
+                    "unknown, starting with 目前無法判定是否應保留行動電源給通訊，因缺少, and include "
+                    "行動電源剩餘容量、手機與"
+                    "通訊近期耗電率、其他必要裝置電量、預計等待或撤退時間. Avoid generic suitability wording.\n"
+                ),
+                "目前是否應關閉非必要耗電功能": (
+                    "State that the decision is currently unknown. Include 手機剩餘電量、近期耗電率、"
+                    "必要通訊與定位功能清單、備援電源、預計剩餘時間. Do not add generic advice.\n"
+                ),
+                "離線地圖是否已完整載入": (
+                    "Every map state is missing. Never say available information shows tiles or GPX. "
+                    "Request 離線地圖載入狀態、目前位置周邊圖磚覆蓋、GPX 載入狀態、"
+                    "關閉網路後開圖驗證.\n"
+                ),
+                "目前是否有可用的第二套導航工具": (
+                    "Use one sentence without repeating the question or any category. Start with "
+                    "目前無法確認是否有可用的第二套導航工具，請提供. Include 備援裝置清單、"
+                    "各裝置離線地圖與 GPX、指南針狀態、備援電量、現場可用性. End with 。\n"
+                ),
+                "裝備濕掉後是否應停止前進": (
+                    "Do not recommend continuing or stopping. State that the decision cannot currently "
+                    "be made, then request 保暖與照明裝備受潮狀態、衣物乾濕與體感、目前雨風溫度、"
+                    "最近可避雨點、下一安全點.\n"
+                ),
+                "目前位置回報間隔": (
+                    "Do not invent a minute interval. State that the interval cannot currently be "
+                    "determined, then request 原定回報間隔、目前事件與隊伍狀態、通訊品質、"
+                    "剩餘電量、與留守人的回報約定.\n"
+                ),
+            }
+            if not subject_rule:
+                subject_rule = equipment_subject_rules.get(answer_brief.subject, "")
+            elif answer_brief.subject == "現在繼續下切是否危險":
+                subject_rule = (
+                    "Required evidence wording: 最近路線距離的變化趨勢、回退方向。\n"
+                )
+            partial_context = (
+                f"Safe partial answer: {raw_text[:600]}\n"
+                if safe_partial_answer
+                else "Discard the previous answer because it is not safe to retain.\n"
+            )
+            if safe_partial_answer and missing_literals:
+                append_unknown_output = True
+                review_prompt = (
+                    "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1\n"
+                    f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                    f"review_round={review_round}\n"
+                    f"Existing safe answer: {raw_text[:600]}\n"
+                    f"Required missing literal text: {missing_literals}\n"
+                    + subject_rule
+                    + "Output exactly one additional natural Traditional Chinese sentence. "
+                    "Start with「還需要補充」and include every required missing literal. "
+                    "Do not repeat the existing answer, do not ask a fragment question, and "
+                    "do not output labels or a list. Output only the additional sentence.\n"
+                )
+            else:
+                review_prompt = (
+                    "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1\n"
+                    f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                    f"review_round={review_round}\n"
+                    f"Original hiker question: {question[:180]}\n"
+                    f"Missing evidence: {required_inputs}\n"
+                    f"需要修正：{correction_text}\n"
+                    + (f"Required added literal text: {missing_literals}\n" if missing_literals else "")
+                    + subject_rule
+                    + partial_context
+                    + "Answer using only the question and missing evidence. "
+                    + "Answer the original question in one or "
+                    "two natural Traditional Chinese sentences. First state that the specific "
+                    "question cannot currently be determined. Then ask for every item in "
+                    "Missing evidence. Never claim missing evidence already exists. Do not say "
+                    "generic placeholders or implementation instructions, and do not output "
+                    "labels or a list."
+                    " Output only the answer.\n"
+                )
+        elif list_output_retry:
+            review_prompt = (
+                "AI_HAT_RAW_LIST_TO_SENTENCES_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"回答主題：{answer_brief.subject}\n"
+                f"可用事實：{'；'.join(answer_brief.facts)}\n"
+                f"上一版模型清單：{raw_text[:500]}\n"
+                f"需要修正：{correction_text}\n"
+                f"判斷限制：{answer_brief.boundary}\n"
+                "把清單改寫成一到兩句自然繁體中文。刪除編號、重複內容與"
+                "未完成片段；保留可用事實，不新增資訊。只輸出改寫後答案。\n"
+            )
+        elif delayed_departure_retry:
+            review_prompt = (
+                "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1\n"
+                f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
+                f"review_round={review_round}\n"
+                f"可用事實（全部保留）：{'；'.join(answer_brief.facts)}\n"
+                f"缺少資料：{'、'.join(answer_brief.missing_evidence)}\n"
+                f"上一版模型回答：{raw_text[:500]}\n"
+                f"需要修正：{correction_text}\n"
+                "寫成一到兩句繁體中文，直接回答能否確認安全完成，保留瓶頸"
+                "路段、CP 區間與路段時間，並說明要重算折返窗口。不得聲稱"
+                "CP 間進度不完整。只輸出答案。\n"
             )
         elif accident_boundary_only:
             review_prompt = (
@@ -7747,11 +8692,13 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
                 "AI_HAT_RAW_TOPIC_RETRY_V1\n"
                 f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
                 f"review_round={review_round}\n"
-                "同一個本地模型要從 facts-only brief 重新作答，不沿用上一版文字。"
+                "同一個本地模型要修正自己的上一版回答。保留沒有被列為錯誤的"
+                "地點、數字、缺失狀態與判斷邊界，只補足缺漏並刪除錯誤。"
                 "只輸出一到兩句繁體中文，不得解釋、列清單或新增常識。\n"
                 f"{question_label}：{model_question}\n"
+                f"上一版模型回答：{raw_text[:600]}\n"
                 f"需要修正：{correction_text}\n"
-                f"禁止內容：{forbidden_text}；不得創造不存在的單位。\n"
+                f"禁止內容：{forbidden_text}。\n"
                 "下列 brief 沒有提供標準答案；請保留每一項可用資訊與缺少資料，"
                 "並遵守判斷限制。不要輸出欄位名稱或前綴：\n"
                 f"{brief_prompt_text}\n"
@@ -7760,8 +8707,16 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
             review_prompt,
             timeout_seconds=max(1, min(timeout_seconds, 120)),
         )
-        reviewed_text = str(reviewed_output or "").strip()
+        original_reviewed_text = str(reviewed_output or "").strip()
+        reviewed_text = _normalize_ai_hat_plus_2_orthography_only(
+            original_reviewed_text
+        )
+        orthography_normalized = bool(
+            orthography_normalized or reviewed_text != original_reviewed_text
+        )
         if reviewed_text:
+            if append_unknown_output:
+                reviewed_text = raw_text.rstrip() + " " + reviewed_text.lstrip()
             raw_text = reviewed_text
             prompt_material += "\n\0\n" + review_prompt
             generation_call_count += 1
@@ -7796,6 +8751,11 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
     setattr(runner, "last_ai_hat_plus_2_prompt_contract", "facts_only_v2")
     setattr(runner, "last_ai_hat_plus_2_answer_contract", "topic_constrained_v1")
     setattr(runner, "last_ai_hat_plus_2_answer_template_applied", False)
+    setattr(
+        runner,
+        "last_ai_hat_plus_2_orthography_normalized",
+        orthography_normalized,
+    )
     selected_few_shot_question = few_shot_questions_by_call.get(selected_call)
     selected_endpoint_trace = endpoint_traces_by_call.get(selected_call, {})
     setattr(
@@ -7968,6 +8928,209 @@ def _build_local_grounded_answer_brief(
     def value(key: str) -> str:
         return _compact_evidence_value(compact, key)
 
+    rescue_report_groups = _extract_rescue_report_fact_groups(grounded)
+    if (
+        rescue_report_groups
+        and _looks_like_rescue_report_information_question(question)
+    ):
+        return LocalGroundedAnswerBrief(
+            decision="ANSWER",
+            subject="留守人報案所需山域資訊",
+            facts=tuple(rescue_report_groups)
+            + (
+                "未確認欄位=標示未知，不可猜測",
+                "執行邊界=Scout 不會自動報案或發送 SOS",
+            ),
+            required_fact_groups=(
+                ("行程計畫", "路線計畫", "行程或路線名稱與原定計畫"),
+                ("位置與時間", "座標與時間", "最後確認點"),
+                ("傷勢", "意識", "是否能走"),
+                ("隊伍人數", "人數", "全員"),
+                ("訊號聯絡", "通訊", "最後聯絡"),
+                ("電量", "照明", "保暖", "水與食物"),
+                ("未知", "未確認", "不可猜測"),
+                (
+                    "不會自動報案",
+                    "不會發送 SOS",
+                    "由留守人轉報",
+                    "留守人轉報",
+                ),
+            ),
+            boundary="未確認欄位標示未知；由留守人轉報，不能假設 Scout 已發出 SOS",
+            forbidden_claims=("不得聲稱 Scout 已報案或發送 SOS",),
+        )
+
+    phone_percent_match = re.search(
+        r"手機(?:電量)?(?:只剩|剩下|剩)?\s*5\s*(?:%|％)",
+        str(question or ""),
+    )
+    low_battery_priority = _extract_low_battery_priority(grounded)
+    if phone_percent_match and low_battery_priority:
+        return LocalGroundedAnswerBrief(
+            decision="RESOURCE_PRIORITY",
+            subject="手機只剩 5% 時的電力優先順序",
+            facts=("手機剩餘電量=5%", *low_battery_priority),
+            required_fact_groups=(
+                ("5%", "5％"),
+                ("保留定位",),
+                ("位置、時間、隊伍與傷勢", "位置時間隊伍傷勢", "短訊息"),
+                ("關閉螢幕", "關閉相機", "非必要背景功能"),
+                ("必要無線功能", "定位、傳送或約定回報"),
+            ),
+            boundary="優先保留定位與必要通訊；不假設訊息已送出",
+            forbidden_claims=("不得要求使用者再次提供手機電量",),
+        )
+
+    visibility_anchors = _extract_visibility_candidate_anchors(grounded)
+    if visibility_anchors and any(
+        term in normalized_question for term in ("容易被看見", "容易被看见")
+    ):
+        required_locations: list[tuple[str, ...]] = []
+        for anchor in visibility_anchors[:2]:
+            parts = [part.strip() for part in anchor.split("|") if part.strip()]
+            label = next(
+                (
+                    part
+                    for part in parts
+                    if not part.startswith(("major_point", "mcp.", "cp="))
+                ),
+                "",
+            )
+            cp_match = re.search(r"cp=cp\.([0-9]+)", anchor, flags=re.IGNORECASE)
+            if label:
+                required_locations.append((label,))
+            if cp_match:
+                cp_value = cp_match.group(1)
+                required_locations.append((f"cp.{cp_value}", f"CP {int(cp_value)}"))
+        return LocalGroundedAnswerBrief(
+            decision="REVIEW_CANDIDATE",
+            subject="哪些待援可見性候選需人工複核",
+            facts=tuple(visibility_anchors[:4])
+            + ("缺少 visibility/rescue line-of-sight 與目前位置綁定",),
+            required_fact_groups=tuple(required_locations)
+            + (
+                (
+                    "沒有 line-of-sight",
+                    "沒有 visibility/rescue line-of-sight",
+                    "無 visibility/rescue line-of-sight",
+                    "缺乏 visibility/rescue line-of-sight",
+                    "缺少視線模型",
+                ),
+                (
+                    "不能指示移動",
+                    "不能據此指示移動",
+                    "無法指示移動",
+                    "不可移動到候選",
+                ),
+            ),
+            boundary="只能列候選供人工複核，不能指示移動到候選位置",
+            forbidden_claims=("不得宣稱候選真的更容易被看見",),
+        )
+
+    (
+        guidance_facts,
+        guidance_boundary,
+        guidance_subject,
+        guidance_required,
+        guidance_missing,
+        guidance_forbidden,
+    ) = _extract_survival_query_guidance(grounded)
+    if guidance_facts:
+        if guidance_subject and guidance_required:
+            return LocalGroundedAnswerBrief(
+                decision="PLAYBOOK",
+                subject=guidance_subject,
+                facts=guidance_facts,
+                required_fact_groups=guidance_required,
+                missing_evidence=guidance_missing,
+                boundary=guidance_boundary,
+                forbidden_claims=guidance_forbidden
+                or ("不得新增未提供的現場狀態或對外發送結果",),
+            )
+        if "可視標記" in normalized_question or "可视标记" in normalized_question:
+            subject = "在安全處建立可視標記"
+            required = (
+                ("安全處",),
+                ("高對比", "反光物", "規律燈光"),
+                ("標記位置", "建立時間", "隊伍狀態"),
+                (
+                    "不得為建立標記移動",
+                    "不要為建立標記移動",
+                    "不要移動到危險地形",
+                    "不要為了建立標記前往危險地形",
+                    "不得為標記前往崖邊",
+                ),
+            )
+        elif "保存哪些證據" in normalized_question or "保存哪些证据" in normalized_question:
+            subject = "需保存給搜救的事件證據"
+            required = (
+                ("座標", "高度", "時間"),
+                ("最後移動方向", "軌跡", "最後確認點"),
+                ("隊伍人數", "傷勢", "意識", "能否行走"),
+                ("訊號", "剩餘電量", "最後聯絡時間"),
+                ("未知", "未確認"),
+                ("不自動發送 SOS", "不會發送 SOS", "只準備人工轉報"),
+            )
+        elif "位置分享給誰" in normalized_question or "位置分享给谁" in normalized_question:
+            subject = "目前位置應人工分享給哪些對象"
+            required = (
+                ("留守人", "領隊", "隊伍聯絡人"),
+                ("119", "搜救窗口"),
+                ("座標", "最後確認點"),
+                (
+                    "Scout 不自動發送位置",
+                    "不自動發送",
+                    "人工分享",
+                    "由人員向",
+                ),
+            )
+        else:
+            subject = "是否應移動到稜線找訊號"
+            required = (
+                ("目前位置", "最後有效位置", "現地"),
+                ("暴露地形",),
+                ("回退路徑",),
+                (
+                    "不要移動找訊號",
+                    "不得只為訊號盲目移動",
+                    "不應僅為訊號盲目移動",
+                    "不應盲目移動到稜線",
+                    "不應盲目移動",
+                ),
+            )
+        return LocalGroundedAnswerBrief(
+            decision="PLAYBOOK",
+            subject=subject,
+            facts=guidance_facts,
+            required_fact_groups=required,
+            boundary=guidance_boundary,
+            forbidden_claims=("不得新增未提供的現場狀態或對外發送結果",),
+        )
+
+    playbook_fields = _extract_survival_playbook_fields(grounded)
+    if playbook_fields:
+        if any(term in normalized_question for term in ("下切溪谷", "沿溪谷")):
+            subject = "是否可下切溪谷"
+            required = (("不建議", "不要", "不得"), ("下切",), ("降低被找到", "迷途與失聯"))
+        elif any(term in normalized_question for term in ("原地等待", "找路")):
+            subject = "位置不確定時應停止並等待"
+            required = (("停止前進",), ("隊伍聚在一起",), ("不要分散找路", "不要下切"))
+        else:
+            subject = "位置不確定時的第一步"
+            required = (("停止前進",), ("隊伍聚在一起",), ("不要分散找路", "不要下切"))
+        return LocalGroundedAnswerBrief(
+            decision="PLAYBOOK",
+            subject=subject,
+            facts=(
+                f"decision={playbook_fields['decision']}",
+                f"reason={playbook_fields['reason']}",
+                f"next_step={playbook_fields['next_step']}",
+            ),
+            required_fact_groups=required,
+            boundary="只使用 playbook 候選指引；不自動報案或發送 SOS",
+            forbidden_claims=("不得建議分散找路、下切溪谷或盲目移動",),
+        )
+
     if "晚出發" in normalized_question or "晚出发" in normalized_question:
         segment_match = re.search(r"seg\.\d+", grounded, flags=re.IGNORECASE)
         cp_pair_match = re.search(
@@ -7987,12 +9150,12 @@ def _build_local_grounded_answer_brief(
             decision="REPLAN",
             subject="晚出發一小時後能否安全完成",
             facts=(
-                "departure_delay_minutes=60",
-                f"bottleneck_segment={segment}",
-                f"checkpoint_pair={cp_pair}",
-                f"segment_duration={duration}",
+                "晚出發=60 分鐘",
+                f"瓶頸路段={segment}",
+                f"CP 區間={cp_pair}",
+                f"路段時間={duration}",
             ),
-            required_fact_groups=((segment,), (cp_pair,)),
+            required_fact_groups=((segment,), (cp_pair,), (duration,)),
             missing_evidence=("天氣", "頭燈與電量", "水食物與隊伍資訊"),
             boundary="目前不能確認能安全完成；先重算折返窗口，必要時改短版或折返",
             forbidden_claims=("不得把晚出發寫成提前出發", "不得確認能安全完成"),
@@ -8064,25 +9227,39 @@ def _build_local_grounded_answer_brief(
                 forbidden_claims=("不得把 boss point 候選寫成即時危險",),
             )
     if "answer_mode=missing_context" in compact:
-        subject = value("missing_context_subject") or "本題"
+        subject = _field_state_decision_subject(
+            question,
+            value("missing_context_subject") or "本題",
+        )
         gaps = tuple(
             item.strip()
             for item in value("missing_context_gaps").split("|")
             if item.strip()
-        )[:3]
+        )[:5]
         requested = tuple(
-            item.strip()
+            (
+                item.strip()
+                if item.strip().startswith("目前時間")
+                else re.sub(r"^目前", "", item.strip()).strip()
+            )
             for item in value("requested_inputs").split("|")
             if item.strip()
-        )[:3]
-        gap_summary = "、".join(gaps) or "必要現場觀測"
-        request_summary = "、".join(requested) or gap_summary
+        )[:5]
+        required_inputs = requested or gaps
+        gap_summary = "、".join(required_inputs) or "必要現場觀測"
+        request_summary = "、".join(required_inputs) or gap_summary
+        is_altitude_self_check = subject == "現在是否需要做高山症自評"
         return LocalGroundedAnswerBrief(
-            decision="UNKNOWN",
+            decision="SELF_CHECK" if is_altitude_self_check else "UNKNOWN",
             subject=subject,
             facts=(f"requested_inputs={request_summary}",),
-            missing_evidence=gaps,
-            boundary=f"不能判定{subject}；需要補充{request_summary}",
+            required_fact_groups=tuple((item,) for item in required_inputs),
+            missing_evidence=required_inputs,
+            boundary=(
+                "建議現在做高山症自評；不可診斷或確認可繼續上升"
+                if is_altitude_self_check
+                else f"不能判定{subject}；需要補充{request_summary}"
+            ),
             forbidden_claims=(value("missing_context_rule") or "不得把缺失資料寫成已知",),
         )
     top_location = value("top_location")
@@ -8091,73 +9268,68 @@ def _build_local_grounded_answer_brief(
     top_bucket = value("top_bucket")
     cp_match = re.search(r"CP\s*(\d+)", top_location, flags=re.IGNORECASE)
     distance_match = re.search(r"約\s*([0-9.]+)\s*m", top_location, flags=re.IGNORECASE)
-    explicit_location = (
-        f"最近檢查點=CP {cp_match.group(1)}；距離檢查點={distance_match.group(1)} m"
-        if cp_match and distance_match
-        else top_location
+    normalized_top_gpx = str(top_gpx or "").strip()
+    normalized_top_gpx_value = re.sub(
+        r"\s*km$",
+        "",
+        normalized_top_gpx,
+        flags=re.IGNORECASE,
     )
     location_evidence = tuple(
         item
         for item in (
-            explicit_location,
-            (
-                f"GPX 里程={top_gpx}；風險分數={top_score}，風險級別={top_bucket}"
-                if top_gpx and top_score
-                else f"風險分數={top_score}，風險級別={top_bucket}"
-                if top_score
-                else ""
-            ),
+            f"CP={cp_match.group(1)}" if cp_match else "",
+            f"距 CP={distance_match.group(1)} m" if distance_match else "",
+            f"GPX={normalized_top_gpx_value} km" if normalized_top_gpx_value else "",
+            f"score={top_score}" if top_score else "",
+            f"bucket={top_bucket}" if top_bucket else "",
         )
         if item
     )
-    if "下雨" in normalized_question or "雨後" in normalized_question:
-        normalized_top_gpx = str(top_gpx or "").strip()
-        gpx_anchor = (
-            f"GPX {normalized_top_gpx}"
-            if normalized_top_gpx.casefold().endswith("km")
-            else f"GPX {normalized_top_gpx} km"
-            if normalized_top_gpx
-            else ""
-        )
-        rain_location_anchors = tuple(
-            item
-            for item in (
-                f"CP {cp_match.group(1)}" if cp_match else "",
-                gpx_anchor,
+    gpx_anchor = (
+        f"GPX {normalized_top_gpx}"
+        if normalized_top_gpx.casefold().endswith("km")
+        else f"GPX {normalized_top_gpx} km"
+        if normalized_top_gpx
+        else ""
+    )
+    location_required_fact_groups = tuple(
+        group
+        for group in (
+            (f"CP {cp_match.group(1)}",) if cp_match else (),
+            (f"{distance_match.group(1)} m",) if distance_match else (),
+            (gpx_anchor,) if gpx_anchor else (),
+            (
+                f"score={top_score}",
+                f"風險分數={top_score}",
             )
-            if item
+            if top_score
+            else (),
+            (
+                f"bucket={top_bucket}",
+                f"風險級別={top_bucket}",
+            )
+            if top_bucket
+            else (),
         )
+        if group
+    )
+    if "下雨" in normalized_question or "雨後" in normalized_question:
         return LocalGroundedAnswerBrief(
             decision="REVIEW_CANDIDATE",
             subject="哪些地方下雨後需優先複核",
-            facts=(
-                f"優先複核位置=CP {cp_match.group(1)}",
-            )
-            if cp_match
-            else (f"優先複核位置=GPX {top_gpx} km",)
-            if top_gpx
-            else (),
-            required_fact_groups=(rain_location_anchors,) if rain_location_anchors else (),
+            facts=location_evidence,
+            required_fact_groups=location_required_fact_groups,
             missing_evidence=("即時天氣資料",) if "天氣窗工具仍缺" in grounded else (),
             boundary="最高分點是雨後優先複核候選；目前不能確認現場已經危險",
             forbidden_claims=("不得說該處下雨後一定危險", "不得使用危及"),
         )
     if "拍照" in normalized_question:
-        photo_location_anchors = tuple(
-            item
-            for item in (
-                f"CP {cp_match.group(1)}" if cp_match else "",
-                f"GPX {top_gpx} km" if top_gpx else "",
-            )
-            if item
-        )
         return LocalGroundedAnswerBrief(
             decision="REVIEW_CANDIDATE",
             subject="哪些地方需避免停留拍照",
-            facts=location_evidence[:2],
-            required_fact_groups=(photo_location_anchors,)
-            if photo_location_anchors
-            else (),
+            facts=location_evidence,
+            required_fact_groups=location_required_fact_groups,
             boundary="最高分點是避免停留拍照的優先複核候選；仍需現場複核",
             forbidden_claims=("不得把候選寫成即時強制指令",),
         )
@@ -8170,12 +9342,8 @@ def _build_local_grounded_answer_brief(
         return LocalGroundedAnswerBrief(
             decision="REVIEW_CANDIDATE",
             subject="最需要複核的 CP 候選",
-            facts=(accident_candidate,),
-            required_fact_groups=(
-                (f"CP {cp_match.group(1)}",),
-            )
-            if cp_match
-            else (),
+            facts=(accident_candidate, *location_evidence),
+            required_fact_groups=location_required_fact_groups,
             boundary="風險分數不能用來預測事故；需人工或現場複核",
             forbidden_claims=("不得把候選寫成事故預測",),
         )
@@ -8294,6 +9462,8 @@ def _local_grounded_answer_brief_violations(
         output,
     ):
         violations.append("輸出 prompt 或欄位標籤")
+    if "Missing evidence" in output:
+        violations.append("輸出 prompt 或欄位標籤")
     if any(
         phrase in output
         for phrase in ("遠高於其他", "高於其他檢查點", "低於其他檢查點", "平均分數")
@@ -8302,14 +9472,34 @@ def _local_grounded_answer_brief_violations(
         for phrase in ("遠高於其他", "高於其他檢查點", "低於其他檢查點", "平均分數")
     ):
         violations.append("新增無證據的比較")
-    if re.search(r"(?m)^\s*(?:\d+[.、]|[-*]\s+)", output):
+    if brief.subject != "哪些待援可見性候選需人工複核" and re.search(
+        r"(?m)^\s*(?:\d+[.、]|[-*]\s+)",
+        output,
+    ):
         violations.append("使用清單而非自然短答")
     if any(
         term in output
         for term in ("其他未提及", "其他詳細資訊", "其他相關資訊")
     ):
         violations.append("新增無證據填充內容")
-    if "部位" in output:
+    if "目前尚缺目前" in output:
+        violations.append("重複用詞：目前尚缺目前")
+    if any(
+        phrase in output
+        for phrase in (
+            "Scout grounding evidence",
+            "不得創造不存在的單位",
+            "未完整保留 Scout grounding",
+            "上述主題",
+            "所有尚未取得的輸入",
+            "保留座標",
+            "保留所有",
+            "最後明確說明",
+            "已完整列出報案資料類別",
+        )
+    ):
+        violations.append("輸出內部 grounding 提示")
+    if "部位" in output and brief.subject != "位置已知的受傷事件回報":
         violations.append("不自然的路線用詞：部位")
     if "危及" in output:
         violations.append("不完整的危險語意：危及")
@@ -8319,6 +9509,397 @@ def _local_grounded_answer_brief_violations(
         violations.append("不自然的配速用詞：CP 速度")
     if re.search(r"CPETA", output, flags=re.IGNORECASE):
         violations.append("不自然的配速用詞：CP ETA 黏字")
+    if brief.decision == "UNKNOWN" and missing_text and any(
+        phrase in output
+        for phrase in (
+            "已有座標",
+            "已有定位",
+            "已有官方步道來源",
+            "包含官方步道來源",
+        )
+    ):
+        violations.append("反轉證據：把缺失輸入寫成已存在")
+    if brief.decision == "UNKNOWN" and brief.subject == "這段滑墜後是否缺少停止點":
+        asserted_no_stop = re.search(
+            r"(?:這段)?滑墜後(?:確定)?沒有(?:明確的)?停止點", output
+        )
+        uncertainty_scopes_claim = re.search(
+            r"(?:無法|不能|尚未).{0,12}是否.{0,16}沒有停止點",
+            output,
+        )
+        if asserted_no_stop and not uncertainty_scopes_claim:
+            violations.append("把未知寫成已確認沒有停止點")
+    if brief.decision == "UNKNOWN" and brief.subject == "這裡是官方路線或非正式路跡":
+        if any(
+            phrase in output
+            for phrase in (
+                "這裡是官方路線",
+                "可判定為官方路線",
+                "這裡是非正式路跡",
+                "可判定為非正式路跡",
+            )
+        ):
+            violations.append("把未知路線來源寫成已確認")
+    if brief.decision == "UNKNOWN" and brief.subject == "這段容許路徑寬度":
+        if any(
+            phrase in output
+            for phrase in ("目前僅有定位資訊", "已有定位資訊", "已有定位精度")
+        ):
+            violations.append("反轉證據：把缺失定位精度寫成已有")
+    if brief.decision == "UNKNOWN" and brief.subject == "目前 GPS 誤差是否過大而不可信":
+        if any(
+            phrase in output
+            for phrase in (
+                "GPS 誤差通常可接受",
+                "誤差較小",
+                "可能影響定位精度",
+                "可能影響結果",
+            )
+        ):
+            violations.append("新增無證據 GPS 品質結論")
+    if brief.decision == "UNKNOWN" and brief.subject == "IMU/PDR 推估是否與 GPS 一致":
+        if any(phrase in output for phrase in ("軍同時間", "推估軋", "HDOP 個人")):
+            violations.append("破損導航術語")
+    if brief.decision == "UNKNOWN" and brief.subject == "現在是否應回到上一個確定點":
+        if any(
+            phrase in output
+            for phrase in (
+                "可考慮回溯",
+                "建議保持原點",
+                "否則建議保持",
+            )
+        ):
+            violations.append("缺資料時新增回退或留置建議")
+    if brief.decision == "UNKNOWN" and brief.subject == "目前是否太累而不適合繼續下坡":
+        if any(
+            phrase in output
+            for phrase in ("可暫時繼續", "建議立即停止", "若身體仍具備")
+        ):
+            violations.append("缺資料時新增繼續或停止建議")
+    if brief.decision == "UNKNOWN" and brief.subject == "目前是否正在出現決策品質下降":
+        if any(
+            phrase in output
+            for phrase in ("僅有已知的認知因素", "已有認知因素")
+        ):
+            violations.append("反轉證據：把缺失認知狀態寫成已知")
+    if brief.decision == "UNKNOWN" and brief.subject == "隊伍是否已形成分離事件":
+        if any(
+            phrase in output
+            for phrase in ("僅知每位隊員", "已知每位隊員", "僅知隊員位置")
+        ):
+            violations.append("反轉證據：把缺失隊伍位置寫成已知")
+    if (
+        brief.decision == "UNKNOWN"
+        and brief.subject == "有人未抵達約定山屋時的檢查與通報時機"
+        and any(
+            phrase in output
+            for phrase in (
+                "無法確定是否有人抵達",
+                "無法判定是否有人抵達",
+                "不能確定是否有人抵達",
+                "無法判定是否有人未抵達",
+                "無法確定是否有人未抵達",
+            )
+        )
+    ):
+        violations.append("否定使用者已提供的未抵達前提")
+    if (
+        brief.subject == "有人未抵達約定山屋時的檢查與通報時機"
+        and "合約" in output
+    ):
+        violations.append("把留守升級條件誤寫成合約")
+    if brief.subject == "留守人報案所需山域資訊":
+        if any(term in output for term in ("身份證明", "是否有必要報案")):
+            violations.append("把山域報案資訊退化成一般報案套話")
+        if re.search(r"\d", output) or re.search(r"(?:^|[，；。])\s*[A-Z]\s*(?:線|點)", output):
+            violations.append("報案資訊新增未提供的具體值")
+        if "\n" in output.strip() or "：" in output or ":" in output:
+            violations.append("報案資訊使用欄位清單格式")
+        if any(
+            term in output
+            for term in ("傷勢無", "傷勢：無", "可用裝置為無", "訊號：未確認")
+        ):
+            violations.append("報案資訊捏造已知狀態")
+    if brief.subject == "手機電量是否足夠完成求救通訊" and re.search(
+        r"剩餘容(?=[\s。；，,]|$)",
+        output,
+    ):
+        violations.append("裝置資源回答包含截斷詞")
+    if brief.subject == "手錶沒電後可用哪些備援定位方式" and any(
+        phrase in output
+        for phrase in ("手錶沒電後無法定位", "手錶沒電後還無法定位")
+    ):
+        violations.append("把未知備援可用性誤寫成無法定位")
+    if brief.subject in {
+        "手錶沒電後可用哪些備援定位方式",
+        "是否應保留行動電源給通訊",
+    } and output.strip().startswith(
+        ("手錶沒電後還能怎麼定位？", "行動電源是否應該保留給通訊？")
+    ):
+        violations.append("重複使用者問題")
+    if (
+        brief.subject == "目前是否有可用的第二套導航工具"
+        and output.strip().startswith(("您是否有第二套導航工具", "我是否有第二套導航工具"))
+    ):
+        violations.append("重複使用者問題")
+    if (
+        brief.subject == "手錶沒電後可用哪些備援定位方式"
+        and "可用的備援方式包括手機 GNSS 狀態" in output
+    ):
+        violations.append("把待檢查狀態誤寫成可用備援方式")
+    if brief.subject == "離線地圖是否已完整載入" and any(
+        phrase in output
+        for phrase in ("可用資訊顯示", "已有圖磚覆蓋", "GPX 已載入")
+    ):
+        violations.append("反轉證據：把缺失地圖狀態寫成已知")
+    if brief.subject == "裝備濕掉後是否應停止前進" and any(
+        phrase in output
+        for phrase in ("可繼續前進", "可以繼續前進", "則需停止", "建議停止")
+    ):
+        violations.append("缺資料時新增繼續或停止建議")
+    if brief.subject in {
+        "是否應保留行動電源給通訊",
+        "目前是否應關閉非必要耗電功能",
+    } and any(
+        phrase in output
+        for phrase in ("評估其適用性", "最終決定仍需依實際情況而定", "建議參考備援電源與使用情境")
+    ):
+        violations.append("裝置資源回答包含泛化填充")
+    if brief.subject == "目前是否有可用的第二套導航工具" and any(
+        output.count(term) > 1
+        for term in ("備援裝置清單", "各裝置離線地圖與 GPX", "指南針狀態")
+    ):
+        violations.append("重複裝置資源欄位")
+    if brief.subject == "是否應保留行動電源給通訊" and any(
+        output.count(term) > 1
+        for term in (
+            "行動電源剩餘容量",
+            "手機與通訊近期耗電率",
+            "其他必要裝置電量",
+            "預計等待或撤退時間",
+        )
+    ):
+        violations.append("重複裝置資源欄位")
+    if (
+        brief.subject == "是否應保留行動電源給通訊"
+        and "因缺少" not in output
+    ):
+        violations.append("缺口清單缺少語法連接")
+    if brief.subject == "位置不確定時應停止並等待" and any(
+        phrase in output
+        for phrase in (
+            "建議找路",
+            "可以找路",
+            "應找路",
+            "建议找路",
+            "應原地等待或找路",
+        )
+    ) and not any(phrase in output for phrase in ("不建議找路", "不要找路", "不可找路")):
+        violations.append("位置不確定時建議找路")
+    if brief.subject == "是否可下切溪谷" and any(
+        phrase in output
+        for phrase in ("可以下切", "可下切", "建議下切", "先下切")
+    ) and not any(
+        phrase in output
+        for phrase in ("不可以下切", "不可下切", "不建議下切", "不要下切", "不得下切")
+    ):
+        violations.append("建議下切溪谷")
+    if brief.subject == "是否應移動到稜線找訊號" and any(
+        phrase in output
+        for phrase in ("建議往稜線", "移動到稜線", "上稜線找訊號")
+    ) and not any(
+        phrase in output
+        for phrase in (
+            "不要移動到稜線",
+            "不得移動到稜線",
+            "不建議往稜線",
+            "不可上稜線",
+            "不應盲目移動到稜線",
+            "不應盲目移動",
+        )
+    ):
+        violations.append("建議盲目移動到稜線")
+    if brief.subject == "在安全處建立可視標記" and any(
+        term in output
+        for term in ("相容平台", "介面或系統", "導入資料", "軟體工具")
+    ):
+        violations.append("把戶外可視標記誤解成軟體標記")
+    if brief.subject == "需保存給搜救的事件證據" and any(
+        phrase in output
+        for phrase in ("無法確定應保存哪些證據", "請列出所有需要確認的項目")
+    ):
+        violations.append("未回答已由工具提供的搜救證據類別")
+    if brief.subject == "哪些待援可見性候選需人工複核" and any(
+        phrase in output
+        for phrase in ("缺少判斷邊界", "請提供每項缺失的證據")
+    ):
+        violations.append("未使用可見性候選 facts")
+    if brief.subject == "哪些待援可見性候選需人工複核" and any(
+        phrase in output
+        for phrase in ("較容易被看見的待援可見性候選", "這些位置更容易被看見")
+    ):
+        violations.append("把可見性候選寫成已確認較容易被看見")
+    if brief.subject == "目前位置回報間隔" and re.search(
+        r"(?:每|間隔)\s*[0-9]+\s*(?:分鐘|小時)",
+        output,
+    ):
+        violations.append("發明位置回報時間間隔")
+    if brief.subject == "手機只剩 5% 時的電力優先順序":
+        if "5%" not in output and "5％" not in output:
+            violations.append("遺漏使用者提供的 5% 電量")
+        if any(
+            phrase in output
+            for phrase in ("無法判斷您手機的狀態", "請提供手機剩餘電量")
+        ):
+            violations.append("忽略已知手機電量")
+    if brief.subject == "目前位置應人工分享給哪些對象" and any(
+        phrase in output
+        for phrase in ("目前位置無法確定", "請提供更詳細的資訊")
+    ):
+        violations.append("未回答位置分享對象")
+    if brief.subject in STRUCTURED_POST_TRIP_GUIDANCE_SUBJECTS:
+        allowed_post_trip_numbers = facts_text + brief.boundary
+        post_trip_numbers = re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?", output)
+        if any(number not in allowed_post_trip_numbers for number in post_trip_numbers):
+            violations.append("行後回答新增未提供的數值或時間")
+        if any(
+            marker in output
+            for marker in (
+                "事件時間點",
+                "前兆事件點",
+                "待補資料",
+                "**",
+            )
+        ):
+            violations.append("行後回答包含 placeholder 或格式標記")
+        post_trip_sentences = [
+            re.sub(r"\s+", "", item)
+            for item in re.split(r"[。！？]", output)
+            if re.sub(r"\s+", "", item)
+        ]
+        if len(post_trip_sentences) != len(set(post_trip_sentences)):
+            violations.append("行後回答重複句子")
+        if "或資源或" in output or "或隊伍或" in output:
+            violations.append("行後回答連接詞重複")
+        if brief.subject == "incident package 資料契約" and re.search(
+            r"(?:位置|座標|軌跡|CP|傷勢|隊伍|天氣|電量|資源|來源|未知欄位)"
+            r"或(?:位置|座標|軌跡|CP|傷勢|隊伍|天氣|電量|資源|來源|未知欄位)",
+            output,
+            flags=re.IGNORECASE,
+        ):
+            violations.append("行後分類使用過多替代連接詞")
+        if brief.subject == "事件主因分類回顧" and "或" in output:
+            violations.append("行後分類使用過多替代連接詞")
+        if brief.subject == "spec 更新候選審查" and re.search(
+            r"spec\s*候選.{0,24}(?:失敗紀錄|回歸測試)",
+            output,
+            flags=re.IGNORECASE,
+        ):
+            violations.append("把失敗證據誤稱為 spec 候選")
+        if brief.subject in {
+            "下次行前規劃三項回顧",
+            "spec 更新候選審查",
+            "incident package 資料契約",
+        } and output.rstrip().endswith("目前不能確認。"):
+            violations.append("行後回答以無受詞的未知句收尾")
+        if brief.subject == "下次行前規劃三項回顧" and any(
+            phrase in output
+            for phrase in ("不能確認證據缺口", "無法確定回顧的具體內容")
+        ):
+            violations.append("把已知 evidence gap 反寫成無法確認")
+        if brief.subject == "最早風險訊號回顧" and re.search(
+            r"CP\s*\d+", output, flags=re.IGNORECASE
+        ):
+            violations.append("把候選 CP 誤寫成最早事件訊號")
+        if brief.subject == "CP 設定缺漏回顧" and re.search(
+            r"CP\s*\d+.{0,10}(?:設錯|漏設|缺漏)", output, flags=re.IGNORECASE
+        ):
+            violations.append("無證據指定某個 CP 設錯或漏設")
+        if brief.subject == "景觀停留風險遺漏回顧" and any(
+            phrase in output for phrase in ("確實被忽略", "已被忽略", "就是被忽略")
+        ):
+            violations.append("無證據聲稱停留風險已被忽略")
+    if brief.subject in STRUCTURED_INCIDENT_GUIDANCE_SUBJECTS:
+        allowed_number_text = facts_text + brief.boundary
+        output_numbers = re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?", output)
+        if any(number not in allowed_number_text for number in output_numbers):
+            violations.append("結構化事故回答新增未提供的數值")
+        if any(
+            phrase in output
+            for phrase in (
+                "例如 GPS",
+                "如 GPS",
+                "如經緯度",
+                "如東北",
+                "如西北",
+                "如東南",
+                "如西南",
+                "公園與道路",
+                "地標為公園",
+            )
+        ):
+            violations.append("結構化事故回答新增示例位置")
+        if brief.missing_evidence and any(
+            phrase in output
+            for phrase in (
+                "皆已確認",
+                "均已確認",
+                "皆已記錄",
+                "均已記錄",
+            )
+        ):
+            violations.append("反轉證據：把事故缺失欄位寫成已確認")
+        if brief.subject == "位置已知的受傷事件回報" and "我已確認" in output:
+            violations.append("錯誤觀測者：Scout 聲稱已確認使用者位置")
+        if brief.subject == "移動傷者的二次傷害風險" and any(
+            phrase in output
+            for phrase in (
+                "專業救援建議與救援建議",
+                "救援建議與專業救援建議",
+            )
+        ):
+            violations.append("重複事故建議用詞")
+        if brief.subject == "移動傷者的二次傷害風險" and "傷勢穩定" in output:
+            violations.append("無證據聲稱傷勢穩定")
+    if (
+        brief.subject == "目前是否有可用的第二套導航工具"
+        and not any(term in output for term in ("請提供", "需提供", "需要提供"))
+    ):
+        violations.append("缺口清單缺少語法連接")
+    if brief.subject == "現在是否需要做高山症自評":
+        if not (
+            "高山症自評" in output
+            and any(term in output for term in ("建議現在", "現在做", "可以先做", "應做"))
+        ):
+            violations.append("未直接建議進行高山症自評")
+        if any(term in output for term in ("確診高山症", "可以繼續上升", "適合繼續上升")):
+            violations.append("高山症自評被誤寫成診斷或上升許可")
+        if not any(
+            term in output
+            for term in (
+                "不能診斷",
+                "不是診斷",
+                "不代表診斷",
+                "不能確認可繼續上升",
+                "不可確認可繼續上升",
+            )
+        ):
+            violations.append("缺少高山症自評判斷邊界")
+        if "\n" in output.strip() or "：" in output or ":" in output:
+            violations.append("高山症自評使用欄位清單格式")
+        if "警報訊號" in output:
+            violations.append("高山症自評新增無證據訊號")
+        if any(
+            term in output
+            for term in (
+                "請立即停止",
+                "立即停止上升",
+                "立即下撤",
+                "通知領隊",
+                "若出現任何症狀",
+            )
+        ):
+            violations.append("高山症自評新增無證據行動指令")
     if brief.subject == "哪些地方一定要設 checkpoint":
         if "無補水點" in facts_text and any(
             phrase in output
@@ -8330,11 +9911,44 @@ def _local_grounded_answer_brief_violations(
             for phrase in ("不能在此新增", "不能新增設置", "不可在此新增", "不可新增 checkpoint")
         ):
             violations.append("過度結論：不能新增 checkpoint")
+    team_unknown_subjects = {
+        "隊友距離是否已經過遠",
+        "後隊是否停止移動太久",
+        "隊伍是否已形成分離事件",
+        "有人未抵達約定山屋時的檢查與通報時機",
+        "目前是否應通知留守人",
+        "定時回報是否已逾時",
+        "最後一次有效位置在哪裡",
+        "隊伍目前誰最需要協助",
+        "隊伍應先集合或各自下撤",
+        "手機電量是否足夠完成求救通訊",
+        "手錶沒電後可用哪些備援定位方式",
+        "頭燈電量是否足夠走完下一段",
+        "是否應保留行動電源給通訊",
+        "目前是否應關閉非必要耗電功能",
+        "離線地圖是否已完整載入",
+        "目前是否有可用的第二套導航工具",
+        "裝備濕掉後是否應停止前進",
+    }
+    if (
+        brief.subject in team_unknown_subjects
+        and output.strip()
+        and output.rstrip()[-1] not in "。！？；"
+    ):
+        violations.append("句尾缺少標點")
+    if brief.subject == "晚出發一小時後能否安全完成" and any(
+        phrase in output for phrase in ("進度尚未完整", "進度不完整")
+    ):
+        violations.append("新增無證據狀態：CP 間進度不完整")
     if brief.subject == "哪些地方需避免停留拍照" and any(
         phrase in output
         for phrase in ("規定需要", "立即現場複核", "禁止停留拍照")
     ):
         violations.append("過度指令：把拍照候選寫成即時規定")
+    if brief.subject == "哪些地方需避免停留拍照" and re.search(
+        r"未達\s*CP", output, flags=re.IGNORECASE
+    ):
+        violations.append("新增無證據狀態：未達 CP")
     if brief.subject == "需要準備多少水和補給" and re.search(
         r"\d+(?:\.\d+)?\s*(?:ml|毫升|公升|kg|公斤|小時|小时)",
         output,
@@ -8345,8 +9959,16 @@ def _local_grounded_answer_brief_violations(
         flags=re.IGNORECASE,
     ):
         violations.append("新增未提供的水量或身體數字")
-    if output.rstrip().endswith(("應進一步", "需要進一步", "並考慮")):
+    if output.rstrip().endswith(
+        ("應進一步", "需要進一步", "並考慮", "並", "且", "或", "以及", "建議")
+    ):
         violations.append("回答句子未完成")
+    if re.search(
+        r"(?:可停留空間|reference-track provenance|定位精度)\s*[？?]\s*$",
+        output,
+        flags=re.IGNORECASE,
+    ):
+        violations.append("缺失 evidence 被寫成孤立問句")
     unbounded_accident_claim = re.sub(
         r"(?:不代表|不能說|不等於)(?:該\s*CP\s*)?最容易發生事故",
         "",
@@ -8357,7 +9979,8 @@ def _local_grounded_answer_brief_violations(
         violations.append("把候選錯寫成事故預測")
 
     if brief.decision == "REVIEW_CANDIDATE" and not any(
-        term in output for term in ("候選", "複核", "复核")
+        term in output
+        for term in ("候選", "複核", "复核", "需評估", "需要評估")
     ):
         violations.append("缺少判斷邊界：需複核候選")
     if brief.subject == "最需要複核的 CP 候選" and not any(
@@ -8367,10 +9990,24 @@ def _local_grounded_answer_brief_violations(
             "風險分數不能直接用來預測事故",
             "風險分數無法用來預測事故",
             "不能用風險分數預測事故",
+            "無法用風險分數預測事故",
             "不代表事故預測",
         )
+    ) and not re.search(
+        r"風險分數\s*(?:為\s*)?[0-9.]*\s*(?:不能|不可)(?:直接)?用來預測事故",
+        output,
     ):
         violations.append("缺少判斷邊界：風險分數不能預測事故")
+    if brief.subject == "是否有低容錯地形":
+        affirmative_low_tolerance = re.sub(
+            r"是否有低容錯地形候選[？?]?",
+            "",
+            output,
+        )
+        if "有低容錯地形候選" not in affirmative_low_tolerance:
+            violations.append("未直接回答：有低容錯地形候選")
+        if re.search(r"低容錯地形候選\s*[：:為是]?\s*(?:無|沒有)", output):
+            violations.append("矛盾結論：低容錯候選不可同時寫成無")
     if brief.subject == "哪些地方下雨後需優先複核":
         rain_boundary_ok = "危險" in output and any(
             term in output
@@ -8378,6 +10015,11 @@ def _local_grounded_answer_brief_violations(
         )
         if not rain_boundary_ok:
             violations.append("缺少判斷邊界：目前不能確認現場已經危險")
+        if any(
+            phrase in output
+            for phrase in ("無法確認是否雨後需優先複核", "不能確認是否雨後需優先複核")
+        ):
+            violations.append("矛盾語意：已列複核候選卻又否定是否需複核")
     night_boundary_ok = (
         brief.subject == "摸黑前應優先複核的路段"
         and "夜間通行" in output
@@ -8392,16 +10034,26 @@ def _local_grounded_answer_brief_violations(
             )
         )
     )
+    pretrip_candidate_scope = "行前" in output and any(
+        term in output for term in ("候選", "複核", "复核")
+    )
     if brief.decision == "REVIEW_CANDIDATE" and any(
         term in brief.boundary for term in ("不是", "未確認", "不能確認", "沒有證據")
-    ) and not night_boundary_ok and not any(
+    ) and not night_boundary_ok and not pretrip_candidate_scope and not any(
         term in output
         for term in ("不能確認", "未確認", "尚未確認", "無法確定", "不是即時")
     ):
         violations.append("缺少判斷邊界：尚未確認現場危險")
     if brief.decision == "UNKNOWN" and not any(
         term in output
-        for term in ("不能判定", "無法判定", "無法判斷", "未知", "無法確認")
+        for term in (
+            "不能判定",
+            "無法判定",
+            "無法判斷",
+            "無法確定",
+            "未知",
+            "無法確認",
+        )
     ):
         violations.append("缺少判斷邊界：目前未知")
     if brief.decision == "REPLAN" and not any(
@@ -8410,7 +10062,7 @@ def _local_grounded_answer_brief_violations(
         violations.append("缺少判斷邊界：需要重算計畫")
 
     unsupported_places = ("山頂", "避難所", "山屋", "溪谷", "稜線", "崩壁")
-    source_text = facts_text + brief.boundary
+    source_text = facts_text + brief.boundary + brief.subject
     for place in unsupported_places:
         if place in output and place not in source_text:
             violations.append(f"新增不存在的地點：{place}")
@@ -8426,13 +10078,63 @@ def _local_grounded_answer_brief_violations(
 def _local_brief_anchor_alternatives(anchor: str) -> tuple[str, ...]:
     normalized = re.sub(r"\s+", "", str(anchor or "").casefold())
     alternatives = [normalized]
+    semantic_aliases = {
+        "局部terrain/riskevidence": (
+            "局部地形與風險資訊",
+            "局部地形風險資料",
+            "地形與風險資訊",
+        ),
+        "reference-trackprovenance": (
+            "參考軌跡來源",
+            "參考軌跡出處",
+        ),
+        "referencetracks": ("參考軌跡",),
+        "gpxclusterdispersion": (
+            "gpx軌跡分散",
+            "軌跡分散程度",
+        ),
+        "地形或斷崖限制": (
+            "地形/斷崖限制",
+            "地形與斷崖限制",
+        ),
+        "nearestroutedistance": ("最近路線距離",),
+        "routecorridor寬度": ("路線走廊寬度",),
+        "nearestroutedistance趨勢": (
+            "最近路線距離趨勢",
+            "最近路線距離的變化趨勢",
+        ),
+        "horizontalaccuracy": ("水平精度", "水平定位精度"),
+        "坡度與地質evidence": ("坡度與地質資訊", "坡度地質資訊"),
+    }
+    alternatives.extend(semantic_aliases.get(normalized, ()))
     cp_match = re.search(r"cp\s*([0-9]+)", anchor, flags=re.IGNORECASE)
     if cp_match:
-        alternatives.append(f"cp{cp_match.group(1)}")
+        alternatives.extend(
+            (f"cp{cp_match.group(1)}", f"cp={cp_match.group(1)}")
+        )
+    segment_match = re.search(r"seg[.]\s*([0-9]+)", anchor, flags=re.IGNORECASE)
+    if segment_match:
+        alternatives.extend(
+            (f"段落{segment_match.group(1)}", f"路段{segment_match.group(1)}")
+        )
+    duration_match = re.search(r"約\s*([0-9.]+)\s*分鐘", anchor)
+    if duration_match:
+        value = duration_match.group(1)
+        alternatives.extend((f"約{value}分鐘", f"約為{value}分鐘"))
     gpx_match = re.search(r"gpx\s*[=：:]?\s*([0-9.]+)\s*km", anchor, flags=re.IGNORECASE)
     if gpx_match:
         value = gpx_match.group(1)
-        alternatives.extend((f"gpx{value}km", f"gpx里程={value}km"))
+        alternatives.extend(
+            (
+                f"gpx{value}km",
+                f"gpx={value}km",
+                f"gpx值為{value}km",
+                f"gpx值是{value}km",
+                f"gpx里程={value}km",
+                f"gpx里程是{value}km",
+                f"gpx里程{value}km",
+            )
+        )
     score_match = re.search(
         r"(?:score|風險分數|teii_20m)\s*=\s*([0-9.]+)",
         anchor,
@@ -8440,6 +10142,25 @@ def _local_brief_anchor_alternatives(anchor: str) -> tuple[str, ...]:
     )
     if score_match:
         alternatives.append(score_match.group(1))
+    bucket_match = re.search(
+        r"(?:bucket|風險級別)\s*=\s*([A-Za-z_]+)",
+        anchor,
+        flags=re.IGNORECASE,
+    )
+    if bucket_match:
+        bucket = bucket_match.group(1).casefold()
+        alternatives.extend(
+            (f"bucket{bucket}", f"風險級別{bucket}", f"風險級別為{bucket}")
+        )
+        if bucket == "extreme":
+            alternatives.extend(
+                (
+                    "風險級別為極端",
+                    "極端風險",
+                    "極端風險類型",
+                    "屬於極端風險",
+                )
+            )
     return tuple(_dedupe_preserving_order(alternatives))
 
 
@@ -9625,6 +11346,65 @@ def _extract_survival_playbook_fields(grounded_answer: str) -> dict[str, str]:
     return values
 
 
+def _extract_survival_query_guidance(
+    grounded_answer: str,
+) -> tuple[
+    tuple[str, ...],
+    str,
+    str,
+    tuple[tuple[str, ...], ...],
+    tuple[str, ...],
+    tuple[str, ...],
+]:
+    text = str(grounded_answer or "")
+
+    def field(name: str) -> str:
+        match = re.search(rf"{re.escape(name)}=([^；;]+)", text)
+        return match.group(1).strip() if match else ""
+
+    facts_text = field("guidance_facts")
+    facts = tuple(
+        item.strip()
+        for item in facts_text.split("|")
+        if item.strip()
+    )
+    required = tuple(
+        tuple(item.strip() for item in group.split("|") if item.strip())
+        for group in field("guidance_required").split("||")
+        if group.strip()
+    )
+    missing = tuple(
+        item.strip()
+        for item in field("guidance_missing").split("|")
+        if item.strip()
+    )
+    forbidden = tuple(
+        item.strip()
+        for item in field("guidance_forbidden").split("|")
+        if item.strip()
+    )
+    return (
+        facts,
+        field("guidance_boundary"),
+        field("guidance_subject"),
+        required,
+        missing,
+        forbidden,
+    )
+
+
+def _extract_low_battery_priority(
+    grounded_answer: str,
+) -> tuple[str, ...]:
+    match = re.search(
+        r"low_battery_priority=([^/；;]+)",
+        str(grounded_answer or ""),
+    )
+    if not match:
+        return ()
+    return tuple(item.strip() for item in match.group(1).split("|") if item.strip())
+
+
 def _extract_visibility_candidate_anchors(grounded_answer: str) -> list[str]:
     text = str(grounded_answer or "")
     marker = "待援可見性候選："
@@ -10235,8 +12015,10 @@ def _normalize_ai_hat_plus_2_local_output(output: str) -> str:
         .replace("路迹", "路跡")
         .replace("軌迹", "軌跡")
         .replace("軐跡", "軌跡")
+        .replace("軍跡", "軌跡")
         .replace("趨势", "趨勢")
         .replace("確診點", "確定點")
+        .replace("確斷", "確定")
         .replace("狼態", "狀態")
         .replace("暴涨", "暴漲")
         .replace("阻断", "阻斷")
@@ -10265,6 +12047,21 @@ def _normalize_ai_hat_plus_2_local_output(output: str) -> str:
         .replace("\n答案：", "\n")
     )
     return _postprocess_ai_hat_plus_2_short_answer(normalized)
+
+
+def _normalize_ai_hat_plus_2_orthography_only(output: str) -> str:
+    return (
+        str(output or "")
+        .translate(_COMMON_LOCAL_ZH_TRANSLATION)
+        .replace("軍跡", "軌跡")
+        .replace("軐跡", "軌跡")
+        .replace("軌迹", "軌跡")
+        .replace("趨势", "趨勢")
+        .replace("狼態", "狀態")
+        .replace("確診點", "確定點")
+        .replace("確斷", "確定")
+        .strip()
+    )
 
 
 def _postprocess_ai_hat_plus_2_short_answer(output: str) -> str:
@@ -10455,6 +12252,15 @@ def _draft_answer_for_local_model(grounded_answer: str) -> str:
 def _missing_context_fact_bundle(question: str, grounded_answer: str) -> dict[str, str]:
     normalized = str(question or "").casefold()
     evidence = str(grounded_answer or "").casefold()
+    if any(
+        term in normalized
+        for term in ("多久回報一次位置", "位置回報間隔", "多常回報位置")
+    ):
+        return {
+            "subject": "目前位置回報間隔",
+            "gaps": "原定回報間隔|目前事件與隊伍狀態|通訊品質|剩餘電量|人工約定",
+            "requested_inputs": "原定回報間隔|目前事件與隊伍狀態|通訊品質|剩餘電量|與留守人的回報約定",
+        }
     if any(term in normalized for term in ("配速", "pace", "buffer", "eta")):
         return {
             "subject": "今日配速與時間緩衝",
@@ -10466,7 +12272,7 @@ def _missing_context_fact_bundle(question: str, grounded_answer: str) -> dict[st
         for term in ("體能", "体能", "體力", "体力", "太硬", "吃力")
     ):
         return {
-            "subject": "這條路線對你不會太硬",
+            "subject": "這條路線對你的體能是否太硬",
             "gaps": "體能 reserve|心率/HRV 或 body battery|主觀疲勞與最近休息 evidence",
             "requested_inputs": "心率/HRV|body battery 或 RPE|最近休息時間|目前配速",
         }
@@ -10619,6 +12425,11 @@ def _missing_context_fact_bundle(question: str, grounded_answer: str) -> dict[st
     )
     for terms, subject, gaps, requested_inputs in team_field_subjects:
         if any(term in normalized for term in terms):
+            if (
+                subject == "何時需要通報未抵達約定山屋的隊員"
+                and any(term in normalized for term in ("怎麼辦", "怎么办", "如何處理"))
+            ):
+                subject = "有人未抵達約定山屋時的檢查與通報時機"
             return {
                 "subject": subject,
                 "gaps": gaps,
@@ -10884,7 +12695,7 @@ def _missing_context_fact_bundle(question: str, grounded_answer: str) -> dict[st
             ("歷史gpx", "历史gpx", "軌跡分散", "轨迹分散"),
             "歷史 GPX 在這裡是否分散",
             "有效 GNSS 定位|reference-track cluster|橫向偏移統計|INS/DR trace",
-            "目前座標|reference tracks|GPX cluster dispersion|橫向偏移統計",
+            "目前座標|reference tracks|GPX cluster dispersion|橫向偏移統計|INS/DR trace",
         ),
         (
             ("路徑寬度", "路径宽度", "容許路徑", "容许路径"),

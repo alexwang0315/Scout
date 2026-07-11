@@ -118,3 +118,87 @@ def test_survival_playbook_output_kind_constant() -> None:
     assert SURVIVAL_INCIDENT_PLAYBOOK_OUTPUT_KIND == (
         "scout_ai_survival_incident_playbook_tool_output"
     )
+
+
+def test_survival_playbook_emits_query_specific_lost_mode_guidance() -> None:
+    visual = explain_scout_survival_incident_playbook(
+        PROJECT_ROOT,
+        query="我要怎麼建立可視標記？",
+    )["query_guidance"]
+    evidence = explain_scout_survival_incident_playbook(
+        PROJECT_ROOT,
+        query="我應該保存哪些證據給搜救？",
+    )["query_guidance"]
+    recipients = explain_scout_survival_incident_playbook(
+        PROJECT_ROOT,
+        query="我該把目前位置分享給誰？",
+    )["query_guidance"]
+    ridge = explain_scout_survival_incident_playbook(
+        PROJECT_ROOT,
+        query="我該往稜線上移動找訊號嗎？",
+    )["query_guidance"]
+
+    assert any("高對比" in fact for fact in visual["facts"])
+    assert "危險地形" in visual["boundary"]
+    assert any("最後移動方向" in fact for fact in evidence["facts"])
+    assert any("留守人" in fact for fact in recipients["facts"])
+    assert recipients["outbound_send_performed"] is False
+    assert any("目前位置" in fact and "回退" in fact for fact in ridge["facts"])
+
+
+def test_survival_playbook_emits_structured_accident_rescue_guidance() -> None:
+    expected = {
+        "我滑倒受傷但位置清楚，該怎麼回報？": (
+            "位置已知的受傷事件回報",
+            "受傷",
+        ),
+        "我應該報座標還是地標？": (
+            "求救位置應如何表達",
+            "座標與地標",
+        ),
+        "直升機是否有可能吊掛？": (
+            "直升機吊掛可行性候選",
+            "周圍障礙",
+        ),
+        "這個地形搜救員能接近嗎？": (
+            "搜救人員地面接近可行性",
+            "接近路線",
+        ),
+        "我該移動到更開闊的地方嗎？": (
+            "是否應移動到開闊待援位置",
+            "盲目移動",
+        ),
+        "移動傷者是否會更危險？": (
+            "移動傷者的二次傷害風險",
+            "立即危險",
+        ),
+        "我們是否需要建立現場指揮角色？": (
+            "事故現場角色分工",
+            "協調者",
+        ),
+        "救援不會立刻到，我們該怎麼撐過夜？": (
+            "待援過夜保全順序",
+            "隔絕濕冷",
+        ),
+    }
+    for question, (subject, required_fact) in expected.items():
+        guidance = explain_scout_survival_incident_playbook(
+            PROJECT_ROOT,
+            query=question,
+        )["query_guidance"]
+        assert guidance["subject"] == subject, question
+        assert any(required_fact in fact for fact in guidance["facts"]), question
+        assert guidance["required_fact_groups"], question
+        assert guidance["outbound_send_performed"] is False
+
+
+def test_leave_behind_relay_question_uses_rescue_report_guidance() -> None:
+    guidance = explain_scout_survival_incident_playbook(
+        PROJECT_ROOT,
+        query="哪些資訊要給留守人轉報？",
+    )["query_guidance"]
+
+    assert guidance["subject"] == "留守人轉報所需資訊"
+    assert any("行程" in fact for fact in guidance["facts"])
+    assert any("位置" in fact and "時間" in fact for fact in guidance["facts"])
+    assert "不自動發送" in guidance["boundary"]

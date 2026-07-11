@@ -153,6 +153,7 @@ class SkillPromptContract(StrictModel):
     deterministic_answer_template_allowed: bool = False
     same_model_self_review_allowed: bool = True
     self_review_must_not_receive_reference_answer: bool = True
+    self_review_may_receive_previous_model_answer: bool = False
 
 
 class SkillAnswerContract(StrictModel):

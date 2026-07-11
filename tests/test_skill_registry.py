@@ -62,6 +62,41 @@ class SkillRegistryTests(unittest.TestCase):
                 for rule in field_answer.answer_contract.style_rules
             )
         )
+        local_answer = registry.get("local-grounded-short-answer")
+        self.assertIsNotNone(local_answer.answer_contract)
+        assert local_answer.answer_contract is not None
+        self.assertIsNotNone(local_answer.answer_contract.prompt_contract)
+        assert local_answer.answer_contract.prompt_contract is not None
+        self.assertTrue(
+            local_answer.answer_contract.prompt_contract.self_review_may_receive_previous_model_answer
+        )
+        self.assertTrue(
+            local_answer.answer_contract.prompt_contract.self_review_must_not_receive_reference_answer
+        )
+        self.assertTrue(
+            any(
+                "低風險自評" in rule
+                for rule in local_answer.answer_contract.missing_evidence_rules
+            )
+        )
+        self.assertTrue(
+            any(
+                "高山症自評" in topic.triggers
+                for topic in local_answer.answer_contract.topic_guidance
+            )
+        )
+        self.assertTrue(
+            any(
+                "隊伍分離" in topic.triggers
+                for topic in local_answer.answer_contract.topic_guidance
+            )
+        )
+        self.assertTrue(
+            any(
+                "報案資訊題" in " ".join(topic.guidance)
+                for topic in local_answer.answer_contract.topic_guidance
+            )
+        )
         self.assertEqual(
             registry.get("remote-status-json").preflight.required_skill_ids,
             [

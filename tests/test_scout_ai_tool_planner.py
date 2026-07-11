@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from assistant_models import AssistantSurface, ScoutAssistantQuery
 from scout_ai_tool_planner import (
     CONTEXTUAL_PERMISSION_TOOL_ID,
@@ -964,6 +966,38 @@ def test_planner_routes_rescue_waiting_and_open_area_questions_to_survival() -> 
         assert survival.boundary.runtime_safety_truth is False
 
 
+def test_planner_routes_accident_rescue_questions_to_survival_playbook() -> None:
+    questions = (
+        "我滑倒受傷但位置清楚，該怎麼回報？",
+        "我應該報座標還是地標？",
+        "直升機是否有可能吊掛？",
+        "這個地形搜救員能接近嗎？",
+        "我該移動到更開闊的地方嗎？",
+        "移動傷者是否會更危險？",
+        "我們是否需要建立現場指揮角色？",
+        "哪些資訊要給留守人轉報？",
+        "救援不會立刻到，我們該怎麼撐過夜？",
+    )
+    for question in questions:
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in _tool_ids(plan), question
+
+
+def test_planner_adds_rescue_site_evidence_tools_for_approach_questions() -> None:
+    for question in (
+        "直升機是否有可能吊掛？",
+        "這個地形搜救員能接近嗎？",
+        "我該移動到更開闊的地方嗎？",
+    ):
+        tool_ids = _tool_ids(
+            plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        )
+        assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in tool_ids, question
+        assert TERRAIN_SCORE_TOOL_ID in tool_ids, question
+        assert MAJOR_POINT_TOOL_ID in tool_ids, question
+        assert LIVE_NAVIGATION_STATE_TOOL_ID in tool_ids, question
+
+
 def test_planner_selects_contextual_permission_for_micro_decision() -> None:
     plan = plan_scout_ai_tools(
         _query("我可以在這裡停下來拍一段影片嗎?"),
@@ -1676,6 +1710,16 @@ def test_planner_routes_dead_phone_watch_battery_to_equipment_resource() -> None
     assert equipment.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
     assert equipment.request is not None
     assert equipment.request["arguments"] == {"phone_battery_percent": 0}
+
+
+def test_equipment_planner_preserves_explicit_phone_battery_percent() -> None:
+    plan = plan_scout_ai_tools(
+        _query("如果手機只剩 5%，怎麼用最有效？"),
+        project_root=PROJECT_ROOT,
+    )
+    equipment = _single_tool(plan, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert equipment.request is not None
+    assert equipment.request["arguments"]["phone_battery_percent"] == 5
     assert equipment.boundary.runtime_safety_truth is False
 
 
@@ -1882,6 +1926,41 @@ def test_planner_passes_post_trip_event_taxonomy_feedback() -> None:
     assert args["weather_matched_expectation"] is False
     assert args["user_feedback_items"] == ["review_for_next_pretrip"]
     assert item.boundary.runtime_safety_truth is False
+
+
+@pytest.mark.parametrize(
+    "question",
+    (
+        "這次最早的風險訊號是什麼？",
+        "Scout 哪個 warning 應該更早出現？",
+        "哪個 CP 設錯或漏設了？",
+        "哪段路的 GPX corridor 太寬或太窄？",
+        "是否有景觀點/拍照停留風險被忽略？",
+        "這次是迷途、滑墜、資源不足還是隊伍治理問題？",
+        "哪些資料應該進 incident package？",
+        "這個案例應該變成 field case 嗎？",
+        "哪些 spec 需要被更新？",
+        "下次行前規劃要改哪三件事？",
+    ),
+)
+def test_planner_routes_q91_q100_to_post_trip_review(question: str) -> None:
+    plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+
+    assert POST_TRIP_REVIEW_TOOL_ID in _tool_ids(plan), question
+
+
+def test_planner_keeps_support_tools_for_cp_and_corridor_review() -> None:
+    cp_plan = plan_scout_ai_tools(
+        _query("哪個 CP 設錯或漏設了？"),
+        project_root=PROJECT_ROOT,
+    )
+    corridor_plan = plan_scout_ai_tools(
+        _query("哪段路的 GPX corridor 太寬或太窄？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    assert ROUTE_ARCHITECTURE_TOOL_ID in _tool_ids(cp_plan)
+    assert ROUTE_STRUCTURE_TOOL_ID in _tool_ids(corridor_plan)
 
 
 def test_planner_selects_route_architecture_for_cp_graph_question() -> None:

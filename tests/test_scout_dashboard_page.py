@@ -30,6 +30,116 @@ def test_scout_dashboard_page_serves_static_shell() -> None:
     assert 'id="dashboardEvidence"' in response.text
 
 
+def test_scout_dashboard_ai_hat_trace_displays_actual_postprocess_mode() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert 'agentAiHatTraceValue(response, "ai_hat_postprocess_applied=")' in html
+    assert "postprocess=${aiHatPostprocess}" in html
+
+
+def test_scout_dashboard_body_index_fresh_project_has_no_fabricated_evidence(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        admin_api,
+        "DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT",
+        tmp_path / "empty_store",
+    )
+    client = TestClient(create_admin_app())
+
+    response = client.get(
+        "/admin/dashboard/body-index?project_id=fresh_body_index_project"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "scout_dashboard_body_index.v1"
+    assert payload["project_id"] == "fresh_body_index_project"
+    assert payload["import_status"] == "not_imported"
+    assert payload["source_index"] == []
+    expected_summary = {
+        "scout_pace_coefficient": "unavailable",
+        "energy_reserve": "unavailable",
+        "vulnerability": "unavailable",
+        "experience_trust": "unavailable",
+        "score_percent": 0,
+        "evidence_status": "unavailable",
+    }
+    for key, value in expected_summary.items():
+        assert payload["summary"][key] == value
+    assert payload["coverage_cards"] == [
+        ["Health exports", "0", "no local HealthExport sources imported"],
+        ["Walking sessions", "0", "no walking workouts imported"],
+        ["GPX tracks", "0", "no route traces imported"],
+        ["15-min windows", "0", "no sanitized pressure windows"],
+        ["Provider metrics", "0", "no source-value metric families"],
+    ]
+    assert payload["pressure_timeline"] == []
+    assert payload["provider_metrics"] == []
+    assert payload["provider_metric_summaries"] == []
+    assert all(row[1] == "pending" for row in payload["health_signals"])
+    assert all("--" in row[2] for row in payload["health_signals"])
+    assert payload["boundary"]["raw_health_payload_shared"] is False
+    assert payload["boundary"]["raw_gpx_shared"] is False
+    assert payload["boundary"]["phase1_runtime_safety_truth"] is False
+    assert payload["boundary"]["safety_api_called"] is False
+    assert payload["boundary"]["outbound_alert_sent"] is False
+
+    html = PAGE.read_text(encoding="utf-8")
+    for fabricated_value in (
+        'value: "3.8 km/h"',
+        'value: "410 m/h"',
+        'value: "-34%"',
+        'scout_pace_coefficient: "0.82"',
+        '["Health exports", "3", "HealthAutoExport zip files"]',
+        '["2018 long walk", "16 windows", "single GPX session", 33]',
+    ):
+        assert fabricated_value not in html
+
+
+def test_scout_dashboard_body_index_all_invalid_import_stays_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source_dir = tmp_path / "InvalidHealthExport"
+    source_dir.mkdir()
+    with zipfile.ZipFile(source_dir / "invalid.zip", "w") as archive:
+        archive.writestr("invalid.json", "{not valid json")
+    monkeypatch.setattr(
+        admin_api,
+        "DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT",
+        tmp_path / "invalid_store",
+    )
+    client = TestClient(create_admin_app())
+
+    response = client.post(
+        "/admin/dashboard/body-index/import",
+        json={
+            "project_id": "invalid_body_index_project",
+            "source_dir": str(source_dir),
+            "confirm_import": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["import_status"] == "not_imported"
+    assert payload["source_index"] == []
+    assert payload["summary"]["evidence_status"] == "unavailable"
+    assert payload["summary"]["scout_pace_coefficient"] == "unavailable"
+    assert payload["summary"]["score_percent"] == 0
+    assert payload["import_result"]["processed_source_count"] == 0
+    assert payload["import_result"]["error_count"] == 1
+    assert all(row[1] == "0" for row in payload["coverage_cards"])
+
+    read_response = client.get(
+        "/admin/dashboard/body-index?project_id=invalid_body_index_project"
+    )
+    assert read_response.status_code == 200
+    assert read_response.json()["summary"] == payload["summary"]
+
+
 def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
     tmp_path: Path,
     monkeypatch,
@@ -75,6 +185,7 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
     assert payload["schema_version"] == "scout_dashboard_body_index.v1"
     assert payload["project_id"] == "test_body_index"
     assert payload["import_status"] == "imported"
+    assert payload["summary"]["evidence_status"] == "available"
     assert payload["import_result"]["new_source_count"] == 2
     assert payload["import_result"]["duplicate_source_count"] == 0
     assert payload["import_result"]["processed_source_count"] == 2
@@ -141,7 +252,19 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
 
     read_response = client.get("/admin/dashboard/body-index?project_id=test_body_index")
     assert read_response.status_code == 200
-    assert read_response.json()["coverage_cards"] == second_payload["coverage_cards"]
+    read_payload = read_response.json()
+    assert read_payload["coverage_cards"] == second_payload["coverage_cards"]
+    assert read_payload["summary"]["evidence_status"] == "available"
+    serialized_read = json.dumps(read_payload, ensure_ascii=False)
+    for forbidden_value in (
+        "heartRateData",
+        "latitude",
+        "longitude",
+        "<trkpt",
+        "HealthAutoExport-body-index-a.zip",
+        "2026-06-02 08:00:00 +0800",
+    ):
+        assert forbidden_value not in serialized_read
 
 
 def test_scout_dashboard_body_index_watch_imports_new_zip(
@@ -975,6 +1098,23 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert ".route-pane" in html
     assert ".detail-pane" in html
 
+    assert "const MAX_RENDERED_SEGMENT_POINTS = 80;" in html
+    assert "SCOUT_LAYER_IDS.map((layerId, index)" in html
+    assert "function buildDashboardSegmentPaths(rawSegments, bounds)" in html
+    assert "segment.display_geometry || {}" in html
+    assert "display.coordinate_segments" in html
+    assert "segmentPaths: buildDashboardSegmentPaths(state.project?.segments, bounds)" in html
+    segment_branch = html.split('if (layerId === "segments") {', 1)[1].split(
+        'if (["reference-tracks", "retreat"].includes(layerId)) {',
+        1,
+    )[0]
+    assert "mapData.segmentPaths" in segment_branch
+    assert 'data-segment-id="${escapeHtml(segment.id)}"' in segment_branch
+    assert 'stroke="#00d4ff"' in segment_branch
+    assert 'stroke-width="5.6"' in segment_branch
+    assert 'stroke-dasharray="7 4"' in segment_branch
+    assert "mapData.routePath" not in segment_branch
+
 
 def test_scout_dashboard_debug_message_runtime_details_contract() -> None:
     html = PAGE.read_text(encoding="utf-8")
@@ -1172,6 +1312,7 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "bodyIndexSummary",
         "bodyIndexRows",
         "bodyIndexScorePercent",
+        "bodyIndexDisplayValue",
         "bodyIndexDefaultTrend",
         "normalizeBodyIndexHealthSignal",
         "bodyIndexTrendArrow",
@@ -1303,9 +1444,13 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "GPX tracks",
         "15-min windows",
         "Provider metrics",
-        "3 local exports / 23 walking sessions",
-        "49 sanitized 15-min windows",
-        "parser-ready walking workouts",
+        "no HealthExport evidence imported",
+        "no sanitized windows imported",
+        "No provider metrics imported.",
+        "No Scout Pace Coefficient has been calculated.",
+        "awaiting evidence",
+        "unavailable until evidence import",
+        "coefficient_metrics",
         "source value only",
         "not live oxygen uptake",
         "VO2max Baseline",
@@ -1316,16 +1461,6 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "Recovery Debt Windows",
         "HR Pressure Windows",
         "Step + Distance Pattern",
-        "2018 long walk",
-        "2020 walking day",
-        "2026 recent baseline",
-        "vo2_max",
-        "blood_oxygen_saturation",
-        "heart_rate_variability",
-        "resting_heart_rate",
-        "walking_heart_rate_average",
-        "active_energy",
-        "walking_running_distance",
     ):
         assert label in html
 

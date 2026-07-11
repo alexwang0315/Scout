@@ -339,6 +339,8 @@ def plan_scout_ai_tools(
                 "Question asks for Survival / Incident Playbook: lost-position, injury, cold exposure, SOS/rescue preparation, evidence preservation, or what not to do in an incident.",
             )
         )
+    if _looks_like_rescue_site_evidence_question(normalized_question):
+        _append_rescue_site_evidence_tools(selected)
     if (
         _looks_like_live_navigation_state_question(normalized_question)
         and not workspace_inventory_question
@@ -709,6 +711,26 @@ def _append_on_route_micro_decision_support_tools(
             RISK_SCORE_TOOL_ID,
             "On-route micro-decisions need forward route-risk evidence before "
             "treating a user action as low consequence.",
+        ),
+    )
+    for tool_id, reason in support_tools:
+        if not _has_tool(selected, tool_id):
+            selected.append((tool_id, reason))
+
+
+def _append_rescue_site_evidence_tools(selected: list[tuple[str, str]]) -> None:
+    support_tools = (
+        (
+            TERRAIN_SCORE_TOOL_ID,
+            "Rescue approach/hoist/open-area questions need slope and terrain-exposure candidates; scores remain pretrip evidence only.",
+        ),
+        (
+            MAJOR_POINT_TOOL_ID,
+            "Rescue approach/hoist/open-area questions need named route points and workspace candidates for human review.",
+        ),
+        (
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            "Rescue approach/hoist/open-area questions need the current position and GNSS quality before relating candidates to the user.",
         ),
     )
     for tool_id, reason in support_tools:
@@ -1332,6 +1354,14 @@ def _equipment_resource_request_overrides(question: str) -> dict[str, Any]:
     overrides: dict[str, Any] = {}
     if _states_phone_battery_dead(normalized):
         overrides["phone_battery_percent"] = 0
+    phone_percent_match = re.search(
+        r"手機(?:電量)?(?:只剩|剩下|剩)?([0-9]{1,3})(?:%|％)",
+        normalized,
+    )
+    if phone_percent_match:
+        phone_percent = int(phone_percent_match.group(1))
+        if 0 <= phone_percent <= 100:
+            overrides["phone_battery_percent"] = phone_percent
     if _states_missing_offline_map(normalized):
         overrides["offline_map_ready"] = False
     if _has_any(
@@ -1451,7 +1481,11 @@ def _post_trip_event_phrases(
     for term in (*terms, *shared_terms):
         if _has_any(normalized, (term,)):
             add(term)
-    if not phrases and _has_any(normalized, ("near", "incident", "事件")):
+    if (
+        not phrases
+        and _has_any(normalized, ("near", "incident", "事件"))
+        and "incidentpackage" not in normalized.replace(" ", "")
+    ):
         add(question)
     return phrases
 
@@ -2104,6 +2138,8 @@ def _looks_like_workspace_inventory_question(text: str) -> bool:
 
 
 def _looks_like_route_structure_question(text: str) -> bool:
+    if "corridor" in text and _has_any(text, ("太寬", "太窄", "寬度", "宽度")):
+        return True
     if _has_any(text, ("轉折", "急轉", "稜線轉折", "路線轉折", "turnpoint", "route turn", "sharp turn")):
         return True
     if _has_any(text, ("幾點前通過", "几点前通过", "最晚幾點", "最晚几点")) and _has_any(
@@ -2118,6 +2154,8 @@ def _looks_like_route_structure_question(text: str) -> bool:
 
 
 def _looks_like_route_architecture_question(text: str) -> bool:
+    if "cp" in text and _has_any(text, ("設錯", "设错", "漏設", "漏设", "缺漏")):
+        return True
     if _looks_like_post_trip_review_question(text):
         return False
     return _has_any(
@@ -3451,6 +3489,30 @@ def _looks_like_post_trip_review_question(text: str) -> bool:
             "capability capsule",
             "incident package",
             "field case",
+            "最早的風險訊號",
+            "最早風險訊號",
+            "最早的風險信號",
+            "最早風險信號",
+            "warning應該更早",
+            "warning 應該更早",
+            "warning應該提前",
+            "warning 應該提前",
+            "cp設錯",
+            "cp 設錯",
+            "cp漏設",
+            "cp 漏設",
+            "corridor太寬",
+            "corridor 太寬",
+            "corridor太窄",
+            "corridor 太窄",
+            "停留風險被忽略",
+            "拍照風險被忽略",
+            "迷途、滑墜、資源不足",
+            "迷途滑墜資源不足",
+            "spec需要被更新",
+            "spec 需要被更新",
+            "spec需要更新",
+            "spec 需要更新",
         ),
     )
 
@@ -3828,13 +3890,36 @@ def _looks_like_survival_incident_playbook_question(text: str) -> bool:
             "報座標",
             "地標",
             "直升機",
+            "搜救員",
+            "搜救人員",
             "傷者",
             "受傷",
+            "現場指揮",
+            "留守人轉報",
+            "給留守人轉報",
+            "轉報",
             "撐過夜",
             "報案",
             "失溫",
             "sos",
             "rescue",
+        ),
+    )
+
+
+def _looks_like_rescue_site_evidence_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "直升機",
+            "吊掛",
+            "吊挂",
+            "搜救員能接近",
+            "搜救人员能接近",
+            "搜救人員能接近",
+            "更開闊",
+            "開闊的地方",
+            "開闊待援",
         ),
     )
 
