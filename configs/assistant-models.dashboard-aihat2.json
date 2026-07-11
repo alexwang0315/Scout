@@ -14,14 +14,14 @@
   },
   "local_model": {
     "profile": "local",
-    "model_name": "hailo:llama3.2:3b",
+    "model_name": "hailo:qwen3:1.7b",
     "base_url": "http://127.0.0.1:18000",
     "backend": "hailo_ollama",
     "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h",
     "token_id": "scout-ai-hat-plus-2-local-ollama",
     "tool_calling": "disabled",
     "model_settings": {
-      "max_tokens": 128
+      "max_tokens": 384
     }
   },
   "timeout_seconds": 120,
