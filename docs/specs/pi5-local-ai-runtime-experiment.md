@@ -406,6 +406,50 @@ Chinese clarification:
 - `safety authority` means the component allowed to decide L0-L4 safety state;
   local AI does not have that authority.
 
+## AI HAT+ 2 / Hailo Ollama Fallback Extension
+
+The original experiment used CPU-only Ollama on Raspberry Pi 5. The next
+fallback target is Raspberry Pi AI HAT+ 2, where the Hailo-10H NPU runs the
+local model behind Hailo Ollama. Scout treats this as a local
+OpenAI-compatible model endpoint, not as a new Scout runtime authority.
+
+Scout config shape:
+
+```json
+{
+  "local_model": {
+    "profile": "local",
+    "model_name": "hailo:qwen2.5:1.5b",
+    "backend": "hailo_ollama",
+    "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h"
+  }
+}
+```
+
+If `base_url` is omitted, Scout resolves the profile to
+`http://127.0.0.1:8000/v1`. This local endpoint does not require a cloud API
+key. Status and observability must report the accelerator as
+`raspberry_pi_ai_hat_plus_2_hailo10h` and backend as `hailo_ollama` without
+exposing token values or config file contents.
+
+Additional AI HAT+ 2 rules:
+
+- run `tools/pi_ai_hat_plus_2_smoke.py` as a manual hardware readiness probe
+  before relying on the fallback path;
+- verify `hailo-ollama` separately with the operator-managed service already
+  running;
+- keep `readiness_starts_local_model=false`;
+- keep `local_model_listener_required_for_readiness=false`;
+- keep `status_model_switch_allowed=false`;
+- use fixed-schema fallback output;
+- disable native provider web/search capabilities on the local Hailo profile;
+- do not expose Scout workspace tool-calling to the local Hailo model unless a
+  later fixture-backed test proves the specific Hailo model supports tool
+  calls reliably;
+- never write AI HAT+ 2 model output to `/safety/*`, ObservedFact, Phase 2
+  Brain, IncidentStore, review decisions, outbound transport, or hardware
+  controls.
+
 ## Recommended Next Tests
 
 1. Run a longer `10-15` minute soak test to confirm thermal plateau.
