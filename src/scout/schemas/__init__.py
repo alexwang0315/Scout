@@ -13,6 +13,15 @@ from scout.schemas.learning import (
     LearningArtifactType,
     LearningBundle,
 )
+from scout.schemas.outbound import (
+    OutboundActionIntent,
+    OutboundDataClass,
+    OutboundDecisionStatus,
+    OutboundGrantDecision,
+    OutboundGrantScope,
+    OutboundPriority,
+    OutboundStandingGrant,
+)
 from scout.schemas.permissions import PermissionDecision, PermissionSpec
 from scout.schemas.runtime import (
     ExecutionPlan,
@@ -47,6 +56,13 @@ __all__ = [
     "LearningArtifact",
     "LearningArtifactType",
     "LearningBundle",
+    "OutboundActionIntent",
+    "OutboundDataClass",
+    "OutboundDecisionStatus",
+    "OutboundGrantDecision",
+    "OutboundGrantScope",
+    "OutboundPriority",
+    "OutboundStandingGrant",
     "PermissionDecision",
     "PermissionSpec",
     "PlanMode",

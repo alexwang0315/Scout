@@ -45,8 +45,10 @@ architecture. The implemented core includes:
 - Mac local chat fallback mode for Scout hardware-unavailable development.
 
 The MVP is still not allowed to let model output mutate Phase 1 safety state,
-call `/safety/*`, write Phase 2 Brain observed facts, send outbound messages,
-or control hardware.
+call `/safety/*`, write Phase 2 Brain observed facts, directly send outbound
+messages, or directly control hardware. A reviewed non-safety outbound action
+may execute only through a typed `OutboundActionIntent`, an active
+`OutboundStandingGrant`, and a deterministic sender that records audit evidence.
 
 ### 1.1 Core Product Promise
 

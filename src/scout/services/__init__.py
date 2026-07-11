@@ -24,6 +24,7 @@ from scout.services.generated_runtime_installer import (
 )
 from scout.services.learning_store import LearningArtifactRecord, LearningStore
 from scout.services.memory_store import MemoryItem, MemoryStore
+from scout.services.outbound_standing_grant import evaluate_outbound_standing_grant
 from scout.services.notification_gateway import (
     DryRunNotificationProvider,
     HttpsJsonNotificationTransport,
@@ -34,10 +35,12 @@ from scout.services.notification_gateway import (
     NotificationGateway,
     NotificationProvider,
     NotificationResult,
+    notification_payload_hash,
     OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
     OperatorConfirmedNotificationProvider,
     OperatorNotificationApproval,
     StdoutNotificationProvider,
+    StandingGrantNotificationProvider,
     TelegramNotificationTransport,
 )
 from scout.services.permission_gate import PermissionGate
@@ -70,6 +73,7 @@ __all__ = [
     "NotificationGateway",
     "NotificationProvider",
     "NotificationResult",
+    "notification_payload_hash",
     "OPERATOR_NOTIFICATION_APPROVAL_PHRASE",
     "OperatorConfirmedNotificationProvider",
     "OperatorNotificationApproval",
@@ -79,10 +83,12 @@ __all__ = [
     "RuntimeIsolationProfile",
     "RoutedRequest",
     "StdoutNotificationProvider",
+    "StandingGrantNotificationProvider",
     "TelegramNotificationTransport",
     "WorkflowRecord",
     "WorkflowStore",
     "connect_database",
+    "evaluate_outbound_standing_grant",
     "generated_package_hash",
     "initialize_database",
     "list_tables",
