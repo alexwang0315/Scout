@@ -6501,10 +6501,8 @@ class PydanticAIEnvRunner:
             or "AI_HAT_RAW_TOPIC_RETRY_V1" in prompt
         ):
             system_prompt = (
-                "你是 Scout AI 的本地登山助理。只根據提供的 Scout evidence 回答，"
-                "缺少資料時明說缺少，不可捏造觀測。用自然繁體中文直接回答，"
-                "最多三句，不列清單，不補充一般常識。路線稱位置或路段，不稱部位；"
-                "用不能確認現場危險，不使用缺少受詞的危及。"
+                "你是 Scout AI 本地助理。只用提供事實，未知明說，禁止捏造。"
+                "繁中短答三句內。"
             )
         if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt:
             system_prompt = (
@@ -6529,7 +6527,7 @@ class PydanticAIEnvRunner:
                     )
                     else min(self.workspace_model_max_tokens, 128)
                     if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt
-                    else min(self.workspace_model_max_tokens, 128)
+                    else min(self.workspace_model_max_tokens, 64)
                     if "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" in prompt
                     else (
                     min(self.workspace_model_max_tokens, 64)
@@ -6559,7 +6557,16 @@ class PydanticAIEnvRunner:
         messages = [{"role": "system", "content": system_prompt}]
         if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt:
             messages.extend(_local_grounded_label_cleanup_few_shot_messages())
-        messages.append({"role": "user", "content": prompt})
+        messages.append(
+            {"role": "user", "content": _strip_hailo_control_markers(prompt)}
+        )
+        messages = [
+            {
+                **message,
+                "content": _normalize_hailo_chat_content(message["content"]),
+            }
+            for message in messages
+        ]
         payload = {
             "model": model_name,
             "messages": messages,
@@ -11291,6 +11298,8 @@ def _compact_total_info_for_local_model(total_info: str, *, max_chars: int) -> s
 
 
 def _compact_hailo_ollama_prompt(prompt: str) -> str:
+    if "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" in prompt:
+        return _compact_hailo_raw_eval_prompt(prompt)
     if "Context:" not in prompt:
         return prompt[:3600]
     question = _extract_context_question(prompt)
@@ -11333,6 +11342,86 @@ def _compact_hailo_ollama_prompt(prompt: str) -> str:
         f"{context_line}"
         "回答要求：先給結論，再給依據與下一步；使用繁體中文。"
     )[:3800]
+
+
+def _compact_hailo_raw_eval_prompt(prompt: str) -> str:
+    question_match = re.search(r"(?:使用者問題|問題)：([^\n]+)", prompt)
+    brief_match = re.search(
+        r"Scout typed answer brief（facts only）：(.+?)(?:\n回答：|$)",
+        prompt,
+        flags=re.DOTALL,
+    )
+    question = question_match.group(1).strip() if question_match else ""
+    brief = brief_match.group(1).strip() if brief_match else ""
+    if not brief:
+        brief = _strip_hailo_control_markers(prompt).strip()
+
+    fields = [item.strip() for item in re.split(r"[；\n]", brief) if item.strip()]
+    missing = next((item for item in fields if "缺少" in item or "missing" in item), "")
+    boundary = next(
+        (
+            item
+            for item in fields
+            if "判斷限制" in item or "邊界" in item or "candidate" in item
+        ),
+        "",
+    )
+    facts = [
+        item
+        for item in fields
+        if item not in {missing, boundary}
+        and "回答主題" not in item
+        and "禁止推論" not in item
+    ][:3]
+
+    lines = ["AI_HAT_RAW_SINGLE_PASS_EVAL_V1"]
+    if question:
+        lines.append(f"請回答「{_truncate_utf8(question, 72)}」。")
+    if facts:
+        fact_text = "；".join(_hailo_brief_field_value(item) for item in facts)
+        lines.append(f"已知{_truncate_utf8(fact_text, 120)}。")
+    if missing:
+        lines.append(f"尚缺{_truncate_utf8(_hailo_brief_field_value(missing), 72)}。")
+    if boundary:
+        lines.append(f"只能{_truncate_utf8(_hailo_brief_field_value(boundary), 60)}。")
+    lines.append("用自己的繁中短答，未知明說，禁止捏造。")
+    return _truncate_utf8("\n".join(lines), 420)
+
+
+def _hailo_brief_field_value(value: str) -> str:
+    key, separator, field_value = value.partition("=")
+    if separator and key.strip() in {
+        "事實",
+        "事實1",
+        "事實2",
+        "事實3",
+        "判斷類型",
+        "缺少資料",
+        "判斷限制",
+    }:
+        return field_value.strip()
+    return value.strip()
+
+
+def _truncate_utf8(value: str, max_bytes: int) -> str:
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    return encoded[:max_bytes].decode("utf-8", errors="ignore").rstrip()
+
+
+def _strip_hailo_control_markers(prompt: str) -> str:
+    """Keep runner control tokens out of the Hailo model's user message."""
+    return re.sub(
+        r"(?m)^AI_HAT_[A-Z0-9_]+[ \t]*(?:\n|$)",
+        "",
+        prompt,
+    ).lstrip()
+
+
+def _normalize_hailo_chat_content(content: str) -> str:
+    """Flatten control characters rejected by Hailo Ollama 5.3 chat parsing."""
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]+", " ", content).strip()
 
 
 def _hailo_answer_hint(question: str, *, total_info: str, context: str) -> str | None:

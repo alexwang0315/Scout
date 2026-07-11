@@ -7012,6 +7012,31 @@ def test_ai_hat_plus_2_prompt_compaction_adds_rain_risk_evidence_hint():
     assert "不要改寫成一般雨天常識" in compact
 
 
+def test_ai_hat_raw_eval_prompt_compaction_fits_hailo_context() -> None:
+    prompt = (
+        "AI_HAT_RAW_SINGLE_PASS_EVAL_V1\n"
+        "這是本地模型品質評測。" + ("冗長規則" * 200) + "\n"
+        "使用者問題：哪些地方下雨後會變危險？\n"
+        "Scout typed answer brief（facts only）："
+        "事實=CP 213；score=99.58；bucket=extreme；"
+        "缺少資料=有效天氣時間窗；判斷限制=行前候選\n"
+        "回答："
+    )
+
+    compact = assistant_provider_module._compact_hailo_ollama_prompt(prompt)
+
+    assert "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" in compact
+    assert "哪些地方下雨後會變危險" in compact
+    assert "CP 213" in compact
+    assert "score=99.58" in compact
+    assert "有效天氣時間窗" in compact
+    assert len(compact.encode("utf-8")) <= 420
+    model_prompt = assistant_provider_module._strip_hailo_control_markers(compact)
+    assert "事實：" not in model_prompt
+    assert "缺口：" not in model_prompt
+    assert "邊界：" not in model_prompt
+
+
 def test_local_fallback_can_enforce_fixed_schema_output_contract():
     cloud = FakeRunner("cloud should not win", fail_run=True)
     local = FakeRunner(_fixed_schema_local_output(), model_name="qwen2.5:0.5b")
@@ -7501,8 +7526,13 @@ def test_hailo_facts_only_eval_uses_deterministic_sampling(monkeypatch):
     payload = captured["payload"]
     assert len(payload["messages"]) == 2
     assert payload["messages"][1]["role"] == "user"
+    assert "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" not in payload["messages"][1]["content"]
+    assert "需複核候選" in payload["messages"][1]["content"]
+    assert "判斷類型=" not in payload["messages"][1]["content"]
     assert "示範問題" not in payload["messages"][1]["content"]
     assert "示範 facts" not in payload["messages"][1]["content"]
+    assert len(payload["messages"][0]["content"].encode("utf-8")) <= 180
+    assert payload["options"]["num_predict"] == 64
     assert payload["options"]["temperature"] == 0
     assert payload["options"]["top_p"] == 1
     assert runner.last_hailo_response_received is True
@@ -7510,6 +7540,52 @@ def test_hailo_facts_only_eval_uses_deterministic_sampling(monkeypatch):
     assert runner.last_hailo_prompt_eval_count == 321
     assert runner.last_hailo_eval_count == 27
     assert runner.last_hailo_total_duration_ns == 123456789
+
+
+def test_hailo_chat_payload_flattens_multiline_control_characters(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"message": {"role": "assistant", "content": "正常短答"}}
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        assistant_provider_module.urllib.request,
+        "urlopen",
+        fake_urlopen,
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        workspace_tools_enabled=False,
+    )
+
+    runner.run(
+        "AI_HAT_RAW_SINGLE_PASS_EVAL_V1\n第一行 facts\n第二行 facts\t第三欄",
+        timeout_seconds=5,
+    )
+
+    payload = captured["payload"]
+    assert "第一行 facts" in payload["messages"][1]["content"]
+    assert "第二行 facts" in payload["messages"][1]["content"]
+    assert all(
+        not any(ord(char) < 32 or ord(char) == 127 for char in message["content"])
+        for message in payload["messages"]
+    )
 
 
 def test_reset_runner_observability_clears_ai_hat_request_scoped_state():

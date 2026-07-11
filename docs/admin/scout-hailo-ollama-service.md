@@ -56,7 +56,7 @@ systemctl --user enable --now scout-hailo-ollama.service
 systemctl --user is-active scout-hailo-ollama.service
 systemctl --user status scout-hailo-ollama.service --no-pager
 curl --fail --silent http://127.0.0.1:8000/api/tags
-journalctl --user -u scout-hailo-ollama.service -n 100 --no-pager
+journalctl --user-unit scout-hailo-ollama.service -n 100 --no-pager
 ```
 
 模型檔預設寫入：
@@ -88,6 +88,29 @@ curl --fail --silent http://127.0.0.1:8000/api/tags
 ```
 
 完成一次實機 reboot 後，再重跑相同 health check，才算 boot recovery 已驗證。
+
+## Verified Boot Recovery
+
+2026-07-11 在 Scout Pi 5 + AI HAT+ 2 實機完成 reboot recovery：
+
+- boot ID 在 reboot 後改變；
+- `Linger=yes`；
+- service 在 uptime 約 60 秒時已為 `enabled`、`active (running)`；
+- unit SHA256 與 repo 相同；
+- listener 仍只綁定 `127.0.0.1:8000`；
+- HailoRT、PCIe driver、model zoo 與 firmware 均為 5.3.0；
+- `qwen3:1.7b` post-reboot inference 回傳 HTTP 200；
+- `NRestarts=0`，錯誤後 inference 仍可成功。
+
+Hailo Ollama 5.3 的 `/api/chat` 對 message content 中的 LF、CR、tab 等控制
+字元有額外相容性限制。Scout Hailo client 必須在 transport boundary 將 C0/C1
+control characters 正規化成空格，仍使用 `json.dumps` 產生 JSON。2026-07-11 的
+multiline live smoke 與 dashboard `/assistant/query` smoke 都沒有增加 journal
+中的 `Failed to render prompt from JSON strings` 計數。
+
+AI workload 後曾出現 `get_throttled=0x50000`，表示本次開機曾發生低電壓與
+throttling，但檢查當下低位元為 0。這不影響 boot recovery 的 PASS 判定，仍需
+在 UPS/供電 baseline 中追蹤。
 
 ## Rollback
 

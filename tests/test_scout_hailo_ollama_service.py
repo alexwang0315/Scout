@@ -34,6 +34,7 @@ def test_hailo_ollama_service_runbook_documents_deploy_health_and_rollback() -> 
         "systemctl --user enable --now scout-hailo-ollama.service",
         "systemctl --user is-active scout-hailo-ollama.service",
         "curl --fail --silent http://127.0.0.1:8000/api/tags",
+        "journalctl --user-unit scout-hailo-ollama.service",
         "hailortcli fw-control identify",
         "Firmware Version: 5.3.0",
         "systemctl --user disable --now scout-hailo-ollama.service",
@@ -43,6 +44,8 @@ def test_hailo_ollama_service_runbook_documents_deploy_health_and_rollback() -> 
         "deterministic allowlist",
         "http://host.docker.internal:8000",
         "127.0.0.1:18000",
+        "Verified Boot Recovery",
+        "control characters",
     ):
         assert token in source
 
@@ -50,6 +53,10 @@ def test_hailo_ollama_service_runbook_documents_deploy_health_and_rollback() -> 
 def test_dashboard_fallback_config_uses_the_documented_mac_tunnel_endpoint() -> None:
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
+    assert config["active_profile"] == "cloud"
     assert config["local_model"]["base_url"] == "http://127.0.0.1:18000"
     assert config["local_model"]["backend"] == "hailo_ollama"
+    assert config["local_model"]["model_name"] == "hailo:qwen3:1.7b"
     assert config["local_model"]["tool_calling"] == "disabled"
+    assert config["connect_on_startup"] is False
+    assert config["fallback_to_local_on_error"] is True
