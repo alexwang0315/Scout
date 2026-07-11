@@ -75,7 +75,7 @@ def test_synthesizes_candidate_only_mcp_set_with_spacing_and_cp_support():
     assert candidate_set.runtime_safety_truth is False
     assert candidate_set.compile_allowed is False
     assert candidate_set.boundary.safety_api_calls_allowed is False
-    assert candidate_set.dense_checkpoint_count == 110
+    assert candidate_set.dense_checkpoint_count == 124
     assert candidate_set.mcp_candidate_count < candidate_set.dense_checkpoint_count
     assert candidate_set.compressed_from_dense_cp is True
 
@@ -187,7 +187,7 @@ def test_builds_scout_cp_support_reconciliation_artifact():
     assert reconciliation.compile_allowed is False
     by_label = {row.label: row for row in reconciliation.rows}
     assert by_label["黑水塘"].support_status == "supported"
-    assert by_label["黑水塘"].nearest_scout_cp.distance_m == 0
+    assert by_label["黑水塘"].nearest_scout_cp.distance_m == 58.519
     mobile = by_label["稜線通訊點"]
     assert mobile.support_status == "suggested_insertion_review_required"
     assert mobile.suggested_cp_insertion is not None

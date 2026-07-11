@@ -262,6 +262,10 @@ def test_execute_ready_current_tool_returns_uniform_result() -> None:
     assert result.payload["risk_decision"]["highest_risk_result"]["risk_bucket"] == (
         "high"
     )
+    highest = result.payload["risk_decision"]["highest_risk_result"]
+    assert highest["nearest_checkpoint"]["label"]
+    assert highest["readable_location"]
+    assert "sample" not in highest["readable_location"].lower()
     assert result.boundary.runtime_safety_truth is False
     assert result.boundary.phase1_safety_mutation_allowed is False
 

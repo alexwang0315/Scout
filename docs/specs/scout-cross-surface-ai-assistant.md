@@ -23,21 +23,29 @@ assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
 keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
-2026-06-30 update: Scout AI provider compatibility now targets Pydantic AI
-v2.4.0. The assistant and Mac-local fallback paths keep Scout's read-only,
-typed-output contract by using `end_strategy="early"`, normalizing
+2026-07-06 update: Scout AI is the full-capability user entrypoint. Pydantic AI
+provider compatibility targets v2.8.0. The assistant and Mac-local fallback
+paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
-provider for `openrouter:<vendor/model>`. Native WebSearch, WebFetch, and
-provider-native MCP are not enabled automatically by the Pydantic AI v2
-upgrade. Operators can enable trusted no-per-query-approval WebSearch/WebFetch
-research with `SCOUT_AI_OS_NATIVE_RESEARCH=1`; this remains candidate-only
-assistant research and cannot mutate runtime safety truth or hardware state.
+provider for `openrouter:<vendor/model>`. Native WebSearch and WebFetch are
+enabled by default for external provider-backed Scout AI calls; operators may
+opt out for lab/CI with `SCOUT_AI_OS_NATIVE_RESEARCH=0`. Provider-native MCP
+still requires a reviewed connector boundary.
 
 This document defines the cross-surface assistant guardrails that now anchor the
 mock provider, bounded context adapters, read-only API, UI shell, opt-in
 Pydantic AI provider, cloud/local model fallback config, readiness gate,
 hardware-readiness runbook, static assistant UI smoke gate, browser-backed
 visual QA, and map-layer selected source labels.
+
+## First Deployment Topology
+
+第一版 Scout 是遠端能力池架構：現場只有 Scout AI 隨行，使用者透過手機和
+Scout AI 對話；手機把訊息、定位/感測摘要、照片或事件 metadata、裝置狀態傳回機房。
+模型、web search/fetch、workspace tools、computer-use/browser-use、資料庫、硬體
+gateway 與重型處理都在機房或可信任工作站上執行。Scout AI 是使用者和 Scout
+軟硬體之間的統一溝通入口，不應被本地 fallback 小模型或早期 read-only 假設降級成
+只能回答少數工具問題的助手。
 
 Implementation note: this milestone is complete for the current read-only
 assistant foundation. Future slices may improve UI reuse, add richer context, or
@@ -271,7 +279,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.4.0;
+- supported runtime family: Pydantic AI v2.8.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;
@@ -281,8 +289,8 @@ Current Pydantic AI provider policy:
 - compatibility alias: `openai:<model>` is normalized to
   `openai-chat:<model>` to avoid an implicit switch to Responses API behavior;
 - `end_strategy="early"` is required for typed Scout assistant calls;
-- WebSearch and WebFetch are off by default. `SCOUT_AI_OS_NATIVE_RESEARCH=1`
-  enables trusted no-per-query-approval candidate-only research.
+- WebSearch and WebFetch are on by default for external provider-backed Scout AI
+  calls. `SCOUT_AI_OS_NATIVE_RESEARCH=0` is only a lab/CI opt-out.
 - provider-native MCP remains off unless separately reviewed and permissioned.
 
 Proposed flags:
@@ -428,6 +436,66 @@ Slice 3 status/runbook acceptance:
 - this slice must not start a local model listener, run Ollama, require Pi
   hardware, switch provider from status, expose token values, or weaken the
   read-only assistant boundary.
+
+Milestone 10.2 Slice 15: AI HAT+ 2 / Hailo Ollama Local Fallback
+
+Slice 15 connects the Pydantic AI assistant fallback profile to Raspberry Pi
+AI HAT+ 2 without linking Scout core to Hailo SDK internals. The integration is
+through a local OpenAI-compatible Hailo Ollama endpoint. This keeps Pydantic AI
+as the model/tool orchestration layer and keeps Hailo-10H as a local inference
+backend only.
+
+AI HAT+ 2 / Hailo Ollama fallback is a disconnected/local model fallback path;
+it is not a Scout runtime safety authority.
+
+AI HAT+ 2 fallback config shape:
+
+```json
+{
+  "local_model": {
+    "profile": "local",
+    "model_name": "hailo:qwen2.5:1.5b",
+    "backend": "hailo_ollama",
+    "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h",
+    "tool_calling": "enabled"
+  },
+  "fallback_to_local_on_error": true,
+  "local_fallback_fixed_schema": false
+}
+```
+
+If `base_url` is omitted for this profile, Scout resolves it to
+`http://127.0.0.1:8000/v1`, matching the Hailo Ollama OpenAI-compatible local
+endpoint shape. The profile does not require `OPENAI_API_KEY`; Scout supplies a
+non-secret local placeholder key only for OpenAI-compatible client
+construction.
+
+Slice 15 acceptance:
+
+- `/assistant/status` reports `local_model_backend=hailo_ollama`,
+  `local_hardware_accelerator=raspberry_pi_ai_hat_plus_2_hailo10h`,
+  `ai_hat_plus_2_fallback_enabled=true`, and
+  `ai_hat_plus_2_readiness_required=true` only under
+  `SCOUT_RUNTIME_PROFILE=pi-field`;
+- Pi field status uses
+  `local_fallback_mode=pi_field_ai_hat_plus_2_manual_opt_in`;
+- Mac/dev status uses
+  `local_fallback_mode=ai_hat_plus_2_configured_not_pi_field` if the same
+  config is loaded outside Pi field mode;
+- readiness and browser smoke checks still keep
+  `readiness_starts_local_model=false`,
+  `local_model_listener_required_for_readiness=false`, and
+  `status_model_switch_allowed=false`;
+- the Hailo local fallback path disables native provider web/search
+  capabilities and, by default, does not expose Scout workspace tool-calling to
+  the local Hailo model; prepared context and fixed-schema fallback remain the
+  bounded interface;
+- manual Pi/AI HAT+ 2 verification should use
+  `tools/pi_ai_hat_plus_2_smoke.py` and an already-running `hailo-ollama`
+  service; it remains not part of the assistant readiness gate;
+- fallback output remains `read-only model interpretation` with
+  `safety_authority=false`, no `/safety/*` mutation, no ObservedFact write, no
+  outbound send, and no hardware/provider control.
 
 Milestone 10.2 Slice 4: Manual Pi/Ollama Verification Artifact
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -660,27 +662,29 @@ def build_prompt(
     tool_results: list[dict[str, Any]],
     missing_tools: list[dict[str, Any]],
     missing_evidence: list[str],
+    context: dict[str, Any] | None = None,
 ) -> str:
-    context = _compact_aihat_context(
+    resolved_context = context or _compact_aihat_context(
         qeval=qeval,
         total_info=total_info,
         tool_results=tool_results,
         missing_tools=missing_tools,
         missing_evidence=missing_evidence,
     )
-    hint = context.get("deterministic_answer_hint")
+    hint = resolved_context.get("deterministic_answer_hint")
     if hint:
         return (
             "你是 Scout AI 的 AI HAT+2 本地 fallback。"
-            "下列「可用結論」已由 Scout deterministic tools 產生；"
-            "你的任務是幾乎照抄可用結論並壓縮成使用者可讀的短答，不得自由改寫或補充地名。"
-            "可用結論中的 CP、segment、里程、座標、score、水量、補給小時、電量等數字必須保留。"
+            "下列「Scout 工具摘要」是 deterministic tools 取得的證據，不是你的最終答案模板。"
+            "你的任務是用自己的繁體中文短答回答問題，同時保留工具摘要中的關鍵事實。"
+            "不得整段照抄工具摘要；若只複製固定句，這次評測會被標為 template copy failure。"
+            "工具摘要中的 CP、segment、里程、座標、score、水量、補給小時、電量等數字必須保留。"
             "CP label、K 標記、座標、score、bucket、路段名稱必須逐字保留，不得翻譯、音譯、替換或猜測。"
-            "不要重複輸出「使用者問題」或「可用結論」這些 prompt 標籤。"
+            "不要重複輸出「使用者問題」或「Scout 工具摘要」這些 prompt 標籤。"
             "不得宣稱已送出求救、修改 /safety、控制硬體或寫入 runtime truth。"
             "使用繁體中文，格式固定為：結論：... 依據：... 下一步：...\n\n"
             f"使用者問題：{question}\n\n"
-            f"可用結論：{hint}\n\n"
+            f"Scout 工具摘要：{hint}\n\n"
             "簡短上下文："
             f"{json.dumps({'missing_tools': missing_tools[:3], 'missing_evidence': missing_evidence[:6]}, ensure_ascii=False, sort_keys=True)}"
         )
@@ -688,7 +692,7 @@ def build_prompt(
         "你是 Scout AI 的 AI HAT+2 本地 fallback。"
         "只能根據提供的短上下文回答，不可說已查雲端或外部服務。"
         "即使資料不完整，也要給保守可執行答案；不要空白、不要只說無法回答。"
-        "若 deterministic_answer_hint 存在，結論必須優先使用它的具體資訊。"
+        "若 deterministic_answer_hint 存在，必須使用它的具體資訊，但不能整段照抄。"
         "若關鍵資料缺失，要先給安全傾向，再說最少需要補哪一項。"
         "結論不要寫「無法確定」；改寫成「目前以不利情境處理：建議延後/撤退/停下重查」。"
         "範例：體能或配速缺資料時，結論寫「目前不能視為有足夠 buffer，先延後或降級目標」。"
@@ -697,7 +701,7 @@ def build_prompt(
         "使用繁體中文，格式固定為：結論：... 依據：... 下一步：...\n\n"
         f"使用者問題：{question}\n\n"
         "Scout 短上下文 JSON:\n"
-        f"{json.dumps(context, ensure_ascii=False, sort_keys=True)[:4500]}"
+        f"{json.dumps(resolved_context, ensure_ascii=False, sort_keys=True)[:4500]}"
     )
 
 
@@ -1499,26 +1503,170 @@ def call_hailo_model(
     return answer, metadata
 
 
+REFUSAL_TERMS = (
+    "無法回答",
+    "無法提供",
+    "無法確定",
+    "不能確定",
+    "不能回答",
+    "需要更多",
+    "請提供更多",
+    "沒有足夠",
+    "資料不足",
+    "資訊不足",
+    "缺少",
+    "缺乏",
+)
+
+
+def assess_aihat_answer_quality(
+    answer: str,
+    *,
+    missing_tools: list[dict[str, Any]],
+    missing_evidence: list[str],
+    tool_results: list[dict[str, Any]],
+    deterministic_answer_hint: str | None = None,
+) -> dict[str, Any]:
+    """Auto-screen AI HAT+2 text quality without claiming human review."""
+
+    stripped = answer.strip()
+    refusal_like = any(term in stripped for term in REFUSAL_TERMS)
+    contradiction_like = refusal_like and any(
+        marker in stripped
+        for marker in (
+            "但是",
+            "但",
+            "不過",
+            "然而",
+            "我們知道",
+            "已知",
+            "有 5",
+            "有5",
+        )
+    )
+    expected_tokens = _expected_grounding_tokens(tool_results)
+    matched_tokens = [token for token in expected_tokens if token in stripped]
+    template_copy_like = _looks_like_template_copy(
+        stripped,
+        deterministic_answer_hint or "",
+    )
+    grounded_context_use: bool | None = (
+        None if not expected_tokens else bool(matched_tokens)
+    )
+    failure_reasons: list[str] = []
+    if not stripped:
+        failure_reasons.append("empty_answer")
+    if contradiction_like:
+        failure_reasons.append("self_contradictory_refusal")
+    if refusal_like and not missing_evidence:
+        failure_reasons.append("refusal_without_missing_evidence")
+    if grounded_context_use is False:
+        failure_reasons.append("did_not_preserve_expected_tool_tokens")
+    if template_copy_like:
+        failure_reasons.append("template_copy_of_deterministic_hint")
+    if missing_tools:
+        failure_reasons.append("missing_tool_gap")
+    if missing_evidence:
+        failure_reasons.append("missing_evidence_gap")
+
+    if not stripped:
+        classification = "quality_no_answer"
+    elif any(
+        reason
+        in {
+            "self_contradictory_refusal",
+            "refusal_without_missing_evidence",
+            "did_not_preserve_expected_tool_tokens",
+            "template_copy_of_deterministic_hint",
+        }
+        for reason in failure_reasons
+    ):
+        classification = "quality_fail"
+    elif failure_reasons:
+        classification = "quality_needs_review"
+    else:
+        classification = "auto_screen_pass_requires_human_review"
+
+    return {
+        "classification": classification,
+        "non_empty_answer": bool(stripped),
+        "refusal_like": refusal_like,
+        "contradiction_like": contradiction_like,
+        "grounded_context_use": grounded_context_use,
+        "template_copy_like": template_copy_like,
+        "expected_grounding_tokens": expected_tokens[:12],
+        "matched_grounding_tokens": matched_tokens[:12],
+        "failure_reasons": failure_reasons,
+        "human_review_required": True,
+    }
+
+
+def _looks_like_template_copy(answer: str, deterministic_answer_hint: str) -> bool:
+    answer_text = re.sub(r"\s+", "", str(answer or ""))
+    hint_text = re.sub(r"\s+", "", str(deterministic_answer_hint or ""))
+    if not answer_text or not hint_text:
+        return False
+    answer_text = re.sub(r"^(?:結論[:：])", "", answer_text)
+    hint_text = re.sub(r"^(?:結論[:：])", "", hint_text)
+    if len(answer_text) < 30 or len(hint_text) < 30:
+        return False
+    if answer_text in hint_text or hint_text in answer_text:
+        return True
+    return SequenceMatcher(None, answer_text[:600], hint_text[:600]).ratio() >= 0.82
+
+
+def _expected_grounding_tokens(tool_results: list[dict[str, Any]]) -> list[str]:
+    tokens: list[str] = []
+    preferred_keys = {
+        "readable_location",
+        "nearest_checkpoint",
+        "nearest_mileage_anchor",
+        "label",
+        "name",
+        "score",
+        "risk_bucket",
+        "distance_km",
+        "distance_m",
+        "lat",
+        "lon",
+        "field_answer",
+        "decision",
+    }
+
+    def visit(value: Any, parent_key: str | None = None) -> None:
+        if len(tokens) >= 30:
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                visit(child, str(key))
+            return
+        if isinstance(value, list):
+            for child in value[:8]:
+                visit(child, parent_key)
+            return
+        if parent_key not in preferred_keys:
+            return
+        if isinstance(value, int | float):
+            token = f"{value:.2f}".rstrip("0").rstrip(".")
+        else:
+            token = str(value).strip()
+        if len(token) < 2:
+            return
+        if token not in tokens:
+            tokens.append(token)
+
+    for result in tool_results:
+        visit(result)
+    return tokens
+
+
 def classify_answer(answer: str, missing_tools: list[dict[str, Any]], missing_evidence: list[str]) -> str:
     stripped = answer.strip()
     if not stripped:
         return "no_answer"
     if missing_tools:
         return "answered_with_missing_tool_gap"
-    refusal_terms = (
-        "無法回答",
-        "無法提供",
-        "無法確定",
-        "不能確定",
-        "不能回答",
-        "需要更多",
-        "請提供更多",
-        "沒有足夠",
-        "資料不足",
-        "缺少",
-        "缺乏",
-    )
-    if any(term in stripped for term in refusal_terms):
+    if any(term in stripped for term in REFUSAL_TERMS):
         return "answered_with_missing_evidence_gap" if missing_evidence else "weak_or_refusal_like_answer"
     return "answered"
 
@@ -1571,6 +1719,13 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
             max_tools=args.max_tools,
             synthetic_field_context=args.synthetic_field_context,
         )
+        prompt_context = _compact_aihat_context(
+            qeval=qeval,
+            total_info=total_info,
+            tool_results=tool_results,
+            missing_tools=missing_tools,
+            missing_evidence=missing_evidence,
+        )
         prompt = build_prompt(
             question=question,
             qeval=qeval,
@@ -1578,6 +1733,7 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
             tool_results=tool_results,
             missing_tools=missing_tools,
             missing_evidence=missing_evidence,
+            context=prompt_context,
         )
         answer, model_metadata = call_hailo_model(
             endpoint=args.endpoint,
@@ -1587,6 +1743,15 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
         )
         answer = sanitize_aihat_answer(answer)
         classification = classify_answer(answer, missing_tools, missing_evidence)
+        answer_quality = assess_aihat_answer_quality(
+            answer,
+            missing_tools=missing_tools,
+            missing_evidence=missing_evidence,
+            tool_results=tool_results,
+            deterministic_answer_hint=str(
+                prompt_context.get("deterministic_answer_hint") or "",
+            ),
+        )
         results.append(
             {
                 "index": index,
@@ -1596,6 +1761,7 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
                 "question": question,
                 "answer": answer,
                 "classification": classification,
+                "answer_quality": answer_quality,
                 "question_eval": qeval,
                 "tool_ids_requested": tool_ids,
                 "tool_results": tool_results,
@@ -1613,9 +1779,15 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
         )
     health_end = collect_health()
     summary: dict[str, int] = {}
+    quality_summary: dict[str, int] = {}
     for item in results:
         cls = str(item["classification"])
         summary[cls] = summary.get(cls, 0) + 1
+        quality_cls = str(
+            (item.get("answer_quality") or {}).get("classification")
+            or "quality_unknown"
+        )
+        quality_summary[quality_cls] = quality_summary.get(quality_cls, 0) + 1
     return {
         "artifact_kind": ARTIFACT_KIND,
         "artifact_version": ARTIFACT_VERSION,
@@ -1630,6 +1802,7 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
         "project_id": args.project_id,
         "synthetic_field_context": bool(args.synthetic_field_context),
         "summary": dict(sorted(summary.items())),
+        "answer_quality_summary": dict(sorted(quality_summary.items())),
         "health_start": health_start,
         "health_end": health_end,
         "results": results,
@@ -1683,6 +1856,20 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
+            "## Answer Quality Auto-Screen",
+            "",
+            "`classification=answered` only means a bounded non-empty response was produced. "
+            "Use this section for AI HAT+2 model-quality triage; every item still requires human review.",
+            "",
+            "| Quality classification | Count |",
+            "| --- | ---: |",
+        ]
+    )
+    for key, value in report.get("answer_quality_summary", {}).items():
+        lines.append(f"| `{key}` | {value} |")
+    lines.extend(
+        [
+            "",
             "## Hardware Health",
             "",
             f"- start temp: `{report['health_start']['temp'].get('stdout')}`",
@@ -1697,7 +1884,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         ]
     )
     for item in report["results"]:
-        if item["classification"] == "answered":
+        quality = item.get("answer_quality") or {}
+        if (
+            item["classification"] == "answered"
+            and quality.get("classification")
+            == "auto_screen_pass_requires_human_review"
+        ):
             continue
         missing_tools = ", ".join(m["tool_id"] for m in item["missing_tools"]) or "-"
         missing_evidence = ", ".join(item["missing_evidence"]) or "-"
@@ -1716,6 +1908,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.extend(
             [
                 f"### {item['id']} `{item['classification']}`",
+                "",
+                f"Answer quality: `{(item.get('answer_quality') or {}).get('classification', 'quality_unknown')}`",
+                "",
+                f"Quality reasons: `{', '.join((item.get('answer_quality') or {}).get('failure_reasons') or []) or '-'}`",
                 "",
                 f"Question: {item['question']}",
                 "",

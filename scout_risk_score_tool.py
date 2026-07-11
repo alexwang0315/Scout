@@ -105,6 +105,7 @@ def search_project_risk_scores(
         )
     ]
     _attach_baseline_calibration_pairs(filtered, loaded_items)
+    _attach_nearest_route_context(filtered, root, project)
     filtered.sort(key=_sort_key(resolved_sort))
     results = filtered[:resolved_limit]
     compact_results = [_compact_result(item) for item in results]
@@ -480,6 +481,9 @@ def _compact_result(item: dict[str, Any]) -> dict[str, Any]:
         "paired_calibration_score",
         "paired_calibration_distance_km",
         "calibration_delta",
+        "nearest_checkpoint",
+        "nearest_mileage_anchor",
+        "readable_location",
         "candidate_only",
         "runtime_safety_truth",
     )
@@ -760,6 +764,15 @@ def _decision_details(
 
 
 def _result_location(item: dict[str, Any]) -> str:
+    if item.get("readable_location"):
+        return str(item["readable_location"])
+    checkpoint = item.get("nearest_checkpoint")
+    if isinstance(checkpoint, dict) and checkpoint.get("label"):
+        label = checkpoint["label"]
+        gap = checkpoint.get("distance_m")
+        if gap is not None:
+            return f"{label} 附近（約 {round(float(gap))} m）"
+        return f"{label} 附近"
     if item.get("distance_km") is not None:
         return f"{item.get('distance_km')} km"
     if item.get("segment_id"):
@@ -769,6 +782,142 @@ def _result_location(item: dict[str, Any]) -> str:
     if item.get("lat") is not None and item.get("lon") is not None:
         return f"{item.get('lat')},{item.get('lon')}"
     return "查詢範圍內"
+
+
+def _attach_nearest_route_context(
+    items: list[dict[str, Any]],
+    root: Path,
+    project: dict[str, Any],
+) -> None:
+    checkpoints = _load_anchor_records(
+        root,
+        str(project.get("checkpoint_candidates_ref") or "candidates/checkpoints.json"),
+        list_keys=("items", "checkpoints", "candidates"),
+    )
+    mileage_anchors = _load_anchor_records(
+        root,
+        str(project.get("route_mileage_k_anchors_ref") or "candidates/route_mileage_k_anchors.json"),
+        list_keys=("anchors", "items", "candidates"),
+    )
+    for item in items:
+        lat = _optional_float(item.get("lat"))
+        lon = _optional_float(item.get("lon"))
+        if lat is None or lon is None:
+            continue
+        nearest_cp = _nearest_geo_anchor(
+            lat=lat,
+            lon=lon,
+            anchors=checkpoints,
+            label_keys=("label", "candidate_id", "checkpoint_id"),
+        )
+        nearest_mileage = _nearest_geo_anchor(
+            lat=lat,
+            lon=lon,
+            anchors=mileage_anchors,
+            label_keys=("display_label", "normalized_mileage_k", "raw_label"),
+        )
+        if nearest_cp is not None:
+            item["nearest_checkpoint"] = nearest_cp
+        if nearest_mileage is not None:
+            item["nearest_mileage_anchor"] = nearest_mileage
+        item["readable_location"] = _readable_route_anchor(item)
+
+
+def _load_anchor_records(
+    root: Path,
+    ref: str,
+    *,
+    list_keys: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    path = _project_path(root, ref)
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        items = []
+        for key in list_keys:
+            value = payload.get(key)
+            if isinstance(value, list):
+                items = value
+                break
+    else:
+        items = []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _nearest_geo_anchor(
+    *,
+    lat: float,
+    lon: float,
+    anchors: list[dict[str, Any]],
+    label_keys: tuple[str, ...],
+) -> dict[str, Any] | None:
+    candidates: list[tuple[float, dict[str, Any]]] = []
+    for anchor in anchors:
+        anchor_lat = _optional_float(anchor.get("lat"))
+        anchor_lon = _optional_float(anchor.get("lon"))
+        if anchor_lat is None or anchor_lon is None:
+            continue
+        distance_m = _haversine_m(lat, lon, anchor_lat, anchor_lon)
+        candidates.append((distance_m, anchor))
+    if not candidates:
+        return None
+    distance_m, anchor = min(candidates, key=lambda value: value[0])
+    label = None
+    for key in label_keys:
+        value = anchor.get(key)
+        if value:
+            label = str(value)
+            break
+    result: dict[str, Any] = {
+        "label": label,
+        "distance_m": round(distance_m, 1),
+        "lat": _optional_float(anchor.get("lat")),
+        "lon": _optional_float(anchor.get("lon")),
+    }
+    for key in (
+        "candidate_id",
+        "checkpoint_id",
+        "checkpoint_type",
+        "display_label",
+        "normalized_mileage_k",
+        "mileage_k",
+        "mileage_m",
+        "review_required",
+        "candidate_only",
+        "runtime_safety_truth",
+    ):
+        if key in anchor:
+            result[key] = anchor.get(key)
+    return result
+
+
+def _readable_route_anchor(item: dict[str, Any]) -> str:
+    parts: list[str] = []
+    checkpoint = item.get("nearest_checkpoint")
+    if isinstance(checkpoint, dict) and checkpoint.get("label"):
+        gap = checkpoint.get("distance_m")
+        if gap is not None:
+            parts.append(f"最近 {checkpoint['label']} 約 {round(float(gap))} m")
+        else:
+            parts.append(f"最近 {checkpoint['label']}")
+    mileage = item.get("nearest_mileage_anchor")
+    if isinstance(mileage, dict) and mileage.get("label"):
+        gap = mileage.get("distance_m")
+        if gap is not None:
+            parts.append(f"近 {mileage['label']} 標註約 {round(float(gap))} m")
+        else:
+            parts.append(f"近 {mileage['label']} 標註")
+    if item.get("distance_km") is not None:
+        parts.append(f"GPX 累積約 {item['distance_km']} km")
+    if item.get("lat") is not None and item.get("lon") is not None:
+        parts.append(f"座標 {item['lat']},{item['lon']}")
+    return "；".join(parts) if parts else "查詢範圍內"
 
 
 def _score_100(value: Any) -> float:

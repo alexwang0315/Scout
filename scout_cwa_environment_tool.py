@@ -25,6 +25,7 @@ CWA_ENVIRONMENT_OPTIONAL_FIELDS = (
     "include_features",
     "include_timeline",
     "stale_after_hours",
+    "reference_time",
 )
 
 DEFAULT_STALE_AFTER_HOURS = 12.0
@@ -51,6 +52,7 @@ def assess_scout_cwa_environment(
     include_features: bool | str | None = None,
     include_timeline: bool | str | None = None,
     stale_after_hours: float | int | str | None = None,
+    reference_time: str | None = None,
     limit: int = DEFAULT_RESULT_LIMIT,
 ) -> dict[str, Any]:
     """Read prepared CWA environment evidence from a Scout workspace.
@@ -70,6 +72,7 @@ def assess_scout_cwa_environment(
         stale_after_hours,
         default=DEFAULT_STALE_AFTER_HOURS,
     )
+    reference_now = _reference_datetime(reference_time)
 
     source_report: list[dict[str, Any]] = []
     environment_package = _load_artifact(
@@ -200,15 +203,23 @@ def assess_scout_cwa_environment(
         "tide_marine_timeline": tide_marine_timeline,
     }
     missing_fields = _missing_fields(source_report)
-    stale_risks = _stale_risks(source_report, stale_after_hours=stale_hours)
+    stale_risks = _stale_risks(
+        source_report,
+        stale_after_hours=stale_hours,
+        reference_time=reference_now,
+    )
+    effective_missing_fields = [
+        *missing_fields,
+        *(["fresh_cwa_environment_evidence"] if stale_risks else []),
+    ]
     warnings_list = _warnings(
-        missing_fields=missing_fields,
+        missing_fields=effective_missing_fields,
         stale_risks=stale_risks,
     )
     cwa_summary = _cwa_summary(artifacts)
     decision_output = _decision_output(
         summary=cwa_summary,
-        missing_fields=missing_fields,
+        missing_fields=effective_missing_fields,
         warnings=warnings_list,
     )
     field_answer = _field_answer(decision_output, cwa_summary)
@@ -220,7 +231,8 @@ def assess_scout_cwa_environment(
     )
     answerability = (
         "cwa_environment_available"
-        if cwa_summary["available_artifact_count"] >= 3 and not missing_fields
+        if cwa_summary["available_artifact_count"] >= 3
+        and not effective_missing_fields
         else "cwa_environment_partial"
         if cwa_summary["available_artifact_count"]
         else "cwa_environment_missing"
@@ -245,6 +257,7 @@ def assess_scout_cwa_environment(
             "include_features": include_feature_rows,
             "include_timeline": include_timeline_rows,
             "stale_after_hours": stale_hours,
+            "reference_time": reference_now.isoformat(),
         },
         "cwa_environment": {
             "role": "CWA official weather/environment workspace evidence",
@@ -256,7 +269,7 @@ def assess_scout_cwa_environment(
         },
         "cwa_summary": cwa_summary,
         "provenance_summary": _provenance_summary(source_report),
-        "missing_fields": missing_fields,
+        "missing_fields": effective_missing_fields,
         "warnings": warnings_list,
         "source_report": source_report,
         "result_count": len(results),
@@ -571,9 +584,9 @@ def _stale_risks(
     source_report: list[dict[str, Any]],
     *,
     stale_after_hours: float,
+    reference_time: datetime,
 ) -> list[str]:
     risks: list[str] = []
-    now = datetime.now(timezone.utc)
     for item in source_report:
         if item.get("stale_risk") and str(item["stale_risk"]).lower() not in {
             "low",
@@ -587,12 +600,21 @@ def _stale_risks(
         parsed = _parse_datetime(timestamp)
         if parsed is None:
             continue
-        age_hours = (now - parsed).total_seconds() / 3600
+        age_hours = (reference_time - parsed).total_seconds() / 3600
         if age_hours > stale_after_hours:
             risks.append(
                 f"{item['source_kind']} age_hours={age_hours:.1f}>{stale_after_hours:g}"
             )
     return _dedupe_text(risks)
+
+
+def _reference_datetime(value: str | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    parsed = _parse_datetime(value)
+    if parsed is None:
+        raise ValueError("reference_time must be an ISO-8601 timestamp")
+    return parsed.astimezone(timezone.utc)
 
 
 def _parse_datetime(value: str) -> datetime | None:

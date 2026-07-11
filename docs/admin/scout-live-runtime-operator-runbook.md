@@ -71,7 +71,7 @@ Required environment secret refs:
 - `active_profile=cloud`
 - `connect_on_startup=true`
 - `fallback_to_local_on_error=true`
-- `local_fallback_fixed_schema=true`
+- `local_fallback_fixed_schema=false`
 
 啟動時 assistant provider 會嘗試 cloud model connectivity check；如果 cloud 通訊失敗且 local model 可用，會切換到 local profile。所有回答仍會標示為 read-only model interpretation，且不得改 runtime、Brain、review、outbound 或 hardware state。
 

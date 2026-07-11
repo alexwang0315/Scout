@@ -64,7 +64,7 @@ def test_live_runtime_operator_runbook_documents_startup_fallback_and_validation
         "active_profile=cloud",
         "connect_on_startup=true",
         "fallback_to_local_on_error=true",
-        "local_fallback_fixed_schema=true",
+        "local_fallback_fixed_schema=false",
         "startup_connection_status",
         "connected:cloud",
         "connected:local",
@@ -123,7 +123,7 @@ def test_live_runtime_example_assistant_model_config_parses_and_uses_secret_refs
     assert config.local_model.base_url == "http://host.docker.internal:11434/v1"
     assert config.connect_on_startup is True
     assert config.fallback_to_local_on_error is True
-    assert config.local_fallback_fixed_schema is True
+    assert config.local_fallback_fixed_schema is False
     assert "<operator" not in serialized
     assert "love0315" not in serialized
 

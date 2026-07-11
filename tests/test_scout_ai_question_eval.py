@@ -15,6 +15,7 @@ from scout_ai_question_eval import (
 from tools.scout_ai_aihat2_fallback_eval import (
     _deterministic_answer_hint,
     _filter_tool_ids_for_eval,
+    assess_aihat_answer_quality,
 )
 
 
@@ -452,6 +453,53 @@ def test_aihat2_fallback_incident_package_question_lists_required_contents() -> 
     assert "最後有效座標/高度/定位精度/座標格式" in package_hint
     assert "review-only incident package candidate" in package_hint
     assert "無法確定" not in package_hint
+
+
+def test_aihat2_answer_quality_flags_self_contradictory_refusal() -> None:
+    quality = assess_aihat_answer_quality(
+        "目前我無法直接回答 boss point 的數量，因為資訊不足。在確定的上下文中，我們知道有5個 boss point。",
+        missing_tools=[],
+        missing_evidence=[],
+        tool_results=[
+            {
+                "tool_id": "pydantic_ai.tool.search_scout_route_structure.v0",
+                "status": "completed",
+                "records": [{"label": "boss point", "score": 5}],
+            }
+        ],
+    )
+
+    assert quality["classification"] == "quality_fail"
+    assert quality["non_empty_answer"] is True
+    assert quality["refusal_like"] is True
+    assert quality["contradiction_like"] is True
+    assert "self_contradictory_refusal" in quality["failure_reasons"]
+    assert quality["human_review_required"] is True
+
+
+def test_aihat2_answer_quality_flags_answer_that_ignores_tool_tokens() -> None:
+    quality = assess_aihat_answer_quality(
+        "下雨後地面潮濕，物品可能污染，請避免不必要外出。",
+        missing_tools=[],
+        missing_evidence=[],
+        tool_results=[
+            {
+                "tool_id": "pydantic_ai.tool.search_scout_risk_scores.v0",
+                "status": "completed",
+                "records": [
+                    {
+                        "readable_location": "最近 CP 213 約 190 m",
+                        "score": 99.58,
+                        "risk_bucket": "extreme",
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert quality["classification"] == "quality_fail"
+    assert quality["grounded_context_use"] is False
+    assert "did_not_preserve_expected_tool_tokens" in quality["failure_reasons"]
 
 
 def test_question_answerability_manifest_and_builtin_tool_are_read_only(tmp_path: Path) -> None:

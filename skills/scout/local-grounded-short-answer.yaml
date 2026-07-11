@@ -1,0 +1,215 @@
+id: local-grounded-short-answer
+version: 0.3.0
+status: experimental
+type: summary
+priority: 95
+triggers:
+  - event: assistant.ai_hat_raw_answer_requested
+    description: Generate a model-authored field answer from facts-only Scout evidence without a precomposed answer or renderer.
+    required_refs: []
+activation_gate:
+  mode: automatic
+  requires_human_approval: false
+  conditions:
+    - AI HAT+2 raw model evaluation is explicitly enabled
+noise_control:
+  cooldown_seconds: 0
+  dedupe_window_seconds: 0
+  max_runs_per_mission: null
+  suppression_keys: []
+preflight:
+  required_skill_ids: []
+  required_capabilities: []
+  required_artifacts: []
+allowed_reads:
+  - assistant.total_info_entry
+  - assistant.workspace_compact_evidence
+  - assistant.current_sensor_snapshot
+  - assistant.tool_missing_evidence
+allowed_writes: []
+forbidden_writes:
+  - phase1.runtime
+  - phase1.safety
+  - phase2.brain.observed_facts
+  - live.safety_api
+  - hardware.controls
+  - outbound.messages
+output_schema:
+  format: artifact
+  artifact_kinds:
+    - scout_ai_local_model_raw_answer
+  required_fields:
+    - question
+    - compact_evidence
+    - model_answer
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: null
+control_surface:
+  operator_visible: true
+  manual_run_allowed: false
+  disable_allowed: true
+  status_label: Local grounded short answer
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: short_term
+answer_contract:
+  language: zh-Hant
+  max_sentences: 3
+  prompt_contract:
+    mode: facts_only
+    precomposed_answer_allowed: false
+    deterministic_answer_template_allowed: false
+    same_model_self_review_allowed: true
+    self_review_must_not_receive_reference_answer: true
+  evidence_checklist:
+    - 第一句直接回答問題，不要先解釋任務或重複問題
+    - 只使用 compact evidence 中出現的事實、缺口與候選，不加入一般常識
+    - evidence 有 CP、GPX、距離、時間或 score 時，保留最相關的具體依據
+  missing_evidence_rules:
+    - 標示 missing 的觀測一律是未知，不得改寫成目前已有、足夠、不足、安全或危險
+    - 缺少必要觀測時要回答目前不能判定，並指出最多三項最關鍵缺口
+  style_rules:
+    - 最多三句繁體中文，不輸出清單、JSON、placeholder、分析過程或 prompt 用語
+    - candidate、需複核與行前圖層不得寫成已確認事故、現場危險或安全指令；路線稱位置或路段，不稱部位；使用不能確認現場危險，不使用缺少受詞的危及
+    - 不得把高 terrain score 解讀成較安全、較適合通行或較適合摸黑
+  action_guidance: {}
+  topic_guidance:
+    - triggers:
+        - 體能
+        - 體力
+        - 太硬
+      guidance:
+        - 心率、HRV、body battery、RPE 或配速標示 missing 時，直接回答目前不能判定路線是否太硬
+        - 不得聲稱目前配速、體能或恢復狀態良好
+    - triggers:
+        - 配速
+        - buffer
+      guidance:
+        - 配速、最近 CP 時間、下一 CP ETA 或最慢成員配速缺失時，回答目前不能判定時間緩衝
+        - CP 提供的是通過時間，不可寫成 CP 速度
+    - triggers:
+        - 最容易出事
+        - 下雨後
+        - 停留拍照
+      guidance:
+        - 風險分數只能指出優先複核候選，不得回答該處一定會出事、雨後一定危險或必須禁止停留
+        - 回答要保留最高候選的 CP 或 GPX 位置，以及 candidate 或人工複核邊界
+    - triggers:
+        - 摸黑
+        - 低容錯
+      guidance:
+        - 所列高分地形都是優先複核候選，不得回答其中任何一處較適合夜間通行
+        - 問題使用複數時，至少保留兩個不同 GPX 位置與各自 terrain score
+    - triggers:
+        - checkpoint
+      guidance:
+        - 不能說某處一定要新增 checkpoint；保留主要難點路段 ID 與是否增設所需條件
+    - triggers:
+        - 水和補給
+        - 水量
+        - 補給
+      guidance:
+        - 水量、剩餘時間、耗水率或補水點缺失時，回答不能計算，不得輸出建議公升數或 placeholder
+    - triggers:
+        - 晚出發
+      guidance:
+        - 不得把晚出發誤寫成提前出發；保留 CP Graph 難點、所需時間與缺失條件
+        - 缺天氣、照明電量、水食物或隊伍狀態時，不得確認能安全完成
+  examples:
+    - question: 降雨後哪個位置需要優先複核？
+      facts:
+        - 優先複核位置=CP 8
+      missing_evidence:
+        - 即時天氣資料
+      boundary: 這是行前複核候選，不能確認現場已經危險
+      action_token: REVIEW_CANDIDATE
+      answer: 降雨後先複核 CP 8；目前缺少即時天氣資料，因此只能列為行前複核候選，不能確認現場已經危險。
+    - question: 目前最高分的行前風險候選是哪個 CP？
+      facts:
+        - 最高分行前風險候選=CP 8
+      missing_evidence: []
+      boundary: 風險分數不能用來預測事故，仍需人工或現場複核
+      action_token: REVIEW_CANDIDATE
+      answer: CP 8 是目前最高分的行前風險候選；風險分數不能用來預測事故，仍需人工或現場複核。
+    - question: 哪些路段一定要增設 checkpoint？
+      facts:
+        - candidate_segment=seg.5
+        - candidate_reasons=需要日照、無撤退點、無補水點、路段時間長
+        - existing_endpoint_cp_rule=兩端已有 CP 時不應重複設點
+      missing_evidence: []
+      boundary: 不能判定一定要增設；需看通過時間、geometry、可回退性與現場辨識度
+      action_token: REVIEW_CANDIDATE
+      answer: 目前不能判定一定要增設 checkpoint；先複核 seg.5，該段內無撤退點與補水點，但兩端已有 CP，是否增設中間點仍需看通過時間、geometry、可回退性與現場辨識度。
+    - question: 哪些路段不適合摸黑走？
+      facts:
+        - GPX 12.3 km（teii_20m=88.8）
+        - GPX 18.4 km（teii_20m=87.9）
+      missing_evidence:
+        - 即時天氣窗
+      boundary: 兩處都是行前候選，不能確認任一處適合夜間通行
+      action_token: REVIEW_CANDIDATE
+      answer: 摸黑前先複核 GPX 12.3 km（teii_20m=88.8）與 GPX 18.4 km（teii_20m=87.9）；目前缺少即時天氣窗，不能確認任一處適合夜間通行。
+    - question: 這條路線有沒有低容錯地形？
+      facts:
+        - GPX 12.3 km
+        - teii_20m=88.2
+      missing_evidence: []
+      boundary: 這是低容錯地形的行前複核候選，尚未確認為現場危險
+      action_token: REVIEW_CANDIDATE
+      answer: 有低容錯地形候選：GPX 12.3 km 的 teii_20m=88.2；這只能作為行前複核依據，尚未確認為現場危險。
+    - question: 哪裡要避免停留拍照？
+      facts:
+        - 最高分行前風險候選=CP 8
+      missing_evidence: []
+      boundary: CP 8 是避免長時間停留拍照的候選，仍需現場複核
+      action_token: REVIEW_CANDIDATE
+      answer: CP 8 是優先避免長時間停留拍照的候選；這不是即時禁令，仍需依現場狀況複核。
+    - question: 我目前的體能足夠走完嗎？
+      facts:
+        - requested_inputs=目前速度、最近休息與個人負荷
+        - RPE=自覺用力程度
+      missing_evidence:
+        - 當下配速
+        - 疲勞觀測
+        - body battery
+      boundary: 目前不能判定體能是否足夠
+      action_token: UNKNOWN
+      answer: 目前缺少當下配速、body battery 與疲勞觀測，不能判定體能是否足夠；請提供最近休息時間與 RPE（自覺用力程度）。
+    - question: 我今天的配速 buffer 足夠嗎？
+      facts:
+        - 需要資料=目前配速、最近 CP 通過時間、下一 CP ETA、最慢成員配速
+      missing_evidence:
+        - 目前配速
+        - 最近 CP 通過時間
+        - 下一 CP ETA
+      boundary: 目前不能判定今日配速與時間緩衝是否足夠
+      action_token: UNKNOWN
+      answer: 目前缺少配速、最近 CP 通過時間與下一 CP ETA，不能判定今日時間緩衝是否足夠；請提供目前配速、最近 CP 通過時間、下一 CP ETA 與最慢成員配速。
+    - question: 我需要準備多少水和補給？
+      facts:
+        - requested_inputs=現有水量、剩餘時間、體重、耗水率、氣溫與補水點
+      missing_evidence:
+        - 現有水量
+        - 剩餘時間
+        - 體重與耗水率
+      boundary: 目前不能計算需要準備多少水和補給
+      action_token: UNKNOWN
+      answer: 目前缺少現有水量、剩餘時間、體重與耗水率，不能計算需要準備多少水和補給；請再提供氣溫與沿途補水點。
+    - question: 晚出發後還能照原計畫走嗎？
+      facts:
+        - departure_delay_minutes=30
+        - bottleneck_segment=seg.5
+        - checkpoint_pair=CP 3 到 CP 4
+        - segment_duration=45 分鐘
+      missing_evidence:
+        - 天氣
+        - 頭燈電量
+      boundary: 目前不能確認能照原計畫完成；需重算折返窗口
+      action_token: REPLAN
+      answer: 晚出發 30 分鐘後，目前不能確認仍能照原計畫完成；seg.5 的 CP 3 到 CP 4 約需 45 分鐘，且缺少天氣與頭燈電量，應先重算折返窗口。

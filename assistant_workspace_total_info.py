@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,7 @@ def build_workspace_total_info_source_ref(
     *,
     project_root: Path | str | None,
     data_root: Path | str | None = None,
+    reference_time: str | None = None,
 ) -> AssistantSourceRef | None:
     if query.surface != AssistantSurface.PRETRIP or project_root is None:
         return None
@@ -53,7 +55,6 @@ def build_workspace_total_info_source_ref(
         "artifact_version": "assistant_workspace_total_info_context.v0",
         "project_id": str(project.get("project_id") or query.project_id or root.name),
         "query_project_id": query.project_id or query.context_ref,
-        "workspace_root": str(root),
         "read_only": True,
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -61,7 +62,11 @@ def build_workspace_total_info_source_ref(
         "route_context": _route_context(root, project),
         "location_context": _location_context(query, data_root=resolved_data_root),
         "body_resource_context": _body_resource_context(root, project),
-        "weather_environment_context": _weather_environment_context(root, project),
+        "weather_environment_context": _weather_environment_context(
+            root,
+            project,
+            reference_time=_parse_datetime(reference_time) or datetime.now(timezone.utc),
+        ),
         "terrain_risk_context": _terrain_risk_context(root, project),
         "sensor_snapshot_context": _sensor_snapshot_context(resolved_data_root),
         "workspace_ref_context": _workspace_ref_context(root, project),
@@ -80,11 +85,11 @@ def build_workspace_total_info_source_ref(
 
 def _route_context(root: Path, project: dict[str, Any]) -> dict[str, Any]:
     route = _load_json_object(_project_path(root, project.get("route_summary_ref")))
-    source_path = str(project.get("route_summary_ref") or "")
+    source_path = _project_ref_label(root, project.get("route_summary_ref"))
     return _drop_none(
         {
             "status": "available" if route else "missing",
-            "source_path": source_path or None,
+            "source_path": source_path,
             "route_name": route.get("route_name") or project.get("route_name"),
             "route_kind": project.get("route_kind"),
             "route_role": project.get("route_role"),
@@ -137,7 +142,10 @@ def _location_context(
 
 def _body_resource_context(root: Path, project: dict[str, Any]) -> dict[str, Any]:
     boss = _load_json_object(_project_path(root, project.get("boss_points_ref")))
-    energy_snapshot_ref = project.get("energy_vitals_snapshot_ref")
+    energy_snapshot_ref = _project_ref_label(
+        root,
+        project.get("energy_vitals_snapshot_ref"),
+    )
     energy_snapshot = _load_json_object(_project_path(root, energy_snapshot_ref))
     mission_graph = _load_json_object(root / "outputs" / "compiled_mission_graph.reviewed.json")
     thresholds = _mission_graph_thresholds(mission_graph)
@@ -145,7 +153,7 @@ def _body_resource_context(root: Path, project: dict[str, Any]) -> dict[str, Any
     return _drop_none(
         {
             "status": "available" if boss or energy_snapshot or thresholds else "missing_live_body_resource",
-            "boss_points_ref": project.get("boss_points_ref"),
+            "boss_points_ref": _project_ref_label(root, project.get("boss_points_ref")),
             "boss_point_count": project.get("boss_point_count"),
             "energy_vitals_snapshot_ref": energy_snapshot_ref,
             "energy_vitals_snapshot_available": bool(energy_snapshot),
@@ -164,19 +172,40 @@ def _body_resource_context(root: Path, project: dict[str, Any]) -> dict[str, Any
     )
 
 
-def _weather_environment_context(root: Path, project: dict[str, Any]) -> dict[str, Any]:
+def _weather_environment_context(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    reference_time: datetime,
+) -> dict[str, Any]:
     cwa = _load_json_object(_project_path(root, project.get("cwa_weather_evidence_ref")))
     qpf = _load_json_object(_project_path(root, project.get("cwa_qpf_corridor_summary_ref")))
     smap = _load_json_object(_project_path(root, project.get("smap_l4_corridor_summary_ref")))
     gpm = _load_json_object(_project_path(root, project.get("gpm_imerg_corridor_summary_ref")))
     derived = _load_json_object(_project_path(root, project.get("environment_risk_derivatives_ref")))
+    artifacts = {"cwa_weather": cwa, "cwa_qpf": qpf, "gee_smap": smap, "gee_gpm": gpm}
+    freshness = {
+        name: _environment_artifact_freshness(payload, reference_time=reference_time)
+        for name, payload in artifacts.items()
+        if payload
+    }
+    stale_sources = sorted(
+        name for name, status in freshness.items() if status == "stale"
+    )
+    available = any((cwa, qpf, smap, gpm, derived))
     return {
-        "status": "available"
-        if any((cwa, qpf, smap, gpm, derived))
-        else "missing_weather_environment",
+        "status": (
+            "partial_stale_environment"
+            if stale_sources
+            else "available"
+            if available
+            else "missing_weather_environment"
+        ),
+        "freshness": freshness,
+        "stale_sources": stale_sources,
         "cwa_weather": _compact_artifact(
             cwa,
-            source_path=project.get("cwa_weather_evidence_ref"),
+            source_path=_project_ref_label(root, project.get("cwa_weather_evidence_ref")),
             keys=(
                 "artifact_kind",
                 "generated_at",
@@ -190,7 +219,10 @@ def _weather_environment_context(root: Path, project: dict[str, Any]) -> dict[st
         ),
         "cwa_qpf": _compact_artifact(
             qpf,
-            source_path=project.get("cwa_qpf_corridor_summary_ref"),
+            source_path=_project_ref_label(
+                root,
+                project.get("cwa_qpf_corridor_summary_ref"),
+            ),
             keys=(
                 "artifact_kind",
                 "generated_at",
@@ -207,19 +239,54 @@ def _weather_environment_context(root: Path, project: dict[str, Any]) -> dict[st
         ),
         "gee_smap": _compact_environment_values(
             smap,
-            source_path=project.get("smap_l4_corridor_summary_ref"),
+            source_path=_project_ref_label(
+                root,
+                project.get("smap_l4_corridor_summary_ref"),
+            ),
         ),
         "gee_gpm": _compact_environment_values(
             gpm,
-            source_path=project.get("gpm_imerg_corridor_summary_ref"),
+            source_path=_project_ref_label(
+                root,
+                project.get("gpm_imerg_corridor_summary_ref"),
+            ),
         ),
         "environment_risk_derivatives": _compact_artifact(
             derived,
-            source_path=project.get("environment_risk_derivatives_ref"),
+            source_path=_project_ref_label(
+                root,
+                project.get("environment_risk_derivatives_ref"),
+            ),
             keys=("artifact_kind", "generated_at", "status", "headline", "counts", "route_buffer_m"),
         ),
         "runtime_safety_truth": False,
     }
+
+
+def _environment_artifact_freshness(
+    payload: dict[str, Any],
+    *,
+    reference_time: datetime,
+    stale_after_hours: float = 72.0,
+) -> str:
+    valid_until = _parse_datetime(
+        payload.get("forecast_valid_until")
+        or payload.get("valid_until")
+        or payload.get("validUntil")
+        or payload.get("valid_to")
+    )
+    if valid_until is not None:
+        return "fresh" if valid_until >= reference_time else "stale"
+    generated_at = _parse_datetime(
+        payload.get("generated_at")
+        or payload.get("generatedAt")
+        or payload.get("fetched_at")
+        or payload.get("issued_at")
+    )
+    if generated_at is None:
+        return "unknown"
+    age_hours = (reference_time - generated_at).total_seconds() / 3600.0
+    return "fresh" if age_hours <= stale_after_hours else "stale"
 
 
 def _terrain_risk_context(root: Path, project: dict[str, Any]) -> dict[str, Any]:
@@ -230,12 +297,18 @@ def _terrain_risk_context(root: Path, project: dict[str, Any]) -> dict[str, Any]
         "status": "available" if any((risk_meta, risk_diag, terrain_dtm)) else "missing_terrain_risk",
         "risk_route_profile": _compact_artifact(
             risk_meta,
-            source_path=project.get("risk_route_profile_metadata_ref"),
+            source_path=_project_ref_label(
+                root,
+                project.get("risk_route_profile_metadata_ref"),
+            ),
             keys=("artifact_kind", "generated_at", "segment_count", "score_summary", "score_fields"),
         ),
         "risk_attribution": _compact_artifact(
             risk_diag,
-            source_path=project.get("risk_attribution_diagnostic_ref"),
+            source_path=_project_ref_label(
+                root,
+                project.get("risk_attribution_diagnostic_ref"),
+            ),
             keys=("artifact_kind", "status", "counts", "route_dimension_stats"),
         ),
         "terrain_dtm_coverage": _compact_artifact(
@@ -245,7 +318,10 @@ def _terrain_risk_context(root: Path, project: dict[str, Any]) -> dict[str, Any]
         ),
         "risk_score_point_count": project.get("risk_score_point_count"),
         "risk_ribbon_segment_count": project.get("risk_ribbon_segment_count"),
-        "terrain_risk_candidate_ref": project.get("terrain_risk_candidates_ref"),
+        "terrain_risk_candidate_ref": _project_ref_label(
+            root,
+            project.get("terrain_risk_candidates_ref"),
+        ),
         "runtime_safety_truth": False,
     }
 
@@ -332,7 +408,24 @@ def _workspace_ref_context(root: Path, project: dict[str, Any]) -> dict[str, Any
             )
         ):
             continue
-        refs.append({"ref_key": key, "source_path": value, "exists": _project_path(root, value).exists()})
+        path = _project_path(root, value)
+        if path is None:
+            refs.append(
+                {
+                    "ref_key": key,
+                    "status": "invalid_workspace_ref",
+                    "exists": False,
+                }
+            )
+            continue
+        refs.append(
+            {
+                "ref_key": key,
+                "source_path": _project_ref_label(root, value),
+                "status": "available" if path.exists() else "missing",
+                "exists": path.exists(),
+            }
+        )
     return {
         "status": "available" if refs else "missing_workspace_refs",
         "ref_count": len(refs),
@@ -356,6 +449,19 @@ def _missing_or_partial_context(summary: dict[str, Any]) -> list[str]:
     if summary["sensor_snapshot_context"].get("status") not in {"available", "not_configured"}:
         missing.append("live_sensor_snapshot")
     return missing
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _compact_artifact(
@@ -537,8 +643,21 @@ def _load_json_object(path: Path | None) -> dict[str, Any]:
 def _project_path(root: Path, ref: object) -> Path | None:
     if not isinstance(ref, str) or not ref.strip():
         return None
-    path = Path(ref)
-    return path if path.is_absolute() else root / path
+    root_resolved = root.expanduser().resolve()
+    path = Path(ref).expanduser()
+    candidate = (path if path.is_absolute() else root_resolved / path).resolve()
+    try:
+        candidate.relative_to(root_resolved)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _project_ref_label(root: Path, ref: object) -> str | None:
+    path = _project_path(root, ref)
+    if path is None:
+        return None
+    return path.relative_to(root.expanduser().resolve()).as_posix()
 
 
 def _number(value: object) -> float | None:

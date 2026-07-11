@@ -6,8 +6,10 @@ Date: 2026-06-30
 
 ## Objective
 
-Scout AI should answer hiker, admin, and operator questions by using local
-workspace material through registered tools, not by guessing from model memory.
+Scout AI is the user's full-capability entrypoint. Local workspace tools,
+provider-native WebSearch/WebFetch, deterministic runtime services, local
+fallback models, and future computer-use capabilities are support layers for
+Scout AI, not policy reasons to refuse ordinary answer/research tasks.
 
 This document classifies the data types in a complete Scout workspace and
 defines the agent-tool coverage needed to process each type. It is intended to
@@ -40,6 +42,19 @@ deterministic tool。模型負責解釋、比較、追問與整理，不直接�
 
 ## Core Boundary
 
+### First Field Deployment Shape
+
+第一版 Scout 是 **Scout AI 隨行、機房能力池遠端執行**：
+
+- 使用者在山域現場主要透過手機和 Scout AI 溝通。
+- 手機負責把文字、語音、定位、感測摘要、照片/事件 metadata、裝置狀態等訊息傳回機房。
+- Scout 軟體、主要模型、web research、workspace tools、computer-use/browser-use
+  executor、硬體 gateway、資料庫與重型處理都在機房或可信任工作站上。
+- Scout AI 是使用者面向的全能入口；它可以調度機房端工具、web fetch/search、
+  workspace evidence、硬體狀態與後續 computer-use capability。
+- 現場端 fallback 只是在通訊或雲端能力中斷時維持最低限度互動；它不是主要架構，
+  也不應因本地小模型限制反過來限制 Scout AI 的能力。
+
 Scout AI may use local tools to read, retrieve, parse, rank, and explain
 workspace evidence.
 
@@ -63,7 +78,7 @@ Default rules:
 
 Pydantic AI provider rules:
 
-- Scout workspace tools target Pydantic AI v2.4.0.
+- Scout workspace tools target Pydantic AI v2.8.0.
 - Local deterministic tools and local `FunctionModel` remain the default.
 - External NVIDIA GLM calls use `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id.
@@ -75,12 +90,12 @@ Pydantic AI provider rules:
 - Scout keeps `end_strategy="early"` for typed agent calls so model execution
   cannot continue into extra same-turn tool calls after Scout has produced its
   typed output.
-- Pydantic AI native WebSearch/WebFetch are not implicitly available to
-  workspace questions. Operators can enable trusted no-per-query-approval
-  research mode through `SCOUT_AI_OS_NATIVE_RESEARCH=1`, or separately with
-  `SCOUT_AI_OS_NATIVE_WEB_SEARCH=1` and `SCOUT_AI_OS_NATIVE_WEB_FETCH=1`.
-  Results are candidate-only research evidence and cannot mutate runtime safety
-  truth, Phase 1 L0-L4 state, hardware controls, or outbound transports.
+- Pydantic AI native WebSearch/WebFetch are available by default for external
+  provider-backed Scout AI questions. No per-query approval is required for
+  normal research/fetch use. Operators may still constrain domains or disable
+  native research for lab/CI runs with the documented env flags. Results are
+  research evidence; state-changing safety, hardware, or outbound actions remain
+  separate capabilities.
 - Provider-native MCP remains unavailable until Scout adds a connector boundary
   and the required Pydantic AI optional dependency.
 
@@ -1081,16 +1096,15 @@ The first tool-coverage slices from this spec are now implemented in this
 checkout:
 
 - Pydantic AI provider compatibility
-  - Runtime target: Pydantic AI v2.4.0.
+- Runtime target: Pydantic AI v2.8.0.
   - Scout keeps `end_strategy="early"` for typed provider calls.
   - `z-ai/glm-5.2` uses the NVIDIA OpenAI-compatible endpoint with the same
     provider model id.
   - `nvidia:<model-id>` remains an advanced/internal NVIDIA provider route.
   - `openrouter:<vendor/model>` uses the Pydantic AI OpenRouter provider.
   - `openai:<model>` is normalized to `openai-chat:<model>`.
-  - WebSearch/WebFetch remain unavailable by default, but
-    `SCOUT_AI_OS_NATIVE_RESEARCH=1` enables trusted no-per-query-approval
-    native research as candidate-only evidence.
+  - WebSearch/WebFetch are available by default for external provider-backed
+    Scout AI calls; `SCOUT_AI_OS_NATIVE_RESEARCH=0` is only a lab/CI opt-out.
   - Native MCP remains unavailable unless Scout registers a reviewed
     connector/capability.
 
@@ -1152,6 +1166,60 @@ Implemented tests:
 
 These tools are read-only. They do not write review state, Brain observed
 facts, runtime safety state, outbound messages, or hardware actions.
+
+### 2026-07-06 Provider Exposure Gap Note
+
+The July 2026 workspace-agent 100-question eval exposed a mapping gap: several
+tools existed as typed modules, registry contracts, executor branches, and
+planner candidates, but were not registered as Pydantic AI native callable
+tools in `assistant_pydantic_provider.py`. In that state a cloud model could not
+select those tools even though the spec and deterministic executor already
+contained them. This is not a data absence; it is a provider exposure bug.
+
+Any future Scout AI tool addition must keep four layers aligned:
+
+1. tool spec / manifest / contract in this document or the relevant tool spec;
+2. deterministic implementation and `scout_ai_tool_executor.py` branch;
+3. planner hint in `scout_ai_tool_planner.py`, when deterministic expected-tool
+   evaluation uses it;
+4. Pydantic AI native callable registration in `assistant_pydantic_provider.py`,
+   including `REGISTERED_WORKSPACE_TOOL_NAMES`, prompt args, `ScoutWorkspaceToolContext`
+   method, `@agent.tool_plain(...)` wrapper, and source-ref mapping.
+
+Regression coverage belongs in `tests/test_assistant_pydantic_provider.py`:
+`build_workspace_tool_prompt()` must list the callable name and tool id, and a
+fixture-backed `ScoutWorkspaceToolContext` call must prove that the provider can
+execute the registered read-only tool without mutating Scout state.
+
+As of this note, the Pydantic provider exposes the additional read-only tools
+that the eval previously marked as missing:
+
+- `explain_scout_safety_boundary`
+  (`scout.ai.safety_boundary.explain.v0`);
+- `assess_scout_review_gap` (`scout.ai.review_gap.assess.v0`);
+- `search_scout_runtime_ingress_status`
+  (`scout.ai.runtime_ingress_status.search.v0`);
+- `assess_scout_live_navigation_state`
+  (`scout.ai.live_navigation_state.assess.v0`);
+- `assess_scout_post_trip_review`
+  (`scout.ai.post_trip_review.assess.v0`);
+- `assess_scout_energy_vitals` (`scout.ai.energy_vitals.assess.v0`);
+- `analyze_scout_ins_dr_trace` (`scout.ai.ins_dr_trace.analyze.v0`);
+- `assess_scout_contextual_permission`
+  (`scout.ai.contextual_permission.assess.v0`);
+- `explain_scout_survival_incident_playbook`
+  (`scout.ai.survival_incident_playbook.explain.v0`);
+- `assess_scout_pace_guardian` (`scout.ai.pace_guardian.assess.v0`);
+- `assess_scout_equipment_resource`
+  (`scout.ai.equipment_resource.assess.v0`);
+- `assess_scout_team_status` (`scout.ai.team_status.assess.v0`);
+- `assess_scout_media_literacy` (`scout.ai.media_literacy.assess.v0`).
+
+Cloud-model evals must judge whether the model selects these native tools on
+its own. Deterministic pre-compaction of `total info entry`, workspace compact
+evidence, and current sensor snapshots is reserved for local fallback modes such
+as AI HAT+ 2, where the model is intentionally small and should only produce a
+short conservative answer from already gathered evidence.
 
 ### Remaining Backlog
 

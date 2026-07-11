@@ -61,6 +61,7 @@ COPY \
     assistant_provider.py \
     assistant_readiness_check.py \
     assistant_skill_router.py \
+    assistant_workspace_total_info.py \
     checkpoint_manager.py \
     communication_provider.py \
     communication_tool.py \
@@ -199,6 +200,15 @@ COPY \
     scout_safety_boundary_tool.py \
     scout_sensor_vitals_record.py \
     scout_sensorlogger_mqtt_observer.py \
+    scout_runtime_physiologic_gate.py \
+    scout_runtime_physiologic_integration.py \
+    scout_runtime_physiologic_pipeline.py \
+    scout_runtime_physiologic_timeline.py \
+    scout_runtime_safety_gate_adapters.py \
+    scout_runtime_safety_gate_models.py \
+    scout_runtime_safety_reducer.py \
+    scout_runtime_safety_state_store.py \
+    scout_runtime_state_store_projection.py \
     scout_lorawan_client_observer.py \
     scout_sx1303_gateway_observer.py \
     scout_survival_incident_playbook_tool.py \

@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from admin_assistant_context import build_admin_assistant_context
 from assistant_models import AssistantSourceRef, AssistantSurface, ScoutAssistantQuery
+from assistant_workspace_total_info import build_workspace_total_info_source_ref
 from debug_assistant_context import RuntimeDebugEventLog, DebugMessageSource, build_debug_assistant_context
 from hardware_readiness_assistant_context import build_hardware_readiness_assistant_context
 from hardware_readiness_admin_view import load_hardware_readiness_fixture
@@ -72,6 +73,11 @@ def create_assistant_context_resolver(
             sources = query_source_refs(query)
         else:
             sources = assistant_source_refs_from_context(context, query=query)
+        sources = augment_sources_with_workspace_total_info(
+            query,
+            sources=sources,
+            project_root=pretrip_project_root,
+        )
         return augment_sources_with_configured_live_navigation_evidence(
             query,
             sources=sources,
@@ -142,7 +148,7 @@ def build_assistant_context(
                 mock_transport_queue=hardware_mock_transport_queue,
                 selected_provider_ref=query.selected_artifact_id or query.context_ref,
             )
-    except KeyError:
+    except (KeyError, TypeError, ValueError):
         return None
     return None
 
@@ -233,6 +239,20 @@ def augment_sources_with_configured_live_navigation_evidence(
         )
     except Exception:
         return sources
+
+
+def augment_sources_with_workspace_total_info(
+    query: ScoutAssistantQuery,
+    *,
+    sources: list[AssistantSourceRef],
+    project_root: Path | str | None,
+) -> list[AssistantSourceRef]:
+    source = build_workspace_total_info_source_ref(query, project_root=project_root)
+    if source is None:
+        return sources
+    if any(existing.source_id == source.source_id for existing in sources):
+        return sources
+    return _dedupe_source_refs([source, *sources])
 
 
 def _configured_pretrip_project_root(

@@ -400,8 +400,11 @@ def test_scout_dashboard_agent_tab_posts_to_same_origin_assistant_api() -> None:
     assert 'id="agentAskButton"' in html
     assert 'id="agentProjectChip"' in html
     assert 'id="agentFallbackToggle"' in html
+    assert 'id="agentRawEvalToggle"' in html
     assert "AI HAT+2 fallback" in html
+    assert "Facts-only model eval" in html
     assert "agentUseAiHatFallback" in html
+    assert "agentUseAiHatRawEval" in html
     assert "width: fit-content;" in html
     assert "max-width: min(900px, 86%);" in html
     assert "border: 0;" in html
@@ -411,11 +414,29 @@ def test_scout_dashboard_agent_tab_posts_to_same_origin_assistant_api() -> None:
     assert ".replace(/^結論[:：]\\s*/u, \"\")" in html
     assert "response?.evidence_backed_answer" in html
     assert "response?.local_model_answer" in html
-    assert "模型回答未通過 grounding（AI HAT+2 raw output）" in html
+    assert "AI HAT+2 原始回答（grounding 失敗，僅供品質檢查）" in html
     assert "回答（AI HAT+2 grounded repair）" in html
     assert "回答（AI HAT+2 synthesized from workspace facts）" in html
+    assert "回答（AI HAT+2 staged missing-context synthesis）" in html
+    assert "回答（AI HAT+2 + field-state-short-answer skill）" in html
+    assert "skill using：${aiHatSkillId" in html
+    assert "function agentAiHatSkillId(response)" in html
+    assert "ai_hat_skill_id=" in html
+    assert "回答（AI HAT+2 action + verified Scout evidence）" not in html
+    assert "AI HAT+2 模型原始輸出（typed decision 不算自然語言回答）" in html
+    assert "AI HAT+2 typed decision token" in html
+    assert "AI HAT+2 action token" in html
+    assert "if (aiHatActionToken)" in html
+    assert "Verified Scout evidence：已用於上方 hybrid answer" not in html
+    assert '"typed_decision_only"' in html
+    assert '"typed_decision_with_verified_evidence"' in html
+    assert '"typed_missing_context_action_only"' in html
+    assert "function agentAiHatTypedDecision(response)" in html
+    assert "function agentAiHatActionToken(response)" in html
+    assert "ai_hat_typed_decision=" in html
+    assert "ai_hat_action_token=" in html
     assert "模型未產生獨立回答（AI HAT+2 copied grounding reference）" in html
-    assert "AI HAT+2 raw output（未通過 grounding，不計成功）" in html
+    assert "AI HAT+2 原始回答（未通過 grounding，不計成功）" not in html
     assert "模型未成功回答（工具摘要另列）" in html
     assert "不能算作模型答題成功" in html
     assert "function agentAiHatGenerationMode(response)" in html
@@ -429,6 +450,8 @@ def test_scout_dashboard_agent_tab_posts_to_same_origin_assistant_api() -> None:
     assert "Scout grounding reference" in html
     assert "quality verdict：AI HAT+2 evidence-prompted answer did not preserve required Scout evidence" in html
     assert "near-copy/subset of the deterministic Scout grounding reference" in html
+    assert "typed decision 只能算分類成功" in html
+    assert "action token 不能算作回答，也不會套用固定句型" in html
     assert "transparent Scout evidence lock" not in html
     assert "missing|缺|stale|過期" not in html
     assert "(?:缺少|過期|过期)" in html
@@ -453,6 +476,21 @@ def test_scout_dashboard_agent_tab_posts_to_same_origin_assistant_api() -> None:
     assert "project_id: projectId()" in html
     assert 'runtime_preference: "cloud"' in html
     assert 'payload.runtime_preference = "ai_hat_plus_2_fallback";' in html
+    assert "payload.ai_hat_raw_eval = Boolean(state.agentUseAiHatRawEval);" in html
+    assert "AI HAT+2 本地模型回答" in html
+    assert "prompt-contract=${aiHatPromptContract}" in html
+    assert "answer-contract=${aiHatAnswerContract}" in html
+    assert "few-shot=${aiHatFewShotSource}:${aiHatFewShotCount}" in html
+    assert "few-shot-topic=${aiHatFewShotQuestion}" in html
+    assert "endpoint-response=${aiHatEndpointResponse}" in html
+    assert "eval-tokens=${aiHatEvalCount}" in html
+    assert "selected-call=${aiHatSelectedCall}" in html
+    assert "sampling=${aiHatSampling}" in html
+    assert "response?.local_model_attempts" in html
+    assert "model attempt ${attempt.call_index}" in html
+    assert "answer-template=${aiHatAnswerTemplate}" in html
+    assert "本地模型只收到 facts-only evidence brief，沒有預寫答案" in html
+    assert "function agentAiHatTraceValue(response, prefix)" in html
     assert "meta: state.agentUseAiHatFallback ? [\"AI HAT+2 fallback requested\"] : []" in html
     assert "meta: [`project=${projectId()}`, \"surface=pretrip\"]" not in html
     assert "Same-origin Scout AI conversation through /assistant/query" in html

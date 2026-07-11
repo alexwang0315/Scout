@@ -380,6 +380,36 @@ def test_weather_window_output_kind_is_registered_constant() -> None:
     assert WEATHER_WINDOW_OUTPUT_KIND == "scout_ai_weather_window_tool_output"
 
 
+def test_weather_window_downgrades_expired_route_weather_package(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_route_weather_project(
+        tmp_path,
+        risk_level="HIGH",
+        final_risk=0.7,
+        weather_risk=0.6,
+    )
+    path = project_root / "outputs" / "route_weather_package.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload.update(
+        generatedAt="2000-01-01T00:00:00Z",
+        issued_at="2000-01-01T00:00:00Z",
+        valid_to="2000-01-02T00:00:00Z",
+        validUntil="2000-01-02T00:00:00Z",
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = assess_scout_weather_window(
+        project_root,
+        query="明天午後雷雨是否要紮營？",
+    )
+
+    assert result["answerability"] == "route_weather_risk_partial"
+    assert "fresh_route_weather_evidence" in result["missing_fields"]
+    assert result["decision"] == "DELAY"
+    assert any("past valid_until" in item for item in result["warnings"])
+
+
 def _write_route_weather_project(
     tmp_path: Path,
     *,

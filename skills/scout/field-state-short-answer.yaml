@@ -1,0 +1,143 @@
+id: field-state-short-answer
+version: 0.1.0
+status: experimental
+type: summary
+priority: 90
+triggers:
+  - event: assistant.missing_context_answer_requested
+    description: Generate a short field answer from verified missing-evidence state and a bounded local-model action.
+    required_refs: []
+activation_gate:
+  mode: automatic
+  requires_human_approval: false
+  conditions:
+    - the question requires current field observations
+    - Scout tools identify one or more missing observations
+noise_control:
+  cooldown_seconds: 0
+  dedupe_window_seconds: 0
+  max_runs_per_mission: null
+  suppression_keys: []
+preflight:
+  required_skill_ids: []
+  required_capabilities:
+    - scout.ai.energy_vitals.assess.v0
+    - scout.ai.live_navigation_state.assess.v0
+    - scout.ai.weather_window.assess.v0
+    - scout.ai.team_status.assess.v0
+    - scout.ai.equipment_resource.assess.v0
+  required_artifacts: []
+allowed_reads:
+  - assistant.total_info_entry
+  - assistant.workspace_compact_evidence
+  - assistant.current_sensor_snapshot
+  - assistant.tool_missing_evidence
+allowed_writes: []
+forbidden_writes:
+  - phase1.runtime
+  - phase1.safety
+  - phase2.brain.observed_facts
+  - live.safety_api
+  - hardware.controls
+  - outbound.messages
+output_schema:
+  format: artifact
+  artifact_kinds:
+    - scout_ai_local_model_answer_candidate
+  required_fields:
+    - question
+    - missing_evidence
+    - action_token
+    - model_answer
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 1
+    backoff_seconds: 0
+  degrade_to: null
+control_surface:
+  operator_visible: true
+  manual_run_allowed: false
+  disable_allowed: true
+  status_label: Field-state short answer
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: short_term
+answer_contract:
+  language: zh-Hant
+  max_sentences: 2
+  evidence_checklist:
+    - 第一個句子必須直接回答使用者問的何時、哪裡、誰或是否；不能只說要檢查資料
+    - 說明最多三項會改變判斷的缺失觀測
+    - 缺失觀測一律保持未知，不可改寫成已確認事實
+    - 第二個句子用自然語言表達保守處置方向
+  missing_evidence_rules:
+    - 資料不足時必須明說現在不能判定本題，不能假裝已經有答案
+    - 不得把缺失觀測寫成足夠、不足、安全、危險或已發生
+    - 只挑最多三項最關鍵的缺失觀測，不要照抄整份欄位清單
+    - 不得從缺失證據診斷疾病或捏造時間、位置、症狀與裝置狀態
+  style_rules:
+    - 最後一句必須用自然語言表達處置方向，不能輸出 action token
+    - 說明不能判定之後，不要只重複所有欄位都是未知
+    - examples 只供文件閱讀，絕不可複製成目前問題的回答
+    - 使用自然繁體中文，不要輸出清單
+    - 不要把使用者稱為病人
+    - 不要提及 prompt、資料庫、政策或模型限制
+    - 不要加入通用醫療或法律免責聲明
+  action_guidance:
+    PAUSE_AND_CHECK: 先暫停推進，檢查關鍵現場觀測
+    HOLD_POSITION_AND_CHECK: 先避免繼續移動，檢查定位與周邊；不要擴大偏離
+    CONSERVE_RESOURCE_AND_CHECK: 先保留關鍵資源，檢查剩餘量與必要需求
+    REGROUP_AND_CHECK: 隊伍不要分散，維持聯絡並核對成員狀態
+  topic_guidance:
+    - triggers:
+        - 沒抵達約定山屋
+        - 未抵達約定山屋
+        - 沒到約定山屋
+      guidance:
+        - 不能只因尚未抵達就回答立即通報，也不能假設對方安全
+        - 通報時機要比較預定抵達時間與目前逾時、最後有效位置與聯絡、隊員狀態及約定的升級條件
+    - triggers:
+        - 定時回報
+        - 回報是不是逾時
+        - 回報是否逾時
+      guidance:
+        - 是否逾時必須比較原定回報時間或間隔、目前時間與最後成功回報時間
+    - triggers:
+        - 最後一次有效位置
+        - 最後有效位置
+      guidance:
+        - 位置回答必須先確認隊員識別、最後有效座標、觀測時間及定位來源；電量資訊不能代替位置
+    - triggers:
+        - 誰最需要協助
+        - 誰需要協助
+        - 隊伍目前誰
+      guidance:
+        - 要比較每位隊員的位置時間、症狀步態、體能與落單逾時狀態，不能只回答整隊是否需要協助
+    - triggers:
+        - 通知留守
+        - 通知留守人
+      guidance:
+        - 是否通知留守要比較原定回報時間、目前逾時、全員位置狀態、通訊及約定的升級條件
+    - triggers:
+        - 裝備濕掉
+        - 裝備受潮
+      guidance:
+        - 必須先說目前不能判定是否應停止前進，再比較保暖照明受潮、衣物乾濕、風寒及可避雨點
+  examples:
+    - question: 手機電量夠撐到今晚嗎？
+      missing_evidence:
+        - 手機剩餘電量
+        - 近期耗電率
+        - 距離日落時間
+      action_token: CONSERVE_RESOURCE_AND_CHECK
+      answer: 目前還不能判斷手機能否撐到今晚，關鍵是剩餘電量、近期耗電率和距離日落時間。確認前先關閉非必要耗電功能。
+    - question: 隊伍是不是已經分離？
+      missing_evidence:
+        - 隊員位置
+        - 最後回報時間
+        - 共同會合點
+      action_token: REGROUP_AND_CHECK
+      answer: 目前還不能確認隊伍是否分離，需要先核對隊員位置、最後回報時間和共同會合點。確認前先維持聯絡並停止擴大距離。

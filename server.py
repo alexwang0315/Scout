@@ -6,10 +6,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -26,6 +22,7 @@ from assistant_context import (
     assistant_source_refs_from_context,
     create_assistant_context_resolver,
 )
+from scout_env import load_scout_env_files
 from assistant_models import AssistantSurface, ScoutAssistantQuery
 from assistant_skill_router import augment_pretrip_sources_with_local_evidence_search
 from debug_api import create_debug_page_router, create_debug_router
@@ -54,9 +51,8 @@ from server_safety_observation_admission_config import (
     create_safety_observation_admission_config_from_env,
 )
 from shared_queue import pdr_event_queue
-from visualize_signal import generate_heatmap
 
-load_dotenv(os.path.expanduser("~/scout-fusion/.env"))
+load_scout_env_files(repo_root=Path(__file__).resolve().parent)
 
 DEBUG = os.getenv("SCOUT_DEBUG", "false").lower() == "true"
 PORT = int(os.getenv("SCOUT_PORT", "9099"))
@@ -441,9 +437,20 @@ async def process_movement_summary(summary: Any) -> Dict[str, Any]:
     }
 
 
+def _generate_signal_heatmap(world: Any) -> bool:
+    from visualize_signal import generate_heatmap
+
+    return bool(generate_heatmap(world))
+
+
 def generate_trajectory_plot() -> bool:
     """Generate trajectory_map.png from combined GPS and PDR trajectories."""
     try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
         trajectory = pdr.get_combined_trajectory()
         if len(trajectory) < 2:
             logger.warning("Not enough trajectory points to generate map")
@@ -687,7 +694,7 @@ async def get_navigation() -> Dict[str, Any]:
 async def trigger_map() -> Dict[str, str]:
     try:
         loop = asyncio.get_event_loop()
-        success = await loop.run_in_executor(executor, generate_heatmap, world)
+        success = await loop.run_in_executor(executor, _generate_signal_heatmap, world)
         if not success:
             return {"status": "error", "path": "heatmap.png"}
         return {"status": "success", "path": "heatmap.png"}

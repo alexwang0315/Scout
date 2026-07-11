@@ -16,6 +16,7 @@ WEATHER_WINDOW_OPTIONAL_FIELDS = (
     "route_weather_package_path",
     "planned_eta_path",
     "current_time",
+    "reference_time",
     "valid_from",
     "valid_to",
     "segment",
@@ -46,6 +47,7 @@ def assess_scout_weather_window(
     route_weather_package_path: str | None = None,
     planned_eta_path: str | None = None,
     current_time: str | None = None,
+    reference_time: str | None = None,
     valid_from: str | None = None,
     valid_to: str | None = None,
     segment: str | None = None,
@@ -107,6 +109,15 @@ def assess_scout_weather_window(
         route_package=route_package,
         weather_evidence=weather_evidence,
     )
+    reference_datetime = _parse_datetime(reference_time) or datetime.now(timezone.utc)
+    stale_warnings = _stale_warnings(
+        route_package=route_package,
+        weather_evidence=weather_evidence,
+        stale_after_hours=stale_hours,
+        reference_time=reference_datetime,
+    )
+    if stale_warnings:
+        missing_fields = _dedupe([*missing_fields, "fresh_route_weather_evidence"])
     daylight_buffer_status = _daylight_buffer_status(
         query=query,
         current_time=current_time,
@@ -126,6 +137,8 @@ def assess_scout_weather_window(
         weather_evidence=weather_evidence,
         missing_fields=missing_fields,
         stale_after_hours=stale_hours,
+        reference_time=reference_datetime,
+        stale_warnings=stale_warnings,
     )
     answerability = (
         "route_weather_risk_available"
@@ -1797,6 +1810,8 @@ def _warnings(
     weather_evidence: dict[str, Any],
     missing_fields: list[str],
     stale_after_hours: float,
+    reference_time: datetime,
+    stale_warnings: list[str] | None = None,
 ) -> list[str]:
     warnings: list[str] = []
     if missing_fields:
@@ -1811,9 +1826,16 @@ def _warnings(
         warnings.append(
             "Weather evidence is a manual placeholder and requires human review before departure-gate use."
         )
-    stale_warning = _stale_warning(route_package or weather_evidence, stale_after_hours)
-    if stale_warning:
-        warnings.append(stale_warning)
+    warnings.extend(
+        stale_warnings
+        if stale_warnings is not None
+        else _stale_warnings(
+            route_package=route_package,
+            weather_evidence=weather_evidence,
+            stale_after_hours=stale_after_hours,
+            reference_time=reference_time,
+        )
+    )
     return _dedupe(warnings)
 
 
@@ -1850,20 +1872,39 @@ def _human_review_required(
     return bool(missing_fields)
 
 
-def _stale_warning(source: dict[str, Any], stale_after_hours: float) -> str | None:
+def _stale_warnings(
+    *,
+    route_package: dict[str, Any],
+    weather_evidence: dict[str, Any],
+    stale_after_hours: float,
+    reference_time: datetime,
+) -> list[str]:
+    warnings = []
+    for source in (route_package, weather_evidence):
+        warning = _stale_warning(source, stale_after_hours, reference_time)
+        if warning:
+            warnings.append(warning)
+    return _dedupe(warnings)
+
+
+def _stale_warning(
+    source: dict[str, Any],
+    stale_after_hours: float,
+    reference_time: datetime,
+) -> str | None:
     if not source:
         return None
     valid_until = _first_present(source, "valid_until", "validUntil", "valid_to", "validTo")
     if valid_until:
         parsed = _parse_datetime(valid_until)
-        if parsed and parsed < datetime.now(timezone.utc):
+        if parsed and parsed < reference_time:
             return f"Weather source is past valid_until={valid_until}."
     generated_at = _first_present(source, "generated_at", "generatedAt", "issued_at", "issuedAt")
     parsed_generated_at = _parse_datetime(generated_at)
     if parsed_generated_at is None:
         return None
     age_hours = (
-        datetime.now(timezone.utc) - parsed_generated_at.astimezone(timezone.utc)
+        reference_time - parsed_generated_at.astimezone(timezone.utc)
     ).total_seconds() / 3600.0
     if age_hours > stale_after_hours:
         return f"Weather source age {age_hours:.1f}h exceeds stale_after_hours={stale_after_hours:g}."

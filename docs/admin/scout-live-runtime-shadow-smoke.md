@@ -102,7 +102,7 @@ Production containers stayed unchanged:
 - `cloud_model=google/gemma-3-27b-it`;
 - `local_model=qwen2.5:0.5b`;
 - `local_fallback_enabled=true`;
-- `local_fallback_fixed_schema=true`;
+- `local_fallback_fixed_schema=false`;
 - `token_values_exposed=false`.
 
 中文註釋：startup 嘗試 cloud provider 後落到 Ollama local fallback。這符合「雲端通訊中斷則切換本地模型」的護欄；不代表 assistant 可改安全狀態。

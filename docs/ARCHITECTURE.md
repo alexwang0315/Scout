@@ -119,7 +119,11 @@ This MVP does not implement:
 - live external notification transports;
 - generated capability runtime code installation outside sandbox metadata;
 - payment automation;
-- unrestricted shell/browser automation;
-- runtime-applied browser UI automation;
+- unscoped destructive shell/browser automation;
 - autonomous Scout core self-modification;
 - Scout Phase 1 L0-L4 safety mutation from model output.
+
+Trusted server-room computer-use/browser-use is part of the Scout AI capability
+direction: Scout AI is the user entrypoint, while the workstation-side executor
+applies reviewed UI/browser actions and records provenance. This is distinct
+from letting model text mutate Phase 1 safety truth directly.
