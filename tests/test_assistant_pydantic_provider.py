@@ -880,7 +880,7 @@ def test_ai_hat_plus_2_generic_rain_answer_is_shown_with_failed_grounding_guard(
 def test_ai_hat_raw_eval_uses_facts_only_prompt_without_precomposed_answer():
     raw_answer = (
         "CP 213 距離約 190 m、GPX 106.27 km、score=99.58，"
-        "是雨後優先複核候選，不能確認該處已經危險。"
+        "bucket=extreme，是雨後優先複核候選，不能確認該處已經危險。"
     )
     local = FakeRunner(
         raw_answer,
@@ -928,8 +928,11 @@ def test_ai_hat_raw_eval_uses_facts_only_prompt_without_precomposed_answer():
     assert "AI_HAT_EVIDENCE_SYNTHESIS_V2" not in local.calls[0]["prompt"]
     assert "Scout typed answer brief" in local.calls[0]["prompt"]
     assert "判斷類型=需複核候選" in local.calls[0]["prompt"]
-    assert "優先複核位置=CP 213" in local.calls[0]["prompt"]
-    assert "風險分數=99.58" not in local.calls[0]["prompt"]
+    assert "CP=213" in local.calls[0]["prompt"]
+    assert "距 CP=190 m" in local.calls[0]["prompt"]
+    assert "GPX=106.27 km" in local.calls[0]["prompt"]
+    assert "score=99.58" in local.calls[0]["prompt"]
+    assert "bucket=extreme" in local.calls[0]["prompt"]
     assert "一般登山常識" in local.calls[0]["prompt"]
     assert "direct_semantics=" not in local.calls[0]["prompt"]
     assert "REQUIRED（每項都必須出現在回答）" not in local.calls[0]["prompt"]
@@ -986,7 +989,10 @@ def test_ai_hat_raw_eval_unknown_topic_does_not_copy_deterministic_answer_into_p
 
 
 def test_ai_hat_facts_only_provider_accepts_compact_answer_without_debug_reference_copy():
-    compact_answer = "雨後先複核 CP 213；目前不能確認現場已經危險。"
+    compact_answer = (
+        "雨後先複核 CP 213 附近，距 CP 約 190 m、GPX 106.27 km、"
+        "score=99.58、bucket=extreme；目前不能確認現場已經危險。"
+    )
     local = FakeRunner(
         compact_answer,
         model_name="qwen2.5-instruct:1.5b",
@@ -1036,8 +1042,9 @@ def test_ai_hat_facts_only_provider_accepts_compact_answer_without_debug_referen
 
 def test_ai_hat_facts_only_reframes_accident_prediction_question_for_local_model():
     local = FakeRunner(
-        "CP 213 是目前最高分的行前風險候選，但不代表該 CP 最容易發生事故；"
-        "仍需人工或現場複核。",
+        "CP 213 附近（距 CP 約 190 m、GPX 106.27 km、score=99.58、"
+        "bucket=extreme）是目前最高分的行前風險候選；風險分數不能用來"
+        "預測事故，仍需人工或現場複核。",
         model_name="qwen2.5-instruct:1.5b",
     )
     runner = FallbackPydanticAIRunner(
@@ -1059,7 +1066,8 @@ def test_ai_hat_facts_only_reframes_accident_prediction_question_for_local_model
     assert "使用者問題：這趟行程最容易出事的 CP 在哪裡" not in prompt
     assert "模型回答目標：目前最高分的行前風險候選是哪個 CP" in prompt
     assert "風險分數不能用來預測事故" in prompt
-    assert "風險分數=99.58" not in prompt
+    assert "score=99.58" in prompt
+    assert "bucket=extreme" in prompt
 
 
 def test_ai_hat_facts_only_reframes_rain_question_as_evidence_task():
@@ -1094,8 +1102,863 @@ def test_rain_answer_brief_does_not_duplicate_gpx_unit():
         grounded_answer="天氣窗工具仍缺 provider。",
     )
 
-    assert brief.required_fact_groups == (("CP 213", "GPX 106.27 km"),)
+    assert brief.required_fact_groups == (
+        ("CP 213",),
+        ("190 m",),
+        ("GPX 106.27 km",),
+        ("score=99.58", "風險分數=99.58"),
+        ("bucket=extreme", "風險級別=extreme"),
+    )
     assert "km km" not in repr(brief)
+
+
+def test_risk_location_briefs_preserve_cp_distance_gpx_score_and_bucket():
+    compact = (
+        "top_location=最近 CP 213 約 190 m; top_gpx_km=106.27 km; "
+        "top_score=99.58; top_bucket=extreme"
+    )
+
+    for question in (
+        "這趟行程最容易出事的 CP 在哪裡？",
+        "哪些地方下雨後會變危險？",
+        "哪些地方要避免停留拍照？",
+    ):
+        brief = assistant_provider_module._build_local_grounded_answer_brief(
+            compact,
+            question=question,
+            grounded_answer="天氣窗工具仍缺 provider。",
+        )
+        prompt = assistant_provider_module._format_local_grounded_answer_brief_for_prompt(
+            brief
+        )
+
+        assert "CP=213" in prompt
+        assert "距 CP=190 m" in prompt
+        assert "GPX=106.27 km" in prompt
+        assert "score=99.58" in prompt
+        assert "bucket=extreme" in prompt
+
+
+def test_checkpoint_segment_anchor_accepts_natural_chinese_segment_wording():
+    alternatives = assistant_provider_module._local_brief_anchor_alternatives("seg.132")
+
+    assert "段落132" in alternatives
+    assert "路段132" in alternatives
+
+
+def test_checkpoint_anchor_accepts_equals_wording():
+    alternatives = assistant_provider_module._local_brief_anchor_alternatives("CP 213")
+
+    assert "cp=213" in alternatives
+
+
+def test_duration_anchor_accepts_natural_copula_wording():
+    alternatives = assistant_provider_module._local_brief_anchor_alternatives(
+        "約 55.8 分鐘"
+    )
+
+    assert "約為55.8分鐘" in alternatives
+
+
+def test_workspace_evidence_anchors_accept_natural_chinese_aliases():
+    terrain = assistant_provider_module._local_brief_anchor_alternatives(
+        "局部 terrain/risk evidence"
+    )
+    tracks = assistant_provider_module._local_brief_anchor_alternatives(
+        "reference tracks"
+    )
+    dispersion = assistant_provider_module._local_brief_anchor_alternatives(
+        "GPX cluster dispersion"
+    )
+    cliff = assistant_provider_module._local_brief_anchor_alternatives(
+        "地形或斷崖限制"
+    )
+    route_distance = assistant_provider_module._local_brief_anchor_alternatives(
+        "nearest route distance"
+    )
+    route_corridor = assistant_provider_module._local_brief_anchor_alternatives(
+        "route corridor 寬度"
+    )
+    horizontal_accuracy = assistant_provider_module._local_brief_anchor_alternatives(
+        "horizontal accuracy"
+    )
+    slope_geology = assistant_provider_module._local_brief_anchor_alternatives(
+        "坡度與地質 evidence"
+    )
+
+    assert "局部地形與風險資訊" in terrain
+    assert "地形與風險資訊" in terrain
+    assert "參考軌跡" in tracks
+    assert "軌跡分散程度" in dispersion
+    assert "地形/斷崖限制" in cliff
+    assert "最近路線距離" in route_distance
+    assert "路線走廊寬度" in route_corridor
+    assert "水平精度" in horizontal_accuracy
+    assert "坡度與地質資訊" in slope_geology
+
+
+def test_risk_bucket_anchor_accepts_natural_chinese_without_equals_sign():
+    alternatives = assistant_provider_module._local_brief_anchor_alternatives(
+        "bucket=extreme"
+    )
+
+    assert "風險級別extreme" in alternatives
+    assert "極端風險類型" in alternatives
+
+
+def test_risk_gpx_anchor_accepts_natural_value_wording():
+    alternatives = assistant_provider_module._local_brief_anchor_alternatives(
+        "GPX 106.27 km"
+    )
+
+    assert "gpx值為106.27km" in alternatives
+    assert "gpx=106.27km" in alternatives
+
+
+def test_accident_brief_accepts_complete_natural_chinese_risk_facts():
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "top_location=最近 CP 213 約 190 m; top_gpx_km=106.27 km; "
+            "top_score=99.58; top_bucket=extreme"
+        ),
+        question="這趟行程最容易出事的 CP 在哪裡？",
+        grounded_answer="這是行前候選，需人工複核。",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        (
+            "最需要複核的 CP 候選為 CP 213，其風險分數為 99.58，位於距 CP "
+            "190 m，GPX 值為 106.27 km，且屬於極端風險類型；風險分數無法"
+            "用來預測事故，仍需人工複核。"
+        ),
+        brief,
+    )
+
+    assert violations == []
+
+
+def test_accident_boundary_accepts_score_inserted_between_subject_and_rule():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="REVIEW_CANDIDATE",
+        subject="最需要複核的 CP 候選",
+        facts=("最高分行前風險候選=CP 213",),
+        required_fact_groups=(("CP 213",),),
+        boundary="風險分數不能用來預測事故；需人工或現場複核",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "CP 213 是候選；風險分數 99.58 不能用來預測事故，仍需人工複核。",
+        brief,
+    )
+
+    assert "缺少判斷邊界：風險分數不能預測事故" not in violations
+
+
+def test_accident_boundary_accepts_unable_to_predict_word_order():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="REVIEW_CANDIDATE",
+        subject="最需要複核的 CP 候選",
+        facts=("最高分行前風險候選=CP 213",),
+        required_fact_groups=(("CP 213",),),
+        boundary="風險分數不能用來預測事故；需人工或現場複核",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "CP 213 是行前候選；無法用風險分數預測事故，需人工複核。",
+        brief,
+    )
+
+    assert "缺少判斷邊界：風險分數不能預測事故" not in violations
+
+
+def test_low_tolerance_brief_rejects_question_repetition_without_affirmative_answer():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="REVIEW_CANDIDATE",
+        subject="是否有低容錯地形",
+        facts=("GPX=106.28 km", "teii_20m=99.63"),
+        required_fact_groups=(("GPX 106.28 km",), ("teii_20m=99.63",)),
+        boundary="有低容錯地形候選；尚未確認為現場危險",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "是否有低容錯地形候選？GPX 106.28 km，teii_20m=99.63，需複核。",
+        brief,
+    )
+
+    assert "未直接回答：有低容錯地形候選" in violations
+
+
+def test_low_tolerance_brief_rejects_affirmative_then_none_contradiction():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="REVIEW_CANDIDATE",
+        subject="是否有低容錯地形",
+        facts=("GPX=106.28 km", "teii_20m=99.63"),
+        boundary="有低容錯地形候選；尚未確認為現場危險",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "有低容錯地形候選：無。建議行前複核。",
+        brief,
+    )
+
+    assert "矛盾結論：低容錯候選不可同時寫成無" in violations
+
+
+def test_local_brief_guard_rejects_truncated_conjunction_suffix():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="REPLAN",
+        subject="晚出發一小時後能否安全完成",
+        facts=("bottleneck_segment=seg.132",),
+        boundary="目前不能確認能安全完成；先重算折返窗口",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前不能確認能安全完成，應先重算折返窗口，並",
+        brief,
+    )
+
+    assert "回答句子未完成" in violations
+
+
+def test_local_brief_guard_rejects_isolated_missing_evidence_question():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="這個景觀點是否適合停留拍照",
+        missing_evidence=("可停留空間",),
+        boundary="目前不能判定",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前無法判斷是否適合停留拍照。可停留空間？",
+        brief,
+    )
+
+    assert "缺失 evidence 被寫成孤立問句" in violations
+
+
+def test_candidate_scope_accepts_explicit_pretrip_review_candidate_wording():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="REVIEW_CANDIDATE",
+        subject="是否有低容錯地形",
+        facts=("GPX=106.28 km", "teii_20m=99.63"),
+        required_fact_groups=(("GPX 106.28 km",), ("teii_20m=99.63",)),
+        boundary="有低容錯地形候選；尚未確認為現場危險",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "有低容錯地形候選：GPX 106.28 km、teii_20m=99.63，僅為行前複核候選。",
+        brief,
+    )
+
+    assert "缺少判斷邊界：尚未確認現場危險" not in violations
+
+
+def test_delayed_departure_brief_requires_segment_duration_and_rejects_fake_progress():
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="如果我晚出發一小時，是否還能安全完成？",
+        grounded_answer=(
+            "主要難點=seg.132 CP 129 到 CP 130，約 55.8 分鐘。"
+            "缺天氣與頭燈電量前先重算折返窗口。"
+        ),
+    )
+
+    assert ("約 55.8 分鐘",) in brief.required_fact_groups
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        (
+            "段落 132 的 CP 129 到 CP 130 進度尚未完整，約 55.8 分鐘；"
+            "目前不能確認安全完成，應重算折返窗口。"
+        ),
+        brief,
+    )
+    assert "新增無證據狀態：CP 間進度不完整" in violations
+    natural_answer_violations = (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            (
+                "目前晚出發 60 分鐘，瓶頸路段為 seg.132，CP 區間為 CP 129 至 "
+                "CP 130，路段時間約為 55.8 分鐘；仍缺天氣與裝備資訊，無法"
+                "確認安全完成，需重算折返窗口。"
+            ),
+            brief,
+        )
+    )
+    assert "缺少事實：約 55.8 分鐘" not in natural_answer_violations
+
+
+def test_local_brief_guard_rejects_repeated_current_missing_phrase():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="今日配速是否有足夠時間緩衝",
+        facts=("requested_inputs=目前配速",),
+        required_fact_groups=(("目前配速",),),
+        missing_evidence=("目前配速",),
+        boundary="不能判定今日配速是否有足夠時間緩衝",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前尚缺目前配速，無法判定時間緩衝是否足夠。",
+        brief,
+    )
+
+    assert "重複用詞：目前尚缺目前" in violations
+
+
+def test_local_brief_guard_rejects_internal_grounding_prompt_leakage():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="今日配速是否有足夠時間緩衝",
+        missing_evidence=("速度或配速",),
+        boundary="不能判定今日配速是否有足夠時間緩衝",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "Scout grounding evidence 未完整保留，因此不得創造不存在的單位。",
+        brief,
+    )
+
+    assert "輸出內部 grounding 提示" in violations
+
+
+def test_unknown_runout_brief_rejects_confirmed_no_stop_point_claim():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="這段滑墜後是否缺少停止點",
+        missing_evidence=("runout 或停止區 geometry",),
+        boundary="目前不能判定是否缺少停止點",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "這段滑墜後沒有停止點，但目前無法判定。",
+        brief,
+    )
+
+    assert "把未知寫成已確認沒有停止點" in violations
+    explicit_violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "這段滑墜後沒有明確的停止點，無法判定是否缺少停止點。",
+        brief,
+    )
+    assert "把未知寫成已確認沒有停止點" in explicit_violations
+    natural_violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前無法確定是否滑墜後沒有停止點，需補充 runout 或停止區 geometry。",
+        brief,
+    )
+    assert "把未知寫成已確認沒有停止點" not in natural_violations
+
+
+def test_unknown_official_route_brief_rejects_confirmed_source_claim():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="這裡是官方路線或非正式路跡",
+        missing_evidence=("官方步道來源", "reference-track provenance"),
+        boundary="目前不能判定路線來源",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "這裡是官方路線，但仍需補充官方步道來源。",
+        brief,
+    )
+
+    assert "把未知路線來源寫成已確認" in violations
+
+
+def test_unknown_route_width_rejects_claim_that_positioning_exists():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="這段容許路徑寬度",
+        missing_evidence=("定位精度",),
+        boundary="目前不能判定路徑寬度",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前僅有定位資訊，仍無法判定容許路徑寬度。",
+        brief,
+    )
+
+    assert "反轉證據：把缺失定位精度寫成已有" in violations
+
+
+def test_navigation_unknown_briefs_reject_unsupported_advice_and_broken_terms():
+    gps_brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="目前 GPS 誤差是否過大而不可信",
+        missing_evidence=("水平精度",),
+        boundary="目前不能判定 GPS 是否可信",
+    )
+    imu_brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="IMU/PDR 推估是否與 GPS 一致",
+        missing_evidence=("共同時間戳",),
+        boundary="目前不能判定是否一致",
+    )
+    retreat_brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="現在是否應回到上一個確定點",
+        missing_evidence=("回退路段 geometry",),
+        boundary="目前不能判定是否應回退",
+    )
+
+    gps_violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "GPS 誤差通常可接受，但目前無法判定。",
+        gps_brief,
+    )
+    imu_violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前無法判定，需比較推估軋與 GPS 軍同時間。",
+        imu_brief,
+    )
+    retreat_violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前無法判定；若條件符合可考慮回溯，否則建議保持原點。",
+        retreat_brief,
+    )
+
+    assert "新增無證據 GPS 品質結論" in gps_violations
+    assert "破損導航術語" in imu_violations
+    assert "缺資料時新增回退或留置建議" in retreat_violations
+
+
+def test_unknown_brief_accepts_unable_to_determine_synonym():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="UNKNOWN",
+        subject="前方是否為稜線轉折點",
+        missing_evidence=("目前座標",),
+        boundary="目前不能判定",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前無法確定前方是否為稜線轉折點，需補充目前座標。",
+        brief,
+    )
+
+    assert "缺少判斷邊界：目前未知" not in violations
+
+
+def test_photo_brief_rejects_unsupported_not_yet_at_cp_claim():
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="REVIEW_CANDIDATE",
+        subject="哪些地方需避免停留拍照",
+        facts=("最高分行前風險候選=CP 213",),
+        required_fact_groups=(("CP 213",),),
+        boundary="CP 213 是避免長時間停留拍照的候選；仍需現場複核",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "CP 213 是行前複核候選，因尚未達 CP 213，建議避免停留拍照。",
+        brief,
+    )
+
+    assert "新增無證據狀態：未達 CP" in violations
+
+
+def test_missing_context_brief_strips_repeated_current_prefix_from_requested_input():
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; missing_context_subject=今日配速與時間緩衝; "
+            "missing_context_gaps=目前配速|最近 CP 通過時間|下一 CP ETA; "
+            "requested_inputs=目前速度或配速|最近 CP 通過時間|下一 CP ETA"
+        ),
+        question="我今天的配速有足夠 buffer 嗎？",
+        grounded_answer="目前缺少配速資料。",
+    )
+
+    assert brief.missing_evidence[0] == "速度或配速"
+    assert "目前尚缺目前" not in assistant_provider_module._format_local_grounded_answer_brief_for_prompt(
+        brief
+    )
+
+
+def test_missing_context_brief_preserves_up_to_five_required_inputs():
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; missing_context_subject=歷史 GPX 在這裡是否分散; "
+            "missing_context_gaps=有效 GNSS 定位|reference-track cluster|橫向偏移統計|INS/DR trace; "
+            "requested_inputs=目前座標|reference tracks|GPX cluster dispersion|橫向偏移統計|INS/DR trace"
+        ),
+        question="歷史 GPX 這裡的軌跡分散嗎？",
+        grounded_answer="目前缺少軌跡證據。",
+    )
+
+    assert len(brief.required_fact_groups) == 5
+    assert ("INS/DR trace",) in brief.required_fact_groups
+
+
+def test_list_output_uses_same_model_list_to_sentences_repair():
+    local = SequenceFakeRunner(
+        [
+            "1. 段落132需設 checkpoint\n2. 無撤退點與補水點",
+            (
+                "目前不能判定一定要增設 checkpoint；先複核段落132，該段無撤退點"
+                "與補水點，是否增設仍需評估通過時間與可回退性。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="哪些地方一定要設 checkpoint？",
+        grounded_answer=(
+            "目前不能直接說某處一定要新增 checkpoint；應先複核主要難點 seg.132，"
+            "原因=需要日照、路段內無撤退點、路段內無補水點、路段時間長。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert "段落132" in output
+    assert "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in local.calls[1]["prompt"]
+    assert len(local.calls) == 2
+
+
+def test_rain_risk_location_uses_same_model_specific_repair():
+    local = SequenceFakeRunner(
+        [
+            "- CP=213\n- GPX 106.27 km",
+            (
+                "雨後優先複核候選為 CP 213 附近，距 CP 190 m、GPX 106.27 km、"
+                "score=99.58、bucket=extreme；目前缺少即時天氣資料，不能確認"
+                "現場已經危險。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="哪些地方下雨後會變危險？",
+        grounded_answer=(
+            "雨後需優先人工複核的最高候選風險點在最近 CP 213 約 190 m；"
+            "GPX 累積約 106.27 km；score=99.58；bucket=extreme。"
+            "天氣窗工具仍缺 provider，所以不能把這個結果說成即時天氣判定。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert "CP 213" in output
+    assert "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in local.calls[1]["prompt"]
+    assert "- CP=213" not in local.calls[1]["prompt"]
+    assert len(local.calls) == 2
+
+
+def test_low_tolerance_uses_same_model_direct_answer_repair():
+    local = SequenceFakeRunner(
+        [
+            "是否有低容錯地形候選？是，GPX=106.28 km；teii_20m=99.63。",
+            (
+                "有低容錯地形候選：GPX=106.28 km、teii_20m=99.63；"
+                "這只是行前複核候選，尚未確認現場危險。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="這條路線有沒有低容錯地形？",
+        grounded_answer=(
+            "有低容錯地形候選：GPX 累積約 106.28 km（teii_20m=99.63）。"
+            "這是行前候選，尚未確認為現場危險。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert output.startswith("有低容錯地形候選")
+    assert "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in local.calls[1]["prompt"]
+    assert "是否有低容錯地形候選？是" not in local.calls[1]["prompt"]
+    assert len(local.calls) == 2
+
+
+def test_unknown_context_retry_uses_only_subject_and_missing_inputs():
+    wrong = "這裡是官方路線，已有官方步道來源。"
+    corrected = (
+        "目前無法判定這裡是官方路線或非正式路跡。需補充目前座標、官方步道"
+        "來源、reference-track provenance 與路線交集結果。"
+    )
+    local = SequenceFakeRunner([wrong, corrected], model_name="qwen3:1.7b")
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="這裡是官方路線還是人走出來的路跡？",
+        grounded_answer=(
+            "目前缺少有效 GNSS 定位、官方步道來源、reference-track provenance、"
+            "路線交集，不能判定這裡是官方路線或非正式路跡。"
+            "下一步：請提供目前座標、官方步道來源、reference-track provenance、"
+            "路線交集結果。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert output == corrected
+    assert "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in local.calls[1]["prompt"]
+    assert wrong not in local.calls[1]["prompt"]
+    assert "上述主題" not in local.calls[1]["prompt"]
+    assert "座標、官方步道來源、reference-track provenance、路線交集結果" in (
+        local.calls[1]["prompt"]
+    )
+
+
+def test_body_resource_guard_rejects_unsupported_advice_and_reversed_evidence():
+    tired_brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; "
+            "missing_context_subject=目前是否太累而不適合繼續下坡; "
+            "missing_context_gaps=症狀與疲勞程度|走路穩定度|心率與恢復趨勢; "
+            "requested_inputs=症狀與疲勞程度|走路穩定度|心率與恢復趨勢"
+        ),
+        question="我現在是不是太累不適合繼續下坡？",
+        grounded_answer="目前缺少體能與步態資料。",
+    )
+    cognition_brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; "
+            "missing_context_subject=目前是否正在出現決策品質下降; "
+            "missing_context_gaps=認知狀態|反應與決策錯誤|同伴觀察; "
+            "requested_inputs=認知狀態|反應與決策錯誤|同伴觀察"
+        ),
+        question="我是不是正在決策品質下降？",
+        grounded_answer="目前缺少認知狀態資料。",
+    )
+
+    assert "缺資料時新增繼續或停止建議" in (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "目前無法判斷；若身體仍具備體力，可暫時繼續，否則建議立即停止。",
+            tired_brief,
+        )
+    )
+    assert "反轉證據：把缺失認知狀態寫成已知" in (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "僅有已知的認知因素，不足以判定決策品質是否下降。",
+            cognition_brief,
+        )
+    )
+
+
+def test_altitude_self_check_brief_recommends_check_without_diagnosis():
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; "
+            "missing_context_subject=現在是否需要做高山症自評; "
+            "missing_context_gaps=海拔與上升速率|頭痛噁心暈眩疲倦|走路穩定與認知狀態; "
+            "requested_inputs=海拔與上升速率|頭痛噁心暈眩疲倦|走路穩定與認知狀態|同伴觀察"
+        ),
+        question="我該做高山症自評嗎？",
+        grounded_answer="目前缺少高海拔症狀與位置資料。",
+    )
+
+    assert brief.decision == "SELF_CHECK"
+    assert brief.subject == "現在是否需要做高山症自評"
+    assert "建議現在做高山症自評" in brief.boundary
+    assert "不可診斷" in brief.boundary
+    assert "高山症自評新增無證據行動指令" in (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "建議現在做高山症自評；若出現任何症狀，請立即停止並通知領隊。",
+            brief,
+        )
+    )
+    list_violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "建議現在做高山症自評\n海拔與上升速率：請記錄\n同伴觀察：留意警報訊號",
+        brief,
+    )
+    assert "缺少高山症自評判斷邊界" in list_violations
+    assert "高山症自評使用欄位清單格式" in list_violations
+    assert "高山症自評新增無證據訊號" in list_violations
+
+
+def test_altitude_self_check_uses_same_model_actionable_repair():
+    local = SequenceFakeRunner(
+        [
+            "目前無法確定是否需要做高山症自評，請先提供症狀資料。",
+            (
+                "建議現在做高山症自評，檢查海拔與上升速率、頭痛噁心暈眩疲倦等症狀、"
+                "走路穩定與認知狀態，並請同伴觀察；這項自評不能確認可繼續上升。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="我該做高山症自評嗎？",
+        grounded_answer=(
+            "目前缺少海拔與上升速率、頭痛噁心暈眩疲倦、走路穩定與認知狀態、"
+            "同伴觀察，不能診斷高山症或確認可繼續上升。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert output.startswith("建議現在做高山症自評")
+    assert "\n" not in output
+    assert "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1" in local.calls[1]["prompt"]
+    assert "恰好一行、恰好一句" in local.calls[1]["prompt"]
+    assert "目前無法確定是否需要" not in local.calls[1]["prompt"]
+    assert len(local.calls) == 2
+
+
+def test_body_resource_unknown_retry_includes_subject_specific_constraints():
+    local = SequenceFakeRunner(
+        [
+            "僅有已知的認知因素，不足以判定決策品質下降。",
+            (
+                "目前無法判斷是否正在出現決策品質下降。請提供疲勞睡眠與休息、"
+                "心率 HRV 或 body reserve、補水補給、反應混亂等認知狀態、最近決策偏差。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="我是不是正在決策品質下降？",
+        grounded_answer=(
+            "目前缺少疲勞與睡眠、心率 HRV 或 reserve、補水補給、認知反應、"
+            "最近決策錯誤，不能判定目前是否正在出現決策品質下降。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert output.startswith("目前無法判斷是否正在出現決策品質下降")
+    assert "補水補給" in output
+    assert "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in local.calls[1]["prompt"]
+    assert "all five categories" in local.calls[1]["prompt"]
+    assert len(local.calls) == 2
+
+
+def test_unknown_context_retry_can_extend_safe_partial_answer():
+    partial = "目前無法判定歷史 GPX 是否分散，需補充座標與參考軌跡。"
+    addition = "還需要補充 GPX 軌跡分散程度、橫向偏移統計與 INS/DR trace。"
+    local = SequenceFakeRunner([partial, addition], model_name="qwen3:1.7b")
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="歷史 GPX 這裡的軌跡分散嗎？",
+        grounded_answer=(
+            "目前缺少有效 GNSS 定位、reference-track cluster、橫向偏移統計、"
+            "INS/DR trace，不能判定歷史 GPX 在這裡是否分散。下一步：請提供"
+            "目前座標、reference tracks、GPX cluster dispersion、橫向偏移統計、"
+            "INS/DR trace。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert output == f"{partial} {addition}"
+    assert "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1" in local.calls[1]["prompt"]
+    assert f"Existing safe answer: {partial}" in local.calls[1]["prompt"]
+    assert "Required missing literal text:" in local.calls[1]["prompt"]
+
+
+def test_raw_local_eval_reports_orthography_only_normalization():
+    local = FakeRunner(
+        (
+            "目前無法判定這段容許路徑寬度，需補充路線走廊寬度規則、歷史 GPX "
+            "軍跡分散統計、地形或斷崖限制與定位精度。"
+        ),
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="這段容許路徑寬度應該抓多少？",
+        grounded_answer=(
+            "目前缺少路線走廊寬度規則、歷史 GPX 軌跡分散統計、"
+            "地形或斷崖限制、目前定位精度，不能判定這段容許路徑寬度。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert "軌跡分散統計" in output
+    assert "軍跡" not in output
+    assert runner.last_ai_hat_plus_2_orthography_normalized is True
+
+
+def test_delayed_departure_uses_same_model_fact_completion_repair():
+    local = SequenceFakeRunner(
+        [
+            "目前不能確認能安全完成，需重算折返窗口。",
+            (
+                "晚出發一小時後不能確認能安全完成；seg.132 的 CP 129 到 CP 130"
+                "約 55.8 分鐘，缺天氣與頭燈電量，應重算折返窗口。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="如果我晚出發一小時，是否還能安全完成？",
+        grounded_answer=(
+            "主要難點=seg.132 CP 129 到 CP 130，約 55.8 分鐘。"
+            "缺天氣、頭燈/電量、水食物與隊伍狀態前先重算折返窗口。"
+        ),
+        timeout_seconds=2,
+    )
+
+    assert "約 55.8 分鐘" in output
+    assert "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in local.calls[1]["prompt"]
+    assert len(local.calls) == 2
+
+
+def test_missing_fitness_brief_normalizes_double_negative_subject():
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; "
+            "missing_context_subject=這條路線對你不會太硬; "
+            "missing_context_gaps=心率/HRV|body battery 或 RPE|最近休息時間; "
+            "requested_inputs=心率/HRV|body battery 或 RPE|最近休息時間"
+        ),
+        question="這條路線對我的體能來說會不會太硬？",
+        grounded_answer="目前缺少體能資料。",
+    )
+
+    assert brief.subject == "這條路線對你的體能是否太硬"
+    assert "不會太硬" not in brief.boundary
+    assert brief.required_fact_groups == (
+        ("心率/HRV",),
+        ("body battery 或 RPE",),
+        ("最近休息時間",),
+    )
+
+
+def test_fitness_missing_context_bundle_uses_direct_non_double_negative_subject():
+    bundle = assistant_provider_module._missing_context_fact_bundle(
+        "這條路線對我的體能來說會不會太硬？",
+        "",
+    )
+
+    assert bundle["subject"] == "這條路線對你的體能是否太硬"
+    assert "不會太硬" not in bundle["subject"]
 
 
 def test_rain_answer_brief_rejects_uncertainty_about_unrelated_next_point():
@@ -1179,9 +2042,9 @@ def test_ai_hat_raw_eval_self_review_uses_same_local_model_without_renderer():
 
     assert "晚出發一小時目前不能確認能安全完成" in output
     assert len(local.calls) == 2
-    assert "AI_HAT_RAW_TOPIC_RETRY_V1" in local.calls[1]["prompt"]
+    assert "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in local.calls[1]["prompt"]
     assert "錯誤草稿：如果提前出發" not in local.calls[1]["prompt"]
-    assert "可用資訊=" in local.calls[1]["prompt"]
+    assert "可用事實（全部保留）" in local.calls[1]["prompt"]
     assert "direct_semantics=" not in local.calls[1]["prompt"]
     assert "請只輸出下面正確意思" not in local.calls[1]["prompt"]
     assert "晚出發一小時後目前不能確認能安全完成" not in local.calls[1]["prompt"]
@@ -1193,8 +2056,9 @@ def test_ai_hat_accident_candidate_retries_from_facts_without_wrong_draft():
     local = SequenceFakeRunner(
         [
             "目前最高分的行前風險候選是 CP 213，代表最容易發生事故。",
-            "CP 213 是目前最高分的行前風險候選；風險分數不能用來預測事故，"
-            "仍需人工或現場複核。",
+            "CP 213 附近（距 CP 約 190 m、GPX 106.27 km、score=99.58、"
+            "bucket=extreme）是目前最高分的行前風險候選；風險分數不能用來"
+            "預測事故，仍需人工或現場複核。",
         ],
         model_name="qwen2.5-instruct:1.5b",
     )
@@ -1216,7 +2080,10 @@ def test_ai_hat_accident_candidate_retries_from_facts_without_wrong_draft():
     assert "風險分數不能用來預測事故" in output
     assert len(local.calls) == 2
     assert "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in local.calls[1]["prompt"]
-    assert "錯誤草稿" not in local.calls[1]["prompt"]
+    assert "上一版模型回答" not in local.calls[1]["prompt"]
+    assert "CP 213；190 m；GPX 106.27 km；score=99.58；bucket=extreme" in (
+        local.calls[1]["prompt"]
+    )
     assert "不得與其他 CP 比較" in local.calls[1]["prompt"]
     assert "事實1=" not in local.calls[1]["prompt"]
     assert "判斷邊界=" not in local.calls[1]["prompt"]
@@ -1441,7 +2308,7 @@ def test_ai_hat_facts_only_self_review_retries_with_specific_brief_violations():
             "CP 213 距離約 190 m，score=99.58；缺少即時天氣資料，"
             "不能確認這座山頂雨後會变危險。",
             "雨後先複核距離約 190 m 的 CP 213，位置在 GPX 106.27 km、"
-            "score=99.58；目前缺少即時天氣資料，因此只能列為複核候選，"
+            "score=99.58、bucket=extreme；目前缺少即時天氣資料，因此只能列為複核候選，"
             "不能確認現場已經危險。",
         ],
         model_name="qwen2.5-instruct:1.5b",
@@ -1465,8 +2332,8 @@ def test_ai_hat_facts_only_self_review_retries_with_specific_brief_violations():
 
     assert "GPX 106.27 km" in output
     assert len(local.calls) == 3
-    assert "AI_HAT_RAW_TOPIC_RETRY_V1" in local.calls[2]["prompt"]
-    assert "錯誤草稿" not in local.calls[2]["prompt"]
+    assert "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in local.calls[2]["prompt"]
+    assert "上一版模型回答" not in local.calls[2]["prompt"]
     assert "新增不存在的地點：山頂" in local.calls[2]["prompt"]
     assert "混入簡體字：变" in local.calls[2]["prompt"]
     assert runner.last_ai_hat_plus_2_generation_call_count == 3
@@ -1476,12 +2343,13 @@ def test_ai_hat_facts_only_self_review_retries_with_specific_brief_violations():
 def test_ai_hat_facts_only_uses_same_model_to_remove_only_prompt_labels():
     labeled = (
         "事實1：最近檢查點 CP 213，距離檢查點 190 m。\n"
-        "事實2：GPX 里程是 106.27 km。\n"
+        "事實2：GPX 里程是 106.27 km，score=99.58。\n"
         "缺少資料：即時天氣資料；判斷邊界：這是雨後優先複核候選，"
         "目前不能確認現場已經危險。"
     )
     cleaned = (
-        "最近檢查點 CP 213，距離檢查點 190 m，GPX 里程是 106.27 km。"
+        "最近檢查點 CP 213，距離檢查點 190 m，GPX 里程是 106.27 km，"
+        "score=99.58。"
         "目前缺少即時天氣資料；這是雨後優先複核候選，"
         "不能確認現場已經危險。"
     )
@@ -2434,6 +3302,184 @@ def test_missing_shelter_arrival_bundle_targets_report_timing_directly() -> None
     assert bundle["subject"] == "何時需要通報未抵達約定山屋的隊員"
     assert "預定抵達時間及逾時分鐘" in bundle["requested_inputs"]
 
+    action_bundle = assistant_provider_module._missing_context_fact_bundle(
+        "有人沒抵達約定山屋，該怎麼辦？",
+        "目前缺少隊員資料",
+    )
+    assert action_bundle["subject"] == "有人未抵達約定山屋時的檢查與通報時機"
+
+
+def test_team_missing_context_preserves_current_time_semantics() -> None:
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; missing_context_subject=定時回報是否已逾時; "
+            "missing_context_gaps=原定回報時間或間隔|目前時間|最後成功回報時間|通訊狀態; "
+            "requested_inputs=原定回報時間或間隔|目前時間|最後成功回報時間|目前通訊狀態"
+        ),
+        question="我的定時回報是不是逾時了？",
+        grounded_answer="目前缺少回報時間資料。",
+    )
+
+    assert "目前時間" in brief.missing_evidence
+    assert "時間" not in brief.missing_evidence
+
+
+def test_team_separation_guard_rejects_missing_positions_as_known() -> None:
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; missing_context_subject=隊伍是否已形成分離事件; "
+            "missing_context_gaps=全員最新位置與時間|隊員間距離趨勢|最後共同點|通訊與會合狀態; "
+            "requested_inputs=每位隊員最新座標及時間|隊員間距離變化|最後共同點|通訊狀態與約定會合點"
+        ),
+        question="我們是否已經形成隊伍分離事件？",
+        grounded_answer="目前缺少隊伍位置資料。",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "僅知每位隊員的座標及時間與隊員間距離變化，但未提供完整數據。",
+        brief,
+    )
+    assert "反轉證據：把缺失隊伍位置寫成已知" in violations
+
+
+def test_missing_shelter_action_repair_respects_user_premise() -> None:
+    local = SequenceFakeRunner(
+        [
+            "若無相關資訊，無法判定是否有人未抵達，並依合約升級條件處理。",
+            (
+                "有人未抵達約定山屋時，目前無法判定通報升級時機；"
+                "請核對預定抵達時間及逾時分鐘、最後有效座標時間及方向、"
+                "最後聯絡內容、隊員身體狀態與留守升級條件。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="有人沒抵達約定山屋，該怎麼辦？",
+        grounded_answer=(
+            "目前缺少預定抵達時間與逾時多久、最後有效位置和方向、最後聯絡、"
+            "隊員狀態、約定升級條件，不能判定通報時機。"
+        ),
+        timeout_seconds=2,
+    )
+    assert output.startswith("有人未抵達約定山屋時")
+    assert "AI_HAT_RAW_SHELTER_ARRIVAL_RETRY_V1" in local.calls[1]["prompt"]
+    assert "合約" not in output
+
+
+def test_rescue_report_raw_eval_uses_fact_groups_and_same_model_repair() -> None:
+    grounded = (
+        "留守人準備人工報案時，至少整理：行程或路線名稱與原定計畫；"
+        "目前位置、最後確認點、座標、高度、時間；傷勢、意識、是否能走；"
+        "人數、是否全員在一起、最弱成員狀態；訊號、可用裝置、電量、最後聯絡時間；"
+        "雨、風、低溫、濕衣、能見度；最後移動方向與逾時多久；"
+        "照明、保暖、水與食物。尚未取得的欄位要明確標成未知，不可猜測；"
+        "Scout 只準備可轉報資料，不會自動報案或發送 SOS。"
+    )
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "answer_mode=structured_evidence",
+        question="留守人需要哪些資訊才能報案？",
+        grounded_answer=grounded,
+    )
+    assert brief.subject == "留守人報案所需山域資訊"
+    assert "行程或路線名稱與原定計畫" in brief.facts
+    assert brief.decision == "ANSWER"
+    invented = (
+        "行程計畫：上午8點走A線到B點；目前位置C點，座標3000m；"
+        "傷勢無，電量10%；Scout 不會自動報案。"
+    )
+    rescue_violations = (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            invented,
+            brief,
+        )
+    )
+    assert "報案資訊新增未提供的具體值" in rescue_violations
+    assert "報案資訊使用欄位清單格式" in rescue_violations
+    assert "報案資訊捏造已知狀態" in rescue_violations
+
+    local = SequenceFakeRunner(
+        [
+            "留守人需提供身份證明、聯絡方式和事件經過。",
+            (
+                "報案時先整理行程計畫、目前或最後位置與時間、傷勢與隊伍人數、"
+                "訊號聯絡與剩餘電量，再補天氣、照明、保暖、水與食物；"
+                "未確認欄位標示未知，由留守人轉報，不能假設 Scout 已發出 SOS。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="留守人需要哪些資訊才能報案？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+    assert "行程計畫" in output
+    assert "位置與時間" in output
+    assert "傷勢" in output
+    assert "AI_HAT_RAW_RESCUE_REPORT_RETRY_V1" in local.calls[1]["prompt"]
+
+
+def test_rescue_report_same_model_can_append_only_missing_boundary() -> None:
+    grounded = (
+        "留守人準備人工報案時，至少整理：行程或路線名稱與原定計畫；"
+        "目前位置、最後確認點、座標、高度、時間；傷勢、意識、是否能走；"
+        "人數與全員狀態；訊號、電量與最後聯絡時間；天氣；照明、保暖、水與食物。"
+        "尚未取得的欄位要明確標成未知，不可猜測；Scout 只準備可轉報資料，"
+        "不會自動報案或發送 SOS。"
+    )
+    categories = (
+        "行程計畫、目前或最後位置與時間、傷勢與隊伍人數、訊號聯絡與電量；"
+        "天氣、照明、保暖、水與食物。"
+    )
+    boundary = "未確認欄位標示未知，由留守人轉報，不能假設 Scout 已發送 SOS。"
+    local = SequenceFakeRunner(
+        ["留守人需提供身份證明與事件經過。", categories, boundary],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="留守人需要哪些資訊才能報案？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+
+    assert output == f"{categories} {boundary}"
+    assert "AI_HAT_RAW_RESCUE_BOUNDARY_APPEND_V1" in local.calls[2]["prompt"]
+    assert categories not in local.calls[2]["prompt"]
+    assert len(local.calls) == 3
+
+
+def test_team_unknown_answer_requires_terminal_punctuation() -> None:
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        (
+            "answer_mode=missing_context; missing_context_subject=後隊是否停止移動太久; "
+            "requested_inputs=後隊最後有效座標及時間|最近移動速度|定位精度|最後聯絡時間與原定回報節點"
+        ),
+        question="後隊是不是停止移動太久？",
+        grounded_answer="目前缺少後隊位置資料。",
+    )
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前無法判斷；請提供後隊最後有效座標及時間、最近移動速度、定位精度、最後聯絡時間與原定回報節點",
+        brief,
+    )
+    assert "句尾缺少標點" in violations
+
 
 def test_equipment_resource_questions_get_question_specific_missing_context() -> None:
     cases = {
@@ -2486,6 +3532,822 @@ def test_equipment_resource_questions_get_question_specific_missing_context() ->
         )
         assert bundle["subject"] == subject, question
         assert requested in bundle["requested_inputs"], question
+
+
+def test_equipment_missing_context_guard_rejects_overclaims_and_broken_text() -> None:
+    cases = (
+        (
+            "我的手機電量還夠求救嗎？",
+            "手機電量是否足夠完成求救通訊",
+            "手機剩餘電量|近期耗電率|目前訊號與可用通訊方式|行動電源剩餘容量",
+            "還需要補充行動電源剩餘容。",
+            "裝置資源回答包含截斷詞",
+        ),
+        (
+            "手錶沒電後還能怎麼定位？",
+            "手錶沒電後可用哪些備援定位方式",
+            "手機 GNSS 狀態|離線地圖與 GPX 載入狀態|備援指南針或定位裝置|最後有效座標時間",
+            "手錶沒電後無法定位。",
+            "把未知備援可用性誤寫成無法定位",
+        ),
+        (
+            "手錶沒電後還能怎麼定位？",
+            "手錶沒電後可用哪些備援定位方式",
+            "手機 GNSS 狀態|離線地圖與 GPX 載入狀態|備援指南針或定位裝置|最後有效座標時間",
+            "手錶沒電後還能怎麼定位？目前無法確認可用方式。",
+            "重複使用者問題",
+        ),
+        (
+            "離線地圖是否已載入？",
+            "離線地圖是否已完整載入",
+            "離線地圖載入狀態|目前位置周邊圖磚覆蓋|GPX 載入狀態|關閉網路後開圖驗證",
+            "可用資訊顯示位置周邊圖磚覆蓋與 GPX 載入狀態。",
+            "反轉證據：把缺失地圖狀態寫成已知",
+        ),
+        (
+            "裝備濕掉後是否該停止前進？",
+            "裝備濕掉後是否應停止前進",
+            "保暖與照明裝備受潮狀態|衣物乾濕與體感|目前雨風溫度|最近可避雨點|下一安全點",
+            "若核心功能未受影響，可繼續前進；若體感變差，則需停止。",
+            "缺資料時新增繼續或停止建議",
+        ),
+        (
+            "行動電源是否應該保留給通訊？",
+            "是否應保留行動電源給通訊",
+            "行動電源剩餘容量|手機與通訊近期耗電率|其他必要裝置電量|預計等待或撤退時間",
+            "請提供數據，以便更準確地評估其適用性。",
+            "裝置資源回答包含泛化填充",
+        ),
+        (
+            "行動電源是否應該保留給通訊？",
+            "是否應保留行動電源給通訊",
+            "行動電源剩餘容量|手機與通訊近期耗電率|其他必要裝置電量|預計等待或撤退時間",
+            "行動電源是否應該保留給通訊？目前無法確定。",
+            "重複使用者問題",
+        ),
+        (
+            "行動電源是否應該保留給通訊？",
+            "是否應保留行動電源給通訊",
+            "行動電源剩餘容量|手機與通訊近期耗電率|其他必要裝置電量|預計等待或撤退時間",
+            "目前無法確定；手機與通訊近期耗電率、其他必要裝置電量。還需要補充手機與通訊近期耗電率、其他必要裝置電量。",
+            "重複裝置資源欄位",
+        ),
+        (
+            "我現在是否該關閉耗電功能？",
+            "目前是否應關閉非必要耗電功能",
+            "手機剩餘電量|近期耗電率|必要通訊與定位功能清單|備援電源|預計剩餘時間",
+            "建議參考備援電源與使用情境，但最終決定仍需依實際情況而定。",
+            "裝置資源回答包含泛化填充",
+        ),
+        (
+            "我是否有第二套導航工具？",
+            "目前是否有可用的第二套導航工具",
+            "備援裝置清單|各裝置離線地圖與 GPX|指南針狀態|備援電量|現場可用性",
+            "目前無法判斷是否有第二套導航工具，請提供備援裝置清單",
+            "句尾缺少標點",
+        ),
+        (
+            "我是否有第二套導航工具？",
+            "目前是否有可用的第二套導航工具",
+            "備援裝置清單|各裝置離線地圖與 GPX|指南針狀態|備援電量|現場可用性",
+            "目前無法確認；請提供備援裝置清單與指南針狀態。還需要補充備援裝置清單與指南針狀態。",
+            "重複裝置資源欄位",
+        ),
+        (
+            "我是否有第二套導航工具？",
+            "目前是否有可用的第二套導航工具",
+            "備援裝置清單|各裝置離線地圖與 GPX|指南針狀態|備援電量|現場可用性",
+            "您是否有第二套導航工具目前無法確定。",
+            "重複使用者問題",
+        ),
+        (
+            "行動電源是否應該保留給通訊？",
+            "是否應保留行動電源給通訊",
+            "行動電源剩餘容量|手機與通訊近期耗電率|其他必要裝置電量|預計等待或撤退時間",
+            "目前無法判定是否應保留行動電源給通訊，行動電源剩餘容量、手機與通訊近期耗電率。請提供這些資訊。",
+            "缺口清單缺少語法連接",
+        ),
+        (
+            "我是否有第二套導航工具？",
+            "目前是否有可用的第二套導航工具",
+            "備援裝置清單|各裝置離線地圖與 GPX|指南針狀態|備援電量|現場可用性",
+            "目前無法確認是否有可用的第二套導航工具。備援裝置清單、指南針狀態。",
+            "缺口清單缺少語法連接",
+        ),
+    )
+    for question, subject, requested, output, expected in cases:
+        brief = assistant_provider_module._build_local_grounded_answer_brief(
+            (
+                "answer_mode=missing_context; "
+                f"missing_context_subject={subject}; requested_inputs={requested}"
+            ),
+            question=question,
+            grounded_answer="目前缺少裝置或裝備現況資料。",
+        )
+        violations = assistant_provider_module._local_grounded_answer_brief_violations(
+            output,
+            brief,
+        )
+        assert expected in violations, question
+
+
+def test_survival_query_guidance_reaches_local_grounded_brief() -> None:
+    from scout_survival_incident_playbook_tool import (
+        explain_scout_survival_incident_playbook,
+    )
+
+    latest = explain_scout_survival_incident_playbook(
+        Path("tests/fixtures/pretrip/projects/chilai_nanhua_day1"),
+        query="我要怎麼建立可視標記？",
+    )
+    query = ScoutAssistantQuery(surface="pretrip", question="我要怎麼建立可視標記？")
+    grounded = assistant_provider_module._format_decision_tool_fallback_answer(
+        query=query,
+        tool_id=assistant_provider_module.SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+        label="survival incident playbook",
+        latest=latest,
+    )
+    assert grounded is not None
+    assert "guidance_facts=" in grounded
+    assert "高對比衣物" in grounded
+    compact = assistant_provider_module._compact_grounded_answer_for_local_model(
+        grounded,
+        question=query.question,
+    )
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        compact,
+        question=query.question,
+        grounded_answer=grounded,
+    )
+    assert brief.subject == "在安全處建立可視標記"
+    assert any("高對比" in fact for fact in brief.facts)
+
+
+def test_structured_survival_guidance_builds_generic_answer_brief() -> None:
+    grounded = (
+        "survival incident playbook 工具顯示；"
+        "guidance_subject=求救位置應如何表達；"
+        "guidance_facts=座標與地標一起回報|座標需附格式、基準與時間|地標補充接近方向；"
+        "guidance_required=座標||地標||格式|基準||時間||接近方向；"
+        "guidance_missing=目前實際座標|座標精度；"
+        "guidance_boundary=未確認值標示未知，不自動發送；"
+        "guidance_forbidden=不得只回報地標|不得聲稱已發送"
+    )
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="我應該報座標還是地標？",
+        grounded_answer=grounded,
+    )
+
+    assert brief.subject == "求救位置應如何表達"
+    assert brief.required_fact_groups == (
+        ("座標",),
+        ("地標",),
+        ("格式", "基準"),
+        ("時間",),
+        ("接近方向",),
+    )
+    assert brief.missing_evidence == ("目前實際座標", "座標精度")
+    assert brief.forbidden_claims == ("不得只回報地標", "不得聲稱已發送")
+
+
+def test_structured_incident_guard_allows_injury_body_part_wording() -> None:
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="位置已知的受傷事件回報",
+        facts=("回報受傷部位與機轉",),
+        required_fact_groups=(("受傷部位",),),
+        boundary="未確認欄位標示未知",
+    )
+    assert not assistant_provider_module._local_grounded_answer_brief_violations(
+        "請回報受傷部位與機轉。",
+        brief,
+    )
+
+
+def test_structured_incident_guard_rejects_invented_location_examples() -> None:
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="求救位置應如何表達",
+        facts=("座標與地標一起回報", "座標需附格式、基準、時間與定位精度"),
+        required_fact_groups=(("座標",), ("地標",)),
+        missing_evidence=("目前實際座標", "可辨識地標"),
+        boundary="未確認值標示未知",
+    )
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "座標與地標一起回報，例如 GPS 123.456789、精度 100 米，地標為公園與道路。",
+        brief,
+    )
+    assert "結構化事故回答新增未提供的數值" in violations
+    assert "結構化事故回答新增示例位置" in violations
+
+
+def test_structured_incident_guard_rejects_false_observer_and_duplicate_phrase() -> None:
+    injury_brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="位置已知的受傷事件回報",
+        facts=("使用者已說位置清楚",),
+        missing_evidence=("傷勢細節",),
+        boundary="未確認欄位標示未知",
+    )
+    movement_brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="移動傷者的二次傷害風險",
+        facts=("依專業救援建議",),
+        boundary="不得輕率移動",
+    )
+    assert "錯誤觀測者：Scout 聲稱已確認使用者位置" in (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "我已確認位置清楚。",
+            injury_brief,
+        )
+    )
+    assert "重複事故建議用詞" in (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "需考量專業救援建議與救援建議。",
+            movement_brief,
+        )
+    )
+    assert "無證據聲稱傷勢穩定" in (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "若傷勢穩定，建議勿移動。",
+            movement_brief,
+        )
+    )
+
+
+def test_rescue_report_guard_accepts_leave_behind_relay_wording() -> None:
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="ANSWER",
+        subject="留守人報案所需山域資訊",
+        facts=("未確認欄位標示未知", "由留守人轉報"),
+        required_fact_groups=(("未知", "未確認"), ("由留守人轉報", "留守人轉報")),
+        boundary="Scout 不自動報案",
+    )
+    assert not assistant_provider_module._local_grounded_answer_brief_violations(
+        "未確認欄位標示未知，留守人轉報。",
+        brief,
+    )
+
+
+def test_structured_incident_guidance_uses_same_model_retry() -> None:
+    grounded = (
+        "guidance_subject=求救位置應如何表達；"
+        "guidance_facts=座標與地標一起回報|座標需附格式、基準、時間與定位精度|"
+        "地標補充周圍特徵與接近方向；"
+        "guidance_required=座標||地標||格式||基準||時間||精度||接近方向|周圍特徵；"
+        "guidance_missing=目前實際座標|定位精度|可辨識地標；"
+        "guidance_boundary=未確認值標示未知，不自動發送；"
+        "guidance_forbidden=不得只回報地標|不得新增示例值"
+    )
+    local = SequenceFakeRunner(
+        [
+            "座標例如 123.456789，地標是公園。",
+            (
+                "座標與地標應一起回報；座標需附格式、基準、取得時間與定位精度，"
+                "地標補充周圍特徵與接近方向。實際值尚未提供，未確認欄位標示未知，"
+                "Scout 不自動發送。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="我應該報座標還是地標？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+
+    assert "實際值尚未提供" in output
+    assert "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1" in local.calls[1]["prompt"]
+
+
+def test_injury_report_appends_only_missing_manual_relay_recipient() -> None:
+    grounded = (
+        "guidance_subject=位置已知的受傷事件回報；"
+        "guidance_facts=位置清楚但需實際座標或最後確認點與時間|"
+        "回報受傷部位與機轉、意識、能否行走|"
+        "回報隊伍人數、通訊、電量與最後聯絡時間|由人員向留守人或 119 轉報；"
+        "guidance_required=位置清楚||座標|最後確認點||時間||受傷部位|傷勢||意識||"
+        "能否行走||隊伍人數||通訊|聯絡||電量||最後聯絡時間||留守人|119|搜救窗口||"
+        "未知|未確認；guidance_missing=實際座標|事件時間|傷勢細節；"
+        "guidance_boundary=未確認欄位標示未知，只準備人工轉報，不自動發送"
+    )
+    local = SequenceFakeRunner(
+        [
+            (
+                "位置清楚這點已知，但實際座標或最後確認點與事件時間未確認；"
+                "受傷部位與機轉、意識、能否行走、隊伍人數、通訊、電量與最後聯絡時間"
+                "均需填入，未確認欄位標示未知。"
+            ),
+            "由人員向留守人或 119 搜救窗口轉報，不自動發送。",
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="我滑倒受傷但位置清楚，該怎麼回報？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+
+    assert output.endswith("由人員向留守人或 119 搜救窗口轉報，不自動發送。")
+    assert "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1" in local.calls[1]["prompt"]
+
+
+def test_rescue_report_guard_rejects_internal_completion_commentary() -> None:
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="ANSWER",
+        subject="留守人報案所需山域資訊",
+        facts=("行程計畫",),
+        boundary="未確認欄位標示未知",
+    )
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "已完整列出報案資料類別。",
+        brief,
+    )
+    assert "輸出內部 grounding 提示" in violations
+
+
+def test_incident_question_prefers_survival_guidance_over_team_gap() -> None:
+    response = assistant_provider_module.build_workspace_tool_fallback_response(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="我滑倒受傷但位置清楚，該怎麼回報？",
+        ),
+        sources=[
+            AssistantSourceRef(
+                source_id=TEAM_STATUS_TOOL_ID,
+                context_summary={
+                    "latest": {
+                        "status": "missing",
+                        "missing_fields": ["team_members"],
+                    }
+                },
+            ),
+            AssistantSourceRef(
+                source_id=SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+                context_summary={
+                    "latest": {
+                        "status": "completed",
+                        "decision_output": {
+                            "firstLayer": {
+                                "decision": "停止推進並交由人工救援判斷",
+                                "limit": "不自動發送",
+                                "reason": "受傷事件需要準確資料",
+                                "nextStep": "準備人工回報",
+                            }
+                        },
+                        "query_guidance": {
+                            "subject": "位置已知的受傷事件回報",
+                            "facts": [
+                                "保留位置已知這項事實",
+                                "回報座標或最後確認點與時間",
+                                "回報傷勢、意識與能否行走",
+                            ],
+                            "required_fact_groups": [["位置已知"]],
+                            "boundary": "不自動發送",
+                        },
+                    }
+                },
+            ),
+        ],
+        provider_error_type="LocalModelGroundingPrompt",
+    )
+
+    assert response is not None
+    assert "guidance_subject=位置已知的受傷事件回報" in response.answer
+    assert "目前缺少必要的即時狀態" not in response.answer
+
+
+def test_lost_mode_and_visibility_briefs_preserve_tool_facts() -> None:
+    playbook_grounded = (
+        "survival incident playbook 工具顯示；decision=不建議繼續移動或下切找路。；"
+        "原因=位置不確定時繼續移動會放大迷途與失聯風險。；"
+        "下一步=停止前進，讓隊伍聚在一起，先不要分散找路或下切。"
+    )
+    lost = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="我應該原地等待還是找路？",
+        grounded_answer=playbook_grounded,
+    )
+    assert lost.subject == "位置不確定時應停止並等待"
+    assert any("停止前進" in fact for fact in lost.facts)
+
+    visibility_grounded = (
+        "待援可見性候選：major_point | 稜線啞口觀景點 | cp=cp.105; "
+        "major_point | 稜線通訊點 | cp=cp.020。這些是 workspace candidate，"
+        "沒有 visibility/rescue line-of-sight 模型，也沒有綁定目前位置；"
+        "只能供人工複核，不能指示你移動到該處。"
+    )
+    visibility = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="哪裡比較容易被看見？",
+        grounded_answer=visibility_grounded,
+    )
+    assert visibility.subject == "哪些待援可見性候選需人工複核"
+    assert any("cp.105" in fact for fact in visibility.facts)
+    assert "不能指示移動" in visibility.boundary
+
+
+def test_explicit_five_percent_phone_brief_preserves_priority_facts() -> None:
+    grounded = (
+        "equipment resource 工具顯示；decision=不建議照原計畫推進；"
+        "重點=low_battery_priority=保留定位與必要通訊|先傳送一則包含位置、時間、隊伍與傷勢的短訊息|"
+        "關閉螢幕、相機與非必要背景功能|只在定位、傳送或約定回報時啟用必要無線功能 / "
+        "phone_battery_percent=5.0"
+    )
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="如果手機只剩 5%，怎麼用最有效？",
+        grounded_answer=grounded,
+    )
+    assert brief.subject == "手機只剩 5% 時的電力優先順序"
+    assert "手機剩餘電量=5%" in brief.facts
+    assert any("保留定位" in fact for fact in brief.facts)
+
+
+def test_ridge_signal_guard_accepts_explicit_do_not_move_wording() -> None:
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="我該往稜線上移動找訊號嗎？",
+        grounded_answer=(
+            "guidance_facts=先確認現地可用通訊與最後有效位置|評估暴露地形與回退路徑|"
+            "不得只為訊號盲目移動；guidance_boundary=不要只為找訊號而增加暴露風險"
+        ),
+    )
+
+    output = (
+        "不應盲目移動到稜線找訊號，需先確認現地可用通訊與最後有效位置，"
+        "並評估暴露地形與回退路徑。"
+    )
+    assert not assistant_provider_module._local_grounded_answer_brief_violations(
+        output,
+        brief,
+    )
+
+
+def test_ridge_signal_uses_dedicated_same_model_retry() -> None:
+    grounded = (
+        "guidance_facts=未確認目前位置、稜線 route geometry、暴露地形與回退路徑前不要移動找訊號|"
+        "先在現位置確認可用通訊與最後有效位置；"
+        "guidance_boundary=不得只為訊號盲目移動到稜線或離開最後可確認路線走廊"
+    )
+    local = SequenceFakeRunner(
+        [
+            "若已確認位置，可以往稜線移動找訊號。",
+            (
+                "不應盲目移動到稜線找訊號；先確認現地可用通訊與最後有效位置，"
+                "並評估暴露地形與回退路徑。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="我該往稜線上移動找訊號嗎？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+
+    assert "暴露地形與回退路徑" in output
+    assert "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1" in local.calls[1]["prompt"]
+
+
+def test_visibility_candidate_allows_a_short_readable_list() -> None:
+    grounded = (
+        "待援可見性候選：major_point | mcp.ridge_pass_view.005 | 稜線啞口觀景點 | "
+        "cp=cp.105; major_point | mcp.mobile_reception_ridge.006 | 稜線通訊點 | "
+        "cp=cp.020。沒有 visibility/rescue line-of-sight 模型，也沒有綁定目前位置；"
+        "只能供人工複核，不能指示你移動到該處。"
+    )
+    local = SequenceFakeRunner(
+        [
+            "目前不能判定哪裡容易被看見。",
+            (
+                "目前沒有 visibility/rescue line-of-sight 模型且未綁定位置。\n"
+                "1. 稜線啞口觀景點（CP 105）。\n"
+                "2. 稜線通訊點（CP 20）。\n"
+                "不能指示移動到候選。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="哪裡比較容易被看見？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+
+    assert "稜線啞口觀景點（CP 105）" in output
+    assert "稜線通訊點（CP 20）" in output
+    assert "\n1." in output
+    assert "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1" in local.calls[1]["prompt"]
+    assert len(local.calls) == 2
+
+
+def test_visibility_guard_accepts_no_model_and_no_move_synonyms() -> None:
+    grounded = (
+        "待援可見性候選：major_point | mcp.ridge_pass_view.005 | 稜線啞口觀景點 | "
+        "cp=cp.105; major_point | mcp.mobile_reception_ridge.006 | 稜線通訊點 | "
+        "cp=cp.020。沒有 visibility/rescue line-of-sight 模型，也沒有綁定目前位置；"
+        "只能供人工複核，不能指示你移動到該處。"
+    )
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="哪裡比較容易被看見？",
+        grounded_answer=grounded,
+    )
+    output = (
+        "目前無 visibility/rescue line-of-sight 模型與位置綁定，只能將稜線啞口觀景點"
+        "（CP 105）與稜線通訊點（CP 20）列為人工複核候選；無法指示移動到候選。"
+    )
+    assert not assistant_provider_module._local_grounded_answer_brief_violations(
+        output,
+        brief,
+    )
+
+
+def test_visual_marker_guard_accepts_safe_no_move_boundary_wording() -> None:
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="我要怎麼建立可視標記？",
+        grounded_answer=(
+            "guidance_facts=在安全處使用高對比衣物或布料、反光物、規律燈光|"
+            "記錄標記位置、建立時間與隊伍狀態；"
+            "guidance_boundary=不要為了建立標記移動到崖邊、稜線或危險地形"
+        ),
+    )
+
+    output = (
+        "可在安全處使用高對比衣物、反光物或規律燈光建立可視標記，並記錄標記位置、"
+        "建立時間與隊伍狀態；不要為了建立標記前往危險地形。"
+    )
+    assert not assistant_provider_module._local_grounded_answer_brief_violations(
+        output,
+        brief,
+    )
+
+
+def test_visual_marker_uses_dedicated_same_model_retry() -> None:
+    grounded = (
+        "guidance_facts=在不移動到危險地形的安全處建立標記|"
+        "使用高對比衣物或布料、反光物、規律燈光等可辨識材料|"
+        "記錄標記位置、建立時間與隊伍狀態；"
+        "guidance_boundary=不得為建立標記移動到崖邊、稜線或其他危險地形"
+    )
+    local = SequenceFakeRunner(
+        [
+            "建立標記時確保標記位置不移動到危險地形。",
+            (
+                "在安全處使用高對比衣物、反光物或規律燈光建立可視標記，並記錄標記"
+                "位置、建立時間與隊伍狀態；最後明確說明不得為建立標記移動到崖邊、"
+                "稜線或其他危險地形。"
+            ),
+            (
+                "在安全處使用高對比衣物、反光物或規律燈光建立可視標記，並記錄標記"
+                "位置、建立時間與隊伍狀態；不要為建立標記移動到崖邊、稜線或其他危險地形。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="我要怎麼建立可視標記？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+
+    assert "不要為建立標記移動到崖邊" in output
+    assert "最後明確說明" not in output
+    assert "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1" in local.calls[2]["prompt"]
+
+
+def test_visual_marker_guard_rejects_internal_instruction_wording() -> None:
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="在安全處建立可視標記",
+        facts=("在安全處建立標記",),
+        boundary="不要移動到危險地形",
+    )
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "最後明確說明不得移動到危險地形。",
+        brief,
+    )
+    assert "輸出內部 grounding 提示" in violations
+
+
+def test_rescue_evidence_requires_unknown_and_no_auto_sos_separately() -> None:
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="我應該保存哪些證據給搜救？",
+        grounded_answer=(
+            "guidance_facts=保存座標、高度與時間|最後移動方向、軌跡與最後確認點|"
+            "隊伍人數、傷勢、意識與能否行走|訊號、剩餘電量與最後聯絡時間|"
+            "未確認欄位標示未知；guidance_boundary=Scout 不自動發送 SOS"
+        ),
+    )
+
+    incomplete = (
+        "保存座標、高度與時間、最後移動方向與軌跡、隊伍人數與傷勢、訊號與剩餘電量；"
+        "未確認欄位標示未知。"
+    )
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        incomplete,
+        brief,
+    )
+    assert any("不自動發送 SOS" in item for item in violations)
+    complete = incomplete + " Scout 不自動發送 SOS，只準備人工轉報。"
+    assert not assistant_provider_module._local_grounded_answer_brief_violations(
+        complete,
+        brief,
+    )
+
+
+def test_rescue_evidence_uses_dedicated_same_model_retry() -> None:
+    grounded = (
+        "guidance_facts=保存目前或最後座標、高度與時間|保存最後移動方向、軌跡與最後確認點|"
+        "保存隊伍人數、傷勢、意識與能否行走|保存訊號、剩餘電量、最後聯絡時間、天氣與剩餘資源；"
+        "guidance_boundary=未確認欄位標示未知，只準備人工轉報資料，不自動發送 SOS"
+    )
+    local = SequenceFakeRunner(
+        [
+            "保存座標與時間，其他資料請依指示補充。",
+            (
+                "保存目前或最後座標、高度與時間、最後移動方向與軌跡、隊伍人數與傷勢、"
+                "訊號與剩餘電量；未確認欄位標示未知，只準備人工轉報，不自動發送 SOS。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="我應該保存哪些證據給搜救？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+
+    assert "不自動發送 SOS" in output
+    assert "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1" in local.calls[1]["prompt"]
+
+
+def test_five_percent_phone_uses_dedicated_same_model_retry() -> None:
+    grounded = (
+        "equipment resource 工具顯示；decision=不建議照原計畫推進；"
+        "重點=low_battery_priority=保留定位與必要通訊|先傳送一則包含位置、時間、隊伍與傷勢的短訊息|"
+        "關閉螢幕、相機與非必要背景功能|只在定位、傳送或約定回報時啟用必要無線功能 / "
+        "phone_battery_percent=5.0"
+    )
+    local = SequenceFakeRunner(
+        [
+            "1. 保留電力。\n2. 關閉不重要的功能。",
+            (
+                "手機只剩 5% 時，優先保留定位與必要通訊，先傳一則包含位置、時間、"
+                "隊伍與傷勢的短訊息。關閉螢幕、相機與非必要背景功能，只在定位、"
+                "傳送或約定回報時啟用必要無線功能；不能假設訊息已送出。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="如果手機只剩 5%，怎麼用最有效？",
+        grounded_answer=grounded,
+        timeout_seconds=2,
+    )
+
+    assert output.startswith("手機只剩 5% 時")
+    assert "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1" in local.calls[1]["prompt"]
+
+
+def test_manual_location_share_wording_satisfies_no_auto_send_boundary() -> None:
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="我該把目前位置分享給誰？",
+        grounded_answer=(
+            "guidance_facts=人工分享給已約定的留守人、領隊或隊伍聯絡人|"
+            "人工求救流程由人員向 119 或搜救窗口轉報|分享座標或最後確認點；"
+            "guidance_boundary=Scout 不自動發送位置"
+        ),
+    )
+
+    output = (
+        "目前位置應人工分享給已約定的留守人、領隊或隊伍聯絡人；進入人工求救流程後，"
+        "由人員向 119 或搜救窗口轉報，並分享座標或最後確認點。"
+    )
+    assert not assistant_provider_module._local_grounded_answer_brief_violations(
+        output,
+        brief,
+    )
+
+
+def test_location_report_interval_gets_specific_missing_context() -> None:
+    bundle = assistant_provider_module._missing_context_fact_bundle(
+        "我現在應該多久回報一次位置？",
+        "目前缺少即時狀態",
+    )
+    assert bundle["subject"] == "目前位置回報間隔"
+    assert "原定回報間隔" in bundle["requested_inputs"]
+    assert "剩餘電量" in bundle["requested_inputs"]
+
+
+def test_lost_mode_guard_rejects_unsafe_or_off_domain_answers() -> None:
+    cases = (
+        (
+            "位置不確定時應停止並等待",
+            "若路線不確定，建議找路。",
+            "位置不確定時建議找路",
+        ),
+        (
+            "是否可下切溪谷",
+            "目前資料不足，可以先下切溪谷找路。",
+            "建議下切溪谷",
+        ),
+        (
+            "是否應移動到稜線找訊號",
+            "建議往稜線移動以取得訊號。",
+            "建議盲目移動到稜線",
+        ),
+        (
+            "在安全處建立可視標記",
+            "請在相容平台介面中導入資料建立可視標記。",
+            "把戶外可視標記誤解成軟體標記",
+        ),
+    )
+    for subject, output, expected in cases:
+        brief = assistant_provider_module.LocalGroundedAnswerBrief(
+            decision="PLAYBOOK",
+            subject=subject,
+            facts=("facts-only",),
+            boundary="保持保守",
+        )
+        assert expected in assistant_provider_module._local_grounded_answer_brief_violations(
+            output,
+            brief,
+        )
+
+
+def test_wet_equipment_uses_same_model_conservative_repair() -> None:
+    local = SequenceFakeRunner(
+        [
+            "若核心功能未受影響，可繼續前進；若體感變差，則需停止。",
+            (
+                "目前無法判定裝備濕掉後是否應停止前進；請確認保暖與照明裝備受潮"
+                "狀態、衣物乾濕與體感、目前雨風溫度、最近可避雨點與下一安全點。"
+            ),
+        ],
+        model_name="qwen3:1.7b",
+    )
+    runner = FallbackPydanticAIRunner(
+        primary_runner=FakeRunner("cloud should not run"),
+        fallback_runner=local,
+    )
+    output = assistant_provider_module._run_ai_hat_plus_2_raw_single_pass_eval(
+        runner,
+        question="裝備濕掉後是否該停止前進？",
+        grounded_answer=(
+            "目前缺少保暖與照明裝備受潮狀態、衣物乾濕、天氣與風寒、可避雨點、"
+            "下一安全點，不能判定裝備濕掉後是否應停止前進。"
+        ),
+        timeout_seconds=2,
+    )
+    assert output.startswith("目前無法判定裝備濕掉後是否應停止前進")
+    assert "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in local.calls[1]["prompt"]
+    assert "Do not recommend continuing or stopping" in local.calls[1]["prompt"]
 
     assert (
         assistant_provider_module._expected_missing_context_action(
@@ -2576,6 +4438,12 @@ def test_ai_hat_plus_2_normalizes_common_navigation_typos() -> None:
         "GNSS 軌跡的距離趨勢不明，溪水暴漲可能阻斷路線；"
         "濕衣已構成失溫風險，請提供上一個確定點與 INS/DR 狀態。"
     )
+    assert assistant_provider_module._normalize_ai_hat_plus_2_local_output(
+        "歷史 GPX 軍跡分散統計"
+    ) == "歷史 GPX 軌跡分散統計"
+    assert assistant_provider_module._normalize_ai_hat_plus_2_orthography_only(
+        "目前無法確斷"
+    ) == "目前無法確定"
 
 
 def test_missing_context_guard_does_not_treat_requested_coordinate_as_known_evidence():
@@ -3390,6 +5258,63 @@ def test_checkpoint_design_question_prefers_route_architecture_over_risk_samples
     assert response is not None
     assert "不能直接說某處一定要新增 checkpoint" in response.answer
     assert "seg.132 CP 129 到 CP 130，約 55.8 分鐘" in response.answer
+
+
+def test_post_trip_question_prefers_query_guidance_over_risk_samples() -> None:
+    response = assistant_provider_module.build_workspace_tool_fallback_response(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="這次最早的風險訊號是什麼？",
+        ),
+        sources=[
+            AssistantSourceRef(
+                source_id=POST_TRIP_REVIEW_TOOL_ID,
+                context_summary={
+                    "latest": {
+                        "status": "completed",
+                        "decision_output": {
+                            "decision": "DELAY",
+                            "firstLayer": {"decision": "DELAY"},
+                        },
+                        "query_guidance": {
+                            "subject": "最早風險訊號回顧",
+                            "facts": [
+                                "completed_trip_timeline=missing",
+                                "route_risk_score_is_not=observed earliest incident signal",
+                            ],
+                            "required_fact_groups": [
+                                ["目前不能確認", "無法確認"],
+                                ["時間線", "時間戳"],
+                            ],
+                            "missing_evidence": ["completed_trip_timeline"],
+                            "boundary": "不能用最高候選分數代替事件歷史",
+                            "forbidden_claims": ["不得把最高風險 CP 當成最早警訊"],
+                        },
+                    }
+                },
+            ),
+            AssistantSourceRef(
+                source_id=RISK_SCORE_TOOL_ID,
+                context_summary={
+                    "latest": {
+                        "status": "completed",
+                        "results": [
+                            {
+                                "readable_location": "最近 CP 213 約 190 m",
+                                "score": 99.58,
+                                "risk_bucket": "extreme",
+                            }
+                        ],
+                    }
+                },
+            ),
+        ],
+        provider_error_type="LocalModelGroundingPrompt",
+    )
+
+    assert response is not None
+    assert "guidance_subject=最早風險訊號回顧" in response.answer
+    assert "最高候選風險點" not in response.answer
     assert "CP 213" not in response.answer
 
 
@@ -3672,7 +5597,7 @@ def test_ai_hat_plus_2_missing_operational_context_blocks_invented_fitness_value
 
     assert response.evidence_backed_answer is not None
     assert "目前缺少體能 reserve" in response.evidence_backed_answer
-    assert "不能判定這條路線對你不會太硬" in response.evidence_backed_answer
+    assert "不能判定這條路線對你的體能是否太硬" in response.evidence_backed_answer
     assert response.local_model_answer is not None
     assert "45 UHE" in response.local_model_answer
     assert "45 UHE" not in response.answer
@@ -7638,7 +9563,7 @@ def test_hailo_facts_only_eval_uses_deterministic_sampling(monkeypatch):
     assert "示範問題" not in payload["messages"][1]["content"]
     assert "示範 facts" not in payload["messages"][1]["content"]
     assert len(payload["messages"][0]["content"].encode("utf-8")) <= 180
-    assert payload["options"]["num_predict"] == 64
+    assert payload["options"]["num_predict"] == 128
     assert payload["options"]["temperature"] == 0
     assert payload["options"]["top_p"] == 1
     assert runner.last_hailo_response_received is True
@@ -7805,7 +9730,7 @@ def test_local_grounded_skill_selects_batch_one_topic_examples(
     assert expected_answer in messages[1]["content"]
 
 
-def test_generic_topic_retry_does_not_inject_delayed_departure_topic():
+def test_low_tolerance_retry_does_not_inject_delayed_departure_topic():
     local = SequenceFakeRunner(
         [
             "目前無法判定。",
@@ -7829,7 +9754,7 @@ def test_generic_topic_retry_does_not_inject_delayed_departure_topic():
     )
 
     retry_prompt = local.calls[1]["prompt"]
-    assert "AI_HAT_RAW_TOPIC_RETRY_V1" in retry_prompt
+    assert "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in retry_prompt
     assert "不得把晚出發" not in retry_prompt
     messages = assistant_provider_module._local_grounded_short_answer_few_shot_messages(
         retry_prompt
@@ -7877,7 +9802,7 @@ def test_hailo_raw_self_review_uses_no_few_shot_and_zero_temperature(monkeypatch
 
     payload = captured["payload"]
     assert len(payload["messages"]) == 2
-    assert payload["options"]["num_predict"] <= 96
+    assert payload["options"]["num_predict"] == 160
     assert payload["options"]["temperature"] == 0
     assert payload["options"]["top_p"] == 1
     assert "\n需要修正：" in payload["options"]["stop"]
@@ -7941,7 +9866,8 @@ def test_ai_hat_facts_only_keeps_best_model_authored_candidate():
         [
             best_draft,
             (
-                "下雨後 CP 213 是優先複核候選；缺少即時天氣資料，"
+                "下雨後 CP 213 附近（距 CP 約 190 m、GPX 106.27 km、"
+                "score=99.58、bucket=extreme）是優先複核候選；缺少即時天氣資料，"
                 "目前不能確認現場已經危險。"
             ),
             "目前無法判定。",
@@ -7966,7 +9892,8 @@ def test_ai_hat_facts_only_keeps_best_model_authored_candidate():
     )
 
     assert output == (
-        "下雨後 CP 213 是優先複核候選；缺少即時天氣資料，"
+        "下雨後 CP 213 附近（距 CP 約 190 m、GPX 106.27 km、"
+        "score=99.58、bucket=extreme）是優先複核候選；缺少即時天氣資料，"
         "目前不能確認現場已經危險。"
     )
     assert runner.last_ai_hat_plus_2_selected_call == 2
@@ -8313,6 +10240,94 @@ def _write_map_perception_workspace(project_root: Path) -> Path:
         encoding="utf-8",
     )
     return project_root
+
+
+def test_local_grounded_brief_uses_post_trip_query_guidance() -> None:
+    grounded = (
+        "post-trip review 工具顯示；"
+        "guidance_subject=incident package 資料契約；"
+        "guidance_facts=位置與時間|實際軌跡與 CP|傷勢與隊伍|天氣與資源；"
+        "guidance_required=位置|座標||軌跡|CP||傷勢|隊伍||天氣|資源；"
+        "guidance_boundary=保留來源與未知欄位，不代表已送出；"
+        "guidance_forbidden=不得聲稱已自動送出"
+    )
+
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        "",
+        question="哪些資料應該進 incident package？",
+        grounded_answer=grounded,
+    )
+
+    assert brief.subject == "incident package 資料契約"
+    assert "實際軌跡與 CP" in brief.facts
+    assert ("位置", "座標") in brief.required_fact_groups
+    assert "不代表已送出" in brief.boundary
+
+
+def test_post_trip_brief_rejects_placeholder_and_candidate_cp_as_history() -> None:
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="最早風險訊號回顧",
+        facts=("缺少完成行程時間線",),
+        required_fact_groups=(("目前不能確認",), ("時間線",)),
+        boundary="不能用最高候選分數代替事件歷史",
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "最早風險訊號是 CP 213 的事件時間點。事件時間點。",
+        brief,
+    )
+
+    assert "行後回答包含 placeholder 或格式標記" in violations
+    assert "把候選 CP 誤寫成最早事件訊號" in violations
+
+
+def test_post_trip_brief_rejects_ambiguous_package_and_spec_wording() -> None:
+    package = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="incident package 資料契約",
+        facts=("位置、軌跡、傷勢、天氣、來源",),
+    )
+    spec = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="spec 更新候選審查",
+        facts=("失敗紀錄與回歸測試",),
+    )
+
+    package_violations = (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "包含位置或軌跡或傷勢。",
+            package,
+        )
+    )
+    spec_violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "spec 候選包括失敗紀錄與回歸測試。",
+        spec,
+    )
+
+    assert "行後分類使用過多替代連接詞" in package_violations
+    assert "把失敗證據誤稱為 spec 候選" in spec_violations
+
+
+def test_post_trip_brief_rejects_reversed_known_evidence_gap() -> None:
+    brief = assistant_provider_module.LocalGroundedAnswerBrief(
+        decision="PLAYBOOK",
+        subject="下次行前規劃三項回顧",
+        facts=("三項工作依 evidence gap 排定",),
+    )
+
+    violations = assistant_provider_module._local_grounded_answer_brief_violations(
+        "第一補時間線；第二補天氣；第三補裝備。目前不能確認證據缺口。",
+        brief,
+    )
+
+    assert "把已知 evidence gap 反寫成無法確認" in violations
+
+
+def test_local_orthography_normalizes_simplified_should_character() -> None:
+    assert assistant_provider_module._normalize_ai_hat_plus_2_orthography_only(
+        "incident package 应包含來源"
+    ) == "incident package 應包含來源"
 
 
 def _fixed_schema_local_output() -> str:

@@ -141,6 +141,7 @@ def explain_scout_survival_incident_playbook(
             provided.get("operator_authorization_ref")
         )
     )
+    query_guidance = _query_guidance(query)
     answerability = (
         "survival_playbook_personalized_context_available"
         if triage.personalized_context_available
@@ -173,6 +174,7 @@ def explain_scout_survival_incident_playbook(
         "decision": triage.decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "query_guidance": query_guidance,
         "survival_incident_playbook": {
             "role": triage.role,
             "scenario": scenario,
@@ -181,6 +183,7 @@ def explain_scout_survival_incident_playbook(
             "do_not_actions": do_not_actions,
             "evidence_to_preserve": evidence_pack,
             "share_policy": share_policy,
+            "query_guidance": query_guidance,
             "boundary": boundary,
         },
         "incident_triage": triage.model_dump(mode="json"),
@@ -373,6 +376,241 @@ def _share_policy(*, operator_authorization_ref: str | None) -> dict[str, Any]:
             "weather_exposure",
             "remaining_battery_and_comms",
         ],
+    }
+
+
+def _query_guidance(query: str) -> dict[str, Any]:
+    normalized = str(query or "").casefold()
+    subject = ""
+    facts: list[str] = []
+    required_fact_groups: list[list[str]] = []
+    missing_evidence: list[str] = []
+    forbidden_claims: list[str] = []
+    boundary = "只準備人工可用資訊，不自動對外發送或改變 runtime safety truth"
+    if _has_any(normalized, ("可視標記", "可视标记")):
+        facts = [
+            "在不移動到危險地形的安全處建立標記",
+            "使用高對比衣物或布料、反光物、規律燈光等可辨識材料",
+            "記錄標記位置、建立時間與隊伍狀態",
+        ]
+        boundary = "不得為建立標記移動到崖邊、稜線或其他危險地形"
+    elif _has_any(normalized, ("保存哪些證據", "保存哪些证据")):
+        facts = [
+            "保存目前或最後座標、高度與時間",
+            "保存最後移動方向、軌跡與最後確認點",
+            "保存隊伍人數、傷勢、意識與能否行走",
+            "保存訊號、剩餘電量、最後聯絡時間、天氣與剩餘資源",
+        ]
+        boundary = "未確認欄位標示未知；只準備人工轉報資料，不自動發送 SOS"
+    elif _has_any(normalized, ("位置分享給誰", "位置分享给谁")):
+        facts = [
+            "先分享給已約定的留守人、領隊或隊伍聯絡人",
+            "進入人工求救流程後，由人員向 119 或搜救窗口轉報",
+            "分享座標或最後確認點、時間、隊伍與傷勢、通訊和電量",
+        ]
+        boundary = "只傳給已約定或救援所需對象；Scout 不自動發送位置"
+    elif _has_any(normalized, ("稜線上移動找訊號", "棱线上移动找信号")):
+        facts = [
+            "未確認目前位置、稜線 route geometry、暴露地形與回退路徑前不要移動找訊號",
+            "先在現位置確認可用通訊與最後有效位置",
+        ]
+        boundary = "不得只為訊號盲目移動到稜線或離開最後可確認路線走廊"
+    elif _has_any(normalized, ("滑倒受傷", "滑倒受伤")) and _has_any(
+        normalized,
+        ("位置清楚", "位置明确", "位置明確"),
+    ):
+        subject = "位置已知的受傷事件回報"
+        facts = [
+            "保留使用者已說位置清楚這項事實，但回報仍需實際座標或最後確認點與時間",
+            "回報受傷部位與機轉、意識、出血、疼痛與能否行走",
+            "回報隊伍人數與是否全員在一起、可用通訊、剩餘電量與最後聯絡時間",
+            "由人員向已約定留守人或 119 搜救窗口轉報",
+        ]
+        required_fact_groups = [
+            ["位置清楚", "位置已知"],
+            ["座標", "最後確認點"],
+            ["時間"],
+            ["受傷部位", "傷勢"],
+            ["意識"],
+            ["能否行走"],
+            ["隊伍人數"],
+            ["通訊", "聯絡"],
+            ["電量"],
+            ["最後聯絡時間"],
+            ["留守人", "119", "搜救窗口"],
+            ["未知", "未確認"],
+        ]
+        missing_evidence = ["實際座標或最後確認點", "事件時間", "傷勢細節", "隊伍與通訊狀態"]
+        boundary = "未確認欄位標示未知，只準備人工轉報，不自動發送"
+        forbidden_claims = ["不得要求重新確認位置是否清楚", "不得聲稱已完成通報"]
+    elif _has_any(normalized, ("報座標還是地標", "报坐标还是地标")):
+        subject = "求救位置應如何表達"
+        facts = [
+            "座標與地標應一起回報，座標作為定位主體、地標作為辨識與接近補充",
+            "座標需附格式、座標基準、取得時間與定位精度",
+            "地標補充最後確認點、周圍特徵與可接近方向",
+        ]
+        required_fact_groups = [
+            ["座標"],
+            ["地標"],
+            ["格式"],
+            ["基準"],
+            ["時間"],
+            ["定位精度", "精度"],
+            ["接近方向", "周圍特徵"],
+        ]
+        missing_evidence = ["目前實際座標", "座標格式與基準", "定位精度", "可辨識地標"]
+        boundary = "未確認值標示未知，由人員轉報；Scout 不自動發送"
+        forbidden_claims = ["不得只回報模糊地標", "不得聲稱位置已送達救援單位"]
+    elif _has_any(normalized, ("直升機", "吊掛", "吊挂")):
+        subject = "直升機吊掛可行性候選"
+        facts = [
+            "目前不能確認可吊掛，最終由執行救援的航空與搜救單位判斷",
+            "需提供精確位置、風雨與能見度、地形坡度、林冠電線岩壁等周圍障礙",
+            "需提供傷者與隊伍狀態，以及安全等待位置",
+            "不要為尋找吊掛點下切、跨越危險地形或盲目移動",
+        ]
+        required_fact_groups = [
+            ["不能確認", "無法確認"],
+            ["救援單位", "航空"],
+            ["位置"],
+            ["風雨", "能見度"],
+            ["坡度", "地形"],
+            ["周圍障礙", "林冠", "電線", "岩壁"],
+            ["傷者", "隊伍"],
+            ["不要", "不得"],
+        ]
+        missing_evidence = ["精確位置", "即時天候與能見度", "坡度與周圍障礙", "傷者與隊伍狀態"]
+        boundary = "只能列吊掛候選條件，不能保證可吊掛，也不得引導冒險移動"
+        forbidden_claims = ["不得保證直升機可吊掛", "不得指示前往未確認吊掛點"]
+    elif _has_any(normalized, ("搜救員能接近", "搜救人員能接近", "搜救人员能接近")):
+        subject = "搜救人員地面接近可行性"
+        facts = [
+            "目前不能確認搜救人員能否接近，需先把當前位置綁定到地形與路線證據",
+            "檢查坡度、崖壁、溪溝、林相與障礙，以及既有步道或接近路線",
+            "補充即時天候、傷者搬運需求與隊伍狀態，由搜救單位決定接近方案",
+        ]
+        required_fact_groups = [
+            ["不能確認", "無法確認"],
+            ["當前位置", "目前位置"],
+            ["坡度", "崖壁", "溪溝"],
+            ["接近路線", "步道"],
+            ["天候", "天氣"],
+            ["傷者"],
+            ["搜救單位"],
+        ]
+        missing_evidence = ["目前位置與定位精度", "坡度與障礙", "可用接近路線", "即時天候", "傷者搬運需求"]
+        boundary = "地形分數只能列候選，不能保證搜救人員可接近"
+        forbidden_claims = ["不得把高分地形候選寫成可接近或不可接近的結論"]
+    elif _has_any(normalized, ("更開闊", "開闊的地方", "开阔的地方")):
+        subject = "是否應移動到開闊待援位置"
+        facts = [
+            "目前不能判定應否移動，需比較現位置與開闊候選之間的完整移動路徑",
+            "檢查坡度、暴露、崖壁、落石、林相與其他障礙",
+            "同時檢查傷勢、隊伍能力、天候、能見度與回退可能",
+            "不得只為增加可見性而盲目移動；最終待援位置由人員與救援單位複核",
+        ]
+        required_fact_groups = [
+            ["不能判定", "無法判定"],
+            ["現位置", "目前位置"],
+            ["完整移動路徑", "路徑"],
+            ["坡度", "暴露", "障礙"],
+            ["傷勢", "隊伍"],
+            ["天候", "能見度"],
+            ["不得", "不要"],
+        ]
+        missing_evidence = ["目前位置與定位精度", "開闊候選與完整移動路徑", "傷勢與隊伍能力", "即時天候與能見度"]
+        boundary = "不得盲目移動到候選；沒有完整路徑證據時保持未知"
+        forbidden_claims = ["不得把開闊候選寫成安全待援點"]
+    elif _has_any(normalized, ("移動傷者", "移动伤者")):
+        subject = "移動傷者的二次傷害風險"
+        facts = [
+            "移動可能造成二次傷害，除非原位置有火、水、落石、墜落等立即危險，否則先避免移動",
+            "需確認受傷機轉、頭頸背疼痛、意識、出血、呼吸與能否行走",
+            "需比較原位置危險、移動路徑地形、距離、可用人力與專業救援建議",
+        ]
+        required_fact_groups = [
+            ["二次傷害"],
+            ["立即危險"],
+            ["避免移動", "不要移動"],
+            ["受傷機轉", "傷勢"],
+            ["意識"],
+            ["呼吸", "出血"],
+            ["移動路徑", "地形"],
+            ["專業救援", "救援建議"],
+        ]
+        missing_evidence = ["傷勢與受傷機轉", "原位置立即危險", "移動路徑與人力", "專業救援建議"]
+        boundary = "不能遠端診斷；沒有立即危險與專業判斷時不得輕率移動傷者"
+        forbidden_claims = ["不得聲稱傷者狀況穩定", "不得提供無證據的移動許可"]
+    elif _has_any(normalized, ("現場指揮", "现场指挥")):
+        subject = "事故現場角色分工"
+        facts = [
+            "多人事故現場應指定一名協調者維持共同決策與資訊一致",
+            "依可用人數分配傷者照護、通訊轉報、位置與事件紀錄等角色",
+            "角色分工不得讓隊伍分散，也不取代 119 或搜救單位的正式指揮",
+        ]
+        required_fact_groups = [
+            ["協調者"],
+            ["傷者照護", "照護"],
+            ["通訊轉報", "通訊"],
+            ["事件紀錄", "紀錄"],
+            ["不得讓隊伍分散", "不要分散"],
+            ["不取代", "正式指揮"],
+        ]
+        missing_evidence = ["現場人數", "傷者狀態", "通訊能力", "已建立的救援聯絡鏈"]
+        boundary = "只提供臨時角色分工，不宣稱取得正式救援指揮權"
+        forbidden_claims = ["不得自稱現場總指揮", "不得取代救援單位命令"]
+    elif _has_any(normalized, ("留守人轉報", "給留守人轉報", "给留守人转报")):
+        subject = "留守人轉報所需資訊"
+        facts = [
+            "提供行程或路線名稱與原定計畫",
+            "提供目前或最後位置、座標、高度與時間",
+            "提供傷勢、意識、能否行走與隊伍人數",
+            "提供訊號、可用裝置、電量、最後聯絡時間、天氣、照明、保暖、水與食物",
+        ]
+        required_fact_groups = [
+            ["行程", "路線"],
+            ["位置", "座標"],
+            ["時間"],
+            ["傷勢", "意識"],
+            ["隊伍人數"],
+            ["訊號", "通訊"],
+            ["電量"],
+            ["天氣", "保暖", "水與食物"],
+        ]
+        missing_evidence = ["實際位置與時間", "傷勢與隊伍狀態", "通訊與電量", "天候與剩餘資源"]
+        boundary = "未確認欄位標示未知，由留守人人工轉報；Scout 不自動發送"
+        forbidden_claims = ["不得聲稱留守人已收到或已完成報案"]
+    elif _has_any(normalized, ("撐過夜", "撑过夜")):
+        subject = "待援過夜保全順序"
+        facts = [
+            "停止不必要移動並讓隊伍聚在一起，選擇不增加地形風險的避風位置",
+            "隔絕濕冷與地面，換上乾燥保暖層並遮蔽風雨",
+            "盤點水、食物、電量、照明與保暖資源，保留定位與必要通訊",
+            "記錄位置與隊伍狀態，維持可辨識標記並定期互相檢查",
+        ]
+        required_fact_groups = [
+            ["停止", "不要移動"],
+            ["隊伍聚在一起", "集合"],
+            ["避風"],
+            ["隔絕濕冷", "乾燥保暖"],
+            ["水", "食物"],
+            ["電量", "照明"],
+            ["定位", "通訊"],
+            ["標記", "記錄位置"],
+            ["互相檢查"],
+        ]
+        missing_evidence = ["目前位置與地形", "即時風雨低溫", "傷者與隊伍狀態", "水食物電量照明與保暖"]
+        boundary = "不得為找營地盲目移動；若現位置有立即危險，交由人員依現場與救援指示調整"
+        forbidden_claims = ["不得保證能安全撐到天亮", "不得聲稱救援到達時間"]
+    return {
+        "subject": subject,
+        "facts": facts,
+        "required_fact_groups": required_fact_groups,
+        "missing_evidence": missing_evidence,
+        "forbidden_claims": forbidden_claims,
+        "boundary": boundary,
+        "outbound_send_performed": False,
     }
 
 

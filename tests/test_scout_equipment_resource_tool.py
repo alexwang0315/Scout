@@ -73,6 +73,12 @@ def test_equipment_resource_no_go_for_low_battery_and_missing_offline_map() -> N
     assert "GPX/路線檔未載入。" in result["resource_readiness"]["critical_gaps"]
     assert "NO_GO" in result["field_answer"]
     assert result["equipment_resource"]["runtime_safety_truth"] is False
+    assert result["resource_state"]["low_battery_priority"] == [
+        "保留定位與必要通訊",
+        "先傳送一則包含位置、時間、隊伍與傷勢的短訊息",
+        "關閉螢幕、相機與非必要背景功能",
+        "只在定位、傳送或約定回報時啟用必要無線功能",
+    ]
 
 
 def test_equipment_resource_no_go_for_missing_offline_map_even_with_fixture_resources() -> None:

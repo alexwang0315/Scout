@@ -3585,6 +3585,7 @@
     const MAP_HEIGHT = 640;
     const MAP_PADDING = 58;
     const MAX_RENDERED_ROUTE_POINTS = 1400;
+    const MAX_RENDERED_SEGMENT_POINTS = 80;
     const DECISIONS = ["GO", "CONDITIONAL_GO", "GUIDED_ONLY", "CHANGE_PLAN", "DELAY", "NO_GO", "ESCALATE"];
     const EVIDENCE_TREE_TABS = [
       { id: "default", label: "CP / Timeline", category: "checkpoint" },
@@ -4738,6 +4739,7 @@
       const aiHatEvalCount = agentAiHatTraceValue(response, "ai_hat_eval_count=") || "-";
       const aiHatSelectedCall = agentAiHatTraceValue(response, "ai_hat_selected_call=") || "-";
       const aiHatSampling = agentAiHatTraceValue(response, "ai_hat_sampling=") || "unknown";
+      const aiHatPostprocess = agentAiHatTraceValue(response, "ai_hat_postprocess_applied=") || "false";
       const modelAnswer = displayAgentAnswer(response?.answer || "(empty assistant answer)");
       const localModelAttempts = Array.isArray(response?.local_model_attempts)
         ? response.local_model_attempts
@@ -4799,7 +4801,7 @@
       }
       if (["raw_single_pass_eval", "raw_self_review_eval"].includes(aiHatGenerationMode)) {
         lines.push(
-          `model trace：calls=${aiHatCallCount} / selected-call=${aiHatSelectedCall} / self-review=${aiHatSelfReview} / sampling=${aiHatSampling} / prompt-contract=${aiHatPromptContract} / answer-contract=${aiHatAnswerContract} / few-shot=${aiHatFewShotSource}:${aiHatFewShotCount} / few-shot-topic=${aiHatFewShotQuestion} / endpoint-response=${aiHatEndpointResponse} / endpoint-model=${aiHatEndpointModel} / prompt-tokens=${aiHatPromptEvalCount} / eval-tokens=${aiHatEvalCount} / hardware-attested=${aiHatHardwareAttested} / answer-template=${aiHatAnswerTemplate} / postprocess=false / prompt=${(aiHatPromptSha || "-").slice(0, 12)} / output=${(aiHatOutputSha || "-").slice(0, 12)}`,
+          `model trace：calls=${aiHatCallCount} / selected-call=${aiHatSelectedCall} / self-review=${aiHatSelfReview} / sampling=${aiHatSampling} / prompt-contract=${aiHatPromptContract} / answer-contract=${aiHatAnswerContract} / few-shot=${aiHatFewShotSource}:${aiHatFewShotCount} / few-shot-topic=${aiHatFewShotQuestion} / endpoint-response=${aiHatEndpointResponse} / endpoint-model=${aiHatEndpointModel} / prompt-tokens=${aiHatPromptEvalCount} / eval-tokens=${aiHatEvalCount} / hardware-attested=${aiHatHardwareAttested} / answer-template=${aiHatAnswerTemplate} / postprocess=${aiHatPostprocess} / prompt=${(aiHatPromptSha || "-").slice(0, 12)} / output=${(aiHatOutputSha || "-").slice(0, 12)}`,
         );
         lines.push("quality mode：本地模型只收到 facts-only evidence brief，沒有預寫答案；self-review 只會再次呼叫同一模型，Scout 工具摘要不會替換或補寫回答。");
       }
@@ -6697,103 +6699,89 @@
     }
 
     function bodyIndexMetrics() {
-      return [
+      const definitions = [
         {
           id: "flat_ground_speed",
           label: "Flat Ground Speed",
           spec: "平地移動速度",
-          value: "3.8 km/h",
-          coeff: "1.00",
-          score: 84,
           effect: "baseline walking ability",
-          source: "completed GPX p50",
+          source: "awaiting completed GPX evidence",
         },
         {
           id: "ascent_speed",
           label: "Ascent Speed",
           spec: "上坡速度",
-          value: "410 m/h",
-          coeff: "0.78",
-          score: 68,
           effect: "climb tolerance",
-          source: "elevation-time model",
+          source: "awaiting elevation-time evidence",
         },
         {
           id: "descent_speed",
           label: "Descent Speed",
           spec: "下坡速度",
-          value: "3.1 km/h",
-          coeff: "0.74",
-          score: 64,
           effect: "knee / technique / fatigue",
-          source: "downhill GPX splits",
+          source: "awaiting downhill GPX evidence",
         },
         {
           id: "technical_slowdown",
           label: "Technical Terrain Slowdown",
           spec: "技術地形降速率",
-          value: "-34%",
-          coeff: "0.66",
-          score: 56,
           effect: "rope, scree, mud, scramble",
-          source: "MCP + terrain tags",
+          source: "awaiting terrain slowdown evidence",
         },
         {
           id: "rest_frequency",
           label: "Rest Frequency",
           spec: "休息頻率",
-          value: "8 min / 55 min",
-          coeff: "0.72",
-          score: 62,
           effect: "recovery rhythm",
-          source: "stop pattern",
+          source: "awaiting stop-pattern evidence",
         },
         {
           id: "late_trip_decay",
           label: "Late-trip Decay",
           spec: "行程後段速度衰退",
-          value: "-18%",
-          coeff: "0.70",
-          score: 59,
           effect: "endurance / pacing",
-          source: "last-third splits",
+          source: "awaiting late-trip evidence",
         },
         {
           id: "load_impact",
           label: "Load Impact",
           spec: "負重影響",
-          value: "-11%",
-          coeff: "0.82",
-          score: 72,
           effect: "pack weight penalty",
-          source: "gear weight estimate",
+          source: "awaiting load evidence",
         },
         {
           id: "weather_impact",
           label: "Weather Impact",
           spec: "天候影響",
-          value: "-9%",
-          coeff: "0.86",
-          score: 76,
           effect: "heat, cold, rain, wind",
-          source: "CWA + forecast refs",
+          source: "awaiting weather-impact evidence",
         },
         {
           id: "experience_confidence",
           label: "Experience Confidence",
           spec: "經驗可信度",
-          value: "0.71",
-          coeff: "0.71",
-          score: 71,
           effect: "self-report vs records",
-          source: "completed trips + claims",
+          source: "awaiting reviewed trip evidence",
         },
       ];
+      const supplied = Array.isArray(state.bodyIndexData?.coefficient_metrics)
+        ? state.bodyIndexData.coefficient_metrics
+        : [];
+      const suppliedById = new Map(supplied.filter((item) => item && item.id).map((item) => [item.id, item]));
+      return definitions.map((definition) => ({
+        ...definition,
+        value: "unavailable",
+        coeff: "--",
+        score: null,
+        status: "pending",
+        ...(suppliedById.get(definition.id) || {}),
+      }));
     }
 
     function renderBodyIndexMetric(metric) {
-      const score = Math.max(0, Math.min(100, Number(metric.score) || 0));
-      const tone = score >= 75 ? "ok" : score >= 60 ? "warn" : "bad";
+      const hasScore = metric.status === "available" && Number.isFinite(Number(metric.score));
+      const score = hasScore ? Math.max(0, Math.min(100, Number(metric.score))) : 0;
+      const tone = !hasScore ? "info" : score >= 75 ? "ok" : score >= 60 ? "warn" : "bad";
       return `
         <article class="body-index-metric" data-body-index-metric="${escapeHtml(metric.id)}">
           <div class="body-index-metric-head">
@@ -6807,7 +6795,7 @@
             <div class="body-index-meter"><span style="--value:${score}%"></span></div>
             <div class="body-index-foot">
               <span>${escapeHtml(metric.effect)}</span>
-              <span class="chip ${tone}">${score}</span>
+              <span class="chip ${tone}">${hasScore ? score : "pending"}</span>
             </div>
           </div>
           <div class="body-index-foot">
@@ -6820,25 +6808,31 @@
 
     function bodyIndexRows(key, fallbackRows) {
       const rows = state.bodyIndexData?.[key];
-      if (Array.isArray(rows) && rows.length) return rows;
+      if (Array.isArray(rows)) return rows;
       return fallbackRows;
     }
 
     function bodyIndexSummary() {
       return state.bodyIndexData?.summary || {
-        scout_pace_coefficient: "0.82",
-        energy_reserve: "0.62",
-        vulnerability: "0.38",
-        experience_trust: "0.71",
-        score_percent: 82,
+        scout_pace_coefficient: "unavailable",
+        energy_reserve: "unavailable",
+        vulnerability: "unavailable",
+        experience_trust: "unavailable",
+        score_percent: 0,
+        evidence_status: "unavailable",
       };
     }
 
     function bodyIndexScorePercent(summary) {
       const explicit = Number(summary.score_percent);
-      if (Number.isFinite(explicit) && explicit > 0) return Math.max(0, Math.min(100, explicit));
-      const coefficient = Number(summary.scout_pace_coefficient || 0.82);
+      if (Number.isFinite(explicit) && explicit >= 0) return Math.max(0, Math.min(100, explicit));
+      const coefficient = Number(summary.scout_pace_coefficient);
+      if (!Number.isFinite(coefficient)) return 0;
       return Math.max(0, Math.min(100, Math.round(coefficient * 100)));
+    }
+
+    function bodyIndexDisplayValue(value) {
+      return value === null || value === undefined || value === "" || value === "unavailable" ? "--" : String(value);
     }
 
     function bodyIndexCoverageValue(label, fallback) {
@@ -6895,50 +6889,34 @@
 
     function bodyIndexHealthCoverage() {
       return bodyIndexRows("coverage_cards", [
-        ["Health exports", "3", "HealthAutoExport zip files"],
-        ["Walking sessions", "23", "parser-ready walking workouts"],
-        ["GPX tracks", "40", "route traces available"],
-        ["15-min windows", "49", "sanitized pressure windows"],
-        ["Provider metrics", "10", "source-value metric families"],
+        ["Health exports", "0", "no local HealthExport sources imported"],
+        ["Walking sessions", "0", "no walking workouts imported"],
+        ["GPX tracks", "0", "no route traces imported"],
+        ["15-min windows", "0", "no sanitized pressure windows"],
+        ["Provider metrics", "0", "no source-value metric families"],
       ]);
     }
 
     function bodyIndexHealthSignals() {
       return bodyIndexRows("health_signals", [
-        ["VO2max Baseline", "available", "median --", "cardio baseline only; not live oxygen uptake", "Energy Reserve", bodyIndexDefaultTrend()],
-        ["Resting HR", "available", "median -- bpm", "provider metric trend for baseline context", "Vulnerability", bodyIndexDefaultTrend()],
-        ["HRV Baseline", "available", "median -- ms", "recovery readiness context; source value only", "Vulnerability", bodyIndexDefaultTrend()],
-        ["Walking HR Average", "available", "median -- bpm", "walking effort baseline without raw samples", "Rest Frequency", bodyIndexDefaultTrend()],
-        ["Active Energy Reset Cue", "computable", "median -- kJ", "active energy budget and reset threshold", "Energy Reserve", bodyIndexDefaultTrend()],
-        ["Recovery Debt Windows", "computable", "-- windows", "post-pressure rest cost from 15-min windows", "Late-trip Decay", bodyIndexDefaultTrend()],
-        ["HR Pressure Windows", "computable", "-- windows", "high effort / low efficiency windows", "Vulnerability", bodyIndexDefaultTrend()],
-        ["Step + Distance Pattern", "available", "steps + distance", "step count and walking distance coverage", "Flat Speed", bodyIndexDefaultTrend()],
+        ["VO2max Baseline", "pending", "median --", "import HealthExport evidence; not live oxygen uptake", "Energy Reserve", bodyIndexDefaultTrend()],
+        ["Resting HR", "pending", "median -- bpm", "no provider metric imported", "Vulnerability", bodyIndexDefaultTrend()],
+        ["HRV Baseline", "pending", "median -- ms", "no source-provider baseline imported", "Vulnerability", bodyIndexDefaultTrend()],
+        ["Walking HR Average", "pending", "median -- bpm", "no walking effort baseline imported", "Rest Frequency", bodyIndexDefaultTrend()],
+        ["Active Energy Reset Cue", "pending", "median -- kJ", "no active energy evidence imported", "Energy Reserve", bodyIndexDefaultTrend()],
+        ["Recovery Debt Windows", "pending", "-- windows", "no sanitized windows imported", "Late-trip Decay", bodyIndexDefaultTrend()],
+        ["HR Pressure Windows", "pending", "-- windows", "no sanitized windows imported", "Vulnerability", bodyIndexDefaultTrend()],
+        ["Step + Distance Pattern", "pending", "-- steps / -- km", "no step or walking distance evidence imported", "Flat Speed", bodyIndexDefaultTrend()],
       ]);
     }
 
     function bodyIndexPressureTimeline() {
-      return bodyIndexRows("pressure_timeline", [
-        ["2018 long walk", "16 windows", "single GPX session", 33],
-        ["2020 walking day", "7 windows", "two GPX sessions", 14],
-        ["2026 recent baseline", "26 windows", "20 walking sessions", 53],
-      ]);
+      return bodyIndexRows("pressure_timeline", []);
     }
 
     function bodyIndexProviderMetrics() {
       const metrics = state.bodyIndexData?.provider_metrics;
-      if (Array.isArray(metrics) && metrics.length) return metrics;
-      return [
-        "vo2_max",
-        "blood_oxygen_saturation",
-        "heart_rate_variability",
-        "resting_heart_rate",
-        "walking_heart_rate_average",
-        "heart_rate",
-        "step_count",
-        "active_energy",
-        "flights_climbed",
-        "walking_running_distance",
-      ];
+      return Array.isArray(metrics) ? metrics : [];
     }
 
     function normalizeBodyIndexHealthSignal(signal) {
@@ -7031,12 +7009,12 @@
             <small>collapsed by default · source_provider only</small>
           </summary>
           <div class="body-index-provider-grid">
-            ${bodyIndexProviderMetrics().map((metric) => `
+            ${bodyIndexProviderMetrics().length ? bodyIndexProviderMetrics().map((metric) => `
               <div class="body-index-provider-chip">
                 <strong>${escapeHtml(metric)}</strong>
                 <span>source value only</span>
               </div>
-            `).join("")}
+            `).join("") : `<div class="empty-state">No provider metrics imported.</div>`}
           </div>
         </details>
       `;
@@ -7046,23 +7024,24 @@
       const metrics = bodyIndexMetrics();
       const summary = bodyIndexSummary();
       const scorePercent = bodyIndexScorePercent(summary);
-      const coefficient = summary.scout_pace_coefficient || "0.82";
-      const energyReserve = summary.energy_reserve || "0.62";
-      const vulnerability = summary.vulnerability || "0.38";
-      const experienceTrust = summary.experience_trust || "0.71";
+      const coefficient = bodyIndexDisplayValue(summary.scout_pace_coefficient);
+      const energyReserve = bodyIndexDisplayValue(summary.energy_reserve);
+      const vulnerability = bodyIndexDisplayValue(summary.vulnerability);
+      const experienceTrust = bodyIndexDisplayValue(summary.experience_trust);
+      const hasBodyIndexEvidence = summary.evidence_status !== "unavailable" && Number(bodyIndexCoverageValue("Health exports", "0")) > 0;
       const importStatus = bodyIndexImportStatus();
       const importTone = ["ok", "warn", "bad", "info"].includes(importStatus.tone) ? importStatus.tone : "info";
       const watchTone = bodyIndexWatchTone();
       const watchSummary = bodyIndexWatchSummary();
       const watchStatus = bodyIndexWatchStatus();
-      const healthExports = bodyIndexCoverageValue("Health exports", "3");
-      const walkingSessions = bodyIndexCoverageValue("Walking sessions", "23");
-      const pressureWindows = bodyIndexCoverageValue("15-min windows", "49");
-      const healthExportEvidence = state.bodyIndexData ? `${healthExports} local exports / ${walkingSessions} walking sessions` : "3 local exports / 23 walking sessions";
-      const pressureWindowEvidence = state.bodyIndexData ? `${pressureWindows} sanitized 15-min windows` : "49 sanitized 15-min windows";
+      const healthExports = bodyIndexCoverageValue("Health exports", "0");
+      const walkingSessions = bodyIndexCoverageValue("Walking sessions", "0");
+      const pressureWindows = bodyIndexCoverageValue("15-min windows", "0");
+      const healthExportEvidence = hasBodyIndexEvidence ? `${healthExports} local exports / ${walkingSessions} walking sessions` : "no HealthExport evidence imported";
+      const pressureWindowEvidence = hasBodyIndexEvidence ? `${pressureWindows} sanitized 15-min windows` : "no sanitized windows imported";
       const impactRows = [
         ["Boss demand", "CP087-CP093 ridge section", "route pressure 0.68"],
-        ["Energy Reserve", `${energyReserve} retained for slowest member basis`, "planning evidence"],
+        ["Energy Reserve", hasBodyIndexEvidence ? `${energyReserve} retained for slowest member basis` : "unavailable until evidence import", "planning evidence"],
         ["Pace gate input", "Scout Pace Coefficient feeds schedule buffer", "source_provider only"],
         ["Challenge Fit", "route demand x pace vulnerability", "advisory only"],
         ["Boundary", "no diagnosis, no Phase 1 mutation, no safety endpoint", "no outbound"],
@@ -7086,7 +7065,7 @@
               <div class="body-index-ring" style="--value:${scorePercent}%"><span>${escapeHtml(coefficient)}</span></div>
               <div class="body-index-score-copy">
                 <h3>Scout Pace Coefficient</h3>
-                <p>Route pace estimate for Chilai Nanhua day 1, calculated as planning evidence for the slowest member basis.</p>
+                <p>${hasBodyIndexEvidence ? "Route pace estimate for Chilai Nanhua day 1, calculated as planning evidence for the slowest member basis." : "No Scout Pace Coefficient has been calculated. Import reviewed local evidence before using this planning surface."}</p>
                 <div class="body-index-chip-row">
                   <span class="chip info">spec 7.2</span>
                   <span class="chip info">HealthExport-aware</span>
@@ -7100,17 +7079,17 @@
             <section class="body-index-mini">
               <span>Energy Reserve</span>
               <strong>${escapeHtml(energyReserve)}</strong>
-              <em>medium reserve</em>
+              <em>${hasBodyIndexEvidence ? "calculated reserve" : "awaiting evidence"}</em>
             </section>
             <section class="body-index-mini">
               <span>Vulnerability</span>
               <strong>${escapeHtml(vulnerability)}</strong>
-              <em>pace + terrain</em>
+              <em>${hasBodyIndexEvidence ? "pace + terrain" : "awaiting evidence"}</em>
             </section>
             <section class="body-index-mini">
               <span>Experience Trust</span>
               <strong>${escapeHtml(experienceTrust)}</strong>
-              <em>records weighted</em>
+              <em>${hasBodyIndexEvidence ? "records weighted" : "awaiting evidence"}</em>
             </section>
           </div>
 
@@ -7187,14 +7166,14 @@
               </div>
               <div class="body-index-panel-body">
                 <div class="body-index-pressure-timeline">
-                  ${bodyIndexPressureTimeline().map(([label, value, detail, percent]) => `
+                  ${bodyIndexPressureTimeline().length ? bodyIndexPressureTimeline().map(([label, value, detail, percent]) => `
                     <div class="body-index-pressure-cell">
                       <span>${escapeHtml(label)}</span>
                       <strong>${escapeHtml(value)}</strong>
                       <div class="body-index-pressure-bar"><span style="--value:${Number(percent)}%"></span></div>
                       <small>${escapeHtml(detail)}</small>
                     </div>
-                  `).join("")}
+                  `).join("") : `<div class="empty-state">No sanitized pressure windows imported.</div>`}
                 </div>
               </div>
             </section>
@@ -7505,6 +7484,7 @@
         coordinateSegments,
         coordinates,
         routePath,
+        segmentPaths: buildDashboardSegmentPaths(state.project?.segments, bounds),
         sourceId: display.source_id || "route_display_geometry.fallback",
         sourcePath: display.source_path || "fallback",
       };
@@ -7518,6 +7498,30 @@
       }
       const fallback = normalizeCoordinates(fallbackCoordinates);
       return fallback.length >= 2 ? [fallback] : [];
+    }
+
+    function buildDashboardSegmentPaths(rawSegments, bounds) {
+      if (!bounds || !Array.isArray(rawSegments)) return [];
+      return rawSegments.flatMap((segment, index) => {
+        if (!segment || typeof segment !== "object") return [];
+        const display = segment.display_geometry || {};
+        const fallbackCoordinates = normalizeCoordinates(display.coordinates);
+        const coordinateSegments = normalizeCoordinateSegments(
+          display.coordinate_segments,
+          fallbackCoordinates,
+        );
+        if (!coordinateSegments.length) return [];
+        const path = pathFromSegments(
+          coordinateSegments,
+          bounds,
+          MAX_RENDERED_SEGMENT_POINTS,
+        );
+        if (!path) return [];
+        return [{
+          id: segment.candidate_id || segment.segment_id || `segment.${index + 1}`,
+          path,
+        }];
+      });
     }
 
     function normalizeCoordinates(rawCoordinates) {
@@ -7627,12 +7631,29 @@
         }
         return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="M112 504 C194 404 252 360 338 315 C452 258 590 172 705 104" fill="none" stroke="#f0b85c" stroke-width="3" stroke-dasharray="9 9"></path></g>`;
       }
-      if (["segments", "reference-tracks", "retreat"].includes(layerId)) {
-        const stroke = layerId === "retreat" ? "#d5a642" : layerId === "reference-tracks" ? "#7899b3" : "#9edee5";
-        const dash = layerId === "segments" ? "" : "stroke-dasharray=\"8 8\"";
+      if (layerId === "segments") {
+        const paths = mapData.segmentPaths.map((segment) => `
+          <path
+            d="${segment.path}"
+            data-segment-id="${escapeHtml(segment.id)}"
+            fill="none"
+            stroke="#00d4ff"
+            stroke-width="5.6"
+            stroke-dasharray="7 4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            opacity=".96"
+            style="filter:drop-shadow(0 0 2px rgba(0,20,28,.92))"
+          ></path>
+        `).join("");
+        return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}" data-segment-source="project.segments">${paths}</g>`;
+      }
+      if (["reference-tracks", "retreat"].includes(layerId)) {
+        const stroke = layerId === "retreat" ? "#d5a642" : "#7899b3";
+        const dash = "stroke-dasharray=\"8 8\"";
         if (mapData.connected) {
           const path = layerId === "retreat" ? retreatPath(mapData) : mapData.routePath;
-          return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="${path}" fill="none" stroke="${stroke}" stroke-width="${layerId === "segments" ? 3 : 2}" ${dash} opacity=".9"></path></g>`;
+          return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="${path}" fill="none" stroke="${stroke}" stroke-width="2" ${dash} opacity=".9"></path></g>`;
         }
         return `<g class="map-layer" data-layer-group="${layerId}" data-layer-hidden="${hidden}"><path d="M124 506 L300 324 L474 263 L646 130 L902 78" fill="none" stroke="${stroke}" stroke-width="3" ${dash}></path><path d="M474 263 C386 346 274 408 186 542" fill="none" stroke="${stroke}" stroke-width="2" ${dash}></path></g>`;
       }

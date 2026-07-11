@@ -260,6 +260,7 @@ def _resource_state(
         "devices": devices[:8],
         "equipment": equipment[:12],
         "phone_battery_percent": phone_battery,
+        "low_battery_priority": _low_battery_priority(phone_battery),
         "watch_battery_percent": watch_battery,
         "power_bank_percent": power_bank,
         "offline_map_ready": offline_map_ready,
@@ -276,6 +277,17 @@ def _resource_state(
         "daylight_hours_remaining": direct.get("daylight_hours_remaining"),
         "resource_plan_warnings": _resource_plan_warnings(resource_plan),
     }
+
+
+def _low_battery_priority(phone_battery: float | None) -> list[str]:
+    if phone_battery is None or phone_battery > 5:
+        return []
+    return [
+        "保留定位與必要通訊",
+        "先傳送一則包含位置、時間、隊伍與傷勢的短訊息",
+        "關閉螢幕、相機與非必要背景功能",
+        "只在定位、傳送或約定回報時啟用必要無線功能",
+    ]
 
 
 def _readiness(
@@ -517,6 +529,10 @@ def _decision_details(
 ) -> list[str]:
     details = [
         field_answer,
+        "low_battery_priority="
+        + "|".join(
+            str(item) for item in resource_state.get("low_battery_priority", [])
+        ),
         f"phone_battery_percent={resource_state.get('phone_battery_percent')}",
         f"power_bank_percent={resource_state.get('power_bank_percent')}",
         f"offline_map_ready={resource_state.get('offline_map_ready')}",

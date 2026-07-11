@@ -238,6 +238,12 @@ def assess_scout_post_trip_review(
         missing_fields=missing_fields,
         post_trip_learning_package=post_trip_learning_package,
     )
+    query_guidance = _post_trip_query_guidance(
+        query,
+        timeline_available=bool(timeline),
+        capsule_available=bool(capsule),
+        missing_fields=missing_fields,
+    )
 
     return {
         "artifact_kind": POST_TRIP_REVIEW_OUTPUT_KIND,
@@ -252,6 +258,7 @@ def assess_scout_post_trip_review(
         "decision_output": decision_output,
         "field_answer": field_answer,
         "missing_fields": missing_fields,
+        "query_guidance": query_guidance,
         "post_trip_review": {
             "role": "Post-Trip Review / Learning Governance",
             "candidate_only": True,
@@ -304,6 +311,235 @@ def assess_scout_post_trip_review(
             "after_action_candidates_source": after_action_source,
             "energy_feedback_source": energy_feedback_source,
         },
+    }
+
+
+def _post_trip_query_guidance(
+    query: str,
+    *,
+    timeline_available: bool,
+    capsule_available: bool,
+    missing_fields: list[str],
+) -> dict[str, Any]:
+    normalized = "".join(str(query or "").casefold().split())
+    common_missing = [str(item) for item in missing_fields[:4]]
+
+    if "最早" in normalized and any(term in normalized for term in ("風險", "訊號", "警訊")):
+        return _query_guidance(
+            subject="最早風險訊號回顧",
+            facts=(
+                "完成行程時間線可用" if timeline_available else "缺少完成行程時間線",
+                "判定最早訊號需要有時間戳的前兆、warning 與事件時間線",
+                "路線風險分數不是已觀測到的最早事件訊號",
+            ),
+            required=(
+                ("目前不能確認", "無法確認", "尚不能確認"),
+                ("時間線", "時間戳"),
+            ),
+            missing=common_missing or ("timestamped_warning_and_incident_timeline",),
+            boundary="只能依實際時間序列找最早前兆，不能用最高候選分數代替事件歷史",
+            forbidden=("不得把最高風險 CP 宣稱為最早已發生風險訊號",),
+        )
+    if "warning" in normalized and any(term in normalized for term in ("更早", "提前")):
+        return _query_guidance(
+            subject="warning 提前時點回顧",
+            facts=(
+                "完成行程時間線可用" if timeline_available else "缺少完成行程時間線",
+                "warning 回顧需要觸發門檻、觸發時間、第一個前兆時間與事件時間",
+                "提前 warning 候選需要因果證據與可重現規則",
+            ),
+            required=(
+                ("目前不能確認", "無法確認", "尚不能確認"),
+                ("觸發時間", "warning 時間"),
+                ("前兆", "事件時間"),
+            ),
+            missing=common_missing or ("warning_trigger_history", "incident_timeline"),
+            boundary="只能提出 warning 提前候選，需以時間線與可重現觸發規則人工複核",
+            forbidden=("不得在沒有 warning 歷史時指定某一 warning 應更早觸發",),
+        )
+    if "cp" in normalized and any(term in normalized for term in ("設錯", "漏設", "缺漏")):
+        return _query_guidance(
+            subject="CP 設定缺漏回顧",
+            facts=(
+                "完成行程時間線可用" if timeline_available else "缺少完成行程時間線",
+                "CP 回顧需要計畫 CP graph、實際軌跡與時間、偏離或延誤證據",
+                "CP 設計需檢查路段時間、撤退可達性、現場辨識度與端點重複設點",
+            ),
+            required=(
+                ("目前不能確認哪個 CP", "無法確認哪個 CP", "尚不能確認哪個 CP"),
+                ("實際軌跡", "實際通過時間"),
+                ("可回退性", "現場辨識度"),
+            ),
+            missing=common_missing or ("actual_track_and_cp_timestamps",),
+            boundary="只能列 CP 設計複核候選，不能把行前高分路段當成已證實設錯或漏設",
+            forbidden=("不得無實際軌跡與時間證據就宣稱某個 CP 設錯或漏設",),
+        )
+    if "corridor" in normalized and any(term in normalized for term in ("太寬", "太窄", "寬度")):
+        return _query_guidance(
+            subject="GPX corridor 寬度回顧",
+            facts=(
+                "完成行程時間線可用" if timeline_available else "缺少完成行程時間線",
+                "corridor 回顧需要逐段寬度、GNSS 分散、地圖精度與地形限制",
+                "太寬會納入無關地形，太窄會排除合理路徑不確定範圍",
+            ),
+            required=(
+                ("目前不能確認哪段", "無法確認哪段", "尚不能確認哪段"),
+                ("corridor 寬度", "路廊寬度"),
+                ("GNSS", "定位誤差"),
+            ),
+            missing=common_missing or ("segment_corridor_widths", "actual_gnss_dispersion"),
+            boundary="需逐段比較寬度、定位誤差與地形，不得用單一固定寬度判定全線",
+            forbidden=("不得在沒有逐段 corridor 與定位誤差證據時指定某段太寬或太窄",),
+        )
+    if any(term in normalized for term in ("景觀點", "拍照", "停留")) and "忽略" in normalized:
+        return _query_guidance(
+            subject="景觀停留風險遺漏回顧",
+            facts=(
+                "完成行程時間線可用" if timeline_available else "缺少完成行程時間線",
+                "遺漏回顧需要計畫景觀停留、實際停留事件、附近地形風險與 route note",
+                "高風險候選不能證明停留風險已被忽略",
+            ),
+            required=(
+                ("目前不能確認是否忽略", "無法確認是否忽略", "尚不能確認是否忽略"),
+                ("實際停留", "停留事件"),
+                ("地形風險", "route note", "路線註記"),
+            ),
+            missing=common_missing or ("planned_and_actual_stop_events",),
+            boundary="高風險位置只能作為回顧候選，需對照實際停留與事件紀錄",
+            forbidden=("不得把最高風險候選直接宣稱為已被忽略的拍照風險",),
+        )
+    if "迷途" in normalized and "滑墜" in normalized and "隊伍治理" in normalized:
+        return _query_guidance(
+            subject="事件主因分類回顧",
+            facts=(
+                "完成行程時間線可用" if timeline_available else "缺少完成行程時間線",
+                "分類維度包括迷途導航、滑墜地形、資源不足與隊伍治理",
+                "分類需要事件順序、位置與軌跡、裝備資源及隊伍聯絡紀錄",
+            ),
+            required=(
+                ("目前不能分類", "無法分類", "尚不能分類"),
+                ("事件時間線", "事件順序"),
+                ("定位軌跡", "位置與軌跡"),
+                ("資源", "隊伍聯絡"),
+            ),
+            missing=common_missing or ("incident_event_sequence",),
+            boundary="可標示多重因素，不能在沒有事件證據時硬選單一主因",
+            forbidden=("不得把地形候選分數直接當成已發生滑墜的證據",),
+        )
+    if "incidentpackage" in normalized:
+        return _query_guidance(
+            subject="incident package 資料契約",
+            facts=(
+                "第一組包含位置、時間、座標基準與定位精度",
+                "第二組包含實際軌跡、最後方向、CP 通過與偏離事件",
+                "第三組包含傷勢、意識與行動能力、隊伍人數與聯絡紀錄",
+                "第四組包含天氣能見度、裝備資源、電量與通訊狀態",
+                "第五組包含警示與決策時間線、原始來源 ref 與未知欄位",
+            ),
+            required=(
+                ("位置", "座標"),
+                ("軌跡", "CP"),
+                ("傷勢", "隊伍"),
+                ("天氣", "電量", "資源"),
+                ("來源", "未知欄位"),
+                (
+                    "不代表已送出",
+                    "未自動送出",
+                    "不會自動送出",
+                    "不代表已自動建立或送出",
+                    "不得聲稱已自動建立或送出",
+                ),
+            ),
+            missing=(),
+            boundary="incident package 保留來源與未知欄位，不得補猜，也不代表已對外送出",
+            forbidden=("不得聲稱 incident package 已自動建立、送出或升格為 runtime safety truth",),
+        )
+    if "fieldcase" in normalized:
+        return _query_guidance(
+            subject="field case 升格審查",
+            facts=(
+                "完成行程時間線可用" if timeline_available else "缺少完成行程時間線",
+                "能力摘要可用" if capsule_available else "缺少能力摘要",
+                "field case 條件包括可重建時間線、來源追溯、學習價值、隱私審查與人工核准",
+            ),
+            required=(
+                (
+                    "目前不能升格",
+                    "尚不能升格",
+                    "目前無法判定是否升格",
+                    "目前不能確認是否升格",
+                ),
+                ("時間線", "可重建"),
+                ("來源", "provenance"),
+                ("隱私", "人工審核"),
+            ),
+            missing=common_missing or ("reconstructable_incident_package",),
+            boundary="field case 必須經隱私與人工審核，不能由模型自動升格",
+            forbidden=("不得在 evidence 不完整時宣稱已成為 field case",),
+        )
+    if "spec" in normalized and any(term in normalized for term in ("更新", "修改", "改")):
+        return _query_guidance(
+            subject="spec 更新候選審查",
+            facts=(
+                "spec 更新需要把已觀測失敗對應到現行 requirement",
+                "spec 更新需要可重現 regression test 與受影響的 tool 或 skill 契約",
+                "可能受影響範圍包括工具派送、evidence schema、回答契約與 eval 驗收標準",
+            ),
+            required=(
+                (
+                    "目前不能指定",
+                    "尚不能指定",
+                    "無法直接指定",
+                    "目前不能確認",
+                ),
+                ("失敗紀錄", "observed failure"),
+                ("回歸測試", "regression test"),
+                ("工具派送", "evidence schema", "回答契約", "驗收標準"),
+            ),
+            missing=(),
+            boundary="只能提出 spec 更新候選，需以失敗證據、測試與人工 review 確認",
+            forbidden=("不得在沒有失敗到規格的追溯證據時直接改寫 spec",),
+        )
+    if "下次行前" in normalized and any(term in normalized for term in ("三件", "三項", "3件", "3項")):
+        return _query_guidance(
+            subject="下次行前規劃三項回顧",
+            facts=(
+                "第一項是補齊實際軌跡、CP 通過時間與延誤時間線",
+                "第二項是對照 warning、天氣路況、停留與 near-miss 事件",
+                "第三項是重審隊伍節奏、裝備資源與折返條件",
+            ),
+            required=(
+                ("第一", "1", "一、"),
+                ("第二", "2", "二、"),
+                ("第三", "3", "三、"),
+                ("實際軌跡", "CP 通過時間"),
+                ("warning", "天氣路況", "near-miss"),
+                ("隊伍節奏", "裝備資源", "折返條件"),
+                ("證據缺口", "不是已證實的事故原因", "不是事故原因"),
+            ),
+            missing=(),
+            boundary="這三項是依目前 evidence gap 排定的回顧工作，不是已證實的事故原因",
+            forbidden=("不得把 evidence gap 寫成已發生事故或已完成規劃修改",),
+        )
+    return {}
+
+
+def _query_guidance(
+    *,
+    subject: str,
+    facts: tuple[str, ...],
+    required: tuple[tuple[str, ...], ...],
+    missing: tuple[str, ...] | list[str],
+    boundary: str,
+    forbidden: tuple[str, ...],
+) -> dict[str, Any]:
+    return {
+        "subject": subject,
+        "facts": list(facts),
+        "required_fact_groups": [list(group) for group in required],
+        "missing_evidence": list(missing),
+        "boundary": boundary,
+        "forbidden_claims": list(forbidden),
     }
 
 

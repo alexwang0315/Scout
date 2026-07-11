@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scout_post_trip_review_tool import (
     POST_TRIP_REVIEW_OUTPUT_KIND,
     POST_TRIP_REVIEW_TOOL_ID,
@@ -225,3 +227,47 @@ def test_post_trip_review_go_when_required_feedback_is_complete(tmp_path: Path) 
 
 def test_post_trip_review_output_kind_constant() -> None:
     assert POST_TRIP_REVIEW_OUTPUT_KIND == "scout_ai_post_trip_review_tool_output"
+
+
+@pytest.mark.parametrize(
+    ("question", "subject"),
+    (
+        ("這次最早的風險訊號是什麼？", "最早風險訊號回顧"),
+        ("Scout 哪個 warning 應該更早出現？", "warning 提前時點回顧"),
+        ("哪個 CP 設錯或漏設了？", "CP 設定缺漏回顧"),
+        ("哪段路的 GPX corridor 太寬或太窄？", "GPX corridor 寬度回顧"),
+        ("是否有景觀點/拍照停留風險被忽略？", "景觀停留風險遺漏回顧"),
+        ("這次是迷途、滑墜、資源不足還是隊伍治理問題？", "事件主因分類回顧"),
+        ("哪些資料應該進 incident package？", "incident package 資料契約"),
+        ("這個案例應該變成 field case 嗎？", "field case 升格審查"),
+        ("哪些 spec 需要被更新？", "spec 更新候選審查"),
+        ("下次行前規劃要改哪三件事？", "下次行前規劃三項回顧"),
+    ),
+)
+def test_post_trip_review_provides_structured_query_guidance(
+    question: str,
+    subject: str,
+) -> None:
+    result = assess_scout_post_trip_review(POST_ANALYSIS_ROOT, query=question)
+
+    guidance = result["query_guidance"]
+    assert guidance["subject"] == subject
+    assert guidance["facts"]
+    assert guidance["required_fact_groups"]
+    assert guidance["boundary"]
+    assert guidance["forbidden_claims"]
+
+
+def test_incident_package_guidance_names_scout_evidence_groups() -> None:
+    result = assess_scout_post_trip_review(
+        POST_ANALYSIS_ROOT,
+        query="哪些資料應該進 incident package？",
+    )
+
+    facts = result["query_guidance"]["facts"]
+    assert any("位置" in fact and "時間" in fact for fact in facts)
+    assert any("軌跡" in fact and "CP" in fact for fact in facts)
+    assert any("傷勢" in fact and "隊伍" in fact for fact in facts)
+    assert any("天氣" in fact and "資源" in fact for fact in facts)
+    assert result["decision"] == "DELAY"
+    assert result["post_trip_feedback"]["incident_events"] == []
