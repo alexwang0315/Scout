@@ -50,18 +50,29 @@ class ActionExecutor:
         title = str(action.config.get("title") or record.workflow.name)
         body = str(action.config.get("body") or action.description)
         priority = str(action.config.get("priority") or "normal")
+        metadata: dict[str, Any] = {
+            "workflow_id": record.id,
+            "action_type": action.type.value,
+        }
+        outbound_intent = action.config.get("outbound_intent")
+        if isinstance(outbound_intent, dict):
+            metadata = {**metadata, "outbound_intent": dict(outbound_intent)}
         result = self._notification_gateway.send(
             record.user_id,
             title,
             body,
             priority=priority,
-            metadata={"workflow_id": record.id, "action_type": action.type.value},
+            metadata=metadata,
         )
-        return {
+        response = {
             "status": "sent",
             "notification_id": result.notification_id,
             "sent": result.sent,
         }
+        standing_grant_id = result.metadata.get("standing_grant_id")
+        if standing_grant_id is not None:
+            response["standing_grant_id"] = standing_grant_id
+        return response
 
     def _execute_ask_user(
         self,

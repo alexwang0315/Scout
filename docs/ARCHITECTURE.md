@@ -42,6 +42,24 @@ User Request
   -> existing browser executor on admin/debug/pretrip
 ```
 
+Reviewed non-safety outbound path:
+
+```text
+User-approved session/trip scope
+  -> immutable OutboundStandingGrant
+  -> typed OutboundActionIntent
+  -> PermissionGate
+  -> StandingGrantNotificationProvider
+  -> configured deterministic transport
+  -> summary-only audit record
+```
+
+The grant removes repeated confirmation only inside its reviewed provider,
+recipient, message-class, topic, data-class, priority, expiry, and send-count
+envelope. Safety-related outbound, SOS, Phase 1 L0-L4 mutation, and secret
+material remain hard denied. Resident observers remain read-only and never own
+this sender path.
+
 ## Phase 9 Implemented MVP Architecture
 
 The current MVP establishes package boundaries, typed contracts,
@@ -76,10 +94,13 @@ Implemented services:
 - `scout.services.learning_store`: reviewable learning artifact persistence and
   approval flow.
 - `scout.services.permission_gate`: deterministic approval/deny decisions.
+- `scout.services.outbound_standing_grant`: deterministic standing-grant
+  evaluation for summarized, non-safety outbound intents.
 - `scout.services.application_router`: deterministic request-class routing
   before workflow compilation.
-- `scout.services.notification_gateway`: provider-based stdout/memory local
-  notification gateway plus dry-run-only external transport recording.
+- `scout.services.notification_gateway`: provider-based local, dry-run, and
+  explicitly configured external transports, including a standing-grant
+  wrapper that rechecks typed intents before transport invocation.
 - `scout.services.sandbox_runner`: generated package static checks and tempdir
   pytest verification with file-count and byte-size guards.
 
@@ -116,7 +137,8 @@ browser state by itself.
 This MVP does not implement:
 
 - OS-level or container-grade sandbox isolation;
-- live external notification transports;
+- automatic creation, renewal, or expansion of outbound standing grants;
+- default-on deployment of live external notification transports;
 - generated capability runtime code installation outside sandbox metadata;
 - payment automation;
 - unscoped destructive shell/browser automation;
