@@ -2324,6 +2324,8 @@ def _looks_like_major_point_question(text: str) -> bool:
         (
             "黑水塘",
             "mcp",
+            "bosspoint",
+            "boss點",
             "majorcritical",
             "namedpoint",
             "水源",

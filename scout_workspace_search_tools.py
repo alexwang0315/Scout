@@ -288,6 +288,19 @@ def search_project_major_points(
     resolved_kinds = {str(kind).lower() for kind in (point_kinds or []) if str(kind).strip()}
     terms = _query_terms(query)
     items, source_report = _major_point_items(root, project)
+    boss_source = next(
+        (
+            item
+            for item in source_report
+            if item.get("source_kind") == "boss_points"
+        ),
+        {},
+    )
+    boss_point_count = (
+        sum(1 for item in items if item["evidence_type"] == "boss_point")
+        if boss_source.get("status") == "loaded"
+        else None
+    )
 
     filtered: list[dict[str, Any]] = []
     for item in items:
@@ -335,6 +348,7 @@ def search_project_major_points(
             "named_point_count": sum(1 for item in items if item["evidence_type"] == "named_point"),
             "support_row_count": sum(1 for item in items if item["evidence_type"] == "major_point_cp_support"),
             "ocr_label_count": sum(1 for item in items if item["evidence_type"] == "ocr_label"),
+            "boss_point_count": boss_point_count,
         },
         "searched_point_count": len(items),
         "matched_point_count": len(filtered),
@@ -343,6 +357,7 @@ def search_project_major_points(
             results,
             query=query,
             point_kinds=resolved_kinds,
+            boss_point_count=boss_point_count,
         ),
         "results": results,
         "boundary": _closed_boundary(),
@@ -705,6 +720,7 @@ def _major_point_items(
             }
         )
 
+    items.extend(_load_boss_point_items(root, project, report))
     items.extend(_ocr_label_point_items(root, project, named_points, report))
     report.append(
         {
@@ -722,7 +738,18 @@ def _major_point_field_answer(
     *,
     query: str,
     point_kinds: set[str],
+    boss_point_count: int | None,
 ) -> str:
+    if _major_point_boss_query(query):
+        if boss_point_count is None:
+            return (
+                "缺少 boss_points workspace artifact，不能確認目前 boss point 數量。"
+                "這是 evidence gap，不可當成 0 個。"
+            )
+        return (
+            f"Boss Point 候選數量：目前有 {boss_point_count} 個 boss point。"
+            "這是 workspace 行前 candidate/review evidence，不是 runtime safety truth。"
+        )
     water_query = _major_point_water_query(query, point_kinds=point_kinds)
     if not results:
         if water_query:
@@ -769,6 +796,102 @@ def _major_point_water_query(query: str, *, point_kinds: set[str]) -> bool:
             "refillwater",
         )
     )
+
+
+def _major_point_boss_query(query: str) -> bool:
+    normalized = query.casefold().replace(" ", "")
+    return "bosspoint" in normalized or "boss點" in normalized
+
+
+def _load_boss_point_items(
+    root: Path,
+    project: dict[str, Any],
+    report: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    ref = str(project.get("boss_points_ref") or "outputs/boss_points.json")
+    source_path = _project_path(root, ref)
+    payload = _load_json_object(source_path)
+    points = payload.get("boss_points") if isinstance(payload, dict) else []
+    if not isinstance(points, list):
+        points = []
+    report.append(
+        {
+            "source_kind": "boss_points",
+            "status": (
+                "loaded"
+                if source_path.exists()
+                and isinstance(payload.get("boss_point_count"), int)
+                else "missing_or_empty"
+            ),
+            "source_path": ref,
+            "loaded_count": len(points),
+            "declared_count": payload.get("boss_point_count"),
+        }
+    )
+    items: list[dict[str, Any]] = []
+    for point in points:
+        if not isinstance(point, dict):
+            continue
+        boss_selection = (
+            point.get("boss_selection")
+            if isinstance(point.get("boss_selection"), dict)
+            else {}
+        )
+        challenge_fit = (
+            point.get("challenge_fit")
+            if isinstance(point.get("challenge_fit"), dict)
+            else {}
+        )
+        display_mileage = (
+            point.get("display_mileage")
+            if isinstance(point.get("display_mileage"), dict)
+            else {}
+        )
+        boss_id = str(point.get("boss_point_id") or "")
+        label = str(point.get("label") or point.get("map_label") or boss_id)
+        raw_classes = point.get("mcp_classes")
+        classes = [
+            "boss_point",
+            *(
+                [str(item) for item in raw_classes]
+                if isinstance(raw_classes, list)
+                else []
+            ),
+        ]
+        score = _optional_float(
+            boss_selection.get("score") or challenge_fit.get("score")
+        )
+        items.append(
+            {
+                "evidence_type": "boss_point",
+                "candidate_id": boss_id,
+                "label": label,
+                "point_classes": classes,
+                "lat": _optional_float(point.get("lat")),
+                "lon": _optional_float(point.get("lon")),
+                "distance_m": _optional_float(display_mileage.get("route_distance_m")),
+                "distance_km": _km(display_mileage.get("route_distance_m")),
+                "rank": point.get("rank"),
+                "score": score,
+                "candidate_only": bool(point.get("candidate_only", True)),
+                "runtime_safety_truth": False,
+                "source_path": ref,
+                "search_text": " ".join(
+                    str(part)
+                    for part in (
+                        "boss point",
+                        "boss點",
+                        boss_id,
+                        label,
+                        point.get("map_label"),
+                        display_mileage.get("label"),
+                        " ".join(str(item) for item in classes),
+                    )
+                    if part
+                ),
+            }
+        )
+    return items
 
 
 def _major_point_brief(item: dict[str, Any]) -> str:

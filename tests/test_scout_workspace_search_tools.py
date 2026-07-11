@@ -117,6 +117,82 @@ def test_major_point_search_finds_heishuitang_near_cp002() -> None:
     assert first["runtime_safety_truth"] is False
 
 
+def test_major_point_search_reports_workspace_boss_point_count(tmp_path: Path) -> None:
+    project_root = tmp_path / "boss-route"
+    (project_root / "outputs").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "boss-route",
+                "boss_points_ref": "outputs/boss_points.json",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "boss_points.json").write_text(
+        json.dumps(
+            {
+                "boss_point_count": 2,
+                "boss_points": [
+                    {
+                        "boss_point_id": "boss.001",
+                        "label": "高壓路段 1",
+                        "lat": 24.0,
+                        "lon": 121.0,
+                        "rank": 1,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                    {
+                        "boss_point_id": "boss.002",
+                        "label": "高壓路段 2",
+                        "lat": 24.1,
+                        "lon": 121.1,
+                        "rank": 2,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_major_points(
+        project_root,
+        query="目前有多少個 boss point？",
+        limit=5,
+    )
+
+    assert result["summaries"]["boss_point_count"] == 2
+    assert result["result_count"] == 2
+    assert result["results"][0]["evidence_type"] == "boss_point"
+    assert "2 個" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_major_point_search_does_not_treat_missing_boss_artifact_as_zero(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "boss-route-missing"
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": "boss-route-missing"}),
+        encoding="utf-8",
+    )
+
+    result = search_project_major_points(
+        project_root,
+        query="目前有多少個 boss point？",
+        limit=5,
+    )
+
+    assert result["summaries"]["boss_point_count"] is None
+    assert result["result_count"] == 0
+    assert "缺少" in result["field_answer"]
+    assert "0 個 boss point" not in result["field_answer"]
+
+
 def test_major_point_search_treats_water_refill_as_water_source_lookup() -> None:
     result = search_project_major_points(
         PROJECT_ROOT,
