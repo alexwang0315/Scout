@@ -5763,6 +5763,112 @@ def test_rescue_visibility_prefers_major_point_candidates_over_generic_map_ocr()
     assert "ocr.noise" not in response.answer
 
 
+def test_boss_point_count_question_uses_major_point_summary() -> None:
+    assert assistant_provider_module._looks_like_major_point_query(
+        "目前有多少個 boss point？"
+    )
+    response = assistant_provider_module.build_workspace_tool_fallback_response(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前有多少個 boss point？",
+        ),
+        sources=[
+            AssistantSourceRef(
+                source_id=MAJOR_POINT_TOOL_ID,
+                context_summary={
+                    "latest": {
+                        "status": "completed",
+                        "result_count": 5,
+                        "summaries": {"boss_point_count": 5},
+                        "results": [
+                            {
+                                "evidence_type": "boss_point",
+                                "candidate_id": "boss.001",
+                                "label": "高壓路段 1",
+                            }
+                        ],
+                    }
+                },
+            ),
+            AssistantSourceRef(
+                source_id=LIVE_NAVIGATION_STATE_TOOL_ID,
+                context_summary={
+                    "latest": {
+                        "status": "completed",
+                        "missing_fields": ["observed_at", "lat", "lon"],
+                    }
+                },
+            ),
+        ],
+        provider_error_type="LocalModelGroundingPrompt",
+    )
+
+    assert response is not None
+    assert "目前有 5 個 boss point" in response.answer
+    assert "candidate" in response.answer
+    assert response.boundary.read_only is True
+    assert response.boundary.safety_mutation_allowed is False
+
+    compact = assistant_provider_module._compact_grounded_answer_for_local_model(
+        response.answer,
+        question="目前有多少個 boss point？",
+    )
+    brief = assistant_provider_module._build_local_grounded_answer_brief(
+        compact,
+        question="目前有多少個 boss point？",
+        grounded_answer=response.answer,
+    )
+    assert "boss_point_count=5" in compact
+    assert brief.facts == ("目前有 5 個 boss point",)
+    assert brief.required_fact_groups == (("5 個 boss point",),)
+    assert assistant_provider_module._local_grounded_answer_brief_violations(
+        "目前未知。",
+        brief,
+    ) == ["缺少事實：5 個 boss point"]
+
+
+def test_boss_point_count_question_reports_missing_artifact_before_live_gaps() -> None:
+    response = assistant_provider_module.build_workspace_tool_fallback_response(
+        ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前有多少個 boss point？",
+        ),
+        sources=[
+            AssistantSourceRef(
+                source_id=MAJOR_POINT_TOOL_ID,
+                context_summary={
+                    "latest": {
+                        "status": "completed",
+                        "summaries": {"boss_point_count": None},
+                        "source_report": [
+                            {
+                                "source_kind": "boss_points",
+                                "status": "missing_or_empty",
+                            }
+                        ],
+                        "results": [],
+                    }
+                },
+            ),
+            AssistantSourceRef(
+                source_id=LIVE_NAVIGATION_STATE_TOOL_ID,
+                context_summary={
+                    "latest": {
+                        "status": "completed",
+                        "missing_fields": ["observed_at", "lat", "lon"],
+                    }
+                },
+            ),
+        ],
+        provider_error_type="LocalModelGroundingPrompt",
+    )
+
+    assert response is not None
+    assert "缺少 boss_points" in response.answer
+    assert "0 個 boss point" not in response.answer
+    assert "operational context" not in response.answer
+
+
 def test_lost_mode_model_answer_must_preserve_wait_and_no_downcut_guidance():
     grounded = (
         "survival incident playbook 工具顯示；decision=不建議繼續移動或下切找路；"
@@ -7527,7 +7633,7 @@ def test_hailo_facts_only_eval_uses_deterministic_sampling(monkeypatch):
     assert len(payload["messages"]) == 2
     assert payload["messages"][1]["role"] == "user"
     assert "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" not in payload["messages"][1]["content"]
-    assert "需複核候選" in payload["messages"][1]["content"]
+    assert "雨後風險" in payload["messages"][1]["content"]
     assert "判斷類型=" not in payload["messages"][1]["content"]
     assert "示範問題" not in payload["messages"][1]["content"]
     assert "示範 facts" not in payload["messages"][1]["content"]

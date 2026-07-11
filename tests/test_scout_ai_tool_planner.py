@@ -133,6 +133,17 @@ def test_planner_selects_major_points_for_named_place_cp_question() -> None:
     assert ROUTE_STRUCTURE_TOOL_ID not in _tool_ids(plan)
 
 
+def test_planner_selects_major_points_for_boss_point_count() -> None:
+    plan = plan_scout_ai_tools(
+        _query("目前有多少個 boss point？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, MAJOR_POINT_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert ROUTE_STRUCTURE_TOOL_ID not in _tool_ids(plan)
+
+
 def test_planner_routes_water_refill_to_major_point_and_resource_tools() -> None:
     plan = plan_scout_ai_tools(
         _query("哪裡可以補水？"),

@@ -3984,6 +3984,10 @@ def _build_missing_operational_context_fallback_response(
     normalized = str(query.question or "").casefold()
     if _looks_like_rescue_report_information_question(normalized):
         return None
+    if "boss" in normalized:
+        major_source = _first_tool_source_by_id(sources, MAJOR_POINT_TOOL_ID)
+        if major_source is not None:
+            return None
     if any(
         term in normalized
         for term in (
@@ -4411,6 +4415,17 @@ def _format_structured_workspace_fallback_answer(
         )
     if tool_id == MAJOR_POINT_TOOL_ID:
         normalized_question = str(query.question or "").casefold()
+        if "boss" in normalized_question:
+            boss_point_count = summaries.get("boss_point_count")
+            if boss_point_count is None:
+                return (
+                    "缺少 boss_points workspace artifact，不能確認目前 boss point 數量。"
+                    "這是 evidence gap，不可當成 0 個。"
+                )
+            return (
+                f"目前有 {boss_point_count} 個 boss point。"
+                "這是 workspace 行前 candidate/review evidence，不是 runtime safety truth。"
+            )
         if any(
             term in normalized_question
             for term in (
@@ -8037,6 +8052,17 @@ def _build_local_grounded_answer_brief(
             boundary="有低容錯地形候選；terrain score 只能標示行前複核候選，尚未確認為現場危險",
             forbidden_claims=("不得回答沒有低容錯地形",),
         )
+    if "boss" in normalized_question:
+        boss_point_count = value("boss_point_count")
+        if boss_point_count:
+            return LocalGroundedAnswerBrief(
+                decision="ANSWER",
+                subject="目前 boss point 數量",
+                facts=(f"目前有 {boss_point_count} 個 boss point",),
+                required_fact_groups=((f"{boss_point_count} 個 boss point",),),
+                boundary="這是 workspace 行前 candidate/review evidence",
+                forbidden_claims=("不得把 boss point 候選寫成即時危險",),
+            )
     if "answer_mode=missing_context" in compact:
         subject = value("missing_context_subject") or "本題"
         gaps = tuple(
@@ -10959,6 +10985,7 @@ def _compact_grounded_answer_for_local_model(
         ("named_point_count", r"named_point_count=([0-9]+)"),
         ("support_row_count", r"support_row_count=([0-9]+)"),
         ("ocr_label_count", r"ocr_label_count=([0-9]+)"),
+        ("boss_point_count", r"目前有\s*([0-9]+)\s*個\s*boss\s*point"),
     ):
         match = re.search(pattern, search_text)
         if match:
@@ -11357,6 +11384,9 @@ def _compact_hailo_raw_eval_prompt(prompt: str) -> str:
         brief = _strip_hailo_control_markers(prompt).strip()
 
     fields = [item.strip() for item in re.split(r"[；\n]", brief) if item.strip()]
+    answer_topic = next((item for item in fields if item.startswith("回答主題=")), "")
+    if not question and answer_topic:
+        question = _hailo_brief_field_value(answer_topic)
     missing = next((item for item in fields if "缺少" in item or "missing" in item), "")
     boundary = next(
         (
@@ -11371,6 +11401,7 @@ def _compact_hailo_raw_eval_prompt(prompt: str) -> str:
         for item in fields
         if item not in {missing, boundary}
         and "回答主題" not in item
+        and not item.startswith("判斷類型=")
         and "禁止推論" not in item
     ][:3]
 
@@ -11745,6 +11776,8 @@ def _looks_like_major_point_query(text: str) -> bool:
         fragment in lowered
         for fragment in (
             "mcp",
+            "boss point",
+            "boss點",
             "major critical",
             "named point",
             "黑水塘",
