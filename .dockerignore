@@ -36,6 +36,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !offline_map.py
 !offline_map_models.py
 !pdr_fallback.py
+!pydantic_ai_runtime_compat.py
 !phase46_live_replay_debug_projector.py
 !phase4_admin_runtime.py
 !phase1_incident_bridge.py
@@ -232,6 +233,9 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !skills/
 !skills/scout/
 !skills/scout/route-briefing-compose.yaml
+!src/
+!src/scout/
+!src/scout/**
 !tools/
 !tools/pi_grove_led_bar_smoke.py
 !tools/pi_oled_i2c_smoke.py

@@ -6,10 +6,10 @@ knowledge.
 
 ## Implementation Update 2026-06-30
 
-Scout AI now runs against Pydantic AI v2.4.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.8.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.4.0 for Pi admin/live
+- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.8.0 for Pi admin/live
   runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -24,12 +24,12 @@ tracks. Tool execution remains deterministic and read-only by default:
   supplies `openai:<model>`, Scout normalizes it to `openai-chat:<model>` to
   preserve the existing Chat-Completions-like Scout tool/output contract rather
   than silently switching to the OpenAI Responses API behavior.
-- Native WebSearch and WebFetch are disabled by default. An operator may enable
-  a trusted no-per-query-approval research mode with
-  `SCOUT_AI_OS_NATIVE_RESEARCH=1`, or individually with
-  `SCOUT_AI_OS_NATIVE_WEB_SEARCH=1` / `SCOUT_AI_OS_NATIVE_WEB_FETCH=1`.
-  Outputs remain candidate-only evidence and must not become runtime safety
-  truth, Phase 1 L0-L4 state, hardware control, or outbound transport.
+- Native WebSearch and WebFetch are enabled by default for external
+  provider-backed Scout AI calls. Scout AI is the full-capability entrypoint;
+  deterministic tools and provider-native research are supporting capability
+  layers. Operators may opt out for lab/CI with
+  `SCOUT_AI_OS_NATIVE_RESEARCH=0`, or constrain domains with the native
+  research domain env vars.
 - Provider-native MCP remains disabled until the matching Pydantic AI optional
   dependency and a Scout-owned connector boundary are added.
 - Environment secrets remain server-side. Tool artifacts, admin/debug payloads,

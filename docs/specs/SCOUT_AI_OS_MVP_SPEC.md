@@ -14,6 +14,16 @@ Scout AI OS is an adaptive workflow agent platform. Its purpose is to accept a u
 
 Scout must not be a pure chatbot. It must be a controlled automation system where the LLM plans and proposes, while deterministic runtime code validates, persists, executes, audits, and enforces permissions.
 
+### 1.0.1 First Deployment Assumption
+
+The first field deployment is remote-operated: only Scout AI accompanies the
+user as the mobile-facing interaction layer. The phone sends user requests,
+location/sensor summaries, photos or event metadata, and device status back to
+the server-room Scout stack. The main software, models, web research,
+workspace tools, computer-use/browser-use executors, databases, and hardware
+gateways run in the server room or trusted workstation environment. Users
+communicate with Scout software and hardware through Scout AI.
+
 ### 1.0 Current Implementation Snapshot
 
 This repository now implements Phase 0 through Phase 9 of the Scout AI OS MVP
@@ -25,7 +35,7 @@ architecture. The implemented core includes:
 - local notification gateway and runtime tick loop;
 - provider-backed agent facades with a local `FunctionModel` default;
 - model policy, timeout/cost SLA gateway, and external-model fallback handling;
-- Pydantic AI v2.4.0 compatibility helpers;
+- Pydantic AI v2.8.0 compatibility helpers;
 - generated capability sandbox verification;
 - FastAPI routes and focused API/runtime tests;
 - Scout AI read-only workspace tool workflow:
@@ -82,7 +92,7 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
-- Pydantic AI v2.4.0 model execution with explicit model policy, OpenRouter and
+- Pydantic AI v2.8.0 model execution with explicit model policy, OpenRouter and
   OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
@@ -103,7 +113,9 @@ Do **not** build these in the MVP:
 
 - Full mobile app.
 - Production background GPS runtime.
-- Heavy browser automation.
+- Unscoped destructive browser automation. Trusted server-room computer-use and
+  browser-use are first-class Scout AI capabilities when they run through the
+  reviewed executor path and record provenance.
 - Kubernetes deployment.
 - Full Temporal cluster.
 - Large vector database.
@@ -111,7 +123,8 @@ Do **not** build these in the MVP:
 - Payment automation.
 - External message sending without approval.
 - Production database modification tools.
-- Unrestricted shell execution.
+- Unscoped destructive shell execution outside the trusted server-room executor
+  capability.
 - Autonomous self-modification of Scout core code.
 
 ### 2.3 Future Extensions
@@ -289,8 +302,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai-slim[openai,openrouter] == 2.4.0
-pydantic-evals == 2.4.0
+pydantic-ai-slim[openai,openrouter] == 2.8.0
+pydantic-evals == 2.8.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -313,7 +326,7 @@ dbos
 mcp clients
 ```
 
-Pydantic AI v2.4.0 operating rules:
+Pydantic AI v2.8.0 operating rules:
 
 - Scout's package path uses `pydantic-ai-slim` with `openai` and `openrouter`
   extras for Pi compatibility.
@@ -329,12 +342,12 @@ Pydantic AI v2.4.0 operating rules:
   `OPENAI_API_KEY`. If an operator supplies `openai:<model>`, Scout normalizes
   it to `openai-chat:<model>` to avoid an implicit switch to the OpenAI
   Responses API behavior.
-- Native WebSearch and WebFetch are disabled by default. Operators may enable
-  trusted no-per-query-approval research mode with
-  `SCOUT_AI_OS_NATIVE_RESEARCH=1`, or individually with
-  `SCOUT_AI_OS_NATIVE_WEB_SEARCH=1` / `SCOUT_AI_OS_NATIVE_WEB_FETCH=1`.
-  Results remain candidate-only evidence and must not mutate runtime safety
-  truth, Phase 1 L0-L4 state, hardware controls, or outbound transports.
+- Native WebSearch and WebFetch are enabled by default for external
+  provider-backed Scout AI calls. Scout AI is the full-capability user entry;
+  tools, web research, local fallback, and deterministic runtime services are
+  support layers. Operators may opt out for lab/CI with
+  `SCOUT_AI_OS_NATIVE_RESEARCH=0`, or constrain domains with the native
+  research domain env vars.
 - Provider-native MCP remains disabled until a separate Scout
   connector/capability and the required Pydantic AI optional dependency are
   reviewed and explicitly enabled.
@@ -753,9 +766,9 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Pydantic AI v2.4.0 Provider Policy
+### 7.6 Pydantic AI v2.8.0 Provider Policy
 
-Scout AI OS uses Pydantic AI v2.4.0 as a typed provider facade, not as an
+Scout AI OS uses Pydantic AI v2.8.0 as a typed provider facade, not as an
 unbounded autonomous runtime.
 
 Provider modes:
@@ -781,9 +794,9 @@ Required provider behavior:
   provider health, fallback, and telemetry;
 - local fallback is allowed for read-only interpretation only;
 - `end_strategy="early"` is required for typed Scout `Agent` calls;
-- native WebSearch and WebFetch remain disabled by default, but
-  `SCOUT_AI_OS_NATIVE_RESEARCH=1` enables trusted no-per-query-approval
-  candidate-only research;
+- native WebSearch and WebFetch are enabled by default for external
+  provider-backed Scout AI calls; `SCOUT_AI_OS_NATIVE_RESEARCH=0` is only a
+  lab/CI opt-out;
 - provider-native MCP remains disabled until a reviewed Scout connector
   explicitly enables it.
 

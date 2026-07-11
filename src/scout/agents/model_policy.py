@@ -255,7 +255,7 @@ def _normalize_fallback_model(value: str | None) -> str:
 
 
 def _native_research_policy(env: dict[str, str]) -> dict[str, Any]:
-    all_enabled = _bool_env(env, NATIVE_RESEARCH_ENV, default=False)
+    all_enabled = _bool_env(env, NATIVE_RESEARCH_ENV, default=True)
     search_enabled = all_enabled or _bool_env(env, NATIVE_WEB_SEARCH_ENV, default=False)
     fetch_enabled = all_enabled or _bool_env(env, NATIVE_WEB_FETCH_ENV, default=False)
     enabled = search_enabled or fetch_enabled
