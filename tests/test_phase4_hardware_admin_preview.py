@@ -512,9 +512,9 @@ def test_phase4_admin_runtime_pretrip_general_question_uses_tool_plan_fallback(
     assert response.status_code == 200
     payload = response.json()
     assert payload["observability"]["safe_failure"] is True
-    assert payload["answer"].startswith("Scout AI risk score tool fallback")
-    assert "大崩塌" in payload["answer"]
-    assert "runtime safety truth" in payload["answer"]
+    assert "Scout AI model answer unavailable" in payload["answer"]
+    assert "最高候選風險點" in payload["evidence_backed_answer"]
+    assert "score=" in payload["evidence_backed_answer"]
     assert any(
         limitation == f"resolved_by={RISK_SCORE_TOOL_ID}"
         for limitation in payload["limitations"]
@@ -928,6 +928,11 @@ def test_phase4_admin_dockerfile_runs_admin_app_not_field_runtime() -> None:
     assert "scout_cli.py" in source
     assert "scout_agent_cli.py" in source
     assert "scout_agent_runtime.py" in source
+    assert "tools/pi_wio_e5_lorawan_uplink_trial_plan.py" in source
+    assert "tools/pi_wio_e5_lorawan_rf_trial.py" in source
+    assert "tools/pi_wio_e5_chirpstack_join_audit.py" in source
+    assert "tools/pi_wio_e5_chirpstack_as9232_profile_provision.py" in source
+    assert "tools/pi_wio_e5_chirpstack_key_sync.py" in source
     assert 'CMD ["python", "-m", "uvicorn", "phase4_admin_runtime:app"' in source
     assert "scout_pi_runtime:app" not in source
     assert "COPY *.py" not in source
@@ -986,6 +991,15 @@ def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets()
     assert "!scout_agent_cli.py" in dockerignore
     assert "!scout_agent_runtime.py" in dockerignore
     assert "!scout_hardware_readiness_live_probe.py" in dockerignore
+    assert "!scout_sx1303_gateway_observer.py" in dockerignore
+    assert "!tools/pi_sx1303_gateway_smoke.py" in dockerignore
+    assert "!tools/pi_sx1303_gateway_rx_smoke.py" in dockerignore
+    assert "!tools/pi_sx1303_gateway_uplink_mqtt_tail.py" in dockerignore
+    assert "!tools/pi_wio_e5_lorawan_uplink_trial_plan.py" in dockerignore
+    assert "!tools/pi_wio_e5_lorawan_rf_trial.py" in dockerignore
+    assert "!tools/pi_wio_e5_chirpstack_join_audit.py" in dockerignore
+    assert "!tools/pi_wio_e5_chirpstack_as9232_profile_provision.py" in dockerignore
+    assert "!tools/pi_wio_e5_chirpstack_key_sync.py" in dockerignore
     assert "!admin_api.py" in dockerignore
     assert "!docs/admin/phase-3-5-runtime-debug.html" in dockerignore
     assert "!docs/admin/phase-3-6-hardware-readiness.html" in dockerignore

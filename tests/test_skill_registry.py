@@ -25,9 +25,11 @@ class SkillRegistryTests(unittest.TestCase):
                 "cwa-environment-assess",
                 "decision-options",
                 "device-capability-check",
+                "field-state-short-answer",
                 "gee-environment-assess",
                 "ins-dr-wearable-route-constrained",
                 "latest-team-position-check",
+                "local-grounded-short-answer",
                 "pretrip-import-preparation",
                 "remote-status-json",
                 "route-briefing-compose",
@@ -38,6 +40,28 @@ class SkillRegistryTests(unittest.TestCase):
             ],
         )
         self.assertTrue(all(manifest.status == "experimental" for manifest in registry))
+        field_answer = registry.get("field-state-short-answer")
+        self.assertIsNotNone(field_answer.answer_contract)
+        assert field_answer.answer_contract is not None
+        self.assertEqual(field_answer.answer_contract.language, "zh-Hant")
+        self.assertEqual(field_answer.answer_contract.max_sentences, 2)
+        self.assertIn(
+            "PAUSE_AND_CHECK",
+            field_answer.answer_contract.action_guidance,
+        )
+        self.assertEqual(len(field_answer.answer_contract.examples), 2)
+        self.assertTrue(
+            any(
+                "沒抵達約定山屋" in topic.triggers
+                for topic in field_answer.answer_contract.topic_guidance
+            )
+        )
+        self.assertTrue(
+            any(
+                "最後一句" in rule
+                for rule in field_answer.answer_contract.style_rules
+            )
+        )
         self.assertEqual(
             registry.get("remote-status-json").preflight.required_skill_ids,
             [

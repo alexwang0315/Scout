@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from scout_workspace_search_tools import (
@@ -36,6 +37,42 @@ def test_workspace_catalog_search_lists_local_artifact_families() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_workspace_catalog_search_includes_preparation_metadata_files(tmp_path: Path) -> None:
+    workspace = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    for rel in (
+        "outputs/layers/layer_preparation_summary.json",
+        "outputs/layers/map_preparation_summary.json",
+        "outputs/scout_ai/pretrip_import_preparation_run_result.json",
+    ):
+        path = workspace / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "artifact_kind": Path(rel).stem,
+                    "status": "completed",
+                    "generated_at": "2026-07-08T00:00:00Z",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    result = search_project_workspace_catalog(
+        workspace,
+        query="已完成 outputs 與仍缺的 preparation metadata",
+        limit=8,
+    )
+
+    assert result["tool_id"] == WORKSPACE_CATALOG_TOOL_ID
+    assert result["summaries"]["preparation_metadata_count"] >= 10
+    assert result["summaries"]["existing_preparation_metadata_count"] >= 3
+    paths = {item["source_path"] for item in result["results"]}
+    assert "outputs/layers/layer_preparation_summary.json" in paths
+    assert "outputs/layers/map_preparation_summary.json" in paths
+    assert any(item["evidence_type"] == "workspace_preparation_metadata" for item in result["results"])
+
+
 def test_route_structure_search_answers_cp_count_and_lookup() -> None:
     count_result = search_project_route_structure(
         PROJECT_ROOT,
@@ -51,6 +88,12 @@ def test_route_structure_search_answers_cp_count_and_lookup() -> None:
     assert count_result["tool_id"] == ROUTE_STRUCTURE_TOOL_ID
     assert count_result["summaries"]["checkpoint_count"] == 124
     assert count_result["summaries"]["segment_count"] == 123
+    assert count_result["summaries"]["expected_segment_count_from_checkpoints"] == 123
+    assert count_result["summaries"]["segment_count_matches_checkpoint_chain"] is True
+    assert count_result["summaries"]["segment_count_delta_from_expected"] == 0
+    assert count_result["summaries"]["segment_missing_distance_count"] == 0
+    assert "segment_missing_display_geometry_count" in count_result["summaries"]
+    assert "checkpoint_duplicate_label_group_count" in count_result["summaries"]
     assert count_result["route_summary"]["distance_km"] == 55.175
     assert any(item["candidate_id"] == "cp.002" for item in cp_result["results"])
     assert cp_result["boundary"]["phase1_safety_mutation_allowed"] is False
@@ -89,6 +132,35 @@ def test_major_point_search_treats_water_refill_as_water_source_lookup() -> None
     assert result["field_answer"].startswith("候選補水/水源點：黑水塘")
     assert "不是現場取水" in result["field_answer"]
     assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_major_point_search_prioritizes_exact_named_anchor_over_alias_match() -> None:
+    result = search_project_major_points(
+        PROJECT_ROOT,
+        query="雲海保線所 route anchor",
+        limit=5,
+    )
+
+    assert result["tool_id"] == MAJOR_POINT_TOOL_ID
+    first = result["results"][0]
+    assert first["candidate_id"] == "np.yunhai_station"
+    assert first["label"] == "雲海保線所"
+    assert result["results"][1]["candidate_id"] == "ocr.yunhai_station.001"
+    assert result["results"][2]["candidate_id"] == "mcp.heishuitang.002"
+    assert result["field_answer"].startswith("候選重要點：雲海保線所")
+
+
+def test_major_point_kind_filter_supports_rescue_visibility_candidates() -> None:
+    result = search_project_major_points(
+        PROJECT_ROOT,
+        query="哪裡比較容易被看見？",
+        point_kinds=["viewpoint_trailhead_pass", "mobile_reception"],
+        limit=5,
+    )
+
+    labels = {item["label"] for item in result["results"]}
+    assert "稜線啞口觀景點" in labels
+    assert "稜線通訊點" in labels
 
 
 def test_evidence_fulltext_wraps_local_evidence_index() -> None:

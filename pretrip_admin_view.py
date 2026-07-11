@@ -7956,10 +7956,28 @@ def _risk_delta_bucket(
 
 
 def _geojson_line_coordinates(geometry: dict[str, Any]) -> list[dict[str, float]]:
-    return [
-        {"lon": float(lon), "lat": float(lat)}
-        for lon, lat, *_ in geometry.get("coordinates", [])
-    ]
+    coordinates: list[dict[str, float]] = []
+    for lon, lat in _geojson_lon_lat_pairs(geometry.get("coordinates", [])):
+        try:
+            coordinates.append({"lon": float(lon), "lat": float(lat)})
+        except (TypeError, ValueError):
+            continue
+    return coordinates
+
+
+def _geojson_lon_lat_pairs(value: Any) -> list[tuple[Any, Any]]:
+    if not isinstance(value, list):
+        return []
+    if len(value) >= 2 and _geojson_scalar(value[0]) and _geojson_scalar(value[1]):
+        return [(value[0], value[1])]
+    pairs: list[tuple[Any, Any]] = []
+    for item in value:
+        pairs.extend(_geojson_lon_lat_pairs(item))
+    return pairs
+
+
+def _geojson_scalar(value: Any) -> bool:
+    return isinstance(value, (int, float, str)) and not isinstance(value, bool)
 
 
 def _geojson_line_coordinate_segments(

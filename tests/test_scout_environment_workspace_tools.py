@@ -27,6 +27,7 @@ def test_cwa_environment_tool_reads_workspace_artifacts_without_network() -> Non
     payload = assess_scout_cwa_environment(
         PROJECT_ROOT,
         query="CWA QPF corridor summary?",
+        reference_time="2026-06-24T06:00:00Z",
         limit=4,
     )
 
@@ -44,6 +45,20 @@ def test_cwa_environment_tool_reads_workspace_artifacts_without_network() -> Non
     assert "F-C0041-001" in payload["cwa_summary"]["datasets"]
     assert "QPF max=32.0mm" in payload["field_answer"]
     assert payload["boundary"]["live_safety_api_calls_allowed"] is False
+
+
+def test_cwa_environment_tool_marks_old_workspace_evidence_partial() -> None:
+    payload = assess_scout_cwa_environment(
+        PROJECT_ROOT,
+        query="目前 CWA QPF 還有效嗎？",
+        reference_time="2026-07-11T00:00:00Z",
+        limit=4,
+    )
+
+    assert payload["answerability"] == "cwa_environment_partial"
+    assert "fresh_cwa_environment_evidence" in payload["missing_fields"]
+    assert payload["decision"] == "DELAY"
+    assert any("age_hours=" in warning for warning in payload["warnings"])
 
 
 def test_gee_environment_tool_reads_workspace_artifacts_without_gee_init() -> None:

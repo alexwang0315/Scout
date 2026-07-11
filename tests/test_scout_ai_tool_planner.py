@@ -30,7 +30,11 @@ from scout_ai_tool_planner import (
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
-from scout_workspace_search_tools import MAJOR_POINT_TOOL_ID, ROUTE_STRUCTURE_TOOL_ID
+from scout_workspace_search_tools import (
+    MAJOR_POINT_TOOL_ID,
+    ROUTE_STRUCTURE_TOOL_ID,
+    WORKSPACE_CATALOG_TOOL_ID,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +55,69 @@ def test_planner_selects_route_structure_for_cp_count_question() -> None:
     assert item.request is not None
     assert item.request["tool_id"] == ROUTE_STRUCTURE_TOOL_ID
     assert plan.boundary.runtime_safety_truth is False
+
+
+def test_planner_selects_workspace_catalog_for_outputs_preparation_metadata_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("請列出已完成 outputs 與仍缺的 preparation metadata。"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, WORKSPACE_CATALOG_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.implementation_status == "ready_current_tool"
+    assert item.missing_fields == []
+    assert item.request is not None
+    assert item.request["tool_id"] == WORKSPACE_CATALOG_TOOL_ID
+
+
+def test_planner_treats_departure_bundle_as_workspace_inventory() -> None:
+    plan = plan_scout_ai_tools(
+        _query("departure bundle 相關檔案是否存在，和 project.json refs 是否對得上？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WORKSPACE_CATALOG_TOOL_ID in tool_ids
+    assert SAFETY_BOUNDARY_TOOL_ID not in tool_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID not in tool_ids
+    assert NAVIGATION_TERRAIN_TOOL_ID not in tool_ids
+
+
+def test_planner_treats_candidate_review_runtime_handoff_as_workspace_inventory() -> None:
+    plan = plan_scout_ai_tools(
+        _query("候選資料、review 資料、runtime handoff 資料分別在哪些區塊？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WORKSPACE_CATALOG_TOOL_ID in tool_ids
+    assert SAFETY_BOUNDARY_TOOL_ID not in tool_ids
+    assert REVIEW_GAP_TOOL_ID not in tool_ids
+
+
+def test_planner_treats_offline_map_outputs_as_inventory_not_readiness() -> None:
+    plan = plan_scout_ai_tools(
+        _query("離線地圖、tile cache、raster OCR 相關輸出有哪些？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WORKSPACE_CATALOG_TOOL_ID in tool_ids
+    assert MAP_PERCEPTION_TOOL_ID in tool_ids
+    assert NAVIGATION_TERRAIN_TOOL_ID not in tool_ids
+    assert EQUIPMENT_RESOURCE_TOOL_ID not in tool_ids
+
+
+def test_planner_does_not_route_named_place_anchor_to_ins_dr() -> None:
+    plan = plan_scout_ai_tools(
+        _query("「雲海保線所附近」應先解析到哪個 route anchor？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert MAJOR_POINT_TOOL_ID in tool_ids
+    assert INS_DR_TRACE_TOOL_ID not in tool_ids
 
 
 def test_planner_selects_major_points_for_named_place_cp_question() -> None:
@@ -133,6 +200,163 @@ def test_planner_routes_forward_high_risk_segment_to_risk_sentinel() -> None:
     assert risk.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
     assert risk.request is not None
     assert risk.request["query"] == "前方是否有高風險路段？"
+
+
+def test_planner_routes_deictic_terrain_questions_to_live_navigation() -> None:
+    questions = (
+        "前方是不是稜線轉折點？",
+        "我是不是快接近崩壁或碎石坡？",
+        "這裡看起來安全，但實際坡度危險嗎？",
+        "這段是不是滑墜後沒有停止點？",
+        "這條乾溝可以走嗎？",
+        "這個景觀點適合停下拍照嗎？",
+        "這裡是官方路線還是人走出來的路跡？",
+        "歷史 GPX 這裡的軌跡分散嗎？",
+        "這段容許路徑寬度應該抓多少？",
+    )
+
+    for question in questions:
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        assert LIVE_NAVIGATION_STATE_TOOL_ID in _tool_ids(plan), question
+
+
+def test_planner_routes_dry_gully_question_to_risk_and_terrain_tools() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這條乾溝可以走嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert LIVE_NAVIGATION_STATE_TOOL_ID in tool_ids
+    assert RISK_SCORE_TOOL_ID in tool_ids
+    assert TERRAIN_SCORE_TOOL_ID in tool_ids
+
+
+def test_planner_routes_field_navigation_questions_to_live_state() -> None:
+    questions = (
+        "我現在是不是偏離路線？",
+        "GPS 誤差會不會太大，不能相信？",
+        "IMU/PDR 推估跟 GPS 是否一致？",
+        "我現在的方向是不是正在遠離主線？",
+        "我是不是錯過轉彎點？",
+        "我該回到上一個確定點嗎？",
+        "我還能修正回主線嗎？",
+        "我現在繼續下切是否危險？",
+        "這個偏離是正常 GPS drift 還是真的走錯？",
+        "是否需要啟動精確導航模式？",
+    )
+
+    for question in questions:
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        assert LIVE_NAVIGATION_STATE_TOOL_ID in _tool_ids(plan), question
+
+    retreat_plan = plan_scout_ai_tools(
+        _query("我該回到上一個確定點嗎？"),
+        project_root=PROJECT_ROOT,
+    )
+    assert ROUTE_ARCHITECTURE_TOOL_ID in _tool_ids(retreat_plan)
+
+    descent_plan = plan_scout_ai_tools(
+        _query("我現在繼續下切是否危險？"),
+        project_root=PROJECT_ROOT,
+    )
+    assert TERRAIN_SCORE_TOOL_ID in _tool_ids(descent_plan)
+
+
+def test_planner_routes_field_weather_risk_questions_to_required_domains() -> None:
+    expected_tools = {
+        "白牆下這段還適合走嗎？": {
+            WEATHER_WINDOW_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+        },
+        "現在風雨是否會放大失溫風險？": {
+            WEATHER_WINDOW_TOOL_ID,
+            ENERGY_VITALS_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+        },
+        "日落前我還能到下一個安全點嗎？": {
+            WEATHER_WINDOW_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+        "這段如果起霧會不會容易失向？": {
+            WEATHER_WINDOW_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+        },
+        "溪水暴漲會不會阻斷路線？": {
+            WEATHER_WINDOW_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            RISK_SCORE_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+        "這段下雨後會變成落石區嗎？": {
+            WEATHER_WINDOW_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            RISK_SCORE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+        },
+        "現在停下來會不會變冷太快？": {
+            WEATHER_WINDOW_TOOL_ID,
+            ENERGY_VITALS_TOOL_ID,
+        },
+        "風寒和濕衣是否已經構成風險？": {
+            WEATHER_WINDOW_TOOL_ID,
+            ENERGY_VITALS_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+        },
+        "我是不是該提前撤退？": {
+            WEATHER_WINDOW_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            ENERGY_VITALS_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+    }
+
+    for question, expected in expected_tools.items():
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        assert expected <= _tool_ids(plan), question
+
+
+def test_planner_routes_body_resource_questions_to_required_domains() -> None:
+    expected_tools = {
+        "我的速度下降是不是異常？": {ENERGY_VITALS_TOOL_ID},
+        "我現在是不是太累不適合繼續下坡？": {
+            ENERGY_VITALS_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+        },
+        "心率偏高代表需要休息嗎？": {ENERGY_VITALS_TOOL_ID},
+        "我是不是正在決策品質下降？": {ENERGY_VITALS_TOOL_ID},
+        "我今天補水不足嗎？": {
+            ENERGY_VITALS_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+        },
+        "我補給吃得夠嗎？": {
+            ENERGY_VITALS_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+        },
+        "我是不是有高海拔不適風險？": {
+            ENERGY_VITALS_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+        },
+        "我該做高山症自評嗎？": {ENERGY_VITALS_TOOL_ID},
+        "我現在適合繼續上升嗎？": {
+            ENERGY_VITALS_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+        "我是不是該原地休息或下撤？": {
+            ENERGY_VITALS_TOOL_ID,
+            LIVE_NAVIGATION_STATE_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+    }
+
+    for question, expected in expected_tools.items():
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        assert expected <= _tool_ids(plan), question
 
 
 def test_planner_selects_weather_ready_tool_for_weather_questions() -> None:
@@ -1400,6 +1624,33 @@ def test_planner_selects_equipment_resource_for_device_and_water_question() -> N
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_equipment_resource_for_power_saving_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("我現在是否該關閉耗電功能？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, EQUIPMENT_RESOURCE_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+
+
+def test_planner_selects_map_perception_for_rescue_visibility_question() -> None:
+    plan = plan_scout_ai_tools(
+        _query("哪裡比較容易被看見？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, MAP_PERCEPTION_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    major = _single_tool(plan, MAJOR_POINT_TOOL_ID)
+    assert major.request is not None
+    assert major.request["arguments"] == {
+        "point_kinds": ["viewpoint_trailhead_pass", "mobile_reception"]
+    }
+
+
 def test_planner_routes_dead_phone_watch_battery_to_equipment_resource() -> None:
     plan = plan_scout_ai_tools(
         _query("如果手機沒電但手錶還有電，可以繼續嗎？"),
@@ -1471,6 +1722,30 @@ def test_planner_routes_rear_group_lost_contact_to_team_status_not_pace() -> Non
         "last_heard_minutes": 50.0,
     }
     assert item.boundary.runtime_safety_truth is False
+
+
+def test_planner_routes_q51_q60_team_intent_family() -> None:
+    questions = (
+        "隊友距離我太遠了嗎？",
+        "後隊是不是停止移動太久？",
+        "我們是否已經形成隊伍分離事件？",
+        "有人沒抵達約定山屋，該怎麼辦？",
+        "是否要通知留守人？",
+        "我的定時回報是不是逾時了？",
+        "最後一次有效位置是哪裡？",
+        "隊伍目前誰最需要協助？",
+        "我們應該集合還是各自下撤？",
+        "留守人需要哪些資訊才能報案？",
+    )
+
+    for question in questions:
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        assert TEAM_STATUS_TOOL_ID in _tool_ids(plan), question
+    report_plan = plan_scout_ai_tools(
+        _query("留守人需要哪些資訊才能報案？"),
+        project_root=PROJECT_ROOT,
+    )
+    assert SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID in _tool_ids(report_plan)
 
 
 def test_planner_selects_post_trip_review_for_after_action_question() -> None:
@@ -1961,6 +2236,141 @@ def test_planner_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
     assert GEE_ENVIRONMENT_TOOL_ID in tool_ids
     assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
     assert len(tool_ids) == 9
+
+
+def test_planner_routes_field_group_one_questions_to_specific_tools() -> None:
+    cases = {
+        "這條路線今天適合我目前的腳程嗎？": {
+            ROUTE_READINESS_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+        },
+        "我這個行程是不是排太滿了？": {
+            ROUTE_READINESS_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+        "哪些 CP 點一定要在幾點前通過？": {
+            ROUTE_STRUCTURE_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+        },
+        "如果我第一天晚到 2 小時，應該撤退還是繼續？": {
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            CWA_ENVIRONMENT_TOOL_ID,
+        },
+        "這條路線哪一段最容易摸黑？": {
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            CWA_ENVIRONMENT_TOOL_ID,
+        },
+        "哪些山屋或營地可以作為撤退點？": {
+            MAJOR_POINT_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+        "這條路線有沒有低容錯地形？": {
+            RISK_SCORE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+        "哪些地方需要特別確認轉折？": {
+            ROUTE_STRUCTURE_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+        "哪些景觀點靠近崩壁或碎石坡？": {
+            ROUTE_CONTEXT_TOOL_ID,
+            RISK_SCORE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+        },
+        "我今天的水量和食物夠不夠撐到下一個安全點？": {
+            ENERGY_VITALS_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+        },
+        "我今天的配速有足夠 buffer 嗎？": {
+            ENERGY_VITALS_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+        },
+        "這趟行程最容易出事的 CP 在哪裡？": {RISK_SCORE_TOOL_ID},
+        "哪些地方一定要設 checkpoint？": {
+            ROUTE_STRUCTURE_TOOL_ID,
+            RISK_SCORE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+            ROUTE_ARCHITECTURE_TOOL_ID,
+        },
+        "哪些路段不適合摸黑走？": {
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            CWA_ENVIRONMENT_TOOL_ID,
+        },
+        "哪些地方要避免停留拍照？": {
+            RISK_SCORE_TOOL_ID,
+            TERRAIN_SCORE_TOOL_ID,
+            MAP_PERCEPTION_TOOL_ID,
+        },
+        "如果我晚出發一小時，是否還能安全完成？": {
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            WEATHER_WINDOW_TOOL_ID,
+            CWA_ENVIRONMENT_TOOL_ID,
+            PACE_GUARDIAN_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+        },
+        "我需要準備多少水和補給？": {
+            ENERGY_VITALS_TOOL_ID,
+            EQUIPMENT_RESOURCE_TOOL_ID,
+        },
+    }
+
+    for question, expected in cases.items():
+        plan = plan_scout_ai_tools(
+            _query(question),
+            project_root=PROJECT_ROOT,
+            limit=8,
+        )
+        assert expected.issubset(_tool_ids(plan)), question
+
+    photo_plan = plan_scout_ai_tools(
+        _query("哪些地方要避免停留拍照？"),
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+    photo_tool_ids = _tool_ids(photo_plan)
+    assert CONTEXTUAL_PERMISSION_TOOL_ID not in photo_tool_ids
+    assert LIVE_NAVIGATION_STATE_TOOL_ID not in photo_tool_ids
+    assert PACE_GUARDIAN_TOOL_ID not in photo_tool_ids
+
+
+def test_planner_routes_field_group_two_turnpoint_to_route_structure() -> None:
+    plan = plan_scout_ai_tools(
+        _query("前方是不是稜線轉折點？"),
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert ROUTE_STRUCTURE_TOOL_ID in tool_ids
+    assert TERRAIN_SCORE_TOOL_ID in tool_ids
+
+
+def test_planner_routes_slip_runout_questions_to_terrain_tools() -> None:
+    plan = plan_scout_ai_tools(
+        _query("這段是不是滑墜後沒有停止點？"),
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert RISK_SCORE_TOOL_ID in tool_ids
+    assert TERRAIN_SCORE_TOOL_ID in tool_ids
+    assert NAVIGATION_TERRAIN_TOOL_ID in tool_ids
+
+    terrain = _single_tool(plan, TERRAIN_SCORE_TOOL_ID)
+    assert terrain.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert terrain.request is not None
+    assert terrain.request["query"] == "這段是不是滑墜後沒有停止點？"
 
 
 def _query(question: str) -> ScoutAssistantQuery:

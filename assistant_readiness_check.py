@@ -94,6 +94,9 @@ MILESTONE_10_2_FAILOVER_CONTRACT_TOKENS = (
     "local_model_name",
     "no local model listener is started by readiness checks",
     "never let local AI directly change L0-L4 safety state",
+    "AI HAT+ 2 / Hailo Ollama fallback",
+    "raspberry_pi_ai_hat_plus_2_hailo10h",
+    "hailo_ollama",
 )
 
 MILESTONE_10_2_FAILOVER_HARDENING_TOKENS: dict[str, tuple[str, ...]] = {
@@ -138,6 +141,11 @@ MILESTONE_10_2_PI_PROFILE_STATUS_TOKENS: dict[str, tuple[str, ...]] = {
         "runtime_profile",
         "local_fallback_mode",
         "pi_field_manual_opt_in",
+        "pi_field_ai_hat_plus_2_manual_opt_in",
+        "ai_hat_plus_2_fallback_enabled",
+        "ai_hat_plus_2_readiness_required",
+        "local_hardware_accelerator",
+        "local_model_backend",
         "configured_not_pi_field",
         "manual_verification_required",
         "readiness_starts_local_model",
@@ -146,8 +154,12 @@ MILESTONE_10_2_PI_PROFILE_STATUS_TOKENS: dict[str, tuple[str, ...]] = {
     ),
     "docs/specs/scout-cross-surface-ai-assistant.md": (
         "Milestone 10.2 Slice 3: Pi Field Profile Status + Manual Failover Runbook",
+        "Milestone 10.2 Slice 15: AI HAT+ 2 / Hailo Ollama Local Fallback",
         "SCOUT_RUNTIME_PROFILE=pi-field",
         "manual Pi/Ollama verification",
+        "manual Pi/AI HAT+ 2 verification",
+        "raspberry_pi_ai_hat_plus_2_hailo10h",
+        "hailo_ollama",
         "not part of the assistant readiness gate",
         "readiness_starts_local_model=false",
         "local_model_listener_required_for_readiness=false",
@@ -155,8 +167,12 @@ MILESTONE_10_2_PI_PROFILE_STATUS_TOKENS: dict[str, tuple[str, ...]] = {
     ),
     "docs/admin/cross-surface-ai-assistant-runbook.md": (
         "Milestone 10.2 Slice 3",
+        "Milestone 10.2 Slice 15",
         "SCOUT_RUNTIME_PROFILE=pi-field",
         "manual Pi/Ollama verification",
+        "manual Pi/AI HAT+ 2 verification",
+        "raspberry_pi_ai_hat_plus_2_hailo10h",
+        "hailo_ollama",
         "curl --max-time",
         "readiness_starts_local_model=false",
         "local_model_listener_required_for_readiness=false",
@@ -183,6 +199,13 @@ ASSISTANT_FOUNDATION_FORBIDDEN_TOKENS = (
     "@router.put",
     "@router.patch",
     "@router.delete",
+)
+
+ASSISTANT_PROVIDER_ALLOWED_NETWORK_TOKENS = (
+    "requests",
+    "httpx",
+    "urllib",
+    "socket",
 )
 
 SERVER_OPT_IN_MOUNT_TOKENS = (
@@ -508,9 +531,16 @@ def _check_assistant_foundation_static_boundaries(root: Path) -> dict[str, Any]:
             continue
         scanned_paths.append(relative_path)
         source = path.read_text(encoding="utf-8")
+        forbidden_tokens = ASSISTANT_FOUNDATION_FORBIDDEN_TOKENS
+        if relative_path == "assistant_pydantic_provider.py":
+            forbidden_tokens = tuple(
+                token
+                for token in forbidden_tokens
+                if token not in ASSISTANT_PROVIDER_ALLOWED_NETWORK_TOKENS
+            )
         missing.extend(
             f"assistant_foundation_forbidden_token:{relative_path}:{token}"
-            for token in ASSISTANT_FOUNDATION_FORBIDDEN_TOKENS
+            for token in forbidden_tokens
             if token in source
         )
 

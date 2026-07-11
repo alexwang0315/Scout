@@ -133,6 +133,40 @@ class ApplicationRoutingPolicy(StrictModel):
         return self
 
 
+class SkillAnswerExample(StrictModel):
+    question: str
+    facts: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    boundary: str = ""
+    action_token: str
+    answer: str
+
+
+class SkillAnswerTopicGuidance(StrictModel):
+    triggers: list[str] = Field(min_length=1)
+    guidance: list[str] = Field(min_length=1)
+
+
+class SkillPromptContract(StrictModel):
+    mode: Literal["facts_only"]
+    precomposed_answer_allowed: bool = False
+    deterministic_answer_template_allowed: bool = False
+    same_model_self_review_allowed: bool = True
+    self_review_must_not_receive_reference_answer: bool = True
+
+
+class SkillAnswerContract(StrictModel):
+    language: str = "zh-Hant"
+    max_sentences: int = Field(default=2, ge=1, le=4)
+    prompt_contract: SkillPromptContract | None = None
+    evidence_checklist: list[str] = Field(default_factory=list)
+    missing_evidence_rules: list[str] = Field(default_factory=list)
+    style_rules: list[str] = Field(default_factory=list)
+    action_guidance: dict[str, str] = Field(default_factory=dict)
+    topic_guidance: list[SkillAnswerTopicGuidance] = Field(default_factory=list)
+    examples: list[SkillAnswerExample] = Field(default_factory=list)
+
+
 class SkillManifest(StrictModel):
     id: str
     version: str
@@ -151,6 +185,7 @@ class SkillManifest(StrictModel):
     control_surface: ControlSurface
     audit: AuditSettings
     application_routing: ApplicationRoutingPolicy | None = None
+    answer_contract: SkillAnswerContract | None = None
 
     @model_validator(mode="after")
     def validate_write_boundaries(self) -> SkillManifest:

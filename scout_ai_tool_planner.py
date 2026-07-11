@@ -103,6 +103,9 @@ def plan_scout_ai_tools(
         normalized_question,
     )
     route_context_question = _looks_like_route_context_question(normalized_question)
+    workspace_inventory_question = looks_like_workspace_inventory_question(
+        normalized_question,
+    )
     pretrip_go_no_go = _looks_like_pretrip_go_no_go_question(
         normalized_question,
     ) and not _has_complete_route_readiness_confirmation_bundle(normalized_question)
@@ -136,7 +139,10 @@ def plan_scout_ai_tools(
         _append_standard_gap_overview_tools(selected)
     if six_power_overview_question:
         _append_standard_six_power_tools(selected)
-    if _looks_like_workspace_catalog_question(normalized_question):
+    if (
+        _looks_like_workspace_catalog_question(normalized_question)
+        or workspace_inventory_question
+    ):
         selected.append(
             (
                 WORKSPACE_CATALOG_TOOL_ID,
@@ -169,6 +175,8 @@ def plan_scout_ai_tools(
                 "hard points, retreat/turn-back, route forgiveness, or alternative/short route structure.",
             )
         )
+    if _looks_like_checkpoint_placement_question(normalized_question):
+        _append_checkpoint_placement_support_tools(selected)
     if _looks_like_risk_question(normalized_question):
         selected.append(
             (
@@ -176,9 +184,31 @@ def plan_scout_ai_tools(
                 "Question asks about danger, route risk score, high-risk locations, or hazard candidates.",
             )
         )
+    if _looks_like_stop_photo_avoidance_question(normalized_question):
+        _append_stop_photo_avoidance_support_tools(selected)
     if (
         _looks_like_terrain_question(normalized_question)
-        and not route_context_question
+        and (
+            not route_context_question
+            or _has_any(
+                normalized_question,
+                (
+                    "崩壁",
+                    "碎石",
+                    "落石",
+                    "坡",
+                    "滑墜",
+                    "滑坠",
+                    "停止點",
+                    "停止点",
+                    "runout",
+                    "低容錯",
+                    "摸黑",
+                    "夜間",
+                    "天黑",
+                ),
+            )
+        )
     ):
         selected.append(
             (
@@ -193,14 +223,20 @@ def plan_scout_ai_tools(
                 "Question asks about map annotations, OCR labels, contour text, or tile/layer perception material.",
             )
         )
-    if _looks_like_navigation_terrain_question(normalized_question):
+    if (
+        _looks_like_navigation_terrain_question(normalized_question)
+        and not workspace_inventory_question
+    ):
         selected.append(
             (
                 NAVIGATION_TERRAIN_TOOL_ID,
                 "Question asks for Navigation & Terrain map-readiness: offline map use, contour literacy, retreat direction, or backup positioning before autonomous travel.",
             )
         )
-    if _looks_like_ins_dr_trace_question(normalized_question):
+    if (
+        _looks_like_ins_dr_trace_question(normalized_question)
+        and not workspace_inventory_question
+    ):
         selected.append(
             (
                 INS_DR_TRACE_TOOL_ID,
@@ -216,6 +252,8 @@ def plan_scout_ai_tools(
         )
     if pretrip_go_no_go:
         _append_pretrip_go_no_go_support_tools(selected)
+    if _looks_like_delayed_departure_question(normalized_question):
+        _append_delayed_departure_support_tools(selected)
     if _looks_like_weather_question(normalized_question):
         selected.append(
             (
@@ -238,7 +276,10 @@ def plan_scout_ai_tools(
                 "Question asks for prepared GEE SMAP/GPM soil moisture, antecedent rain, hydrologic background, grid, timeline, or provenance evidence from the workspace.",
             )
         )
-    if _looks_like_energy_vitals_question(normalized_question):
+    if (
+        _looks_like_energy_vitals_question(normalized_question)
+        and not workspace_inventory_question
+    ):
         selected.append(
             (
                 ENERGY_VITALS_TOOL_ID,
@@ -253,14 +294,17 @@ def plan_scout_ai_tools(
                 "slowest-member pacing, delay/ahead-of-plan pace, rest rhythm, lunch-point movement, shortening the route, or whether the team can still reach the next CP.",
             )
         )
-    if _looks_like_equipment_resource_question(normalized_question):
+    if (
+        _looks_like_equipment_resource_question(normalized_question)
+        and not workspace_inventory_question
+    ):
         selected.append(
             (
                 EQUIPMENT_RESOURCE_TOOL_ID,
                 "Question asks for Equipment / Resource readiness: battery, offline maps, GPX, lighting, power bank, water, food, or critical gear gaps.",
             )
         )
-    if _looks_like_team_status_question(normalized_question):
+    if _looks_like_team_status_question(normalized_question) and not workspace_inventory_question:
         selected.append(
             (
                 TEAM_STATUS_TOOL_ID,
@@ -274,7 +318,7 @@ def plan_scout_ai_tools(
                 "Question asks for Post-Trip Review / learning governance: completed-trip evidence, after-action candidates, actual CP timing, slow segments, near miss, equipment gaps, or next-plan model updates.",
             )
         )
-    if _looks_like_review_gap_question(normalized_question):
+    if _looks_like_review_gap_question(normalized_question) and not workspace_inventory_question:
         selected.append(
             (
                 REVIEW_GAP_TOOL_ID,
@@ -295,21 +339,30 @@ def plan_scout_ai_tools(
                 "Question asks for Survival / Incident Playbook: lost-position, injury, cold exposure, SOS/rescue preparation, evidence preservation, or what not to do in an incident.",
             )
         )
-    if _looks_like_live_navigation_state_question(normalized_question):
+    if (
+        _looks_like_live_navigation_state_question(normalized_question)
+        and not workspace_inventory_question
+    ):
         selected.append(
             (
                 LIVE_NAVIGATION_STATE_TOOL_ID,
                 "Question needs current live navigation state such as position, GNSS quality, heading, or INS/DR uncertainty.",
             )
         )
-    if _looks_like_runtime_ingress_status_question(normalized_question):
+    if (
+        _looks_like_runtime_ingress_status_question(normalized_question)
+        and not workspace_inventory_question
+    ):
         selected.append(
             (
                 RUNTIME_INGRESS_STATUS_TOOL_ID,
                 "Question asks for read-only runtime ingress/router/provider pipeline status, data gaps, latency, or Sensor Logger/MQTT trace evidence.",
             )
         )
-    if _looks_like_safety_boundary_question(normalized_question):
+    if (
+        _looks_like_safety_boundary_question(normalized_question)
+        and not workspace_inventory_question
+    ):
         selected.append(
             (
                 SAFETY_BOUNDARY_TOOL_ID,
@@ -318,7 +371,9 @@ def plan_scout_ai_tools(
         )
     if (
         _looks_like_contextual_permission_question(normalized_question)
+        and not workspace_inventory_question
         and not six_power_overview_question
+        and not _looks_like_stop_photo_avoidance_question(normalized_question)
     ):
         selected.append(
             (
@@ -391,6 +446,78 @@ def _append_pretrip_go_no_go_support_tools(selected: list[tuple[str, str]]) -> N
         (
             EQUIPMENT_RESOURCE_TOOL_ID,
             "Pre-trip Go/No-Go needs equipment, device, offline map, GPX, water, food, and critical resource evidence.",
+        ),
+    )
+    for tool_id, reason in support_tools:
+        if not _has_tool(selected, tool_id):
+            selected.append((tool_id, reason))
+
+
+def _append_checkpoint_placement_support_tools(selected: list[tuple[str, str]]) -> None:
+    support_tools = (
+        (
+            ROUTE_STRUCTURE_TOOL_ID,
+            "Checkpoint placement questions need the existing CP graph, route segments, and checkpoint chain.",
+        ),
+        (
+            RISK_SCORE_TOOL_ID,
+            "Checkpoint placement questions need high-risk candidate locations before recommending added checkpoints.",
+        ),
+        (
+            TERRAIN_SCORE_TOOL_ID,
+            "Checkpoint placement questions need terrain/low-forgiveness candidates such as steep, exposed, or unstable segments.",
+        ),
+        (
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            "Checkpoint placement questions need Route Architecture context for hard points, turn-back points, and time-pressure gates.",
+        ),
+    )
+    for tool_id, reason in support_tools:
+        if not _has_tool(selected, tool_id):
+            selected.append((tool_id, reason))
+
+
+def _append_stop_photo_avoidance_support_tools(selected: list[tuple[str, str]]) -> None:
+    support_tools = (
+        (
+            RISK_SCORE_TOOL_ID,
+            "Avoid-stop/photo questions need high-risk candidate locations before allowing scenic stops.",
+        ),
+        (
+            TERRAIN_SCORE_TOOL_ID,
+            "Avoid-stop/photo questions need steep, exposed, unstable, or low-forgiveness terrain evidence.",
+        ),
+        (
+            MAP_PERCEPTION_TOOL_ID,
+            "Avoid-stop/photo questions can use map/OCR/photo-context materials around scenic or annotated locations.",
+        ),
+    )
+    for tool_id, reason in support_tools:
+        if not _has_tool(selected, tool_id):
+            selected.append((tool_id, reason))
+
+
+def _append_delayed_departure_support_tools(selected: list[tuple[str, str]]) -> None:
+    support_tools = (
+        (
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            "Delayed-departure questions need CP Graph timing, turn-back gates, hard points, and route-shortening options.",
+        ),
+        (
+            WEATHER_WINDOW_TOOL_ID,
+            "Delayed-departure questions need daylight/weather-window evidence before saying the plan still fits.",
+        ),
+        (
+            CWA_ENVIRONMENT_TOOL_ID,
+            "Delayed-departure questions need prepared CWA forecast, warning, QPF, and daylight/moonlight evidence when available.",
+        ),
+        (
+            PACE_GUARDIAN_TOOL_ID,
+            "Delayed-departure questions need pace buffer and slowest-member evidence.",
+        ),
+        (
+            EQUIPMENT_RESOURCE_TOOL_ID,
+            "Delayed-departure questions need device, headlamp, battery, food, water, and night-travel resource evidence.",
         ),
     )
     for tool_id, reason in support_tools:
@@ -776,6 +903,20 @@ def _major_point_request_overrides(question: str) -> dict[str, Any]:
     normalized = _normalize(question)
     if _looks_like_water_point_question(normalized):
         return {"point_kinds": ["water_source"]}
+    if _has_any(
+        normalized,
+        (
+            "容易被看見",
+            "容易被看见",
+            "容易被發現",
+            "容易被发现",
+            "救援可見性",
+            "救援可见性",
+        ),
+    ):
+        return {
+            "point_kinds": ["viewpoint_trailhead_pass", "mobile_reception"]
+        }
     return {}
 
 
@@ -1170,6 +1311,10 @@ def _asks_to_use_average_pace(normalized_question: str) -> bool:
             "平均腳程",
             "平均速度",
             "平均配速",
+            "配速",
+            "安全buffer",
+            "足夠buffer",
+            "足夠 buffer",
             "平均值",
             "用平均估",
             "用平均速度",
@@ -1866,6 +2011,16 @@ def _looks_like_workspace_catalog_question(text: str) -> bool:
             "workspace",
             "artifact",
             "artifacts",
+            "output",
+            "outputs",
+            "metadata",
+            "preparation",
+            "prepared",
+            "準備",
+            "已完成",
+            "仍缺",
+            "缺的",
+            "缺少",
             "toolregistry",
             "資料型態",
             "有哪些資料",
@@ -1876,10 +2031,89 @@ def _looks_like_workspace_catalog_question(text: str) -> bool:
     )
 
 
+def looks_like_workspace_inventory_question(text: str) -> bool:
+    return _looks_like_workspace_inventory_question(_normalize(text))
+
+
+def _looks_like_workspace_inventory_question(text: str) -> bool:
+    if _has_any(
+        text,
+        (
+            "後隊",
+            "隊友",
+            "留守",
+            "失聯",
+            "聯絡",
+            "回報準備",
+            "有效位置多久",
+        ),
+    ):
+        return False
+    inventory_terms = (
+        "artifact",
+        "artifacts",
+        "artifactref",
+        "sourcefile",
+        "outputs",
+        "output",
+        "metadata",
+        "project.json",
+        "refs",
+        "ref",
+        "departurebundle",
+        "departure bundle",
+        "出發bundle",
+        "出發包",
+        "檔案",
+        "來源檔",
+        "資料",
+        "資料區塊",
+        "區塊",
+        "輸出",
+        "相關輸出",
+        "preparation",
+        "runtimehandoff",
+        "runtime handoff",
+        "handoff",
+        "候選資料",
+        "review資料",
+        "tilecache",
+        "tile cache",
+        "rasterocr",
+        "raster ocr",
+        "displaygeometry",
+        "display geometry",
+        "distancesummary",
+        "distance summary",
+    )
+    ask_terms = (
+        "哪些",
+        "有哪些",
+        "列出",
+        "是否存在",
+        "存在",
+        "在哪",
+        "在哪些",
+        "對得上",
+        "缺少",
+        "仍缺",
+        "缺的",
+        "缺",
+    )
+    return _has_any(text, inventory_terms) and _has_any(text, ask_terms)
+
+
 def _looks_like_route_structure_question(text: str) -> bool:
+    if _has_any(text, ("轉折", "急轉", "稜線轉折", "路線轉折", "turnpoint", "route turn", "sharp turn")):
+        return True
+    if _has_any(text, ("幾點前通過", "几点前通过", "最晚幾點", "最晚几点")) and _has_any(
+        text,
+        ("cp", "checkpoint", "檢查點"),
+    ):
+        return True
     return (
         _has_any(text, ("cp", "checkpoint", "checkpoints", "檢查點", "路線", "segment"))
-        and _has_any(text, ("多少", "幾個", "count", "數量", "總共", "列表", "有哪些"))
+        and _has_any(text, ("多少", "幾個", "count", "數量", "總共", "列表", "有哪些", "哪些"))
     ) or _has_any(text, ("有多少個cp", "有多少個CP".lower(), "cp數"))
 
 
@@ -1895,9 +2129,19 @@ def _looks_like_route_architecture_question(text: str) -> bool:
             "路線力",
             "路線結構",
             "行程結構",
+            "行程是不是排太滿",
+            "行程排太滿",
+            "排太滿",
+            "太滿了",
             "cpgraph",
             "cp圖",
             "cp graph",
+            "轉折",
+            "转折",
+            "急轉",
+            "急转",
+            "稜線轉折",
+            "路線轉折",
             "撤退點",
             "下一個撤退",
             "撤退路線",
@@ -1912,6 +2156,17 @@ def _looks_like_route_architecture_question(text: str) -> bool:
             "退路",
             "還有退路",
             "退路嗎",
+            "上一個確定點",
+            "上一个确定点",
+            "回到上一個",
+            "回到上一个",
+            "下一個安全點",
+            "下一个安全点",
+            "提前撤退",
+            "原地休息",
+            "休息或下撤",
+            "繼續上升",
+            "继续上升",
             "cp通過時間",
             "checkpoint通過時間",
             "計畫cp通過時間",
@@ -1932,6 +2187,9 @@ def _looks_like_route_architecture_question(text: str) -> bool:
             "走錯時",
             "走錯要往哪",
             "走錯往哪",
+            "摸黑",
+            "夜間通過",
+            "不適合摸黑",
             "走錯要退",
             "走錯要下撤",
             "往哪裡退",
@@ -1965,12 +2223,99 @@ def _looks_like_route_architecture_question(text: str) -> bool:
             "回頭成本",
             "補給點",
             "水源是否合理",
+            "幾點前通過",
+            "几点前通过",
+            "最晚幾點",
+            "最晚几点",
+            "通過期限",
+            "通过期限",
+            "晚出發",
+            "晚出发",
+            "延後出發",
+            "延遲出發",
+            "晚一小時",
+            "晚1小時",
+            "晚2小時",
+            "晚兩小時",
+            "晚到2小時",
+            "晚到兩小時",
         ),
     ) or _looks_like_external_deadline_pressure_question(text)
 
 
+def _looks_like_checkpoint_placement_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "一定要設checkpoint",
+            "一定要設cp",
+            "要設checkpoint",
+            "要設cp",
+            "新增checkpoint",
+            "新增cp",
+            "補checkpoint",
+            "補cp",
+            "checkpoint設在哪",
+            "cp設在哪",
+            "哪些地方一定要設",
+            "哪個cp設錯",
+            "漏設",
+        ),
+    )
+
+
+def _looks_like_stop_photo_avoidance_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "避免停留拍照",
+            "避免停留",
+            "不適合停留",
+            "不要停留",
+            "停下拍照",
+            "停留拍照",
+            "停下來拍照",
+            "景觀點適合",
+            "拍照停留",
+            "拍攝停留",
+        ),
+    )
+
+
+def _looks_like_delayed_departure_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "晚出發",
+            "晚出发",
+            "延後出發",
+            "延遲出發",
+            "出發晚",
+            "晚一小時",
+            "晚1小時",
+            "晚2小時",
+            "晚兩小時",
+            "晚到一小時",
+            "晚到1小時",
+            "晚到2小時",
+            "晚到兩小時",
+        ),
+    )
+
+
 def _looks_like_major_point_question(text: str) -> bool:
-    if _looks_like_map_perception_question(text):
+    visibility_question = _has_any(
+        text,
+        (
+            "容易被看見",
+            "容易被看见",
+            "容易被發現",
+            "容易被发现",
+            "救援可見性",
+            "救援可见性",
+        ),
+    )
+    if _looks_like_map_perception_question(text) and not visibility_question:
         return False
     if _looks_like_external_deadline_pressure_question(text):
         return False
@@ -1996,6 +2341,12 @@ def _looks_like_major_point_question(text: str) -> bool:
             "第幾cp",
             "cp附近",
             "附近",
+            "容易被看見",
+            "容易被看见",
+            "容易被發現",
+            "容易被发现",
+            "救援可見性",
+            "救援可见性",
         ),
     ) and not _looks_like_weather_question(text)
 
@@ -2072,9 +2423,19 @@ def _looks_like_risk_question(text: str) -> bool:
             "危險",
             "風險",
             "高風險",
+            "出事",
+            "事故",
+            "低容錯",
+            "容錯低",
+            "不適合停留",
+            "避免停留",
+            "避免停留拍照",
             "崩",
             "墜",
             "碎石",
+            "落石",
+            "乾溝",
+            "干沟",
             "邊緣",
         ),
     )
@@ -2099,6 +2460,7 @@ def _looks_like_body_decision_risk_question(text: str) -> bool:
             "墜",
             "碎石",
             "落石",
+            "落石",
             "滑墜",
             "邊緣",
             "危險地形",
@@ -2119,6 +2481,24 @@ def _looks_like_terrain_question(text: str) -> bool:
             "稜線",
             "崩壁",
             "碎石",
+            "落石",
+            "乾溝",
+            "干沟",
+            "下切",
+            "滑墜",
+            "滑坠",
+            "停止點",
+            "停止点",
+            "runout",
+            "低容錯",
+            "容錯低",
+            "摸黑",
+            "夜間",
+            "天黑",
+            "白牆",
+            "白墙",
+            "不適合摸黑",
+            "不適合停留",
         ),
     )
 
@@ -2172,6 +2552,12 @@ def _looks_like_map_perception_question(text: str) -> bool:
             "標注",
             "文字",
             "圖層",
+            "容易被看見",
+            "容易被看见",
+            "容易被發現",
+            "容易被发现",
+            "救援可見性",
+            "救援可见性",
         ),
     )
 
@@ -2259,6 +2645,11 @@ def _looks_like_navigation_terrain_question(text: str) -> bool:
             "稜線",
             "谷線",
             "鞍部",
+            "滑墜",
+            "滑坠",
+            "停止點",
+            "停止点",
+            "runout",
             "撤退方向",
             "定位備援",
             "第二套定位",
@@ -2301,6 +2692,9 @@ def _looks_like_weather_question(text: str) -> bool:
             "風寒",
             "風口",
             "失溫",
+            "變冷",
+            "变冷",
+            "冷太快",
             "高溫",
             "炎熱",
             "酷熱",
@@ -2335,6 +2729,7 @@ def _looks_like_weather_question(text: str) -> bool:
             "紮營",
             "扎營",
             "避雨",
+            "提前撤退",
         ),
     )
 
@@ -2509,6 +2904,15 @@ def _looks_like_route_readiness_question(text: str) -> bool:
             "pretrip readiness",
             "go no go",
             "gonogo",
+            "今天適合",
+            "目前的腳程",
+            "行程是不是排太滿",
+            "排太滿",
+            "太滿了",
+            "幾點前通過",
+            "几点前通过",
+            "最晚幾點",
+            "最晚几点",
         ),
     )
 
@@ -2608,6 +3012,9 @@ def _looks_like_energy_vitals_question(text: str) -> bool:
             "休息",
             "補水",
             "水分",
+            "水量",
+            "食物",
+            "行動糧",
             "脫水",
             "營養",
             "補給",
@@ -2619,7 +3026,19 @@ def _looks_like_energy_vitals_question(text: str) -> bool:
             "身體",
             "健康",
             "高山症",
+            "高海拔",
+            "海拔不適",
+            "繼續上升",
+            "继续上升",
+            "原地休息",
             "下撤",
+            "失溫",
+            "風寒",
+            "濕衣",
+            "湿衣",
+            "變冷",
+            "变冷",
+            "提前撤退",
             "決策品質",
         ),
     )
@@ -2655,6 +3074,10 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "平均腳程",
             "平均速度",
             "平均配速",
+            "配速",
+            "安全buffer",
+            "足夠buffer",
+            "足夠 buffer",
             "平均值",
             "用平均",
             "落後",
@@ -2663,6 +3086,14 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "比預期慢",
             "比預計慢",
             "比預定慢",
+            "目前的腳程",
+            "行程是不是排太滿",
+            "排太滿",
+            "太滿了",
+            "幾點前通過",
+            "几点前通过",
+            "最晚幾點",
+            "最晚几点",
             "攻略速度",
             "照攻略速度",
             "照他們速度",
@@ -2693,9 +3124,16 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
         (
             "隊友在哪",
             "後隊在哪",
+            "後隊",
             "隊友不見",
             "隊友走散",
             "隊伍走散",
+            "隊伍分離",
+            "隊友距離",
+            "隊伍距離",
+            "誰最需要協助",
+            "誰需要協助",
+            "隊伍目前誰",
             "脫隊",
             "失聯",
             "聯絡不上",
@@ -2762,6 +3200,17 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "平均腳程",
             "平均速度",
             "平均配速",
+            "配速",
+            "腳程",
+            "目前的腳程",
+            "行程是不是排太滿",
+            "排太滿",
+            "太滿了",
+            "幾點前通過",
+            "几点前通过",
+            "最晚幾點",
+            "最晚几点",
+            "buffer",
             "平均值",
             "用平均",
             "比預估慢",
@@ -2791,6 +3240,9 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "太快",
             "提早",
             "提前",
+            "日落前",
+            "下一個安全點",
+            "下一个安全点",
             "ahead",
             "early",
             "休息節奏",
@@ -2805,6 +3257,7 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
             "原節奏",
             "落後",
             "晚了",
+            "晚到",
             "縮短行程",
             "改短版",
             "原計畫",
@@ -2847,6 +3300,10 @@ def _looks_like_equipment_resource_question(text: str) -> bool:
             "手機完全沒電",
             "手機電量耗盡",
             "電量",
+            "耗電",
+            "省電",
+            "關閉非必要功能",
+            "關閉耗電功能",
             "沒電",
             "手錶",
             "手錶電量",
@@ -2861,11 +3318,20 @@ def _looks_like_equipment_resource_question(text: str) -> bool:
             "水剩",
             "水還剩",
             "水量",
+            "多少水",
+            "需要準備多少水",
+            "補給",
+            "補給量",
             "食物",
             "行動糧",
             "瓦斯",
             "雨衣",
             "保暖層",
+            "保暖",
+            "濕衣",
+            "湿衣",
+            "失溫",
+            "風寒",
             "急救包",
         ),
     )
@@ -2894,6 +3360,13 @@ def _looks_like_team_status_question(text: str) -> bool:
             "沒回覆",
             "未回覆",
             "後隊在哪",
+            "後隊",
+            "隊伍分離",
+            "隊友距離",
+            "隊伍距離",
+            "誰最需要協助",
+            "誰需要協助",
+            "隊伍目前誰",
         ),
     ):
         return False
@@ -2908,6 +3381,12 @@ def _looks_like_team_status_question(text: str) -> bool:
             "隊友不見",
             "隊友走散",
             "隊伍走散",
+            "隊伍分離",
+            "隊友距離",
+            "隊伍距離",
+            "誰最需要協助",
+            "誰需要協助",
+            "隊伍目前誰",
             "脫隊",
             "後隊",
             "留守",
@@ -3034,6 +3513,11 @@ def _looks_like_post_trip_route_context_update_question(text: str) -> bool:
 
 
 def _looks_like_ins_dr_trace_question(text: str) -> bool:
+    if _has_any(text, ("routeanchor", "route anchor")) and not _has_any(
+        text,
+        ("gps", "ins", "dr", "pdr", "imu", "軌跡", "偏差", "uncertainty"),
+    ):
+        return False
     return _has_any(
         text,
         (
@@ -3090,9 +3574,36 @@ def _looks_like_live_navigation_state_question(text: str) -> bool:
         text,
         (
             "我現在",
+            "我是不是",
             "現在是不是",
             "目前",
             "前方",
+            "這裡",
+            "这里",
+            "這段",
+            "这段",
+            "這個景觀點",
+            "这个景观点",
+            "快接近",
+            "站在",
+            "這條乾溝",
+            "这条干沟",
+            "回到上一個",
+            "回到上一个",
+            "上一個確定點",
+            "上一个确定点",
+            "精確導航",
+            "精确导航",
+            "繼續上升",
+            "继续上升",
+            "原地休息",
+            "下撤",
+            "白牆",
+            "白墙",
+            "日落前",
+            "下一個安全點",
+            "下一个安全点",
+            "提前撤退",
             "gps",
             "gnss",
             "imu",
@@ -3139,6 +3650,65 @@ def _looks_like_live_navigation_state_question(text: str) -> bool:
             "告警",
             "ln",
             "主線",
+            "主路",
+            "路徑",
+            "路径",
+            "寬度",
+            "宽度",
+            "稜線",
+            "棱线",
+            "轉折",
+            "转折",
+            "坡度",
+            "坡面",
+            "地形",
+            "崩壁",
+            "碎石",
+            "乾溝",
+            "干沟",
+            "滑墜",
+            "滑坠",
+            "停止點",
+            "停止点",
+            "邊緣",
+            "边缘",
+            "接近",
+            "偏離",
+            "偏离",
+            "誤差",
+            "误差",
+            "可信",
+            "相信",
+            "一致",
+            "drift",
+            "確定點",
+            "确定点",
+            "上一個",
+            "上一个",
+            "精確導航",
+            "精确导航",
+            "走",
+            "到達",
+            "到达",
+            "能到",
+            "失向",
+            "撤退",
+            "變冷",
+            "变冷",
+            "高海拔",
+            "海拔不適",
+            "上升",
+            "下坡",
+            "太累",
+            "休息",
+            "下撤",
+            "gpx",
+            "軌跡",
+            "轨迹",
+            "景觀點",
+            "景观点",
+            "拍照",
+            "停留",
             "下切",
             "溪谷",
         ),
@@ -3370,6 +3940,10 @@ def _looks_like_contextual_permission_question(text: str) -> bool:
             "必須離開",
             "可以停下來",
             "能不能停",
+            "避免停留",
+            "不適合停留",
+            "不要停留",
+            "避免停留拍照",
             "可以拍照",
             "可以拍影片",
             "可以拍片",

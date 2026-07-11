@@ -3532,6 +3532,10 @@
                   <input type="checkbox" id="agentFallbackToggle">
                   <span>AI HAT+2 fallback</span>
                 </label>
+                <label class="agent-fallback-toggle" title="Generate from facts-only evidence; any self-review uses the same local model and never receives a reference answer">
+                  <input type="checkbox" id="agentRawEvalToggle" checked>
+                  <span>Facts-only model eval</span>
+                </label>
               </div>
             </div>
             <div class="agent-app-actions">
@@ -3988,6 +3992,7 @@
       agentResponses: [],
       agentBusy: false,
       agentUseAiHatFallback: false,
+      agentUseAiHatRawEval: true,
       agentStatus: {
         checked: false,
         ok: false,
@@ -4549,6 +4554,11 @@
         state.agentUseAiHatFallback = Boolean(fallbackToggle.checked);
         renderAgentStatus();
       });
+      const rawEvalToggle = document.getElementById("agentRawEvalToggle");
+      rawEvalToggle?.addEventListener("change", () => {
+        state.agentUseAiHatRawEval = Boolean(rawEvalToggle.checked);
+        renderAgentStatus();
+      });
     }
 
     async function refreshAgentStatus() {
@@ -4587,6 +4597,7 @@
       const providerChip = document.getElementById("agentProviderChip");
       const projectChip = document.getElementById("agentProjectChip");
       const fallbackToggle = document.getElementById("agentFallbackToggle");
+      const rawEvalToggle = document.getElementById("agentRawEvalToggle");
       const input = document.getElementById("agentQuestionInput");
       const button = document.getElementById("agentAskButton");
       const status = state.agentStatus || {};
@@ -4600,6 +4611,7 @@
       }
       if (projectChip) projectChip.textContent = `project=${projectId()}`;
       if (fallbackToggle) fallbackToggle.checked = Boolean(state.agentUseAiHatFallback);
+      if (rawEvalToggle) rawEvalToggle.checked = Boolean(state.agentUseAiHatRawEval);
       if (input) input.disabled = state.agentBusy;
       if (button) button.disabled = state.agentBusy;
     }
@@ -4633,6 +4645,7 @@
         };
         if (state.agentUseAiHatFallback) {
           payload.runtime_preference = "ai_hat_plus_2_fallback";
+          payload.ai_hat_raw_eval = Boolean(state.agentUseAiHatRawEval);
         }
         const response = await postJson(
           ASSISTANT_QUERY_PATH,
@@ -4705,7 +4718,35 @@
       const rawAnswer = displayAgentAnswer(response?.local_model_answer || "");
       const guard = agentGroundingGuard(response);
       const aiHatGenerationMode = agentAiHatGenerationMode(response);
+      const aiHatSkillId = agentAiHatSkillId(response);
+      const aiHatTypedDecision = agentAiHatTypedDecision(response);
+      const aiHatActionToken = agentAiHatActionToken(response);
+      const aiHatPromptSha = agentAiHatTraceValue(response, "ai_hat_prompt_sha256=");
+      const aiHatOutputSha = agentAiHatTraceValue(response, "ai_hat_output_sha256=");
+      const aiHatCallCount = agentAiHatTraceValue(response, "ai_hat_generation_call_count=") || "-";
+      const aiHatSelfReview = agentAiHatTraceValue(response, "ai_hat_self_review=") || "false";
+      const aiHatPromptContract = agentAiHatTraceValue(response, "ai_hat_prompt_contract=") || "unknown";
+      const aiHatAnswerTemplate = agentAiHatTraceValue(response, "ai_hat_answer_template_applied=") || "unknown";
+      const aiHatAnswerContract = agentAiHatTraceValue(response, "ai_hat_answer_contract=") || "unknown";
+      const aiHatFewShotSource = agentAiHatTraceValue(response, "ai_hat_few_shot_source=") || "none";
+      const aiHatFewShotCount = agentAiHatTraceValue(response, "ai_hat_few_shot_example_count=") || "0";
+      const aiHatFewShotQuestion = agentAiHatTraceValue(response, "ai_hat_few_shot_question=") || "-";
+      const aiHatEndpointResponse = agentAiHatTraceValue(response, "ai_hat_endpoint_response_received=") || "false";
+      const aiHatHardwareAttested = agentAiHatTraceValue(response, "ai_hat_hardware_attested=") || "false";
+      const aiHatEndpointModel = agentAiHatTraceValue(response, "ai_hat_endpoint_model=") || "-";
+      const aiHatPromptEvalCount = agentAiHatTraceValue(response, "ai_hat_prompt_eval_count=") || "-";
+      const aiHatEvalCount = agentAiHatTraceValue(response, "ai_hat_eval_count=") || "-";
+      const aiHatSelectedCall = agentAiHatTraceValue(response, "ai_hat_selected_call=") || "-";
+      const aiHatSampling = agentAiHatTraceValue(response, "ai_hat_sampling=") || "unknown";
       const modelAnswer = displayAgentAnswer(response?.answer || "(empty assistant answer)");
+      const localModelAttempts = Array.isArray(response?.local_model_attempts)
+        ? response.local_model_attempts
+        : [];
+      const typedDecisionOnly = [
+        "typed_decision_only",
+        "typed_decision_with_verified_evidence",
+        "typed_missing_context_action_only",
+      ].includes(aiHatGenerationMode);
       const isAiHatRun = Boolean(rawAnswer) || agentLimitations(response).some((item) =>
         item.includes("AI HAT+2 local fallback was requested")
       );
@@ -4713,20 +4754,30 @@
       const guardFailed = guard.startsWith("failed");
       const answer = deterministicFallbackOnly
         ? "模型未成功回答；下方 Scout grounding reference 是 deterministic 工具摘要，只能用於 debug / evidence review，不能算作模型答題成功。"
-        : rawAnswer || modelAnswer;
-      const referenceCopyLike = agentAnswerLooksLikeReferenceCopy(answer, evidenceAnswer);
+        : (rawAnswer || modelAnswer);
+      const referenceCopyLike = !guardFailed && !typedDecisionOnly && agentAnswerLooksLikeReferenceCopy(answer, evidenceAnswer);
       let answerLabel = "回答";
       if (deterministicFallbackOnly) {
         answerLabel = "模型未成功回答（工具摘要另列）";
       } else if (isAiHatRun) {
-        if (referenceCopyLike) {
-          answerLabel = "模型未產生獨立回答（AI HAT+2 copied grounding reference）";
+        if (["raw_single_pass_eval", "raw_self_review_eval"].includes(aiHatGenerationMode)) {
+          answerLabel = guardFailed
+            ? "AI HAT+2 本地模型回答（grounding 未通過）"
+            : "AI HAT+2 本地模型回答";
         } else if (guardFailed) {
-          answerLabel = "模型回答未通過 grounding（AI HAT+2 raw output）";
+          answerLabel = "AI HAT+2 原始回答（grounding 失敗，僅供品質檢查）";
+        } else if (typedDecisionOnly) {
+          answerLabel = "AI HAT+2 模型原始輸出（typed decision 不算自然語言回答）";
+        } else if (referenceCopyLike) {
+          answerLabel = "模型未產生獨立回答（AI HAT+2 copied grounding reference）";
         } else if (aiHatGenerationMode === "repaired_from_grounding_failure") {
           answerLabel = "回答（AI HAT+2 grounded repair）";
         } else if (aiHatGenerationMode === "synthesized_from_workspace_facts") {
           answerLabel = "回答（AI HAT+2 synthesized from workspace facts）";
+        } else if (aiHatGenerationMode === "staged_missing_context_synthesis") {
+          answerLabel = "回答（AI HAT+2 staged missing-context synthesis）";
+        } else if (aiHatGenerationMode.startsWith("skill_guided_missing_context_") || aiHatSkillId) {
+          answerLabel = "回答（AI HAT+2 + field-state-short-answer skill）";
         } else {
           answerLabel = "回答（AI HAT+2 evidence-prompted）";
         }
@@ -4734,15 +4785,36 @@
       const lines = [
         `問題：${question}`,
         `tool using：${agentToolUsing(response).join(", ") || "-"}`,
+        `skill using：${aiHatSkillId || "-"}`,
         `missing tool：${agentMissingTools(response).join(", ") || "-"}`,
         `Missing evidence：${agentMissingEvidence(response).join(", ") || "-"}`,
         `grounding guard：${guard}`,
         `${answerLabel}：${answer}`,
       ];
-      if (guardFailed && rawAnswer && rawAnswer !== answer) {
-        lines.push(`AI HAT+2 raw output（未通過 grounding，不計成功）：${rawAnswer}`);
+      if (typedDecisionOnly && aiHatTypedDecision) {
+        lines.push(`AI HAT+2 typed decision token：${aiHatTypedDecision}`);
       }
-      if (evidenceAnswer) {
+      if (aiHatActionToken) {
+        lines.push(`AI HAT+2 action token：${aiHatActionToken}`);
+      }
+      if (["raw_single_pass_eval", "raw_self_review_eval"].includes(aiHatGenerationMode)) {
+        lines.push(
+          `model trace：calls=${aiHatCallCount} / selected-call=${aiHatSelectedCall} / self-review=${aiHatSelfReview} / sampling=${aiHatSampling} / prompt-contract=${aiHatPromptContract} / answer-contract=${aiHatAnswerContract} / few-shot=${aiHatFewShotSource}:${aiHatFewShotCount} / few-shot-topic=${aiHatFewShotQuestion} / endpoint-response=${aiHatEndpointResponse} / endpoint-model=${aiHatEndpointModel} / prompt-tokens=${aiHatPromptEvalCount} / eval-tokens=${aiHatEvalCount} / hardware-attested=${aiHatHardwareAttested} / answer-template=${aiHatAnswerTemplate} / postprocess=false / prompt=${(aiHatPromptSha || "-").slice(0, 12)} / output=${(aiHatOutputSha || "-").slice(0, 12)}`,
+        );
+        lines.push("quality mode：本地模型只收到 facts-only evidence brief，沒有預寫答案；self-review 只會再次呼叫同一模型，Scout 工具摘要不會替換或補寫回答。");
+      }
+      if (localModelAttempts.length > 1) {
+        localModelAttempts.forEach((attempt) => {
+          const attemptState = attempt.selected ? "selected" : "rejected";
+          const violations = Array.isArray(attempt.brief_violations)
+            ? attempt.brief_violations.join(" | ")
+            : "";
+          lines.push(
+            `model attempt ${attempt.call_index}（${attemptState} / grounding=${attempt.grounding_ok ? "pass" : "fail"}${violations ? ` / ${violations}` : ""}）：${displayAgentAnswer(attempt.answer)}`,
+          );
+        });
+      }
+      if (evidenceAnswer && evidenceAnswer !== answer) {
         lines.push(`Scout grounding reference（工具摘要，不取代本地模型回答）：${evidenceAnswer}`);
       }
       if (guard.startsWith("failed")) {
@@ -4750,6 +4822,12 @@
       }
       if (referenceCopyLike) {
         lines.push("quality verdict：AI HAT+2 answer is a near-copy/subset of the deterministic Scout grounding reference; do not count this as strong local-model reasoning quality.");
+      }
+      if (typedDecisionOnly) {
+        lines.push("quality verdict：typed decision 只能算分類成功，不能算本地模型已產生自然語言答案；verified evidence 另列且不得冒充模型回答。");
+      }
+      if (aiHatGenerationMode === "typed_missing_context_action_only") {
+        lines.push("quality verdict：AI HAT+2 只完成 action 分類，沒有產生通過 grounding 的自然語言答案；action token 不能算作回答，也不會套用固定句型。");
       }
       return lines.join("\n");
     }
@@ -4785,6 +4863,38 @@
         .find((item) => item.startsWith("ai_hat_generation_mode="));
       if (!mode) return "-";
       return mode.split("=").slice(1).join("=") || "-";
+    }
+
+    function agentAiHatTypedDecision(response) {
+      const decision = agentLimitations(response)
+        .map((item) => String(item || ""))
+        .find((item) => item.startsWith("ai_hat_typed_decision="));
+      if (!decision) return "";
+      return decision.split("=").slice(1).join("=") || "";
+    }
+
+    function agentAiHatSkillId(response) {
+      const skill = agentLimitations(response)
+        .map((item) => String(item || ""))
+        .find((item) => item.startsWith("ai_hat_skill_id="));
+      if (!skill) return "";
+      return skill.split("=").slice(1).join("=") || "";
+    }
+
+    function agentAiHatActionToken(response) {
+      const action = agentLimitations(response)
+        .map((item) => String(item || ""))
+        .find((item) => item.startsWith("ai_hat_action_token="));
+      if (!action) return "";
+      return action.split("=").slice(1).join("=") || "";
+    }
+
+    function agentAiHatTraceValue(response, prefix) {
+      const value = agentLimitations(response)
+        .map((item) => String(item || ""))
+        .find((item) => item.startsWith(prefix));
+      if (!value) return "";
+      return value.slice(prefix.length);
     }
 
     function agentLimitations(response) {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -29,6 +30,14 @@ DEFAULT_PROJECT_ID = "chilai_nanhua_day1"
 DEFAULT_WORKSPACE_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects"
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "scout_ai_live_tool_selection"
 SECRET_NAME_FRAGMENTS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
+
+
+class EvalCaseTimeout(TimeoutError):
+    pass
+
+
+def _raise_eval_case_timeout(signum: int, frame: object) -> None:
+    raise EvalCaseTimeout("Scout AI eval case timed out")
 
 
 class WorkspaceToolRunner(Protocol):
@@ -166,6 +175,36 @@ def load_env_file(path: Path | None) -> dict[str, str]:
     return values
 
 
+def load_eval_cases(path: Path) -> tuple[EvalCase, ...]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        raw_cases = payload.get("cases")
+    else:
+        raw_cases = payload
+    if not isinstance(raw_cases, list):
+        raise ValueError("cases file must contain a list or a {cases: [...]} object")
+    cases: list[EvalCase] = []
+    for index, item in enumerate(raw_cases, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"case {index} must be an object")
+        case_id = str(item.get("case_id") or item.get("id") or "").strip()
+        question = str(item.get("question") or "").strip()
+        required_tool_ids = item.get("required_tool_ids") or item.get("expected_tool_ids") or []
+        if not case_id or not question:
+            raise ValueError(f"case {index} must include case_id/id and question")
+        if not isinstance(required_tool_ids, list):
+            raise ValueError(f"case {case_id} required_tool_ids must be a list")
+        cases.append(
+            EvalCase(
+                case_id=case_id,
+                question=question,
+                required_tool_ids=tuple(str(tool_id) for tool_id in required_tool_ids),
+                notes=str(item.get("notes") or item.get("data_family") or ""),
+            )
+        )
+    return tuple(cases)
+
+
 def run_live_tool_selection_eval(
     *,
     cases: tuple[EvalCase, ...] = WEATHER_GEO_CASES,
@@ -177,7 +216,12 @@ def run_live_tool_selection_eval(
 ) -> dict[str, Any]:
     started_at = _utc_now()
     samples = []
-    for case in cases:
+    for index, case in enumerate(cases, start=1):
+        print(
+            f"[scout-ai-eval] case {index}/{len(cases)} {case.case_id}",
+            file=sys.stderr,
+            flush=True,
+        )
         sample = _run_one_case(
             case,
             runner=runner,
@@ -249,7 +293,12 @@ def _run_one_case(
     t0 = time.perf_counter()
     output = ""
     error: dict[str, str] | None = None
+    previous_handler: signal.Handlers | int | None = None
     try:
+        if timeout_seconds > 0 and hasattr(signal, "SIGALRM"):
+            previous_handler = signal.getsignal(signal.SIGALRM)
+            signal.signal(signal.SIGALRM, _raise_eval_case_timeout)
+            signal.alarm(timeout_seconds)
         output = runner.run_with_workspace_tools(
             prompt,
             timeout_seconds=timeout_seconds,
@@ -257,6 +306,11 @@ def _run_one_case(
         )
     except Exception as exc:
         error = {"type": type(exc).__name__, "message": _redact(str(exc))}
+    finally:
+        if timeout_seconds > 0 and hasattr(signal, "SIGALRM"):
+            signal.alarm(0)
+            if previous_handler is not None:
+                signal.signal(signal.SIGALRM, previous_handler)
     latency_ms = round((time.perf_counter() - t0) * 1000, 3)
     invocations = [
         invocation
@@ -378,12 +432,31 @@ def _utc_now() -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
+    parser.add_argument("--cases-file", type=Path, default=None)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--base-url", default=None)
+    parser.add_argument("--backend", default="auto")
+    parser.add_argument("--hardware-accelerator", default="none")
+    parser.add_argument(
+        "--disable-workspace-tools",
+        action="store_true",
+        help="Run the model without Pydantic AI workspace tool registration.",
+    )
+    parser.add_argument(
+        "--api-key-env-var",
+        default="OPENROUTER_API_KEY",
+        help="Environment variable to read the model API key from.",
+    )
+    parser.add_argument(
+        "--allow-missing-api-key",
+        action="store_true",
+        help="Allow local backends such as hailo_ollama to run without an API key.",
+    )
     parser.add_argument("--project-id", default=DEFAULT_PROJECT_ID)
     parser.add_argument("--workspace-root", type=Path, default=DEFAULT_WORKSPACE_ROOT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--timeout-seconds", type=int, default=45)
+    parser.add_argument("--case-offset", type=int, default=0)
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--max-context-chars", type=int, default=12000)
     parser.add_argument("--model-max-tokens", type=int, default=None)
@@ -391,19 +464,26 @@ def main(argv: list[str] | None = None) -> int:
 
     env_values = load_env_file(args.env_file)
     os.environ.update(env_values)
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise SystemExit("OPENROUTER_API_KEY is missing; not running live eval")
+    api_key = os.environ.get(args.api_key_env_var)
+    if not api_key and not args.allow_missing_api_key:
+        raise SystemExit(f"{args.api_key_env_var} is missing; not running live eval")
     os.environ["SCOUT_PRETRIP_WORKSPACE_ROOT"] = str(args.workspace_root)
     if args.model_max_tokens is not None:
         os.environ["SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS"] = str(args.model_max_tokens)
 
-    cases = WEATHER_GEO_CASES[: args.max_cases] if args.max_cases else WEATHER_GEO_CASES
+    base_cases = load_eval_cases(args.cases_file) if args.cases_file else WEATHER_GEO_CASES
+    if args.case_offset < 0:
+        raise SystemExit("--case-offset must be >= 0")
+    offset_cases = base_cases[args.case_offset :]
+    cases = offset_cases[: args.max_cases] if args.max_cases else offset_cases
     runner = PydanticAIEnvRunner(
         model_name=args.model,
         base_url=args.base_url,
         api_key=api_key,
         profile_name="live_tool_selection_eval",
+        backend=args.backend,
+        hardware_accelerator=args.hardware_accelerator,
+        workspace_tools_enabled=not args.disable_workspace_tools,
         workspace_model_max_tokens=args.model_max_tokens,
     )
     report = run_live_tool_selection_eval(

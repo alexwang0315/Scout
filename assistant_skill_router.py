@@ -20,6 +20,7 @@ from scout_ai_tool_planner import (
     ScoutAiToolPlan,
     ScoutAiToolPlanItem,
     ScoutAiToolPlanItemStatus,
+    looks_like_workspace_inventory_question,
     plan_scout_ai_tools,
 )
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
@@ -64,11 +65,13 @@ def augment_pretrip_sources_with_local_evidence_search(
         limit=limit,
         evidence_sources=evidence_sources,
     )
-    full_workflow_source = build_pretrip_full_workflow_source(
-        query,
-        project_root=project_root,
-        limit=limit,
-    )
+    full_workflow_source = None
+    if not looks_like_workspace_inventory_question(query.question):
+        full_workflow_source = build_pretrip_full_workflow_source(
+            query,
+            project_root=project_root,
+            limit=limit,
+        )
     search_source = build_pretrip_local_evidence_search_source(
         query,
         project_root=project_root,
@@ -120,11 +123,13 @@ def augment_pretrip_sources_with_tool_plan(
     )
     if not planner_sources:
         return _dedupe_sources([*base_sources, *energy_sources])
-    full_workflow_source = build_pretrip_full_workflow_source(
-        query,
-        project_root=project_root,
-        limit=limit,
-    )
+    full_workflow_source = None
+    if not looks_like_workspace_inventory_question(query.question):
+        full_workflow_source = build_pretrip_full_workflow_source(
+            query,
+            project_root=project_root,
+            limit=limit,
+        )
     return _dedupe_sources(
         [
             *base_sources,

@@ -157,6 +157,82 @@ shell:
 - 這仍是 UI formatting only；不啟動本地模型、不呼叫 Ollama、不啟動
   Pi/Docker/hardware provider、不呼叫 `/safety/*` mutation、不寫 Scout state。
 
+### Milestone 10.2 Slice 15: AI HAT+ 2 / Hailo Ollama Local Fallback
+
+Slice 15 把 local fallback profile 從 generic Ollama 擴展到
+Raspberry Pi AI HAT+ 2 / Hailo Ollama。Pydantic AI 仍然只是 assistant/provider
+orchestration；AI HAT+ 2 只作為 local inference backend，不是 Scout safety
+authority，也不是 hardware control surface。
+
+外部設定檔範例：
+
+```json
+{
+  "active_profile": "cloud",
+  "cloud_model": {
+    "profile": "cloud",
+    "model_name": "nvidia:z-ai/glm-5.2",
+    "token_id": "operator-managed-nvidia-token",
+    "token_env_var": "NVIDIA_API_KEY"
+  },
+  "local_model": {
+    "profile": "local",
+    "model_name": "hailo:qwen2.5:1.5b",
+    "backend": "hailo_ollama",
+    "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h",
+    "tool_calling": "enabled"
+  },
+  "timeout_seconds": 8,
+  "max_context_chars": 12000,
+  "connect_on_startup": false,
+  "fallback_to_local_on_error": true,
+  "local_fallback_fixed_schema": false
+}
+```
+
+`base_url` 可省略；Scout 會把 AI HAT+ 2 fallback 解析成
+`http://127.0.0.1:8000/v1`。這是 Hailo Ollama 的 OpenAI-compatible local endpoint
+形狀，不需要 `OPENAI_API_KEY`。如現場實際 endpoint 不同，operator 可在外部 JSON
+明確填入 `base_url`，但不得把 token value 寫進設定檔。
+
+manual Pi/AI HAT+ 2 verification 只檢查已存在的硬體與 service：
+
+```bash
+export SCOUT_RUNTIME_PROFILE=pi-field
+./venv/bin/python tools/pi_ai_hat_plus_2_smoke.py --pretty --no-write
+curl --max-time 2 http://127.0.0.1:8000/hailo/v1/list
+curl --max-time 5 http://127.0.0.1:9110/assistant/status
+```
+
+`/assistant/status` 在 Pi field profile 應顯示：
+
+- `local_fallback_mode=pi_field_ai_hat_plus_2_manual_opt_in`；
+- `local_model_backend=hailo_ollama`；
+- `local_hardware_accelerator=raspberry_pi_ai_hat_plus_2_hailo10h`；
+- `ai_hat_plus_2_fallback_enabled=true`；
+- `ai_hat_plus_2_readiness_required=true`；
+- `readiness_starts_local_model=false`；
+- `local_model_listener_required_for_readiness=false`；
+- `status_model_switch_allowed=false`。
+
+這條 fallback path 預設不把 native web/search capability 掛到 local Hailo model，也不把
+Scout workspace tool-calling 交給 local Hailo model。local fallback 使用既有 bounded
+context 與 fixed schema，避免小模型因 tool/function calling 不穩而拒答或卡住。
+
+Boundaries:
+
+- not part of the assistant readiness gate。
+- read-only model interpretation。
+- 不啟動 Hailo Ollama from readiness checks。
+- 不啟動本地模型 from readiness checks。
+- 不呼叫 `/safety/*` mutation。
+- 不寫 ObservedFact。
+- 不寫 Phase 2 Brain。
+- 不寫 IncidentStore。
+- 不送 outbound。
+- 不控制 hardware。
+- 不控制 provider。
+
 ### Milestone 10.2 Slice 3: Pi Field Profile Status + Manual Failover Runbook
 
 Slice 3 只增加 status/runbook guardrail，不啟動本地模型，也不讓 UI 或 status endpoint

@@ -55,7 +55,7 @@ The assistant config points to:
 - local fallback profile: `qwen2.5:0.5b` through host Ollama;
 - `connect_on_startup=true`;
 - `fallback_to_local_on_error=true`;
-- `local_fallback_fixed_schema=true`.
+- `local_fallback_fixed_schema=false`.
 
 Scout Ollama had both `qwen2.5:0.5b` and `qwen2.5:1.5b` available.
 

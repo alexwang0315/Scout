@@ -3,11 +3,11 @@ from pydantic_ai import Agent, RunContext
 from pydantic import BaseModel
 from typing import Literal
 from macos_wifi import MacOSWifiWorld
-from dotenv import load_dotenv
 from pydantic_ai_runtime_compat import build_chat_model, pydantic_agent_runtime_kwargs
+from scout_env import load_scout_env_files
 
 # 1. 加載環境變量
-load_dotenv(os.path.expanduser('~/scout-fusion/.env'))
+load_scout_env_files()
 api_key = os.getenv('OPENROUTER_API_KEY')
 
 # 2. 使用 Pydantic AI v2 OpenRouter provider，不修改全域 OpenAI env。

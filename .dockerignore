@@ -61,6 +61,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !assistant_offline_fallback_contract.py
 !assistant_pydantic_provider.py
 !assistant_readiness_check.py
+!assistant_workspace_total_info.py
 !debug_assistant_context.py
 !hardware_readiness_admin_view.py
 !hardware_readiness_assistant_context.py
@@ -96,6 +97,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !safety_runtime_session.py
 !safety_state_machine.py
 !scout_pi_runtime.py
+!scout_runtime_*.py
 !skill_registry_models.py
 !skill_runtime.py
 !admin_after_action.py
@@ -187,8 +189,10 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_gee_integration.py
 !scout_layer_contract.py
 !scout_contextual_permission_tool.py
+!scout_cwa_environment_tool.py
 !scout_energy_vitals_tool.py
 !scout_equipment_resource_tool.py
+!scout_gee_environment_tool.py
 !scout_ins_dr_trace_tool.py
 !scout_live_navigation_state_tool.py
 !scout_route_context_tool.py

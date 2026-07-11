@@ -156,6 +156,8 @@ def search_project_route_structure(
 
     items: list[dict[str, Any]] = []
     cp_by_id = {str(item.get("candidate_id")): item for item in checkpoints if isinstance(item, dict)}
+    segment_quality = _segment_quality_summary(segments)
+    checkpoint_quality = _checkpoint_quality_summary(checkpoints, segments)
     for index, raw in enumerate(checkpoints):
         if not isinstance(raw, dict):
             continue
@@ -179,7 +181,7 @@ def search_project_route_structure(
             continue
         if resolved_segment and str(item.get("candidate_id", "")).lower() != resolved_segment.lower():
             continue
-        score = _text_match_score(item.get("search_text", ""), terms, query)
+        score = _major_point_match_score(item, terms, query)
         if terms and score <= 0 and not (resolved_cp or resolved_segment):
             continue
         filtered.append({k: v for k, v in item.items() if k != "search_text"} | {"match_score": round(score, 3)})
@@ -206,6 +208,8 @@ def search_project_route_structure(
         "summaries": {
             "checkpoint_count": len(checkpoints),
             "segment_count": len(segments),
+            **segment_quality,
+            **checkpoint_quality,
             "source_paths": {
                 "route_summary": project.get("route_summary_ref"),
                 "checkpoints": checkpoint_source,
@@ -217,6 +221,54 @@ def search_project_route_structure(
         "result_count": len(filtered[:resolved_limit]),
         "results": filtered[:resolved_limit],
         "boundary": _closed_boundary(),
+    }
+
+
+def _segment_quality_summary(segments: list[Any]) -> dict[str, Any]:
+    segment_dicts = [item for item in segments if isinstance(item, dict)]
+    return {
+        "segment_missing_distance_count": sum(
+            1 for item in segment_dicts if item.get("distance_m") is None
+        ),
+        "segment_missing_display_geometry_count": sum(
+            1
+            for item in segment_dicts
+            if not any(key in item for key in ("display_geometry", "geometry", "coordinates"))
+        ),
+        "segment_route_point_index_geometry_count": sum(
+            1
+            for item in segment_dicts
+            if item.get("route_point_start_index") is not None
+            and item.get("route_point_end_index") is not None
+        ),
+    }
+
+
+def _checkpoint_quality_summary(
+    checkpoints: list[Any],
+    segments: list[Any],
+) -> dict[str, Any]:
+    checkpoint_dicts = [item for item in checkpoints if isinstance(item, dict)]
+    segment_dicts = [item for item in segments if isinstance(item, dict)]
+    labels: dict[str, list[str]] = {}
+    for item in checkpoint_dicts:
+        label = str(item.get("label") or "").strip()
+        if not label:
+            continue
+        labels.setdefault(label, []).append(str(item.get("candidate_id") or ""))
+    duplicate_groups = {
+        label: ids
+        for label, ids in labels.items()
+        if len(ids) > 1
+    }
+    expected_segment_count = max(0, len(checkpoint_dicts) - 1)
+    segment_count = len(segment_dicts)
+    return {
+        "expected_segment_count_from_checkpoints": expected_segment_count,
+        "segment_count_matches_checkpoint_chain": segment_count == expected_segment_count,
+        "segment_count_delta_from_expected": segment_count - expected_segment_count,
+        "checkpoint_duplicate_label_group_count": len(duplicate_groups),
+        "checkpoint_duplicate_label_groups": duplicate_groups,
     }
 
 
@@ -243,8 +295,8 @@ def search_project_major_points(
             continue
         if resolved_kinds and not (set(str(kind).lower() for kind in item.get("point_classes", [])) & resolved_kinds):
             continue
-        score = _text_match_score(item.get("search_text", ""), terms, query)
-        if terms and score <= 0 and not resolved_cp:
+        score = _major_point_match_score(item, terms, query)
+        if terms and score <= 0 and not resolved_cp and not resolved_kinds:
             continue
         compact = {k: v for k, v in item.items() if k != "search_text"}
         compact["match_score"] = round(score, 3)
@@ -258,6 +310,7 @@ def search_project_major_points(
 
     filtered.sort(
         key=lambda item: (
+            -float(item.get("match_score") or 0.0),
             -float(item.get("score") or 0.0),
             str(item.get("label") or item.get("candidate_id")),
         )
@@ -370,6 +423,61 @@ def _catalog_items(root: Path, project: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
             }
         )
+    items.extend(_preparation_metadata_items(root))
+    return items
+
+
+def _preparation_metadata_items(root: Path) -> list[dict[str, Any]]:
+    paths = (
+        "outputs/layers/layer_preparation_summary.json",
+        "outputs/layers/map_preparation_summary.json",
+        "outputs/layers/layer_preparation_job.json",
+        "outputs/layers/layer_preparation_manifest.json",
+        "outputs/scout_ai/pretrip_import_preparation_run_result.json",
+        "outputs/scout_ai/pretrip_import_preparation_skill_run_record.json",
+        "outputs/risk/risk_ribbon.metadata.json",
+        "outputs/risk/calibrated_risk_heatmap.metadata.json",
+        "outputs/risk/risk_score_points.metadata.json",
+        "outputs/risk/route_risk.metadata.json",
+    )
+    items: list[dict[str, Any]] = []
+    for rel in paths:
+        path = root / rel
+        artifact_kind = None
+        top_level_keys: list[str] = []
+        status = None
+        if path.exists() and path.suffix.lower() in {".json", ".geojson"}:
+            payload = _load_json_object(path)
+            if isinstance(payload, dict):
+                artifact_kind = payload.get("artifact_kind")
+                status = payload.get("status") or payload.get("overall_status")
+                top_level_keys = sorted(payload.keys())[:12]
+        ref_key = Path(rel).name.replace(".", "_")
+        items.append(
+            {
+                "evidence_type": "workspace_preparation_metadata",
+                "domain": "workspace",
+                "ref_key": ref_key,
+                "source_path": rel,
+                "exists": path.exists(),
+                "count_keys": {},
+                "artifact_kind": artifact_kind,
+                "status": status,
+                "top_level_keys": top_level_keys,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "search_text": " ".join(
+                    [
+                        ref_key,
+                        rel,
+                        "workspace preparation metadata outputs completed missing preparation_summary map_preparation layer_preparation pretrip_import",
+                        artifact_kind or "",
+                        status or "",
+                        " ".join(top_level_keys),
+                    ]
+                ),
+            }
+        )
     return items
 
 
@@ -384,6 +492,19 @@ def _catalog_summaries(items: list[dict[str, Any]]) -> dict[str, Any]:
         "artifact_ref_count": len(items),
         "existing_ref_count": sum(1 for item in items if item["exists"]),
         "missing_ref_count": sum(1 for item in items if not item["exists"]),
+        "preparation_metadata_count": sum(
+            1 for item in items if item.get("evidence_type") == "workspace_preparation_metadata"
+        ),
+        "existing_preparation_metadata_count": sum(
+            1
+            for item in items
+            if item.get("evidence_type") == "workspace_preparation_metadata" and item["exists"]
+        ),
+        "missing_preparation_metadata_count": sum(
+            1
+            for item in items
+            if item.get("evidence_type") == "workspace_preparation_metadata" and not item["exists"]
+        ),
         "domains": by_domain,
     }
 
@@ -860,6 +981,8 @@ def _normalize_domains(values: list[str] | None) -> set[str]:
 
 def _domains_from_query(query: str) -> set[str]:
     lowered = query.lower()
+    if any(term in lowered for term in ("preparation", "metadata", "已完成", "仍缺")):
+        return set()
     domains = set()
     for domain, hints in _DOMAIN_HINTS.items():
         if any(hint.lower() in lowered for hint in hints):
@@ -874,6 +997,11 @@ def _looks_candidate_key(key: str, value: str) -> bool:
 
 def _catalog_match_score(item: dict[str, Any], terms: set[str], raw_query: str) -> float:
     score = _text_match_score(str(item.get("search_text") or ""), terms, raw_query)
+    lowered_query = raw_query.lower()
+    if item.get("evidence_type") == "workspace_preparation_metadata" and any(
+        term in lowered_query for term in ("preparation", "metadata", "已完成", "仍缺")
+    ):
+        score += 12.0
     if item["exists"]:
         score += 0.25
     return score
@@ -947,6 +1075,34 @@ def _text_match_score(text: str, terms: set[str], raw_query: str) -> float:
     for term in terms:
         if term in lowered:
             score += 4.0 if re.search(r"[\u4e00-\u9fff]", term) else 2.0
+    return score
+
+
+def _major_point_match_score(
+    item: dict[str, Any],
+    terms: set[str],
+    raw_query: str,
+) -> float:
+    score = _text_match_score(item.get("search_text", ""), terms, raw_query)
+    label = str(item.get("label") or "").lower()
+    label_text = str(item.get("label_text") or "").lower()
+    aliases = [
+        str(alias).lower()
+        for alias in item.get("aliases", [])
+        if str(alias).strip()
+    ]
+    raw = str(raw_query or "").lower().strip()
+    if raw and label and label in raw:
+        score += 30.0
+    for term in terms:
+        if len(term) < 2:
+            continue
+        if label and term in label:
+            score += 20.0
+        elif label_text and term in label_text:
+            score += 18.0
+        elif any(term in alias for alias in aliases):
+            score += 6.0
     return score
 
 

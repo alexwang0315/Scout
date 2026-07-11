@@ -28,6 +28,7 @@ from scout_runtime_safety_state_store import RuntimeSafetyStateStore
 from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
 from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
+    _geojson_line_coordinates,
     _mileage_tag_alignment_summary,
     _reference_segment_timing_summary,
     build_pretrip_admin_view,
@@ -45,6 +46,25 @@ WEARABLE_FIXTURES = [
     WEARABLE_FIXTURE_ROOT / "apple_health_missing_hr_interval.json",
     WEARABLE_FIXTURE_ROOT / "garmin_body_battery_provider_values.json",
 ]
+
+
+def test_geojson_line_coordinates_tolerates_extra_nested_segments():
+    coordinates = _geojson_line_coordinates(
+        {
+            "type": "LineString",
+            "coordinates": [
+                [[121.21, 24.05], [121.211, 24.051]],
+                [[121.22, 24.06], [121.221, 24.061]],
+            ],
+        }
+    )
+
+    assert coordinates == [
+        {"lon": 121.21, "lat": 24.05},
+        {"lon": 121.211, "lat": 24.051},
+        {"lon": 121.22, "lat": 24.06},
+        {"lon": 121.221, "lat": 24.061},
+    ]
 
 
 def test_reference_segment_timing_without_projection_does_not_highlight_whole_route():

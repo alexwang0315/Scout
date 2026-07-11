@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class AssistantSurface(str, Enum):
@@ -18,6 +18,11 @@ class AssistantSurfaceConstraint(str, Enum):
     ADMIN_AFTER_ACTION_READ_ONLY = "admin_after_action_read_only"
     PRETRIP_READ_ONLY = "pretrip_read_only"
     HARDWARE_READINESS_READ_ONLY = "hardware_readiness_read_only"
+
+
+class AssistantRuntimePreference(str, Enum):
+    CLOUD = "cloud"
+    AI_HAT_PLUS_2_FALLBACK = "ai_hat_plus_2_fallback"
 
 
 class AssistantSourceRef(BaseModel):
@@ -193,11 +198,32 @@ class ScoutAssistantQuery(BaseModel):
 
     surface: AssistantSurface
     question: str = Field(min_length=1, max_length=2000)
-    context_ref: str | None = None
+    context_ref: str | None = Field(default=None, max_length=255)
     selected_event_id: str | None = None
     selected_artifact_id: str | None = None
-    project_id: str | None = None
+    project_id: str | None = Field(default=None, max_length=255)
+    runtime_preference: AssistantRuntimePreference | None = None
+    ai_hat_raw_eval: bool = False
     live_navigation_snapshot: dict[str, Any] | None = None
+
+    @field_validator("context_ref", "project_id")
+    @classmethod
+    def validate_workspace_identifier(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if value in {".", ".."} or any(char in value for char in ("/", "\\", "\x00")):
+            raise ValueError("workspace identifiers must not contain path components")
+        return value
+
+
+class AssistantLocalModelAttempt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    call_index: int = Field(ge=1)
+    answer: str = Field(min_length=1)
+    grounding_ok: bool
+    brief_violations: list[str] = Field(default_factory=list)
+    selected: bool = False
 
 
 class ScoutAssistantResponse(BaseModel):
@@ -205,6 +231,9 @@ class ScoutAssistantResponse(BaseModel):
 
     surface: AssistantSurface
     answer: str = Field(min_length=1)
+    local_model_answer: str | None = None
+    local_model_attempts: list[AssistantLocalModelAttempt] = Field(default_factory=list)
+    evidence_backed_answer: str | None = None
     model_interpretation: Literal[True] = True
     read_only: Literal[True] = True
     sources: list[AssistantSourceRef] = Field(default_factory=list)

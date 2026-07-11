@@ -4,14 +4,14 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Callable
-
 from fastapi import APIRouter, FastAPI
 
 from assistant_context import AssistantContextResolver, query_source_refs
+from assistant_workspace_total_info import build_workspace_total_info_source_ref
 from assistant_models import (
     AssistantBoundary,
     AssistantObservability,
+    AssistantRuntimePreference,
     AssistantSourceRef,
     ScoutAssistantQuery,
     ScoutAssistantResponse,
@@ -84,6 +84,10 @@ def answer_assistant_query_safely(
     started_at: float | None = None,
 ) -> ScoutAssistantResponse:
     resolved_sources = _augment_sources_with_tool_registry_context(list(sources or []))
+    resolved_sources = _augment_sources_with_workspace_total_info(
+        query,
+        sources=resolved_sources,
+    )
     resolved_started_at = started_at if started_at is not None else time.perf_counter()
     try:
         skill_response = resolve_assistant_query_with_skill(
@@ -122,6 +126,24 @@ def answer_assistant_query_safely(
             provider_error_type=type(exc).__name__,
         )
         if workspace_tool_fallback is not None:
+            synthesized = _provider_grounded_synthesis_response(
+                provider,
+                query,
+                workspace_tool_fallback,
+                provider_error_type=type(exc).__name__,
+            )
+            if synthesized is not None:
+                return _with_observability(
+                    synthesized,
+                    provider=provider,
+                    sources=synthesized.sources,
+                    started_at=resolved_started_at,
+                    safe_failure=False,
+                )
+            workspace_tool_fallback = _mark_deterministic_fallback_only(
+                workspace_tool_fallback,
+                provider_error_type=type(exc).__name__,
+            )
             return _with_observability(
                 workspace_tool_fallback,
                 provider=provider,
@@ -211,6 +233,11 @@ def create_assistant_provider_status(
         "cloud_only": False,
         "local_fallback_enabled": False,
         "local_fallback_mode": "disabled",
+        "local_model_backend": "not_configured",
+        "local_hardware_accelerator": "none",
+        "ai_hat_plus_2_fallback_enabled": False,
+        "ai_hat_plus_2_readiness_required": False,
+        "ai_hat_plus_2_readiness_artifact": "tools/pi_ai_hat_plus_2_smoke.py",
         "manual_verification_required": False,
         "local_fallback_max_concurrency": 1,
         "readiness_starts_local_model": False,
@@ -241,12 +268,24 @@ def create_assistant_provider_status(
 
     local_fallback_enabled = model_config.fallback_to_local_on_error
     pi_field_profile = runtime_profile == "pi-field"
+    ai_hat_plus_2_fallback = (
+        model_config.local_model.hardware_accelerator
+        == "raspberry_pi_ai_hat_plus_2_hailo10h"
+    )
     if not local_fallback_enabled:
         local_fallback_mode = "disabled"
     elif pi_field_profile:
-        local_fallback_mode = "pi_field_manual_opt_in"
+        local_fallback_mode = (
+            "pi_field_ai_hat_plus_2_manual_opt_in"
+            if ai_hat_plus_2_fallback
+            else "pi_field_manual_opt_in"
+        )
     else:
-        local_fallback_mode = "configured_not_pi_field"
+        local_fallback_mode = (
+            "ai_hat_plus_2_configured_not_pi_field"
+            if ai_hat_plus_2_fallback
+            else "configured_not_pi_field"
+        )
 
     status.update(
         {
@@ -254,12 +293,19 @@ def create_assistant_provider_status(
             "active_profile": model_config.active_profile,
             "cloud_model": model_config.cloud_model.model_name,
             "local_model": model_config.local_model.model_name,
+            "local_model_backend": model_config.local_model.backend,
+            "local_hardware_accelerator": model_config.local_model.hardware_accelerator,
             "timeout_seconds": model_config.timeout_seconds,
             "max_context_chars": model_config.max_context_chars,
             "connect_on_startup": model_config.connect_on_startup,
             "local_fallback_enabled": local_fallback_enabled,
             "local_fallback_fixed_schema": model_config.local_fallback_fixed_schema,
             "local_fallback_mode": local_fallback_mode,
+            "ai_hat_plus_2_fallback_enabled": local_fallback_enabled
+            and ai_hat_plus_2_fallback,
+            "ai_hat_plus_2_readiness_required": local_fallback_enabled
+            and ai_hat_plus_2_fallback
+            and pi_field_profile,
             "manual_verification_required": local_fallback_enabled and pi_field_profile,
             "cloud_only": model_config.active_profile == "cloud"
             and not local_fallback_enabled,
@@ -289,7 +335,8 @@ def create_assistant_workflow_status(
             "available": bool(workflow_gate.get("ok")),
             "status": "ready" if workflow_gate.get("ok") else "needs_attention",
             "workflow_gate_ok": bool(workflow_gate.get("ok")),
-            "overall_readiness_ok": bool(readiness.get("ok")),
+            "overall_readiness_ok": bool(workflow_gate.get("ok")),
+            "repository_readiness_ok": bool(readiness.get("ok")),
             "readiness_failed_checks": list(readiness.get("failed_checks") or []),
             "workflow_tool_ids": workflow_tool_ids,
             "workflow_tool_count": len(workflow_tool_ids),
@@ -417,6 +464,20 @@ def _augment_sources_with_tool_registry_context(
     return [*sources, _assistant_tool_registry_source_ref()]
 
 
+def _augment_sources_with_workspace_total_info(
+    query: ScoutAssistantQuery,
+    *,
+    sources: list[AssistantSourceRef],
+) -> list[AssistantSourceRef]:
+    project_root = _pretrip_workspace_project_root_from_env(query)
+    source = build_workspace_total_info_source_ref(query, project_root=project_root)
+    if source is None:
+        return sources
+    if any(existing.source_id == source.source_id for existing in sources):
+        return sources
+    return [source, *sources]
+
+
 def _assistant_tool_registry_source_ref() -> AssistantSourceRef:
     return AssistantSourceRef(
         source_id="assistant_context.tool_registry",
@@ -488,7 +549,14 @@ def _pretrip_workspace_project_root_from_env(
     workspace_root = os.environ.get("SCOUT_PRETRIP_WORKSPACE_ROOT")
     if not project_id or not workspace_root:
         return None
-    candidate = Path(workspace_root).expanduser() / project_id
+    root = Path(workspace_root).expanduser().resolve()
+    candidate = (root / project_id).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    if candidate == root:
+        return None
     if (candidate / "project.json").exists():
         return candidate
     return None
@@ -510,6 +578,67 @@ def _workspace_tool_fallback_response(
         )
     except Exception:
         return None
+
+
+def _provider_grounded_synthesis_response(
+    provider: ScoutAssistantProvider,
+    query: ScoutAssistantQuery,
+    fallback_response: ScoutAssistantResponse,
+    *,
+    provider_error_type: str,
+) -> ScoutAssistantResponse | None:
+    if query.runtime_preference == AssistantRuntimePreference.AI_HAT_PLUS_2_FALLBACK:
+        return None
+    synthesizer = getattr(provider, "synthesize_grounded_answer", None)
+    if not callable(synthesizer):
+        return None
+    try:
+        synthesized = synthesizer(query, grounded_answer=fallback_response.answer)
+    except Exception:
+        return None
+    if not str(synthesized or "").strip():
+        return None
+    return fallback_response.model_copy(
+        update={
+            "answer": (
+                "Pydantic AI read-only model interpretation: "
+                + str(synthesized).strip()
+            ),
+            "evidence_backed_answer": fallback_response.answer,
+            "limitations": [
+                *fallback_response.limitations,
+                f"initial_provider_error_type={provider_error_type}",
+                "grounded_model_synthesis_after_provider_error=passed",
+                "Initial provider run failed, but Scout retried the cloud model with compact read-only tool evidence and used that model synthesis as the answer.",
+            ],
+        }
+    )
+
+
+def _mark_deterministic_fallback_only(
+    response: ScoutAssistantResponse,
+    *,
+    provider_error_type: str,
+) -> ScoutAssistantResponse:
+    fallback_answer = response.answer
+    return response.model_copy(
+        update={
+            "answer": (
+                "Scout AI model answer unavailable：模型未成功回答；provider failed "
+                "and grounded model synthesis did not produce a valid answer. "
+                "deterministic read-only 工具摘要已保留在 evidence_backed_answer，"
+                "不能算作模型答題品質成功。"
+            ),
+            "evidence_backed_answer": fallback_answer,
+            "limitations": [
+                *response.limitations,
+                f"initial_provider_error_type={provider_error_type}",
+                "deterministic_tool_fallback_only=true",
+                "Provider run failed and grounded model synthesis did not produce a valid answer.",
+                "Do not count this response as model answer quality success.",
+            ],
+        }
+    )
 
 
 def _with_observability(
@@ -534,6 +663,7 @@ def _with_observability(
             sort_keys=True,
         )
     )
+    model_profile_used = _provider_metadata(provider, "last_profile")
     observability = AssistantObservability(
         provider_class=type(provider).__name__,
         source_count=len(sources),
@@ -542,9 +672,13 @@ def _with_observability(
         latency_ms=latency_ms,
         latency_class=latency_class,
         safe_failure=safe_failure,
-        model_profile_used=_provider_metadata(provider, "last_profile"),
+        model_profile_used=model_profile_used,
         failover_reason=_provider_metadata(provider, "last_failover_reason"),
-        local_model_name=_provider_metadata(provider, "local_model_name"),
+        local_model_name=(
+            _provider_metadata(provider, "local_model_name")
+            if model_profile_used == "local"
+            else None
+        ),
     )
     return response.model_copy(update={"observability": observability})
 
