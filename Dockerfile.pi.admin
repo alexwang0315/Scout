@@ -86,6 +86,7 @@ COPY \
     offline_map.py \
     offline_map_models.py \
     pdr_fallback.py \
+    pydantic_ai_runtime_compat.py \
     phase2_brain_models.py \
     phase2_refs.py \
     phase2_store_utils.py \
@@ -224,6 +225,7 @@ COPY \
 
 COPY scout_ai_*.py scout_*_tool.py ./
 COPY pretrip_*.py ./
+COPY src/scout/ ./scout/
 
 COPY tools/pydantic_ai_cloud_latency_benchmark.py ./tools/
 COPY tools/pi_grove_led_bar_smoke.py ./tools/

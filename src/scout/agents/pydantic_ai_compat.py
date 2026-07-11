@@ -13,6 +13,8 @@ OPENAI_KEY_ENV = "OPENAI_API_KEY"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL = "http://127.0.0.1:8000/v1"
+LOCAL_OPENAI_COMPATIBLE_API_KEY = "scout-local-openai-compatible"
 
 
 def pydantic_ai_runtime_version() -> str:
@@ -65,11 +67,16 @@ def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
         )
     if policy.native_web_fetch_enabled:
         from pydantic_ai.capabilities.web_fetch import WebFetch
+        from scout.agents.local_web_fetch import build_local_web_fetch
 
         capabilities.append(
             WebFetch(
                 native=True,
-                max_uses=policy.native_research_max_fetches,
+                local=build_local_web_fetch(
+                    allowed_domains=policy.native_research_allowed_domains or None,
+                    blocked_domains=policy.native_research_blocked_domains or None,
+                    max_uses=policy.native_research_max_fetches,
+                ),
                 allowed_domains=policy.native_research_allowed_domains or None,
                 blocked_domains=policy.native_research_blocked_domains or None,
                 enable_citations=True,
@@ -108,6 +115,9 @@ def build_chat_model(
         model_name = _strip_nvidia_prefix(model_name)
         base_url = base_url or NVIDIA_BASE_URL
         api_key = api_key or os.getenv(NVIDIA_KEY_ENV)
+    if _is_hailo_ollama_model(model_name=model_name, base_url=base_url):
+        model_name = _strip_hailo_prefix(model_name)
+        base_url = base_url or AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL
 
     try:
         from pydantic_ai.models.openai import OpenAIChatModel
@@ -117,7 +127,10 @@ def build_chat_model(
 
     return OpenAIChatModel(
         _strip_openai_chat_prefix(model_name),
-        provider=OpenAIProvider(base_url=base_url, api_key=api_key or os.getenv(OPENAI_KEY_ENV)),
+        provider=OpenAIProvider(
+            base_url=base_url,
+            api_key=_resolve_openai_compatible_api_key(base_url=base_url, api_key=api_key),
+        ),
     )
 
 
@@ -147,6 +160,12 @@ def _is_nvidia_model(*, model_name: str, base_url: str | None) -> bool:
     )
 
 
+def _is_hailo_ollama_model(*, model_name: str, base_url: str | None) -> bool:
+    return model_name.startswith("hailo:") or bool(
+        base_url and _is_local_openai_compatible_base_url(base_url)
+    )
+
+
 def _strip_openrouter_prefix(model_name: str) -> str:
     if model_name.startswith("openrouter:"):
         return model_name.removeprefix("openrouter:")
@@ -159,7 +178,30 @@ def _strip_nvidia_prefix(model_name: str) -> str:
     return model_name
 
 
+def _strip_hailo_prefix(model_name: str) -> str:
+    if model_name.startswith("hailo:"):
+        return model_name.removeprefix("hailo:")
+    return model_name
+
+
 def _strip_openai_chat_prefix(model_name: str) -> str:
     if model_name.startswith("openai-chat:"):
         return model_name.removeprefix("openai-chat:")
     return model_name
+
+
+def _resolve_openai_compatible_api_key(
+    *,
+    base_url: str | None,
+    api_key: str | None,
+) -> str | None:
+    if api_key:
+        return api_key
+    if base_url and _is_local_openai_compatible_base_url(base_url):
+        return LOCAL_OPENAI_COMPATIBLE_API_KEY
+    return os.getenv(OPENAI_KEY_ENV)
+
+
+def _is_local_openai_compatible_base_url(base_url: str) -> bool:
+    normalized = base_url.strip().lower()
+    return normalized.startswith(("http://127.0.0.1", "http://localhost"))
