@@ -17,6 +17,7 @@ DOC = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.md"
 PRETRIP_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 LAYER_CONTRACT_DOC = ROOT / "docs" / "specs" / "scout-admin-map-layer-contract.md"
 WEATHER_DOC = ROOT / "docs" / "specs" / "scout-weather-environment-sensing.md"
+SMOKE_TOOL = ROOT / "tools" / "admin_ui_visual_smoke.js"
 
 
 def test_scout_dashboard_page_serves_static_shell() -> None:
@@ -1877,3 +1878,27 @@ def test_dashboard_primary_information_architecture_and_mobile_shell_contract() 
     assert "bindMobileNavigation" in html
     assert "70dvh" in html
     assert "env(safe-area-inset-bottom)" in html
+
+
+def test_dashboard_p0_p2_review_regressions_are_fail_closed() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+    smoke = SMOKE_TOOL.read_text(encoding="utf-8")
+
+    assert 'if (snapshot.status === "unavailable") return "unavailable";' in html
+    assert "dataScopeErrors" in html
+    assert "loadedDataScopes.add(scope);" in html.split(
+        "async function loadDataScope", 1
+    )[1].split("async function performDataScope", 1)[0].split(".then", 1)[1]
+    assert "window.location.replace(nextUrl.toString())" in html
+    assert "sidebar.inert = !open" in html
+    assert 'sidebar.setAttribute("aria-hidden", open ? "false" : "true")' in html
+
+    overlay_loader = pretrip_html.split(
+        "async function loadCwaRainfallGridOverlay", 1
+    )[1].split("function bindCwaWeatherImageryControls", 1)[0]
+    assert 'grid_overlay_status: overlay.status' in overlay_loader
+    assert 'overlay.status === "ready" && gridCells.length ? "ready" : "no_coverage"' not in overlay_loader
+
+    assert "/admin/dashboard?projectId=chilai_nanhua_day1#map" in smoke
+    assert 'replace(\n      "/projects/chilai_nanhua_day1_scoutAI"' not in smoke

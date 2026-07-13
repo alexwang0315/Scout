@@ -43,7 +43,8 @@ def test_admin_ui_visual_smoke_script_covers_routes_viewports_and_boundaries():
 
     for route in ("/admin/debug", "/admin/pretrip", "/admin/hardware-readiness", "/admin", "/admin/dashboard"):
         assert route in script
-    assert "/admin/dashboard?projectId=chilai_nanhua_day1_scoutAI#map" in script
+    assert "/admin/dashboard?projectId=chilai_nanhua_day1#map" in script
+    assert '"/projects/chilai_nanhua_day1_scoutAI"' not in script
 
     for selector in (
         "#runtimeMap",

@@ -65,6 +65,73 @@ def _copy_pretrip_workspace(tmp_path: Path) -> Path:
     return workspace_root
 
 
+def test_admin_projection_rejects_out_of_workspace_ref(tmp_path: Path) -> None:
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    project_path = project_root / "project.json"
+    baseline_project = json.loads(project_path.read_text(encoding="utf-8"))
+    outside = tmp_path / "outside-admin-projection.json"
+    sentinel = "outside-workspace-sentinel"
+    outside.write_text(json.dumps({"sentinel": sentinel}), encoding="utf-8")
+    workspace_outside = workspace_root / "outside-admin-projection.json"
+    workspace_outside.write_text(json.dumps({"sentinel": sentinel}), encoding="utf-8")
+    symlink_path = project_root / "outputs" / "escaped-admin-projection.json"
+    symlink_path.parent.mkdir(parents=True, exist_ok=True)
+    symlink_path.symlink_to(outside)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    for unsafe_ref in (
+        "../outside-admin-projection.json",
+        str(outside),
+        "outputs/escaped-admin-projection.json",
+    ):
+        project_path.write_text(
+            json.dumps({**baseline_project, "admin_projection_ref": unsafe_ref}),
+            encoding="utf-8",
+        )
+
+        response = client.get(
+            f"/admin/pretrip/projects/{PROJECT_ID}/admin-projection"
+        )
+
+        assert response.status_code == 422
+        assert sentinel not in response.text
+
+
+def test_debug_projection_rejects_mismatched_cwa_project_identity(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    projection_ref = "outputs/environment/cwa/rainfall/review-mismatch.geojson"
+    projection_path = project_root / projection_ref
+    projection_path.parent.mkdir(parents=True, exist_ok=True)
+    projection_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "artifactKind": "cwa_route_grid_projection",
+                "projectId": "different-project",
+                "products": [],
+                "features": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    project["cwa_rainfall_route_projection_ref"] = projection_ref
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/debug-projection"
+    )
+
+    assert response.status_code == 422
+    assert "project identity" in response.json()["detail"].lower()
+
+
 def _write_small_gpx(
     path: Path,
     *,

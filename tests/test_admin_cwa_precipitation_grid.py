@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,6 +51,9 @@ def _prepare_workspace(tmp_path: Path) -> Path:
     route_path.write_text(
         json.dumps(
             {
+                "artifact_kind": "pretrip_segment_display_geometry",
+                "project_id": "fixture-route",
+                "route_artifact_id": "artifact.gpx.fixture-route",
                 "segments": [
                     {
                         "coordinate_segments": [
@@ -81,6 +85,85 @@ def _prepare_workspace(tmp_path: Path) -> Path:
     }
     (project_root / "project.json").write_text(json.dumps(project), encoding="utf-8")
     return workspace_root
+
+
+def _issue_location_approval(client: TestClient) -> dict[str, object]:
+    response = client.post(
+        "/admin/pretrip/projects/fixture-route/rainfall-location-approvals",
+        json={
+            "confirmLocationAccess": True,
+            "scope": "current_trip_rainfall_sampling",
+            "operatorAlias": "fixture_operator",
+            "ttlMinutes": 30,
+        },
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _write_mismatched_pair_projection(workspace_root: Path) -> None:
+    project_root = workspace_root / "fixture-route"
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    route_ref = str(project["segment_display_geometry_ref"])
+    route_sha256 = hashlib.sha256((project_root / route_ref).read_bytes()).hexdigest()
+    manifest_path = (
+        project_root
+        / "outputs/environment/cwa/rainfall/rainfall_grid_manifest.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    source_frame_ids = {
+        kind: frame["frameId"]
+        for kind, frame in manifest["latestByKind"].items()
+    }
+    manifest.update(
+        {
+            "projectId": "fixture-route",
+            "routeRef": route_ref,
+            "routeSha256": route_sha256,
+            "routeBasis": "segment_display_geometry",
+            "sourceFrameIds": source_frame_ids,
+            "pairId": "rainfall.pair.manifest",
+        }
+    )
+    manifest["activePair"] = {
+        key: manifest[key]
+        for key in (
+            "pairId",
+            "projectId",
+            "routeRef",
+            "routeSha256",
+            "routeBasis",
+            "sourceFrameIds",
+        )
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    projection_ref = "outputs/environment/cwa/rainfall/route_grid_projection.geojson"
+    projection_path = project_root / projection_ref
+    projection_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "schemaVersion": "cwa_route_grid_projection.v1",
+                "artifactKind": "cwa_route_grid_projection",
+                "projectId": "fixture-route",
+                "routeRef": route_ref,
+                "routeSha256": route_sha256,
+                "routeBasis": "segment_display_geometry",
+                "sourceFrameIds": source_frame_ids,
+                "pairId": "rainfall.pair.projection",
+                "products": [],
+                "features": [],
+                "boundary": {
+                    "candidateOnly": True,
+                    "runtimeSafetyTruth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    project["cwa_rainfall_route_projection_ref"] = projection_ref
+    project_path.write_text(json.dumps(project), encoding="utf-8")
 
 
 def test_admin_rainfall_grid_manifest_is_cache_only_and_redacted(
@@ -149,6 +232,7 @@ def test_admin_position_target_rainfall_trend_is_compact_and_does_not_persist_co
     )
     workspace_root = _prepare_workspace(tmp_path)
     client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+    approval = _issue_location_approval(client)
 
     response = client.post(
         "/admin/pretrip/projects/fixture-route/rainfall-trend",
@@ -161,9 +245,9 @@ def test_admin_position_target_rainfall_trend_is_compact_and_does_not_persist_co
             },
             "targetPosition": {"lat": 23.0125, "lon": 121.025, "id": "CP-02"},
             "confirmLocationAccess": True,
-            "locationApprovalReference": "approval.test.001",
-            "locationApprovedAt": "2026-07-13T10:39:00+08:00",
-            "locationApprovalScope": "current_trip_rainfall_sampling",
+            "locationApprovalReference": approval["reference"],
+            "locationApprovedAt": approval["approvedAt"],
+            "locationApprovalScope": approval["scope"],
         },
     )
 
@@ -176,12 +260,12 @@ def test_admin_position_target_rainfall_trend_is_compact_and_does_not_persist_co
     assert '"lon"' not in serialized
     assert "values" not in serialized
     assert payload["boundary"]["rawCoordinatesPersisted"] is False
-    assert payload["locationApproval"]["reference"] == "approval.test.001"
+    assert payload["locationApproval"]["reference"] == approval["reference"]
     audit_path = (
         workspace_root / "fixture-route" / payload["locationApproval"]["auditRef"]
     )
     audit_text = audit_path.read_text(encoding="utf-8")
-    assert "approval.test.001" in audit_text
+    assert str(approval["reference"]) in audit_text
     assert '"lat"' not in audit_text
     assert '"lon"' not in audit_text
 
@@ -195,9 +279,9 @@ def test_admin_position_target_rainfall_trend_is_compact_and_does_not_persist_co
             },
             "targetPosition": {"lat": 23, "lon": 121, "id": "CP-02"},
             "confirmLocationAccess": True,
-            "locationApprovalReference": "approval.test.001",
-            "locationApprovedAt": "2026-07-13T10:39:00+08:00",
-            "locationApprovalScope": "current_trip_rainfall_sampling",
+            "locationApprovalReference": approval["reference"],
+            "locationApprovedAt": approval["approvedAt"],
+            "locationApprovalScope": approval["scope"],
         },
     )
     assert invalid.status_code == 422
@@ -291,6 +375,7 @@ def test_location_approval_validation_uses_injected_clock(tmp_path: Path) -> Non
             now_factory=lambda: fixed_now,
         )
     )
+    approval = _issue_location_approval(client)
 
     response = client.post(
         "/admin/pretrip/projects/fixture-route/rainfall-trend",
@@ -303,14 +388,68 @@ def test_location_approval_validation_uses_injected_clock(tmp_path: Path) -> Non
             },
             "targetPosition": {"lat": 23.0125, "lon": 121.025, "id": "CP-02"},
             "confirmLocationAccess": True,
-            "locationApprovalReference": "approval.test.clock",
-            "locationApprovedAt": "2026-07-13T10:59:00+08:00",
-            "locationApprovalScope": "current_trip_rainfall_sampling",
+            "locationApprovalReference": approval["reference"],
+            "locationApprovedAt": approval["approvedAt"],
+            "locationApprovalScope": approval["scope"],
         },
     )
 
     assert response.status_code == 200
     assert response.json()["evaluatedAt"] == fixed_now.isoformat()
+
+
+def test_rainfall_trend_rejects_unregistered_attestation_by_default(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _prepare_workspace(tmp_path)
+    fixed_now = datetime(2026, 7, 13, 3, 0, tzinfo=timezone.utc)
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            now_factory=lambda: fixed_now,
+        )
+    )
+
+    response = client.post(
+        "/admin/pretrip/projects/fixture-route/rainfall-trend",
+        json={
+            "currentPosition": {
+                "lat": 23.0,
+                "lon": 121.0,
+                "observedAt": fixed_now.isoformat(),
+                "accuracyM": 15,
+            },
+            "targetPosition": {"lat": 23.0125, "lon": 121.025, "id": "CP-02"},
+            "confirmLocationAccess": True,
+            "locationApprovalReference": "caller.attestation.unregistered",
+            "locationApprovedAt": fixed_now.isoformat(),
+            "locationApprovalScope": "current_trip_rainfall_sampling",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "server-issued" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "/admin/pretrip/projects/fixture-route/rainfall-grids",
+        "/admin/pretrip/projects/fixture-route/rainfall-grid-overlay",
+    ],
+)
+def test_rainfall_reads_reject_projection_manifest_pair_mismatch(
+    tmp_path: Path,
+    endpoint: str,
+) -> None:
+    workspace_root = _prepare_workspace(tmp_path)
+    _write_mismatched_pair_projection(workspace_root)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(endpoint)
+
+    assert response.status_code == 422
+    assert "pair" in response.json()["detail"].lower()
 
 
 def test_server_issued_location_approval_is_verified_and_audited(
