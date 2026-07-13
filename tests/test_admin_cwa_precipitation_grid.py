@@ -4,14 +4,28 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+import admin_api
 from admin_api import create_admin_app
 from cwa_precipitation_grid import parse_qpesums_grid
 from weather_grid_store import WeatherGridStore
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "cwa" / "qpesums"
+
+
+def _freeze_admin_clock(
+    monkeypatch: pytest.MonkeyPatch,
+    value: datetime,
+) -> None:
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            return value if tz is None else value.astimezone(tz)
+
+    monkeypatch.setattr(admin_api, "datetime", FrozenDateTime)
 
 
 def _prepare_workspace(tmp_path: Path) -> Path:
@@ -127,7 +141,12 @@ def test_rainfall_public_manifest_evaluates_product_freshness_at_read_time(
 
 def test_admin_position_target_rainfall_trend_is_compact_and_does_not_persist_coordinates(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _freeze_admin_clock(
+        monkeypatch,
+        datetime(2026, 7, 13, 3, 0, tzinfo=timezone.utc),
+    )
     workspace_root = _prepare_workspace(tmp_path)
     client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
 
@@ -216,3 +235,79 @@ def test_admin_rainfall_endpoints_reject_unsafe_or_wrong_project_ids(
         ).status_code
         == 404
     )
+
+
+def test_weather_imagery_manifest_project_id_must_match_requested_project(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _prepare_workspace(tmp_path)
+    project_root = workspace_root / "fixture-route"
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    manifest_ref = "outputs/environment/cwa/imagery/weather_imagery_manifest.json"
+    project["cwa_weather_imagery_manifest_ref"] = manifest_ref
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    manifest_path = project_root / manifest_ref
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "artifactKind": "weatherImageryTimelineManifest",
+                "schemaVersion": "weatherImageryTimelineManifest.v1",
+                "projectId": "legacy-project",
+                "layerId": "cwa-weather",
+                "status": "ready",
+                "animationWindowsHours": [3, 6, 9, 12],
+                "childOverlays": {
+                    "radar": {"frames": [], "windows": {}},
+                    "satellite": {"frames": [], "windows": {}},
+                },
+                "processingBoundary": {
+                    "adminReadIsCacheOnly": True,
+                    "upstreamFetchOnRead": False,
+                    "candidateOnly": True,
+                    "runtimeSafetyTruth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        "/admin/pretrip/projects/fixture-route/weather-imagery"
+    )
+
+    assert response.status_code == 422
+    assert "project" in response.json()["detail"].lower()
+
+
+def test_location_approval_validation_uses_injected_clock(tmp_path: Path) -> None:
+    workspace_root = _prepare_workspace(tmp_path)
+    fixed_now = datetime(2026, 7, 13, 3, 0, tzinfo=timezone.utc)
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            now_factory=lambda: fixed_now,
+        )
+    )
+
+    response = client.post(
+        "/admin/pretrip/projects/fixture-route/rainfall-trend",
+        json={
+            "currentPosition": {
+                "lat": 23.0,
+                "lon": 121.0,
+                "observedAt": "2026-07-13T10:40:00+08:00",
+                "accuracyM": 15,
+            },
+            "targetPosition": {"lat": 23.0125, "lon": 121.025, "id": "CP-02"},
+            "confirmLocationAccess": True,
+            "locationApprovalReference": "approval.test.clock",
+            "locationApprovedAt": "2026-07-13T10:59:00+08:00",
+            "locationApprovalScope": "current_trip_rainfall_sampling",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["evaluatedAt"] == fixed_now.isoformat()
