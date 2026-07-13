@@ -311,3 +311,64 @@ def test_location_approval_validation_uses_injected_clock(tmp_path: Path) -> Non
 
     assert response.status_code == 200
     assert response.json()["evaluatedAt"] == fixed_now.isoformat()
+
+
+def test_server_issued_location_approval_is_verified_and_audited(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _prepare_workspace(tmp_path)
+    fixed_now = datetime(2026, 7, 13, 3, 0, tzinfo=timezone.utc)
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            now_factory=lambda: fixed_now,
+        )
+    )
+
+    issued = client.post(
+        "/admin/pretrip/projects/fixture-route/rainfall-location-approvals",
+        json={
+            "confirmLocationAccess": True,
+            "scope": "current_trip_rainfall_sampling",
+            "operatorAlias": "fixture_operator",
+            "ttlMinutes": 30,
+        },
+    )
+    assert issued.status_code == 200
+    approval = issued.json()
+    assert approval["projectId"] == "fixture-route"
+    assert approval["verification"] == "server_record"
+
+    response = client.post(
+        "/admin/pretrip/projects/fixture-route/rainfall-trend",
+        json={
+            "currentPosition": {
+                "lat": 23.0,
+                "lon": 121.0,
+                "observedAt": fixed_now.isoformat(),
+                "accuracyM": 15,
+            },
+            "targetPosition": {"lat": 23.0125, "lon": 121.025, "id": "CP-02"},
+            "confirmLocationAccess": True,
+            "locationApprovalReference": approval["reference"],
+            "locationApprovedAt": approval["approvedAt"],
+            "locationApprovalScope": approval["scope"],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["locationApproval"]["verification"] == "server_record"
+    project_root = workspace_root / "fixture-route"
+    registry = (
+        project_root
+        / "outputs/environment/cwa/rainfall/location_approval_registry.json"
+    ).read_text(encoding="utf-8")
+    audit = (
+        project_root
+        / "outputs/environment/cwa/rainfall/location_access_audit.jsonl"
+    ).read_text(encoding="utf-8")
+    assert '"lat"' not in registry + audit
+    assert '"lon"' not in registry + audit
+    assert "access_attempted" in audit
+    assert "access_completed" in audit
