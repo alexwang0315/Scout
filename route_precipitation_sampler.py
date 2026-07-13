@@ -32,12 +32,14 @@ def build_route_precipitation_trend(
         qpf_grid,
         current_position,
         include_id=False,
+        evaluated_at=evaluated,
     )
     target = _position_summary(
         qpe_grid,
         qpf_grid,
         target_position,
         include_id=True,
+        evaluated_at=evaluated,
     )
     if (
         not math.isfinite(route_buffer_m)
@@ -52,7 +54,7 @@ def build_route_precipitation_trend(
         route_buffer_m=route_buffer_m,
     )
     provided = int(current_position is not None) + int(target_position is not None)
-    status = (
+    requested_status = (
         "ready"
         if provided == 2
         else (
@@ -64,6 +66,13 @@ def build_route_precipitation_trend(
     coverage_ratio = corridor["coveredRouteSampleCount"] / max(
         corridor["sampleCount"],
         1,
+    )
+    status = _route_data_status(
+        requested_status=requested_status,
+        current=current,
+        target=target,
+        corridor=corridor,
+        provided=provided,
     )
     location_factor = 1.0 if provided == 2 else 0.8
     datum_factor = (
@@ -85,6 +94,7 @@ def build_route_precipitation_trend(
         )
         else 1.0
     )
+    accuracy_factor = _accuracy_factor(current_position)
     qpe_freshness = evaluate_precipitation_freshness(
         grid_kind=qpe_grid.grid_kind,
         source_timestamp=qpe_grid.source_timestamp,
@@ -102,9 +112,10 @@ def build_route_precipitation_trend(
     )
     if stale_data:
         status = "stale_data"
+    unusable_data = status in {"no_coverage", "missing_data"}
     confidence = (
         0.0
-        if stale_data
+        if stale_data or unusable_data
         else round(
             min(
                 0.95,
@@ -112,7 +123,8 @@ def build_route_precipitation_trend(
                 * location_factor
                 * datum_factor
                 * delay_factor
-                * point_penalty,
+                * point_penalty
+                * accuracy_factor,
             ),
             2,
         )
@@ -188,6 +200,7 @@ def _position_summary(
     position: Mapping[str, Any] | None,
     *,
     include_id: bool,
+    evaluated_at: datetime,
 ) -> dict[str, Any]:
     if position is None:
         return {
@@ -202,16 +215,13 @@ def _position_summary(
         observed_at = position.get("observedAt")
         if observed_at is not None:
             observed = _aware_datetime(observed_at)
-            reference = max(qpe_grid.fetched_at, qpf_grid.fetched_at)
-            if observed < reference - timedelta(hours=24):
+            if observed < evaluated_at - timedelta(hours=24):
                 raise ValueError("current position observation is stale")
-            if observed > reference + timedelta(minutes=15):
+            if observed > evaluated_at + timedelta(minutes=15):
                 raise ValueError("current position observation is in the future")
         accuracy = position.get("accuracyM")
-        if accuracy is not None and (
-            _coordinate(accuracy, "accuracyM", 0, 100_000) < 0
-        ):
-            raise ValueError("invalid accuracyM")
+        if accuracy is not None:
+            _coordinate(accuracy, "accuracyM", 0, 100_000)
     qpe, qpe_status = sample_grid_point(qpe_grid, lat=lat, lon=lon)
     qpf, qpf_status = sample_grid_point(qpf_grid, lat=lat, lon=lon)
     status = qpe_status if qpe_status != "ready" else qpf_status
@@ -230,6 +240,48 @@ def _position_summary(
             raise ValueError("target id is required")
         summary["id"] = target_id[:128]
     return summary
+
+
+def _route_data_status(
+    *,
+    requested_status: str,
+    current: Mapping[str, Any],
+    target: Mapping[str, Any],
+    corridor: Mapping[str, Any],
+    provided: int,
+) -> str:
+    if provided < 2:
+        return requested_status
+    point_statuses = {str(current.get("status")), str(target.get("status"))}
+    covered_route_samples = int(corridor.get("coveredRouteSampleCount") or 0)
+    route_samples = int(corridor.get("sampleCount") or 0)
+    ready_point_count = sum(item.get("status") == "ready" for item in (current, target))
+    if covered_route_samples == 0 and ready_point_count == 0:
+        return "no_coverage"
+    if "missing_cell" in point_statuses:
+        return "missing_data"
+    if (
+        point_statuses != {"ready"}
+        or route_samples == 0
+        or covered_route_samples < route_samples
+    ):
+        return "partial"
+    return requested_status
+
+
+def _accuracy_factor(position: Mapping[str, Any] | None) -> float:
+    if position is None or position.get("accuracyM") is None:
+        return 1.0
+    accuracy_m = _coordinate(position.get("accuracyM"), "accuracyM", 0, 100_000)
+    if accuracy_m <= 20:
+        return 1.0
+    if accuracy_m <= 50:
+        return 0.9
+    if accuracy_m <= 100:
+        return 0.8
+    if accuracy_m <= 500:
+        return 0.65
+    return 0.4
 
 
 def _corridor_summary(

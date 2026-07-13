@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import radar_satellite_risk_extractor as extractor
 from radar_satellite_risk_extractor import (
     build_route_weather_risk_package,
     encode_compact_lora_alert,
@@ -332,3 +333,32 @@ def test_server_job_fails_closed_without_trusted_capability(tmp_path: Path) -> N
             allow_network_fetch=True,
             processing_profile="mac-workstation",
         )
+
+
+def test_imagery_artifact_set_rolls_back_if_publish_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text('{"version":"old-first"}\n', encoding="utf-8")
+    second.write_text('{"version":"old-second"}\n', encoding="utf-8")
+    previous = {first: first.read_bytes(), second: second.read_bytes()}
+    real_write = extractor._write_bytes_atomically
+
+    def fail_second_new_publish(path: Path, content: bytes) -> None:
+        if path == second and b'"new-second"' in content:
+            raise OSError("injected publish failure")
+        real_write(path, content)
+
+    monkeypatch.setattr(extractor, "_write_bytes_atomically", fail_second_new_publish)
+
+    with pytest.raises(OSError, match="injected publish failure"):
+        extractor._publish_json_artifact_set(
+            [
+                (first, {"version": "new-first"}),
+                (second, {"version": "new-second"}),
+            ]
+        )
+
+    assert {path: path.read_bytes() for path in previous} == previous

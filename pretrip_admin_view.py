@@ -5,6 +5,7 @@ import json
 import math
 import re
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,10 @@ from admin_map_layers import build_pretrip_map_layers
 from admin_evidence_timeline import (
     build_pretrip_evidence_timeline,
     build_scout_agent_skill_summary,
+)
+from cwa_route_identity import (
+    validate_cwa_artifact_route_identity,
+    validate_cwa_pair_identity,
 )
 from post_analysis_capability import summarize_capability_artifacts
 from scout_companion_match_models import (
@@ -36,6 +41,7 @@ from scout_runtime_state_store_projection import (
     runtime_safety_state_store_projection_events,
 )
 from weather_grid_store import rainfall_product_freshness, rainfall_products_status
+from weather_imagery_freshness import evaluate_weather_imagery_freshness
 from pretrip_spatial_imprint_export import (
     DEFAULT_SPATIAL_IMPRINT_CANDIDATES_REF,
     DEFAULT_SPATIAL_IMPRINT_MANIFEST_REF,
@@ -730,6 +736,14 @@ def build_pretrip_admin_view(
     )
     route_weather_risk_package = _load_optional_json(
         artifacts.get("route_weather_risk_package")
+    )
+    _validate_loaded_cwa_artifacts(
+        project_root=artifacts["project"].parent,
+        project=project,
+        rainfall_projection=cwa_rainfall_route_projection,
+        rainfall_trend=cwa_rainfall_route_trend,
+        imagery_manifest=cwa_weather_imagery_manifest,
+        route_risk_package=route_weather_risk_package,
     )
     gee_feature_package = _load_optional_json(artifacts.get("gee_feature_package"))
     environment_risk_derivatives = _load_optional_json(
@@ -1633,6 +1647,14 @@ def resolve_pretrip_project_artifacts(
         "reference_segment_timing": REFERENCE_SEGMENT_TIMING_REF,
     }.items():
         artifacts.setdefault(artifact_key, resolved_project_root / default_ref)
+    resolved_root = resolved_project_root.resolve()
+    for artifact_key, artifact_path in artifacts.items():
+        try:
+            artifact_path.resolve().relative_to(resolved_root)
+        except ValueError as exc:
+            raise ValueError(
+                f"unsafe pre-trip project artifact ref: {artifact_key}"
+            ) from exc
     return artifacts
 
 
@@ -1675,7 +1697,12 @@ def load_pretrip_admin_surface_projection(
         return _synthetic_admin_projection_for_project(
             project_id, resolved_project_root
         )
-    projection_path = resolved_project_root / projection_ref
+    projection_path = _project_ref_value_path(
+        resolved_project_root,
+        str(projection_ref),
+    )
+    if projection_path is None:
+        raise ValueError("unsafe pre-trip admin projection ref")
     if not projection_path.exists():
         return _synthetic_admin_projection_for_project(
             project_id, resolved_project_root
@@ -1702,12 +1729,15 @@ def load_pretrip_debug_projection_events(
     project = _load_json(resolved_project_root / "project.json")
     events_ref = project.get("debug_projection_events_ref")
     layer_events_ref = project.get("layer_debug_projection_events_ref")
-    layer_events = (
-        _load_optional_jsonl(
-            resolved_project_root / layer_events_ref if layer_events_ref else None
+    layer_events_path = None
+    if layer_events_ref:
+        layer_events_path = _project_ref_value_path(
+            resolved_project_root,
+            str(layer_events_ref),
         )
-        or []
-    )
+        if layer_events_path is None:
+            raise ValueError("unsafe pre-trip layer debug events ref")
+    layer_events = _load_optional_jsonl(layer_events_path) or []
     if not events_ref:
         events = _synthetic_debug_projection_events_for_project(
             project_id, resolved_project_root
@@ -1723,7 +1753,9 @@ def load_pretrip_debug_projection_events(
             "events": events,
             "boundary": _debug_projection_boundary(events),
         }
-    events_path = resolved_project_root / events_ref
+    events_path = _project_ref_value_path(resolved_project_root, str(events_ref))
+    if events_path is None:
+        raise ValueError("unsafe pre-trip debug events ref")
     if not events_path.exists():
         events = _synthetic_debug_projection_events_for_project(
             project_id, resolved_project_root
@@ -1769,12 +1801,24 @@ def load_pretrip_debug_projection_view(
         for ref_key in ref_keys:
             project_ref = project.get(ref_key)
             if project_ref:
-                return resolved_project_root / project_ref
+                path = _project_ref_value_path(
+                    resolved_project_root,
+                    str(project_ref),
+                )
+                if path is None:
+                    raise ValueError(f"unsafe pre-trip project ref: {ref_key}")
+                return path
         return None
 
-    route_summary = _load_json(resolved_project_root / project["route_summary_ref"])
+    def required_project_path(ref_key: str) -> Path:
+        path = optional_project_path(ref_key)
+        if path is None:
+            raise ValueError(f"missing pre-trip project ref: {ref_key}")
+        return path
+
+    route_summary = _load_json(required_project_path("route_summary_ref"))
     route_projection_bounds = _route_projection_bounds(route_summary)
-    map_context = _load_json(resolved_project_root / project["map_context_ref"])
+    map_context = _load_json(required_project_path("map_context_ref"))
     checkpoints_path = optional_project_path(
         "overpass_aligned_checkpoint_candidates_ref",
         "checkpoint_candidates_ref",
@@ -1785,9 +1829,7 @@ def load_pretrip_debug_projection_view(
     )
     checkpoints_raw = _load_json(checkpoints_path)
     segments_raw = _load_json(segments_path)
-    map_candidates_raw = _load_json(
-        resolved_project_root / project["map_candidates_ref"]
-    )
+    map_candidates_raw = _load_json(required_project_path("map_candidates_ref"))
     reference_tracks_raw = _load_optional_json(
         optional_project_path("reference_tracks_ref")
     )
@@ -1874,6 +1916,14 @@ def load_pretrip_debug_projection_view(
     )
     route_weather_risk_package_raw = _load_optional_json(
         optional_project_path("route_weather_risk_package_ref")
+    )
+    _validate_loaded_cwa_artifacts(
+        project_root=resolved_project_root,
+        project=project,
+        rainfall_projection=cwa_rainfall_route_projection_raw,
+        rainfall_trend=cwa_rainfall_route_trend_raw,
+        imagery_manifest=cwa_weather_imagery_manifest_raw,
+        route_risk_package=route_weather_risk_package_raw,
     )
     gee_feature_package_raw = _load_optional_json(
         optional_project_path("gee_feature_package_ref")
@@ -9696,7 +9746,17 @@ def _cwa_qpf_environment_summary(
         )
         if key in trend
     }
-    summary["status"] = rainfall_products_status(products)
+    current_rainfall_status = rainfall_products_status(products)
+    if compact_trend:
+        compact_trend["snapshotStatus"] = compact_trend.get("status")
+        compact_trend["historicalSnapshot"] = True
+        compact_trend["currentDataStatus"] = current_rainfall_status
+        compact_trend["confidenceAtReadTime"] = (
+            compact_trend.get("confidence")
+            if current_rainfall_status == "ready"
+            else 0.0
+        )
+    summary["status"] = current_rainfall_status
     summary["rainfall_products"] = products
     summary["grid_cells"] = cells
     summary["grid_legend"] = projection.get("legend", {})
@@ -9857,27 +9917,48 @@ def _cwa_weather_imagery_summary(
 ) -> dict[str, Any]:
     payload = manifest or {}
     overlays: dict[str, Any] = {}
+    evaluated_at = datetime.now(timezone.utc)
+    frame_statuses: list[str] = []
     for family in ("radar", "satellite"):
         raw_overlay = (payload.get("childOverlays") or {}).get(family) or {}
         frames = []
-        for frame in raw_overlay.get("frames", []):
+        raw_frames = raw_overlay.get("frames", [])
+        if not isinstance(raw_frames, list):
+            raw_frames = []
+        latest_frame_id = raw_overlay.get("latestFrameId")
+        if not latest_frame_id and raw_frames:
+            latest_frame_id = raw_frames[-1].get("frameId")
+        for frame in raw_frames:
             if not isinstance(frame, dict):
                 continue
-            frames.append(
-                {
-                    key: frame.get(key)
-                    for key in (
-                        "frameId",
-                        "sourceTimestamp",
-                        "fetchedAt",
-                        "imageType",
-                        "extent",
-                        "expectedDelayMinutes",
-                        "dataDelayMinutes",
-                        "bboxWgs84",
-                    )
+            compact_frame = {
+                key: frame.get(key)
+                for key in (
+                    "frameId",
+                    "sourceTimestamp",
+                    "fetchedAt",
+                    "imageType",
+                    "extent",
+                    "expectedDelayMinutes",
+                    "updateIntervalMinutes",
+                    "dataDelayMinutes",
+                    "bboxWgs84",
+                )
+            }
+            try:
+                compact_frame["freshness"] = evaluate_weather_imagery_freshness(
+                    frame,
+                    evaluated_at=evaluated_at,
+                )
+            except ValueError:
+                compact_frame["freshness"] = {
+                    "status": "stale_data",
+                    "reason": "invalid_timestamp",
+                    "evaluatedAt": evaluated_at.isoformat(),
                 }
-            )
+            if frame.get("frameId") == latest_frame_id:
+                frame_statuses.append(compact_frame["freshness"]["status"])
+            frames.append(compact_frame)
         overlays[family] = {
             "latestFrameId": raw_overlay.get("latestFrameId"),
             "defaultOpacity": raw_overlay.get(
@@ -9887,12 +9968,26 @@ def _cwa_weather_imagery_summary(
             "frames": frames,
             "frameCount": len(frames),
         }
+    current_data_status = "missing_source"
+    if frame_statuses and all(item == "current" for item in frame_statuses):
+        current_data_status = "ready"
+    elif frame_statuses and all(item == "stale_data" for item in frame_statuses):
+        current_data_status = "stale_data"
+    elif frame_statuses:
+        current_data_status = "partially_stale"
+    snapshot_status = str(payload.get("status") or "")
+    if not snapshot_status:
+        snapshot_status = "ready" if frame_statuses else "missing_source"
     return {
         "source_id": f"{project_id}.cwa-weather-imagery",
         "source_path": source_refs.get("cwa_weather_imagery_manifest", ""),
         "risk_package_path": source_refs.get("route_weather_risk_package", ""),
         "layer_id": "cwa-weather",
-        "status": "ready" if payload else "missing_source",
+        "status": snapshot_status,
+        "snapshotStatus": snapshot_status,
+        "historicalSnapshot": True,
+        "currentDataStatus": current_data_status,
+        "evaluatedAt": evaluated_at.isoformat(),
         "animationWindowsHours": payload.get("animationWindowsHours", [3, 6, 9, 12]),
         "childOverlays": overlays,
         "imageryFeatures": (risk_package or {}).get("imageryFeatures", {}),
@@ -14703,9 +14798,53 @@ def _project_ref_value_path(project_root: Path, ref: str) -> Path | None:
     if not ref or "\x00" in ref:
         return None
     path = Path(ref)
-    if path.is_absolute() or ".." in path.parts:
+    if path.is_absolute() or any(part in {".", ".."} for part in path.parts):
         return None
-    return project_root / path
+    resolved_root = project_root.resolve()
+    resolved_path = (resolved_root / path).resolve()
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError:
+        return None
+    return resolved_path
+
+
+def _validate_loaded_cwa_artifacts(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    rainfall_projection: dict[str, Any] | None,
+    rainfall_trend: dict[str, Any] | None,
+    imagery_manifest: dict[str, Any] | None,
+    route_risk_package: dict[str, Any] | None,
+) -> None:
+    for artifact, label in (
+        (rainfall_projection, "rainfall projection"),
+        (rainfall_trend, "rainfall trend"),
+        (imagery_manifest, "weather imagery manifest"),
+        (route_risk_package, "route weather risk package"),
+    ):
+        if isinstance(artifact, dict):
+            validate_cwa_artifact_route_identity(
+                project_root,
+                project,
+                artifact,
+                artifact_label=label,
+            )
+    if isinstance(rainfall_projection, dict) and isinstance(rainfall_trend, dict):
+        validate_cwa_pair_identity(
+            rainfall_projection,
+            rainfall_trend,
+            first_label="rainfall projection",
+            second_label="rainfall trend",
+        )
+    if isinstance(imagery_manifest, dict) and isinstance(route_risk_package, dict):
+        validate_cwa_pair_identity(
+            imagery_manifest,
+            route_risk_package,
+            first_label="weather imagery manifest",
+            second_label="route weather risk package",
+        )
 
 
 def _map_layer_metadata(layer: dict[str, Any]) -> dict[str, Any]:

@@ -2014,7 +2014,8 @@
                     <label title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>
                     <fieldset data-cwa-imagery-controls style="grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:6px;padding:8px;border:1px solid #334155;border-radius:8px">
                       <legend>CWA radar / satellite</legend>
-                      <label>Product <select data-cwa-imagery-product><option value="all">All prepared</option></select></label>
+                      <p data-cwa-rainfall-support="legacy_projection" style="grid-column:1/-1;margin:0;color:#f6c453;font-size:11px">Persisted rainfall grid is available in Pre-trip and Dashboard Map. This surface shows the legacy projection only; candidate-only and never runtime safety truth.</p>
+                      <label>Product <select data-cwa-imagery-product><option value="radar">Radar latest</option></select></label>
                       <label>Window <select data-cwa-imagery-window><option value="3h">3h</option><option value="6h">6h</option><option value="9h">9h</option><option value="12h" selected>12h</option></select></label>
                       <label>Frame <input type="range" min="0" max="0" value="0" data-cwa-imagery-timeline></label>
                       <label>Radar opacity <input type="range" min="0" max="100" value="62" data-cwa-imagery-opacity="radar"></label>
@@ -6528,23 +6529,23 @@
       });
     }
 
-    const cwaImageryUi = {manifest:null,windowId:"12h",frameIndex:0,productId:"all",radarOpacity:.62,satelliteOpacity:.48,playTimer:null};
+    const cwaImageryUi = {manifest:null,windowId:"12h",frameIndex:0,productId:"radar",radarOpacity:.62,satelliteOpacity:.48,playTimer:null};
     function cwaImageryFrames(family) {
       const overlay=cwaImageryUi.manifest?.childOverlays?.[family]||{};
       const ids=overlay.windows?.[cwaImageryUi.windowId]||[];
       const hasWindow=Object.prototype.hasOwnProperty.call(overlay.windows||{},cwaImageryUi.windowId);
-      return (overlay.frames||[]).filter(frame=>(!hasWindow||ids.includes(frame.frameId))&&(cwaImageryUi.productId==="all"||frame.productId===cwaImageryUi.productId));
+      return (overlay.frames||[]).filter(frame=>(!hasWindow||ids.includes(frame.frameId))&&(cwaImageryUi.productId==="all"||cwaImageryUi.productId===family||frame.productId===cwaImageryUi.productId));
     }
     function selectedCwaImageryFrame(family) {const frames=cwaImageryFrames(family);return frames.length?frames[Math.min(cwaImageryUi.frameIndex,frames.length-1)]:null;}
     function renderCwaWeatherImagery(group,bounds,projectFn,elementFn) {
       ["satellite","radar"].forEach(family=>{const frame=selectedCwaImageryFrame(family);if(!frame?.assetUrl||!frame?.bboxWgs84||frame.mapOverlaySupported===false)return;const bbox=frame.bboxWgs84;const [x1,y1]=projectFn(bounds,bbox.north,bbox.west);const [x2,y2]=projectFn(bounds,bbox.south,bbox.east);group.appendChild(elementFn("image",{href:frame.assetUrl.startsWith("/")?`${apiBase()}${frame.assetUrl}`:frame.assetUrl,x:Math.min(x1,x2),y:Math.min(y1,y2),width:Math.abs(x2-x1),height:Math.abs(y2-y1),opacity:family==="radar"?cwaImageryUi.radarOpacity:cwaImageryUi.satelliteOpacity,preserveAspectRatio:"none","aria-hidden":"true","data-cwa-imagery-family":family,"data-cwa-imagery-frame":frame.frameId}));});
     }
-    function replaceCwaProductOptions(select,products,selected){const all=document.createElement("option");all.value="all";all.textContent="All prepared";const options=[...products.entries()].map(([id,label])=>{const option=document.createElement("option");option.value=id;option.textContent=label;return option;});select.replaceChildren(all,...options);select.value=products.has(selected)?selected:"all";}
+    function replaceCwaProductOptions(select,products,selected){const families=[["radar","Radar latest"],["satellite","Satellite latest"],["all","All prepared (compare)"]].map(([value,label])=>{const option=document.createElement("option");option.value=value;option.textContent=label;return option;});const options=[...products.entries()].map(([id,label])=>{const option=document.createElement("option");option.value=id;option.textContent=label;return option;});select.replaceChildren(...families,...options);select.value=["radar","satellite","all"].includes(selected)||products.has(selected)?selected:"radar";}
     function syncCwaImageryControls() {
       const products=new Map();["radar","satellite"].forEach(family=>(cwaImageryUi.manifest?.childOverlays?.[family]?.frames||[]).forEach(frame=>{if(frame.productId)products.set(frame.productId,`${family}: ${frame.imageType||frame.productId} / ${frame.extent||"unknown"}`);}));
       document.querySelectorAll("[data-cwa-imagery-product]").forEach(select=>{const selected=cwaImageryUi.productId;replaceCwaProductOptions(select,products,selected);});
       const max=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length,1);cwaImageryUi.frameIndex=Math.min(cwaImageryUi.frameIndex,max-1);
-      document.querySelectorAll("[data-cwa-imagery-timeline]").forEach(input=>{input.max=String(max-1);input.value=String(cwaImageryUi.frameIndex);});
+      const playableFrameCount=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length);if(playableFrameCount<2&&cwaImageryUi.playTimer){clearInterval(cwaImageryUi.playTimer);cwaImageryUi.playTimer=null;}document.querySelectorAll("[data-cwa-imagery-timeline]").forEach(input=>{input.max=String(max-1);input.value=String(cwaImageryUi.frameIndex);input.disabled=playableFrameCount<2;});document.querySelectorAll("[data-cwa-imagery-play]").forEach(button=>{button.disabled=playableFrameCount<2;if(playableFrameCount<2){button.textContent="Play";button.setAttribute("aria-pressed","false");}});
       const current=selectedCwaImageryFrame("radar")||selectedCwaImageryFrame("satellite");document.querySelectorAll("[data-cwa-imagery-status]").forEach(output=>{output.setAttribute("aria-live",cwaImageryUi.playTimer?"off":"polite");output.textContent=current?`${current.sourceTimestamp||"unknown time"} · delay ${current.dataDelayMinutes??"n/a"}m · ${current.imageType||"imagery"}`:"Prepared CWA imagery unavailable";});
     }
     async function loadCwaWeatherImagery(projectId) {try{const response=await fetch(`${apiBase()}/admin/pretrip/projects/${encodeURIComponent(projectId)}/weather-imagery`);cwaImageryUi.manifest=response.ok?await response.json():null;}catch(_error){cwaImageryUi.manifest=null;}syncCwaImageryControls();}
@@ -6554,7 +6555,7 @@
       document.querySelectorAll("[data-cwa-imagery-window]").forEach(select=>select.addEventListener("change",()=>{cwaImageryUi.windowId=select.value;cwaImageryUi.frameIndex=0;syncCwaImageryControls();rerenderCwaImagery();}));
       document.querySelectorAll("[data-cwa-imagery-timeline]").forEach(input=>input.addEventListener("input",()=>{cwaImageryUi.frameIndex=Number(input.value||0);syncCwaImageryControls();rerenderCwaImagery();}));
       document.querySelectorAll("[data-cwa-imagery-opacity]").forEach(input=>input.addEventListener("input",()=>{const value=Number(input.value||0)/100;if(input.dataset.cwaImageryOpacity==="radar")cwaImageryUi.radarOpacity=value;else cwaImageryUi.satelliteOpacity=value;rerenderCwaImagery();}));
-      document.querySelectorAll("[data-cwa-imagery-play]").forEach(button=>button.addEventListener("click",()=>{if(cwaImageryUi.playTimer){clearInterval(cwaImageryUi.playTimer);cwaImageryUi.playTimer=null;button.textContent="Play";button.setAttribute("aria-pressed","false");syncCwaImageryControls();return;}button.textContent="Pause";button.setAttribute("aria-pressed","true");cwaImageryUi.playTimer=setInterval(()=>{const max=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length,1);cwaImageryUi.frameIndex=(cwaImageryUi.frameIndex+1)%max;syncCwaImageryControls();rerenderCwaImagery();},700);}));
+      document.querySelectorAll("[data-cwa-imagery-play]").forEach(button=>button.addEventListener("click",()=>{const playableFrameCount=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length);if(playableFrameCount<2)return;if(cwaImageryUi.playTimer){clearInterval(cwaImageryUi.playTimer);cwaImageryUi.playTimer=null;button.textContent="Play";button.setAttribute("aria-pressed","false");syncCwaImageryControls();return;}button.textContent="Pause";button.setAttribute("aria-pressed","true");cwaImageryUi.playTimer=setInterval(()=>{const max=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length,1);cwaImageryUi.frameIndex=(cwaImageryUi.frameIndex+1)%max;syncCwaImageryControls();rerenderCwaImagery();},700);}));
       syncCwaImageryControls();
     }
     async function loadCase() {

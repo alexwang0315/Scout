@@ -31,6 +31,7 @@ class CachedImageryFrame:
     image_type: str
     extent: str
     expected_delay_minutes: int
+    update_interval_minutes: int
     bbox_wgs84: dict[str, float]
     media_type: str
     dimensions: tuple[int, int]
@@ -54,6 +55,7 @@ class CachedImageryFrame:
             "imageType": self.image_type,
             "extent": self.extent,
             "expectedDelayMinutes": self.expected_delay_minutes,
+            "updateIntervalMinutes": self.update_interval_minutes,
             "bboxWgs84": self.bbox_wgs84,
             "mediaType": self.media_type,
             "dimensions": {"width": self.dimensions[0], "height": self.dimensions[1]},
@@ -147,6 +149,7 @@ class WeatherImageryTileCache:
             image_type=spec.image_type,
             extent=spec.extent,
             expected_delay_minutes=spec.expected_delay_minutes,
+            update_interval_minutes=spec.update_interval_minutes,
             bbox_wgs84=effective_bbox,
             media_type=media_type,
             dimensions=dimensions,
@@ -169,7 +172,12 @@ class WeatherImageryTileCache:
         metadata_ref = (relative_dir / f"{sha256}.json").as_posix()
         _atomic_write(
             self._resolve_ref(metadata_ref),
-            (json.dumps(frame.to_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+            (
+                json.dumps(
+                    frame.to_dict(), ensure_ascii=False, indent=2, sort_keys=True
+                )
+                + "\n"
+            ).encode("utf-8"),
         )
         self.prune()
         return frame
@@ -223,46 +231,93 @@ class WeatherImageryTileCache:
             raise FileNotFoundError(cache_ref)
         return path
 
+    def asset_exists(self, cache_ref: str) -> bool:
+        return self._resolve_ref(cache_ref).is_file()
+
     def prune(self, *, reserve_bytes: int = 0) -> dict[str, int]:
-        files = [path for path in self.root.glob("frames/**/*") if path.is_file()]
         cutoff = time.time() - self.max_age_hours * 3600
         removed_files = 0
         removed_bytes = 0
-        for path in files:
+
+        # Metadata is the frame-bundle index. Expiring it must remove every
+        # referenced asset in the same operation so a manifest cannot retain a
+        # half-deleted frame.
+        for metadata_path in self.root.glob("frames/*/*/*.json"):
             try:
-                stat = path.stat()
+                metadata_stat = metadata_path.stat()
             except OSError:
                 continue
-            if stat.st_mtime >= cutoff:
+            if metadata_stat.st_mtime >= cutoff:
                 continue
             try:
-                path.unlink()
-                removed_files += 1
-                removed_bytes += stat.st_size
-            except OSError:
-                pass
-        remaining = []
+                payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                payload = {}
+            bundle_paths = [metadata_path]
+            for key in ("cacheRef", "displayRef"):
+                ref = payload.get(key) if isinstance(payload, dict) else None
+                if isinstance(ref, str) and ref:
+                    try:
+                        bundle_paths.append(self._resolve_ref(ref))
+                    except ValueError:
+                        continue
+            for path in dict.fromkeys(bundle_paths):
+                try:
+                    size = path.stat().st_size
+                    path.unlink()
+                    removed_files += 1
+                    removed_bytes += size
+                except OSError:
+                    continue
+
+        bundles: list[tuple[float, int, Path]] = []
         total_bytes = 0
-        for path in self.root.glob("frames/**/*"):
-            if not path.is_file():
+        for directory in self.root.glob("frames/*/*"):
+            if not directory.is_dir():
                 continue
-            try:
-                stat = path.stat()
-            except OSError:
+            stats: list[tuple[float, int]] = []
+            for path in directory.iterdir():
+                if not path.is_file():
+                    continue
+                try:
+                    stat = path.stat()
+                except OSError:
+                    continue
+                stats.append((stat.st_mtime, stat.st_size))
+            if not stats:
+                try:
+                    directory.rmdir()
+                except OSError:
+                    pass
                 continue
-            remaining.append((stat.st_mtime, stat.st_size, path))
-            total_bytes += stat.st_size
+            bundle_bytes = sum(size for _mtime, size in stats)
+            bundles.append(
+                (max(mtime for mtime, _size in stats), bundle_bytes, directory)
+            )
+            total_bytes += bundle_bytes
         target = max(0, self.max_total_bytes - max(0, reserve_bytes))
-        for _mtime, size, path in sorted(remaining):
+        for _mtime, size, directory in sorted(bundles):
             if total_bytes <= target:
                 break
+            bundle_removed = 0
+            bundle_files = 0
+            for path in directory.iterdir():
+                if not path.is_file():
+                    continue
+                try:
+                    path_size = path.stat().st_size
+                    path.unlink()
+                    bundle_removed += path_size
+                    bundle_files += 1
+                except OSError:
+                    continue
             try:
-                path.unlink()
-                total_bytes -= size
-                removed_files += 1
-                removed_bytes += size
+                directory.rmdir()
             except OSError:
                 pass
+            total_bytes -= bundle_removed
+            removed_files += bundle_files
+            removed_bytes += bundle_removed
         return {"removedFiles": removed_files, "removedBytes": removed_bytes}
 
     @contextmanager
@@ -274,7 +329,9 @@ class WeatherImageryTileCache:
             try:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
-                raise RuntimeError("a CWA imagery server job is already running") from exc
+                raise RuntimeError(
+                    "a CWA imagery server job is already running"
+                ) from exc
             try:
                 try:
                     completed_at = float(completed_path.read_text(encoding="utf-8"))
@@ -351,6 +408,7 @@ def _frame_from_dict(payload: dict[str, Any]) -> CachedImageryFrame:
         image_type=str(payload["imageType"]),
         extent=str(payload["extent"]),
         expected_delay_minutes=int(payload["expectedDelayMinutes"]),
+        update_interval_minutes=int(payload.get("updateIntervalMinutes", 10)),
         bbox_wgs84=dict(payload["bboxWgs84"]),
         media_type=str(payload["mediaType"]),
         dimensions=(int(dimensions.get("width", 0)), int(dimensions.get("height", 0))),
@@ -367,7 +425,9 @@ def _frame_from_dict(payload: dict[str, Any]) -> CachedImageryFrame:
 
 
 def _safe_component(value: str) -> str:
-    normalized = "".join(char if char.isalnum() or char in "._-" else "_" for char in value)
+    normalized = "".join(
+        char if char.isalnum() or char in "._-" else "_" for char in value
+    )
     if not normalized or normalized in {".", ".."}:
         raise ValueError("unsafe cache component")
     return normalized
@@ -408,9 +468,7 @@ def _reproject_himawari_full_disk(image: Any, *, output_size: int = 400) -> Any:
             (polar_radius_km**2 / equatorial_radius_km**2) * tan(latitude)
         )
         cos_latitude = cos(geocentric_latitude)
-        earth_radius = polar_radius_km / sqrt(
-            1.0 - eccentricity * cos_latitude**2
-        )
+        earth_radius = polar_radius_km / sqrt(1.0 - eccentricity * cos_latitude**2)
         earth_z = earth_radius * sin(geocentric_latitude)
         for x in range(output_size):
             longitude = radians(60.0 + (x + 0.5) * 180.0 / output_size)
@@ -452,8 +510,14 @@ def _detect_full_disk_geometry(image: Any) -> tuple[float, float, float, float]:
         sum(1 for y in range(sample.height) if max(pixels[x, y]) >= 18)
         for x in range(sample.width)
     ]
-    rows = [index for index, count in enumerate(row_counts) if count >= sample.width * 0.15]
-    columns = [index for index, count in enumerate(column_counts) if count >= sample.height * 0.15]
+    rows = [
+        index for index, count in enumerate(row_counts) if count >= sample.width * 0.15
+    ]
+    columns = [
+        index
+        for index, count in enumerate(column_counts)
+        if count >= sample.height * 0.15
+    ]
     if not rows or not columns:
         sample.close()
         raise ValueError("unable to detect Himawari full-disk geometry")
