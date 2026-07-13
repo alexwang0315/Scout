@@ -89,6 +89,19 @@ def test_admin_ui_visual_smoke_script_covers_routes_viewports_and_boundaries():
     assert "#jsonPane" in script
     assert "#routeMeta" in script
     assert "mapOnly" in script
+    assert "#dashboardCwaImagery" in script
+    assert "cwaControlsInViewport" in script
+    assert "cwaControlsInteractive" in script
+    assert "cwaKeyboardAccessible" in script
+    assert "rangeChangedFromKeyboard" in script
+    assert "cwaOverlayImages" in script
+    assert "cwaOverlayDomUpdated" in script
+    assert "cwaImageryFixtureManifest" in script
+    assert 'id: "compact", width: 320' in script
+    assert "data-dashboard-cwa-imagery-window" in script
+    assert "data-dashboard-cwa-imagery-play" in script
+    assert "data-dashboard-cwa-rainfall-product" in script
+    assert "setRainfallProduct" in script
     assert "mapIsLargest" in script
     assert "centeredMapLayout" in script
     assert "--screenshots-dir" in script

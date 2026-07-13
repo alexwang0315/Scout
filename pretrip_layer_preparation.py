@@ -115,6 +115,18 @@ OUTPUT_REFS = {
     "cwa_qpf_grid_ref": "outputs/environment/cwa/qpf_grid.geojson",
     "cwa_qpf_route_timeline_ref": "outputs/environment/cwa/qpf_route_timeline.json",
     "cwa_qpf_corridor_summary_ref": "outputs/environment/cwa/qpf_corridor_summary.json",
+    "cwa_rainfall_grid_manifest_ref": (
+        "outputs/environment/cwa/rainfall/rainfall_grid_manifest.json"
+    ),
+    "cwa_rainfall_route_projection_ref": (
+        "outputs/environment/cwa/rainfall/route_grid_projection.geojson"
+    ),
+    "cwa_rainfall_route_trend_ref": (
+        "outputs/environment/cwa/rainfall/route_precipitation_trend.json"
+    ),
+    "team_target_rainfall_trend_ref": (
+        "outputs/environment/cwa/rainfall/route_precipitation_trend.json"
+    ),
     "cwa_forecast_timeline_ref": "outputs/environment/cwa/forecast_timeline.json",
     "cwa_astronomy_timeline_ref": "outputs/environment/cwa/astronomy_timeline.json",
     "cwa_tide_marine_timeline_ref": "outputs/environment/cwa/tide_marine_timeline.json",
@@ -982,6 +994,18 @@ def _prepare_cwa_environment_artifacts(
             )
             )
 
+    rainfall_grid_outputs = _maybe_prepare_cwa_precipitation_grid_job(
+        project_root=project_root,
+        project=project,
+        request=request,
+        bbox=bbox,
+        prepared_at=prepared_at,
+    )
+    if rainfall_grid_outputs.get("cwa_rainfall_grid_status") == "ready":
+        fetch_results.extend(
+            _environment_fetch_result(dataset_id, status="ready")
+            for dataset_id in ("O-B0045-001", "F-B0046-001")
+        )
     external_calls_made = any(item.get("status") == "ready" for item in fetch_results)
     time_metadata = _cwa_time_metadata(
         prepared_at=prepared_at,
@@ -1050,9 +1074,27 @@ def _prepare_cwa_environment_artifacts(
         "warnings": warnings[:80],
         "observations": observations[:120],
         "qpf_source_note": (
-            "F-C0041 QPF direct grid was not used here; this artifact exposes "
-            "forecast-derived QPF candidates from CWA forecast/rain evidence."
+            "This backward-compatible qpf_grid.geojson exposes forecast-derived "
+            "point candidates. Official O-B0045-001 QPE and F-B0046-001 QPF "
+            "numeric grids, when prepared, are stored under the rainfall refs."
         ),
+        "rainfall_grids": {
+            "status": rainfall_grid_outputs.get(
+                "cwa_rainfall_grid_status", "not_requested"
+            ),
+            "manifest_ref": rainfall_grid_outputs.get(
+                "cwa_rainfall_grid_manifest_ref"
+            ),
+            "route_projection_ref": rainfall_grid_outputs.get(
+                "cwa_rainfall_route_projection_ref"
+            ),
+            "route_trend_ref": rainfall_grid_outputs.get(
+                "cwa_rainfall_route_trend_ref"
+            ),
+            "processing_target": "server_side_job",
+            "raspberry_pi_grid_processing": False,
+            "mobile_grid_processing": False,
+        },
         "boundary": _environment_boundary(external_calls_made=external_calls_made),
     }
     qpf_geojson = _feature_collection(
@@ -1190,8 +1232,50 @@ def _prepare_cwa_environment_artifacts(
         "cwa_cacheable": False,
         "cwa_ttl_seconds": 0,
         "cwa_time_metadata": time_metadata,
+        **rainfall_grid_outputs,
         **imagery_outputs,
     }
+
+
+def _maybe_prepare_cwa_precipitation_grid_job(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    request: LayerPreparationRequest,
+    bbox: dict[str, float],
+    prepared_at: str,
+) -> dict[str, Any]:
+    if "cwa-qpf" not in _normalize_layer_ids(request.layers):
+        return {"cwa_rainfall_grid_status": "not_requested"}
+    if request.network_mode != "explicit-fetch" or not request.allow_network_fetch:
+        return {"cwa_rainfall_grid_status": "not_requested_no_explicit_fetch"}
+    if request.profile != "mac-workstation":
+        return {
+            "cwa_rainfall_grid_status": "blocked_server_side_grid_preparation_required",
+            "cwa_rainfall_grid_blocker": "profile_must_be_mac_workstation",
+        }
+    route_points = _route_points_for_weather_imagery(project_root, project)
+    if len(route_points) < 2:
+        return {
+            "cwa_rainfall_grid_status": "blocked_missing_route_geometry",
+            "cwa_rainfall_grid_blocker": "segment_display_geometry_ref_missing_or_empty",
+        }
+    try:
+        from cwa_precipitation_grid_ingestor import (
+            prepare_cwa_precipitation_workspace,
+        )
+
+        return prepare_cwa_precipitation_workspace(
+            project_root=project_root,
+            route_points=route_points,
+            route_bbox=bbox,
+            fetched_at=prepared_at,
+        )
+    except Exception as exc:  # pragma: no cover - live provider/server worker path.
+        return {
+            "cwa_rainfall_grid_status": "fetch_or_processing_failed",
+            "cwa_rainfall_grid_error": _safe_exception_summary(exc),
+        }
 
 
 def _maybe_prepare_cwa_imagery_server_job(

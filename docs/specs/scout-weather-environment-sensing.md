@@ -121,6 +121,7 @@ Current Scout dataset groups:
 | Typhoon（颱風） | `W-C0034-001`, `W-C0034-005` | Departure blockers or high-priority warning review when route time/bbox intersects typhoon impact. |
 | Rain and weather observations（雨量與氣象觀測） | `O-A0002-001`, `O-A0001-001`, `O-A0003-001` | Nearby station markers, 1h/3h/24h rain, wind, gust, temperature, humidity, visibility. |
 | QPF / quantitative precipitation forecast（定量降水預報） | `F-C0041-001` to `F-C0041-008` | Gridded route-bbox/corridor rainfall accumulation, peak window, lead-time, update cadence, and uncertainty review. |
+| QPESUMS near-real-time rainfall grid（即時降雨格點） | `O-B0045-001`, `F-B0046-001` | Past-one-hour radar QPE and next-one-hour QPF numeric grids for route, team-position, target, and corridor sampling. |
 | Township forecast（鄉鎮預報） | `F-D0047-021`, `F-D0047-023`, `F-D0047-041`, `F-D0047-043`, `F-D0047-089`, `F-D0047-091`, `F-D0047-093` | Route-township forecast timeline for rain, wind, temperature, comfort, and UV review. |
 | Astronomy（日月出沒） | `A-B0062-001`, `A-B0063-001` | Dark-arrival warning, night-travel risk, headlamp/retreat time review. |
 | Tide and marine（潮汐與海象） | `F-A0021-001`, `O-B0075-*` | Coastal trail, river-mouth, island, and tide-sensitive route review. |
@@ -181,6 +182,67 @@ Therefore QPF supports `hold review`, `warning candidate`, or compound
 environment candidates. It must not be phrased as "this exact slope will/will
 not receive X mm" or used as direct runtime safety truth.
 
+### CWA QPESUMS Numeric Rainfall Grids
+
+Scout uses the CWA file API products `O-B0045-001`（過去一小時雷達定量降雨
+估計）and `F-B0046-001`（未來一小時定量降水預報）as numeric weather grids.
+They are distinct from the backward-compatible township/forecast-derived
+`outputs/environment/cwa/qpf_grid.geojson` point artifact.
+
+The server normalizer must read dimensions, resolution, origin, timestamp,
+unit, and cell ordering from structured provider metadata. It validates the
+declared shape against the cell count, converts provider no-data sentinels to
+`null`, reverses the provider's lower-left/longitude-first stream into Scout's
+north-first row order, and converts the TWD67 source coordinates to WGS84. The
+artifact records the transform method and conservative coordinate uncertainty;
+it must never relabel untransformed TWD67 coordinates as WGS84.
+
+One explicit preparation run writes:
+
+```text
+outputs/environment/cwa/rainfall/rainfall_grid_manifest.json
+outputs/environment/cwa/rainfall/grids/O-B0045-001/<timestamp>-<hash>.json.gz
+outputs/environment/cwa/rainfall/grids/F-B0046-001/<timestamp>-<hash>.json.gz
+outputs/environment/cwa/rainfall/route_grid_projection.geojson
+outputs/environment/cwa/rainfall/route_precipitation_trend.json
+```
+
+The gzip frames are immutable, content-addressed numeric snapshots. Persisting
+them does not make them reusable as current weather truth: every explicit
+preparation must refetch, while older frames remain provenance/history. The
+route projection contains only route-bbox cells for display; browser, mobile,
+and Raspberry Pi clients never load or process the full grid.
+
+`route_precipitation_trend.json` always contains a 1.5 km route-buffer summary.
+Provider invalid values (`-1` for QPE and `-99` for QPF) remain missing/unknown;
+they must never be silently converted to zero rain. It
+uses an explicit, authorized current position and an explicit target id only
+when supplied to the cache-only admin evaluator; it does not infer the target,
+does not store raw current/target coordinates, and otherwise reports
+`awaiting_position_and_target`. QPE-to-QPF difference is an observation versus
+forecast comparison, not a measured rainfall rate. Target ETA beyond the
+one-hour forecast horizon must remain outside the supported horizon rather
+than being extrapolated.
+
+Before pairing QPE/QPF cells, Scout validates product kind, dimensions,
+resolution, WGS84 bounds, and source-time alignment. Confidence is based on
+route samples with valid paired coverage, not a ratio between grid-cell count
+and route-point count. Freshness uses one shared policy in the map, public
+manifest, and route sampler: QPF expires at its provider `validUntil`, while
+QPE remains current for at most two hours after `sourceTimestamp` because its
+`validUntil` denotes the end of the past accumulation window rather than a
+forecast expiry. A product more than 15 minutes in the future is also invalid.
+If either paired product is stale, the route package becomes `stale_data` and
+confidence is forced to zero even though the immutable evidence remains stored.
+
+The browser endpoint `GET .../rainfall-grids` returns only redacted product
+metadata. `POST .../rainfall-trend` requires `confirmLocationAccess=true`, a
+typed approval reference/time/scope, validates coordinates/timestamps, samples
+prepared workspace frames, returns compact values, and never fetches upstream
+or writes the submitted position to disk. It appends only a sanitized approval
+audit event (approval reference/time/scope and `rawCoordinatesPersisted=false`).
+All outputs remain candidate-only, not runtime safety truth.
+
 ### CWA Radar And Satellite Imagery
 
 CWA radar echo and Himawari satellite imagery are temporal child overlays of
@@ -234,6 +296,14 @@ WGS84 rectangle. Full-disk remains
 source georeferencing for map and eligible route sampling. True-color is
 visual/corroborating only and uses the configured source's `Last-Modified`
 timestamp.
+
+Dashboard MAP embeds the canonical pretrip map and controls `cwa-weather`
+through a same-origin state bridge. It exposes product, 3/6/9/12-hour window,
+frame, radar/satellite opacity, play/pause, timestamp, and delay without
+duplicating projection or image-processing code. The browser path remains
+cache-only; all fetch, decode, georeference, route sampling, and motion work is
+server-side, while Pi/mobile surfaces consume only prepared display assets and
+compact candidate features.
 
 Required workspace outputs:
 

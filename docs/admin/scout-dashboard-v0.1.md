@@ -45,6 +45,62 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-13 - Dashboard MAP CWA numeric rainfall grids
+
+- Reused the existing `cwa-qpf` layer for CWA past-one-hour QPE and
+  next-one-hour QPF; the 32-layer contract remains unchanged.
+- Added Dashboard/pretrip controls for rainfall product and opacity, plus the
+  official millimetre color scale, source time, validity, and delay metadata.
+- Recalculates product freshness on every read: QPF uses its forecast
+  `validUntil`, QPE uses `sourceTimestamp + 2 hours`, and expired selections are
+  visibly marked `STALE` instead of remaining `ready`.
+- Persisted full validated numeric frames only in the workspace server output;
+  the browser receives route-clipped cells and compact trend features.
+- Added deterministic current-position, explicit-target, and route-corridor
+  sampling. The cache-only evaluator validates input and omits submitted
+  coordinates from both response and persistent artifacts.
+- Raspberry Pi/mobile remain consumers of prepared compact outputs and never
+  fetch, georeference, or sample full CWA grids.
+- This slice installs no recurring monitoring schedule. Every explicit
+  preparation refetches current CWA truth and appends a deduplicated evidence
+  snapshot.
+
+### 2026-07-13 - Dashboard MAP CWA imagery controls
+
+User request:
+
+- Integrate prepared CWA radar and satellite imagery into the Dashboard MAP
+  page and update the related documentation.
+
+Implementation steps:
+
+- Kept `/admin/pretrip` as the single canonical map renderer and added a
+  same-origin pretrip controller named `scoutCwaImageryController`.
+- Added Dashboard-native controls for the `cwa-weather` layer, prepared
+  product, 3/6/9/12-hour window, frame, radar/satellite opacity, and
+  play/pause state.
+- Mirrored only compact display state from the iframe. The Dashboard does not
+  receive raw cache refs, ETags, credentials, upstream URLs, or image pixels
+  for browser-side processing.
+- Added a polite live status for source timestamp, data delay, type, extent,
+  and explicit `not prepared` handling.
+
+Boundary notes:
+
+- Dashboard reads remain cache-only and candidate-only.
+- Fetch, decode, georeference, route sampling, and motion estimation remain
+  server-side. Raspberry Pi/mobile clients are compact artifact consumers.
+- `cwa-weather` remains one of the existing 32 top-level layers; no new layer
+  id or runtime safety-truth path was added.
+
+Verification:
+
+- Dashboard/CWA focused tests and keyboard/status accessibility assertions.
+- 32-layer verifier and Dashboard desktop/mobile browser smoke.
+- Real workspace verification uses `/admin/dashboard?projectId=<id>#map`
+  after the approved one-shot CWA preparation worker has produced the cache
+  manifest.
+
 ### 2026-07-02 - Scout Dashboard v0.1 Initial Integration
 
 User request:

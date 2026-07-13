@@ -25,7 +25,9 @@ FIXTURE_PROJECT_ROOT = (
 )
 
 
-def test_layer_preparation_preview_is_metadata_only_and_no_write(tmp_path: Path) -> None:
+def test_layer_preparation_preview_is_metadata_only_and_no_write(
+    tmp_path: Path,
+) -> None:
     project_root = _copy_fixture_project(tmp_path)
     layer_outputs = project_root / "outputs" / "layers"
     before_files = _relative_file_set(layer_outputs)
@@ -100,17 +102,21 @@ def test_layer_preparation_overpass_plan_uses_route_corridor_bbox(
     assert query_bbox["east"] > route_bbox["east"]
     assert preview["route_corridor"]["route_ref"] == route_summary["artifact_id"]
     assert preview["route_corridor"]["corridor_m"] == 1_000.0
-    assert preview["route_corridor"]["route_geometry_refs"][
-        "segment_display_geometry_ref"
-    ] == "outputs/segment_display_geometry.json"
+    assert (
+        preview["route_corridor"]["route_geometry_refs"]["segment_display_geometry_ref"]
+        == "outputs/segment_display_geometry.json"
+    )
     assert overpass_layer["route_corridor"] == preview["route_corridor"]
     assert overpass_layer["status"] == "ready_from_project_ref"
     assert overpass_layer["warnings"] == []
     assert overpass_layer["counts"]["candidate_count"] > 0
     assert overpass_layer["planned_request"]["source"] == "route_corridor_bbox"
     assert overpass_layer["planned_request"]["network_calls_made"] is False
-    assert "way[\"highway\"" in overpass_layer["planned_request"]["query_body"]
-    assert str(round(query_bbox["south"], 7)) in overpass_layer["planned_request"]["query_body"]
+    assert 'way["highway"' in overpass_layer["planned_request"]["query_body"]
+    assert (
+        str(round(query_bbox["south"], 7))
+        in overpass_layer["planned_request"]["query_body"]
+    )
     assert "<trkpt" not in json.dumps(preview, ensure_ascii=False).lower()
 
 
@@ -197,16 +203,23 @@ def test_layer_preparation_run_writes_planned_overpass_refs_and_allows_live_refr
     planned_project = _load(project_path)
     planned_evidence = _load(project_root / planned_project["overpass_evidence_ref"])
 
-    assert planned_project["overpass_evidence_ref"] == "candidates/overpass_evidence.json"
+    assert (
+        planned_project["overpass_evidence_ref"] == "candidates/overpass_evidence.json"
+    )
     assert planned_project["overpass_map_context_ref"] == (
         "outputs/layers/normalized/overpass_vector_evidence.geojson"
     )
-    assert planned_project["overpass_query_ref"] == "outputs/layers/plans/overpass_query.ql"
+    assert (
+        planned_project["overpass_query_ref"]
+        == "outputs/layers/plans/overpass_query.ql"
+    )
     assert planned_project["overpass_candidate_count"] == 0
     assert planned_evidence["status"] == "planned_no_network"
     assert planned_evidence["source_artifact"]["source_kind"] == "overpass_query_plan"
     assert planned_evidence["request"]["raw_response_sha256"] is None
-    assert planned_evidence["request"]["conversion_rule_version"] == "planned_no_network"
+    assert (
+        planned_evidence["request"]["conversion_rule_version"] == "planned_no_network"
+    )
     assert planned_evidence["counts"]["candidates"] == 0
     assert planned_evidence["boundary"]["runtime_safety_truth"] is False
     assert (project_root / planned_project["overpass_map_context_ref"]).is_file()
@@ -244,7 +257,9 @@ def test_layer_preparation_run_writes_planned_overpass_refs_and_allows_live_refr
         )
     )
     refreshed_project = _load(project_path)
-    refreshed_evidence = _load(project_root / refreshed_project["overpass_evidence_ref"])
+    refreshed_evidence = _load(
+        project_root / refreshed_project["overpass_evidence_ref"]
+    )
 
     assert fetch_count == 1
     assert refreshed_project["overpass_fetched_at"] == "2026-05-22T01:00:00+00:00"
@@ -267,7 +282,9 @@ def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm
         assert kwargs["pbf_path"] == pbf_path.resolve()
         assert kwargs["bbox"]["south"] < kwargs["bbox"]["north"]
         assert kwargs["bbox"]["west"] < kwargs["bbox"]["east"]
-        extracted_pbf_path = kwargs["raw_payload_path"].parent / "osm_pbf_route_bbox.osm.pbf"
+        extracted_pbf_path = (
+            kwargs["raw_payload_path"].parent / "osm_pbf_route_bbox.osm.pbf"
+        )
         extracted_pbf_path.write_bytes(b"fixture-route-bbox-pbf")
         return (
             raw_fixture.read_bytes(),
@@ -318,7 +335,10 @@ def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm
     assert project["osm_pbf_source_url"] == (
         "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
     )
-    assert project["osm_pbf_raw_payload_ref"] == "normalized/map/osm_pbf_phase_a_raw.osm.json"
+    assert (
+        project["osm_pbf_raw_payload_ref"]
+        == "normalized/map/osm_pbf_phase_a_raw.osm.json"
+    )
     assert project["osm_pbf_extracted_at"] == "2026-06-25T00:00:00+00:00"
     assert project["osm_pbf_route_extract_ref"] == (
         "normalized/map/osm_pbf_route_bbox.osm.pbf"
@@ -359,7 +379,9 @@ def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm
     assert project["osm_pbf_cache_expires_at"] == "2026-07-20T00:00:00+00:00"
     assert project["osm_pbf_refresh_required"] is False
     assert evidence["pbf_cache"]["cache_status"] == "fresh"
-    render_manifest = _load(project_root / project["osm_pbf_render_extract_manifest_ref"])
+    render_manifest = _load(
+        project_root / project["osm_pbf_render_extract_manifest_ref"]
+    )
     assert render_manifest["preferred_render_source_ref"] == (
         "normalized/map/osm_pbf_route_bbox.osm.pbf"
     )
@@ -370,18 +392,22 @@ def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm
     assert layers_by_id["overpass"]["lifecycle"]["fetch"]["status"] == (
         "completed_local_osm_pbf_extract"
     )
-    assert layers_by_id["overpass"]["lifecycle"]["fetch"][
-        "external_network_calls_made"
-    ] is False
-    assert layers_by_id["overpass"]["lifecycle"]["fetch"][
-        "local_pbf_source_url"
-    ] == "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
-    assert layers_by_id["overpass"]["lifecycle"]["fetch"][
-        "local_pbf_cache_status"
-    ] == "fresh"
-    assert layers_by_id["overpass"]["lifecycle"]["fetch"][
-        "local_pbf_refresh_required"
-    ] is False
+    assert (
+        layers_by_id["overpass"]["lifecycle"]["fetch"]["external_network_calls_made"]
+        is False
+    )
+    assert (
+        layers_by_id["overpass"]["lifecycle"]["fetch"]["local_pbf_source_url"]
+        == "http://download.geofabrik.de/asia/taiwan-latest.osm.pbf"
+    )
+    assert (
+        layers_by_id["overpass"]["lifecycle"]["fetch"]["local_pbf_cache_status"]
+        == "fresh"
+    )
+    assert (
+        layers_by_id["overpass"]["lifecycle"]["fetch"]["local_pbf_refresh_required"]
+        is False
+    )
     assert layers_by_id["osm"]["counts"]["overpass_candidate_count"] == 6
     assert layers_by_id["osm"]["output_refs"]["local_osm_render_extract_ref"] == (
         "normalized/map/osm_pbf_route_bbox.osm.pbf"
@@ -492,12 +518,16 @@ def test_layer_preparation_exposes_cwa_and_gee_environment_layers_without_networ
     assert layers_by_id["soil-moisture"]["output_refs"]["soil_moisture_grid_ref"] == (
         "outputs/environment/gee/soil_moisture_grid.geojson"
     )
-    assert layers_by_id["soil-moisture"]["output_refs"][
-        "gee_fetch_requires_explicit_network"
-    ] is True
-    assert layers_by_id["antecedent-rain"]["output_refs"][
-        "antecedent_rain_grid_ref"
-    ] == "outputs/environment/gee/antecedent_rain_grid.geojson"
+    assert (
+        layers_by_id["soil-moisture"]["output_refs"][
+            "gee_fetch_requires_explicit_network"
+        ]
+        is True
+    )
+    assert (
+        layers_by_id["antecedent-rain"]["output_refs"]["antecedent_rain_grid_ref"]
+        == "outputs/environment/gee/antecedent_rain_grid.geojson"
+    )
     assert all(
         layer["lifecycle"]["fetch"]["external_network_calls_made"] is False
         for layer in layers_by_id.values()
@@ -541,11 +571,11 @@ def test_layer_preparation_writes_environment_status_artifacts_for_admin_view(
         assert (project_root / project[ref_key]).is_file()
 
     cwa_evidence = json.loads(
-        (project_root / project["cwa_weather_evidence_ref"]).read_text(
-            encoding="utf-8"
-        )
+        (project_root / project["cwa_weather_evidence_ref"]).read_text(encoding="utf-8")
     )
-    qpf = json.loads((project_root / project["cwa_qpf_grid_ref"]).read_text(encoding="utf-8"))
+    qpf = json.loads(
+        (project_root / project["cwa_qpf_grid_ref"]).read_text(encoding="utf-8")
+    )
     soil = json.loads(
         (project_root / project["soil_moisture_grid_ref"]).read_text(encoding="utf-8")
     )
@@ -677,11 +707,11 @@ def test_layer_preparation_writes_cwa_hourly_fetch_and_validity_metadata(
 
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     cwa_evidence = json.loads(
-        (project_root / project["cwa_weather_evidence_ref"]).read_text(
-            encoding="utf-8"
-        )
+        (project_root / project["cwa_weather_evidence_ref"]).read_text(encoding="utf-8")
     )
-    qpf = json.loads((project_root / project["cwa_qpf_grid_ref"]).read_text(encoding="utf-8"))
+    qpf = json.loads(
+        (project_root / project["cwa_qpf_grid_ref"]).read_text(encoding="utf-8")
+    )
     qpf_summary = json.loads(
         (project_root / project["cwa_qpf_corridor_summary_ref"]).read_text(
             encoding="utf-8"
@@ -726,9 +756,10 @@ def test_layer_preparation_writes_cwa_hourly_fetch_and_validity_metadata(
     assert qpf["features"][0]["properties"]["api_fetched_at_hour"] == (
         "2026-06-26T01:00:00Z"
     )
-    assert qpf["features"][0]["properties"]["cwa_time_metadata"][
-        "api_fetched_at_hour"
-    ] == "2026-06-26T01:00:00Z"
+    assert (
+        qpf["features"][0]["properties"]["cwa_time_metadata"]["api_fetched_at_hour"]
+        == "2026-06-26T01:00:00Z"
+    )
     assert qpf["features"][0]["properties"]["valid_until_hour"] == (
         "2026-06-26T08:00:00Z"
     )
@@ -761,6 +792,107 @@ def test_layer_preparation_writes_cwa_hourly_fetch_and_validity_metadata(
     )
 
 
+def test_layer_preparation_persists_cwa_numeric_rainfall_grids_on_mac_worker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    fixture_root = ROOT / "tests" / "fixtures" / "cwa" / "qpesums"
+    grid_payloads = {
+        dataset_id: json.loads(
+            (fixture_root / f"{dataset_id}.small.json").read_text(encoding="utf-8")
+        )
+        for dataset_id in ("O-B0045-001", "F-B0046-001")
+    }
+
+    import scout_weather_integration
+
+    monkeypatch.setenv("SCOUT_CWA_API_KEY", "test-key")
+    monkeypatch.setattr(
+        scout_weather_integration,
+        "fetch_cwa_dataset",
+        lambda dataset_id, **_kwargs: {"dataset_id": dataset_id},
+    )
+    monkeypatch.setattr(
+        scout_weather_integration,
+        "fetch_cwa_file_dataset",
+        lambda dataset_id, **_kwargs: grid_payloads[dataset_id],
+    )
+    monkeypatch.setattr(
+        scout_weather_integration,
+        "normalize_cwa_weather_points",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        scout_weather_integration,
+        "normalize_cwa_warnings",
+        lambda *_args, **_kwargs: [],
+    )
+
+    run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("cwa-qpf",),
+            profile="mac-workstation",
+            network_mode="explicit-fetch",
+            allow_network_fetch=True,
+            prepared_at="2026-07-13T10:42:00+08:00",
+        )
+    )
+
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    assert project["cwa_rainfall_grid_status"] == "ready"
+    for ref_key in (
+        "cwa_rainfall_grid_manifest_ref",
+        "cwa_qpe_numeric_grid_ref",
+        "cwa_qpf_numeric_grid_ref",
+        "cwa_rainfall_route_projection_ref",
+        "cwa_rainfall_route_trend_ref",
+        "team_target_rainfall_trend_ref",
+    ):
+        assert (project_root / project[ref_key]).is_file()
+    assert project["cwa_qpf_grid_ref"] == "outputs/environment/cwa/qpf_grid.geojson"
+    assert (project_root / project["cwa_qpf_grid_ref"]).is_file()
+
+    rainfall_manifest = json.loads(
+        (project_root / project["cwa_rainfall_grid_manifest_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert set(rainfall_manifest["latestByKind"]) == {
+        "qpe_past_1h",
+        "qpf_next_1h",
+    }
+    assert rainfall_manifest["cachePolicy"]["mustRefetchOnPrepare"] is True
+    trend = json.loads(
+        (project_root / project["team_target_rainfall_trend_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert trend["status"] == "awaiting_position_and_target"
+    assert trend["boundary"]["rawCoordinatesPersisted"] is False
+
+    view = build_pretrip_admin_view(
+        "chilai_nanhua_day1",
+        root=ROOT,
+        project_root=project_root,
+    )
+    assert {item["gridKind"] for item in view["cwa_qpf"]["rainfall_products"]} == {
+        "qpe_past_1h",
+        "qpf_next_1h",
+    }
+    assert view["cwa_qpf"]["status"] in {"partially_stale", "stale_data"}
+    assert {
+        item["gridKind"]: item["freshness"]["status"]
+        for item in view["cwa_qpf"]["rainfall_products"]
+    }["qpf_next_1h"] == "stale_data"
+    assert view["cwa_qpf"]["route_rainfall_trend"]["status"] == (
+        "awaiting_position_and_target"
+    )
+    assert '"values":' not in json.dumps(view["cwa_qpf"])
+
+
 def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -775,7 +907,9 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
             (23.8720, 121.1720, 1440, "2026-05-22T00:20:00Z"),
         ],
     )
-    project_payload = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    project_payload = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
     project_payload["golden_route_gpx_ref"] = str(route_gpx.relative_to(project_root))
     cwa_time_metadata = {
         "api_request_attempted_at_hour": "2026-06-26T01:00:00Z",
@@ -803,7 +937,8 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
         "outputs/environment/cwa/cwa_weather_evidence.json"
     )
     (project_root / "project.json").write_text(
-        json.dumps(project_payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(project_payload, ensure_ascii=False, indent=2, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
 
@@ -1139,9 +1274,7 @@ def test_layer_preparation_refreshes_gee_derivatives_after_risk_sync(
     feature_package = _load(project_root / project["gee_feature_package_ref"])
     derivatives = _load(project_root / project["environment_risk_derivatives_ref"])
     first_segment = feature_package["segments"][0]
-    gap_families = {
-        item["metric_family"] for item in derivatives["source_metric_gaps"]
-    }
+    gap_families = {item["metric_family"] for item in derivatives["source_metric_gaps"]}
 
     assert project["risk_score_generation_status"] == "completed"
     assert feature_package["status"] == "fetch_failed"
@@ -1285,6 +1418,7 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     project["raster_label_ocr_label_count"] = 99
     project["raster_label_evidence_count"] = 99
     project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+
     def fake_seed(plan, **kwargs):
         return {
             "status": "seed_complete",
@@ -1364,7 +1498,9 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     import pretrip_raster_label_ocr
 
     monkeypatch.setattr(pretrip_layer_preparation, "seed_imagery_tile_cache", fake_seed)
-    monkeypatch.setattr(pretrip_raster_label_ocr, "extract_raster_label_ocr", fake_extract)
+    monkeypatch.setattr(
+        pretrip_raster_label_ocr, "extract_raster_label_ocr", fake_extract
+    )
 
     manifest = run_layer_preparation(
         LayerPreparationRequest(
@@ -1383,7 +1519,9 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     )
     project = _load(project_path)
     raster_pipeline = manifest["raster_label_preparation"]
-    imagery_layer = {layer["layer_id"]: layer for layer in manifest["layers"]}["imagery"]
+    imagery_layer = {layer["layer_id"]: layer for layer in manifest["layers"]}[
+        "imagery"
+    ]
     projection = _load(project_root / manifest["outputs"]["layer_map_projection_ref"])
     projected_imagery = {layer["layer_id"]: layer for layer in projection["layers"]}[
         "imagery"
@@ -1442,7 +1580,9 @@ def test_layer_preparation_does_not_copy_known_scout_imagery_manifests(
         / "manifests"
     )
     source_manifest_dir.mkdir(parents=True)
-    (source_manifest_dir / "chilai_nanhua_day1.local_raster_source_manifest.json").write_text(
+    (
+        source_manifest_dir / "chilai_nanhua_day1.local_raster_source_manifest.json"
+    ).write_text(
         json.dumps(
             {
                 "source_kind": "local_geotiff",
@@ -1452,11 +1592,15 @@ def test_layer_preparation_does_not_copy_known_scout_imagery_manifests(
         ),
         encoding="utf-8",
     )
-    (source_manifest_dir / "chilai_nanhua_day1.raster_tile_pyramid_plan.json").write_text(
+    (
+        source_manifest_dir / "chilai_nanhua_day1.raster_tile_pyramid_plan.json"
+    ).write_text(
         json.dumps({"cache_root": "/data/scout/raster-tiles"}, sort_keys=True),
         encoding="utf-8",
     )
-    monkeypatch.setattr(pretrip_layer_preparation, "DEFAULT_SCOUT_DATA_ROOT", scout_root)
+    monkeypatch.setattr(
+        pretrip_layer_preparation, "DEFAULT_SCOUT_DATA_ROOT", scout_root
+    )
 
     manifest = run_layer_preparation(
         LayerPreparationRequest(
@@ -1522,7 +1666,9 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
         )
     )
     project = _load(project_root / "project.json")
-    route_bundle = _load(project_root / "normalized" / "routes" / "route_evidence_bundle.json")
+    route_bundle = _load(
+        project_root / "normalized" / "routes" / "route_evidence_bundle.json"
+    )
 
     assert manifest["inputs"]["gpx_speed_filter"]["applied"] is True
     assert manifest["inputs"]["route_evidence_bundle"]["available"] is True
@@ -1567,9 +1713,7 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     route_notes_layer = next(
         layer for layer in manifest["layers"] if layer["layer_id"] == "route-notes"
     )
-    assert [
-        ref.get("project_ref_key") for ref in route_notes_layer["source_refs"]
-    ] == [
+    assert [ref.get("project_ref_key") for ref in route_notes_layer["source_refs"]] == [
         "normalized_route_note_candidates_ref",
         "route_note_candidates_ref",
     ]
@@ -1606,10 +1750,14 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     for key, ref in expected_map_prep_refs.items():
         assert project[key] == ref
         assert (project_root / ref).is_file()
-    map_preparation_summary = _load(project_root / project["map_preparation_summary_ref"])
+    map_preparation_summary = _load(
+        project_root / project["map_preparation_summary_ref"]
+    )
     web_case_plan = _load(project_root / project["web_case_query_plan_ref"])
     raster_label_plan = _load(project_root / project["raster_label_plan_ref"])
-    overpass_vector_evidence = _load(project_root / project["overpass_vector_evidence_ref"])
+    overpass_vector_evidence = _load(
+        project_root / project["overpass_vector_evidence_ref"]
+    )
     terrain_route_samples = _load(project_root / project["terrain_route_samples_ref"])
     terrain_visualization = _load(project_root / project["terrain_visualization_ref"])
     web_case_evidence = _load(project_root / project["web_case_evidence_ref"])
@@ -1632,7 +1780,9 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     assert raster_label_plan["status"] == "planned_for_map_preparation_ocr"
     assert raster_label_plan["ocr_or_vision_performed"] is False
     assert raster_label_plan["imagery_processing_enabled"] is True
-    assert raster_label_plan["ocr_engine"]["entrypoint"] == "pretrip_raster_label_ocr.py"
+    assert (
+        raster_label_plan["ocr_engine"]["entrypoint"] == "pretrip_raster_label_ocr.py"
+    )
     assert raster_label_plan["ocr_engine"]["preferred_engine"] == "tesseract"
     assert raster_label_plan["ocr_engine"]["output_ref"] == (
         "outputs/layers/raster_label_ocr_output.json"
@@ -1692,18 +1842,22 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     assert ocr_sources["happyman_rudy_twmap"]["ocr_capable"] is True
     assert ocr_sources["happyman_rudy_twmap"]["raw_url_template_embedded"] is False
     assert ocr_sources["happyman_rudy_twmap"]["wmts_layer"] == "rudy_twmap"
-    assert "trail_mileage_k_anchor" in ocr_sources["happyman_rudy_twmap"][
-        "label_extraction_roles"
-    ]
-    assert "road_mileage_stone" in ocr_sources["happyman_rudy_twmap"][
-        "label_extraction_roles"
-    ]
-    assert "cellular_communication_point" in ocr_sources["happyman_rudy_twmap"][
-        "label_extraction_roles"
-    ]
-    assert "trail_name_label" in ocr_sources["happyman_rudy_twmap"][
-        "label_extraction_roles"
-    ]
+    assert (
+        "trail_mileage_k_anchor"
+        in ocr_sources["happyman_rudy_twmap"]["label_extraction_roles"]
+    )
+    assert (
+        "road_mileage_stone"
+        in ocr_sources["happyman_rudy_twmap"]["label_extraction_roles"]
+    )
+    assert (
+        "cellular_communication_point"
+        in ocr_sources["happyman_rudy_twmap"]["label_extraction_roles"]
+    )
+    assert (
+        "trail_name_label"
+        in ocr_sources["happyman_rudy_twmap"]["label_extraction_roles"]
+    )
     for artifact in (
         overpass_vector_evidence,
         terrain_route_samples,
@@ -1725,7 +1879,9 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
         "slope_shading",
         "contours",
     ]
-    assert terrain_visualization["visualization_spec"]["raw_dem_embedded_in_json"] is False
+    assert (
+        terrain_visualization["visualization_spec"]["raw_dem_embedded_in_json"] is False
+    )
     assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
     assert web_case_evidence["artifact_kind"] == "pretrip_web_case_evidence"
     assert web_case_evidence["evidence_items"] == []
@@ -1760,7 +1916,10 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     assert all(item["source_refs"] for item in semantic_input["evidence_items"])
     assert semantic_judgements["artifact_kind"] == "gis_perception_ai_judgements"
     assert semantic_judgements["schema_version"] == "gis_perception_ai_judgements.v1"
-    assert semantic_judgements["input_bundle_ref"] == project["gis_semantic_input_bundle_ref"]
+    assert (
+        semantic_judgements["input_bundle_ref"]
+        == project["gis_semantic_input_bundle_ref"]
+    )
     assert semantic_judgements["judgement_count"] == 0
     assert semantic_judgements["live_model_call_performed"] is False
     assert semantic_judgements["network_calls_allowed"] is False
@@ -1768,9 +1927,12 @@ def test_layer_preparation_records_gpx_filter_provenance_from_import_workspace(
     assert semantic_judgements["boundary"]["runtime_safety_truth"] is False
     assert (project_root / project["layer_map_projection_ref"]).is_file()
     assert (project_root / project["layer_debug_projection_events_ref"]).is_file()
-    assert "<trkpt" not in (project_root / project["layer_preparation_manifest_ref"]).read_text(
-        encoding="utf-8"
-    ).lower()
+    assert (
+        "<trkpt"
+        not in (project_root / project["layer_preparation_manifest_ref"])
+        .read_text(encoding="utf-8")
+        .lower()
+    )
 
 
 def test_layer_preparation_writes_route_note_semantic_input_bundle(
@@ -1833,10 +1995,14 @@ def test_layer_preparation_writes_route_note_semantic_input_bundle(
     semantic_judgements = _load(
         project_root / project["gis_perception_ai_judgements_ref"]
     )
-    checkpoint_candidates = _load(project_root / project["gis_checkpoint_candidates_ref"])
+    checkpoint_candidates = _load(
+        project_root / project["gis_checkpoint_candidates_ref"]
+    )
     ln_proposals = _load(project_root / project["ln_proposals_ref"])
     poi_candidates = _load(project_root / project["poi_candidates_ref"])
-    terrain_risk_candidates = _load(project_root / project["terrain_risk_candidates_ref"])
+    terrain_risk_candidates = _load(
+        project_root / project["terrain_risk_candidates_ref"]
+    )
     detour_candidates = _load(project_root / project["detour_route_candidates_ref"])
 
     assert semantic_input["artifact_kind"] == "pretrip_gis_semantic_input_bundle"
@@ -1853,7 +2019,9 @@ def test_layer_preparation_writes_route_note_semantic_input_bundle(
         if item["source_kind"] == "rest_area_candidate"
     )
     assert rest_item["candidate_type"] == "rest_area"
-    assert rest_item["source_refs"] == ["outputs/rest_area_candidates.json#rest_area.fixture.001"]
+    assert rest_item["source_refs"] == [
+        "outputs/rest_area_candidates.json#rest_area.fixture.001"
+    ]
     assert rest_item["rest_area_metrics"]["mean_speed_m_per_min"] == 0.4
     assert semantic_input["evidence_items"][0]["source_refs"]
     assert semantic_input["boundary"]["candidate_only"] is True
@@ -1866,8 +2034,9 @@ def test_layer_preparation_writes_route_note_semantic_input_bundle(
     assert semantic_judgements["input_bundle_sha256"]
     assert semantic_judgements["prompt_version"] == "gis_semantic_classifier.v1"
     assert semantic_judgements["prompt_hash"] == semantic_judgements["prompt_sha256"]
-    assert semantic_judgements["judgement_count"] == (
-        semantic_input["counts"]["evidence_item_count"]
+    assert (
+        semantic_judgements["judgement_count"]
+        == (semantic_input["counts"]["evidence_item_count"])
     )
     assert semantic_judgements["live_model_call_performed"] is False
     assert semantic_judgements["network_calls_allowed"] is False
@@ -1888,13 +2057,17 @@ def test_layer_preparation_writes_route_note_semantic_input_bundle(
     assert rest_judgement["cp_needed"] is True
     assert semantic_judgements["judgements"][0]["requires_human_review"] is True
     assert semantic_judgements["judgements"][0]["runtime_safety_truth"] is False
-    assert checkpoint_candidates["artifact_kind"] == "pretrip_layer_gis_checkpoint_candidates"
+    assert (
+        checkpoint_candidates["artifact_kind"]
+        == "pretrip_layer_gis_checkpoint_candidates"
+    )
     assert checkpoint_candidates["schema_version"] == (
         "route_corridor_map_preparation.candidates.v1"
     )
     assert checkpoint_candidates["counts"]["candidate_count"] > 0
-    assert checkpoint_candidates["counts"]["candidate_only_count"] == (
-        checkpoint_candidates["counts"]["candidate_count"]
+    assert (
+        checkpoint_candidates["counts"]["candidate_only_count"]
+        == (checkpoint_candidates["counts"]["candidate_count"])
     )
     assert checkpoint_candidates["counts"]["runtime_safety_truth_count"] == 0
     assert checkpoint_candidates["candidates"][0]["source_judgement_id"]
@@ -1902,7 +2075,10 @@ def test_layer_preparation_writes_route_note_semantic_input_bundle(
     assert ln_proposals["artifact_kind"] == "pretrip_layer_ln_proposals"
     assert ln_proposals["counts"]["candidate_count"] > 0
     assert poi_candidates["artifact_kind"] == "pretrip_layer_poi_candidates"
-    assert terrain_risk_candidates["artifact_kind"] == "pretrip_layer_terrain_risk_candidates"
+    assert (
+        terrain_risk_candidates["artifact_kind"]
+        == "pretrip_layer_terrain_risk_candidates"
+    )
     assert detour_candidates["artifact_kind"] == "pretrip_layer_detour_route_candidates"
     serialized = json.dumps(semantic_input, ensure_ascii=False).lower()
     serialized_judgements = json.dumps(semantic_judgements, ensure_ascii=False).lower()
@@ -1985,17 +2161,28 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert ribbon_layer["counts"]["score_surface_type"] == "route_aligned_risk_ribbon"
     assert heatmap_layer["status"] == "ready_from_project_ref"
     assert heatmap_layer["counts"]["segment_count"] == 2
-    assert heatmap_layer["counts"]["score_surface_type"] == "route_aligned_calibrated_heatmap"
+    assert (
+        heatmap_layer["counts"]["score_surface_type"]
+        == "route_aligned_calibrated_heatmap"
+    )
     assert delta_layer["status"] == "ready_from_project_ref"
     assert delta_layer["counts"]["baseline_segment_count"] == 1
     assert delta_layer["counts"]["calibrated_segment_count"] == 2
     assert project["risk_score_points_ref"] == "outputs/risk/risk_score_points.geojson"
     assert project["risk_ribbon_ref"] == "outputs/risk/risk_ribbon.geojson"
-    assert project["calibrated_risk_heatmap_ref"] == "outputs/risk/calibrated_risk_heatmap.geojson"
-    assert project["risk_attribution_diagnostic_ref"] == "outputs/risk/risk_attribution_diagnostic.json"
+    assert (
+        project["calibrated_risk_heatmap_ref"]
+        == "outputs/risk/calibrated_risk_heatmap.geojson"
+    )
+    assert (
+        project["risk_attribution_diagnostic_ref"]
+        == "outputs/risk/risk_attribution_diagnostic.json"
+    )
     assert project["boss_points_ref"] == "outputs/boss_points.json"
     assert project["boss_points_geojson_ref"] == "outputs/boss_points.geojson"
-    assert project["route_pressure_profile_ref"] == "outputs/route_pressure_profile.json"
+    assert (
+        project["route_pressure_profile_ref"] == "outputs/route_pressure_profile.json"
+    )
     assert project["route_pressure_profile_geojson_ref"] == (
         "outputs/route_pressure_profile.geojson"
     )
@@ -2045,8 +2232,9 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert terrain_samples["features"][0]["properties"]["evidence_type"] == (
         "pretrip_terrain_route_sample"
     )
-    assert terrain_samples["features"][0]["properties"]["source_risk_ref"] == (
-        project["risk_route_profile_ref"]
+    assert (
+        terrain_samples["features"][0]["properties"]["source_risk_ref"]
+        == (project["risk_route_profile_ref"])
     )
     assert terrain_samples["features"][0]["properties"]["runtime_safety_truth"] is False
     terrain_visualization = _load(project_root / project["terrain_visualization_ref"])
@@ -2064,22 +2252,27 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert terrain_visualization["visualization_spec"]["actual_processor"] == (
         "python_dtm_bitmap_fallback"
     )
-    assert terrain_visualization["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
+    assert (
+        terrain_visualization["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
+    )
     assert terrain_visualization["visualization_spec"]["corridor_half_width_m"] == 500.0
     assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
-    assert terrain_visualization["visualization_spec"]["raw_dem_embedded_in_json"] is False
+    assert (
+        terrain_visualization["visualization_spec"]["raw_dem_embedded_in_json"] is False
+    )
     assert terrain_visualization["counts"]["feature_count"] == 0
     assert terrain_visualization["counts"]["cell_count"] > 0
     assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
     assert terrain_visualization["counts"]["runtime_safety_truth_count"] == 0
     assert terrain_visualization["features"] == []
-    overlays = {overlay["mode"]: overlay for overlay in terrain_visualization["raster_overlays"]}
+    overlays = {
+        overlay["mode"]: overlay for overlay in terrain_visualization["raster_overlays"]
+    }
     assert set(overlays) == {"hillshade", "elevation_tint", "slope_shading", "contours"}
     assert overlays["slope_shading"]["cell_resolution_m"] == 20.0
     assert overlays["slope_shading"]["corridor_half_width_m"] == 500.0
     assert overlays["slope_shading"]["runtime_href"] == (
-        "/admin/pretrip/projects/chilai_nanhua_day1"
-        "/terrain-overlays/slope_shading.png"
+        "/admin/pretrip/projects/chilai_nanhua_day1/terrain-overlays/slope_shading.png"
     )
     assert overlays["slope_shading"]["runtime_safety_truth"] is False
     assert (project_root / overlays["slope_shading"]["source_path"]).is_file()
@@ -2217,12 +2410,15 @@ def test_layer_preparation_terrain_can_fallback_to_risk_ribbon_lines(
     assert terrain_samples["features"][0]["properties"]["runtime_safety_truth"] is False
     assert terrain_visualization["status"] == "ready_from_dtm_20m_corridor_bitmap"
     assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
-    assert terrain_visualization["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
+    assert (
+        terrain_visualization["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
+    )
     assert terrain_visualization["visualization_spec"]["corridor_half_width_m"] == 500.0
-    overlays = {overlay["mode"]: overlay for overlay in terrain_visualization["raster_overlays"]}
+    overlays = {
+        overlay["mode"]: overlay for overlay in terrain_visualization["raster_overlays"]
+    }
     assert overlays["hillshade"]["runtime_href"] == (
-        "/admin/pretrip/projects/chilai_nanhua_day1"
-        "/terrain-overlays/hillshade.png"
+        "/admin/pretrip/projects/chilai_nanhua_day1/terrain-overlays/hillshade.png"
     )
     assert (project_root / overlays["hillshade"]["source_path"]).is_file()
 
@@ -2276,7 +2472,7 @@ def test_layer_preparation_explicit_fetch_normalizes_overpass_with_fixture_fetch
     evidence = _load(project_root / updated_project["overpass_evidence_ref"])
 
     assert captured["endpoint"] == "https://overpass-api.de/api/interpreter"
-    assert "way[\"highway\"" in captured["query_body"]
+    assert 'way["highway"' in captured["query_body"]
     assert overpass["status"] == "ready_from_project_ref"
     assert overpass["lifecycle"]["fetch"]["status"] == "completed_live_fetch"
     assert overpass["lifecycle"]["fetch"]["external_network_calls_made"] is True
@@ -2300,7 +2496,9 @@ def test_layer_preparation_explicit_fetch_normalizes_overpass_with_fixture_fetch
     )
     assert (project_root / updated_project["overpass_raw_payload_ref"]).is_file()
     assert (project_root / updated_project["overpass_map_context_ref"]).is_file()
-    assert (project_root / "outputs" / "layers" / "plans" / "overpass_query.ql").is_file()
+    assert (
+        project_root / "outputs" / "layers" / "plans" / "overpass_query.ql"
+    ).is_file()
     assert "<trkpt" not in json.dumps(evidence, ensure_ascii=False).lower()
 
 
@@ -2462,8 +2660,7 @@ def _write_minimal_overpass_dtm_workspace(tmp_path: Path) -> Path:
                     "geometry": {
                         "type": "LineString",
                         "coordinates": [
-                            [lon, lat]
-                            for lat, lon, _ele, _time in route_points
+                            [lon, lat] for lat, lon, _ele, _time in route_points
                         ],
                     },
                     "properties": {
@@ -2550,11 +2747,7 @@ def _write_json(path: Path, payload: dict) -> None:
 def _relative_file_set(path: Path) -> set[str]:
     if not path.exists():
         return set()
-    return {
-        str(item.relative_to(path))
-        for item in path.rglob("*")
-        if item.is_file()
-    }
+    return {str(item.relative_to(path)) for item in path.rglob("*") if item.is_file()}
 
 
 def _write_gpx(
@@ -2743,9 +2936,13 @@ def _write_risk_score_outputs(directory: Path) -> None:
             json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-    (directory / "route_risk.csv").write_text("sample_id,pretrip_risk\n", encoding="utf-8")
+    (directory / "route_risk.csv").write_text(
+        "sample_id,pretrip_risk\n", encoding="utf-8"
+    )
     (directory / "risk_score_points.csv").write_text("x,y,rs\n", encoding="utf-8")
-    (directory / "risk_score_points.xyz").write_text("250000 2650000 61.2\n", encoding="utf-8")
+    (directory / "risk_score_points.xyz").write_text(
+        "250000 2650000 61.2\n", encoding="utf-8"
+    )
 
 
 def _assert_risk_features_have_pretrip_provenance(

@@ -192,8 +192,8 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
     ),
     "cwa-qpf": AdminMapLayerSpec(
         layer_id="cwa-qpf",
-        label="CWA QPF",
-        label_zh="定量降水預報圖層（CWA QPF，路線 bbox/corridor 降雨格點）",
+        label="CWA QPE / QPF",
+        label_zh="定量降水圖層（CWA 過去 1 小時 QPE／未來 1 小時 QPF 路線格點）",
         layer_kind="environment",
         z_index=SCOUT_LAYER_RANKS["cwa-qpf"],
         render_mode="geojson_overlay",
@@ -794,8 +794,16 @@ def _layer_renderer_contract(layer_id: str) -> dict[str, Any]:
     if layer_id == "cwa-qpf":
         return {
             "geojson_ref_key": "cwa_qpf_grid_ref",
+            "numeric_grid_manifest_ref_key": "cwa_rainfall_grid_manifest_ref",
+            "route_grid_projection_ref_key": "cwa_rainfall_route_projection_ref",
+            "route_rainfall_trend_ref_key": "cwa_rainfall_route_trend_ref",
             "provider": "cwa_opendata",
-            "dataset_family": "CWA_QPF",
+            "dataset_family": "CWA_QPESUMS_QPE_QPF",
+            "rainfall_products": ["qpe_past_1h", "qpf_next_1h"],
+            "server_side_grid_processing": True,
+            "raspberry_pi_grid_processing": False,
+            "mobile_grid_processing": False,
+            "admin_read_is_cache_only": True,
             "candidate_only": True,
             "runtime_safety_truth": False,
             "secret_value_embedded": False,

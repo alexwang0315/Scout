@@ -23,6 +23,10 @@ LEGACY_CWA_API_KEY_ENV = "CWA_API_KEY"
 CWA_TOWNSHIP_WEEKLY_FORECAST = "F-D0047-093"
 CWA_36H_FORECAST = "F-C0032-001"
 CWA_WEATHER_WARNING = "W-C0033-001"
+CWA_FILEAPI_MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+CWA_FILEAPI_MAX_ZIP_ENTRIES = 512
+CWA_FILEAPI_MAX_ZIP_ENTRY_BYTES = 8 * 1024 * 1024
+CWA_FILEAPI_MAX_ZIP_EXPANDED_BYTES = 128 * 1024 * 1024
 
 WEATHER_INTEGRATION_ARTIFACT_KIND = "route_weather_package"
 
@@ -133,7 +137,12 @@ def fetch_cwa_file_dataset(
     )
     request = urllib.request.Request(url, headers={"accept": "application/json,application/zip,*/*"})
     with urllib.request.urlopen(request, timeout=timeout_s) as response:  # noqa: S310 - trusted CWA endpoint.
-        raw = response.read()
+        content_length = response.headers.get("Content-Length")
+        if content_length and int(content_length) > CWA_FILEAPI_MAX_RESPONSE_BYTES:
+            raise ValueError("CWA file API response exceeds size limit")
+        raw = response.read(CWA_FILEAPI_MAX_RESPONSE_BYTES + 1)
+    if len(raw) > CWA_FILEAPI_MAX_RESPONSE_BYTES:
+        raise ValueError("CWA file API response exceeds size limit")
     if raw.startswith(b"PK"):
         return _decode_cwa_zip_payload(dataset_id, raw)
     try:
@@ -150,11 +159,24 @@ def fetch_cwa_file_dataset(
 def _decode_cwa_zip_payload(dataset_id: str, raw: bytes) -> dict[str, Any]:
     documents: list[dict[str, str]] = []
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-        for name in archive.namelist():
+        entries = archive.infolist()
+        if len(entries) > CWA_FILEAPI_MAX_ZIP_ENTRIES:
+            raise ValueError("CWA ZIP response exceeds entry limit")
+        expanded_bytes = 0
+        for entry in entries:
+            name = entry.filename
             if not name.lower().endswith(".xml"):
                 continue
+            if entry.file_size > CWA_FILEAPI_MAX_ZIP_ENTRY_BYTES:
+                raise ValueError("CWA ZIP entry exceeds size limit")
+            expanded_bytes += entry.file_size
+            if expanded_bytes > CWA_FILEAPI_MAX_ZIP_EXPANDED_BYTES:
+                raise ValueError("CWA ZIP response exceeds expanded size limit")
             try:
-                text = archive.read(name).decode("utf-8")
+                payload = archive.read(entry)
+                if len(payload) != entry.file_size:
+                    raise ValueError("CWA ZIP entry size mismatch")
+                text = payload.decode("utf-8")
             except (KeyError, UnicodeDecodeError):
                 continue
             documents.append({"name": name, "text": text})
