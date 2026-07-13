@@ -73,8 +73,10 @@ def test_admin_projection_rejects_out_of_workspace_ref(tmp_path: Path) -> None:
     outside = tmp_path / "outside-admin-projection.json"
     sentinel = "outside-workspace-sentinel"
     outside.write_text(json.dumps({"sentinel": sentinel}), encoding="utf-8")
-    workspace_outside = workspace_root / "outside-admin-projection.json"
-    workspace_outside.write_text(json.dumps({"sentinel": sentinel}), encoding="utf-8")
+    (workspace_root / "outside-admin-projection.json").write_text(
+        json.dumps({"sentinel": sentinel}),
+        encoding="utf-8",
+    )
     symlink_path = project_root / "outputs" / "escaped-admin-projection.json"
     symlink_path.parent.mkdir(parents=True, exist_ok=True)
     symlink_path.symlink_to(outside)

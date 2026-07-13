@@ -31,6 +31,7 @@ from admin_local_raster_tiles import (
     build_imagery_tile_cache_plan,
     seed_imagery_tile_cache,
 )
+from cwa_route_identity import load_cwa_route_identity
 from pretrip_models import RouteBBox
 from pretrip_osm_pbf_ingest import (
     build_osm_pbf_feature_index,
@@ -476,25 +477,6 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     _write_map_preparation_spec_artifacts(project_root, manifest)
     outputs.update(_write_planned_overpass_evidence(project_root, manifest))
     _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
-    overpass_route_alignment = _run_overpass_route_alignment_after_layer_preparation(
-        project_root=project_root,
-        manifest=manifest,
-    )
-    manifest["overpass_route_alignment"] = overpass_route_alignment
-    if overpass_route_alignment.get("status") == "completed":
-        outputs.update(overpass_route_alignment.get("output_refs", {}))
-        outputs["overpass_route_alignment_snapped_point_count"] = (
-            overpass_route_alignment.get("counts", {}).get("snapped_point_count", 0)
-        )
-        outputs["overpass_route_alignment_kept_gpx_point_count"] = (
-            overpass_route_alignment.get("counts", {}).get("kept_gpx_point_count", 0)
-        )
-        _update_project_refs(
-            project_root / "project.json",
-            project,
-            outputs,
-            manifest["finished_at"],
-        )
     raster_label_preparation = _run_raster_label_preparation_after_layer_preparation(
         project_root=project_root,
         manifest=manifest,
@@ -871,10 +853,11 @@ def _maybe_prepare_environment_evidence(request: LayerPreparationRequest) -> Non
         )
 
     if outputs:
+        current_project = _load_json(project_path)
         outputs.update(
             _write_environment_synthesis_artifacts(
                 project_root=project_root,
-                project={**project, **outputs},
+                project={**project, **current_project, **outputs},
                 route_summary=route_summary,
                 bbox=query_bbox,
                 prepared_at=prepared_at,
@@ -884,10 +867,12 @@ def _maybe_prepare_environment_evidence(request: LayerPreparationRequest) -> Non
         )
 
     if outputs:
+        current_project = _load_json(project_path)
         _write_json(
             project_path,
             {
                 **project,
+                **current_project,
                 **outputs,
                 "environment_evidence_updated_at": prepared_at,
             },
@@ -1254,8 +1239,9 @@ def _maybe_prepare_cwa_precipitation_grid_job(
             "cwa_rainfall_grid_status": "blocked_server_side_grid_preparation_required",
             "cwa_rainfall_grid_blocker": "profile_must_be_mac_workstation",
         }
-    route_points = _route_points_for_weather_imagery(project_root, project)
-    if len(route_points) < 2:
+    try:
+        route_identity, route_points = load_cwa_route_identity(project_root, project)
+    except (OSError, ValueError):
         return {
             "cwa_rainfall_grid_status": "blocked_missing_route_geometry",
             "cwa_rainfall_grid_blocker": "segment_display_geometry_ref_missing_or_empty",
@@ -1267,8 +1253,12 @@ def _maybe_prepare_cwa_precipitation_grid_job(
 
         return prepare_cwa_precipitation_workspace(
             project_root=project_root,
+            project_id=route_identity["projectId"],
             route_points=route_points,
             route_bbox=bbox,
+            route_source_ref=route_identity["routeRef"],
+            route_source_sha256=route_identity["routeSha256"],
+            route_basis=route_identity["routeBasis"],
             fetched_at=prepared_at,
         )
     except Exception as exc:  # pragma: no cover - live provider/server worker path.
@@ -1297,8 +1287,9 @@ def _maybe_prepare_cwa_imagery_server_job(
             "cwa_weather_imagery_status": "blocked_explicit_network_fetch_required",
             "cwa_weather_imagery_blocker": "explicit_fetch_and_allow_network_fetch_required",
         }
-    route_points = _route_points_for_weather_imagery(project_root, project)
-    if len(route_points) < 2:
+    try:
+        route_identity, route_points = load_cwa_route_identity(project_root, project)
+    except (OSError, ValueError):
         return {
             "cwa_weather_imagery_status": "blocked_missing_route_geometry",
             "cwa_weather_imagery_blocker": "segment_display_geometry_ref_missing_or_empty",
@@ -1330,6 +1321,7 @@ def _maybe_prepare_cwa_imagery_server_job(
         refs = run_server_side_cwa_imagery_job(
             project_root=project_root,
             route_id=str(project.get("project_id") or request.project_id),
+            route_identity=route_identity,
             route_points=route_points,
             terrain_segments=_terrain_segments_for_weather_imagery(project_root, project),
             radar_ingestor=CwaRadarIngestor.from_cwa_opendata(
@@ -1372,36 +1364,15 @@ def _route_points_for_weather_imagery(
     *,
     max_points: int = 2_000,
 ) -> list[tuple[float, float]]:
-    ref = project.get("segment_display_geometry_ref")
-    if not isinstance(ref, str) or not ref:
+    try:
+        _, route_points = load_cwa_route_identity(
+            project_root,
+            project,
+            max_points=max_points,
+        )
+    except (OSError, ValueError):
         return []
-    path = _safe_project_relative_path(project_root, ref)
-    if path is None or not path.exists():
-        return []
-    payload = _load_json(path)
-    points: list[tuple[float, float]] = []
-    for segment in payload.get("segments", []):
-        if not isinstance(segment, dict):
-            continue
-        for coordinate_segment in segment.get("coordinate_segments", []):
-            if not isinstance(coordinate_segment, list):
-                continue
-            for point in coordinate_segment:
-                if not isinstance(point, dict):
-                    continue
-                lat = _as_float(point.get("lat"))
-                lon = _as_float(point.get("lon"))
-                if lat is not None and lon is not None:
-                    candidate = (lat, lon)
-                    if not points or candidate != points[-1]:
-                        points.append(candidate)
-    if len(points) <= max_points:
-        return points
-    step = max(1, len(points) // max_points)
-    sampled = points[::step]
-    if sampled[-1] != points[-1]:
-        sampled.append(points[-1])
-    return sampled[: max_points + 1]
+    return route_points
 
 
 def _terrain_segments_for_weather_imagery(
@@ -2433,6 +2404,41 @@ def _build_layer_preparation_manifest(
         )
     if workspace_file_mutation_allowed and "overpass" in normalized_layers:
         _stamp_overpass_evidence_provenance(project_root=project_root, project=project)
+    overpass_route_alignment: dict[str, Any] | None = None
+    alignment_outputs: dict[str, Any] = {}
+    if workspace_file_mutation_allowed and set(normalized_layers) & {
+        "overpass",
+        "risk-ribbon",
+        "risk-score",
+    }:
+        overpass_route_alignment = _run_overpass_route_alignment_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "normalized_layers": normalized_layers,
+                "finished_at": prepared_at,
+            },
+        )
+        if overpass_route_alignment.get("status") == "completed":
+            alignment_outputs.update(
+                overpass_route_alignment.get("output_refs", {})
+            )
+            alignment_outputs["overpass_route_alignment_snapped_point_count"] = (
+                overpass_route_alignment.get("counts", {}).get(
+                    "snapped_point_count", 0
+                )
+            )
+            alignment_outputs["overpass_route_alignment_kept_gpx_point_count"] = (
+                overpass_route_alignment.get("counts", {}).get(
+                    "kept_gpx_point_count", 0
+                )
+            )
+            _update_project_refs(
+                project_path,
+                project,
+                alignment_outputs,
+                prepared_at,
+            )
+            project = _load_json(project_path)
     environment_layers_requested = bool(
         {"cwa-weather", "cwa-qpf", "soil-moisture", "antecedent-rain"}
         & set(normalized_layers)
@@ -2489,6 +2495,7 @@ def _build_layer_preparation_manifest(
     outputs = {
         **OUTPUT_REFS,
         **_project_state_output_refs(project),
+        **alignment_outputs,
     }
 
     manifest = {
@@ -2528,6 +2535,7 @@ def _build_layer_preparation_manifest(
         "counts": counts,
         "layers": layers,
         "validation": validation,
+        "overpass_route_alignment": overpass_route_alignment,
         "boundary": boundary,
         "notes": [
             (

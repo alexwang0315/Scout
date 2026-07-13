@@ -2755,3 +2755,142 @@ Live rainfall-grid API: PASS (cache-only; upstream fetch on read=false)
 Live pretrip compact view: PASS (QPE 255 route-bbox cells; QPF 0; trend=unknown)
 Recurring scheduler installed: NO
 ```
+
+## Run Log: 2026-07-13 Dashboard CWA P0-P2 Completion
+
+Target repository and workspace:
+
+```text
+/Users/alexwang0315/scout-fusion
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Issues encountered:
+
+1. Numeric-grid and imagery artifacts did not bind a complete immutable route
+   identity. An aligned route could change while a previously generated CWA
+   manifest still appeared current for the project.
+2. A product with no valid route cells, provider no-data, a stale observation,
+   or only one half of the QPE/QPF pair could still inherit a misleading
+   prepared/ready presentation.
+3. Location-approval age was checked inside model validation with wall-clock
+   time, which made request evaluation nondeterministic. Caller-provided
+   approval references also had no server-verifiable registry.
+4. Imagery freshness was a write-time snapshot. Expired or missing cache files
+   could remain represented by a public asset URL, and quota pruning could
+   remove part of a frame bundle.
+5. The compact pre-trip project response still duplicated large OSM,
+   Overpass, risk, and CWA grid structures. Dashboard and its pre-trip iframe
+   each paid that cost, producing roughly 34.9 MB responses and
+   100-second-class first loads on the real workspace.
+6. Dashboard Weather and several debug/legacy presentations mixed live,
+   partial, preview, and unavailable content without a consistent disclosure.
+
+Root causes and fixes:
+
+- Added `cwa_route_identity.py`: prefer the current Overpass-aligned display
+  geometry, fall back to base display geometry, hash the original artifact
+  bytes, and return bounded route points without changing the identity count.
+- Numeric QPE/QPF publication now stages immutable frames, builds projection
+  and trend in memory, holds a process/thread manifest lock, writes both
+  artifacts atomically, and publishes the active manifest last. Publication
+  failure restores the previous generation while still under the lock.
+- Radar/satellite manifests, sampling, motion, and route-weather risk packages
+  carry the same route identity, source frame ids, and deterministic pair id.
+  Their active manifest and `project.json` pointers are the final two writes;
+  an injected failure rolls the artifact set back.
+- Read-time status now distinguishes stale, no coverage, missing data, partial,
+  zero precipitation, cache missing, and unavailable. `observedAt` is compared
+  to the request's injected `evaluatedAt`; position accuracy reduces
+  confidence, and unusable positions force confidence to zero.
+- Added a server-issued location approval endpoint with a 5-120 minute TTL,
+  strict project/scope binding, privacy-safe registry, and attempted/completed/
+  failed audit events. Raw submitted coordinates are response-only.
+- Recompute imagery freshness on every admin read. Public asset URLs are added
+  only for an existing cache file; expiry/quota pruning removes a timestamped
+  frame bundle rather than individual files.
+- The compact API drops duplicate subtrees, gzip-compresses the 9099 workspace
+  app, and serves bounded route-grid cells from a same-project cache-only lazy
+  endpoint. Current measured size is 13.5 MB raw / about 1.01 MB gzip with
+  5.5-8.5 seconds server time.
+- Dashboard now has eight primary information groups, route-scoped loading,
+  strict project identity, explicit live/partial/preview labels, a shared CWA
+  truth state, radar-only default, play guard, Asia/Taipei semantic time, debug
+  DEGRADED/retry handling, mobile navigation, and a viewport-bounded CWA sheet.
+
+SOP changes:
+
+- Treat `projectId + routeRef + routeSha256 + sourceFrameIds + pairId` as one
+  provenance unit for every new route-aligned CWA generation. Reject a
+  same-project artifact whose stored route hash no longer matches the active
+  route.
+- Never publish the active manifest before every derived member of its pair is
+  durable. Test rollback with an injected mid-publication failure.
+- Never equate zero rendered cells with zero precipitation. First distinguish
+  provider no-data and route no-coverage; display the data timestamp and
+  read-time freshness alongside the result.
+- Admin GETs are cache-only. A new CWA fetch remains an explicit preparation
+  operation with network approval; stale workspace data is displayed as stale
+  instead of being silently refreshed.
+- Keep the full 32-layer contract. QPE/QPF remain under `cwa-qpf`; radar and
+  satellite remain child overlays under `cwa-weather`.
+
+Current live-workspace note:
+
+- The existing July 13 CWA artifacts predate the route/pair fields. They are
+  accepted through the documented legacy-read path and currently evaluate as
+  stale (QPE has 255 route-bbox cells; QPF has 0). This run intentionally did
+  not refetch external CWA data. The next approved explicit preparation will
+  publish the new provenance format.
+
+Validation snapshot:
+
+```text
+CWA/Dashboard focused pytest: PASS (92 passed)
+Pre-trip admin API regression: PASS (81 passed)
+Focused pre-trip CWA preparation: PASS (3 passed)
+pnpm lint: PASS
+pnpm typecheck: PASS
+pnpm test: PASS (17 passed)
+Scout 32-layer repo gate: PASS
+Scout 32-layer real-workspace gate: PASS
+Admin Chromium smoke: PASS (desktop, 390x844, 320x720)
+Live 9099 map: PASS (239 Segment paths; 1 radar image; no console/HTTP errors)
+Live CWA truth: PASS (stale; QPF no coverage; unknown is not shown as zero)
+Live compact payload: PASS (13.5 MB raw; about 1.01 MB gzip)
+Recurring scheduler installed: NO
+External CWA refetch performed: NO
+```
+
+### Post-review hardening for this run
+
+The read-only review found that route and pair fields alone were insufficient
+unless every producer and consumer enforced their ordering and identity:
+
+- Overpass route alignment now runs before same-run CWA grid or imagery
+  preparation. A CWA artifact therefore cannot be published against the base
+  or previous aligned hash and become invalid when the same preparation run
+  replaces the active aligned route.
+- `cwa_route_identity.py` rejects a route artifact whose artifact kind,
+  top-level project id, optional segment project id, or route artifact id does
+  not belong to the current project. It does not relabel old-project geometry
+  with the current `projectId`.
+- Rainfall reads compare `pairId` and normalized `sourceFrameIds` before
+  combining projection cells with manifest freshness. Legacy artifacts with
+  neither field are explicitly unverified; mixed or incomplete metadata is a
+  hard 422 error.
+- The pre-trip compact/debug loaders now validate CWA project/route/pair
+  identity and resolve project refs with root containment, including symlink
+  resolution. Absolute and parent-traversal refs are rejected.
+- Server-issued location approval is the default enforcement boundary.
+  Unregistered caller attestations require the explicit
+  `SCOUT_ALLOW_LEGACY_CALLER_LOCATION_ATTESTATION=true` compatibility flag;
+  the Dashboard workspace app does not set it.
+- Dashboard unavailable/partial/stale/no-coverage states remain distinct;
+  failed project loads are retryable, project switching reloads a canonical
+  `?projectId=...` URL, and the closed mobile navigation drawer is inert.
+
+New regression coverage reproduces stale embedded project ids, same-run
+alignment ordering, pair mixing, unregistered location approval, absolute /
+parent / symlink ref escape, debug-projection project mismatch, stale UI truth,
+project switching, mobile drawer accessibility, and fixture project aliasing.

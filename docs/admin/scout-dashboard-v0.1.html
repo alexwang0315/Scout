@@ -245,6 +245,23 @@
       line-height: 1.2;
     }
 
+    .dashboard-nav-toggle {
+      display: none;
+      width: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .topbar-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
     .topbar .subline {
       margin-top: 5px;
       color: var(--muted);
@@ -424,6 +441,12 @@
       gap: 8px;
     }
 
+    .dashboard-cwa-panel-toggle {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 7px 10px;
+    }
+
     .dashboard-cwa-imagery-header strong {
       color: #f3f7f8;
       font-size: 13px;
@@ -448,7 +471,7 @@
     .dashboard-cwa-imagery select,
     .dashboard-cwa-imagery button {
       min-width: 0;
-      min-height: 28px;
+      min-height: 44px;
       border: 1px solid rgba(122, 151, 160, .5);
       border-radius: 5px;
       background: #111f24;
@@ -471,8 +494,8 @@
     }
 
     .dashboard-cwa-layer-toggle input {
-      width: 24px;
-      min-height: 24px;
+      width: 44px;
+      min-height: 44px;
       margin: 0;
       accent-color: #4cc7df;
     }
@@ -3386,9 +3409,22 @@
         grid-template-columns: 1fr;
       }
       .dashboard-sidebar {
-        grid-template-rows: auto auto auto;
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 240;
+        width: min(340px, 88vw);
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+        box-shadow: 18px 0 46px rgba(0, 0, 0, .42);
+        transform: translateX(-102%);
+        transition: transform .18s ease;
+      }
+      .dashboard-sidebar.is-open {
+        transform: translateX(0);
+      }
+      .dashboard-nav-toggle {
+        display: inline-flex;
       }
       .nav {
         display: grid;
@@ -3397,6 +3433,10 @@
         overflow: visible;
         padding: 10px;
       }
+      .nav-item,
+      .nav-section summary {
+        min-height: 44px;
+      }
       .nav-section {
         width: 100%;
       }
@@ -3404,7 +3444,7 @@
         min-height: 0;
       }
       .topbar {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr) auto;
       }
       .status-strip {
         justify-content: flex-start;
@@ -3488,7 +3528,7 @@
       }
 
       .dashboard-shell.is-frame-full .dashboard-sidebar {
-        display: none;
+        z-index: 260;
       }
 
       .dashboard-shell.is-frame-full .dashboard-frame {
@@ -3526,77 +3566,104 @@
         gap: 3px;
       }
       .map-evidence-rail {
+        --cwa-mobile-rail-height: min(70dvh, calc(75dvh - 90px), 550px);
         top: auto;
         left: 10px;
         right: 10px;
         bottom: 10px;
         width: auto;
-        max-height: min(54vh, 430px);
+        max-height: var(--cwa-mobile-rail-height);
+        padding-bottom: env(safe-area-inset-bottom);
       }
       .map-evidence-rail.is-collapsed {
         left: auto;
         width: min(304px, calc(100vw - 20px));
         max-height: none;
       }
+      .dashboard-cwa-imagery[data-dashboard-cwa-sheet-state="peek"] .dashboard-cwa-imagery-grid,
+      .dashboard-cwa-imagery[data-dashboard-cwa-sheet-state="peek"] [data-dashboard-cwa-rainfall-status],
+      .dashboard-cwa-imagery[data-dashboard-cwa-sheet-state="peek"] .dashboard-cwa-imagery-boundary {
+        display: none;
+      }
+      .dashboard-cwa-imagery[data-dashboard-cwa-sheet-state="expanded"] {
+        max-height: calc(var(--cwa-mobile-rail-height) - 96px);
+        overflow: auto;
+        overscroll-behavior: contain;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+      }
+      .dashboard-cwa-imagery-grid {
+        grid-template-columns: 1fr;
+      }
+      .dashboard-cwa-imagery-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: rgba(11, 28, 34, .96);
+      }
     }
   </style>
 </head>
 <body>
   <div class="dashboard-shell" id="dashboardShell">
-    <aside class="dashboard-sidebar">
+    <aside class="dashboard-sidebar" id="dashboardSidebar" aria-label="Scout dashboard sections">
       <header class="brand">
         <h1>Scout Dashboard v0.1</h1>
         <div class="route" id="dashboardRouteStatus">chilai_nanhua_day1_scoutAI</div>
       </header>
       <nav class="nav" aria-label="Scout dashboard navigation">
-        <button class="nav-item" type="button" data-route="home"><span class="mark"></span><span>Home</span></button>
-        <details class="nav-section" open>
-          <summary><span class="mark"></span><span>Features</span></summary>
+        <button class="nav-item" type="button" data-nav-primary data-route="home" data-route-truth="live"><span class="mark"></span><span>Overview</span></button>
+        <details class="nav-section" data-nav-primary open>
+          <summary><span class="mark"></span><span>Plan Trip</span></summary>
           <div class="nav-subtree">
-            <button class="nav-item" type="button" data-route="features-lbs"><span class="mark"></span><span>LBS</span></button>
-            <button class="nav-item" type="button" data-route="features-workspace"><span class="mark"></span><span>Workspace</span></button>
-            <details class="nav-section" open>
-              <summary><span class="mark"></span><span>Import New Trip</span></summary>
-              <div class="nav-subtree">
-                <button class="nav-item" type="button" data-route="features-import-new-trip"><span class="mark"></span><span>Trip Intake</span></button>
-                <button class="nav-item" type="button" data-route="features-country-material-pool"><span class="mark"></span><span>Country Material Pool</span></button>
-              </div>
-            </details>
+            <button class="nav-item" type="button" data-route="features-workspace" data-route-truth="partial"><span class="mark"></span><span>Workspace</span></button>
+            <button class="nav-item" type="button" data-route="features-import-new-trip" data-route-truth="partial"><span class="mark"></span><span>Trip Intake</span></button>
+            <button class="nav-item" type="button" data-route="surface-pretrip" data-route-truth="live"><span class="mark"></span><span>Pre-trip Surface</span></button>
+            <button class="nav-item" type="button" data-route="features-country-material-pool" data-route-truth="preview"><span class="mark"></span><span>Country Material Pool</span></button>
           </div>
         </details>
-        <details class="nav-section" open>
-          <summary><span class="mark"></span><span>Admin Surfaces</span></summary>
+        <details class="nav-section" data-nav-primary open>
+          <summary><span class="mark"></span><span>Map & Evidence</span></summary>
           <div class="nav-subtree">
-            <button class="nav-item" type="button" data-route="surface-pretrip"><span class="mark"></span><span>Pre-trip</span></button>
-            <button class="nav-item" type="button" data-route="surface-admin"><span class="mark"></span><span>Admin</span></button>
-            <button class="nav-item" type="button" data-route="surface-debug"><span class="mark"></span><span>Debug</span></button>
+            <button class="nav-item" type="button" data-route="map" data-route-truth="live"><span class="mark"></span><span>Map</span></button>
+            <button class="nav-item" type="button" data-route="timeline" data-route-truth="partial"><span class="mark"></span><span>Timeline Evidence</span></button>
+            <button class="nav-item" type="button" data-route="features-lbs" data-route-truth="preview"><span class="mark"></span><span>LBS</span></button>
           </div>
         </details>
-        <button class="nav-item" type="button" data-route="agent"><span class="mark"></span><span>Agent</span></button>
-        <button class="nav-item" type="button" data-route="map"><span class="mark"></span><span>Map</span></button>
-        <button class="nav-item" type="button" data-route="timeline"><span class="mark"></span><span>Timeline Evidence</span></button>
-        <button class="nav-item" type="button" data-route="emergency"><span class="mark"></span><span>Safety / Emergency</span></button>
-        <details class="nav-section" open>
-          <summary><span class="mark"></span><span>Exploring for Six Axis</span></summary>
+        <details class="nav-section" data-nav-primary open>
+          <summary><span class="mark"></span><span>Team & Pace</span></summary>
           <div class="nav-subtree">
-            <button class="nav-item" type="button" data-route="outdoor-route-context"><span class="mark"></span><span>Route Context</span></button>
-            <details class="nav-section" open>
-              <summary><span class="mark"></span><span>Pace Fit</span></summary>
-              <div class="nav-subtree">
-                <button class="nav-item" type="button" data-route="outdoor-pace-fit"><span class="mark"></span><span>Pace Dashboard</span></button>
-                <button class="nav-item" type="button" data-route="outdoor-pace-fit-body-index"><span class="mark"></span><span>Body Index</span></button>
-                <button class="nav-item" type="button" data-route="outdoor-pace-fit-emergency"><span class="mark"></span><span>Emergency UI</span></button>
-              </div>
-            </details>
-            <button class="nav-item" type="button" data-route="outdoor-permission"><span class="mark"></span><span>Permission</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-architecture"><span class="mark"></span><span>Architecture</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-weather"><span class="mark"></span><span>Weather</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-navigation"><span class="mark"></span><span>Navigation</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-route-context" data-route-truth="partial"><span class="mark"></span><span>Route Context</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-pace-fit" data-route-truth="partial"><span class="mark"></span><span>Pace Dashboard</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-pace-fit-body-index" data-route-truth="partial"><span class="mark"></span><span>Body Index</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-pace-fit-emergency" data-route-truth="preview"><span class="mark"></span><span>Emergency UI</span></button>
           </div>
         </details>
-        <button class="nav-item" type="button" data-route="debug"><span class="mark"></span><span>Debug Message</span></button>
-        <button class="nav-item" type="button" data-route="observer"><span class="mark"></span><span>MQTT / Observer Message</span></button>
-        <button class="nav-item" type="button" data-route="settings"><span class="mark"></span><span>Settings / Configure</span></button>
+        <details class="nav-section" data-nav-primary open>
+          <summary><span class="mark"></span><span>Safety Decisions</span></summary>
+          <div class="nav-subtree">
+            <button class="nav-item" type="button" data-route="emergency" data-route-truth="partial"><span class="mark"></span><span>Safety / Emergency</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-weather" data-route-truth="partial"><span class="mark"></span><span>Weather</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-permission" data-route-truth="preview"><span class="mark"></span><span>Permission</span></button>
+          </div>
+        </details>
+        <button class="nav-item" type="button" data-nav-primary data-route="agent" data-route-truth="live"><span class="mark"></span><span>Assistant</span></button>
+        <details class="nav-section" data-nav-primary>
+          <summary><span class="mark"></span><span>System</span></summary>
+          <div class="nav-subtree">
+            <button class="nav-item" type="button" data-route="surface-admin" data-route-truth="live"><span class="mark"></span><span>Admin Surface</span></button>
+            <button class="nav-item" type="button" data-route="surface-debug" data-route-truth="live"><span class="mark"></span><span>Debug Surface</span></button>
+            <button class="nav-item" type="button" data-route="debug" data-route-truth="partial"><span class="mark"></span><span>Debug Message</span></button>
+            <button class="nav-item" type="button" data-route="observer" data-route-truth="preview"><span class="mark"></span><span>MQTT / Observer</span></button>
+            <button class="nav-item" type="button" data-route="settings" data-route-truth="live"><span class="mark"></span><span>Settings</span></button>
+          </div>
+        </details>
+        <details class="nav-section" data-nav-primary>
+          <summary><span class="mark"></span><span>Labs / Preview</span></summary>
+          <div class="nav-subtree">
+            <button class="nav-item" type="button" data-route="outdoor-architecture" data-route-truth="preview"><span class="mark"></span><span>Architecture</span></button>
+            <button class="nav-item" type="button" data-route="outdoor-navigation" data-route-truth="preview"><span class="mark"></span><span>Navigation</span></button>
+          </div>
+        </details>
       </nav>
       <footer class="sidebar-footer">
         <span>Admin server</span>
@@ -3606,7 +3673,8 @@
 
     <main class="dashboard-frame">
       <header class="topbar">
-        <div>
+        <div class="topbar-title-row">
+          <button class="dashboard-nav-toggle" type="button" id="dashboardNavToggle" aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Open dashboard navigation">☰</button>
           <h2 id="pageTitle">Home</h2>
         </div>
         <div class="status-strip" aria-label="Dashboard boundary status">
@@ -3688,6 +3756,26 @@
     const MAX_RENDERED_ROUTE_POINTS = 1400;
     const MAX_RENDERED_SEGMENT_POINTS = 80;
     const DECISIONS = ["GO", "CONDITIONAL_GO", "GUIDED_ONLY", "CHANGE_PLAN", "DELAY", "NO_GO", "ESCALATE"];
+    const CWA_UI_STATUSES = Object.freeze({
+      loading: {label: "loading", tone: "info"},
+      ready: {label: "ready", tone: "ok"},
+      partial: {label: "partial", tone: "warn"},
+      stale_data: {label: "stale", tone: "warn"},
+      no_coverage: {label: "no coverage", tone: "warn"},
+      zero_precipitation: {label: "zero precipitation", tone: "info"},
+      unavailable: {label: "unavailable", tone: "bad"},
+      error: {label: "error", tone: "bad"},
+    });
+    const ROUTE_DATA_SCOPES = Object.freeze({
+      project: ["home", "map", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-pretrip", "surface-admin", "surface-debug", "emergency", "outdoor-route-context", "outdoor-architecture", "outdoor-navigation", "outdoor-weather"],
+      briefing: ["outdoor-route-context"],
+      body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index", "outdoor-pace-fit-emergency"],
+      weather: ["outdoor-weather"],
+      debug: ["debug"],
+      hardware: ["debug"],
+    });
+    const loadedDataScopes = new Set();
+    const dataScopePromises = new Map();
     const EVIDENCE_TREE_TABS = [
       { id: "default", label: "CP / Timeline", category: "checkpoint" },
       { id: "map_risk", label: "Map / Risk", category: "risk" },
@@ -4057,6 +4145,21 @@
       mobileWearableIngress: null,
       monitoringCenter: null,
       hardwareReadiness: null,
+      debugEndpointStates: {
+        events: {status: "idle"},
+        state: {status: "idle"},
+        messages: {status: "idle"},
+        ingress: {status: "idle"},
+        monitoring: {status: "idle"},
+        hardware: {status: "idle"},
+      },
+      dataScopeErrors: {},
+      weatherData: {
+        status: "idle",
+        rainfall: null,
+        imagery: null,
+        errors: [],
+      },
       selectedAction: "film",
       activeDebugDetail: "state",
       activeEvidenceTab: "default",
@@ -4075,7 +4178,7 @@
         rainfallProducts: [],
         rainfallOpacityPercent: 56,
         rainfallCurrent: null,
-        productId: "all",
+        productId: "radar",
         products: [],
         windowId: "12h",
         frameIndex: 0,
@@ -4084,7 +4187,10 @@
         satelliteOpacityPercent: 48,
         playing: false,
         current: null,
+        freshness: "unknown_freshness",
+        coverageStatus: "unavailable",
       },
+      dashboardCwaSheetExpanded: false,
       evidenceItemsBySource: {},
       pretripDataProjectId: PROJECT_ID,
       briefingFrameVersion: "",
@@ -4189,12 +4295,13 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       bindNavigation();
+      bindMobileNavigation();
       bindAgentChatControls();
       setRoute(routeFromHash());
       loadData().finally(() => {
-        if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route);
+        if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
       });
-      window.addEventListener("hashchange", () => setRoute(routeFromHash()));
+      window.addEventListener("hashchange", () => setRoute(routeFromHash(), {loadRouteData: true}));
     });
 
     function apiBase() {
@@ -4253,9 +4360,7 @@
     }
 
     function pretripDataProjectIds() {
-      const requested = projectId();
-      const normalized = requested.replace(/_scoutAI$/, "");
-      return [...new Set([requested, normalized, PRETRIP_DATA_PROJECT_ID].filter(Boolean))];
+      return [projectId()];
     }
 
     async function fetchJson(path, options = {}) {
@@ -4345,80 +4450,178 @@
       }, delayMs);
     }
 
-    async function loadData() {
-      const id = projectId();
-      document.getElementById("dashboardRouteStatus").textContent = id;
-      const tasks = [
-        fetchFirstPretripJson(
-          (candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}?compact=1`,
-          { timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS },
-        ).then((data) => {
-          state.project = data;
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/admin-projection`).then((data) => {
-          state.adminProjection = data;
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/debug-projection-events`).then((data) => {
-          state.debugEvents = data.events || data.timeline || [];
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchFirstPretripJson((candidateId) => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/briefings/route-context/variants`).then((data) => {
-          state.briefingVariants = data;
-          if (data.status === "completed") {
-            state.briefingVariantsStatus = {
-              tone: "ok",
-              text: `${data.variant_count || 0} variants ready via ${data.model || "Scout AI"}`,
-            };
-          }
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchJson(bodyIndexStatusPath(), { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS }).then((data) => {
-          state.bodyIndexData = data;
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchJson(bodyIndexWatchStatusPath()).then((data) => {
-          state.bodyIndexWatchStatus = data;
-          if (Number(data.interval_seconds) > 0) {
-            state.bodyIndexWatchIntervalSeconds = Number(data.interval_seconds);
-          }
-          scheduleBodyIndexWatchRefresh();
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchJson("/debug/events?limit=200").then((data) => {
-          state.runtimeDebugEventPayload = data;
-          state.runtimeDebugEvents = data.events || [];
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchJson("/debug/state").then((data) => {
-          state.debugRuntimeState = data;
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchJson("/debug/messages").then((data) => {
-          state.debugMessagesPayload = data;
-          state.debugMessages = data.messages || [];
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchJson("/debug/mobile-wearable/ingress").then((data) => {
-          state.mobileWearableIngress = data;
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchJson("/debug/monitoring").then((data) => {
-          state.monitoringCenter = data;
-          refreshCurrentDataView();
-        }).catch(() => {}),
-        fetchJson("/admin/hardware-readiness/context").then((data) => {
-          state.hardwareReadiness = data;
-          refreshCurrentDataView();
-        }).catch(() => {}),
-      ];
-      await Promise.allSettled(tasks);
+    function dataScopesForRoute(route) {
+      return Object.entries(ROUTE_DATA_SCOPES)
+        .filter(([, routes]) => routes.includes(route))
+        .map(([scope]) => scope);
+    }
+
+    async function loadDataForRoute(route, {force = false} = {}) {
+      document.getElementById("dashboardRouteStatus").textContent = projectId();
+      const scopes = dataScopesForRoute(route);
+      const results = await Promise.allSettled(
+        scopes.map(scope => loadDataScope(scope, {force})),
+      );
+      const failedScopes = results
+        .map((result, index) => ({result, scope: scopes[index]}))
+        .filter(item => item.result.status === "rejected")
+        .map(item => item.scope);
+      document.getElementById("dashboardRouteStatus").textContent = failedScopes.length
+        ? `${projectId()} · retrying ${failedScopes.join(", ")}`
+        : projectId();
       refreshCurrentDataView();
     }
 
+    async function loadDataScope(scope, {force = false} = {}) {
+      if (dataScopePromises.has(scope)) return dataScopePromises.get(scope);
+      if (force) loadedDataScopes.delete(scope);
+      if (!force && loadedDataScopes.has(scope)) return;
+      const promise = performDataScope(scope)
+        .then(() => {
+          loadedDataScopes.add(scope);
+          const {[scope]: _cleared, ...remainingErrors} = state.dataScopeErrors;
+          state.dataScopeErrors = remainingErrors;
+        })
+        .catch(error => {
+          state.dataScopeErrors = {
+            ...state.dataScopeErrors,
+            [scope]: String(error?.message || error || "data load failed"),
+          };
+          throw error;
+        })
+        .finally(() => {
+          dataScopePromises.delete(scope);
+        });
+      dataScopePromises.set(scope, promise);
+      return promise;
+    }
+
+    async function performDataScope(scope) {
+      if (scope === "project") return loadProjectData();
+      if (scope === "briefing") return loadBriefingData();
+      if (scope === "body") return loadBodyIndexData();
+      if (scope === "weather") return loadWeatherData();
+      if (scope === "debug") return loadDebugData();
+      if (scope === "hardware") return loadHardwareData();
+    }
+
+    async function loadProjectData() {
+      state.project = null;
+      state.adminProjection = null;
+      state.debugEvents = [];
+      const tasks = [
+        fetchFirstPretripJson(
+          candidateId => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}?compact=1`,
+          { timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS },
+        ).then(data => { state.project = data; }),
+        fetchFirstPretripJson(candidateId => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/admin-projection`)
+          .then(data => { state.adminProjection = data; }),
+        fetchFirstPretripJson(candidateId => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/debug-projection-events`)
+          .then(data => { state.debugEvents = data.events || data.timeline || []; }),
+      ];
+      await Promise.all(tasks);
+    }
+
+    async function loadBriefingData() {
+      try {
+        const data = await fetchFirstPretripJson(candidateId => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/briefings/route-context/variants`);
+        state.briefingVariants = data;
+        if (data.status === "completed") {
+          state.briefingVariantsStatus = {
+            tone: "ok",
+            text: `${data.variant_count || 0} variants ready via ${data.model || "Scout AI"}`,
+          };
+        }
+      } catch (_error) {
+        state.briefingVariantsStatus = {tone: "warn", text: "Route briefing variants unavailable"};
+      }
+    }
+
+    async function loadBodyIndexData() {
+      const results = await Promise.allSettled([
+        fetchJson(bodyIndexStatusPath(), {timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS}),
+        fetchJson(bodyIndexWatchStatusPath()),
+      ]);
+      if (results[0].status === "fulfilled") state.bodyIndexData = results[0].value;
+      if (results[1].status === "fulfilled") {
+        const watch = results[1].value;
+        state.bodyIndexWatchStatus = watch;
+        if (Number(watch.interval_seconds) > 0) state.bodyIndexWatchIntervalSeconds = Number(watch.interval_seconds);
+        scheduleBodyIndexWatchRefresh();
+      }
+    }
+
+    async function loadWeatherData() {
+      state.weatherData = {...state.weatherData, status: "loading", errors: []};
+      refreshCurrentDataView();
+      const project = encodeURIComponent(projectId());
+      const [rainfallResult, imageryResult] = await Promise.allSettled([
+        fetchJson(`/admin/pretrip/projects/${project}/rainfall-grids`),
+        fetchJson(`/admin/pretrip/projects/${project}/weather-imagery`),
+      ]);
+      const rainfall = rainfallResult.status === "fulfilled" ? rainfallResult.value : null;
+      const imagery = imageryResult.status === "fulfilled" ? imageryResult.value : null;
+      const errors = [rainfallResult, imageryResult]
+        .filter(result => result.status === "rejected")
+        .map(result => String(result.reason?.message || result.reason || "CWA cache unavailable"));
+      state.weatherData = {
+        status: rainfall && imagery ? "ready" : rainfall || imagery ? "partial" : errors.length ? "error" : "unavailable",
+        rainfall,
+        imagery,
+        errors,
+        loadedAt: new Date().toISOString(),
+        boundary: "cache-only",
+      };
+    }
+
+    async function loadTrackedDebugEndpoint(key, path, applyPayload) {
+      state.debugEndpointStates = {
+        ...state.debugEndpointStates,
+        [key]: {status: "loading", path},
+      };
+      try {
+        const payload = await fetchJson(path);
+        applyPayload(payload);
+        state.debugEndpointStates = {
+          ...state.debugEndpointStates,
+          [key]: {status: "loaded", path},
+        };
+      } catch (error) {
+        state.debugEndpointStates = {
+          ...state.debugEndpointStates,
+          [key]: {status: "error", path, error: String(error?.message || error)},
+        };
+      }
+    }
+
+    async function loadDebugData() {
+      await Promise.all([
+        loadTrackedDebugEndpoint("events", "/debug/events?limit=200", data => {
+          state.runtimeDebugEventPayload = data;
+          state.runtimeDebugEvents = data.events || [];
+        }),
+        loadTrackedDebugEndpoint("state", "/debug/state", data => { state.debugRuntimeState = data; }),
+        loadTrackedDebugEndpoint("messages", "/debug/messages", data => {
+          state.debugMessagesPayload = data;
+          state.debugMessages = data.messages || [];
+        }),
+        loadTrackedDebugEndpoint("ingress", "/debug/mobile-wearable/ingress", data => { state.mobileWearableIngress = data; }),
+        loadTrackedDebugEndpoint("monitoring", "/debug/monitoring", data => { state.monitoringCenter = data; }),
+      ]);
+    }
+
+    async function loadHardwareData() {
+      await loadTrackedDebugEndpoint("hardware", "/admin/hardware-readiness/context", data => { state.hardwareReadiness = data; });
+    }
+
+    async function loadData() {
+      const scopes = dataScopesForRoute(state.route);
+      if (!scopes.length) return loadDataScope("project", {force: true});
+      return loadDataForRoute(state.route, {force: true});
+    }
+
     function refreshCurrentDataView() {
-      const readiness = state.project?.readiness?.status || state.project?.readiness_status || "ready";
+      const readiness = state.project?.readiness?.status || state.project?.readiness_status || "loading";
       document.getElementById("readinessChip").textContent = readiness;
       if (state.route === "map") {
         renderMapEvidenceRail();
@@ -4445,7 +4648,42 @@
       document.querySelectorAll("[data-route]").forEach((button) => {
         button.addEventListener("click", () => {
           window.location.hash = button.dataset.route || "home";
+          setDashboardNavigationOpen(false);
         });
+      });
+    }
+
+    function setDashboardNavigationOpen(open, {returnFocus = false} = {}) {
+      const sidebar = document.getElementById("dashboardSidebar");
+      const toggle = document.getElementById("dashboardNavToggle");
+      if (!sidebar || !toggle) return;
+      const mobile = window.matchMedia("(max-width: 1120px)").matches;
+      sidebar.classList.toggle("is-open", mobile && open);
+      toggle.setAttribute("aria-expanded", mobile && open ? "true" : "false");
+      toggle.setAttribute("aria-label", mobile && open ? "Close dashboard navigation" : "Open dashboard navigation");
+      if (mobile) {
+        sidebar.inert = !open;
+        sidebar.setAttribute("aria-hidden", open ? "false" : "true");
+      } else {
+        sidebar.inert = false;
+        sidebar.removeAttribute("aria-hidden");
+      }
+      if (returnFocus && !open) toggle.focus();
+    }
+
+    function bindMobileNavigation() {
+      const sidebar = document.getElementById("dashboardSidebar");
+      const toggle = document.getElementById("dashboardNavToggle");
+      if (!sidebar || !toggle) return;
+      setDashboardNavigationOpen(false);
+      toggle.addEventListener("click", () => {
+        const open = !sidebar.classList.contains("is-open");
+        setDashboardNavigationOpen(open);
+      });
+      window.addEventListener("resize", () => setDashboardNavigationOpen(false));
+      document.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        setDashboardNavigationOpen(false, {returnFocus: true});
       });
     }
 
@@ -4454,7 +4692,7 @@
       return raw || "home";
     }
 
-    function setRoute(route) {
+    function setRoute(route, {loadRouteData = false} = {}) {
       state.route = route;
       document.querySelectorAll("[data-route]").forEach((button) => {
         button.classList.toggle("is-active", button.dataset.route === route);
@@ -4465,6 +4703,7 @@
         : (routeMeta[route] || routeMeta.home);
       document.getElementById("pageTitle").textContent = meta[0];
       render();
+      if (loadRouteData) void loadDataForRoute(route);
     }
 
     function render() {
@@ -5973,6 +6212,14 @@
       const runtime = state.debugRuntimeState || {};
       const hardware = state.hardwareReadiness || {};
       const ingress = state.mobileWearableIngress || {};
+      const endpointStates = Object.values(state.debugEndpointStates || {});
+      const endpointErrorCount = endpointStates.filter(item => item.status === "error").length;
+      const endpointLoadingCount = endpointStates.filter(item => item.status === "idle" || item.status === "loading").length;
+      const debugHealthLabel = endpointErrorCount
+        ? `DEGRADED ${endpointErrorCount}/${endpointStates.length} endpoints unavailable`
+        : endpointLoadingCount
+          ? `loading ${endpointLoadingCount}/${endpointStates.length}`
+          : "connected";
       const boundary = {
         ...(state.runtimeDebugEventPayload?.debug_boundary || {}),
         ...(runtime.debug_boundary || {}),
@@ -5984,13 +6231,15 @@
       const boundaryClosed = boundary.phase1_mutation_allowed === false && boundary.phase2_writeback_allowed === false;
       return `
         <div class="debug-telemetry-bar" aria-label="Debug dashboard telemetry">
+          ${debugTelemetryCell("Debug health", debugHealthLabel, endpointErrorCount ? "retry available" : "read-only endpoints", endpointErrorCount ? "warn" : endpointLoadingCount ? "info" : "ok")}
           ${debugTelemetryCell("Route / Workspace", projectId(), state.pretripDataProjectId || "projection", "info")}
           ${debugTelemetryCell("Selected View", active.label, `${formatInteger(active.count)} refs`, active.count ? "ok" : "info")}
-          ${debugTelemetryCell("Runtime", runtime.runtime_profile || "phase35-debug", `events ${formatInteger(runtime.event_count ?? state.runtimeDebugEvents.length)}`, "info")}
+          ${debugTelemetryCell("Runtime", runtime.runtime_profile || (endpointErrorCount ? "unavailable" : "loading"), `events ${formatInteger(runtime.event_count ?? state.runtimeDebugEvents.length)}`, endpointErrorCount ? "warn" : "info")}
           ${debugTelemetryCell("Boundary", boundaryClosed ? "read-only" : "review", "closed", boundaryClosed ? "ok" : "warn")}
           ${debugTelemetryCell("Hardware", `${formatInteger(hardware.summary?.interface_count ?? asArray(hardware.interface_inventory).length)} interfaces`, `${formatInteger(hardware.summary?.degraded_provider_count || 0)} degraded`, hardware.summary?.degraded_provider_count ? "warn" : "ok")}
           ${debugTelemetryCell("Outbound", "mock only", `${formatInteger(state.debugMessages.length)} messages`, "ok")}
           ${debugTelemetryCell("Ingress", ingress.status || "not loaded", ingress.reason || "observer stream", ingress.unavailable ? "warn" : "info")}
+          <button type="button" data-debug-retry ${endpointLoadingCount ? "disabled" : ""}>Retry debug endpoints</button>
         </div>
       `;
     }
@@ -6547,14 +6796,69 @@
       `;
     }
 
+    function renderWeatherLiveSummary() {
+      const weather = state.weatherData || {};
+      if (weather.status === "idle" || weather.status === "loading") {
+        return `<section class="panel" data-weather-status="loading"><div class="panel-header"><h3>CWA Live Cache</h3><span class="chip info">loading</span></div><div class="panel-body">Loading cache-only rainfall and imagery evidence for this project.</div></section>`;
+      }
+      const compactRainfallProducts = asArray(state.project?.cwa_qpf?.rainfall_products);
+      const rainfallProducts = asArray(weather.rainfall?.products).length
+        ? asArray(weather.rainfall.products).map(product => ({
+            ...(compactRainfallProducts.find(item => item.gridKind === product.gridKind) || {}),
+            ...product,
+          }))
+        : compactRainfallProducts;
+      const preferredRainfall = rainfallProducts.find(item => item.gridKind === "qpf_next_1h") || rainfallProducts[0] || null;
+      const imageryFamilies = ["radar", "satellite"].map(family => {
+        const overlay = weather.imagery?.childOverlays?.[family] || {};
+        const frames = asArray(overlay.frames);
+        return {family, current: frames.find(frame => frame.frameId === overlay.latestFrameId) || frames[frames.length - 1] || null};
+      });
+      const currentImagery = imageryFamilies.find(item => item.current)?.current || null;
+      const freshness = preferredRainfall?.freshness?.status || weather.rainfall?.status || "unknown_freshness";
+      const availableCells = Number(preferredRainfall?.availableCellCount || 0);
+      const coverageStatus = preferredRainfall
+        ? (availableCells > 0 ? "covered" : "no_coverage")
+        : "unavailable";
+      const derived = dashboardCwaDerivedStatus({
+        status: weather.status,
+        bridgeReady: true,
+        current: currentImagery,
+        rainfallCurrent: preferredRainfall,
+        freshness,
+        coverageStatus,
+      });
+      const statusMeta = CWA_UI_STATUSES[derived] || CWA_UI_STATUSES.unavailable;
+      return `
+        <section class="panel" data-weather-status="${escapeHtml(derived)}">
+          <div class="panel-header"><h3>CWA Live Cache</h3><span class="chip ${statusMeta.tone}">${escapeHtml(statusMeta.label)}</span></div>
+          <div class="panel-body">
+            <div class="metric-line">
+              <div class="metric-row"><span>Boundary</span><strong>cache-only · candidate-only</strong></div>
+              <div class="metric-row"><span>Rainfall product</span><strong>${escapeHtml(preferredRainfall?.gridKind || "unavailable")}</strong></div>
+              <div class="metric-row"><span>Freshness</span><strong>${escapeHtml(freshness)}</strong></div>
+              <div class="metric-row"><span>Coverage</span><strong>${escapeHtml(coverageStatus === "covered" ? `${availableCells} route-bbox cells` : coverageStatus)}</strong></div>
+              <div class="metric-row"><span>${preferredRainfall?.gridKind === "qpe_past_1h" ? "觀測截至" : "預報基準"}</span><strong>${escapeHtml(formatCwaTimestamp(preferredRainfall?.sourceTimestamp, ""))}</strong></div>
+              <div class="metric-row"><span>有效至</span><strong>${escapeHtml(formatCwaTimestamp(preferredRainfall?.validUntil, ""))}</strong></div>
+              ${imageryFamilies.map(({family, current}) => `<div class="metric-row"><span>${escapeHtml(family)} 影像時間</span><strong>${escapeHtml(formatCwaTimestamp(current?.sourceTimestamp, ""))}</strong></div>`).join("")}
+            </div>
+            ${weather.errors?.length ? `<p class="status error">${escapeHtml(weather.errors.join(" · "))}</p>` : ""}
+            <div style="height:10px"></div>
+            <button type="button" data-weather-open-map>Open current project in Map</button>
+          </div>
+        </section>
+      `;
+    }
+
     function renderWeatherPage(force) {
       return `
         ${outdoorTabs(force.route)}
         <div class="grid-2">
-          ${renderMapPanel("weather")}
+          ${renderWeatherLiveSummary()}
           <section class="panel">
-            <div class="panel-header"><h3>Weather-to-Decision Timeline</h3><span class="chip warn">CHANGE_PLAN</span></div>
+            <div class="panel-header"><h3>示例規則</h3><span class="chip info">Preview</span></div>
             <div class="panel-body">
+              <p class="status">These example rules are not a decision for the current trip. Use the live cache summary and Map evidence above.</p>
               <table class="table">
                 <thead><tr><th>Condition</th><th>Route impact</th><th>Required action</th></tr></thead>
                 <tbody>
@@ -7985,19 +8289,56 @@
       `;
     }
 
+    function dashboardCwaDerivedStatus(snapshot = {}) {
+      const freshness = snapshot.freshness || snapshot.rainfallCurrent?.freshness?.status || "unknown_freshness";
+      const coverageStatus = snapshot.coverageStatus || (snapshot.rainfallCurrent
+        ? (Number(snapshot.rainfallCurrent.availableCellCount || 0) > 0 ? "covered" : "no_coverage")
+        : "unavailable");
+      if (snapshot.status === "loading") return "loading";
+      if (snapshot.status === "error") return "error";
+      if (snapshot.status === "unavailable") return "unavailable";
+      if (!snapshot.bridgeReady) return "loading";
+      if (freshness === "stale_data" || freshness === "partially_stale" || snapshot.status === "stale_data") return "stale_data";
+      if (coverageStatus === "no_coverage" || snapshot.status === "no_coverage") return "no_coverage";
+      if (coverageStatus === "zero_precipitation" || snapshot.status === "zero_precipitation") return "zero_precipitation";
+      if (snapshot.status === "partial") return "partial";
+      if (snapshot.current || snapshot.rainfallCurrent || snapshot.status === "ready") return "ready";
+      return "unavailable";
+    }
+
+    function formatCwaTimestamp(value, semanticLabel = "") {
+      const prefix = semanticLabel ? `${semanticLabel}: ` : "";
+      if (!value) return `${prefix}unknown`;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return `${prefix}${value}`;
+      const formatted = new Intl.DateTimeFormat("zh-TW", {
+        timeZone: "Asia/Taipei",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(parsed);
+      return `${prefix}${formatted} Asia/Taipei`;
+    }
+
     function renderDashboardCwaImageryControls() {
       const imagery = state.dashboardCwaImagery || {};
-      const statusTone = imagery.status === "ready" ? "ok" : imagery.bridgeReady ? "warn" : "info";
-      const statusLabel = imagery.status === "ready" ? "prepared" : imagery.bridgeReady ? "not prepared" : "connecting";
+      const derivedStatus = dashboardCwaDerivedStatus(imagery);
+      const statusMeta = CWA_UI_STATUSES[derivedStatus] || CWA_UI_STATUSES.unavailable;
+      const sheetState = state.dashboardCwaSheetExpanded ? "expanded" : "peek";
       const productOptions = [
-        {id: "all", label: "All prepared"},
+        {id: "radar", label: "Radar latest"},
+        {id: "satellite", label: "Satellite latest"},
+        {id: "all", label: "All prepared (compare)"},
         ...asArray(imagery.products),
       ];
       return `
-        <section class="dashboard-cwa-imagery" id="dashboardCwaImagery" aria-label="CWA radar and satellite imagery controls">
+        <section class="dashboard-cwa-imagery" id="dashboardCwaImagery" aria-label="CWA radar and satellite imagery controls" data-dashboard-cwa-sheet-state="${sheetState}">
           <div class="dashboard-cwa-imagery-header">
             <strong>CWA rainfall / radar / satellite</strong>
-            <span class="chip ${statusTone}" data-dashboard-cwa-imagery-state>${escapeHtml(statusLabel)}</span>
+            <span class="chip ${statusMeta.tone}" data-dashboard-cwa-imagery-state>${escapeHtml(statusMeta.label)}</span>
+            <button class="dashboard-cwa-panel-toggle" type="button" data-dashboard-cwa-panel-toggle aria-expanded="${state.dashboardCwaSheetExpanded ? "true" : "false"}">${state.dashboardCwaSheetExpanded ? "Peek" : "Expand"}</button>
           </div>
           <div class="dashboard-cwa-imagery-grid">
             <label class="dashboard-cwa-layer-toggle">
@@ -8036,7 +8377,7 @@
             <label>Satellite opacity
               <input type="range" min="0" max="100" value="${Number(imagery.satelliteOpacityPercent ?? 48)}" data-dashboard-cwa-imagery-opacity="satellite">
             </label>
-            <button type="button" data-dashboard-cwa-imagery-play aria-pressed="${imagery.playing ? "true" : "false"}">${imagery.playing ? "Pause" : "Play"}</button>
+            <button type="button" data-dashboard-cwa-imagery-play aria-pressed="${imagery.playing ? "true" : "false"}" ${Number(imagery.maxFrameIndex || 0) < 1 ? "disabled" : ""}>${imagery.playing ? "Pause" : "Play"}</button>
           </div>
           <output data-dashboard-cwa-rainfall-status role="status" aria-live="polite">${escapeHtml(dashboardCwaRainfallStatusText(imagery))}</output>
           <output data-dashboard-cwa-imagery-status role="status" aria-live="polite">${escapeHtml(dashboardCwaImageryStatusText(imagery))}</output>
@@ -8047,14 +8388,20 @@
 
     function dashboardCwaImageryStatusText(imagery = state.dashboardCwaImagery || {}) {
       if (!imagery.bridgeReady) return "Connecting to the same-origin pretrip map controller.";
+      const derivedStatus = dashboardCwaDerivedStatus(imagery);
+      if (derivedStatus === "stale_data") return `STALE · ${dashboardCwaRainfallStatusText(imagery)}`;
+      if (derivedStatus === "no_coverage") return "NO COVERAGE · prepared grid has no valid route-bbox cells; this is unknown, not zero rain.";
+      if (derivedStatus === "zero_precipitation") return "ZERO PRECIPITATION · valid covered cells report 0 mm for the selected product.";
+      if (derivedStatus === "error" || derivedStatus === "unavailable") return "Prepared CWA rainfall/imagery unavailable for this project.";
       const current = imagery.current;
       if (!current && imagery.rainfallCurrent) {
         const cells = Number(imagery.rainfallCurrent.availableCellCount || 0);
         const coverage = cells > 0 ? `${cells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)";
-        return `${imagery.rainfallCurrent.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${imagery.rainfallCurrent.sourceTimestamp || "unknown time"} · delay ${imagery.rainfallCurrent.dataDelayMinutes ?? "n/a"}m · ${coverage}`;
+        const semantic = imagery.rainfallCurrent.gridKind === "qpe_past_1h" ? "觀測截至" : "預報基準";
+        return `${imagery.rainfallCurrent.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${formatCwaTimestamp(imagery.rainfallCurrent.sourceTimestamp, semantic)} · 目前資料延遲 ${imagery.rainfallCurrent.dataDelayMinutes ?? "n/a"}m · ${coverage}`;
       }
       if (!current) return "Prepared CWA rainfall/imagery unavailable for this project.";
-      return `${current.sourceTimestamp || "unknown time"} · delay ${current.dataDelayMinutes ?? "n/a"}m · ${current.imageType || "imagery"} · ${current.extent || "unknown extent"}`;
+      return `${formatCwaTimestamp(current.sourceTimestamp, "影像時間")} · ${formatCwaTimestamp(current.fetchedAt, "快取擷取時間")} · 目前資料延遲 ${current.dataDelayMinutes ?? "n/a"}m · ${current.imageType || "imagery"} · ${current.extent || "unknown extent"}`;
     }
 
     function dashboardCwaRainfallStatusText(imagery = state.dashboardCwaImagery || {}) {
@@ -8062,7 +8409,8 @@
       const rainfall = imagery.rainfallCurrent;
       if (!rainfall) return "Prepared rainfall grid unavailable for this project.";
       const cells = Number(rainfall.availableCellCount || 0);
-      return `${rainfall.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${rainfall.sourceTimestamp || "unknown time"} · valid to ${rainfall.validUntil || "unknown"} · delay ${rainfall.dataDelayMinutes ?? "n/a"}m · ${cells ? `${cells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)"}`;
+      const semantic = rainfall.gridKind === "qpe_past_1h" ? "觀測截至" : "預報基準";
+      return `${rainfall.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${formatCwaTimestamp(rainfall.sourceTimestamp, semantic)} · ${formatCwaTimestamp(rainfall.validUntil, "有效至")} · 目前資料延遲 ${rainfall.dataDelayMinutes ?? "n/a"}m · ${cells ? `${cells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)"}`;
     }
 
     function renderPretripEvidenceGroup(group, index, options = {}) {
@@ -8753,12 +9101,21 @@
       bindDebugDetailControls();
       bindRouteContextBriefingControls();
       bindBodyIndexControls();
+      document.querySelector("[data-weather-open-map]")?.addEventListener("click", () => {
+        window.location.hash = "map";
+      });
+      document.querySelector("[data-debug-retry]")?.addEventListener("click", () => {
+        void loadDataForRoute("debug", {force: true});
+      });
       const saveSettings = document.getElementById("saveSettings");
       if (saveSettings) {
         saveSettings.addEventListener("click", () => {
           localStorage.setItem("scout.dashboardApiBase", document.getElementById("apiBaseInput").value.trim());
-          localStorage.setItem("scout.dashboardProjectId", document.getElementById("projectInput").value.trim() || PROJECT_ID);
-          loadData().finally(render);
+          const nextProjectId = document.getElementById("projectInput").value.trim() || PROJECT_ID;
+          localStorage.setItem("scout.dashboardProjectId", nextProjectId);
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("projectId", nextProjectId);
+          window.location.replace(nextUrl.toString());
         });
       }
     }
@@ -9253,13 +9610,17 @@
       const current = snapshot.current && typeof snapshot.current === "object" ? {
         frameId: snapshot.current.frameId || null,
         sourceTimestamp: snapshot.current.sourceTimestamp || null,
+        fetchedAt: snapshot.current.fetchedAt || null,
         dataDelayMinutes: snapshot.current.dataDelayMinutes ?? null,
+        expectedDelayMinutes: snapshot.current.expectedDelayMinutes ?? null,
         imageType: snapshot.current.imageType || null,
         extent: snapshot.current.extent || null,
       } : null;
       return {
         bridgeReady: true,
-        status: snapshot.status === "ready" ? "ready" : "not_prepared",
+        status: CWA_UI_STATUSES[snapshot.status] ? snapshot.status : "unavailable",
+        freshness: snapshot.freshness || snapshot.rainfallCurrent?.freshness?.status || "unknown_freshness",
+        coverageStatus: snapshot.coverageStatus || "unavailable",
         layerEnabled: Boolean(snapshot.layerEnabled),
         rainfallLayerEnabled: Boolean(snapshot.rainfallLayerEnabled),
         rainfallProduct: ["qpe_past_1h", "qpf_next_1h"].includes(snapshot.rainfallProduct)
@@ -9272,7 +9633,7 @@
         rainfallCurrent: snapshot.rainfallCurrent && typeof snapshot.rainfallCurrent === "object"
           ? snapshot.rainfallCurrent
           : null,
-        productId: String(snapshot.productId || "all"),
+        productId: String(snapshot.productId || "radar"),
         products,
         windowId: ["3h", "6h", "9h", "12h"].includes(snapshot.windowId) ? snapshot.windowId : "12h",
         frameIndex: Math.max(0, Number(snapshot.frameIndex) || 0),
@@ -9309,14 +9670,19 @@
       if (rainfallOpacity) rainfallOpacity.value = String(snapshot.rainfallOpacityPercent ?? 56);
       const product = panel.querySelector("[data-dashboard-cwa-imagery-product]");
       if (product) {
-        const options = [{id: "all", label: "All prepared"}, ...asArray(snapshot.products)];
+        const options = [
+          {id: "radar", label: "Radar latest"},
+          {id: "satellite", label: "Satellite latest"},
+          {id: "all", label: "All prepared (compare)"},
+          ...asArray(snapshot.products),
+        ];
         product.replaceChildren(...options.map(item => {
           const option = document.createElement("option");
           option.value = String(item.id || "all");
           option.textContent = String(item.label || item.id || "All prepared");
           return option;
         }));
-        product.value = options.some(item => item.id === snapshot.productId) ? snapshot.productId : "all";
+        product.value = options.some(item => item.id === snapshot.productId) ? snapshot.productId : "radar";
       }
       const windowControl = panel.querySelector("[data-dashboard-cwa-imagery-window]");
       if (windowControl) windowControl.value = snapshot.windowId || "12h";
@@ -9335,7 +9701,9 @@
         play.textContent = snapshot.playing ? "Pause" : "Play";
         play.setAttribute("aria-pressed", snapshot.playing ? "true" : "false");
       }
-      panel.querySelectorAll("input,select,button").forEach(control => { control.disabled = !bridgeReady; });
+      panel.querySelectorAll("input,select,button:not([data-dashboard-cwa-panel-toggle])").forEach(control => { control.disabled = !bridgeReady; });
+      if (timeline) timeline.disabled = !bridgeReady || Number(snapshot.maxFrameIndex || 0) < 1;
+      if (play) play.disabled = !bridgeReady || Number(snapshot.maxFrameIndex || 0) < 1;
       const status = panel.querySelector("[data-dashboard-cwa-imagery-status]");
       if (status) {
         status.setAttribute("aria-live", snapshot.playing ? "off" : "polite");
@@ -9345,8 +9713,10 @@
       if (rainfallStatus) rainfallStatus.textContent = dashboardCwaRainfallStatusText(snapshot);
       const stateChip = panel.querySelector("[data-dashboard-cwa-imagery-state]");
       if (stateChip) {
-        stateChip.textContent = snapshot.status === "ready" ? "prepared" : bridgeReady ? "not prepared" : "connecting";
-        stateChip.className = `chip ${snapshot.status === "ready" ? "ok" : bridgeReady ? "warn" : "info"}`;
+        const derivedStatus = dashboardCwaDerivedStatus(snapshot);
+        const statusMeta = CWA_UI_STATUSES[derivedStatus] || CWA_UI_STATUSES.unavailable;
+        stateChip.textContent = statusMeta.label;
+        stateChip.className = `chip ${statusMeta.tone}`;
       }
     }
 
@@ -9361,6 +9731,12 @@
       const panel = document.getElementById("dashboardCwaImagery");
       if (!panel || panel.dataset.bound === "true") return;
       panel.dataset.bound = "true";
+      panel.querySelector("[data-dashboard-cwa-panel-toggle]")?.addEventListener("click", event => {
+        state.dashboardCwaSheetExpanded = !state.dashboardCwaSheetExpanded;
+        panel.dataset.dashboardCwaSheetState = state.dashboardCwaSheetExpanded ? "expanded" : "peek";
+        event.currentTarget.setAttribute("aria-expanded", state.dashboardCwaSheetExpanded ? "true" : "false");
+        event.currentTarget.textContent = state.dashboardCwaSheetExpanded ? "Peek" : "Expand";
+      });
       panel.querySelector("[data-dashboard-cwa-imagery-layer]")?.addEventListener("change", event => {
         invokeDashboardCwaImagery("setLayerEnabled", event.currentTarget.checked);
       });

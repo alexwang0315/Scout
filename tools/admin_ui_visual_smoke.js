@@ -17,6 +17,10 @@ process.env.NODE_PATH = [process.env.NODE_PATH, bundledNodeModules].filter(Boole
 Module._initPaths();
 
 const { chromium } = require("playwright");
+const SCOUT_ADMIN_UI_STARTUP_TIMEOUT_MS = Math.max(
+  5_000,
+  Number(process.env.SCOUT_ADMIN_UI_STARTUP_TIMEOUT_MS || 20_000),
+);
 
 const scoutLayerIds = [
   "imagery",
@@ -199,6 +203,27 @@ async function installCwaImageryFixture(page) {
       body: `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${fill}"/></svg>`,
     });
   });
+  await page.route(/\/admin\/pretrip\/projects\/chilai_nanhua_day1\/rainfall-(?:grids|grid-overlay)(?:\?.*)?$/, async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    const projectId = "chilai_nanhua_day1";
+    const overlay = pathname.endsWith("/rainfall-grid-overlay");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(overlay ? {
+        projectId,
+        status: "no_coverage",
+        gridCells: [],
+        cachePolicy: {adminReadIsCacheOnly: true, upstreamFetchOnRead: false},
+        boundary: {candidateOnly: true, runtimeSafetyTruth: false},
+      } : {
+        projectId,
+        status: "unavailable",
+        products: [],
+        processingBoundary: {adminReadIsCacheOnly: true, upstreamFetchOnRead: false, candidateOnly: true},
+      }),
+    });
+  });
 }
 
 async function main() {
@@ -208,7 +233,7 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
-    await waitFor(`${baseUrl}/admin`, 20_000);
+    await waitFor(`${baseUrl}/admin`, SCOUT_ADMIN_UI_STARTUP_TIMEOUT_MS);
     const report = await runBrowserChecks(baseUrl, args.screenshotsDir);
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } finally {
@@ -285,13 +310,16 @@ async function runBrowserChecks(baseUrl, screenshotsDir) {
       await installCwaImageryFixture(page);
       const consoleErrors = [];
       page.on("console", (message) => {
-        if (message.type() === "error") consoleErrors.push(message.text());
+        if (message.type() === "error") {
+          const location = message.location();
+          consoleErrors.push(`${message.text()}${location.url ? ` @ ${location.url}` : ""}`);
+        }
       });
       page.on("pageerror", (error) => consoleErrors.push(error.message));
 
       for (const surface of surfaces) {
         const url = `${baseUrl}${surface.path}`;
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20_000 });
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: SCOUT_ADMIN_UI_STARTUP_TIMEOUT_MS });
         await page.waitForTimeout(250);
         await waitForSurface(surface, page);
         const frameShellChecks = surface.frameMustFitViewport
@@ -417,6 +445,11 @@ async function collectDashboardFrameReuseChecks(page) {
       await delay(100);
     }
     const cwaPanel = document.querySelector("#dashboardCwaImagery");
+    const sheetToggle = cwaPanel?.querySelector("[data-dashboard-cwa-panel-toggle]");
+    if (cwaPanel?.dataset.dashboardCwaSheetState === "peek") {
+      sheetToggle?.click();
+      await delay(50);
+    }
     const cwaSelectors = [
       "[data-dashboard-cwa-imagery-layer]",
       "[data-dashboard-cwa-rainfall-layer]",
@@ -432,14 +465,25 @@ async function collectDashboardFrameReuseChecks(page) {
     ];
     const cwaControls = cwaSelectors.map((selector) => cwaPanel?.querySelector(selector));
     const panelRect = cwaPanel?.getBoundingClientRect();
+    const railRect = document.querySelector("#dashboardMapEvidence")?.getBoundingClientRect();
+    const mapRect = document.querySelector("#dashboardMap")?.getBoundingClientRect();
+    const minTouchTargetPx = 44;
+    const cwaSheetFitsViewport = Boolean(panelRect
+      && panelRect.top >= 0
+      && panelRect.bottom <= window.innerHeight + 1
+      && (window.innerWidth > 620 || panelRect.height <= window.innerHeight * 0.7 + 1));
+    const cwaMapVisibleHeight = window.innerWidth <= 620 && railRect && mapRect
+      ? Math.max(0, Math.round(railRect.top - mapRect.top))
+      : Math.round(window.innerHeight);
     const cwaControlsInViewport = Boolean(panelRect
       && panelRect.width > 0
       && panelRect.height > 0
       && panelRect.left >= 0
       && panelRect.right <= window.innerWidth + 1
-      && cwaControls.every((control) => {
+      && cwaControls.every((control, index) => {
         const rect = control?.getBoundingClientRect();
-        return rect && rect.width >= 24 && rect.height >= 24;
+        const minimum = index === cwaControls.length - 1 ? 24 : minTouchTargetPx;
+        return rect && rect.width >= minimum && rect.height >= minimum;
       }));
     const controller = frame.contentWindow?.scoutCwaImageryController;
     let cwaControlsInteractive = false;
@@ -476,7 +520,7 @@ async function collectDashboardFrameReuseChecks(page) {
       const radarImage = frame.contentDocument?.querySelector('image[data-cwa-imagery-family="radar"]');
       const satelliteImage = frame.contentDocument?.querySelector('image[data-cwa-imagery-family="satellite"]');
       cwaOverlayDomUpdated = radarImage?.getAttribute("data-cwa-imagery-frame") === "radar.fixture.2"
-        && satelliteImage?.getAttribute("data-cwa-imagery-frame") === "satellite.fixture.2"
+        && !satelliteImage
         && Math.abs(Number(radarImage?.getAttribute("opacity")) - 0.37) < 0.001;
       cwaControlsInteractive = active.layerEnabled === true
         && active.rainfallLayerEnabled === true
@@ -491,6 +535,7 @@ async function collectDashboardFrameReuseChecks(page) {
       controller.setRainfallLayerEnabled(false);
       controller.setRainfallProduct("qpf_next_1h");
       controller.setRainfallOpacity(56);
+      controller.setProduct("radar");
       controller.setWindow("12h");
       controller.setOpacity("radar", 62);
     }
@@ -500,8 +545,10 @@ async function collectDashboardFrameReuseChecks(page) {
       && sameSrc
       && loadCount === 0
       && cwaControlsInViewport
+      && cwaSheetFitsViewport
+      && cwaMapVisibleHeight >= (window.innerWidth <= 620 ? Math.round(window.innerHeight * 0.25) : 1)
       && cwaControlsInteractive
-      && cwaOverlayImages >= 2
+      && cwaOverlayImages === 1
       && cwaOverlayDomUpdated;
     if (!ok) {
       throw new Error(JSON.stringify({
@@ -512,6 +559,20 @@ async function collectDashboardFrameReuseChecks(page) {
         initialSrc,
         currentSrc: frame.src,
         cwaControlsInViewport,
+        cwaSheetFitsViewport,
+        cwaMapVisibleHeight,
+        minTouchTargetPx: 44,
+        cwaPanelRect: panelRect ? {
+          top: Math.round(panelRect.top),
+          bottom: Math.round(panelRect.bottom),
+          height: Math.round(panelRect.height),
+        } : null,
+        cwaRailRect: railRect ? {
+          top: Math.round(railRect.top),
+          bottom: Math.round(railRect.bottom),
+          height: Math.round(railRect.height),
+        } : null,
+        viewport: {width: window.innerWidth, height: window.innerHeight},
         cwaControlsInteractive,
         cwaOverlayImages,
         cwaOverlayDomUpdated,
@@ -524,6 +585,9 @@ async function collectDashboardFrameReuseChecks(page) {
       sameSrc,
       loadCount,
       cwaControlsInViewport,
+      cwaSheetFitsViewport,
+      cwaMapVisibleHeight,
+      minTouchTargetPx: 44,
       cwaControlsInteractive,
       cwaOverlayImages,
       cwaOverlayDomUpdated,
@@ -576,6 +640,7 @@ async function collectDashboardFrameReuseChecks(page) {
     controller?.setRainfallLayerEnabled(false);
     controller?.setRainfallProduct("qpf_next_1h");
     controller?.setRainfallOpacity(56);
+    controller?.setProduct("radar");
     controller?.setFrameIndex(0);
     controller?.setPlaying(false);
   });

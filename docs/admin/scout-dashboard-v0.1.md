@@ -45,6 +45,98 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-13 - Dashboard and CWA P0-P2 completion
+
+User request:
+
+- Complete the full P0-P2 improvement backlog from the Dashboard review and
+  the follow-up review of commit `e7ee30ca`.
+
+P0 correctness and safety:
+
+- Rainfall and imagery artifacts now bind `projectId`, the active
+  Overpass-aligned-or-base route ref and SHA-256, source frame ids, and a
+  deterministic pair id. Projection/trend files are prepared before the
+  active manifest; failed multi-file publication rolls back instead of
+  exposing a mixed generation.
+- Rainfall truth has explicit `stale_data`, `no_coverage`, `missing_data`,
+  `partial`, and zero-precipitation semantics. Unknown/no-data can no longer
+  appear as `ready`, and unusable samples have zero confidence.
+- CWA timestamps are evaluated against one injected server clock. Imagery
+  freshness is recomputed on read and a missing cache asset is not advertised
+  as an available URL.
+- Current-position sampling now supports server-issued, project-scoped,
+  expiring approval records. Attempt/completion/failure audits are durable but
+  never persist latitude or longitude. Unregistered caller attestations are
+  rejected by default; legacy acceptance requires an explicit server-side
+  compatibility flag and is not enabled by the Dashboard workspace app.
+- Final review hardening moved same-run Overpass alignment before CWA
+  preparation, validates embedded route artifact kind/project identity, and
+  rejects projection/manifest or projection/trend pair mismatches before any
+  freshness or cells are exposed.
+- Pre-trip artifact refs now resolve inside the selected project root with
+  absolute, parent traversal, and symlink escape checks. The enriched debug
+  projection applies the same project/route/pair validation as direct CWA
+  endpoints.
+
+P1 data and performance integration:
+
+- Dashboard Weather consumes the same-project cache-only rainfall-grid and
+  imagery endpoints. Pre-trip lazily loads bounded rainfall cells from
+  `gridOverlayEndpoint`; an admin read never fetches CWA upstream.
+- The compact project API removes duplicate heavy structures, serves rainfall
+  cells lazily, and uses gzip in the real 9099 workspace app. On the current
+  Chilai-Nanhua workspace the response changed from about 34.9 MB and
+  100-second-class duplicate reads to 13.5 MB raw / about 1.01 MB gzip and
+  5.5-8.5 seconds server time.
+- Data is loaded per Dashboard route. Project id fallback from
+  `_scoutAI` to an older project has been removed; failed debug endpoints show
+  `DEGRADED` and expose an operator retry.
+
+P2 information architecture and responsive UI:
+
+- Primary navigation is consolidated into eight groups: Overview, Plan Trip,
+  Map & Evidence, Team & Pace, Safety Decisions, Assistant, System, and Labs /
+  Preview. Existing route ids remain compatible, and live/partial/preview
+  states are disclosed.
+- The map defaults to radar only. Playback is disabled with fewer than two
+  frames, timestamps use Asia/Taipei semantic labels, and stale/no-coverage/
+  zero/unavailable states use one shared truth model.
+- Mobile navigation and a 44 px touch-target CWA peek/expanded sheet were
+  added. The expanded sheet scrolls inside the evidence rail, remains within
+  70dvh, respects the safe area, and preserves at least 25% visible map height.
+- Mobile Map keeps the navigation drawer available and marks the off-canvas
+  drawer inert/hidden to assistive technology while closed. Project changes
+  update the URL and reload the page, preventing old-project async state from
+  leaking into the newly selected project.
+- Debug and after-action surfaces disclose that persisted rainfall-grid
+  rendering is fully supported only in Pre-trip and Dashboard Map. Legacy
+  example weather rules are labelled Preview rather than live decisions.
+
+Boundary notes:
+
+- All CWA-derived outputs remain cache-only, candidate-only, human-review
+  evidence. No `/safety/*` path, Phase 1 runtime safety truth, recurring
+  monitor, outbound send, or client-side image/grid processing was added.
+- The current workspace still contains the pre-P0 CWA generation without the
+  new route/pair fields. It remains readable as a legacy snapshot and is
+  truthfully shown as stale. The next explicitly approved CWA preparation will
+  publish the new provenance contract; this closeout did not silently refetch
+  external weather data.
+
+Verification:
+
+- P0-P2 focused pytest: PASS (`92 passed`).
+- Full pre-trip admin API regression: PASS (`81 passed`).
+- Focused pre-trip CWA layer preparation: PASS (`3 passed`).
+- `pnpm lint`, `pnpm typecheck`, and `pnpm test`: PASS (`17 passed`).
+- Repo and real-workspace 32-layer contracts: PASS.
+- Chromium admin smoke: PASS on desktop, 390x844, and 320x720; all expected
+  layer toggles, keyboard controls, frame reuse, and overflow checks passed.
+- Live 9099: PASS with 239 Segment paths, one cache-backed radar overlay,
+  truthful stale/QPF-no-coverage display, no console/HTTP errors, and mobile
+  expanded-sheet bounds of 377-824 px with 218 px of map still visible.
+
 ### 2026-07-13 - Dashboard MAP CWA numeric rainfall grids
 
 - Reused the existing `cwa-qpf` layer for CWA past-one-hour QPE and

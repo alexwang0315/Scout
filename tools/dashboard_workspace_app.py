@@ -7,6 +7,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
+from starlette.middleware.gzip import GZipMiddleware
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -43,6 +44,7 @@ def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
     os.environ.setdefault("SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS", "24000")
 
     app = FastAPI(title="Scout Dashboard Workspace App")
+    app.add_middleware(GZipMiddleware, minimum_size=1_024, compresslevel=5)
     app.include_router(create_admin_router(pretrip_workspace_root=workspace_root))
 
     debug_log = MemoryRuntimeDebugEventLog(_debug_events())
@@ -52,7 +54,9 @@ def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
         debug_log=debug_log,
         timestamp_factory=lambda: "2026-07-09T00:00:00Z",
     )
-    app.include_router(create_debug_router(debug_log=debug_log, message_source=transport))
+    app.include_router(
+        create_debug_router(debug_log=debug_log, message_source=transport)
+    )
     app.include_router(create_debug_page_router())
     app.include_router(create_hardware_readiness_router())
 

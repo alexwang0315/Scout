@@ -116,14 +116,25 @@ def _write_mismatched_pair_projection(workspace_root: Path) -> None:
         kind: frame["frameId"]
         for kind, frame in manifest["latestByKind"].items()
     }
+    pair_identity = {
+        "projectId": "fixture-route",
+        "routeRef": route_ref,
+        "routeSha256": route_sha256,
+        "routeBasis": "segment_display_geometry",
+        "sourceFrameIds": source_frame_ids,
+    }
     manifest.update(
         {
-            "projectId": "fixture-route",
-            "routeRef": route_ref,
-            "routeSha256": route_sha256,
-            "routeBasis": "segment_display_geometry",
-            "sourceFrameIds": source_frame_ids,
-            "pairId": "rainfall.pair.manifest",
+            **pair_identity,
+            "pairId": "cwa.rainfall.pair."
+            + hashlib.sha256(
+                json.dumps(
+                    pair_identity,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
         }
     )
     manifest["activePair"] = {
@@ -427,8 +438,8 @@ def test_rainfall_trend_rejects_unregistered_attestation_by_default(
         },
     )
 
-    assert response.status_code == 422
-    assert "server-issued" in response.json()["detail"]
+    assert response.status_code == 403
+    assert "approval" in response.json()["detail"].lower()
 
 
 @pytest.mark.parametrize(

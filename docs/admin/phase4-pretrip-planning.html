@@ -1727,7 +1727,7 @@
                       <label>Rain opacity <input type="range" min="0" max="100" value="56" data-cwa-rainfall-opacity></label>
                       <div class="cwa-rainfall-legend" data-cwa-rainfall-legend aria-label="Rainfall millimetre legend"><span style="--rain-color:#fff">0</span><span style="--rain-color:#77edf1">0.3</span><span style="--rain-color:#00a8f3">1</span><span style="--rain-color:#1ba500">1.5</span><span style="--rain-color:#f4f500">3</span><span style="--rain-color:#ff9800">6</span><span style="--rain-color:#f50000">10</span><span style="--rain-color:#8f0000">17</span><span style="--rain-color:#eb00dc">25+ mm</span></div>
                       <output data-cwa-rainfall-status role="status" aria-live="polite" style="grid-column:1/-1">Prepared rainfall grid not loaded</output>
-                      <label>Product <select data-cwa-imagery-product><option value="all">All prepared</option></select></label>
+                      <label>Product <select data-cwa-imagery-product><option value="radar">Radar latest</option></select></label>
                       <label>Window <select data-cwa-imagery-window><option value="3h">3h</option><option value="6h">6h</option><option value="9h">9h</option><option value="12h" selected>12h</option></select></label>
                       <label>Frame <input type="range" min="0" max="0" value="0" data-cwa-imagery-timeline></label>
                       <label>Radar opacity <input type="range" min="0" max="100" value="62" data-cwa-imagery-opacity="radar"></label>
@@ -7400,7 +7400,7 @@
       manifest: null,
       windowId: "12h",
       frameIndex: 0,
-      productId: "all",
+      productId: "radar",
       rainfallProduct: "qpf_next_1h",
       rainfallOpacity: 0.56,
       radarOpacity: 0.62,
@@ -7467,7 +7467,9 @@
         const inWindow = !hasWindow || windowIds.includes(frame.frameId);
         return renderableCwaImageryFrame(frame)
           && inWindow
-          && (cwaImageryUi.productId === "all" || frame.productId === cwaImageryUi.productId);
+          && (cwaImageryUi.productId === "all"
+            || cwaImageryUi.productId === family
+            || frame.productId === cwaImageryUi.productId);
       });
     }
     function selectedCwaImageryFrame(family) {
@@ -7493,6 +7495,42 @@
         }));
       });
     }
+    function cwaRainfallCoverageStatus(rainfall) {
+      if (!rainfall) return "unavailable";
+      const overlayStatus = state?.view?.cwa_qpf?.grid_overlay_status;
+      if (overlayStatus === "unavailable" || overlayStatus === "error") return "unavailable";
+      if (overlayStatus === "no_coverage") return "no_coverage";
+      const availableCellCount = Number(rainfall.availableCellCount || 0);
+      if (availableCellCount < 1) return "no_coverage";
+      const selectedCells = (state?.view?.cwa_qpf?.grid_cells || [])
+        .filter(cell => cell.grid_kind === rainfall.gridKind);
+      if (selectedCells.length && selectedCells.every(cell => Number(cell.rainfall_mm || 0) <= 0)) {
+        return "zero_precipitation";
+      }
+      return "covered";
+    }
+    function cwaDerivedStatus({current, rainfall, freshness, coverageStatus}) {
+      if (freshness === "stale_data" || freshness === "partially_stale") return "stale_data";
+      if (coverageStatus === "no_coverage") return "no_coverage";
+      if (coverageStatus === "zero_precipitation") return "zero_precipitation";
+      if (coverageStatus === "unavailable" && rainfall) return "unavailable";
+      if (current || rainfall) return "ready";
+      return "unavailable";
+    }
+    function formatCwaTimestamp(value, semanticLabel) {
+      if (!value) return `${semanticLabel}: unknown`;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return `${semanticLabel}: ${value}`;
+      const formatted = new Intl.DateTimeFormat("zh-TW", {
+        timeZone: "Asia/Taipei",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      }).format(parsed);
+      return `${semanticLabel}: ${formatted} Asia/Taipei`;
+    }
     function renderCurrentCwaImagerySurface() {
       if (typeof state !== "undefined" && state?.view && typeof renderMap === "function") renderMap(state.view);
       if (typeof debugPageState !== "undefined" && debugPageState?.projection && typeof renderDebugEvidenceMap === "function") renderDebugEvidenceMap(debugPageState.projection);
@@ -7509,8 +7547,12 @@
       const maxFrames = Math.max(radarFrames.length, satelliteFrames.length, 1);
       const current = selectedCwaImageryFrame("radar") || selectedCwaImageryFrame("satellite");
       const rainfallCurrent = cwaRainfallProductMetadata();
+      const freshness = rainfallCurrent?.freshness?.status || "unknown_freshness";
+      const coverageStatus = cwaRainfallCoverageStatus(rainfallCurrent);
       return {
-        status: current || rainfallCurrent ? "ready" : "not_prepared",
+        status: cwaDerivedStatus({current, rainfall: rainfallCurrent, freshness, coverageStatus}),
+        freshness: freshness,
+        coverageStatus: coverageStatus,
         layerEnabled: Boolean(cwaWeatherLayerInput()?.checked),
         rainfallLayerEnabled: Boolean(cwaRainfallLayerInput()?.checked),
         rainfallProduct: cwaImageryUi.rainfallProduct,
@@ -7531,7 +7573,9 @@
         current: current ? {
           frameId: current.frameId || null,
           sourceTimestamp: current.sourceTimestamp || null,
+          fetchedAt: current.fetchedAt || null,
           dataDelayMinutes: current.dataDelayMinutes ?? null,
+          expectedDelayMinutes: current.expectedDelayMinutes ?? null,
           imageType: current.imageType || null,
           extent: current.extent || null
         } : null,
@@ -7556,17 +7600,24 @@
       });
       document.querySelectorAll("[data-cwa-imagery-product]").forEach(select => {
         const selected = cwaImageryUi.productId;
-        const allOption = document.createElement("option");
-        allOption.value = "all";
-        allOption.textContent = "All prepared";
+        const familyOptions = [
+          ["radar", "Radar latest"],
+          ["satellite", "Satellite latest"],
+          ["all", "All prepared (compare)"],
+        ].map(([value, label]) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          return option;
+        });
         const productOptions = [...products.entries()].map(([id, label]) => {
           const option = document.createElement("option");
           option.value = id;
           option.textContent = label;
           return option;
         });
-        select.replaceChildren(allOption, ...productOptions);
-        select.value = products.has(selected) ? selected : "all";
+        select.replaceChildren(...familyOptions, ...productOptions);
+        select.value = ["radar", "satellite", "all"].includes(selected) || products.has(selected) ? selected : "radar";
       });
       document.querySelectorAll("[data-cwa-rainfall-product]").forEach(select => {
         select.value = cwaImageryUi.rainfallProduct;
@@ -7575,23 +7626,36 @@
         input.value = String(Math.round(cwaImageryUi.rainfallOpacity * 100));
       });
       const maxFrames = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length, 1);
+      const playableFrameCount = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length);
+      if (playableFrameCount < 2 && cwaImageryUi.playTimer) {
+        clearInterval(cwaImageryUi.playTimer);
+        cwaImageryUi.playTimer = null;
+      }
       cwaImageryUi.frameIndex = Math.min(cwaImageryUi.frameIndex, maxFrames - 1);
       document.querySelectorAll("[data-cwa-imagery-timeline]").forEach(input => {
         input.max = String(maxFrames - 1);
         input.value = String(cwaImageryUi.frameIndex);
+        input.disabled = playableFrameCount < 2;
+      });
+      document.querySelectorAll("[data-cwa-imagery-play]").forEach(button => {
+        button.disabled = playableFrameCount < 2;
+        if (button.disabled) {
+          button.textContent = "Play";
+          button.setAttribute("aria-pressed", "false");
+        }
       });
       const current = selectedCwaImageryFrame("radar") || selectedCwaImageryFrame("satellite");
       const rainfall = cwaRainfallProductMetadata();
       const rainfallCells = Number(rainfall?.availableCellCount || 0);
       const rainfallFreshness = rainfall?.freshness?.status || "unknown_freshness";
       const rainfallStatus = rainfall
-        ? `${rainfallFreshness === "stale_data" ? "STALE · " : ""}${rainfall.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${rainfall.sourceTimestamp || "unknown time"} · valid to ${rainfall.validUntil || "unknown"} · delay ${rainfall.dataDelayMinutes ?? "n/a"}m · ${rainfallCells ? `${rainfallCells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)"}`
+        ? `${rainfallFreshness === "stale_data" ? "STALE · " : ""}${rainfall.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${formatCwaTimestamp(rainfall.sourceTimestamp, rainfall.gridKind === "qpe_past_1h" ? "觀測截至" : "預報基準")} · ${formatCwaTimestamp(rainfall.validUntil, "有效至")} · 目前資料延遲 ${rainfall.dataDelayMinutes ?? "n/a"}m · ${rainfallCells ? `${rainfallCells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)"}`
         : "Prepared rainfall grid unavailable";
       document.querySelectorAll("[data-cwa-rainfall-status]").forEach(output => {
         output.textContent = rainfallStatus;
       });
       const status = current
-        ? `${current.sourceTimestamp || "unknown time"} · delay ${current.dataDelayMinutes ?? "n/a"}m · ${current.imageType || "imagery"}`
+        ? `${formatCwaTimestamp(current.sourceTimestamp, "影像時間")} · ${formatCwaTimestamp(current.fetchedAt, "快取擷取時間")} · 目前資料延遲 ${current.dataDelayMinutes ?? "n/a"}m · ${current.imageType || "imagery"}`
         : rainfall
           ? `${rainfallFreshness === "stale_data" ? "STALE · " : ""}${rainfall.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${rainfall.sourceTimestamp || "unknown time"} · delay ${rainfall.dataDelayMinutes ?? "n/a"}m · ${rainfallCells ? `${rainfallCells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)"}`
           : "Prepared CWA rainfall/imagery unavailable";
@@ -7610,6 +7674,51 @@
       }
       syncCwaImageryControls();
       return cwaImageryUi.manifest;
+    }
+    async function loadCwaRainfallGridOverlay(view) {
+      const cwaQpf = view?.cwa_qpf && typeof view.cwa_qpf === "object" ? view.cwa_qpf : {};
+      const endpoint = String(cwaQpf.gridOverlayEndpoint || "");
+      if (!endpoint) {
+        const nextView = {
+          ...view,
+          cwa_qpf: {...cwaQpf, grid_cells: [], grid_overlay_status: "unavailable"}
+        };
+        state.view = nextView;
+        return nextView;
+      }
+      const expectedPrefix = `/admin/pretrip/projects/${encodeURIComponent(PROJECT_ID)}/`;
+      if (!endpoint.startsWith(expectedPrefix)) {
+        const nextView = {
+          ...view,
+          cwa_qpf: {...cwaQpf, grid_cells: [], grid_overlay_status: "error"}
+        };
+        state.view = nextView;
+        return nextView;
+      }
+      try {
+        const response = await fetch(`${apiBase()}${endpoint}`, {headers: {Accept: "application/json"}});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const overlay = await response.json();
+        const gridCells = Array.isArray(overlay.gridCells) ? overlay.gridCells : [];
+        const nextView = {
+          ...view,
+          cwa_qpf: {
+            ...cwaQpf,
+            grid_cells: gridCells,
+            grid_overlay_status: overlay.status || (gridCells.length ? "ready" : "no_coverage"),
+            grid_overlay_boundary: overlay.boundary || {},
+          }
+        };
+        state.view = nextView;
+        return nextView;
+      } catch (_error) {
+        const nextView = {
+          ...view,
+          cwa_qpf: {...cwaQpf, grid_cells: [], grid_overlay_status: "unavailable"}
+        };
+        state.view = nextView;
+        return nextView;
+      }
     }
     function bindCwaWeatherImageryControls() {
       document.querySelectorAll("[data-cwa-rainfall-product]").forEach(select => {
@@ -7655,6 +7764,8 @@
       });
       document.querySelectorAll("[data-cwa-imagery-play]").forEach(button => {
         button.addEventListener("click", () => {
+          const playableFrameCount = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length);
+          if (playableFrameCount < 2) return;
           if (cwaImageryUi.playTimer) {
             clearInterval(cwaImageryUi.playTimer); cwaImageryUi.playTimer = null;
             button.textContent = "Play"; button.setAttribute("aria-pressed", "false");
@@ -7706,7 +7817,7 @@
         return cwaImageryStateSnapshot();
       },
       setProduct: productId => {
-        cwaImageryUi.productId = String(productId || "all");
+        cwaImageryUi.productId = String(productId || "radar");
         cwaImageryUi.frameIndex = 0;
         syncCwaImageryControls(); renderCurrentCwaImagerySurface();
         return cwaImageryStateSnapshot();
@@ -7731,6 +7842,7 @@
         return cwaImageryStateSnapshot();
       },
       setPlaying: playing => {
+        if (cwaImageryStateSnapshot().maxFrameIndex < 1) return cwaImageryStateSnapshot();
         const active = Boolean(cwaImageryUi.playTimer);
         if (Boolean(playing) !== active) document.querySelector("[data-cwa-imagery-play]")?.click();
         return cwaImageryStateSnapshot();
@@ -7739,9 +7851,10 @@
     async function reloadProjectView() {
       const selectedSourceId = evidenceSourceId(state.selected);
       const response = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`);
-      const view = await response.json();
+      let view = await response.json();
       state.weatherOverlay = null;
       state.view = view;
+      view = await loadCwaRainfallGridOverlay(view);
       await loadCwaWeatherImagery(PROJECT_ID);
       updateMetrics(view);
       renderMap(view);

@@ -5,9 +5,15 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
+from threading import RLock
 from typing import Any
+
+import fcntl
 
 from cwa_precipitation_grid import CwaPrecipitationGrid
 from rainfall_grid_freshness import evaluate_precipitation_freshness
@@ -16,6 +22,18 @@ from rainfall_grid_freshness import evaluate_precipitation_freshness
 MAX_COMPRESSED_GRID_BYTES = 8 * 1024 * 1024
 MAX_DECOMPRESSED_GRID_BYTES = 32 * 1024 * 1024
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+MANIFEST_PROVENANCE_KEYS = frozenset(
+    {
+        "projectId",
+        "routeRef",
+        "routeSha256",
+        "routeBasis",
+        "routeSourceRef",
+        "routeSourceSha256",
+        "sourceFrameIds",
+        "pairId",
+    }
+)
 
 
 def rainfall_product_freshness(
@@ -32,6 +50,14 @@ def rainfall_product_freshness(
 
 
 def rainfall_products_status(products: list[dict[str, Any]]) -> str:
+    required_kinds = {"qpe_past_1h", "qpf_next_1h"}
+    available_kinds = {
+        str(product.get("gridKind") or "")
+        for product in products
+        if product.get("gridKind")
+    }
+    if not required_kinds.issubset(available_kinds):
+        return "missing_source"
     statuses = {
         str((product.get("freshness") or {}).get("status") or "unknown")
         for product in products
@@ -45,6 +71,67 @@ def rainfall_products_status(products: list[dict[str, Any]]) -> str:
     if "stale_data" in statuses:
         return "partially_stale"
     return "unknown_freshness"
+
+
+@lru_cache(maxsize=128)
+def _thread_lock_for_root(root: str) -> RLock:
+    del root
+    return RLock()
+
+
+def _validated_manifest_provenance(
+    value: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if value is None:
+        return {}
+    unknown = set(value) - MANIFEST_PROVENANCE_KEYS
+    if unknown:
+        raise ValueError(
+            f"unsupported rainfall manifest provenance keys: {sorted(unknown)}"
+        )
+    normalized: dict[str, Any] = {}
+    for key in MANIFEST_PROVENANCE_KEYS - {"sourceFrameIds"}:
+        if key not in value:
+            continue
+        item = value[key]
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"rainfall manifest provenance {key} is invalid")
+        normalized[key] = item.strip()
+    source_frame_ids = value.get("sourceFrameIds")
+    if source_frame_ids is not None:
+        if not isinstance(source_frame_ids, Mapping):
+            raise ValueError("rainfall sourceFrameIds must be a mapping")
+        normalized_ids = {
+            str(kind): str(frame_id)
+            for kind, frame_id in source_frame_ids.items()
+            if str(kind) and str(frame_id)
+        }
+        if len(normalized_ids) != len(source_frame_ids):
+            raise ValueError("rainfall sourceFrameIds contains an invalid entry")
+        normalized["sourceFrameIds"] = dict(sorted(normalized_ids.items()))
+    route_sha = normalized.get("routeSha256")
+    if route_sha is not None and (
+        len(route_sha) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in route_sha)
+    ):
+        raise ValueError("rainfall routeSha256 must be a SHA-256 hex digest")
+    route_source_sha = normalized.get("routeSourceSha256")
+    if route_source_sha is not None and route_source_sha != route_sha:
+        raise ValueError("rainfall route source SHA aliases do not match")
+    if "pairId" in normalized:
+        required = {
+            "projectId",
+            "routeRef",
+            "routeSha256",
+            "routeBasis",
+            "sourceFrameIds",
+        }
+        missing = required - set(normalized)
+        if missing:
+            raise ValueError(
+                f"rainfall pair provenance is incomplete: {sorted(missing)}"
+            )
+    return normalized
 
 
 class WeatherGridStore:
@@ -77,11 +164,13 @@ class WeatherGridStore:
             raise
         return destination
 
-    def update_manifest(self, grids: list[CwaPrecipitationGrid]) -> dict[str, Any]:
+    def stage_frames(
+        self,
+        grids: Sequence[CwaPrecipitationGrid],
+    ) -> list[dict[str, Any]]:
         if not grids:
             raise ValueError("at least one weather grid is required")
         frames: list[dict[str, Any]] = []
-        latest: dict[str, dict[str, Any]] = {}
         for grid in grids:
             path = self.put(grid)
             stored_grid = load_weather_grid_snapshot(path)
@@ -90,9 +179,60 @@ class WeatherGridStore:
                 path.relative_to(self.root).as_posix(),
             )
             frames.append(frame)
-            existing = latest.get(grid.grid_kind)
+        return frames
+
+    @contextmanager
+    def staged_manifest_update(
+        self,
+        frames: Sequence[Mapping[str, Any]],
+        *,
+        provenance: Mapping[str, Any] | None = None,
+        on_publish_error: Callable[[], None] | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        staged_frames = [dict(frame) for frame in frames]
+        if not staged_frames:
+            raise ValueError("at least one weather grid frame is required")
+        with self._manifest_update_lock():
+            manifest = self._build_manifest(
+                staged_frames,
+                provenance=provenance,
+            )
+            try:
+                yield manifest
+                self._atomic_json(
+                    self.root / "rainfall_grid_manifest.json",
+                    manifest,
+                )
+            except Exception:
+                if on_publish_error is not None:
+                    on_publish_error()
+                raise
+
+    def update_manifest(
+        self,
+        grids: Sequence[CwaPrecipitationGrid],
+        *,
+        provenance: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        frames = self.stage_frames(grids)
+        with self.staged_manifest_update(frames, provenance=provenance) as manifest:
+            published = manifest
+        return published
+
+    def _build_manifest(
+        self,
+        frames: list[dict[str, Any]],
+        *,
+        provenance: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        latest: dict[str, dict[str, Any]] = {}
+        for frame in frames:
+            kind = str(frame.get("gridKind") or "")
+            if not kind:
+                raise ValueError("weather grid frame kind is missing")
+            existing = latest.get(kind)
             if existing is None or _frame_recency(frame) > _frame_recency(existing):
-                latest[grid.grid_kind] = frame
+                latest[kind] = frame
         previous = self._read_manifest()
         by_id = {
             str(item.get("frameId")): item
@@ -108,7 +248,8 @@ class WeatherGridStore:
             current = latest.get(frame["gridKind"])
             if current is None or _frame_recency(frame) > _frame_recency(current):
                 latest[frame["gridKind"]] = frame
-        manifest = {
+        manifest_provenance = _validated_manifest_provenance(provenance)
+        manifest: dict[str, Any] = {
             "schemaVersion": "cwa_rainfall_grid_manifest.v1",
             "artifactKind": "cwa_rainfall_grid_manifest",
             "frames": all_frames,
@@ -126,8 +267,21 @@ class WeatherGridStore:
                 "raspberryPiGridProcessing": False,
                 "mobileGridProcessing": False,
             },
+            **manifest_provenance,
         }
-        self._atomic_json(self.root / "rainfall_grid_manifest.json", manifest)
+        if manifest_provenance.get("pairId"):
+            manifest["activePair"] = {
+                key: manifest_provenance[key]
+                for key in (
+                    "pairId",
+                    "projectId",
+                    "routeRef",
+                    "routeSha256",
+                    "routeBasis",
+                    "sourceFrameIds",
+                )
+                if key in manifest_provenance
+            }
         return manifest
 
     def public_manifest(
@@ -163,7 +317,7 @@ class WeatherGridStore:
                 evaluated_at=evaluated_at,
             )
             products.append(product)
-        return {
+        public = {
             "schemaVersion": manifest.get("schemaVersion"),
             "artifactKind": manifest.get("artifactKind"),
             "status": rainfall_products_status(products),
@@ -181,6 +335,20 @@ class WeatherGridStore:
                 "mobileGridProcessing": False,
             },
         }
+        for key in (
+            "projectId",
+            "routeRef",
+            "routeSha256",
+            "routeBasis",
+            "routeSourceRef",
+            "routeSourceSha256",
+            "sourceFrameIds",
+            "pairId",
+            "activePair",
+        ):
+            if key in manifest:
+                public[key] = manifest[key]
+        return public
 
     def _read_manifest(self) -> dict[str, Any]:
         path = self.root / "rainfall_grid_manifest.json"
@@ -194,6 +362,7 @@ class WeatherGridStore:
             or payload.get("artifactKind") != "cwa_rainfall_grid_manifest"
         ):
             raise ValueError("invalid weather grid manifest contract")
+        _validate_manifest_active_pair(payload)
         return payload
 
     def _safe_path(self, relative: Path) -> Path:
@@ -201,6 +370,19 @@ class WeatherGridStore:
         if self.root not in destination.parents:
             raise ValueError("weather grid path escapes store root")
         return destination
+
+    @contextmanager
+    def _manifest_update_lock(self) -> Iterator[None]:
+        self.root.mkdir(parents=True, exist_ok=True)
+        thread_lock = _thread_lock_for_root(str(self.root))
+        with thread_lock:
+            lock_path = self.root / ".rainfall-grid-manifest.lock"
+            with lock_path.open("a+b") as lock_file:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     def _atomic_json(self, path: Path, payload: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -234,6 +416,60 @@ def _frame_payload(grid: CwaPrecipitationGrid) -> dict[str, Any]:
         },
         "boundary": boundary,
     }
+
+
+def _validate_manifest_active_pair(manifest: Mapping[str, Any]) -> None:
+    if manifest.get("pairId") is None and manifest.get("sourceFrameIds") is None:
+        return
+    provenance = _validated_manifest_provenance(
+        {
+            key: manifest[key]
+            for key in MANIFEST_PROVENANCE_KEYS
+            if key in manifest
+        }
+    )
+    latest = manifest.get("latestByKind")
+    if not isinstance(latest, Mapping):
+        raise ValueError("rainfall manifest active source frames are missing")
+    active_source_frames = {
+        str(kind): str(frame.get("frameId") or "")
+        for kind, frame in latest.items()
+        if isinstance(frame, Mapping)
+    }
+    if provenance.get("sourceFrameIds") != active_source_frames:
+        raise ValueError("rainfall manifest active source frames mismatch")
+    identity = {
+        key: provenance[key]
+        for key in (
+            "projectId",
+            "routeRef",
+            "routeSha256",
+            "routeBasis",
+            "sourceFrameIds",
+        )
+    }
+    expected_pair_id = "cwa.rainfall.pair." + hashlib.sha256(
+        _canonical_json(identity)
+    ).hexdigest()
+    if provenance.get("pairId") != expected_pair_id:
+        raise ValueError("rainfall manifest pairId does not match active provenance")
+    active_pair = manifest.get("activePair")
+    if active_pair is not None:
+        if not isinstance(active_pair, Mapping):
+            raise ValueError("rainfall manifest activePair is invalid")
+        expected_active_pair = {
+            key: provenance[key]
+            for key in (
+                "pairId",
+                "projectId",
+                "routeRef",
+                "routeSha256",
+                "routeBasis",
+                "sourceFrameIds",
+            )
+        }
+        if dict(active_pair) != expected_active_pair:
+            raise ValueError("rainfall manifest activePair mismatch")
 
 
 def _frame_identity_payload(frame: dict[str, Any]) -> dict[str, Any]:

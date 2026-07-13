@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import shutil
 from datetime import datetime, timedelta, timezone
@@ -102,3 +103,37 @@ def test_public_manifest_does_not_report_ready_with_only_one_product(
     assert [item["gridKind"] for item in public["products"]] == ["qpe_past_1h"]
     assert public["products"][0]["freshness"]["status"] == "current"
     assert public["status"] != "ready"
+
+
+def test_public_manifest_rejects_pair_source_frames_that_are_not_active(
+    tmp_path: Path,
+) -> None:
+    store = WeatherGridStore(tmp_path / "rainfall")
+    grids = [_grid("O-B0045-001"), _grid("F-B0046-001")]
+    initial = store.update_manifest(grids)
+    source_frame_ids = {
+        kind: frame["frameId"] for kind, frame in initial["latestByKind"].items()
+    }
+    identity = {
+        "projectId": "fixture-route",
+        "routeRef": "outputs/segment_display_geometry.json",
+        "routeSha256": "a" * 64,
+        "routeBasis": "segment_display_geometry",
+        "sourceFrameIds": source_frame_ids,
+    }
+    pair_id = "cwa.rainfall.pair." + hashlib.sha256(
+        json.dumps(
+            identity,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    store.update_manifest(grids, provenance={**identity, "pairId": pair_id})
+    manifest_path = store.root / "rainfall_grid_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sourceFrameIds"]["qpe_past_1h"] = "tampered-frame"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="active source frames"):
+        store.public_manifest()

@@ -4,7 +4,9 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import sys
+import tempfile
 import threading
 import zipfile
 from datetime import datetime, timedelta, timezone
@@ -17,6 +19,7 @@ import yaml
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from starlette.middleware.gzip import GZipMiddleware
 
 from admin_after_action import PRETRIP_CASE_ID, ROOT, build_admin_case_view, list_admin_cases
 from admin_local_raster_tiles import (
@@ -181,6 +184,7 @@ DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_OUTPUT_DIR_REF = (
 )
 RAINFALL_TREND_EVALUATION_SEMAPHORE = threading.BoundedSemaphore(2)
 RAINFALL_LOCATION_AUDIT_LOCK = threading.Lock()
+RAINFALL_LOCATION_APPROVAL_LOCK = threading.Lock()
 DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_BASELINE_REF = (
     "outputs/briefings/route_context_briefing.template_backup.20260705T051214Z.html"
 )
@@ -1525,13 +1529,36 @@ class PreTripRainfallTrendRequest(BaseModel):
         approved_at = self.location_approved_at
         if approved_at.tzinfo is None or approved_at.utcoffset() is None:
             raise ValueError("locationApprovedAt must include timezone")
-        now = datetime.now(timezone.utc)
-        normalized = approved_at.astimezone(timezone.utc)
-        if normalized > now + timedelta(minutes=5):
-            raise ValueError("location approval cannot be in the future")
-        if normalized < now - timedelta(days=7):
-            raise ValueError("location approval is stale")
         return self
+
+
+class PreTripRainfallLocationApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    confirm_location_access: Literal[True] = Field(alias="confirmLocationAccess")
+    scope: Literal["current_trip_rainfall_sampling"]
+    operator_alias: str = Field(
+        alias="operatorAlias",
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+    )
+    ttl_minutes: int = Field(alias="ttlMinutes", default=30, ge=5, le=120)
+
+
+def _validate_location_approval_window(
+    request: PreTripRainfallTrendRequest,
+    *,
+    evaluated_at: datetime,
+) -> None:
+    if evaluated_at.tzinfo is None or evaluated_at.utcoffset() is None:
+        raise ValueError("server evaluation clock must include timezone")
+    now = evaluated_at.astimezone(timezone.utc)
+    approved_at = request.location_approved_at.astimezone(timezone.utc)
+    if approved_at > now + timedelta(minutes=5):
+        raise ValueError("location approval cannot be in the future")
+    if approved_at < now - timedelta(days=7):
+        raise ValueError("location approval is stale")
 
 
 class PreTripRouteContextBriefingRegenerateRequest(BaseModel):
@@ -2016,8 +2043,10 @@ def create_admin_app(
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
     ) = None,
+    now_factory: Callable[[], datetime] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Scout Fusion Admin API")
+    app.add_middleware(GZipMiddleware, minimum_size=1_024, compresslevel=5)
     app.include_router(
         create_admin_router(
             incident_store_path=incident_store_path,
@@ -2026,6 +2055,7 @@ def create_admin_app(
             route_context_briefing_variants_runner_factory=(
                 route_context_briefing_variants_runner_factory
             ),
+            now_factory=now_factory,
         )
     )
     return app
@@ -2039,11 +2069,13 @@ def create_admin_router(
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
     ) = None,
+    now_factory: Callable[[], datetime] | None = None,
 ) -> APIRouter:
     load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
     resolved_incident_store_path = incident_store_path or _incident_store_from_env()
     resolved_wearable_inventory_root = wearable_inventory_root(_data_root_from_env())
+    resolved_now_factory = now_factory or (lambda: datetime.now(timezone.utc))
 
     @router.get("", response_class=HTMLResponse)
     def admin_page() -> Response:
@@ -3410,6 +3442,8 @@ def create_admin_router(
             return _compact_pretrip_project_view(view) if compact else view
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get(
         "/pretrip/projects/{project_id}/briefings/route-context",
@@ -3914,32 +3948,119 @@ def create_admin_router(
 
     @router.get("/pretrip/projects/{project_id}/weather-imagery")
     def pretrip_project_weather_imagery(project_id: str) -> dict[str, Any]:
-        project_root = _pretrip_workspace_project_root(
+        project_root = _validated_pretrip_project_root(
             pretrip_workspace_root,
             project_id=project_id,
         )
         if project_root is None:
             return _empty_cwa_weather_imagery_manifest(project_id)
         try:
-            manifest = _load_cwa_weather_imagery_manifest(project_root)
+            manifest = _load_cwa_weather_imagery_manifest(
+                project_root,
+                project_id=project_id,
+            )
         except HTTPException as exc:
             if exc.status_code != 404:
                 raise
             return _empty_cwa_weather_imagery_manifest(project_id)
         public_manifest = json.loads(json.dumps(manifest))
+        from weather_imagery_freshness import evaluate_weather_imagery_freshness
+        from weather_imagery_tile_cache import WeatherImageryTileCache
+
+        evaluated_at = resolved_now_factory()
+        cache = WeatherImageryTileCache(
+            Path(
+                os.environ.get(
+                    "SCOUT_CWA_IMAGERY_CACHE_ROOT",
+                    "~/.scout-fusion/cwa-weather-imagery-cache",
+                )
+            ).expanduser()
+        )
+        supported_frame_states: list[tuple[str, str]] = []
         for overlay in (public_manifest.get("childOverlays") or {}).values():
             if not isinstance(overlay, dict):
                 continue
-            for frame in overlay.get("frames", []):
+            overlay_frames = overlay.get("frames", [])
+            if not isinstance(overlay_frames, list):
+                continue
+            latest_frame_id = str(overlay.get("latestFrameId") or "")
+            if not latest_frame_id and overlay_frames:
+                latest_frame_id = str(overlay_frames[-1].get("frameId") or "")
+            for frame in overlay_frames:
                 if not isinstance(frame, dict):
                     continue
                 frame_id = str(frame.get("frameId") or "")
+                asset_ref = (
+                    frame.get("assetRef")
+                    or frame.get("displayRef")
+                    or frame.get("cacheRef")
+                )
+                try:
+                    freshness = evaluate_weather_imagery_freshness(
+                        frame,
+                        evaluated_at=evaluated_at,
+                    )
+                except ValueError:
+                    freshness = {
+                        "status": "stale_data",
+                        "reason": "invalid_timestamp",
+                        "evaluatedAt": evaluated_at.isoformat(),
+                    }
+                frame["freshness"] = freshness
+                frame["dataDelayMinutes"] = freshness.get("dataDelayMinutes")
                 for private_key in ("cacheRef", "displayRef", "assetRef", "etag"):
                     frame.pop(private_key, None)
-                if frame.get("mapOverlaySupported") is not False:
+                if frame.get("mapOverlaySupported") is False:
+                    frame["assetStatus"] = "not_supported"
+                    continue
+                try:
+                    asset_available = (
+                        isinstance(asset_ref, str)
+                        and bool(asset_ref)
+                        and cache.asset_exists(asset_ref)
+                    )
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="unsafe weather imagery cache reference",
+                    ) from exc
+                frame["assetStatus"] = (
+                    "available" if asset_available else "cache_missing"
+                )
+                if frame_id == latest_frame_id:
+                    supported_frame_states.append(
+                        (
+                            str(freshness.get("status") or "stale_data"),
+                            frame["assetStatus"],
+                        )
+                    )
+                if asset_available:
                     frame["assetUrl"] = (
                         f"/admin/pretrip/projects/{project_id}/weather-imagery/{frame_id}"
                     )
+        if not supported_frame_states:
+            public_manifest["status"] = "not_prepared"
+        elif all(
+            asset_status == "cache_missing"
+            for _fresh, asset_status in supported_frame_states
+        ):
+            public_manifest["status"] = "cache_missing"
+        elif any(
+            asset_status == "cache_missing"
+            for _fresh, asset_status in supported_frame_states
+        ):
+            public_manifest["status"] = "partially_available"
+        elif all(
+            freshness == "stale_data" for freshness, _asset in supported_frame_states
+        ):
+            public_manifest["status"] = "stale_data"
+        elif any(
+            freshness == "stale_data" for freshness, _asset in supported_frame_states
+        ):
+            public_manifest["status"] = "partially_stale"
+        else:
+            public_manifest["status"] = "ready"
+        public_manifest["evaluatedAt"] = evaluated_at.isoformat()
         public_manifest.setdefault("processingBoundary", {}).update(
             {
                 "adminReadIsCacheOnly": True,
@@ -3952,13 +4073,16 @@ def create_admin_router(
 
     @router.get("/pretrip/projects/{project_id}/weather-imagery/{frame_id}")
     def pretrip_project_weather_imagery_asset(project_id: str, frame_id: str) -> Response:
-        project_root = _pretrip_workspace_project_root(
+        project_root = _validated_pretrip_project_root(
             pretrip_workspace_root,
             project_id=project_id,
         )
         if project_root is None:
             raise HTTPException(status_code=404, detail="Pre-trip project not found")
-        manifest = _load_cwa_weather_imagery_manifest(project_root)
+        manifest = _load_cwa_weather_imagery_manifest(
+            project_root,
+            project_id=project_id,
+        )
         frame = _weather_imagery_frame_by_id(manifest, frame_id)
         if frame is None:
             raise HTTPException(status_code=404, detail="Weather imagery frame not found")
@@ -4021,10 +4145,73 @@ def create_admin_router(
             ) from exc
         if not public_manifest.get("products"):
             raise HTTPException(status_code=404, detail="Rainfall grids not prepared")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=422, detail="invalid pre-trip project"
+            ) from exc
+        projection = _load_pretrip_rainfall_projection(
+            project_root,
+            project if isinstance(project, dict) else {},
+            required=False,
+        )
+        pair_verification = "not_applicable"
+        if projection is not None:
+            pair_verification = _validate_cwa_pair_for_api(
+                public_manifest,
+                projection,
+                first_label="rainfall grid manifest",
+                second_label="rainfall projection",
+            )
+            _validate_cwa_artifact_route_identity(
+                project_root,
+                requested_project_id=project_id,
+                artifact=projection,
+                artifact_label="rainfall projection",
+            )
+            if pair_verification == "verified":
+                route_cell_counts = _rainfall_projection_available_cell_counts(projection)
+                route_products = {
+                    str(item.get("gridKind") or ""): item
+                    for item in projection.get("products", [])
+                    if isinstance(item, dict)
+                }
+                public_manifest["products"] = [
+                    {
+                        **product,
+                        **(
+                            {
+                                "availableCellCount": route_products[
+                                    str(product.get("gridKind") or "")
+                                ].get(
+                                    "availableCellCount",
+                                    route_cell_counts.get(
+                                        str(product.get("gridKind") or ""),
+                                        0,
+                                    ),
+                                ),
+                                "coverageScope": "route_bbox",
+                            }
+                            if str(product.get("gridKind") or "") in route_products
+                            else {}
+                        ),
+                    }
+                    for product in public_manifest["products"]
+                ]
+        _validate_cwa_artifact_route_identity(
+            project_root,
+            requested_project_id=project_id,
+            artifact=public_manifest,
+            artifact_label="rainfall grid manifest",
+        )
         return {
             **public_manifest,
             "projectId": project_id,
             "layerId": "cwa-qpf",
+            "pairVerification": pair_verification,
             "processingBoundary": {
                 "adminReadIsCacheOnly": True,
                 "upstreamFetchOnRead": False,
@@ -4032,6 +4219,213 @@ def create_admin_router(
                 "runtimeSafetyTruth": False,
                 "raspberryPiGridProcessing": False,
                 "mobileGridProcessing": False,
+            },
+        }
+
+    @router.get("/pretrip/projects/{project_id}/rainfall-grid-overlay")
+    def pretrip_project_rainfall_grid_overlay(
+        project_id: str,
+        grid_kind: str | None = None,
+        limit_per_product: int = 750,
+    ) -> dict[str, Any]:
+        if grid_kind not in {None, "qpe_past_1h", "qpf_next_1h"}:
+            raise HTTPException(
+                status_code=422, detail="unsupported rainfall grid kind"
+            )
+        if limit_per_product < 1 or limit_per_product > 1_000:
+            raise HTTPException(
+                status_code=422, detail="invalid rainfall overlay limit"
+            )
+        project_root = _validated_pretrip_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=422, detail="invalid pre-trip project"
+            ) from exc
+        projection = _load_pretrip_rainfall_projection(
+            project_root,
+            project if isinstance(project, dict) else {},
+            required=True,
+        )
+        assert projection is not None
+        artifact_project_id = projection.get("projectId")
+        if artifact_project_id is not None and artifact_project_id != project_id:
+            raise HTTPException(
+                status_code=422, detail="rainfall projection project mismatch"
+            )
+        _validate_cwa_artifact_route_identity(
+            project_root,
+            requested_project_id=project_id,
+            artifact=projection,
+            artifact_label="rainfall projection",
+        )
+        selected: dict[str, list[dict[str, Any]]] = {
+            "qpe_past_1h": [],
+            "qpf_next_1h": [],
+        }
+        for feature in projection.get("features", []):
+            if not isinstance(feature, dict):
+                continue
+            properties = feature.get("properties") or {}
+            kind = str(properties.get("gridKind") or "")
+            if kind not in selected or (grid_kind is not None and kind != grid_kind):
+                continue
+            selected[kind].append(feature)
+        cells: list[dict[str, Any]] = []
+        for kind, features in selected.items():
+            step = max(1, math.ceil(len(features) / limit_per_product))
+            for feature in features[::step][:limit_per_product]:
+                geometry = feature.get("geometry") or {}
+                properties = feature.get("properties") or {}
+                coordinates = geometry.get("coordinates")
+                if geometry.get("type") != "Polygon" or not isinstance(
+                    coordinates, list
+                ):
+                    continue
+                cells.append(
+                    {
+                        "cell_id": feature.get("id"),
+                        "coordinates": coordinates[0] if coordinates else [],
+                        "grid_kind": kind,
+                        "rainfall_mm": properties.get("rainfallMm"),
+                        "unit": properties.get("unit"),
+                        "source_timestamp": properties.get("sourceTimestamp"),
+                        "data_delay_minutes": properties.get("dataDelayMinutes"),
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                )
+        manifest_path = _pretrip_rainfall_manifest_path(project_root)
+        from weather_grid_store import WeatherGridStore
+
+        try:
+            public_manifest = WeatherGridStore(manifest_path.parent).public_manifest()
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Prepared rainfall grid manifest is invalid",
+            ) from exc
+        pair_verification = _validate_cwa_pair_for_api(
+            public_manifest,
+            projection,
+            first_label="rainfall grid manifest",
+            second_label="rainfall projection",
+        )
+        _validate_cwa_artifact_route_identity(
+            project_root,
+            requested_project_id=project_id,
+            artifact=public_manifest,
+            artifact_label="rainfall grid manifest",
+        )
+        current_products = {
+            str(item.get("gridKind") or ""): item
+            for item in public_manifest.get("products", [])
+            if isinstance(item, dict)
+        }
+        route_cell_counts = _rainfall_projection_available_cell_counts(projection)
+        projection_products = [
+            {
+                **item,
+                "availableCellCount": item.get(
+                    "availableCellCount",
+                    route_cell_counts.get(str(item.get("gridKind") or ""), 0),
+                ),
+                **(
+                    {
+                        "freshness": current_products[
+                            str(item.get("gridKind") or "")
+                        ].get("freshness")
+                    }
+                    if pair_verification == "verified"
+                    and str(item.get("gridKind") or "") in current_products
+                    else {}
+                ),
+            }
+            for item in projection.get("products", [])
+            if isinstance(item, dict)
+        ]
+        return {
+            "schemaVersion": "cwa_route_grid_overlay.v1",
+            "artifactKind": "cwa_route_grid_overlay",
+            "projectId": project_id,
+            "status": (
+                public_manifest.get("status", "unavailable")
+                if cells and pair_verification == "verified"
+                else "unavailable"
+                if cells
+                else "no_coverage"
+            ),
+            "gridCells": cells,
+            "products": projection_products,
+            "bboxWgs84": projection.get("bboxWgs84"),
+            "legend": projection.get("legend", {}),
+            "routeRef": projection.get("routeRef"),
+            "routeSha256": projection.get("routeSha256"),
+            "pairId": projection.get("pairId"),
+            "pairVerification": pair_verification,
+            "cachePolicy": {
+                "adminReadIsCacheOnly": True,
+                "upstreamFetchOnRead": False,
+            },
+            "boundary": {
+                "candidateOnly": True,
+                "runtimeSafetyTruth": False,
+                "mobileGridProcessing": False,
+            },
+        }
+
+    @router.post("/pretrip/projects/{project_id}/rainfall-location-approvals")
+    def issue_pretrip_project_rainfall_location_approval(
+        project_id: str,
+        request: PreTripRainfallLocationApprovalRequest,
+    ) -> dict[str, Any]:
+        project_root = _validated_pretrip_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        issued_at = resolved_now_factory()
+        try:
+            approval = _issue_rainfall_location_approval(
+                project_root,
+                project_id=project_id,
+                scope=request.scope,
+                operator_alias=request.operator_alias,
+                ttl_minutes=request.ttl_minutes,
+                issued_at=issued_at,
+            )
+            audit_ref = _append_rainfall_location_access_audit(
+                project_root,
+                project_id=project_id,
+                approval_reference=str(approval["reference"]),
+                approved_at=issued_at,
+                scope=request.scope,
+                evaluated_at=issued_at.isoformat(),
+                event_type="approval_issued",
+                verification="server_record",
+            )
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Location approval could not be issued",
+            ) from exc
+        return {
+            **approval,
+            "verification": "server_record",
+            "auditRef": audit_ref,
+            "rawCoordinatesPersisted": False,
+            "boundary": {
+                "candidateOnly": True,
+                "runtimeSafetyTruth": False,
             },
         }
 
@@ -4046,7 +4440,58 @@ def create_admin_router(
         )
         if project_root is None:
             raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        evaluated_at = resolved_now_factory()
+        try:
+            _validate_location_approval_window(request, evaluated_at=evaluated_at)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        attempt_audit_ref = _append_rainfall_location_access_audit(
+            project_root,
+            project_id=project_id,
+            approval_reference=request.location_approval_reference,
+            approved_at=request.location_approved_at,
+            scope=request.location_approval_scope,
+            evaluated_at=evaluated_at.isoformat(),
+            event_type="access_attempted",
+            verification="pending",
+        )
+        try:
+            approval_verification = _verify_rainfall_location_approval(
+                project_root,
+                project_id=project_id,
+                approval_reference=request.location_approval_reference,
+                approved_at=request.location_approved_at,
+                scope=request.location_approval_scope,
+                evaluated_at=evaluated_at,
+            )
+        except (OSError, ValueError) as exc:
+            _append_rainfall_location_access_audit(
+                project_root,
+                project_id=project_id,
+                approval_reference=request.location_approval_reference,
+                approved_at=request.location_approved_at,
+                scope=request.location_approval_scope,
+                evaluated_at=evaluated_at.isoformat(),
+                event_type="access_failed",
+                verification="rejected",
+                reason_code="approval_verification_failed",
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Location approval could not be verified",
+            ) from exc
         project, route_points = _pretrip_rainfall_project_and_route(project_root)
+        _validate_cwa_artifact_route_identity(
+            project_root,
+            requested_project_id=project_id,
+            artifact={
+                "projectId": project.get("project_id"),
+                "routeRef": project.get("cwa_rainfall_route_ref"),
+                "routeSha256": project.get("cwa_rainfall_route_sha256"),
+                "routeBasis": project.get("cwa_rainfall_route_basis"),
+            },
+            artifact_label="rainfall trend source",
+        )
         from route_precipitation_sampler import build_route_precipitation_trend
         qpe_path = _safe_pretrip_project_ref_path(
             project_root, project.get("cwa_qpe_numeric_grid_ref")
@@ -4057,6 +4502,17 @@ def create_admin_router(
         if qpe_path is None or qpf_path is None:
             raise HTTPException(status_code=404, detail="Rainfall grids not prepared")
         if not RAINFALL_TREND_EVALUATION_SEMAPHORE.acquire(blocking=False):
+            _append_rainfall_location_access_audit(
+                project_root,
+                project_id=project_id,
+                approval_reference=request.location_approval_reference,
+                approved_at=request.location_approved_at,
+                scope=request.location_approval_scope,
+                evaluated_at=evaluated_at.isoformat(),
+                event_type="access_failed",
+                verification=approval_verification,
+                reason_code="evaluator_busy",
+            )
             raise HTTPException(
                 status_code=429,
                 detail="Rainfall trend evaluator is busy; retry shortly",
@@ -4074,15 +4530,17 @@ def create_admin_router(
                 target_position=request.target_position.model_dump(
                     mode="json", by_alias=True
                 ),
-                evaluated_at=datetime.now(timezone.utc),
+                evaluated_at=evaluated_at,
             )
-            audit_ref = _append_rainfall_location_approval_audit(
+            audit_ref = _append_rainfall_location_access_audit(
                 project_root,
                 project_id=project_id,
                 approval_reference=request.location_approval_reference,
                 approved_at=request.location_approved_at,
                 scope=request.location_approval_scope,
                 evaluated_at=str(package["evaluatedAt"]),
+                event_type="access_completed",
+                verification=approval_verification,
             )
             return {
                 **package,
@@ -4091,10 +4549,23 @@ def create_admin_router(
                     "approvedAt": request.location_approved_at.isoformat(),
                     "scope": request.location_approval_scope,
                     "auditRef": audit_ref,
+                    "attemptAuditRef": attempt_audit_ref,
+                    "verification": approval_verification,
                     "rawCoordinatesPersisted": False,
                 },
             }
         except (OSError, ValueError) as exc:
+            _append_rainfall_location_access_audit(
+                project_root,
+                project_id=project_id,
+                approval_reference=request.location_approval_reference,
+                approved_at=request.location_approved_at,
+                scope=request.location_approval_scope,
+                evaluated_at=evaluated_at.isoformat(),
+                event_type="access_failed",
+                verification=approval_verification,
+                reason_code="prepared_grid_invalid",
+            )
             raise HTTPException(
                 status_code=422,
                 detail="Prepared rainfall grid contract is invalid",
@@ -4118,6 +4589,8 @@ def create_admin_router(
                 status_code=404,
                 detail="Pre-trip admin projection not found",
             ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/pretrip/projects/{project_id}/debug-projection-events")
     def pretrip_project_debug_projection_events(project_id: str) -> dict[str, Any]:
@@ -4135,6 +4608,8 @@ def create_admin_router(
                 status_code=404,
                 detail="Pre-trip debug projection events not found",
             ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/pretrip/projects/{project_id}/debug-projection")
     def pretrip_project_debug_projection(project_id: str) -> dict[str, Any]:
@@ -4152,6 +4627,8 @@ def create_admin_router(
                 status_code=404,
                 detail="Pre-trip debug projection not found",
             ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post("/pretrip/projects/{project_id}/import-gpx-preview")
     def pretrip_import_gpx_preview(
@@ -6074,7 +6551,7 @@ def _compact_summary_payload(payload: Any) -> Any:
 def _compact_overpass_evidence(payload: Any) -> Any:
     if not isinstance(payload, dict):
         return payload
-    compact = dict(payload)
+    compact = _compact_summary_payload(payload)
     for key, extra_keys in {
         "corridor_candidates": (
             "candidate_type",
@@ -6120,6 +6597,76 @@ def _compact_overpass_evidence(payload: Any) -> Any:
             compact["admin_payload_truncated"] = (
                 len(items) > _COMPACT_MAP_LAYER_ITEM_LIMIT
             )
+    return compact
+
+
+def _compact_osm_pbf_evidence(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = _compact_summary_payload(payload)
+    for key in ("render_source_ref", "conversion_rule_version"):
+        if key in payload:
+            compact[key] = payload[key]
+    items = payload.get("items")
+    if isinstance(items, list):
+        compact["items"] = [
+            _compact_evidence_item(
+                item,
+                extra_keys=(
+                    "feature_type",
+                    "geometry_type",
+                    "layer_id",
+                    "lat",
+                    "lon",
+                    "category_id",
+                    "category_label",
+                    "review_category",
+                ),
+            )
+            for item in items[:_COMPACT_MAP_LAYER_ITEM_LIMIT]
+            if isinstance(item, dict)
+        ]
+        compact["source_items_count"] = len(items)
+        compact["admin_payload_item_limit"] = _COMPACT_MAP_LAYER_ITEM_LIMIT
+        compact["admin_payload_truncated"] = len(items) > len(compact["items"])
+    return compact
+
+
+def _compact_risk_segment_collection(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    compact = _compact_summary_payload(payload)
+    segments = payload.get("segments")
+    if not isinstance(segments, list):
+        return compact
+    keys = (
+        "candidate_id",
+        "label",
+        "status",
+        "segment_id",
+        "coordinates",
+        "start_distance_m",
+        "end_distance_m",
+        "pretrip_risk",
+        "calibrated_risk_candidate",
+        "baseline_pretrip_risk",
+        "delta_score",
+        "score_field",
+        "risk_level",
+        "risk_bucket",
+        "delta_bucket",
+        "style_class",
+        "stroke",
+        "candidate_only",
+        "runtime_safety_truth",
+    )
+    kept = segments[:_COMPACT_MAP_LAYER_ITEM_LIMIT]
+    compact["segments"] = [
+        _compact_mapping(segment, keys) for segment in kept if isinstance(segment, dict)
+    ]
+    compact["source_segments_count"] = len(segments)
+    compact["admin_payload_item_limit"] = _COMPACT_MAP_LAYER_ITEM_LIMIT
+    compact["admin_payload_truncated"] = len(segments) > len(kept)
     return compact
 
 
@@ -6701,6 +7248,15 @@ def _compact_capability_timeline_import(payload: Any) -> Any:
 def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
     view["route"] = _compact_route(view.get("route"))
     view["segments"] = _compact_segments(view.get("segments"))
+    cwa_qpf = view.get("cwa_qpf")
+    if isinstance(cwa_qpf, dict):
+        compact_cwa_qpf = dict(cwa_qpf)
+        compact_cwa_qpf["grid_cells"] = []
+        compact_cwa_qpf["grid_overlay_lazy"] = True
+        compact_cwa_qpf["gridOverlayEndpoint"] = (
+            f"/admin/pretrip/projects/{view.get('project_id', '')}/rainfall-grid-overlay"
+        )
+        view["cwa_qpf"] = compact_cwa_qpf
     view["checkpoints"] = _compact_collection_list(
         view.get("checkpoints"),
         extra_keys=("lat", "lon", "label", "route_distance_m", "overpass_projection"),
@@ -6759,41 +7315,9 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
             "scp",
         ),
     )
-    risk_segment_keys = (
-        "segment_id",
-        "coordinates",
-        "pretrip_risk",
-        "calibrated_risk_candidate",
-        "baseline_pretrip_risk",
-        "delta_score",
-        "score_field",
-        "risk_level",
-        "risk_bucket",
-        "delta_bucket",
-        "style_class",
-        "stroke",
-        "route_id",
-        "from_sample_id",
-        "to_sample_id",
-    )
-    view["risk_ribbon"] = _compact_summary_collection_items(
-        view.get("risk_ribbon"),
-        "segments",
-        extra_keys=risk_segment_keys,
-        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
-    )
-    view["risk_heatmap"] = _compact_summary_collection_items(
-        view.get("risk_heatmap"),
-        "segments",
-        extra_keys=risk_segment_keys,
-        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
-    )
-    view["risk_delta"] = _compact_summary_collection_items(
-        view.get("risk_delta"),
-        "segments",
-        extra_keys=risk_segment_keys,
-        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
-    )
+    view["risk_ribbon"] = _compact_risk_segment_collection(view.get("risk_ribbon"))
+    view["risk_heatmap"] = _compact_risk_segment_collection(view.get("risk_heatmap"))
+    view["risk_delta"] = _compact_risk_segment_collection(view.get("risk_delta"))
     view["terrain_visualization"] = _compact_collection_items(
         view.get("terrain_visualization"),
         "samples",
@@ -6844,6 +7368,7 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
         view.get("major_critical_points")
     )
     view["overpass_evidence"] = _compact_overpass_evidence(view.get("overpass_evidence"))
+    view["osm_pbf_evidence"] = _compact_osm_pbf_evidence(view.get("osm_pbf_evidence"))
     view["reference_tracks"] = _compact_reference_tracks(view.get("reference_tracks"))
 
 
@@ -7784,7 +8309,11 @@ def _safe_pretrip_project_ref_path(
     return resolved_path
 
 
-def _load_cwa_weather_imagery_manifest(project_root: Path) -> dict[str, Any]:
+def _load_cwa_weather_imagery_manifest(
+    project_root: Path,
+    *,
+    project_id: str | None = None,
+) -> dict[str, Any]:
     project_path = project_root / "project.json"
     try:
         project = json.loads(project_path.read_text(encoding="utf-8"))
@@ -7804,6 +8333,18 @@ def _load_cwa_weather_imagery_manifest(project_root: Path) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="invalid weather imagery manifest") from exc
     if not isinstance(payload, dict) or payload.get("artifactKind") != "weatherImageryTimelineManifest":
         raise HTTPException(status_code=422, detail="invalid weather imagery manifest contract")
+    expected_project_id = project_id or str(project.get("project_id") or "")
+    if not expected_project_id or str(payload.get("projectId") or "") != expected_project_id:
+        raise HTTPException(
+            status_code=422,
+            detail="weather imagery manifest project identity mismatch",
+        )
+    _validate_cwa_artifact_route_identity(
+        project_root,
+        requested_project_id=expected_project_id,
+        artifact=payload,
+        artifact_label="weather imagery manifest",
+    )
     return payload
 
 
@@ -7823,7 +8364,7 @@ def _pretrip_rainfall_manifest_path(project_root: Path) -> Path:
     return path
 
 
-def _validated_rainfall_project_root(
+def _validated_pretrip_project_root(
     pretrip_workspace_root: Path | None,
     *,
     project_id: str,
@@ -7855,6 +8396,68 @@ def _validated_rainfall_project_root(
     return project_root
 
 
+def _validated_rainfall_project_root(
+    pretrip_workspace_root: Path | None,
+    *,
+    project_id: str,
+) -> Path | None:
+    """Backward-compatible alias for the shared strict project resolver."""
+    return _validated_pretrip_project_root(
+        pretrip_workspace_root,
+        project_id=project_id,
+    )
+
+
+def _validate_cwa_artifact_route_identity(
+    project_root: Path,
+    *,
+    requested_project_id: str,
+    artifact: dict[str, Any],
+    artifact_label: str,
+) -> None:
+    try:
+        project = json.loads(
+            (project_root / "project.json").read_text(encoding="utf-8")
+        )
+        if not isinstance(project, dict):
+            raise ValueError("project contract is invalid")
+        if str(project.get("project_id") or "") != requested_project_id:
+            raise ValueError(f"{artifact_label} project identity mismatch")
+        from cwa_route_identity import validate_cwa_artifact_route_identity
+
+        validate_cwa_artifact_route_identity(
+            project_root,
+            project,
+            artifact,
+            artifact_label=artifact_label,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+
+def _validate_cwa_pair_for_api(
+    first: dict[str, Any],
+    second: dict[str, Any],
+    *,
+    first_label: str,
+    second_label: str,
+) -> str:
+    from cwa_route_identity import validate_cwa_pair_identity
+
+    try:
+        return validate_cwa_pair_identity(
+            first,
+            second,
+            first_label=first_label,
+            second_label=second_label,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def _load_cached_weather_grid(path: Path) -> Any:
     stat = path.stat()
     return _load_cached_weather_grid_by_identity(
@@ -7864,7 +8467,192 @@ def _load_cached_weather_grid(path: Path) -> Any:
     )
 
 
-def _append_rainfall_location_approval_audit(
+def _load_pretrip_rainfall_projection(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    required: bool,
+) -> dict[str, Any] | None:
+    projection_path = _safe_pretrip_project_ref_path(
+        project_root,
+        project.get("cwa_rainfall_route_projection_ref"),
+    )
+    if projection_path is None or not projection_path.is_file():
+        if required:
+            raise HTTPException(
+                status_code=404,
+                detail="Rainfall route projection not prepared",
+            )
+        return None
+    try:
+        projection = json.loads(projection_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="invalid rainfall route projection",
+        ) from exc
+    if (
+        not isinstance(projection, dict)
+        or projection.get("artifactKind") != "cwa_route_grid_projection"
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="invalid rainfall route projection contract",
+        )
+    return projection
+
+
+def _rainfall_projection_available_cell_counts(
+    projection: dict[str, Any],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for feature in projection.get("features", []):
+        if not isinstance(feature, dict):
+            continue
+        properties = feature.get("properties") or {}
+        kind = str(properties.get("gridKind") or "")
+        if kind:
+            counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
+def _rainfall_location_approval_registry_path(project_root: Path) -> tuple[str, Path]:
+    ref = "outputs/environment/cwa/rainfall/location_approval_registry.json"
+    path = _safe_pretrip_project_ref_path(project_root, ref)
+    if path is None:
+        raise ValueError("unsafe rainfall location approval registry path")
+    return ref, path
+
+
+def _write_json_atomically(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _issue_rainfall_location_approval(
+    project_root: Path,
+    *,
+    project_id: str,
+    scope: str,
+    operator_alias: str,
+    ttl_minutes: int,
+    issued_at: datetime,
+) -> dict[str, Any]:
+    if issued_at.tzinfo is None or issued_at.utcoffset() is None:
+        raise ValueError("server evaluation clock must include timezone")
+    _, path = _rainfall_location_approval_registry_path(project_root)
+    approved_at = issued_at.astimezone(timezone.utc)
+    expires_at = approved_at + timedelta(minutes=ttl_minutes)
+    record = {
+        "reference": f"rainfall.approval.{secrets.token_hex(12)}",
+        "projectId": project_id,
+        "scope": scope,
+        "operatorAlias": operator_alias,
+        "approvedAt": approved_at.isoformat(),
+        "expiresAt": expires_at.isoformat(),
+        "revoked": False,
+    }
+    with RAINFALL_LOCATION_APPROVAL_LOCK:
+        approvals: list[dict[str, Any]] = []
+        if path.is_file():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ValueError("invalid rainfall location approval registry") from exc
+            existing_approvals = (
+                existing.get("approvals", []) if isinstance(existing, dict) else []
+            )
+            approvals = [item for item in existing_approvals if isinstance(item, dict)][
+                -255:
+            ]
+        approvals.append(record)
+        _write_json_atomically(
+            path,
+            {
+                "schemaVersion": "scout.rainfall_location_approvals.v1",
+                "projectId": project_id,
+                "updatedAt": approved_at.isoformat(),
+                "approvals": approvals,
+                "rawCoordinatesPersisted": False,
+                "runtimeSafetyTruth": False,
+            },
+        )
+    return dict(record)
+
+
+def _verify_rainfall_location_approval(
+    project_root: Path,
+    *,
+    project_id: str,
+    approval_reference: str,
+    approved_at: datetime,
+    scope: str,
+    evaluated_at: datetime,
+) -> str:
+    _, path = _rainfall_location_approval_registry_path(project_root)
+    if path.is_file():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError("invalid rainfall location approval registry") from exc
+        approvals = payload.get("approvals", []) if isinstance(payload, dict) else []
+        for item in approvals:
+            if (
+                not isinstance(item, dict)
+                or item.get("reference") != approval_reference
+            ):
+                continue
+            try:
+                recorded_approved_at = datetime.fromisoformat(str(item["approvedAt"]))
+                expires_at = datetime.fromisoformat(str(item["expiresAt"]))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("invalid rainfall location approval record") from exc
+            if recorded_approved_at.tzinfo is None or expires_at.tzinfo is None:
+                raise ValueError("rainfall location approval timezone is missing")
+            supplied_approved_at = approved_at.astimezone(timezone.utc)
+            if (
+                abs(
+                    (
+                        recorded_approved_at.astimezone(timezone.utc)
+                        - supplied_approved_at
+                    ).total_seconds()
+                )
+                > 1
+            ):
+                raise ValueError("rainfall location approval timestamp mismatch")
+            if (
+                item.get("projectId") != project_id
+                or item.get("scope") != scope
+                or item.get("revoked") is True
+                or evaluated_at.astimezone(timezone.utc)
+                > expires_at.astimezone(timezone.utc)
+            ):
+                raise ValueError("rainfall location approval is not valid")
+            return "server_record"
+    if os.getenv("SCOUT_ALLOW_LEGACY_CALLER_LOCATION_ATTESTATION", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        return "caller_attestation_legacy"
+    raise ValueError("server-issued rainfall location approval is required")
+
+
+def _append_rainfall_location_access_audit(
     project_root: Path,
     *,
     project_id: str,
@@ -7872,29 +8660,42 @@ def _append_rainfall_location_approval_audit(
     approved_at: datetime,
     scope: str,
     evaluated_at: str,
+    event_type: Literal[
+        "approval_issued",
+        "access_attempted",
+        "access_completed",
+        "access_failed",
+    ],
+    verification: str,
+    reason_code: str | None = None,
 ) -> str:
     ref = "outputs/environment/cwa/rainfall/location_access_audit.jsonl"
     path = _safe_pretrip_project_ref_path(project_root, ref)
     if path is None:
         raise ValueError("unsafe rainfall location audit path")
     event_id = hashlib.sha256(
-        f"{project_id}|{approval_reference}|{evaluated_at}".encode("utf-8")
+        f"{project_id}|{approval_reference}|{event_type}|{evaluated_at}".encode("utf-8")
     ).hexdigest()[:24]
     event = {
         "eventId": f"rainfall.location_access.{event_id}",
-        "eventType": "rainfall_location_access_approved",
+        "eventType": f"rainfall_location_{event_type}",
         "projectId": project_id,
         "approvalReference": approval_reference,
         "approvedAt": approved_at.isoformat(),
         "scope": scope,
         "evaluatedAt": evaluated_at,
+        "verification": verification,
         "rawCoordinatesPersisted": False,
         "runtimeSafetyTruth": False,
     }
+    if reason_code is not None:
+        event["reasonCode"] = reason_code
     with RAINFALL_LOCATION_AUDIT_LOCK:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
     return ref
 
 
@@ -7918,43 +8719,20 @@ def _pretrip_rainfall_project_and_route(
         raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
     if not isinstance(project, dict):
         raise HTTPException(status_code=422, detail="invalid pre-trip project")
-    route_path = _safe_pretrip_project_ref_path(
-        project_root,
-        project.get("segment_display_geometry_ref"),
-    )
-    if route_path is None or not route_path.is_file():
-        raise HTTPException(status_code=404, detail="Route geometry not prepared")
     try:
-        payload = json.loads(route_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        from cwa_route_identity import load_cwa_route_identity
+
+        _identity, points = load_cwa_route_identity(
+            project_root,
+            project,
+            max_points=2_000,
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=404, detail="Route geometry not prepared"
+        ) from exc
+    except ValueError as exc:
         raise HTTPException(status_code=422, detail="invalid route geometry") from exc
-    points: list[tuple[float, float]] = []
-    for segment in payload.get("segments", []) if isinstance(payload, dict) else []:
-        if not isinstance(segment, dict):
-            continue
-        for coordinate_segment in segment.get("coordinate_segments", []):
-            if not isinstance(coordinate_segment, list):
-                continue
-            for point in coordinate_segment:
-                if not isinstance(point, dict):
-                    continue
-                try:
-                    lat = float(point.get("lat"))
-                    lon = float(point.get("lon"))
-                except (TypeError, ValueError):
-                    continue
-                if not math.isfinite(lat) or not math.isfinite(lon):
-                    continue
-                if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-                    continue
-                candidate = (lat, lon)
-                if not points or points[-1] != candidate:
-                    points.append(candidate)
-    if len(points) < 2:
-        raise HTTPException(status_code=422, detail="route geometry has too few points")
-    if len(points) > 2_000:
-        step = math.ceil(len(points) / 2_000)
-        points = points[::step]
     return project, points
 
 

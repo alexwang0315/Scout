@@ -24,11 +24,11 @@ CoordinateTransformer = Callable[[float, float], tuple[float, float]]
 class PrecipitationGridBoundary(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    candidate_only: bool = True
-    runtime_safety_truth: bool = False
-    server_side_only: bool = True
-    raspberry_pi_grid_processing: bool = False
-    mobile_grid_processing: bool = False
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    server_side_only: Literal[True] = True
+    raspberry_pi_grid_processing: Literal[False] = False
+    mobile_grid_processing: Literal[False] = False
 
 
 class CwaPrecipitationGrid(BaseModel):
@@ -74,7 +74,10 @@ class CwaPrecipitationGrid(BaseModel):
             CWA_QPE_PAST_1H_DATASET: ("qpe_past_1h", -1.0),
             CWA_QPF_NEXT_1H_DATASET: ("qpf_next_1h", -99.0),
         }.get(self.dataset_id)
-        if expected_kind is None or (self.grid_kind, self.source_nodata) != expected_kind:
+        if (
+            expected_kind is None
+            or (self.grid_kind, self.source_nodata) != expected_kind
+        ):
             raise ValueError("dataset, grid kind, and no-data sentinel disagree")
         if self.width * self.height > MAX_GRID_CELLS:
             raise ValueError("weather grid exceeds cell limit")
@@ -142,8 +145,12 @@ def parse_qpesums_grid(
     resolution = _finite_float(parameters.get("GridResolution"), "GridResolution")
     if resolution <= 0 or resolution > 1:
         raise ValueError("invalid CWA precipitation grid resolution")
-    start_lon = _finite_float(parameters.get("StartPointLongitude"), "StartPointLongitude")
-    start_lat = _finite_float(parameters.get("StartPointLatitude"), "StartPointLatitude")
+    start_lon = _finite_float(
+        parameters.get("StartPointLongitude"), "StartPointLongitude"
+    )
+    start_lat = _finite_float(
+        parameters.get("StartPointLatitude"), "StartPointLatitude"
+    )
     if not (-180 <= start_lon <= 180 and -90 <= start_lat <= 90):
         raise ValueError("invalid CWA precipitation grid origin")
     if str(parameters.get("Precipitation", "")).strip().lower() != "mm":
@@ -166,8 +173,7 @@ def parse_qpesums_grid(
             cells.append(value)
 
     south_first_rows = [
-        tuple(cells[offset : offset + width])
-        for offset in range(0, len(cells), width)
+        tuple(cells[offset : offset + width]) for offset in range(0, len(cells), width)
     ]
     values = tuple(reversed(south_first_rows))
     transformer = coordinate_transformer or twd67_to_wgs84
@@ -187,7 +193,12 @@ def parse_qpesums_grid(
     )
     delay_minutes = max(
         0,
-        round((fetched.astimezone(source_timestamp.tzinfo) - source_timestamp).total_seconds() / 60),
+        round(
+            (
+                fetched.astimezone(source_timestamp.tzinfo) - source_timestamp
+            ).total_seconds()
+            / 60
+        ),
     )
     if grid_kind == "qpe_past_1h":
         valid_from = source_timestamp - timedelta(minutes=60)
@@ -298,7 +309,9 @@ def _transformed_bounds(
         ),
     )
     transformed = [transformer(lat, lon) for lat, lon in source_corners]
-    if any(not math.isfinite(lat) or not math.isfinite(lon) for lat, lon in transformed):
+    if any(
+        not math.isfinite(lat) or not math.isfinite(lon) for lat, lon in transformed
+    ):
         raise ValueError("coordinate transformer returned non-finite bounds")
     lats = [item[0] for item in transformed]
     lons = [item[1] for item in transformed]
