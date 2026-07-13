@@ -460,6 +460,8 @@ def build_pretrip_map_layers(
         "cwa-weather": (
             "pretrip.map_layer.cwa_weather",
             source_refs.get("cwa_weather_evidence")
+            or source_refs.get("cwa_weather_imagery_manifest")
+            or source_refs.get("route_weather_risk_package")
             or source_refs.get("route_weather_package")
             or source_refs.get("weather_source_manifest")
             or source_refs.get("weather_decision_candidates"),
@@ -814,7 +816,23 @@ def _layer_renderer_contract(layer_id: str) -> dict[str, Any]:
                 "route_weather_package_ref",
                 "weather_source_manifest_ref",
                 "weather_decision_candidates_ref",
+                "cwa_weather_imagery_manifest_ref",
+                "route_weather_risk_package_ref",
             ],
+            "temporal_child_overlays": ["radar", "satellite"],
+            "child_overlay_render_mode": "cached_georeferenced_raster",
+            "imagery_manifest_endpoint_template": (
+                "/admin/pretrip/projects/{project_id}/weather-imagery"
+            ),
+            "imagery_asset_endpoint_template": (
+                "/admin/pretrip/projects/{project_id}/weather-imagery/{frame_id}"
+            ),
+            "opacity_controls": True,
+            "timeline_controls": True,
+            "animation_windows_hours": [3, 6, 9, 12],
+            "admin_read_is_cache_only": True,
+            "raspberry_pi_image_processing": False,
+            "mobile_image_processing": False,
         }
     if layer_id == "weather-api":
         return {

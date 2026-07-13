@@ -192,6 +192,22 @@ Provenance requirements:
 
 ## Regression Notes From Operator Reruns
 
+### CWA Weather Temporal Child Overlays
+
+Radar and satellite imagery render inside `data-layer-group="cwa-weather"` at
+the existing z-index 67. The 32-layer contract does not expand. Each admin
+surface must expose the prepared-product selector, radar and satellite opacity,
+3/6/9/12-hour timeline, frame slider, play/pause control, source timestamp, and
+data delay. Browser reads are cache-only: manifest or asset misses must never
+start an upstream fetch, image decode, georeference, tile build, route sample,
+or motion estimate.
+
+The nested imagery controls are required on `/admin/pretrip`, `/admin/debug`,
+and `/admin`. They remain usable when the main CWA layer is enabled and show an
+explicit unavailable state when no prepared manifest exists. Raw cache paths,
+ETags, CWA credentials, and upstream authorization data must not be returned to
+the browser.
+
 The following mistakes are easy to repeat and are considered contract
 regressions:
 

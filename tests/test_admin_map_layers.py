@@ -170,6 +170,12 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
     cwa_weather = next(layer for layer in layers if layer["layer_id"] == "cwa-weather")
     assert cwa_weather["source_kind"] == "cwa_weather_candidate"
     assert cwa_weather["secret_value_embedded"] is False
+    assert cwa_weather["temporal_child_overlays"] == ["radar", "satellite"]
+    assert cwa_weather["opacity_controls"] is True
+    assert cwa_weather["timeline_controls"] is True
+    assert cwa_weather["animation_windows_hours"] == [3, 6, 9, 12]
+    assert cwa_weather["admin_read_is_cache_only"] is True
+    assert cwa_weather["raspberry_pi_image_processing"] is False
     assert layers[-1]["layer_kind"] == "api"
     assert layers[-1]["label_zh"].startswith("氣象 API")
     assert layers[-1]["render_mode"] == "api_overlay"
@@ -203,6 +209,26 @@ def test_admin_pages_expose_the_same_alpha_workspace_layer_controls():
                 "completed-track",
             )
         assert static_layer_controls == expected_controls
+
+
+def test_admin_pages_expose_cwa_weather_imagery_child_controls_without_new_layer_ids():
+    pages = [
+        ROOT / "docs" / "admin" / "phase4-pretrip-planning.html",
+        ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html",
+        ROOT / "docs" / "admin" / "phase1-after-action.html",
+    ]
+
+    for page in pages:
+        html = page.read_text(encoding="utf-8")
+        assert 'data-cwa-imagery-controls' in html
+        assert 'data-cwa-imagery-product' in html
+        assert 'data-cwa-imagery-window' in html
+        assert 'data-cwa-imagery-timeline' in html
+        assert 'data-cwa-imagery-opacity="radar"' in html
+        assert 'data-cwa-imagery-opacity="satellite"' in html
+        assert 'data-cwa-imagery-play' in html
+        assert 'renderCwaWeatherImagery' in html
+        assert '/weather-imagery' in html
 
 
 def test_after_action_map_layers_reuse_the_same_base_and_api_order():

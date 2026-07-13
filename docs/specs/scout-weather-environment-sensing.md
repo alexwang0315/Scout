@@ -181,6 +181,91 @@ Therefore QPF supports `hold review`, `warning candidate`, or compound
 environment candidates. It must not be phrased as "this exact slope will/will
 not receive X mm" or used as direct runtime safety truth.
 
+### CWA Radar And Satellite Imagery
+
+CWA radar echo and Himawari satellite imagery are temporal child overlays of
+the existing `cwa-weather` layer. They do not create new top-level Scout layer
+ids. The verified OpenData registry includes:
+
+- radar composite `O-A0058-001` through `O-A0058-006` for larger/Taiwan-near
+  extents, terrain/no-terrain variants, and transparent overlays;
+- single-site rainfall-radar products `O-A0084-001` through `O-A0084-003`;
+- satellite color `O-B0028-*`, black-white `O-B0029-*`, enhanced color
+  `O-B0030-*`, and visible `O-B0031-*`, with `001/002/003` representing
+  full-disk/global, East Asia, and Taiwan products;
+- true-color products only through a separately verified CWA satellite-portal
+  adapter. Scout must not invent or scrape an undocumented URL.
+
+The explicit one-shot worker is enabled with
+`pretrip_layer_preparation --prepare-cwa-imagery` and requires all of:
+
+```text
+profile=mac-workstation
+network_mode=explicit-fetch
+allow_network_fetch=true
+SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1
+```
+
+It fetches metadata/images, keeps raw frames in
+`SCOUT_CWA_IMAGERY_CACHE_ROOT` outside the workspace, builds bounded display
+assets, georeferences them from registry metadata, samples the GPX route
+buffer, and estimates echo/cloud motion. Raspberry Pi and mobile profiles must
+not decode, resize, classify, sample, or motion-process these images. They may
+only consume the compact JSON packages and cache-only display assets.
+
+The server worker enforces an 8 MiB/20-megapixel limit per source image, a hard
+24-frame limit per product (evenly spaced so the full 12-hour window remains
+represented), one job at a time, and a retry cooldown after both successful
+and failed jobs. The worker also requires an operator-controlled server
+capability attestation and rejects ARM/Raspberry Pi hosts independently of the
+requested profile.
+
+Recent animation windows merge the official short-term-history response when a
+dataset exposes one with the bounded rolling cache of timestamps actually
+fetched by Scout. If CWA returns no history resource, the first run contains
+only the latest frame and later runs accumulate real observed frames; Scout
+does not fabricate a 3/6/9/12-hour backfill.
+
+Full-disk products are converted server-side from the Himawari geostationary
+view into a transparent Web-Mercator-aligned overlay before map delivery; the
+raw disk is never exposed as a fallback overlay or stretched affinely over a
+WGS84 rectangle. Full-disk remains
+`routeSamplingSupported=false`, while East Asia and Taiwan products use affine
+source georeferencing for map and eligible route sampling. True-color is
+visual/corroborating only and uses the configured source's `Last-Modified`
+timestamp.
+
+Required workspace outputs:
+
+```text
+outputs/environment/cwa/imagery/registry_snapshot.json
+outputs/environment/cwa/imagery/radar_frames_manifest.json
+outputs/environment/cwa/imagery/satellite_frames_manifest.json
+outputs/environment/cwa/imagery/route_imagery_sampling.json
+outputs/environment/cwa/imagery/radar_motion_estimate.json
+outputs/environment/cwa/imagery/weather_imagery_manifest.json
+outputs/route_weather_risk_package.json
+outputs/route_weather_lora_alert.json
+```
+
+The route package exposes `currentRainOnRoute`, `nearbyStrongEcho`,
+`rainBandApproaching`, `estimatedRainArrivalMinutes`, `convectiveCellScore`,
+`satelliteConvectiveCloudScore`, `cloudMotionTowardRoute`,
+`dataDelayMinutes`, and `confidence`. A boolean is `null`, not reassuring
+`false`, when coverage, georeferencing, freshness, or classification is not
+adequate.
+
+TEII remains immutable terrain evidence. Weather imagery may add review
+candidates for rain plus dry creek, rain plus scree/cliff, convective cloud or
+thunderstorm plus ridge, and strong echo plus steep descent only when the
+terrain class/descent metadata is explicit. TEII alone must not invent a creek,
+cliff, scree, ridge, or descent classification.
+
+The LoRa artifact is byte-bounded candidate output only. Producing it does not
+authorize an RF send, hardware access, Phase 1 mutation, or `/safety/*` call.
+Recurring near-real-time polling remains a separately approved cron/systemd or
+server workflow; this implementation does not silently install monitoring.
+
 ### SMAP Soil Moisture Through GEE
 
 `SMAP soil moisture`（衛星土壤含水量） is useful as a hydrologic background

@@ -718,6 +718,12 @@ def build_pretrip_admin_view(
     cwa_qpf_corridor_summary = _load_optional_json(
         artifacts.get("cwa_qpf_corridor_summary")
     )
+    cwa_weather_imagery_manifest = _load_optional_json(
+        artifacts.get("cwa_weather_imagery_manifest")
+    )
+    route_weather_risk_package = _load_optional_json(
+        artifacts.get("route_weather_risk_package")
+    )
     gee_feature_package = _load_optional_json(artifacts.get("gee_feature_package"))
     environment_risk_derivatives = _load_optional_json(
         artifacts.get("environment_risk_derivatives")
@@ -1036,6 +1042,12 @@ def build_pretrip_admin_view(
             evidence_payload=cwa_weather_evidence,
             warnings_geojson=cwa_warnings_geojson,
             observations_geojson=cwa_observations_geojson,
+            source_refs=source_refs,
+        ),
+        "cwa_weather_imagery": _cwa_weather_imagery_summary(
+            project_id,
+            manifest=cwa_weather_imagery_manifest,
+            risk_package=route_weather_risk_package,
             source_refs=source_refs,
         ),
         "soil_moisture": _environment_geojson_summary(
@@ -1376,6 +1388,7 @@ def build_pretrip_admin_view(
         "weather": planning_tab["weather"],
         "cwa_qpf": planning_tab["cwa_qpf"],
         "cwa_weather": planning_tab["cwa_weather"],
+        "cwa_weather_imagery": planning_tab["cwa_weather_imagery"],
         "soil_moisture": planning_tab["soil_moisture"],
         "antecedent_rain": planning_tab["antecedent_rain"],
         "environment_values": planning_tab["environment_values"],
@@ -1533,6 +1546,8 @@ def resolve_pretrip_project_artifacts(
         "cwa_qpf_grid": "cwa_qpf_grid_ref",
         "cwa_qpf_route_timeline": "cwa_qpf_route_timeline_ref",
         "cwa_qpf_corridor_summary": "cwa_qpf_corridor_summary_ref",
+        "cwa_weather_imagery_manifest": "cwa_weather_imagery_manifest_ref",
+        "route_weather_risk_package": "route_weather_risk_package_ref",
         "gee_feature_package": "gee_feature_package_ref",
         "environment_risk_derivatives": "environment_risk_derivatives_ref",
         "new_landslide_candidates": "new_landslide_candidates_ref",
@@ -1807,6 +1822,12 @@ def load_pretrip_debug_projection_view(
     cwa_qpf_corridor_summary_raw = _load_optional_json(
         optional_project_path("cwa_qpf_corridor_summary_ref")
     )
+    cwa_weather_imagery_manifest_raw = _load_optional_json(
+        optional_project_path("cwa_weather_imagery_manifest_ref")
+    )
+    route_weather_risk_package_raw = _load_optional_json(
+        optional_project_path("route_weather_risk_package_ref")
+    )
     gee_feature_package_raw = _load_optional_json(
         optional_project_path("gee_feature_package_ref")
     )
@@ -1992,6 +2013,12 @@ def load_pretrip_debug_projection_view(
         "cwa_observations_geojson": project.get("cwa_observations_geojson_ref", ""),
         "cwa_qpf_grid": project.get("cwa_qpf_grid_ref", ""),
         "cwa_qpf_corridor_summary": project.get("cwa_qpf_corridor_summary_ref", ""),
+        "cwa_weather_imagery_manifest": project.get(
+            "cwa_weather_imagery_manifest_ref", ""
+        ),
+        "route_weather_risk_package": project.get(
+            "route_weather_risk_package_ref", ""
+        ),
         "gee_feature_package": project.get("gee_feature_package_ref", ""),
         "environment_risk_derivatives": project.get(
             "environment_risk_derivatives_ref",
@@ -2167,6 +2194,12 @@ def load_pretrip_debug_projection_view(
             observations_geojson=cwa_observations_geojson_raw,
             source_refs=source_refs,
         ),
+        "cwa_weather_imagery": _cwa_weather_imagery_summary(
+            project_id,
+            manifest=cwa_weather_imagery_manifest_raw,
+            risk_package=route_weather_risk_package_raw,
+            source_refs=source_refs,
+        ),
         "soil_moisture": _environment_geojson_summary(
             project_id,
             soil_moisture_grid_raw,
@@ -2309,6 +2342,7 @@ def load_pretrip_debug_projection_view(
         "risk_delta": view["risk_delta"],
         "cwa_qpf": view["cwa_qpf"],
         "cwa_weather": view["cwa_weather"],
+        "cwa_weather_imagery": view["cwa_weather_imagery"],
         "soil_moisture": view["soil_moisture"],
         "antecedent_rain": view["antecedent_rain"],
         "environment_values": view["environment_values"],
@@ -9615,6 +9649,73 @@ def _cwa_weather_environment_summary(
                 {"candidate_only": True, "runtime_safety_truth": False},
             )
         ),
+    }
+
+
+def _cwa_weather_imagery_summary(
+    project_id: str,
+    *,
+    manifest: dict[str, Any] | None,
+    risk_package: dict[str, Any] | None,
+    source_refs: dict[str, str],
+) -> dict[str, Any]:
+    payload = manifest or {}
+    overlays: dict[str, Any] = {}
+    for family in ("radar", "satellite"):
+        raw_overlay = (payload.get("childOverlays") or {}).get(family) or {}
+        frames = []
+        for frame in raw_overlay.get("frames", []):
+            if not isinstance(frame, dict):
+                continue
+            frames.append(
+                {
+                    key: frame.get(key)
+                    for key in (
+                        "frameId",
+                        "sourceTimestamp",
+                        "fetchedAt",
+                        "imageType",
+                        "extent",
+                        "expectedDelayMinutes",
+                        "dataDelayMinutes",
+                        "bboxWgs84",
+                    )
+                }
+            )
+        overlays[family] = {
+            "latestFrameId": raw_overlay.get("latestFrameId"),
+            "defaultOpacity": raw_overlay.get(
+                "defaultOpacity", 0.62 if family == "radar" else 0.48
+            ),
+            "windows": raw_overlay.get("windows", {}),
+            "frames": frames,
+            "frameCount": len(frames),
+        }
+    return {
+        "source_id": f"{project_id}.cwa-weather-imagery",
+        "source_path": source_refs.get("cwa_weather_imagery_manifest", ""),
+        "risk_package_path": source_refs.get("route_weather_risk_package", ""),
+        "layer_id": "cwa-weather",
+        "status": "ready" if payload else "missing_source",
+        "animationWindowsHours": payload.get("animationWindowsHours", [3, 6, 9, 12]),
+        "childOverlays": overlays,
+        "imageryFeatures": (risk_package or {}).get("imageryFeatures", {}),
+        "weatherTerrainInteractions": (risk_package or {}).get(
+            "weatherTerrainInteractions", []
+        ),
+        "manifestEndpoint": (
+            f"/admin/pretrip/projects/{project_id}/weather-imagery"
+            if payload
+            else None
+        ),
+        "processingBoundary": {
+            "serverSideOnly": True,
+            "raspberryPiImageProcessing": False,
+            "mobileImageProcessing": False,
+            "adminReadIsCacheOnly": True,
+            "candidateOnly": True,
+            "runtimeSafetyTruth": False,
+        },
     }
 
 

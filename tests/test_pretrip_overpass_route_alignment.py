@@ -113,15 +113,21 @@ def test_overpass_route_alignment_uses_50m_gpx_normal_corridor_before_gpx_fallba
     _write_json(
         project_root / "candidates/segments.json",
         {
+            "project_id": "stale-source-project",
+            "route_artifact_id": "artifact.gpx.stale-source-project",
             "candidates": [
                 {
                     "candidate_id": "seg.001",
+                    "project_id": "stale-source-project",
+                    "route_artifact_id": "artifact.gpx.stale-source-project",
                     "from_candidate_id": "cp.near",
                     "to_candidate_id": "cp.end",
                     "distance_m": 250.0,
                 },
                 {
                     "candidate_id": "seg.normal",
+                    "project_id": "stale-source-project",
+                    "route_artifact_id": "artifact.gpx.stale-source-project",
                     "from_candidate_id": "cp.normal-start",
                     "to_candidate_id": "cp.normal-end",
                     "distance_m": 50.0,
@@ -133,9 +139,13 @@ def test_overpass_route_alignment_uses_50m_gpx_normal_corridor_before_gpx_fallba
     _write_json(
         project_root / "outputs/segment_display_geometry.json",
         {
+            "project_id": "stale-source-project",
+            "route_artifact_id": "artifact.gpx.stale-source-project",
             "segments": [
                 {
                     "segment_candidate_id": "seg.001",
+                    "project_id": "stale-source-project",
+                    "route_artifact_id": "artifact.gpx.stale-source-project",
                     "coordinates": [
                         {"lat": 24.00002, "lon": 121.001},
                         {"lat": 24.00002, "lon": 121.004},
@@ -149,6 +159,8 @@ def test_overpass_route_alignment_uses_50m_gpx_normal_corridor_before_gpx_fallba
                 },
                 {
                     "segment_candidate_id": "seg.normal",
+                    "project_id": "stale-source-project",
+                    "route_artifact_id": "artifact.gpx.stale-source-project",
                     "coordinates": [
                         {"lat": 24.001, "lon": 121.0045},
                         {"lat": 24.00035, "lon": 121.005},
@@ -197,7 +209,11 @@ def test_overpass_route_alignment_uses_50m_gpx_normal_corridor_before_gpx_fallba
     assert far["lat"] == 24.001
 
     segments = _load(project_root / "outputs/overpass_aligned_segments.json")
+    assert segments["project_id"] == "route"
+    assert segments["route_artifact_id"] == "artifact.gpx.route"
     aligned_segment = segments["candidates"][0]
+    assert aligned_segment["project_id"] == "route"
+    assert aligned_segment["route_artifact_id"] == "artifact.gpx.route"
     assert aligned_segment["overpass_projection"]["status"] == "segment_endpoints_snapped_to_overpass"
     assert aligned_segment["gpx_distance_m"] == 250.0
     assert aligned_segment["distance_m"] > aligned_segment["gpx_distance_m"]
@@ -214,7 +230,11 @@ def test_overpass_route_alignment_uses_50m_gpx_normal_corridor_before_gpx_fallba
     assert normal_segment["route_basis"] == "overpass_risk_ribbon_centerline"
 
     display = _load(project_root / "outputs/overpass_aligned_segment_display_geometry.json")
+    assert display["project_id"] == "route"
+    assert display["route_artifact_id"] == "artifact.gpx.route"
     segment = display["segments"][0]
+    assert segment["project_id"] == "route"
+    assert segment["route_artifact_id"] == "artifact.gpx.route"
     assert segment["overpass_alignment"]["route_basis"] == "overpass_risk_ribbon_centerline"
     assert segment["coordinates"][0]["lat"] == 24.0
     assert segment["coordinates"][-1]["lat"] == 24.0
