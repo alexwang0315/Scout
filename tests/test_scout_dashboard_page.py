@@ -14,6 +14,9 @@ from admin_api import create_admin_app
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
 DOC = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.md"
+PRETRIP_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
+LAYER_CONTRACT_DOC = ROOT / "docs" / "specs" / "scout-admin-map-layer-contract.md"
+WEATHER_DOC = ROOT / "docs" / "specs" / "scout-weather-environment-sensing.md"
 
 
 def test_scout_dashboard_page_serves_static_shell() -> None:
@@ -1114,6 +1117,54 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert 'stroke-width="5.6"' in segment_branch
     assert 'stroke-dasharray="7 4"' in segment_branch
     assert "mapData.routePath" not in segment_branch
+
+
+def test_scout_dashboard_map_exposes_cwa_imagery_bridge_and_controls() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+
+    for marker in (
+        'id="dashboardCwaImagery"',
+        'data-dashboard-cwa-imagery-product',
+        'data-dashboard-cwa-imagery-window',
+        'data-dashboard-cwa-imagery-timeline',
+        'data-dashboard-cwa-imagery-opacity="radar"',
+        'data-dashboard-cwa-imagery-opacity="satellite"',
+        'data-dashboard-cwa-rainfall-product',
+        'data-dashboard-cwa-rainfall-opacity',
+        'data-dashboard-cwa-rainfall-legend',
+        'data-dashboard-cwa-rainfall-status',
+        'data-dashboard-cwa-imagery-play',
+        'data-dashboard-cwa-imagery-status',
+        'aria-label="CWA radar and satellite imagery controls"',
+        "bindDashboardCwaImageryBridge",
+        "syncDashboardCwaImageryControls",
+        "scoutCwaImageryController",
+        'scout:cwa-imagery-state',
+        "cache-only",
+        "candidate-only",
+    ):
+        assert marker in html
+
+    assert "window.scoutCwaImageryController" in pretrip_html
+    assert "function cwaImageryStateSnapshot()" in pretrip_html
+    assert 'new CustomEvent("scout:cwa-imagery-state"' in pretrip_html
+    assert "/admin/pretrip/projects/${encodeURIComponent(projectId)}/weather-imagery" in pretrip_html
+    assert "SCOUT_CWA_API_KEY" not in html
+
+
+def test_scout_dashboard_cwa_imagery_documentation_contract() -> None:
+    dashboard_doc = DOC.read_text(encoding="utf-8")
+    layer_doc = LAYER_CONTRACT_DOC.read_text(encoding="utf-8")
+    weather_doc = WEATHER_DOC.read_text(encoding="utf-8")
+
+    assert "Dashboard MAP CWA imagery controls" in dashboard_doc
+    assert "same-origin pretrip controller" in dashboard_doc
+    assert "cache-only" in dashboard_doc
+    assert "Dashboard MAP" in layer_doc
+    assert "scoutCwaImageryController" in layer_doc
+    assert "Dashboard MAP" in weather_doc
+    assert "server-side" in weather_doc
 
 
 def test_scout_dashboard_debug_message_runtime_details_contract() -> None:

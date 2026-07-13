@@ -344,8 +344,8 @@ SCOUT_LAYER_CONTRACT: tuple[dict[str, Any], ...] = (
     },
     {
         "layer_id": "cwa-qpf",
-        "label": "CWA QPF",
-        "label_zh": "定量降水預報圖層（CWA QPF，路線 bbox/corridor 降雨格點）",
+        "label": "CWA QPE / QPF",
+        "label_zh": "定量降水圖層（CWA 過去 1 小時 QPE／未來 1 小時 QPF 路線格點）",
         "layer_kind": "environment",
         "z_index": 59,
         "render_mode": "geojson_overlay",
@@ -354,8 +354,8 @@ SCOUT_LAYER_CONTRACT: tuple[dict[str, Any], ...] = (
         "surfaces": ("pretrip", "debug", "after-action"),
         "required_behavior": "CWA quantitative precipitation forecast grid/timeline evidence, candidate-only and review-gated.",
         "components": ("scout_weather_integration.py", "pretrip_layer_preparation.py", "admin_map_layers.py", "docs/admin/*.html"),
-        "dependencies": "Prepared CWA QPF grid/timeline artifacts from explicit weather/environment preparation.",
-        "states": "Unavailable until CWA QPF artifacts are prepared; missing data must remain visible.",
+        "dependencies": "Prepared CWA QPE/QPF numeric grids, route projection, and legacy QPF artifacts from explicit server weather preparation.",
+        "states": "Unavailable until CWA rainfall artifacts are prepared; provider no-data must remain unknown rather than zero.",
         "verification": "Preparation source ref, rank/group/browser toggle, and no client API key exposure.",
     },
     {

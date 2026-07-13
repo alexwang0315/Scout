@@ -7,6 +7,27 @@ from admin_api import create_admin_app
 from pretrip_admin_view import _cwa_weather_imagery_summary
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_pretrip_map_renders_numeric_rainfall_cells_with_product_and_opacity_controls() -> None:
+    html = (ROOT / "docs/admin/phase4-pretrip-planning.html").read_text(
+        encoding="utf-8"
+    )
+
+    for marker in (
+        "renderCwaRainfallGrid",
+        "data-cwa-rainfall-product",
+        "data-cwa-rainfall-opacity",
+        "data-cwa-rainfall-legend",
+        "data-cwa-rainfall-status",
+        "qpe_past_1h",
+        "qpf_next_1h",
+        "CWA rainfall / radar / satellite",
+    ):
+        assert marker in html
+
+
 def test_admin_weather_imagery_manifest_and_asset_are_cache_only(
     tmp_path: Path,
     monkeypatch,

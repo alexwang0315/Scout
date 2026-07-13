@@ -203,10 +203,38 @@ start an upstream fetch, image decode, georeference, tile build, route sample,
 or motion estimate.
 
 The nested imagery controls are required on `/admin/pretrip`, `/admin/debug`,
-and `/admin`. They remain usable when the main CWA layer is enabled and show an
-explicit unavailable state when no prepared manifest exists. Raw cache paths,
-ETags, CWA credentials, and upstream authorization data must not be returned to
-the browser.
+and `/admin`. Dashboard MAP reuses the `/admin/pretrip` renderer and mirrors
+the same state through the same-origin `scoutCwaImageryController`; it is not a
+fourth renderer and does not add a layer id. The controls remain usable when
+the main CWA layer is enabled and show an explicit unavailable state when no
+prepared manifest exists. Raw cache paths, ETags, CWA credentials, and upstream
+authorization data must not be returned to the browser.
+
+### CWA Numeric Rainfall Grid Child Products
+
+Past-one-hour QPE (`O-B0045-001`) and next-one-hour QPF (`F-B0046-001`) render
+inside the existing `data-layer-group="cwa-qpf"` at z-index 59. They do not add
+a 33rd top-level layer. The layer exposes a QPE/QPF selector, millimetre color
+legend, opacity, source timestamp, validity window, and delay. The legacy
+`cwa_qpf_grid_ref` remains available for public-API compatibility; new numeric
+contracts use `cwa_rainfall_grid_manifest_ref`,
+`cwa_rainfall_route_projection_ref`, and
+`cwa_rainfall_route_trend_ref`.
+
+Admin GET reads are cache-only and may return compact route-grid cells but not
+the full numeric `values`, gzip data refs, raw provider payload, ETag, upstream
+URL, or credential. Position/target sampling is a typed POST over already
+prepared frames; its response omits submitted coordinates and cannot write
+Phase 1 safety truth. Dashboard MAP mirrors this state through the existing
+same-origin `scoutCwaImageryController`, so there is still one canonical map
+renderer.
+
+The position POST is denied unless it carries explicit current-trip location
+approval confirmation, approval reference, timezone-aware approval time, and
+`current_trip_rainfall_sampling` scope. Expired QPF remains visible as stale
+evidence but reports `stale_data` with zero confidence. Browser projection is
+evenly decimated per product, zero-rain cells remain transparent, and opacity
+changes update the SVG group rather than rebuilding every polygon.
 
 The following mistakes are easy to repeat and are considered contract
 regressions:
@@ -265,7 +293,7 @@ regressions:
 | `risk-delta` | Difference between baseline and calibrated risk. | `pretrip_risk_heatmap.py`, `pretrip_layer_preparation.py`, `admin_map_layers.py`, admin pages. | z-index 56; depends on baseline and calibrated risk. | Off by default; unavailable if either input absent. | Delta source or paired-source ref, group/rank/toggle. |
 | `soil-moisture` | GEE/SMAP soil moisture context. | `scout_gee_integration.py`, `admin_map_layers.py`, admin pages. | z-index 57; environmental candidate evidence. | Unavailable when GEE/data absent; no safety truth mutation. | Source availability, group/rank/toggle. |
 | `antecedent-rain` | GEE/GPM antecedent rain context. | `scout_gee_integration.py`, `admin_map_layers.py`, admin pages. | z-index 58; environmental candidate evidence. | Unavailable when data absent; no safety truth mutation. | Source availability, group/rank/toggle. |
-| `cwa-qpf` | Central Weather Administration quantitative precipitation forecast grid/context. | `admin_weather_overlay.py`, `scout_weather_integration.py`, `admin_map_layers.py`, admin pages. | z-index 59; weather candidate evidence below risk points. | Unavailable without fetched CWA/open weather evidence; no runtime safety truth mutation. | Source/status availability, group/rank/toggle. |
+| `cwa-qpf` | CWA past-1h QPE plus next-1h QPF numeric rainfall grid/context; legacy forecast-derived points remain compatible. | `cwa_precipitation_grid.py`, `cwa_precipitation_grid_ingestor.py`, `weather_grid_store.py`, `route_precipitation_sampler.py`, `admin_map_layers.py`, admin pages. | z-index 59; route-clipped cells below risk points; QPE/QPF selector and opacity. | Unavailable without explicit server preparation; full grids are never processed by Pi/mobile; no runtime safety truth mutation. | Source timestamp/delay/validity, mm legend, compact cells only, 32-layer group/rank/toggle. |
 | `risk-score` | Point risk-score evidence. | `pretrip_risk_heatmap.py`, `pretrip_layer_preparation.py`, `admin_map_layers.py`, admin pages. | z-index 60; above risk raster/ribbon layers. | Off by default; candidate evidence only. | Risk point artifact/source/count, group/rank/toggle. |
 | `checkpoints` | CP candidates/reviewed checkpoints. | `pretrip_import.py`, `pretrip_overpass_route_alignment.py`, `pretrip_layer_preparation.py`, admin pages. | z-index 62; above risk layers. | Marker radius stays screen-sized; focus uses expected viewport policy. | CP count/source/alignment, group/rank/toggle/focus smoke. |
 | `pois` | Named POI/context candidates, including official communication-point markers from the Forestry and Nature Conservation Agency mountain communication dataset. | `pretrip_route_context_collection.py`, `admin_map_layers.py`, admin pages. | z-index 64; above checkpoints, below hazards. | Avoid raw variable-name labels; unavailable if no POI source. Communication points are candidate evidence only and must preserve stale-risk/provenance metadata. | Label/source/group/rank/toggle. |

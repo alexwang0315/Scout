@@ -161,6 +161,17 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
     cwa_qpf = next(layer for layer in layers if layer["layer_id"] == "cwa-qpf")
     assert cwa_qpf["provider"] == "cwa_opendata"
     assert cwa_qpf["geojson_ref_key"] == "cwa_qpf_grid_ref"
+    assert cwa_qpf["numeric_grid_manifest_ref_key"] == (
+        "cwa_rainfall_grid_manifest_ref"
+    )
+    assert cwa_qpf["route_grid_projection_ref_key"] == (
+        "cwa_rainfall_route_projection_ref"
+    )
+    assert cwa_qpf["route_rainfall_trend_ref_key"] == (
+        "cwa_rainfall_route_trend_ref"
+    )
+    assert cwa_qpf["rainfall_products"] == ["qpe_past_1h", "qpf_next_1h"]
+    assert cwa_qpf["server_side_grid_processing"] is True
     assert cwa_qpf["runtime_safety_truth"] is False
     soil = next(layer for layer in layers if layer["layer_id"] == "soil-moisture")
     assert soil["provider"] == "google_earth_engine"
@@ -227,8 +238,15 @@ def test_admin_pages_expose_cwa_weather_imagery_child_controls_without_new_layer
         assert 'data-cwa-imagery-opacity="radar"' in html
         assert 'data-cwa-imagery-opacity="satellite"' in html
         assert 'data-cwa-imagery-play' in html
+        assert 'data-cwa-imagery-status role="status" aria-live="polite"' in html
+        assert '"aria-hidden"' in html
         assert 'renderCwaWeatherImagery' in html
         assert '/weather-imagery' in html
+
+    pretrip_html = pages[0].read_text(encoding="utf-8")
+    assert "window.scoutCwaImageryController" in pretrip_html
+    assert "function cwaImageryStateSnapshot()" in pretrip_html
+    assert 'new CustomEvent("scout:cwa-imagery-state"' in pretrip_html
 
 
 def test_after_action_map_layers_reuse_the_same_base_and_api_order():

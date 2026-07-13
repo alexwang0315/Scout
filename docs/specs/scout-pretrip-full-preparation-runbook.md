@@ -295,6 +295,53 @@ This command is the main orchestrator. It should update:
 - mileage tag alignment;
 - layer manifests and admin/debug projections.
 
+### Optional One-Shot CWA Numeric Rainfall Grid Worker
+
+When `cwa-qpf` is requested with `--profile mac-workstation`,
+`--network-mode explicit-fetch`, and `--allow-network-fetch`, the same one-shot
+preparation run also fetches CWA `O-B0045-001` and `F-B0046-001`, validates and
+georeferences their numeric grids, and stores immutable gzip frames plus the
+route projection/trend package under
+`outputs/environment/cwa/rainfall/`. This is server-side numeric processing;
+Pi/mobile profiles report a blocker and perform no full-grid work.
+
+After the run, verify these refs in `project.json`:
+
+- `cwa_rainfall_grid_manifest_ref`;
+- `cwa_qpe_numeric_grid_ref` and `cwa_qpf_numeric_grid_ref`;
+- `cwa_rainfall_route_projection_ref`;
+- `cwa_rainfall_route_trend_ref` and `team_target_rainfall_trend_ref`.
+
+`cwa_qpf_grid_ref` must remain present and valid for backward compatibility.
+The rainfall frames are persistent evidence snapshots but keep
+`cacheable=false`, `ttl=0`, and `mustRefetchOnPrepare=true`; never treat the
+latest stored frame as fresh without a new explicit run. No recurring ten-
+minute fetch is installed by this command. Long-term monitoring remains a
+separate approval-gated operation.
+
+Treat QPE `-1` and QPF `-99` as provider-invalid/no-data, not zero rainfall.
+The route trend samples a 1.5 km route buffer; if no valid QPF cell intersects
+that buffer, the correct result is `unknown` with zero paired cells. A blank
+QPF map therefore means unavailable forecast coverage, not a dry-route claim.
+
+Current position and target evaluation uses the cache-only admin POST
+`/admin/pretrip/projects/{project_id}/rainfall-trend`. Supply only an authorized
+current-position observation and an explicit target id, together with
+`confirmLocationAccess=true`, `locationApprovalReference`, timezone-aware
+`locationApprovedAt`, and scope `current_trip_rainfall_sampling`. The compact
+response does not persist or return raw coordinates. An expired QPF returns
+`stale_data` and confidence `0`; rerun explicit preparation rather than using
+the immutable snapshot as current truth. The only POST write is the sanitized
+`outputs/environment/cwa/rainfall/location_access_audit.jsonl`; it records the
+approval reference/time/scope and explicitly records that no raw coordinates
+were persisted.
+
+Map/API freshness is recalculated when the prepared data is read. QPF expires
+at `validUntil`; QPE uses `sourceTimestamp + 2 hours` because the QPE
+`validUntil` is the past-one-hour accumulation endpoint. The UI marks an
+expired selected product as `STALE`, and mixed QPE/QPF freshness is reported as
+`partially_stale` rather than `ready`.
+
 ### Optional One-Shot CWA Radar/Satellite Worker
 
 Run image-heavy weather preparation only on the Mac/server worker. Add
@@ -334,8 +381,11 @@ Required checks:
   computed data delay, and candidate-only boundary are present;
 - Pi/mobile profiles report
   `blocked_server_side_imagery_preparation_required` and perform no image work;
-- `/admin/pretrip`, `/admin/debug`, and `/admin` render only prepared cached
-  assets with product, opacity, and timeline controls;
+- `/admin/pretrip`, `/admin/debug`, `/admin`, and
+  `/admin/dashboard?projectId=$PROJECT_ID#map` render only prepared cached
+  assets with product, opacity, 3/6/9/12-hour timeline, frame, and play/pause
+  controls; the Dashboard path must reuse the same-origin pretrip controller
+  rather than fetch or process imagery independently;
 - `outputs/route_weather_lora_alert.json` has `sent=false` and does not invoke
   radio or outbound providers.
 
@@ -2668,4 +2718,40 @@ Live 9099 Segment render: PASS (239 non-empty paths; control checked; no horizon
 Live 9099 risk render: PASS (3,576 baseline; 3,576 calibrated; 3,672 delta SVG paths)
 Live 9099 console/4xx errors: PASS (0 / 0)
 Backup retained: /tmp/scout-provenance-repair.fgZG1X/backup
+```
+
+## Run Log: 2026-07-13 CWA QPESUMS Numeric Grid Integration
+
+Issue encountered:
+
+- Symptom: `cwa_qpf_grid_ref` existed and rendered forecast-derived points, but
+  the workspace did not contain the official past-one-hour QPE or next-one-hour
+  QPF numeric cells needed to sample a team position, target, and route buffer.
+- Root cause: the legacy artifact was generated from general forecast/station
+  evidence and was intentionally not a QPESUMS direct-grid contract.
+- Fix: keep the legacy ref for API compatibility; add validated
+  `O-B0045-001`/`F-B0046-001` TWD67-to-WGS84 numeric snapshots, content-addressed
+  gzip storage, a route-bbox display projection, and a compact 1.5 km
+  route-buffer trend package.
+- Live-data finding: the 2026-07-13 11:10 +08 QPE contained 255 valid cells in
+  the route bbox, while QPF contained zero valid cells there. CWA explicitly
+  describes `-99` as invalid; the route forecast therefore remains `unknown`,
+  not zero rain.
+- SOP change: never infer dry weather from a blank QPF overlay. Show product
+  time, delay, and valid-cell count; preserve provider no-data and reduce
+  confidence. Current-position evaluation requires authorized typed POST input
+  and never persists raw coordinates.
+
+Validation snapshot:
+
+```text
+CWA numeric parser/store/sampler/API focused tests: PASS
+Dashboard/map CWA focused tests: PASS (38 passed)
+pnpm lint/typecheck/test: PASS
+32-layer repo gate: PASS
+32-layer real-workspace gate: PASS
+Admin UI visual smoke: PASS (desktop, 390px, 320px)
+Live rainfall-grid API: PASS (cache-only; upstream fetch on read=false)
+Live pretrip compact view: PASS (QPE 255 route-bbox cells; QPF 0; trend=unknown)
+Recurring scheduler installed: NO
 ```

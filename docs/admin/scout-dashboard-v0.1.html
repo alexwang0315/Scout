@@ -408,6 +408,107 @@
       overflow-wrap: anywhere;
     }
 
+    .dashboard-cwa-imagery {
+      display: grid;
+      gap: 9px;
+      padding: 10px;
+      border: 1px solid rgba(76, 199, 223, .34);
+      border-radius: 7px;
+      background: rgba(11, 28, 34, .88);
+    }
+
+    .dashboard-cwa-imagery-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .dashboard-cwa-imagery-header strong {
+      color: #f3f7f8;
+      font-size: 13px;
+    }
+
+    .dashboard-cwa-imagery-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .dashboard-cwa-imagery label {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      color: #9fb7bd;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .dashboard-cwa-imagery input,
+    .dashboard-cwa-imagery select,
+    .dashboard-cwa-imagery button {
+      min-width: 0;
+      min-height: 28px;
+      border: 1px solid rgba(122, 151, 160, .5);
+      border-radius: 5px;
+      background: #111f24;
+      color: #edf5f6;
+      font: inherit;
+    }
+
+    .dashboard-cwa-imagery input:focus-visible,
+    .dashboard-cwa-imagery select:focus-visible,
+    .dashboard-cwa-imagery button:focus-visible {
+      outline: 2px solid #ffd36a;
+      outline-offset: 2px;
+    }
+
+    .dashboard-cwa-layer-toggle {
+      grid-template-columns: 24px minmax(0, 1fr);
+      align-items: center;
+      grid-column: 1 / -1;
+      min-height: 28px;
+    }
+
+    .dashboard-cwa-layer-toggle input {
+      width: 24px;
+      min-height: 24px;
+      margin: 0;
+      accent-color: #4cc7df;
+    }
+
+    .dashboard-cwa-imagery .cwa-rainfall-legend {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(9, minmax(24px, 1fr));
+      gap: 2px;
+      color: #9fb7bd;
+      font-size: 9px;
+      text-align: center;
+    }
+
+    .dashboard-cwa-imagery .cwa-rainfall-legend span::before {
+      content: "";
+      display: block;
+      height: 7px;
+      border: 1px solid rgba(15, 23, 42, .2);
+      border-radius: 2px;
+      background: var(--rain-color);
+    }
+
+    .dashboard-cwa-imagery output {
+      min-height: 32px;
+      color: #c9d8dc;
+      font-size: 11px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .dashboard-cwa-imagery-boundary {
+      color: #78959d;
+      font-size: 10px;
+    }
+
     .map-evidence-toggle {
       display: inline-grid;
       place-items: center;
@@ -3965,6 +4066,25 @@
       selectedMapEvidenceSourceId: "",
       pendingMapEvidenceFocusId: "",
       mapEvidenceRetryTimer: null,
+      dashboardCwaImagery: {
+        bridgeReady: false,
+        status: "loading",
+        layerEnabled: false,
+        rainfallLayerEnabled: false,
+        rainfallProduct: "qpf_next_1h",
+        rainfallProducts: [],
+        rainfallOpacityPercent: 56,
+        rainfallCurrent: null,
+        productId: "all",
+        products: [],
+        windowId: "12h",
+        frameIndex: 0,
+        maxFrameIndex: 0,
+        radarOpacityPercent: 62,
+        satelliteOpacityPercent: 48,
+        playing: false,
+        current: null,
+      },
       evidenceItemsBySource: {},
       pretripDataProjectId: PROJECT_ID,
       briefingFrameVersion: "",
@@ -7820,6 +7940,7 @@
             ${collapsed ? "" : `<p id="dashboardMapEvidenceStatus">Loading pre-trip timeline evidence for map focus.</p>`}
           </div>
           ${collapsed ? "" : `<div class="map-evidence-body" id="dashboardMapEvidenceBody">
+            ${renderDashboardCwaImageryControls()}
             <div class="evidence-empty">Timeline evidence will appear here when the pre-trip project payload is ready.</div>
           </div>`}
         `;
@@ -7841,6 +7962,7 @@
           ${collapsed ? "" : `<p id="dashboardMapEvidenceStatus">${escapeHtml(focusStatus)}</p>`}
         </div>
         ${collapsed ? "" : `<div class="map-evidence-body" id="dashboardMapEvidenceBody">
+          ${renderDashboardCwaImageryControls()}
           <div class="evidence-tabs" role="tablist" aria-label="Map evidence categories">
             ${EVIDENCE_TREE_TABS.map((tab) => `
               <button
@@ -7861,6 +7983,86 @@
           </div>
         </div>`}
       `;
+    }
+
+    function renderDashboardCwaImageryControls() {
+      const imagery = state.dashboardCwaImagery || {};
+      const statusTone = imagery.status === "ready" ? "ok" : imagery.bridgeReady ? "warn" : "info";
+      const statusLabel = imagery.status === "ready" ? "prepared" : imagery.bridgeReady ? "not prepared" : "connecting";
+      const productOptions = [
+        {id: "all", label: "All prepared"},
+        ...asArray(imagery.products),
+      ];
+      return `
+        <section class="dashboard-cwa-imagery" id="dashboardCwaImagery" aria-label="CWA radar and satellite imagery controls">
+          <div class="dashboard-cwa-imagery-header">
+            <strong>CWA rainfall / radar / satellite</strong>
+            <span class="chip ${statusTone}" data-dashboard-cwa-imagery-state>${escapeHtml(statusLabel)}</span>
+          </div>
+          <div class="dashboard-cwa-imagery-grid">
+            <label class="dashboard-cwa-layer-toggle">
+              <input type="checkbox" data-dashboard-cwa-imagery-layer ${imagery.layerEnabled ? "checked" : ""}>
+              <span>Show CWA imagery overlay</span>
+            </label>
+            <label class="dashboard-cwa-layer-toggle">
+              <input type="checkbox" data-dashboard-cwa-rainfall-layer ${imagery.rainfallLayerEnabled ? "checked" : ""}>
+              <span>Show rainfall grid</span>
+            </label>
+            <label>Rain grid
+              <select data-dashboard-cwa-rainfall-product>
+                ${(asArray(imagery.rainfallProducts).length ? imagery.rainfallProducts : [{id: "qpe_past_1h", label: "Past 1h QPE"}, {id: "qpf_next_1h", label: "Next 1h QPF"}]).map(option => `<option value="${escapeHtml(option.id)}" ${option.id === imagery.rainfallProduct ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Rain opacity
+              <input type="range" min="0" max="100" value="${Number(imagery.rainfallOpacityPercent ?? 56)}" data-dashboard-cwa-rainfall-opacity>
+            </label>
+            <div class="cwa-rainfall-legend" data-dashboard-cwa-rainfall-legend aria-label="Rainfall millimetre legend"><span style="--rain-color:#fff">0</span><span style="--rain-color:#77edf1">0.3</span><span style="--rain-color:#00a8f3">1</span><span style="--rain-color:#1ba500">1.5</span><span style="--rain-color:#f4f500">3</span><span style="--rain-color:#ff9800">6</span><span style="--rain-color:#f50000">10</span><span style="--rain-color:#8f0000">17</span><span style="--rain-color:#eb00dc">25+ mm</span></div>
+            <label>Product
+              <select data-dashboard-cwa-imagery-product>
+                ${productOptions.map(option => `<option value="${escapeHtml(option.id)}" ${option.id === imagery.productId ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Window
+              <select data-dashboard-cwa-imagery-window>
+                ${["3h", "6h", "9h", "12h"].map(value => `<option value="${value}" ${value === imagery.windowId ? "selected" : ""}>${value}</option>`).join("")}
+              </select>
+            </label>
+            <label>Frame
+              <input type="range" min="0" max="${Number(imagery.maxFrameIndex || 0)}" value="${Number(imagery.frameIndex || 0)}" data-dashboard-cwa-imagery-timeline>
+            </label>
+            <label>Radar opacity
+              <input type="range" min="0" max="100" value="${Number(imagery.radarOpacityPercent ?? 62)}" data-dashboard-cwa-imagery-opacity="radar">
+            </label>
+            <label>Satellite opacity
+              <input type="range" min="0" max="100" value="${Number(imagery.satelliteOpacityPercent ?? 48)}" data-dashboard-cwa-imagery-opacity="satellite">
+            </label>
+            <button type="button" data-dashboard-cwa-imagery-play aria-pressed="${imagery.playing ? "true" : "false"}">${imagery.playing ? "Pause" : "Play"}</button>
+          </div>
+          <output data-dashboard-cwa-rainfall-status role="status" aria-live="polite">${escapeHtml(dashboardCwaRainfallStatusText(imagery))}</output>
+          <output data-dashboard-cwa-imagery-status role="status" aria-live="polite">${escapeHtml(dashboardCwaImageryStatusText(imagery))}</output>
+          <span class="dashboard-cwa-imagery-boundary">cache-only · candidate-only · image processing stays server-side</span>
+        </section>
+      `;
+    }
+
+    function dashboardCwaImageryStatusText(imagery = state.dashboardCwaImagery || {}) {
+      if (!imagery.bridgeReady) return "Connecting to the same-origin pretrip map controller.";
+      const current = imagery.current;
+      if (!current && imagery.rainfallCurrent) {
+        const cells = Number(imagery.rainfallCurrent.availableCellCount || 0);
+        const coverage = cells > 0 ? `${cells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)";
+        return `${imagery.rainfallCurrent.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${imagery.rainfallCurrent.sourceTimestamp || "unknown time"} · delay ${imagery.rainfallCurrent.dataDelayMinutes ?? "n/a"}m · ${coverage}`;
+      }
+      if (!current) return "Prepared CWA rainfall/imagery unavailable for this project.";
+      return `${current.sourceTimestamp || "unknown time"} · delay ${current.dataDelayMinutes ?? "n/a"}m · ${current.imageType || "imagery"} · ${current.extent || "unknown extent"}`;
+    }
+
+    function dashboardCwaRainfallStatusText(imagery = state.dashboardCwaImagery || {}) {
+      if (!imagery.bridgeReady) return "Connecting to prepared rainfall grids.";
+      const rainfall = imagery.rainfallCurrent;
+      if (!rainfall) return "Prepared rainfall grid unavailable for this project.";
+      const cells = Number(rainfall.availableCellCount || 0);
+      return `${rainfall.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${rainfall.sourceTimestamp || "unknown time"} · valid to ${rainfall.validUntil || "unknown"} · delay ${rainfall.dataDelayMinutes ?? "n/a"}m · ${cells ? `${cells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)"}`;
     }
 
     function renderPretripEvidenceGroup(group, index, options = {}) {
@@ -9032,6 +9234,189 @@
       document.querySelectorAll("[data-map-evidence-source]").forEach((button) => {
         button.addEventListener("click", () => focusDashboardMapEvidence(button.dataset.mapEvidenceSource || ""));
       });
+      bindDashboardCwaImageryControls();
+    }
+
+    function dashboardCwaImageryController() {
+      const frame = document.getElementById("pretripMapFrame");
+      try {
+        return frame?.contentWindow?.scoutCwaImageryController || null;
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function normalizeDashboardCwaImageryState(snapshot = {}) {
+      const products = asArray(snapshot.products)
+        .filter(item => item && typeof item.id === "string")
+        .map(item => ({id: item.id, label: String(item.label || item.id)}));
+      const current = snapshot.current && typeof snapshot.current === "object" ? {
+        frameId: snapshot.current.frameId || null,
+        sourceTimestamp: snapshot.current.sourceTimestamp || null,
+        dataDelayMinutes: snapshot.current.dataDelayMinutes ?? null,
+        imageType: snapshot.current.imageType || null,
+        extent: snapshot.current.extent || null,
+      } : null;
+      return {
+        bridgeReady: true,
+        status: snapshot.status === "ready" ? "ready" : "not_prepared",
+        layerEnabled: Boolean(snapshot.layerEnabled),
+        rainfallLayerEnabled: Boolean(snapshot.rainfallLayerEnabled),
+        rainfallProduct: ["qpe_past_1h", "qpf_next_1h"].includes(snapshot.rainfallProduct)
+          ? snapshot.rainfallProduct
+          : "qpf_next_1h",
+        rainfallProducts: asArray(snapshot.rainfallProducts)
+          .filter(item => item && typeof item.id === "string")
+          .map(item => ({id: item.id, label: String(item.label || item.id)})),
+        rainfallOpacityPercent: Math.max(0, Math.min(100, Number(snapshot.rainfallOpacityPercent) || 0)),
+        rainfallCurrent: snapshot.rainfallCurrent && typeof snapshot.rainfallCurrent === "object"
+          ? snapshot.rainfallCurrent
+          : null,
+        productId: String(snapshot.productId || "all"),
+        products,
+        windowId: ["3h", "6h", "9h", "12h"].includes(snapshot.windowId) ? snapshot.windowId : "12h",
+        frameIndex: Math.max(0, Number(snapshot.frameIndex) || 0),
+        maxFrameIndex: Math.max(0, Number(snapshot.maxFrameIndex) || 0),
+        radarOpacityPercent: Math.max(0, Math.min(100, Number(snapshot.radarOpacityPercent) || 0)),
+        satelliteOpacityPercent: Math.max(0, Math.min(100, Number(snapshot.satelliteOpacityPercent) || 0)),
+        playing: Boolean(snapshot.playing),
+        current,
+      };
+    }
+
+    function syncDashboardCwaImageryControls(snapshot = state.dashboardCwaImagery) {
+      state.dashboardCwaImagery = snapshot;
+      const panel = document.getElementById("dashboardCwaImagery");
+      if (!panel) return;
+      const bridgeReady = Boolean(snapshot.bridgeReady);
+      const layer = panel.querySelector("[data-dashboard-cwa-imagery-layer]");
+      if (layer) layer.checked = Boolean(snapshot.layerEnabled);
+      const rainfallLayer = panel.querySelector("[data-dashboard-cwa-rainfall-layer]");
+      if (rainfallLayer) rainfallLayer.checked = Boolean(snapshot.rainfallLayerEnabled);
+      const rainfallProduct = panel.querySelector("[data-dashboard-cwa-rainfall-product]");
+      if (rainfallProduct) {
+        const options = asArray(snapshot.rainfallProducts).length
+          ? snapshot.rainfallProducts
+          : [{id: "qpe_past_1h", label: "Past 1h QPE"}, {id: "qpf_next_1h", label: "Next 1h QPF"}];
+        rainfallProduct.replaceChildren(...options.map(item => {
+          const option = document.createElement("option");
+          option.value = item.id; option.textContent = item.label;
+          return option;
+        }));
+        rainfallProduct.value = snapshot.rainfallProduct || "qpf_next_1h";
+      }
+      const rainfallOpacity = panel.querySelector("[data-dashboard-cwa-rainfall-opacity]");
+      if (rainfallOpacity) rainfallOpacity.value = String(snapshot.rainfallOpacityPercent ?? 56);
+      const product = panel.querySelector("[data-dashboard-cwa-imagery-product]");
+      if (product) {
+        const options = [{id: "all", label: "All prepared"}, ...asArray(snapshot.products)];
+        product.replaceChildren(...options.map(item => {
+          const option = document.createElement("option");
+          option.value = String(item.id || "all");
+          option.textContent = String(item.label || item.id || "All prepared");
+          return option;
+        }));
+        product.value = options.some(item => item.id === snapshot.productId) ? snapshot.productId : "all";
+      }
+      const windowControl = panel.querySelector("[data-dashboard-cwa-imagery-window]");
+      if (windowControl) windowControl.value = snapshot.windowId || "12h";
+      const timeline = panel.querySelector("[data-dashboard-cwa-imagery-timeline]");
+      if (timeline) {
+        timeline.max = String(snapshot.maxFrameIndex || 0);
+        timeline.value = String(Math.min(snapshot.frameIndex || 0, snapshot.maxFrameIndex || 0));
+      }
+      panel.querySelectorAll("[data-dashboard-cwa-imagery-opacity]").forEach(input => {
+        input.value = String(input.dataset.dashboardCwaImageryOpacity === "radar"
+          ? snapshot.radarOpacityPercent ?? 62
+          : snapshot.satelliteOpacityPercent ?? 48);
+      });
+      const play = panel.querySelector("[data-dashboard-cwa-imagery-play]");
+      if (play) {
+        play.textContent = snapshot.playing ? "Pause" : "Play";
+        play.setAttribute("aria-pressed", snapshot.playing ? "true" : "false");
+      }
+      panel.querySelectorAll("input,select,button").forEach(control => { control.disabled = !bridgeReady; });
+      const status = panel.querySelector("[data-dashboard-cwa-imagery-status]");
+      if (status) {
+        status.setAttribute("aria-live", snapshot.playing ? "off" : "polite");
+        status.textContent = dashboardCwaImageryStatusText(snapshot);
+      }
+      const rainfallStatus = panel.querySelector("[data-dashboard-cwa-rainfall-status]");
+      if (rainfallStatus) rainfallStatus.textContent = dashboardCwaRainfallStatusText(snapshot);
+      const stateChip = panel.querySelector("[data-dashboard-cwa-imagery-state]");
+      if (stateChip) {
+        stateChip.textContent = snapshot.status === "ready" ? "prepared" : bridgeReady ? "not prepared" : "connecting";
+        stateChip.className = `chip ${snapshot.status === "ready" ? "ok" : bridgeReady ? "warn" : "info"}`;
+      }
+    }
+
+    function invokeDashboardCwaImagery(method, ...args) {
+      const controller = dashboardCwaImageryController();
+      if (!controller || typeof controller[method] !== "function") return;
+      const snapshot = controller[method](...args);
+      syncDashboardCwaImageryControls(normalizeDashboardCwaImageryState(snapshot));
+    }
+
+    function bindDashboardCwaImageryControls() {
+      const panel = document.getElementById("dashboardCwaImagery");
+      if (!panel || panel.dataset.bound === "true") return;
+      panel.dataset.bound = "true";
+      panel.querySelector("[data-dashboard-cwa-imagery-layer]")?.addEventListener("change", event => {
+        invokeDashboardCwaImagery("setLayerEnabled", event.currentTarget.checked);
+      });
+      panel.querySelector("[data-dashboard-cwa-rainfall-layer]")?.addEventListener("change", event => {
+        invokeDashboardCwaImagery("setRainfallLayerEnabled", event.currentTarget.checked);
+      });
+      panel.querySelector("[data-dashboard-cwa-rainfall-product]")?.addEventListener("change", event => {
+        invokeDashboardCwaImagery("setRainfallProduct", event.currentTarget.value);
+      });
+      panel.querySelector("[data-dashboard-cwa-rainfall-opacity]")?.addEventListener("input", event => {
+        invokeDashboardCwaImagery("setRainfallOpacity", Number(event.currentTarget.value || 0));
+      });
+      panel.querySelector("[data-dashboard-cwa-imagery-product]")?.addEventListener("change", event => {
+        invokeDashboardCwaImagery("setProduct", event.currentTarget.value);
+      });
+      panel.querySelector("[data-dashboard-cwa-imagery-window]")?.addEventListener("change", event => {
+        invokeDashboardCwaImagery("setWindow", event.currentTarget.value);
+      });
+      panel.querySelector("[data-dashboard-cwa-imagery-timeline]")?.addEventListener("input", event => {
+        invokeDashboardCwaImagery("setFrameIndex", Number(event.currentTarget.value || 0));
+      });
+      panel.querySelectorAll("[data-dashboard-cwa-imagery-opacity]").forEach(input => {
+        input.addEventListener("input", event => {
+          invokeDashboardCwaImagery("setOpacity", event.currentTarget.dataset.dashboardCwaImageryOpacity, Number(event.currentTarget.value || 0));
+        });
+      });
+      panel.querySelector("[data-dashboard-cwa-imagery-play]")?.addEventListener("click", () => {
+        invokeDashboardCwaImagery("setPlaying", !state.dashboardCwaImagery.playing);
+      });
+      syncDashboardCwaImageryControls(state.dashboardCwaImagery);
+    }
+
+    function bindDashboardCwaImageryBridge(frame) {
+      let childWindow;
+      try {
+        childWindow = frame?.contentWindow;
+        if (!childWindow) return;
+        if (frame.dashboardCwaBridgeWindow && frame.dashboardCwaBridgeHandler) {
+          frame.dashboardCwaBridgeWindow.removeEventListener("scout:cwa-imagery-state", frame.dashboardCwaBridgeHandler);
+        }
+        const handler = event => {
+          if (!event?.detail) return;
+          syncDashboardCwaImageryControls(normalizeDashboardCwaImageryState(event.detail));
+        };
+        childWindow.addEventListener("scout:cwa-imagery-state", handler);
+        frame.dashboardCwaBridgeWindow = childWindow;
+        frame.dashboardCwaBridgeHandler = handler;
+        const controller = childWindow.scoutCwaImageryController;
+        if (!controller || typeof controller.getState !== "function") {
+          window.setTimeout(() => bindDashboardCwaImageryBridge(frame), 150);
+          return;
+        }
+        syncDashboardCwaImageryControls(normalizeDashboardCwaImageryState(controller.getState()));
+      } catch (_error) {
+        syncDashboardCwaImageryControls({...state.dashboardCwaImagery, bridgeReady: false, status: "loading"});
+      }
     }
 
     function focusDashboardMapEvidence(sourceId, attempt = 0) {
@@ -9140,6 +9525,7 @@
             #readinessStrip,
             .toolbar-title,
             .tool-disclosure,
+            [data-cwa-imagery-controls],
             .route-pane,
             .detail-pane,
             #hoverHint {
@@ -9361,6 +9747,7 @@
         doc.querySelector(".layer-menu")?.setAttribute("open", "");
         doc.querySelector(".layer-advanced")?.setAttribute("open", "");
         doc.documentElement.dataset.dashboardMapOnly = "true";
+        bindDashboardCwaImageryBridge(frame);
         const hasRenderedMap = Boolean(doc.querySelector("#map[viewBox] [data-layer-group]"));
         if (hasRenderedMap) {
           frame.dataset.mapOnlyReady = "true";

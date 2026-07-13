@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 import threading
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Literal
 from xml.etree.ElementTree import ParseError
@@ -177,6 +179,8 @@ DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_MODEL = "nvidia:z-ai/glm-5.2"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_OUTPUT_DIR_REF = (
     "outputs/briefings/route_context_variants_ai_once"
 )
+RAINFALL_TREND_EVALUATION_SEMAPHORE = threading.BoundedSemaphore(2)
+RAINFALL_LOCATION_AUDIT_LOCK = threading.Lock()
 DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_BASELINE_REF = (
     "outputs/briefings/route_context_briefing.template_backup.20260705T051214Z.html"
 )
@@ -1480,6 +1484,54 @@ class PreTripPrepareLayersRequest(BaseModel):
 
 class PreTripPrepareLayersRunRequest(PreTripPrepareLayersRequest):
     confirm_prepare: bool = False
+
+
+class PreTripRainfallCurrentPosition(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    observed_at: datetime = Field(alias="observedAt")
+    accuracy_m: float | None = Field(default=None, alias="accuracyM", ge=0, le=100_000)
+
+
+class PreTripRainfallTargetPosition(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    id: str = Field(min_length=1, max_length=128)
+
+
+class PreTripRainfallTrendRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    current_position: PreTripRainfallCurrentPosition = Field(alias="currentPosition")
+    target_position: PreTripRainfallTargetPosition = Field(alias="targetPosition")
+    confirm_location_access: Literal[True] = Field(alias="confirmLocationAccess")
+    location_approval_reference: str = Field(
+        alias="locationApprovalReference",
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+    )
+    location_approved_at: datetime = Field(alias="locationApprovedAt")
+    location_approval_scope: Literal["current_trip_rainfall_sampling"] = Field(
+        alias="locationApprovalScope"
+    )
+
+    @model_validator(mode="after")
+    def validate_location_approval(self) -> "PreTripRainfallTrendRequest":
+        approved_at = self.location_approved_at
+        if approved_at.tzinfo is None or approved_at.utcoffset() is None:
+            raise ValueError("locationApprovedAt must include timezone")
+        now = datetime.now(timezone.utc)
+        normalized = approved_at.astimezone(timezone.utc)
+        if normalized > now + timedelta(minutes=5):
+            raise ValueError("location approval cannot be in the future")
+        if normalized < now - timedelta(days=7):
+            raise ValueError("location approval is stale")
+        return self
 
 
 class PreTripRouteContextBriefingRegenerateRequest(BaseModel):
@@ -3948,6 +4000,107 @@ def create_admin_router(
                 "X-Scout-Upstream-Fetch-On-Read": "false",
             },
         )
+
+    @router.get("/pretrip/projects/{project_id}/rainfall-grids")
+    def pretrip_project_rainfall_grids(project_id: str) -> dict[str, Any]:
+        project_root = _validated_rainfall_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        manifest_path = _pretrip_rainfall_manifest_path(project_root)
+        from weather_grid_store import WeatherGridStore
+
+        try:
+            public_manifest = WeatherGridStore(manifest_path.parent).public_manifest()
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Prepared rainfall grid manifest is invalid",
+            ) from exc
+        if not public_manifest.get("products"):
+            raise HTTPException(status_code=404, detail="Rainfall grids not prepared")
+        return {
+            **public_manifest,
+            "projectId": project_id,
+            "layerId": "cwa-qpf",
+            "processingBoundary": {
+                "adminReadIsCacheOnly": True,
+                "upstreamFetchOnRead": False,
+                "candidateOnly": True,
+                "runtimeSafetyTruth": False,
+                "raspberryPiGridProcessing": False,
+                "mobileGridProcessing": False,
+            },
+        }
+
+    @router.post("/pretrip/projects/{project_id}/rainfall-trend")
+    def pretrip_project_rainfall_trend(
+        project_id: str,
+        request: PreTripRainfallTrendRequest,
+    ) -> dict[str, Any]:
+        project_root = _validated_rainfall_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        project, route_points = _pretrip_rainfall_project_and_route(project_root)
+        from route_precipitation_sampler import build_route_precipitation_trend
+        qpe_path = _safe_pretrip_project_ref_path(
+            project_root, project.get("cwa_qpe_numeric_grid_ref")
+        )
+        qpf_path = _safe_pretrip_project_ref_path(
+            project_root, project.get("cwa_qpf_numeric_grid_ref")
+        )
+        if qpe_path is None or qpf_path is None:
+            raise HTTPException(status_code=404, detail="Rainfall grids not prepared")
+        if not RAINFALL_TREND_EVALUATION_SEMAPHORE.acquire(blocking=False):
+            raise HTTPException(
+                status_code=429,
+                detail="Rainfall trend evaluator is busy; retry shortly",
+            )
+        try:
+            qpe_grid = _load_cached_weather_grid(qpe_path)
+            qpf_grid = _load_cached_weather_grid(qpf_path)
+            package = build_route_precipitation_trend(
+                qpe_grid=qpe_grid,
+                qpf_grid=qpf_grid,
+                route_points=route_points,
+                current_position=request.current_position.model_dump(
+                    mode="json", by_alias=True
+                ),
+                target_position=request.target_position.model_dump(
+                    mode="json", by_alias=True
+                ),
+                evaluated_at=datetime.now(timezone.utc),
+            )
+            audit_ref = _append_rainfall_location_approval_audit(
+                project_root,
+                project_id=project_id,
+                approval_reference=request.location_approval_reference,
+                approved_at=request.location_approved_at,
+                scope=request.location_approval_scope,
+                evaluated_at=str(package["evaluatedAt"]),
+            )
+            return {
+                **package,
+                "locationApproval": {
+                    "reference": request.location_approval_reference,
+                    "approvedAt": request.location_approved_at.isoformat(),
+                    "scope": request.location_approval_scope,
+                    "auditRef": audit_ref,
+                    "rawCoordinatesPersisted": False,
+                },
+            }
+        except (OSError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Prepared rainfall grid contract is invalid",
+            ) from exc
+        finally:
+            RAINFALL_TREND_EVALUATION_SEMAPHORE.release()
 
     @router.get("/pretrip/projects/{project_id}/admin-projection")
     def pretrip_project_admin_projection(project_id: str) -> dict[str, Any]:
@@ -7652,6 +7805,157 @@ def _load_cwa_weather_imagery_manifest(project_root: Path) -> dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("artifactKind") != "weatherImageryTimelineManifest":
         raise HTTPException(status_code=422, detail="invalid weather imagery manifest contract")
     return payload
+
+
+def _pretrip_rainfall_manifest_path(project_root: Path) -> Path:
+    try:
+        project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+    path = _safe_pretrip_project_ref_path(
+        project_root,
+        project.get("cwa_rainfall_grid_manifest_ref"),
+    )
+    if path is None:
+        raise HTTPException(status_code=404, detail="Rainfall grids not prepared")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Rainfall grid manifest missing")
+    return path
+
+
+def _validated_rainfall_project_root(
+    pretrip_workspace_root: Path | None,
+    *,
+    project_id: str,
+) -> Path | None:
+    try:
+        _validate_pretrip_import_project_id(project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="invalid project id") from exc
+    project_root = _pretrip_workspace_project_root(
+        pretrip_workspace_root,
+        project_id=project_id,
+    )
+    if project_root is None:
+        return None
+    try:
+        payload = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+    if not isinstance(payload, dict) or str(payload.get("project_id") or "") != project_id:
+        return None
+    if pretrip_workspace_root is not None:
+        configured_root = Path(pretrip_workspace_root).expanduser().resolve()
+        resolved_project = project_root.resolve()
+        if resolved_project != configured_root:
+            try:
+                resolved_project.relative_to(configured_root)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail="unsafe project path") from exc
+    return project_root
+
+
+def _load_cached_weather_grid(path: Path) -> Any:
+    stat = path.stat()
+    return _load_cached_weather_grid_by_identity(
+        str(path.resolve()),
+        stat.st_mtime_ns,
+        stat.st_size,
+    )
+
+
+def _append_rainfall_location_approval_audit(
+    project_root: Path,
+    *,
+    project_id: str,
+    approval_reference: str,
+    approved_at: datetime,
+    scope: str,
+    evaluated_at: str,
+) -> str:
+    ref = "outputs/environment/cwa/rainfall/location_access_audit.jsonl"
+    path = _safe_pretrip_project_ref_path(project_root, ref)
+    if path is None:
+        raise ValueError("unsafe rainfall location audit path")
+    event_id = hashlib.sha256(
+        f"{project_id}|{approval_reference}|{evaluated_at}".encode("utf-8")
+    ).hexdigest()[:24]
+    event = {
+        "eventId": f"rainfall.location_access.{event_id}",
+        "eventType": "rainfall_location_access_approved",
+        "projectId": project_id,
+        "approvalReference": approval_reference,
+        "approvedAt": approved_at.isoformat(),
+        "scope": scope,
+        "evaluatedAt": evaluated_at,
+        "rawCoordinatesPersisted": False,
+        "runtimeSafetyTruth": False,
+    }
+    with RAINFALL_LOCATION_AUDIT_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+    return ref
+
+
+@lru_cache(maxsize=16)
+def _load_cached_weather_grid_by_identity(
+    path: str,
+    _mtime_ns: int,
+    _size: int,
+) -> Any:
+    from weather_grid_store import load_weather_grid_snapshot
+
+    return load_weather_grid_snapshot(Path(path))
+
+
+def _pretrip_rainfall_project_and_route(
+    project_root: Path,
+) -> tuple[dict[str, Any], list[tuple[float, float]]]:
+    try:
+        project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+    if not isinstance(project, dict):
+        raise HTTPException(status_code=422, detail="invalid pre-trip project")
+    route_path = _safe_pretrip_project_ref_path(
+        project_root,
+        project.get("segment_display_geometry_ref"),
+    )
+    if route_path is None or not route_path.is_file():
+        raise HTTPException(status_code=404, detail="Route geometry not prepared")
+    try:
+        payload = json.loads(route_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid route geometry") from exc
+    points: list[tuple[float, float]] = []
+    for segment in payload.get("segments", []) if isinstance(payload, dict) else []:
+        if not isinstance(segment, dict):
+            continue
+        for coordinate_segment in segment.get("coordinate_segments", []):
+            if not isinstance(coordinate_segment, list):
+                continue
+            for point in coordinate_segment:
+                if not isinstance(point, dict):
+                    continue
+                try:
+                    lat = float(point.get("lat"))
+                    lon = float(point.get("lon"))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(lat) or not math.isfinite(lon):
+                    continue
+                if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                    continue
+                candidate = (lat, lon)
+                if not points or points[-1] != candidate:
+                    points.append(candidate)
+    if len(points) < 2:
+        raise HTTPException(status_code=422, detail="route geometry has too few points")
+    if len(points) > 2_000:
+        step = math.ceil(len(points) / 2_000)
+        points = points[::step]
+    return project, points
 
 
 def _empty_cwa_weather_imagery_manifest(project_id: str) -> dict[str, Any]:

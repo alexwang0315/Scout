@@ -133,7 +133,73 @@ const surfaces = [
 const viewports = [
   { id: "desktop", width: 1440, height: 1000 },
   { id: "mobile", width: 390, height: 844 },
+  { id: "compact", width: 320, height: 720 },
 ];
+
+function cwaImageryFixtureManifest() {
+  const frame = (family, index, imageType, opacity) => ({
+    frameId: `${family}.fixture.${index}`,
+    productId: `${family}.${imageType}.taiwan`,
+    sourceTimestamp: `2026-07-13T0${index}:20:00+08:00`,
+    fetchedAt: `2026-07-13T0${index}:27:00+08:00`,
+    imageType,
+    extent: "taiwan",
+    expectedDelayMinutes: family === "radar" ? 12 : 20,
+    dataDelayMinutes: 7,
+    bboxWgs84: { west: 120.5, south: 23.5, east: 121.5, north: 24.5 },
+    mediaType: "image/svg+xml",
+    mapOverlaySupported: true,
+    assetUrl: `/admin/pretrip/projects/chilai_nanhua_day1/weather-imagery/${family}.fixture.${index}`,
+    fixtureOpacity: opacity,
+  });
+  const radarFrames = [frame("radar", 1, "echo_no_terrain", 0.62), frame("radar", 2, "echo_no_terrain", 0.62)];
+  const satelliteFrames = [frame("satellite", 1, "enhanced_color", 0.48), frame("satellite", 2, "enhanced_color", 0.48)];
+  const windows = {
+    "3h": [radarFrames[0].frameId, radarFrames[1].frameId],
+    "6h": [radarFrames[0].frameId, radarFrames[1].frameId],
+    "9h": [radarFrames[0].frameId, radarFrames[1].frameId],
+    "12h": [radarFrames[0].frameId, radarFrames[1].frameId],
+  };
+  const satelliteWindows = Object.fromEntries(Object.entries(windows).map(([key]) => [key, satelliteFrames.map(item => item.frameId)]));
+  return {
+    artifactKind: "weatherImageryTimelineManifest",
+    schemaVersion: "weatherImageryTimelineManifest.v1",
+    projectId: "chilai_nanhua_day1",
+    layerId: "cwa-weather",
+    animationWindowsHours: [3, 6, 9, 12],
+    childOverlays: {
+      radar: { latestFrameId: radarFrames[1].frameId, frames: radarFrames, windows },
+      satellite: { latestFrameId: satelliteFrames[1].frameId, frames: satelliteFrames, windows: satelliteWindows },
+    },
+    processingBoundary: {
+      adminReadIsCacheOnly: true,
+      upstreamFetchOnRead: false,
+      candidateOnly: true,
+      runtimeSafetyTruth: false,
+    },
+  };
+}
+
+async function installCwaImageryFixture(page) {
+  await page.route(/\/admin\/pretrip\/projects\/[^/]+\/weather-imagery(?:\/[^/?]+)?(?:\?.*)?$/, async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith("/weather-imagery")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(cwaImageryFixtureManifest()),
+      });
+      return;
+    }
+    const radar = pathname.includes("/radar.fixture.");
+    const fill = radar ? "rgba(44,160,210,.65)" : "rgba(245,182,47,.42)";
+    await route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${fill}"/></svg>`,
+    });
+  });
+}
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -216,6 +282,7 @@ async function runBrowserChecks(baseUrl, screenshotsDir) {
   try {
     for (const viewport of viewports) {
       const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
+      await installCwaImageryFixture(page);
       const consoleErrors = [];
       page.on("console", (message) => {
         if (message.type() === "error") consoleErrors.push(message.text());
@@ -326,7 +393,7 @@ async function collectFrameShellChecks(surface, page) {
 }
 
 async function collectDashboardFrameReuseChecks(page) {
-  return page.evaluate(async () => {
+  const result = await page.evaluate(async () => {
     const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
     const frame = document.querySelector("#pretripMapFrame");
     if (!frame) throw new Error("Dashboard map frame missing");
@@ -346,7 +413,96 @@ async function collectDashboardFrameReuseChecks(page) {
     const loadCount = Number(frame.dataset.smokeLoadCount || "0");
     const sameSrc = frame.src === initialSrc;
     const visibleAfterReturn = document.querySelector("#dashboardMap")?.hidden === false;
-    const ok = hiddenWhileAway && visibleAfterReturn && sameSrc && loadCount === 0;
+    for (let attempt = 0; attempt < 20 && !document.querySelector("#dashboardCwaImagery"); attempt += 1) {
+      await delay(100);
+    }
+    const cwaPanel = document.querySelector("#dashboardCwaImagery");
+    const cwaSelectors = [
+      "[data-dashboard-cwa-imagery-layer]",
+      "[data-dashboard-cwa-rainfall-layer]",
+      "[data-dashboard-cwa-rainfall-product]",
+      "[data-dashboard-cwa-rainfall-opacity]",
+      "[data-dashboard-cwa-imagery-product]",
+      "[data-dashboard-cwa-imagery-window]",
+      "[data-dashboard-cwa-imagery-timeline]",
+      '[data-dashboard-cwa-imagery-opacity="radar"]',
+      '[data-dashboard-cwa-imagery-opacity="satellite"]',
+      "[data-dashboard-cwa-imagery-play]",
+      "[data-dashboard-cwa-imagery-status]",
+    ];
+    const cwaControls = cwaSelectors.map((selector) => cwaPanel?.querySelector(selector));
+    const panelRect = cwaPanel?.getBoundingClientRect();
+    const cwaControlsInViewport = Boolean(panelRect
+      && panelRect.width > 0
+      && panelRect.height > 0
+      && panelRect.left >= 0
+      && panelRect.right <= window.innerWidth + 1
+      && cwaControls.every((control) => {
+        const rect = control?.getBoundingClientRect();
+        return rect && rect.width >= 24 && rect.height >= 24;
+      }));
+    const controller = frame.contentWindow?.scoutCwaImageryController;
+    let cwaControlsInteractive = false;
+    let cwaOverlayDomUpdated = false;
+    if (controller && cwaControls.every(Boolean)) {
+      const layer = cwaPanel.querySelector("[data-dashboard-cwa-imagery-layer]");
+      const rainfallLayer = cwaPanel.querySelector("[data-dashboard-cwa-rainfall-layer]");
+      const rainfallProduct = cwaPanel.querySelector("[data-dashboard-cwa-rainfall-product]");
+      const rainfallOpacity = cwaPanel.querySelector("[data-dashboard-cwa-rainfall-opacity]");
+      const windowControl = cwaPanel.querySelector("[data-dashboard-cwa-imagery-window]");
+      const radarOpacity = cwaPanel.querySelector('[data-dashboard-cwa-imagery-opacity="radar"]');
+      const timeline = cwaPanel.querySelector("[data-dashboard-cwa-imagery-timeline]");
+      const play = cwaPanel.querySelector("[data-dashboard-cwa-imagery-play]");
+      layer.checked = true;
+      layer.dispatchEvent(new Event("change", {bubbles: true}));
+      rainfallLayer.checked = true;
+      rainfallLayer.dispatchEvent(new Event("change", {bubbles: true}));
+      rainfallProduct.value = "qpe_past_1h";
+      rainfallProduct.dispatchEvent(new Event("change", {bubbles: true}));
+      rainfallOpacity.value = "41";
+      rainfallOpacity.dispatchEvent(new Event("input", {bubbles: true}));
+      windowControl.value = "3h";
+      windowControl.dispatchEvent(new Event("change", {bubbles: true}));
+      radarOpacity.value = "37";
+      radarOpacity.dispatchEvent(new Event("input", {bubbles: true}));
+      timeline.value = "1";
+      timeline.dispatchEvent(new Event("input", {bubbles: true}));
+      play.click();
+      await delay(50);
+      const active = controller.getState();
+      play.click();
+      await delay(50);
+      const stopped = controller.getState();
+      const radarImage = frame.contentDocument?.querySelector('image[data-cwa-imagery-family="radar"]');
+      const satelliteImage = frame.contentDocument?.querySelector('image[data-cwa-imagery-family="satellite"]');
+      cwaOverlayDomUpdated = radarImage?.getAttribute("data-cwa-imagery-frame") === "radar.fixture.2"
+        && satelliteImage?.getAttribute("data-cwa-imagery-frame") === "satellite.fixture.2"
+        && Math.abs(Number(radarImage?.getAttribute("opacity")) - 0.37) < 0.001;
+      cwaControlsInteractive = active.layerEnabled === true
+        && active.rainfallLayerEnabled === true
+        && active.rainfallProduct === "qpe_past_1h"
+        && active.rainfallOpacityPercent === 41
+        && active.windowId === "3h"
+        && active.frameIndex === 1
+        && active.radarOpacityPercent === 37
+        && active.playing === true
+        && stopped.playing === false;
+      controller.setLayerEnabled(false);
+      controller.setRainfallLayerEnabled(false);
+      controller.setRainfallProduct("qpf_next_1h");
+      controller.setRainfallOpacity(56);
+      controller.setWindow("12h");
+      controller.setOpacity("radar", 62);
+    }
+    const cwaOverlayImages = frame.contentDocument?.querySelectorAll("image[data-cwa-imagery-family]").length || 0;
+    const ok = hiddenWhileAway
+      && visibleAfterReturn
+      && sameSrc
+      && loadCount === 0
+      && cwaControlsInViewport
+      && cwaControlsInteractive
+      && cwaOverlayImages >= 2
+      && cwaOverlayDomUpdated;
     if (!ok) {
       throw new Error(JSON.stringify({
         hiddenWhileAway,
@@ -355,10 +511,95 @@ async function collectDashboardFrameReuseChecks(page) {
         loadCount,
         initialSrc,
         currentSrc: frame.src,
+        cwaControlsInViewport,
+        cwaControlsInteractive,
+        cwaOverlayImages,
+        cwaOverlayDomUpdated,
       }));
     }
-    return { ok, hiddenWhileAway, visibleAfterReturn, sameSrc, loadCount };
+    return {
+      ok,
+      hiddenWhileAway,
+      visibleAfterReturn,
+      sameSrc,
+      loadCount,
+      cwaControlsInViewport,
+      cwaControlsInteractive,
+      cwaOverlayImages,
+      cwaOverlayDomUpdated,
+    };
   });
+  const focusOrder = [
+    "[data-dashboard-cwa-imagery-layer]",
+    "[data-dashboard-cwa-rainfall-layer]",
+    "[data-dashboard-cwa-rainfall-product]",
+    "[data-dashboard-cwa-rainfall-opacity]",
+    "[data-dashboard-cwa-imagery-product]",
+    "[data-dashboard-cwa-imagery-window]",
+    "[data-dashboard-cwa-imagery-timeline]",
+    '[data-dashboard-cwa-imagery-opacity="radar"]',
+    '[data-dashboard-cwa-imagery-opacity="satellite"]',
+    "[data-dashboard-cwa-imagery-play]",
+  ];
+  await page.locator(focusOrder[0]).focus();
+  await page.keyboard.press("Space");
+  const keyboardFocusResults = [{ selector: focusOrder[0], focused: true }];
+  for (const selector of focusOrder.slice(1)) {
+    await page.keyboard.press("Tab");
+    keyboardFocusResults.push({
+      selector,
+      focused: await page.evaluate((candidate) => document.activeElement?.matches(candidate) === true, selector),
+    });
+  }
+  const focusVisible = await page.evaluate(() => {
+    const node = document.activeElement;
+    if (!node) return false;
+    const style = getComputedStyle(node);
+    return style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth || "0") >= 2;
+  });
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(50);
+  const playingFromKeyboard = await page.evaluate(() => (
+    document.querySelector("#pretripMapFrame")?.contentWindow?.scoutCwaImageryController?.getState?.().playing === true
+  ));
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(50);
+  await page.locator("[data-dashboard-cwa-imagery-timeline]").focus();
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(50);
+  const rangeChangedFromKeyboard = await page.evaluate(() => (
+    document.querySelector("#pretripMapFrame")?.contentWindow?.scoutCwaImageryController?.getState?.().frameIndex === 1
+  ));
+  await page.evaluate(() => {
+    const controller = document.querySelector("#pretripMapFrame")?.contentWindow?.scoutCwaImageryController;
+    controller?.setLayerEnabled(false);
+    controller?.setRainfallLayerEnabled(false);
+    controller?.setRainfallProduct("qpf_next_1h");
+    controller?.setRainfallOpacity(56);
+    controller?.setFrameIndex(0);
+    controller?.setPlaying(false);
+  });
+  const cwaKeyboardAccessible = keyboardFocusResults.every(item => item.focused)
+    && focusVisible
+    && playingFromKeyboard
+    && rangeChangedFromKeyboard;
+  if (!cwaKeyboardAccessible) {
+    throw new Error(JSON.stringify({
+      cwaKeyboardAccessible,
+      keyboardFocusResults,
+      focusVisible,
+      playingFromKeyboard,
+      rangeChangedFromKeyboard,
+    }));
+  }
+  return {
+    ...result,
+    cwaKeyboardAccessible,
+    keyboardFocusResults,
+    focusVisible,
+    playingFromKeyboard,
+    rangeChangedFromKeyboard,
+  };
 }
 
 async function waitForSurface(surface, page) {

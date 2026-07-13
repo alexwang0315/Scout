@@ -656,6 +656,9 @@
     .cwa-qpf-point { fill: #f59e0b; stroke: #fff7ed; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
     .cwa-qpf-point.qpf-high { fill: #d97706; }
     .cwa-qpf-point.qpf-extreme { fill: #b91c1c; }
+    .cwa-rainfall-cell { stroke: rgba(15, 23, 42, .16); stroke-width: .35; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .cwa-rainfall-legend { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(9, minmax(28px, 1fr)); gap: 2px; font-size: 10px; text-align: center; }
+    .cwa-rainfall-legend span::before { content: ""; display: block; height: 8px; border-radius: 2px; background: var(--rain-color); border: 1px solid rgba(15,23,42,.16); }
     .cwa-weather-point { fill: #0ea5e9; stroke: #e0f2fe; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
     .cwa-weather-point.weather-warning { fill: #dc2626; stroke: #fff1f2; }
     .environment-extent { vector-effect: non-scaling-stroke; stroke-width: 2; stroke-dasharray: 10 6; pointer-events: visiblePainted; }
@@ -1719,14 +1722,18 @@
                     <label title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>
                     <label title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>
                     <fieldset data-cwa-imagery-controls style="grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:6px;padding:8px;border:1px solid #334155;border-radius:8px">
-                      <legend>CWA radar / satellite</legend>
+                      <legend>CWA rainfall / radar / satellite</legend>
+                      <label>Rain grid <select data-cwa-rainfall-product><option value="qpe_past_1h">Past 1h QPE</option><option value="qpf_next_1h" selected>Next 1h QPF</option></select></label>
+                      <label>Rain opacity <input type="range" min="0" max="100" value="56" data-cwa-rainfall-opacity></label>
+                      <div class="cwa-rainfall-legend" data-cwa-rainfall-legend aria-label="Rainfall millimetre legend"><span style="--rain-color:#fff">0</span><span style="--rain-color:#77edf1">0.3</span><span style="--rain-color:#00a8f3">1</span><span style="--rain-color:#1ba500">1.5</span><span style="--rain-color:#f4f500">3</span><span style="--rain-color:#ff9800">6</span><span style="--rain-color:#f50000">10</span><span style="--rain-color:#8f0000">17</span><span style="--rain-color:#eb00dc">25+ mm</span></div>
+                      <output data-cwa-rainfall-status role="status" aria-live="polite" style="grid-column:1/-1">Prepared rainfall grid not loaded</output>
                       <label>Product <select data-cwa-imagery-product><option value="all">All prepared</option></select></label>
                       <label>Window <select data-cwa-imagery-window><option value="3h">3h</option><option value="6h">6h</option><option value="9h">9h</option><option value="12h" selected>12h</option></select></label>
                       <label>Frame <input type="range" min="0" max="0" value="0" data-cwa-imagery-timeline></label>
                       <label>Radar opacity <input type="range" min="0" max="100" value="62" data-cwa-imagery-opacity="radar"></label>
                       <label>Satellite opacity <input type="range" min="0" max="100" value="48" data-cwa-imagery-opacity="satellite"></label>
                       <button type="button" data-cwa-imagery-play aria-pressed="false">Play</button>
-                      <output data-cwa-imagery-status style="grid-column:1/-1">Prepared cache not loaded</output>
+                      <output data-cwa-imagery-status role="status" aria-live="polite" style="grid-column:1/-1">Prepared cache not loaded</output>
                     </fieldset>
                     <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
                     <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
@@ -6370,6 +6377,7 @@
       svg.appendChild(riskDeltaGroup);
 
       const cwaQpfGroup = el("g", {"data-layer-group": "cwa-qpf"});
+      renderCwaRainfallGrid(cwaQpfGroup, bounds, view.cwa_qpf, el);
       renderEnvironmentExtent(cwaQpfGroup, bounds, "cwa-qpf", view.cwa_qpf, 0);
       (view.cwa_qpf?.points || []).forEach(point => {
         const [x, y] = project(bounds, point.lat, point.lon);
@@ -7393,17 +7401,73 @@
       windowId: "12h",
       frameIndex: 0,
       productId: "all",
+      rainfallProduct: "qpf_next_1h",
+      rainfallOpacity: 0.56,
       radarOpacity: 0.62,
       satelliteOpacity: 0.48,
       playTimer: null
     };
+    function renderableCwaImageryFrame(frame) {
+      return Boolean(frame?.assetUrl && frame?.bboxWgs84 && frame.mapOverlaySupported !== false);
+    }
+    function cwaWeatherLayerInput() {
+      return [...document.querySelectorAll("input[data-layer]")]
+        .find(input => input.dataset.layer === "cwa-weather") || null;
+    }
+    function cwaRainfallLayerInput() {
+      return [...document.querySelectorAll("input[data-layer]")]
+        .find(input => input.dataset.layer === "cwa-qpf") || null;
+    }
+    function cwaRainfallProductMetadata() {
+      return (state?.view?.cwa_qpf?.rainfall_products || [])
+        .find(item => item.gridKind === cwaImageryUi.rainfallProduct) || null;
+    }
+    function cwaRainfallColor(value) {
+      const mm = Number(value || 0);
+      if (mm >= 25) return "#eb00dc";
+      if (mm >= 17) return "#8f0000";
+      if (mm >= 10) return "#f50000";
+      if (mm >= 6) return "#ff9800";
+      if (mm >= 3) return "#f4f500";
+      if (mm >= 1.5) return "#1ba500";
+      if (mm >= 1) return "#00a8f3";
+      if (mm >= 0.3) return "#77edf1";
+      return "#ffffff";
+    }
+    function renderCwaRainfallGrid(group, bounds, summary, elementFn) {
+      const rainGroup = elementFn("g", {
+        "data-cwa-rainfall-grid": cwaImageryUi.rainfallProduct,
+        opacity: cwaImageryUi.rainfallOpacity
+      });
+      (summary?.grid_cells || [])
+        .filter(cell => cell.grid_kind === cwaImageryUi.rainfallProduct && Number(cell.rainfall_mm) > 0)
+        .forEach(cell => {
+          const points = (cell.coordinates || []).map(coordinate => {
+            const [x, y] = project(bounds, Number(coordinate[1]), Number(coordinate[0]));
+            return `${x},${y}`;
+          });
+          if (points.length < 4) return;
+          const polygon = elementFn("polygon", {
+            points: points.join(" "),
+            fill: cwaRainfallColor(cell.rainfall_mm),
+            class: "cwa-rainfall-cell",
+            "data-cwa-rainfall-kind": cell.grid_kind,
+            "data-cwa-rainfall-mm": cell.rainfall_mm
+          });
+          attachEvidence(polygon, cell);
+          rainGroup.appendChild(polygon);
+        });
+      group.appendChild(rainGroup);
+    }
     function cwaImageryFrames(family) {
       const overlay = cwaImageryUi.manifest?.childOverlays?.[family] || {};
       const windowIds = overlay.windows?.[cwaImageryUi.windowId] || [];
       const hasWindow = Object.prototype.hasOwnProperty.call(overlay.windows || {}, cwaImageryUi.windowId);
       return (overlay.frames || []).filter(frame => {
         const inWindow = !hasWindow || windowIds.includes(frame.frameId);
-        return inWindow && (cwaImageryUi.productId === "all" || frame.productId === cwaImageryUi.productId);
+        return renderableCwaImageryFrame(frame)
+          && inWindow
+          && (cwaImageryUi.productId === "all" || frame.productId === cwaImageryUi.productId);
       });
     }
     function selectedCwaImageryFrame(family) {
@@ -7423,6 +7487,7 @@
           width: Math.abs(x2 - x1), height: Math.abs(y2 - y1),
           opacity: family === "radar" ? cwaImageryUi.radarOpacity : cwaImageryUi.satelliteOpacity,
           preserveAspectRatio: "none",
+          "aria-hidden": "true",
           "data-cwa-imagery-family": family,
           "data-cwa-imagery-frame": frame.frameId
         }));
@@ -7432,18 +7497,82 @@
       if (typeof state !== "undefined" && state?.view && typeof renderMap === "function") renderMap(state.view);
       if (typeof debugPageState !== "undefined" && debugPageState?.projection && typeof renderDebugEvidenceMap === "function") renderDebugEvidenceMap(debugPageState.projection);
     }
+    function cwaImageryStateSnapshot() {
+      const products = new Map();
+      ["radar", "satellite"].forEach(family => {
+        (cwaImageryUi.manifest?.childOverlays?.[family]?.frames || []).filter(renderableCwaImageryFrame).forEach(frame => {
+          if (frame.productId) products.set(frame.productId, `${family}: ${frame.imageType || frame.productId} / ${frame.extent || "unknown"}`);
+        });
+      });
+      const radarFrames = cwaImageryFrames("radar");
+      const satelliteFrames = cwaImageryFrames("satellite");
+      const maxFrames = Math.max(radarFrames.length, satelliteFrames.length, 1);
+      const current = selectedCwaImageryFrame("radar") || selectedCwaImageryFrame("satellite");
+      const rainfallCurrent = cwaRainfallProductMetadata();
+      return {
+        status: current || rainfallCurrent ? "ready" : "not_prepared",
+        layerEnabled: Boolean(cwaWeatherLayerInput()?.checked),
+        rainfallLayerEnabled: Boolean(cwaRainfallLayerInput()?.checked),
+        rainfallProduct: cwaImageryUi.rainfallProduct,
+        rainfallProducts: (state?.view?.cwa_qpf?.rainfall_products || []).map(item => ({
+          id: item.gridKind,
+          label: item.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"
+        })),
+        rainfallOpacityPercent: Math.round(cwaImageryUi.rainfallOpacity * 100),
+        rainfallCurrent,
+        productId: cwaImageryUi.productId,
+        products: [...products.entries()].map(([id, label]) => ({id, label})),
+        windowId: cwaImageryUi.windowId,
+        frameIndex: cwaImageryUi.frameIndex,
+        maxFrameIndex: maxFrames - 1,
+        radarOpacityPercent: Math.round(cwaImageryUi.radarOpacity * 100),
+        satelliteOpacityPercent: Math.round(cwaImageryUi.satelliteOpacity * 100),
+        playing: Boolean(cwaImageryUi.playTimer),
+        current: current ? {
+          frameId: current.frameId || null,
+          sourceTimestamp: current.sourceTimestamp || null,
+          dataDelayMinutes: current.dataDelayMinutes ?? null,
+          imageType: current.imageType || null,
+          extent: current.extent || null
+        } : null,
+        boundary: {
+          cacheOnly: true,
+          candidateOnly: true,
+          browserImageProcessing: false
+        }
+      };
+    }
+    function publishCwaImageryState() {
+      window.dispatchEvent(new CustomEvent("scout:cwa-imagery-state", {
+        detail: cwaImageryStateSnapshot()
+      }));
+    }
     function syncCwaImageryControls() {
       const products = new Map();
       ["radar", "satellite"].forEach(family => {
-        (cwaImageryUi.manifest?.childOverlays?.[family]?.frames || []).forEach(frame => {
+        (cwaImageryUi.manifest?.childOverlays?.[family]?.frames || []).filter(renderableCwaImageryFrame).forEach(frame => {
           if (frame.productId) products.set(frame.productId, `${family}: ${frame.imageType || frame.productId} / ${frame.extent || "unknown"}`);
         });
       });
       document.querySelectorAll("[data-cwa-imagery-product]").forEach(select => {
         const selected = cwaImageryUi.productId;
-        select.innerHTML = '<option value="all">All prepared</option>' + [...products.entries()]
-          .map(([id, label]) => `<option value="${id}">${label}</option>`).join("");
+        const allOption = document.createElement("option");
+        allOption.value = "all";
+        allOption.textContent = "All prepared";
+        const productOptions = [...products.entries()].map(([id, label]) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = label;
+          return option;
+        });
+        select.replaceChildren(allOption, ...productOptions);
         select.value = products.has(selected) ? selected : "all";
+      });
+      document.querySelectorAll("[data-cwa-rainfall-product]").forEach(select => {
+        select.value = cwaImageryUi.rainfallProduct;
+      });
+      document.querySelectorAll("[data-cwa-rainfall-opacity]").forEach(input => {
+        input.value = String(Math.round(cwaImageryUi.rainfallOpacity * 100));
       });
       const maxFrames = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length, 1);
       cwaImageryUi.frameIndex = Math.min(cwaImageryUi.frameIndex, maxFrames - 1);
@@ -7452,10 +7581,25 @@
         input.value = String(cwaImageryUi.frameIndex);
       });
       const current = selectedCwaImageryFrame("radar") || selectedCwaImageryFrame("satellite");
+      const rainfall = cwaRainfallProductMetadata();
+      const rainfallCells = Number(rainfall?.availableCellCount || 0);
+      const rainfallFreshness = rainfall?.freshness?.status || "unknown_freshness";
+      const rainfallStatus = rainfall
+        ? `${rainfallFreshness === "stale_data" ? "STALE · " : ""}${rainfall.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${rainfall.sourceTimestamp || "unknown time"} · valid to ${rainfall.validUntil || "unknown"} · delay ${rainfall.dataDelayMinutes ?? "n/a"}m · ${rainfallCells ? `${rainfallCells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)"}`
+        : "Prepared rainfall grid unavailable";
+      document.querySelectorAll("[data-cwa-rainfall-status]").forEach(output => {
+        output.textContent = rainfallStatus;
+      });
       const status = current
         ? `${current.sourceTimestamp || "unknown time"} · delay ${current.dataDelayMinutes ?? "n/a"}m · ${current.imageType || "imagery"}`
-        : "Prepared CWA imagery unavailable";
-      document.querySelectorAll("[data-cwa-imagery-status]").forEach(output => { output.textContent = status; });
+        : rainfall
+          ? `${rainfallFreshness === "stale_data" ? "STALE · " : ""}${rainfall.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${rainfall.sourceTimestamp || "unknown time"} · delay ${rainfall.dataDelayMinutes ?? "n/a"}m · ${rainfallCells ? `${rainfallCells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)"}`
+          : "Prepared CWA rainfall/imagery unavailable";
+      document.querySelectorAll("[data-cwa-imagery-status]").forEach(output => {
+        output.setAttribute("aria-live", cwaImageryUi.playTimer ? "off" : "polite");
+        output.textContent = status;
+      });
+      publishCwaImageryState();
     }
     async function loadCwaWeatherImagery(projectId) {
       try {
@@ -7468,6 +7612,21 @@
       return cwaImageryUi.manifest;
     }
     function bindCwaWeatherImageryControls() {
+      document.querySelectorAll("[data-cwa-rainfall-product]").forEach(select => {
+        select.addEventListener("change", () => {
+          cwaImageryUi.rainfallProduct = select.value;
+          syncCwaImageryControls(); renderCurrentCwaImagerySurface();
+        });
+      });
+      document.querySelectorAll("[data-cwa-rainfall-opacity]").forEach(input => {
+        input.addEventListener("input", () => {
+          cwaImageryUi.rainfallOpacity = Math.max(0, Math.min(100, Number(input.value) || 0)) / 100;
+          document.querySelectorAll("[data-cwa-rainfall-grid]").forEach(group => {
+            group.setAttribute("opacity", String(cwaImageryUi.rainfallOpacity));
+          });
+          publishCwaImageryState();
+        });
+      });
       document.querySelectorAll("[data-cwa-imagery-product]").forEach(select => {
         select.addEventListener("change", () => {
           cwaImageryUi.productId = select.value; cwaImageryUi.frameIndex = 0;
@@ -7491,14 +7650,15 @@
           const value = Number(input.value || 0) / 100;
           if (input.dataset.cwaImageryOpacity === "radar") cwaImageryUi.radarOpacity = value;
           else cwaImageryUi.satelliteOpacity = value;
-          renderCurrentCwaImagerySurface();
+          renderCurrentCwaImagerySurface(); publishCwaImageryState();
         });
       });
       document.querySelectorAll("[data-cwa-imagery-play]").forEach(button => {
         button.addEventListener("click", () => {
           if (cwaImageryUi.playTimer) {
             clearInterval(cwaImageryUi.playTimer); cwaImageryUi.playTimer = null;
-            button.textContent = "Play"; button.setAttribute("aria-pressed", "false"); return;
+            button.textContent = "Play"; button.setAttribute("aria-pressed", "false");
+            syncCwaImageryControls(); publishCwaImageryState(); return;
           }
           button.textContent = "Pause"; button.setAttribute("aria-pressed", "true");
           cwaImageryUi.playTimer = setInterval(() => {
@@ -7506,10 +7666,76 @@
             cwaImageryUi.frameIndex = (cwaImageryUi.frameIndex + 1) % maxFrames;
             syncCwaImageryControls(); renderCurrentCwaImagerySurface();
           }, 700);
+          publishCwaImageryState();
         });
       });
       syncCwaImageryControls();
     }
+    window.scoutCwaImageryController = Object.freeze({
+      getState: () => cwaImageryStateSnapshot(),
+      setLayerEnabled: enabled => {
+        const input = cwaWeatherLayerInput();
+        if (!input) return cwaImageryStateSnapshot();
+        input.checked = Boolean(enabled);
+        input.dispatchEvent(new Event("change", {bubbles: true}));
+        publishCwaImageryState();
+        return cwaImageryStateSnapshot();
+      },
+      setRainfallLayerEnabled: enabled => {
+        const input = cwaRainfallLayerInput();
+        if (!input) return cwaImageryStateSnapshot();
+        input.checked = Boolean(enabled);
+        input.dispatchEvent(new Event("change", {bubbles: true}));
+        publishCwaImageryState();
+        return cwaImageryStateSnapshot();
+      },
+      setRainfallProduct: productId => {
+        if (["qpe_past_1h", "qpf_next_1h"].includes(productId)) {
+          cwaImageryUi.rainfallProduct = productId;
+        }
+        syncCwaImageryControls(); renderCurrentCwaImagerySurface();
+        return cwaImageryStateSnapshot();
+      },
+      setRainfallOpacity: percent => {
+        cwaImageryUi.rainfallOpacity = Math.max(0, Math.min(100, Number(percent) || 0)) / 100;
+        syncCwaImageryControls();
+        document.querySelectorAll("[data-cwa-rainfall-grid]").forEach(group => {
+          group.setAttribute("opacity", String(cwaImageryUi.rainfallOpacity));
+        });
+        publishCwaImageryState();
+        return cwaImageryStateSnapshot();
+      },
+      setProduct: productId => {
+        cwaImageryUi.productId = String(productId || "all");
+        cwaImageryUi.frameIndex = 0;
+        syncCwaImageryControls(); renderCurrentCwaImagerySurface();
+        return cwaImageryStateSnapshot();
+      },
+      setWindow: windowId => {
+        if (["3h", "6h", "9h", "12h"].includes(windowId)) cwaImageryUi.windowId = windowId;
+        cwaImageryUi.frameIndex = 0;
+        syncCwaImageryControls(); renderCurrentCwaImagerySurface();
+        return cwaImageryStateSnapshot();
+      },
+      setFrameIndex: frameIndex => {
+        const max = cwaImageryStateSnapshot().maxFrameIndex;
+        cwaImageryUi.frameIndex = Math.max(0, Math.min(max, Number(frameIndex) || 0));
+        syncCwaImageryControls(); renderCurrentCwaImagerySurface();
+        return cwaImageryStateSnapshot();
+      },
+      setOpacity: (family, percent) => {
+        const opacity = Math.max(0, Math.min(100, Number(percent) || 0)) / 100;
+        if (family === "radar") cwaImageryUi.radarOpacity = opacity;
+        if (family === "satellite") cwaImageryUi.satelliteOpacity = opacity;
+        renderCurrentCwaImagerySurface(); publishCwaImageryState();
+        return cwaImageryStateSnapshot();
+      },
+      setPlaying: playing => {
+        const active = Boolean(cwaImageryUi.playTimer);
+        if (Boolean(playing) !== active) document.querySelector("[data-cwa-imagery-play]")?.click();
+        return cwaImageryStateSnapshot();
+      }
+    });
     async function reloadProjectView() {
       const selectedSourceId = evidenceSourceId(state.selected);
       const response = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`);

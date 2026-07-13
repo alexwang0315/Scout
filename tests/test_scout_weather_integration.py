@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import io
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,7 @@ from scout_weather_integration import (
     segment_gpx_route,
     weather_risk_score,
     write_route_weather_package,
+    _decode_cwa_zip_payload,
 )
 from scout_weather_window_tool import assess_scout_weather_window
 from taiwan_township_lookup import make_township_lookup_callback
@@ -71,6 +74,16 @@ def test_resolve_cwa_api_key_prefers_scout_env_and_keeps_legacy_fallback() -> No
     assert preferred_env == "SCOUT_CWA_API_KEY"
     assert legacy_key == "legacy-server-side-key"
     assert legacy_env == "CWA_API_KEY"
+
+
+def test_cwa_zip_decoder_rejects_excessive_entry_count() -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for index in range(513):
+            archive.writestr(f"{index}.xml", "<root />")
+
+    with pytest.raises(ValueError, match="entry limit"):
+        _decode_cwa_zip_payload("fixture", buffer.getvalue())
 
 
 def test_normalize_cwa_36h_forecast_to_scout_weather_points() -> None:
