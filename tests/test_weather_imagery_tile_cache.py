@@ -1,6 +1,8 @@
 from pathlib import Path
 import io
 from math import asinh, pi, radians, tan
+import os
+import time
 
 import pytest
 
@@ -31,10 +33,36 @@ def test_cache_stores_content_addressed_georeferenced_frame(tmp_path: Path) -> N
     assert frame.image_type == "echo_no_terrain"
     assert frame.extent == "taiwan"
     assert frame.expected_delay_minutes == spec.expected_delay_minutes
+    assert frame.update_interval_minutes == spec.update_interval_minutes
     assert frame.cache_ref.endswith(".png")
     assert cache.read_asset(frame.cache_ref) == b"small-fixture-image"
+    assert cache.asset_exists(frame.cache_ref) is True
+    assert cache.asset_exists("frames/missing.png") is False
     assert frame.to_dict()["sourceTimestamp"] == "2026-07-11T03:20:00Z"
     assert frame.to_dict()["fetchedAt"] == "2026-07-11T03:27:00Z"
+    assert frame.to_dict()["updateIntervalMinutes"] == spec.update_interval_minutes
+
+
+def test_cache_prunes_an_expired_frame_as_one_bundle(tmp_path: Path) -> None:
+    spec = build_cwa_imagery_registry()["radar.integrated.taiwan.transparent"]
+    cache = WeatherImageryTileCache(tmp_path / "cache", max_age_hours=1)
+    frame = cache.put_frame(
+        spec,
+        source_timestamp="2026-07-11T03:20:00Z",
+        fetched_at="2026-07-11T03:27:00Z",
+        content=b"bundle-image",
+        media_type="image/png",
+        dimensions=(4, 4),
+        build_display_asset=False,
+    )
+    metadata_path = next(cache.root.glob("frames/*/*/*.json"))
+    expired = time.time() - 7_200
+    os.utime(metadata_path, (expired, expired))
+
+    cache.prune()
+
+    assert cache.get_frame(frame.frame_id) is None
+    assert list(metadata_path.parent.glob("*")) == []
 
 
 def test_cache_rejects_traversal_and_never_fetches_on_read(tmp_path: Path) -> None:
