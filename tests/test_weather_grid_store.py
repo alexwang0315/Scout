@@ -3,7 +3,7 @@ from __future__ import annotations
 import gzip
 import json
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from cwa_precipitation_grid import parse_qpesums_grid
@@ -87,3 +87,18 @@ def test_snapshot_loader_rejects_filename_content_hash_mismatch(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="content hash"):
         load_weather_grid_snapshot(tampered_name)
+
+
+def test_public_manifest_does_not_report_ready_with_only_one_product(
+    tmp_path: Path,
+) -> None:
+    store = WeatherGridStore(tmp_path / "rainfall")
+    store.update_manifest([_grid("O-B0045-001")])
+
+    public = store.public_manifest(
+        evaluated_at=datetime(2026, 7, 13, 3, 40, tzinfo=timezone.utc)
+    )
+
+    assert [item["gridKind"] for item in public["products"]] == ["qpe_past_1h"]
+    assert public["products"][0]["freshness"]["status"] == "current"
+    assert public["status"] != "ready"
