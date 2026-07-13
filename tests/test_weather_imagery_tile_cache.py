@@ -1,7 +1,8 @@
-from pathlib import Path
 import io
+import json
 from math import asinh, pi, radians, tan
 import os
+from pathlib import Path
 import time
 
 import pytest
@@ -63,6 +64,126 @@ def test_cache_prunes_an_expired_frame_as_one_bundle(tmp_path: Path) -> None:
 
     assert cache.get_frame(frame.frame_id) is None
     assert list(metadata_path.parent.glob("*")) == []
+
+
+def test_prune_tolerates_invalid_metadata_unsafe_refs_and_unlink_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = WeatherImageryTileCache(tmp_path / "cache", max_age_hours=1)
+    expired = time.time() - 7_200
+
+    invalid_dir = cache.root / "frames/fixture/invalid"
+    invalid_dir.mkdir(parents=True)
+    invalid_metadata = invalid_dir / "invalid.json"
+    invalid_metadata.write_text("not-json", encoding="utf-8")
+    os.utime(invalid_metadata, (expired, expired))
+
+    unsafe_dir = cache.root / "frames/fixture/unsafe"
+    unsafe_dir.mkdir(parents=True)
+    unsafe_metadata = unsafe_dir / "unsafe.json"
+    unsafe_metadata.write_text(
+        json.dumps({"cacheRef": "../outside-cache.png"}),
+        encoding="utf-8",
+    )
+    os.utime(unsafe_metadata, (expired, expired))
+
+    failure_dir = cache.root / "frames/fixture/unlink-failure"
+    failure_dir.mkdir(parents=True)
+    stubborn_asset = failure_dir / "stubborn.png"
+    stubborn_asset.write_bytes(b"stubborn")
+    failure_metadata = failure_dir / "frame.json"
+    failure_metadata.write_text(
+        json.dumps(
+            {
+                "cacheRef": stubborn_asset.relative_to(cache.root).as_posix(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    os.utime(failure_metadata, (expired, expired))
+
+    original_unlink = Path.unlink
+
+    def unlink_with_failure(path: Path, *args: object, **kwargs: object) -> None:
+        if path == stubborn_asset:
+            raise OSError("simulated unlink failure")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink_with_failure)
+
+    result = cache.prune()
+
+    assert result["removedFiles"] == 3
+    assert not invalid_metadata.exists()
+    assert not unsafe_metadata.exists()
+    assert not failure_metadata.exists()
+    assert stubborn_asset.read_bytes() == b"stubborn"
+
+
+def test_prune_tolerates_non_files_stat_errors_and_nonempty_directories(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = WeatherImageryTileCache(tmp_path / "cache")
+    bundle_dir = cache.root / "frames/fixture/scan-errors"
+    bundle_dir.mkdir(parents=True)
+    (bundle_dir / "nested").mkdir()
+    unreadable_file = bundle_dir / "unreadable.bin"
+    unreadable_file.write_bytes(b"unreadable")
+
+    original_is_file = Path.is_file
+    original_stat = Path.stat
+
+    def is_file_for_scan(path: Path) -> bool:
+        if path == unreadable_file:
+            return True
+        return original_is_file(path)
+
+    def stat_with_failure(path: Path, *args: object, **kwargs: object):
+        if path == unreadable_file:
+            raise OSError("simulated stat failure")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "is_file", is_file_for_scan)
+    monkeypatch.setattr(Path, "stat", stat_with_failure)
+
+    result = cache.prune()
+
+    assert result == {"removedFiles": 0, "removedBytes": 0}
+    assert unreadable_file.read_bytes() == b"unreadable"
+
+
+def test_prune_capacity_eviction_counts_partial_success_and_continues_on_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = WeatherImageryTileCache(tmp_path / "cache", max_total_bytes=1)
+    bundle_dir = cache.root / "frames/fixture/capacity"
+    bundle_dir.mkdir(parents=True)
+    removable_asset = bundle_dir / "removable.bin"
+    removable_asset.write_bytes(b"remove-me")
+    stubborn_asset = bundle_dir / "stubborn.bin"
+    stubborn_asset.write_bytes(b"keep-me")
+    (bundle_dir / "nested").mkdir()
+
+    original_unlink = Path.unlink
+
+    def unlink_with_failure(path: Path, *args: object, **kwargs: object) -> None:
+        if path == stubborn_asset:
+            raise OSError("simulated unlink failure")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink_with_failure)
+
+    result = cache.prune()
+
+    assert result == {
+        "removedFiles": 1,
+        "removedBytes": len(b"remove-me"),
+    }
+    assert not removable_asset.exists()
+    assert stubborn_asset.read_bytes() == b"keep-me"
 
 
 def test_cache_rejects_traversal_and_never_fetches_on_read(tmp_path: Path) -> None:

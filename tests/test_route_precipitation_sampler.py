@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import route_precipitation_sampler as precipitation_sampler
 from cwa_precipitation_grid import parse_qpesums_grid
 from route_precipitation_sampler import build_route_precipitation_trend
 
@@ -173,3 +174,26 @@ def test_current_position_observed_at_is_compared_with_evaluated_at() -> None:
 
     assert package["status"] == "stale_data"
     assert package["confidence"] == 0
+
+
+def test_route_data_status_is_partial_when_only_part_of_route_is_covered() -> None:
+    status = precipitation_sampler._route_data_status(
+        requested_status="ready",
+        current={"status": "ready"},
+        target={"status": "outside_grid"},
+        corridor={"sampleCount": 4, "coveredRouteSampleCount": 2},
+        provided=2,
+    )
+
+    assert status == "partial"
+
+
+@pytest.mark.parametrize(
+    ("accuracy_m", "expected"),
+    [(35, 0.9), (75, 0.8), (200, 0.65), (501, 0.4)],
+)
+def test_accuracy_factor_uses_expected_distance_buckets(
+    accuracy_m: int,
+    expected: float,
+) -> None:
+    assert precipitation_sampler._accuracy_factor({"accuracyM": accuracy_m}) == expected

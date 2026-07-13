@@ -120,6 +120,20 @@ def test_teii_alone_does_not_invent_terrain_classification() -> None:
     assert package["weatherTerrainInteractions"] == []
 
 
+def test_compact_lora_alert_rejects_impossible_byte_budget() -> None:
+    with pytest.raises(ValueError, match="exceeds byte budget"):
+        encode_compact_lora_alert(
+            {
+                "routeId": "fixture-route",
+                "imageryFeatures": {
+                    "currentRainOnRoute": True,
+                    "confidence": 0.8,
+                },
+            },
+            max_bytes=1,
+        )
+
+
 def test_fresh_satellite_does_not_hide_stale_radar_delay_or_confidence() -> None:
     package = build_route_weather_risk_package(
         route_id="fixture-route",
@@ -335,6 +349,134 @@ def test_server_job_fails_closed_without_trusted_capability(tmp_path: Path) -> N
         )
 
 
+def test_unlocked_server_job_rejects_network_denial_and_workspace_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(extractor, "_is_raspberry_pi_host", lambda: False)
+    project_root = tmp_path / "workspace"
+    external_cache = WeatherImageryTileCache(tmp_path / "external-cache")
+    common = {
+        "project_root": project_root,
+        "route_id": "fixture-route",
+        "route_identity": None,
+        "route_points": [(24.0, 121.0), (24.0, 121.01)],
+        "terrain_segments": [],
+        "radar_ingestor": None,
+        "satellite_ingestor": None,
+        "registry": {},
+        "radar_product_id": "radar.fixture",
+        "satellite_product_id": "satellite.fixture",
+        "evaluated_at": "2026-07-11T03:30:00Z",
+        "processing_profile": "mac-workstation",
+        "route_buffer_m": 500.0,
+        "frame_grid_decoder": lambda _frame, _cache: None,
+        "build_display_assets": False,
+    }
+
+    with pytest.raises(PermissionError, match="network approval"):
+        extractor._run_server_side_cwa_imagery_job_unlocked(
+            **common,
+            cache=external_cache,
+            allow_network_fetch=False,
+        )
+
+    workspace_cache = WeatherImageryTileCache(project_root / "raw-cache")
+    with pytest.raises(ValueError, match="cache must live outside"):
+        extractor._run_server_side_cwa_imagery_job_unlocked(
+            **common,
+            cache=workspace_cache,
+            allow_network_fetch=True,
+        )
+
+
+@pytest.mark.parametrize(
+    ("route_id", "identity", "message"),
+    [
+        (" ", None, "route_id must not be empty"),
+        (
+            "fixture-route",
+            {
+                "projectId": "other-route",
+                "routeRef": "outputs/route.json",
+                "routeSha256": "a" * 64,
+                "routeBasis": "segment_display_geometry",
+            },
+            "project mismatch",
+        ),
+        (
+            "fixture-route",
+            {
+                "projectId": "fixture-route",
+                "routeRef": "../route.json",
+                "routeSha256": "a" * 64,
+                "routeBasis": "segment_display_geometry",
+            },
+            "ref is unsafe",
+        ),
+        (
+            "fixture-route",
+            {
+                "projectId": "fixture-route",
+                "routeRef": "outputs/route.json",
+                "routeSha256": "invalid",
+                "routeBasis": "segment_display_geometry",
+            },
+            "hash is invalid",
+        ),
+        (
+            "fixture-route",
+            {
+                "projectId": "fixture-route",
+                "routeRef": "outputs/route.json",
+                "routeSha256": "a" * 64,
+                "routeBasis": " ",
+            },
+            "basis is missing",
+        ),
+    ],
+)
+def test_imagery_route_provenance_rejects_invalid_identity(
+    route_id: str,
+    identity: dict[str, object] | None,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        extractor._imagery_route_provenance(
+            route_id=route_id,
+            route_identity=identity,
+            radar_frames=[],
+            satellite_frames=[],
+        )
+
+
+def test_empty_frame_manifest_and_latest_fallback_are_explicit() -> None:
+    manifest = extractor._frames_manifest(
+        "radar",
+        [],
+        evaluated_at="2026-07-11T03:30:00Z",
+    )
+    assert manifest["latestFrameId"] is None
+    assert manifest["frames"] == []
+    assert manifest["windows"] == {}
+
+    sentinel = object()
+
+    class EmptyWindowIngestor:
+        def ingest_recent(self, *_args, **_kwargs):
+            return []
+
+        def ingest_latest(self, *_args, **_kwargs):
+            return sentinel
+
+    assert extractor._ingest_window_or_latest(
+        EmptyWindowIngestor(),
+        "radar.fixture",
+        evaluated_at="2026-07-11T03:30:00Z",
+        build_display_assets=False,
+    ) == [sentinel]
+
+
 def test_imagery_artifact_set_rolls_back_if_publish_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -362,3 +504,30 @@ def test_imagery_artifact_set_rolls_back_if_publish_fails(
         )
 
     assert {path: path.read_bytes() for path in previous} == previous
+
+
+def test_imagery_artifact_rollback_removes_newly_created_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    real_write = extractor._write_bytes_atomically
+
+    def fail_second_publish(path: Path, content: bytes) -> None:
+        if path == second:
+            raise OSError("injected second publish failure")
+        real_write(path, content)
+
+    monkeypatch.setattr(extractor, "_write_bytes_atomically", fail_second_publish)
+
+    with pytest.raises(OSError, match="second publish failure"):
+        extractor._publish_json_artifact_set(
+            [
+                (first, {"version": "new-first"}),
+                (second, {"version": "new-second"}),
+            ]
+        )
+
+    assert not first.exists()
+    assert not second.exists()
