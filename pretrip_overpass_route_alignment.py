@@ -294,11 +294,16 @@ def _align_candidate_file(
             )
         )
 
+    aligned_items = [
+        _with_project_identity(item, project) for item in aligned_items
+    ]
+
     if item_key is None:
         output: Any = aligned_items
     else:
         output = {
             **payload,
+            **_project_artifact_identity(project),
             item_key: aligned_items,
             "source_path": output_ref,
             "source_ref": ref,
@@ -563,11 +568,16 @@ def _align_segments_from_checkpoints(
         )
         aligned_items.append(aligned)
 
+    aligned_items = [
+        _with_project_identity(item, project) for item in aligned_items
+    ]
+
     if item_key is None:
         output: Any = aligned_items
     else:
         output = {
             **payload,
+            **_project_artifact_identity(project),
             item_key: aligned_items,
             "source_path": ALIGNED_SEGMENTS_REF,
             "source_ref": ref,
@@ -759,8 +769,12 @@ def _align_segment_display_geometry(
             }
         )
 
+    aligned_segments = [
+        _with_project_identity(segment, project) for segment in aligned_segments
+    ]
     output = {
         **payload,
+        **_project_artifact_identity(project),
         "artifact_kind": "pretrip_overpass_aligned_segment_display_geometry",
         "source_path": ALIGNED_SEGMENT_DISPLAY_REF,
         "source_ref": ref,
@@ -1664,6 +1678,27 @@ class _Stats:
 
 def _status(status: str, **kwargs: Any) -> dict[str, Any]:
     return {"status": status, "boundary": _boundary(), **kwargs}
+
+
+def _project_artifact_identity(project: dict[str, Any]) -> dict[str, str]:
+    project_id = project.get("project_id")
+    if not isinstance(project_id, str) or not project_id.strip():
+        return {}
+    normalized_project_id = project_id.strip()
+    route_artifact_id = project.get("route_artifact_id")
+    if not isinstance(route_artifact_id, str) or not route_artifact_id.strip():
+        route_artifact_id = f"artifact.gpx.{normalized_project_id}"
+    return {
+        "project_id": normalized_project_id,
+        "route_artifact_id": route_artifact_id.strip(),
+    }
+
+
+def _with_project_identity(
+    artifact: dict[str, Any],
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    return {**artifact, **_project_artifact_identity(project)}
 
 
 def _boundary() -> dict[str, bool]:

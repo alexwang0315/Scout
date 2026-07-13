@@ -104,6 +104,14 @@ def test_pretrip_admin_map_segments_render_from_display_geometry_first():
     assert 'id="agentSkillsPanel"' in html
     assert 'id="agentSkillsList"' in html
     assert "segment-overlay" in html
+    assert "stroke: #00d4ff;" in html
+    assert "stroke-dasharray: 7 4;" in html
+    assert "opacity: .92;" in html
+    assert "drop-shadow(0 0 2px rgba(0, 20, 28, .92))" in html
+    assert "stroke-width: 5.6;" in html
+    assert 'if (node.classList.contains("segment-overlay")) base = 5.6;' in html
+    assert "segments: 50," in html
+    assert "Preserve the canonical layer rank" in html
     assert "reference-track" in html
     assert "gis-perception-cp" in html
     assert "gis-nearby-group" in html

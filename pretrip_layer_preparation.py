@@ -118,6 +118,14 @@ OUTPUT_REFS = {
     "cwa_forecast_timeline_ref": "outputs/environment/cwa/forecast_timeline.json",
     "cwa_astronomy_timeline_ref": "outputs/environment/cwa/astronomy_timeline.json",
     "cwa_tide_marine_timeline_ref": "outputs/environment/cwa/tide_marine_timeline.json",
+    "cwa_imagery_registry_ref": "outputs/environment/cwa/imagery/registry_snapshot.json",
+    "cwa_radar_frames_manifest_ref": "outputs/environment/cwa/imagery/radar_frames_manifest.json",
+    "cwa_satellite_frames_manifest_ref": "outputs/environment/cwa/imagery/satellite_frames_manifest.json",
+    "route_imagery_sampling_ref": "outputs/environment/cwa/imagery/route_imagery_sampling.json",
+    "radar_motion_estimate_ref": "outputs/environment/cwa/imagery/radar_motion_estimate.json",
+    "cwa_weather_imagery_manifest_ref": "outputs/environment/cwa/imagery/weather_imagery_manifest.json",
+    "route_weather_risk_package_ref": "outputs/route_weather_risk_package.json",
+    "route_weather_lora_alert_ref": "outputs/route_weather_lora_alert.json",
     "soil_moisture_grid_ref": "outputs/environment/gee/soil_moisture_grid.geojson",
     "smap_l4_timeseries_ref": "outputs/environment/gee/smap_l4_timeseries.json",
     "smap_l4_corridor_summary_ref": (
@@ -384,6 +392,7 @@ class LayerPreparationRequest:
     profile: LayerProfile = "pi-offline"
     network_mode: NetworkMode = "no-network"
     allow_network_fetch: bool = False
+    prepare_cwa_imagery: bool = False
     bbox: dict[str, Any] | None = None
     route_evidence_bundle: Path | None = None
     route_corridor_m: float = 500.0
@@ -1122,6 +1131,23 @@ def _prepare_cwa_environment_artifacts(
         artifact["cache_policy"] = cache_policy
         artifact["cwa_time_metadata"] = time_metadata
 
+    imagery_outputs = _maybe_prepare_cwa_imagery_server_job(
+        project_root=project_root,
+        project=project,
+        request=request,
+        prepared_at=prepared_at,
+    )
+    cwa_evidence["weather_imagery"] = {
+        "status": imagery_outputs.get("cwa_weather_imagery_status", "not_requested"),
+        "manifest_ref": imagery_outputs.get("cwa_weather_imagery_manifest_ref"),
+        "route_weather_risk_package_ref": imagery_outputs.get(
+            "route_weather_risk_package_ref"
+        ),
+        "processing_target": "server_side_job",
+        "raspberry_pi_image_processing": False,
+        "mobile_image_processing": False,
+    }
+
     _write_json(cwa_dir / "cwa_weather_evidence.json", cwa_evidence)
     _write_json(cwa_dir / "qpf_grid.geojson", qpf_geojson)
     _write_json(cwa_dir / "warnings.geojson", warnings_geojson)
@@ -1164,7 +1190,178 @@ def _prepare_cwa_environment_artifacts(
         "cwa_cacheable": False,
         "cwa_ttl_seconds": 0,
         "cwa_time_metadata": time_metadata,
+        **imagery_outputs,
     }
+
+
+def _maybe_prepare_cwa_imagery_server_job(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    request: LayerPreparationRequest,
+    prepared_at: str,
+) -> dict[str, Any]:
+    if not request.prepare_cwa_imagery:
+        return {"cwa_weather_imagery_status": "not_requested"}
+    if request.profile != "mac-workstation":
+        return {
+            "cwa_weather_imagery_status": "blocked_server_side_imagery_preparation_required",
+            "cwa_weather_imagery_blocker": "profile_must_be_mac_workstation",
+        }
+    if request.network_mode != "explicit-fetch" or not request.allow_network_fetch:
+        return {
+            "cwa_weather_imagery_status": "blocked_explicit_network_fetch_required",
+            "cwa_weather_imagery_blocker": "explicit_fetch_and_allow_network_fetch_required",
+        }
+    route_points = _route_points_for_weather_imagery(project_root, project)
+    if len(route_points) < 2:
+        return {
+            "cwa_weather_imagery_status": "blocked_missing_route_geometry",
+            "cwa_weather_imagery_blocker": "segment_display_geometry_ref_missing_or_empty",
+        }
+    try:
+        from cwa_imagery_registry import build_cwa_imagery_registry
+        from cwa_radar_ingestor import CwaRadarIngestor
+        from cwa_satellite_ingestor import CwaSatelliteIngestor
+        from radar_satellite_risk_extractor import run_server_side_cwa_imagery_job
+        from weather_imagery_tile_cache import WeatherImageryTileCache
+
+        true_color_urls = {
+            extent: value
+            for extent, value in {
+                "full_disk": os.environ.get("SCOUT_CWA_TRUE_COLOR_FULL_DISK_URL"),
+                "east_asia": os.environ.get("SCOUT_CWA_TRUE_COLOR_EAST_ASIA_URL"),
+                "taiwan": os.environ.get("SCOUT_CWA_TRUE_COLOR_TAIWAN_URL"),
+            }.items()
+            if value
+        }
+        registry = build_cwa_imagery_registry(true_color_urls=true_color_urls)
+        cache_root = Path(
+            os.environ.get(
+                "SCOUT_CWA_IMAGERY_CACHE_ROOT",
+                "~/.scout-fusion/cwa-weather-imagery-cache",
+            )
+        ).expanduser()
+        cache = WeatherImageryTileCache(cache_root)
+        refs = run_server_side_cwa_imagery_job(
+            project_root=project_root,
+            route_id=str(project.get("project_id") or request.project_id),
+            route_points=route_points,
+            terrain_segments=_terrain_segments_for_weather_imagery(project_root, project),
+            radar_ingestor=CwaRadarIngestor.from_cwa_opendata(
+                registry=registry,
+                cache=cache,
+            ),
+            satellite_ingestor=CwaSatelliteIngestor.from_cwa_opendata(
+                registry=registry,
+                cache=cache,
+            ),
+            cache=cache,
+            registry=registry,
+            radar_product_id=os.environ.get(
+                "SCOUT_CWA_RADAR_PRODUCT_ID",
+                "radar.integrated.taiwan.transparent",
+            ),
+            satellite_product_id=os.environ.get(
+                "SCOUT_CWA_SATELLITE_PRODUCT_ID",
+                "satellite.enhanced_color.taiwan",
+            ),
+            evaluated_at=prepared_at,
+            allow_network_fetch=True,
+            processing_profile=request.profile,
+            route_buffer_m=request.route_corridor_m,
+            server_capability_attested=(
+                os.environ.get("SCOUT_CWA_SERVER_IMAGERY_CAPABLE") == "1"
+            ),
+        )
+        return {**refs, "cwa_weather_imagery_status": "ready"}
+    except Exception as exc:  # pragma: no cover - live provider/server worker path.
+        return {
+            "cwa_weather_imagery_status": "fetch_or_processing_failed",
+            "cwa_weather_imagery_error": _safe_exception_summary(exc),
+        }
+
+
+def _route_points_for_weather_imagery(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    max_points: int = 2_000,
+) -> list[tuple[float, float]]:
+    ref = project.get("segment_display_geometry_ref")
+    if not isinstance(ref, str) or not ref:
+        return []
+    path = _safe_project_relative_path(project_root, ref)
+    if path is None or not path.exists():
+        return []
+    payload = _load_json(path)
+    points: list[tuple[float, float]] = []
+    for segment in payload.get("segments", []):
+        if not isinstance(segment, dict):
+            continue
+        for coordinate_segment in segment.get("coordinate_segments", []):
+            if not isinstance(coordinate_segment, list):
+                continue
+            for point in coordinate_segment:
+                if not isinstance(point, dict):
+                    continue
+                lat = _as_float(point.get("lat"))
+                lon = _as_float(point.get("lon"))
+                if lat is not None and lon is not None:
+                    candidate = (lat, lon)
+                    if not points or candidate != points[-1]:
+                        points.append(candidate)
+    if len(points) <= max_points:
+        return points
+    step = max(1, len(points) // max_points)
+    sampled = points[::step]
+    if sampled[-1] != points[-1]:
+        sampled.append(points[-1])
+    return sampled[: max_points + 1]
+
+
+def _terrain_segments_for_weather_imagery(
+    project_root: Path,
+    project: dict[str, Any],
+) -> list[dict[str, Any]]:
+    for ref_key in ("risk_score_points_ref", "risk_route_profile_ref"):
+        ref = project.get(ref_key)
+        if not isinstance(ref, str) or not ref:
+            continue
+        path = _safe_project_relative_path(project_root, ref)
+        if path is None or not path.exists():
+            continue
+        payload = _load_json(path)
+        features = payload.get("features", []) if isinstance(payload, dict) else []
+        segments: list[dict[str, Any]] = []
+        for index, feature in enumerate(features):
+            properties = dict(feature.get("properties") or {}) if isinstance(feature, dict) else {}
+            hazards = properties.get("hazard_types") or properties.get("hazardTypes") or []
+            if not isinstance(hazards, list):
+                hazards = []
+            segments.append(
+                {
+                    "segmentId": properties.get("segment_id")
+                    or properties.get("segmentId")
+                    or f"terrain.{index:05d}",
+                    "teii_20m": properties.get("teii_20m"),
+                    "hazardTypes": hazards,
+                    "gradePercent": properties.get("grade_percent")
+                    or properties.get("gradePercent"),
+                    "terrainSourceRefs": [ref],
+                }
+            )
+        return segments
+    return []
+
+
+def _safe_project_relative_path(project_root: Path, ref: str) -> Path | None:
+    path = (project_root / ref).resolve()
+    try:
+        path.relative_to(project_root.resolve())
+    except ValueError:
+        return None
+    return path
 
 
 def _prepare_gee_environment_artifacts(
@@ -2419,6 +2616,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--allow-network-fetch", action="store_true")
     parser.add_argument(
+        "--prepare-cwa-imagery",
+        action="store_true",
+        help=(
+            "Run the one-shot server-side CWA radar/satellite worker. Requires "
+            "--profile mac-workstation, explicit-fetch, and --allow-network-fetch."
+        ),
+    )
+    parser.add_argument(
         "--bbox",
         help="Optional bbox as south,west,north,east. Defaults to route summary bbox.",
     )
@@ -2528,6 +2733,7 @@ def main(argv: list[str] | None = None) -> None:
         profile=args.profile,
         network_mode=args.network_mode,
         allow_network_fetch=args.allow_network_fetch,
+        prepare_cwa_imagery=args.prepare_cwa_imagery,
         bbox=bbox,
         route_evidence_bundle=args.route_evidence_bundle,
         route_corridor_m=args.route_corridor_m,

@@ -1931,3 +1931,188 @@ Verification:
 - PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check`.
 - Evidence screenshot:
   `/tmp/scout-dashboard-body-index-watch-controls-desktop.png`.
+
+### 2026-07-11 - Body Index Empty-state Evidence Integrity
+
+User request:
+
+- Take over Scout Dashboard v0.1 from the current 9099 admin runtime and
+  continue development without exposing private health data or turning
+  advisory evidence into safety truth.
+
+Implementation steps:
+
+- Added a regression test for a fresh project with no Body Index snapshot or
+  imported HealthExport source.
+- Replaced the default nonzero pace coefficient, reserve, vulnerability,
+  experience, coverage, provider metrics, and historical pressure timeline
+  with an explicit unavailable/zero state.
+- Changed all eight default Health Baseline Signal cards to `pending` with
+  unavailable values until sanitized source-provider evidence is imported.
+- Kept all nine Scout Pace Coefficient section 7.2 cards visible, but removed
+  their sample speeds, coefficients, penalties, and scores. The UI now accepts
+  future evidence-backed `coefficient_metrics`; otherwise each card renders as
+  pending.
+- Added explicit empty states for pressure windows and provider metrics, and
+  kept imported snapshots marked with `evidence_status=available`.
+- Applied the same unavailable summary when every candidate ZIP fails parsing,
+  so an error-only import cannot persist a calculated coefficient. The v1
+  summary fields remain strings (`unavailable` before import) for response-type
+  compatibility, while the UI displays `--`.
+
+Boundary notes:
+
+- This is a non-GIS Dashboard/API truthfulness repair; no GPX, map, layer,
+  route projection, or workspace import path changed.
+- No raw HealthExport row, raw GPX, coordinate, exact timestamp, original zip
+  filename, Phase 1 safety mutation, live safety automation, hardware control,
+  or outbound transport was added.
+- The Body Index watcher remains stopped by default and still requires
+  `confirm_watch=true`.
+
+Known remaining gaps:
+
+- The nine section 7.2 detail cards remain pending until an evidence-backed
+  `coefficient_metrics` payload is implemented; the imported aggregate summary
+  and Health Baseline Signals continue to render independently.
+- The live Scout AI compact pretrip project payload is still large and slow
+  enough to delay first-load data on some dashboard pages; this repair did not
+  change the pretrip/GIS payload.
+- `MQTT / Observer Message` remains a separate future data-backed dashboard
+  slice and was not mixed into this Body Index truthfulness repair.
+
+Verification:
+
+- RED: the fresh-project regression test reproduced the fabricated default
+  coefficient and coverage values.
+- GREEN: the focused fresh-project regression test passed after the API and UI
+  empty-state repair.
+- PASS: `tests/test_scout_dashboard_page.py` (26 tests) and
+  `tests/test_scout_runtime_physiologic_pipeline.py` (11 tests).
+- PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `git diff --check`.
+- PASS: the restarted 9099 browser smoke rendered a fresh project with zero
+  coverage, `--` coefficient, nine pending section 7.2 cards, eight pending
+  health signals, empty timeline/provider states, stopped watcher, no
+  fabricated strings, and no horizontal overflow.
+- PASS: the existing imported project retained its 3-source sanitized
+  snapshot, available/computable health signals, stopped watcher, and no
+  browser console or 4xx response errors during the Body Index smoke.
+- Evidence screenshots:
+  `/tmp/scout-dashboard-body-index-empty-state-9099.png` and
+  `/tmp/scout-dashboard-body-index-imported-9099.png`.
+
+### 2026-07-11 - Map Segment Visibility And Geometry Repair
+
+User request:
+
+- Restore the Segment layer that appeared to be missing from the Dashboard Map.
+
+Implementation steps:
+
+- Confirmed the workspace and compact API still contained 239 source-backed
+  Segment records and valid display geometry; no workspace rebuild was needed.
+- Increased the pretrip Segment overlay contrast, width, opacity, and dashed
+  visual identity so it remains distinguishable on light and dark basemaps.
+- Preserved the canonical 32-layer render order and made Segment visible
+  through the intentionally translucent risk overlays using a bright dashed
+  stroke and dark contrast halo.
+- Kept the existing map position, layer controls, fit/zoom tools, and iframe
+  integration unchanged.
+- Replaced the Dashboard fallback renderer's route-path imitation with one
+  path per `state.project.segments[*].display_geometry.coordinate_segments`,
+  preserving Segment ids and skipping absent/invalid geometry.
+- Added regression coverage for Segment style, z-order, scale-aware stroke
+  width, genuine per-segment paths, and no connected-route fallback to a fake
+  Segment path.
+
+Boundary notes:
+
+- The repair is presentation-only and reads existing candidate evidence.
+- It does not rebuild or mutate the workspace, alter Segment artifacts, call
+  `/safety/*`, change Phase 1 runtime safety truth, control hardware, or send
+  outbound transport.
+
+Known remaining gaps:
+
+- The two `overpass_aligned_*` Segment artifacts still carry an older
+  `chilai_nanhua_day1_scoutAI_test0630_1` internal project id. They remain
+  loadable but should be separately regenerated or re-bound under a reviewed
+  provenance repair.
+
+Verification:
+
+- RED: focused pretrip/dashboard tests failed on the missing high-contrast
+  style, risk-overlay z-order, and true per-segment renderer contract.
+- GREEN: focused tests passed after the presentation and renderer repair.
+- PASS: focused pretrip, dashboard, and layer-contract tests (54 tests).
+- PASS: `pnpm lint`, `pnpm typecheck`, `pnpm test`, both 32-layer gates,
+  workspace spec alignment, admin visual smoke, and `git diff --check`.
+- PASS: live 9099 Dashboard Map rendered 239 non-empty, unique Segment paths
+  with `stroke=rgb(0, 212, 255)`, `stroke-width=5.6px`, dashed styling,
+  `opacity=.92`, a dark halo, checked control, no console/4xx errors, and no
+  horizontal overflow while normal risk overlays remained enabled.
+- PASS: the Dashboard fallback preview rendered 239 unique Segment ids and 239
+  unique non-empty paths from `project.segments`; zero Segment paths matched
+  the generic Route path, with no console/4xx errors or horizontal overflow.
+- Evidence screenshot: `/tmp/scout-segments-dashboard-fixed.png`.
+
+### 2026-07-11 - Overpass-Aligned Segment Provenance Repair
+
+User request:
+
+- Repair the two Overpass-aligned Segment artifacts that still carried the old
+  `chilai_nanhua_day1_scoutAI_test0630_1` project identity.
+
+Implementation steps:
+
+- Confirmed the stale identity appeared in artifact metadata, route source
+  refs, absolute source URIs, and propagated risk-ribbon feature ids.
+- Added a producer regression that starts with stale source identity and
+  requires aligned envelopes and records to use the current project identity.
+- Changed the alignment producer to immutably stamp the current `project_id`
+  and canonical `artifact.gpx.<project_id>` route artifact id.
+- Rebuilt the current-project risk centerline and alignment in an isolated
+  minimal workspace, then copied back
+  `outputs/overpass_aligned_segments.json` and
+  `outputs/overpass_aligned_segment_display_geometry.json`.
+- Synchronized 13 deterministic upstream `outputs/risk/*` route, score,
+  ribbon, diagnostic, and calibrated artifacts so every new aligned
+  `source_feature_id` continues to resolve and the baseline/calibrated
+  risk-delta join stays intact.
+
+Boundary notes:
+
+- The formal workspace's base GPX, candidates, checkpoints, project manifest,
+  calibrated risk outputs, and other aligned artifacts were not rewritten.
+  The 13 upstream risk artifacts were replaced only after backup and
+  identity/numeric parity checks because they are required provenance sources
+  for the two requested aligned artifacts.
+- The two repaired artifacts remain candidate-only display evidence with
+  `runtime_safety_truth=false`; no `/safety/*`, Phase 1 safety mutation,
+  hardware control, private health data, or outbound transport was introduced.
+
+Verification:
+
+- RED: the producer regression reproduced inherited stale `project_id` and
+  `route_artifact_id` values.
+- GREEN: the regression passed after current-project identity stamping.
+- PASS: all 239 Segment ids and alignment-status distributions were preserved.
+- PASS: 10,262 lat/lon coordinate occurrences were byte-value equivalent
+  before and after provenance repair.
+- PASS: stale-id fields changed from 4,604 to 0 in aligned Segment candidates
+  and from 8,059 to 0 in aligned display geometry.
+- PASS: all 7,152 risk-ribbon sample refs, 3,648 aligned Segment feature refs,
+  and 7,578 aligned display feature refs resolve in the formal workspace.
+- PASS: all 13 synchronized upstream risk artifacts contain zero old-ID
+  occurrences; route/risk numeric CSV content is unchanged after identity
+  normalization.
+- PASS: display geometry retained 239 logical segments, 239 parts, 5,131
+  points, `candidate_only=true`, and `runtime_safety_truth=false`.
+- PASS: focused alignment pytest (6 tests), `pnpm lint`, `pnpm typecheck`,
+  `pnpm test`, both 32-layer gates, workspace spec alignment, admin visual
+  smoke, and `git diff --check`.
+- PASS: live 9099 Map retained 239 non-empty Segment paths, 3,576 baseline
+  risk paths, 3,576 calibrated paths, 3,672 risk-delta SVG paths, a checked
+  Segment control, no horizontal overflow, and zero console/4xx errors.
+- Evidence screenshot: `/tmp/scout-provenance-repair-live-9099-final.png`.
+- Backup: `/tmp/scout-provenance-repair.fgZG1X/backup`.

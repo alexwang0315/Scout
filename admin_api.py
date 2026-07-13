@@ -5,7 +5,6 @@ import json
 import os
 import sys
 import threading
-import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -307,21 +306,6 @@ def _dashboard_body_index_boundary() -> dict[str, Any]:
     }
 
 
-def _dashboard_body_index_default_provider_metrics() -> list[str]:
-    return [
-        "vo2_max",
-        "blood_oxygen_saturation",
-        "heart_rate_variability",
-        "resting_heart_rate",
-        "walking_heart_rate_average",
-        "heart_rate",
-        "step_count",
-        "active_energy",
-        "flights_climbed",
-        "walking_running_distance",
-    ]
-
-
 def _dashboard_body_index_default_signal_trend() -> dict[str, Any]:
     return {
         "direction": "mid",
@@ -338,69 +322,80 @@ def _dashboard_body_index_default_health_signals() -> list[list[Any]]:
     return [
         [
             "VO2max Baseline",
-            "available",
+            "pending",
             "median --",
-            "cardio baseline only; not live oxygen uptake",
+            "import HealthExport evidence; not live oxygen uptake",
             "Energy Reserve",
             _dashboard_body_index_default_signal_trend(),
         ],
         [
             "Resting HR",
-            "available",
+            "pending",
             "median -- bpm",
-            "provider metric trend for baseline context",
+            "no provider metric imported",
             "Vulnerability",
             _dashboard_body_index_default_signal_trend(),
         ],
         [
             "HRV Baseline",
-            "available",
+            "pending",
             "median -- ms",
-            "recovery readiness context; source value only",
+            "no source-provider baseline imported",
             "Vulnerability",
             _dashboard_body_index_default_signal_trend(),
         ],
         [
             "Walking HR Average",
-            "available",
+            "pending",
             "median -- bpm",
-            "walking effort baseline without raw samples",
+            "no walking effort baseline imported",
             "Rest Frequency",
             _dashboard_body_index_default_signal_trend(),
         ],
         [
             "Active Energy Reset Cue",
-            "computable",
+            "pending",
             "median -- kJ",
-            "active energy budget and reset threshold",
+            "no active energy evidence imported",
             "Energy Reserve",
             _dashboard_body_index_default_signal_trend(),
         ],
         [
             "Recovery Debt Windows",
-            "computable",
+            "pending",
             "-- windows",
-            "post-pressure rest cost from 15-min windows",
+            "no sanitized windows imported",
             "Late-trip Decay",
             _dashboard_body_index_default_signal_trend(),
         ],
         [
             "HR Pressure Windows",
-            "computable",
+            "pending",
             "-- windows",
-            "high effort / low efficiency windows",
+            "no sanitized windows imported",
             "Vulnerability",
             _dashboard_body_index_default_signal_trend(),
         ],
         [
             "Step + Distance Pattern",
-            "available",
-            "steps + distance",
-            "step count and walking distance coverage",
+            "pending",
+            "-- steps / -- km",
+            "no step or walking distance evidence imported",
             "Flat Speed",
             _dashboard_body_index_default_signal_trend(),
         ],
     ]
+
+
+def _dashboard_body_index_unavailable_summary() -> dict[str, Any]:
+    return {
+        "scout_pace_coefficient": "unavailable",
+        "energy_reserve": "unavailable",
+        "vulnerability": "unavailable",
+        "experience_trust": "unavailable",
+        "score_percent": 0,
+        "evidence_status": "unavailable",
+    }
 
 
 def _dashboard_body_index_default_snapshot(project_id: str) -> dict[str, Any]:
@@ -410,27 +405,17 @@ def _dashboard_body_index_default_snapshot(project_id: str) -> dict[str, Any]:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "import_status": "not_imported",
         "source_dir": None,
-        "summary": {
-            "scout_pace_coefficient": "0.82",
-            "energy_reserve": "0.62",
-            "vulnerability": "0.38",
-            "experience_trust": "0.71",
-            "score_percent": 82,
-        },
+        "summary": _dashboard_body_index_unavailable_summary(),
         "coverage_cards": [
-            ["Health exports", "3", "HealthAutoExport zip files"],
-            ["Walking sessions", "23", "parser-ready walking workouts"],
-            ["GPX tracks", "40", "route traces available"],
-            ["15-min windows", "49", "sanitized pressure windows"],
-            ["Provider metrics", "10", "source-value metric families"],
+            ["Health exports", "0", "no local HealthExport sources imported"],
+            ["Walking sessions", "0", "no walking workouts imported"],
+            ["GPX tracks", "0", "no route traces imported"],
+            ["15-min windows", "0", "no sanitized pressure windows"],
+            ["Provider metrics", "0", "no source-value metric families"],
         ],
         "health_signals": _dashboard_body_index_default_health_signals(),
-        "pressure_timeline": [
-            ["2018 long walk", "16 windows", "single GPX session", 33],
-            ["2020 walking day", "7 windows", "two GPX sessions", 14],
-            ["2026 recent baseline", "26 windows", "20 walking sessions", 53],
-        ],
-        "provider_metrics": _dashboard_body_index_default_provider_metrics(),
+        "pressure_timeline": [],
+        "provider_metrics": [],
         "provider_metric_summaries": [],
         "source_index": [],
         "import_result": {
@@ -967,31 +952,52 @@ def _dashboard_body_index_snapshot_from_sources(
         1,
     )
     provider_metric_count = len(provider_metrics)
-    experience = min(
-        0.92,
-        0.55
-        + (total_sessions * 0.01)
-        + (total_gpx * 0.002)
-        + (provider_metric_count * 0.005),
-    )
-    energy = min(0.86, 0.54 + (total_sessions * 0.004) + (provider_metric_count * 0.003))
-    vulnerability = max(0.18, 0.48 - (total_sessions * 0.003) - (provider_metric_count * 0.004))
-    pace_coefficient = min(0.9, 0.7 + (experience * 0.12) + (energy * 0.08) - (vulnerability * 0.04))
+    if sources:
+        experience = min(
+            0.92,
+            0.55
+            + (total_sessions * 0.01)
+            + (total_gpx * 0.002)
+            + (provider_metric_count * 0.005),
+        )
+        energy = min(
+            0.86,
+            0.54
+            + (total_sessions * 0.004)
+            + (provider_metric_count * 0.003),
+        )
+        vulnerability = max(
+            0.18,
+            0.48
+            - (total_sessions * 0.003)
+            - (provider_metric_count * 0.004),
+        )
+        pace_coefficient = min(
+            0.9,
+            0.7
+            + (experience * 0.12)
+            + (energy * 0.08)
+            - (vulnerability * 0.04),
+        )
+        summary = {
+            "scout_pace_coefficient": f"{pace_coefficient:.2f}",
+            "energy_reserve": f"{energy:.2f}",
+            "vulnerability": f"{vulnerability:.2f}",
+            "experience_trust": f"{experience:.2f}",
+            "score_percent": round(pace_coefficient * 100),
+            "evidence_status": "available",
+            "total_distance_km": total_distance_km,
+            "total_duration_min": total_duration_min,
+        }
+    else:
+        summary = _dashboard_body_index_unavailable_summary()
     return {
         "schema_version": DASHBOARD_BODY_INDEX_SCHEMA_VERSION,
         "project_id": project_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "import_status": "imported" if sources else "not_imported",
         "source_dir": str(source_dir),
-        "summary": {
-            "scout_pace_coefficient": f"{pace_coefficient:.2f}",
-            "energy_reserve": f"{energy:.2f}",
-            "vulnerability": f"{vulnerability:.2f}",
-            "experience_trust": f"{experience:.2f}",
-            "score_percent": round(pace_coefficient * 100),
-            "total_distance_km": total_distance_km,
-            "total_duration_min": total_duration_min,
-        },
+        "summary": summary,
         "coverage_cards": [
             ["Health exports", str(total_exports), "deduped local zip files"],
             [
@@ -1460,6 +1466,7 @@ class PreTripPrepareLayersRequest(BaseModel):
     profile: Literal["mac-workstation", "pi-offline", "pi-online-explicit"] = "pi-offline"
     network_mode: Literal["no-network", "explicit-fetch"] = "no-network"
     allow_network_fetch: bool = False
+    prepare_cwa_imagery: bool = False
     route_corridor_m: float = Field(default=500.0, gt=0)
     bbox: dict[str, Any] | None = None
     prepared_at: str | None = None
@@ -3853,6 +3860,95 @@ def create_admin_router(
             live_weather_snapshot=live_weather_snapshot,
         )
 
+    @router.get("/pretrip/projects/{project_id}/weather-imagery")
+    def pretrip_project_weather_imagery(project_id: str) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            return _empty_cwa_weather_imagery_manifest(project_id)
+        try:
+            manifest = _load_cwa_weather_imagery_manifest(project_root)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return _empty_cwa_weather_imagery_manifest(project_id)
+        public_manifest = json.loads(json.dumps(manifest))
+        for overlay in (public_manifest.get("childOverlays") or {}).values():
+            if not isinstance(overlay, dict):
+                continue
+            for frame in overlay.get("frames", []):
+                if not isinstance(frame, dict):
+                    continue
+                frame_id = str(frame.get("frameId") or "")
+                for private_key in ("cacheRef", "displayRef", "assetRef", "etag"):
+                    frame.pop(private_key, None)
+                if frame.get("mapOverlaySupported") is not False:
+                    frame["assetUrl"] = (
+                        f"/admin/pretrip/projects/{project_id}/weather-imagery/{frame_id}"
+                    )
+        public_manifest.setdefault("processingBoundary", {}).update(
+            {
+                "adminReadIsCacheOnly": True,
+                "upstreamFetchOnRead": False,
+                "raspberryPiImageProcessing": False,
+                "mobileImageProcessing": False,
+            }
+        )
+        return public_manifest
+
+    @router.get("/pretrip/projects/{project_id}/weather-imagery/{frame_id}")
+    def pretrip_project_weather_imagery_asset(project_id: str, frame_id: str) -> Response:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        manifest = _load_cwa_weather_imagery_manifest(project_root)
+        frame = _weather_imagery_frame_by_id(manifest, frame_id)
+        if frame is None:
+            raise HTTPException(status_code=404, detail="Weather imagery frame not found")
+        if frame.get("mapOverlaySupported") is False:
+            raise HTTPException(status_code=404, detail="Weather imagery overlay not prepared")
+        asset_ref = frame.get("assetRef") or frame.get("displayRef") or frame.get("cacheRef")
+        if not isinstance(asset_ref, str) or not asset_ref:
+            raise HTTPException(status_code=404, detail="Weather imagery asset not prepared")
+        from weather_imagery_tile_cache import WeatherImageryTileCache
+
+        cache = WeatherImageryTileCache(
+            Path(
+                os.environ.get(
+                    "SCOUT_CWA_IMAGERY_CACHE_ROOT",
+                    "~/.scout-fusion/cwa-weather-imagery-cache",
+                )
+            ).expanduser()
+        )
+        try:
+            content = cache.read_asset(asset_ref)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail="Weather imagery cache asset missing") from exc
+        media_type = str(
+            frame.get("displayMediaType")
+            or frame.get("mediaType")
+            or "image/png"
+        )
+        if media_type not in {"image/png", "image/jpeg"}:
+            raise HTTPException(status_code=422, detail="Unsupported weather imagery media type")
+        return Response(
+            content,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "private, max-age=60",
+                "X-Scout-CWA-Weather-Imagery": "cache-only",
+                "X-Scout-Frame-Id": frame_id,
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+                "X-Scout-Upstream-Fetch-On-Read": "false",
+            },
+        )
+
     @router.get("/pretrip/projects/{project_id}/admin-projection")
     def pretrip_project_admin_projection(project_id: str) -> dict[str, Any]:
         project_root = _pretrip_workspace_project_root(
@@ -5421,6 +5517,7 @@ def _pretrip_prepare_layers_request(
         profile=request.profile,
         network_mode=request.network_mode,
         allow_network_fetch=request.allow_network_fetch,
+        prepare_cwa_imagery=request.prepare_cwa_imagery,
         bbox=request.bbox,
         route_corridor_m=request.route_corridor_m,
         prepared_at=request.prepared_at,
@@ -7532,6 +7629,66 @@ def _safe_pretrip_project_ref_path(
     except ValueError:
         return None
     return resolved_path
+
+
+def _load_cwa_weather_imagery_manifest(project_root: Path) -> dict[str, Any]:
+    project_path = project_root / "project.json"
+    try:
+        project = json.loads(project_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+    ref = project.get("cwa_weather_imagery_manifest_ref")
+    if not isinstance(ref, str) or not ref:
+        raise HTTPException(status_code=404, detail="Weather imagery manifest not prepared")
+    manifest_path = _safe_pretrip_project_ref_path(project_root, ref)
+    if manifest_path is None:
+        raise HTTPException(status_code=422, detail="unsafe weather imagery manifest path")
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Weather imagery manifest missing") from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid weather imagery manifest") from exc
+    if not isinstance(payload, dict) or payload.get("artifactKind") != "weatherImageryTimelineManifest":
+        raise HTTPException(status_code=422, detail="invalid weather imagery manifest contract")
+    return payload
+
+
+def _empty_cwa_weather_imagery_manifest(project_id: str) -> dict[str, Any]:
+    return {
+        "artifactKind": "weatherImageryTimelineManifest",
+        "schemaVersion": "weatherImageryTimelineManifest.v1",
+        "projectId": project_id,
+        "layerId": "cwa-weather",
+        "status": "not_prepared",
+        "animationWindowsHours": [3, 6, 9, 12],
+        "childOverlays": {
+            "radar": {"frames": [], "windows": {}},
+            "satellite": {"frames": [], "windows": {}},
+        },
+        "processingBoundary": {
+            "serverSideOnly": True,
+            "adminReadIsCacheOnly": True,
+            "upstreamFetchOnRead": False,
+            "raspberryPiImageProcessing": False,
+            "mobileImageProcessing": False,
+            "candidateOnly": True,
+            "runtimeSafetyTruth": False,
+        },
+    }
+
+
+def _weather_imagery_frame_by_id(
+    manifest: dict[str, Any],
+    frame_id: str,
+) -> dict[str, Any] | None:
+    for overlay in (manifest.get("childOverlays") or {}).values():
+        if not isinstance(overlay, dict):
+            continue
+        for frame in overlay.get("frames", []):
+            if isinstance(frame, dict) and frame.get("frameId") == frame_id:
+                return frame
+    return None
 
 
 def _raster_tile_fallback_enabled_from_env() -> bool:

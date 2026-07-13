@@ -1,0 +1,310 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from radar_satellite_risk_extractor import (
+    build_route_weather_risk_package,
+    encode_compact_lora_alert,
+    run_server_side_cwa_imagery_job,
+    write_route_weather_risk_outputs,
+)
+from cwa_imagery_registry import build_cwa_imagery_registry
+from cwa_radar_ingestor import CwaRadarIngestor
+from cwa_satellite_ingestor import CwaSatelliteIngestor
+from route_imagery_sampler import RasterGrid, build_route_buffer
+from weather_imagery_tile_cache import WeatherImageryTileCache
+
+
+def test_risk_extractor_outputs_requested_features_and_teii_interactions(tmp_path: Path) -> None:
+    route_buffer = build_route_buffer([(24.0, 121.0), (24.0, 121.02)], buffer_m=1_000)
+    radar_samples = [
+        {
+            "sourceTimestamp": "2026-07-11T03:20:00Z",
+            "fetchedAt": "2026-07-11T03:27:00Z",
+            "currentRainOnRoute": True,
+            "nearbyStrongEcho": True,
+            "convectiveCellScore": 0.88,
+            "coverageConfidence": 0.9,
+        }
+    ]
+    satellite_samples = [
+        {
+            "sourceTimestamp": "2026-07-11T03:20:00Z",
+            "fetchedAt": "2026-07-11T03:28:00Z",
+            "satelliteConvectiveCloudScore": 0.82,
+            "coverageConfidence": 0.8,
+        }
+    ]
+    radar_motion = {
+        "movingTowardRoute": True,
+        "estimatedArrivalMinutes": 35,
+        "confidence": 0.75,
+    }
+    cloud_motion = {"movingTowardRoute": True, "confidence": 0.6}
+    terrain_segments = [
+        {
+            "segmentId": "seg.001",
+            "teii_20m": 91,
+            "hazardTypes": ["dry_creek", "scree", "cliff", "ridge"],
+            "gradePercent": -28,
+            "terrainSourceRefs": ["outputs/risk_score_points.geojson"],
+        }
+    ]
+
+    package = build_route_weather_risk_package(
+        route_id="fixture-route",
+        route_buffer=route_buffer,
+        radar_samples=radar_samples,
+        satellite_samples=satellite_samples,
+        radar_motion=radar_motion,
+        cloud_motion=cloud_motion,
+        terrain_segments=terrain_segments,
+        evaluated_at="2026-07-11T03:30:00Z",
+    )
+
+    features = package["imageryFeatures"]
+    assert features == {
+        "currentRainOnRoute": True,
+        "nearbyStrongEcho": True,
+        "rainBandApproaching": True,
+        "estimatedRainArrivalMinutes": 35,
+        "convectiveCellScore": 0.88,
+        "satelliteConvectiveCloudScore": 0.82,
+        "cloudMotionTowardRoute": True,
+        "dataDelayMinutes": 10,
+        "confidence": features["confidence"],
+    }
+    assert 0 < features["confidence"] <= 1
+    assert {item["ruleCode"] for item in package["weatherTerrainInteractions"]} == {
+        "RAIN_DRY_CREEK",
+        "RAIN_SCREE_CLIFF",
+        "THUNDER_RIDGE",
+        "STRONG_ECHO_STEEP_DESCENT",
+    }
+    assert package["boundary"]["candidateOnly"] is True
+    assert package["boundary"]["runtimeSafetyTruth"] is False
+
+    output = write_route_weather_risk_outputs(tmp_path, package)
+    assert output["route_weather_risk_package_ref"] == "outputs/route_weather_risk_package.json"
+    written = json.loads((tmp_path / output["route_weather_risk_package_ref"]).read_text())
+    assert written["routeId"] == "fixture-route"
+    alert = encode_compact_lora_alert(package)
+    assert len(alert["encoded"].encode("utf-8")) <= 160
+    assert alert["sent"] is False
+    assert alert["runtimeSafetyTruth"] is False
+
+
+def test_teii_alone_does_not_invent_terrain_classification() -> None:
+    package = build_route_weather_risk_package(
+        route_id="fixture-route",
+        route_buffer=build_route_buffer([(24.0, 121.0), (24.0, 121.01)], buffer_m=500),
+        radar_samples=[
+            {
+                "sourceTimestamp": "2026-07-11T03:20:00Z",
+                "fetchedAt": "2026-07-11T03:27:00Z",
+                "currentRainOnRoute": True,
+                "nearbyStrongEcho": True,
+                "convectiveCellScore": 0.9,
+                "coverageConfidence": 1.0,
+            }
+        ],
+        satellite_samples=[],
+        radar_motion={},
+        cloud_motion={},
+        terrain_segments=[{"segmentId": "seg.001", "teii_20m": 99}],
+        evaluated_at="2026-07-11T03:30:00Z",
+    )
+
+    assert package["weatherTerrainInteractions"] == []
+
+
+def test_fresh_satellite_does_not_hide_stale_radar_delay_or_confidence() -> None:
+    package = build_route_weather_risk_package(
+        route_id="fixture-route",
+        route_buffer=build_route_buffer([(24.0, 121.0), (24.0, 121.01)], buffer_m=500),
+        radar_samples=[
+            {
+                "sourceTimestamp": "2026-07-11T01:30:00Z",
+                "fetchedAt": "2026-07-11T03:29:00Z",
+                "expectedDelayMinutes": 12,
+                "currentRainOnRoute": True,
+                "nearbyStrongEcho": True,
+                "convectiveCellScore": 0.8,
+                "coverageConfidence": 1.0,
+            }
+        ],
+        satellite_samples=[
+            {
+                "sourceTimestamp": "2026-07-11T03:25:00Z",
+                "fetchedAt": "2026-07-11T03:29:00Z",
+                "expectedDelayMinutes": 20,
+                "satelliteConvectiveCloudScore": 0.8,
+                "coverageConfidence": 1.0,
+            }
+        ],
+        radar_motion={"confidence": 1.0},
+        cloud_motion={"confidence": 1.0},
+        terrain_segments=[],
+        evaluated_at="2026-07-11T03:30:00Z",
+    )
+
+    assert package["imageryFeatures"]["dataDelayMinutes"] == 120
+    assert package["dataDelayBySource"] == {
+        "radarMinutes": 120,
+        "satelliteMinutes": 5,
+    }
+    assert package["imageryFeatures"]["confidence"] <= 0.2
+
+
+def test_server_job_writes_compact_manifests_and_rejects_pi_processing(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspace" / "route"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text('{"project_id":"fixture-route"}\n')
+    cache = WeatherImageryTileCache(tmp_path / "external-cache")
+    registry = build_cwa_imagery_registry()
+    radar_spec = registry["radar.integrated.taiwan.transparent"]
+    satellite_spec = registry["satellite.enhanced_color.taiwan"]
+
+    def metadata(spec):
+        return {"sourceTimestamp": "2026-07-11T03:20:00Z", "url": spec.latest_url}
+
+    def history(spec, _hours):
+        return [metadata(spec)]
+
+    def image_bytes(url):
+        media_type = "image/png" if url.endswith(".png") else "image/jpeg"
+        return b"fixture-image", media_type, "fixture-etag"
+
+    radar_ingestor = CwaRadarIngestor(
+        registry=registry,
+        cache=cache,
+        latest_metadata_fetcher=metadata,
+        history_metadata_fetcher=history,
+        bytes_fetcher=image_bytes,
+    )
+    satellite_ingestor = CwaSatelliteIngestor(
+        registry=registry,
+        cache=cache,
+        latest_metadata_fetcher=metadata,
+        history_metadata_fetcher=history,
+        bytes_fetcher=image_bytes,
+    )
+    radar_grid = RasterGrid(
+        west=118,
+        south=20.5,
+        east=124,
+        north=26.5,
+        values=((25.0, 48.0), (30.0, 52.0)),
+    )
+    satellite_grid = RasterGrid(
+        west=117,
+        south=19,
+        east=126,
+        north=27,
+        values=((0.7, 0.9), (0.8, 0.95)),
+    )
+
+    refs = run_server_side_cwa_imagery_job(
+        project_root=project_root,
+        route_id="fixture-route",
+        route_points=[(24.0, 121.0), (24.0, 121.02)],
+        terrain_segments=[],
+        radar_ingestor=radar_ingestor,
+        satellite_ingestor=satellite_ingestor,
+        cache=cache,
+        registry=registry,
+        radar_product_id=radar_spec.product_id,
+        satellite_product_id=satellite_spec.product_id,
+        evaluated_at="2026-07-11T03:30:00Z",
+        allow_network_fetch=True,
+        processing_profile="mac-workstation",
+        server_capability_attested=True,
+        min_job_interval_seconds=0,
+        frame_grid_decoder=lambda frame, _cache: (
+            radar_grid if frame.product_id == radar_spec.product_id else satellite_grid
+        ),
+        build_display_assets=False,
+    )
+
+    assert refs["route_weather_risk_package_ref"] == "outputs/route_weather_risk_package.json"
+    assert refs["cwa_weather_imagery_manifest_ref"].endswith("weather_imagery_manifest.json")
+    project = json.loads((project_root / "project.json").read_text())
+    assert project["route_weather_risk_package_ref"] == refs["route_weather_risk_package_ref"]
+    manifest = json.loads((project_root / refs["cwa_weather_imagery_manifest_ref"]).read_text())
+    assert manifest["animationWindowsHours"] == [3, 6, 9, 12]
+    assert manifest["processingBoundary"]["raspberryPiImageProcessing"] is False
+    assert manifest["childOverlays"]["radar"]["frames"]
+    assert manifest["childOverlays"]["satellite"]["frames"]
+    assert "fixture-image" not in json.dumps(manifest)
+
+    try:
+        run_server_side_cwa_imagery_job(
+            project_root=project_root,
+            route_id="fixture-route",
+            route_points=[(24.0, 121.0), (24.0, 121.02)],
+            terrain_segments=[],
+            radar_ingestor=radar_ingestor,
+            satellite_ingestor=satellite_ingestor,
+            cache=cache,
+            registry=registry,
+            radar_product_id=radar_spec.product_id,
+            satellite_product_id=satellite_spec.product_id,
+            evaluated_at="2026-07-11T03:30:00Z",
+            allow_network_fetch=True,
+            processing_profile="pi-online-explicit",
+            server_capability_attested=True,
+            frame_grid_decoder=lambda frame, _cache: radar_grid,
+            build_display_assets=False,
+        )
+    except RuntimeError as exc:
+        assert "server-side" in str(exc)
+    else:
+        raise AssertionError("Pi profile must not run image-heavy weather processing")
+
+
+def test_server_job_rejects_actual_raspberry_pi_host_even_with_mac_profile(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "radar_satellite_risk_extractor._is_raspberry_pi_host",
+        lambda: True,
+    )
+
+    try:
+        run_server_side_cwa_imagery_job(
+            project_root=tmp_path / "workspace",
+            route_id="fixture-route",
+            route_points=[(24.0, 121.0), (24.0, 121.01)],
+            terrain_segments=[],
+            radar_ingestor=None,
+            satellite_ingestor=None,
+            cache=WeatherImageryTileCache(tmp_path / "cache"),
+            registry={},
+            evaluated_at="2026-07-11T03:30:00Z",
+            allow_network_fetch=True,
+            processing_profile="mac-workstation",
+            server_capability_attested=True,
+        )
+    except RuntimeError as exc:
+        assert "Raspberry Pi" in str(exc)
+    else:
+        raise AssertionError("actual Raspberry Pi host detection must fail closed")
+
+
+def test_server_job_fails_closed_without_trusted_capability(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="attestation"):
+        run_server_side_cwa_imagery_job(
+            project_root=tmp_path / "workspace",
+            route_id="fixture-route",
+            route_points=[(24.0, 121.0), (24.0, 121.01)],
+            terrain_segments=[],
+            radar_ingestor=None,
+            satellite_ingestor=None,
+            cache=WeatherImageryTileCache(tmp_path / "cache"),
+            registry={},
+            evaluated_at="2026-07-11T03:30:00Z",
+            allow_network_fetch=True,
+            processing_profile="mac-workstation",
+        )

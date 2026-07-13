@@ -295,6 +295,53 @@ This command is the main orchestrator. It should update:
 - mileage tag alignment;
 - layer manifests and admin/debug projections.
 
+### Optional One-Shot CWA Radar/Satellite Worker
+
+Run image-heavy weather preparation only on the Mac/server worker. Add
+`--prepare-cwa-imagery` and use `--profile mac-workstation` with the existing
+explicit-fetch approval flags:
+
+```bash
+SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1 \
+SCOUT_CWA_IMAGERY_CACHE_ROOT=/tmp/scout-local-data/cwa-weather-imagery \
+PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m pretrip_layer_preparation \
+  --project-id "$PROJECT_ID" \
+  --workspace-root "$WORKSPACE_ROOT" \
+  --layers cwa-weather,cwa-qpf,terrain,risk-score,route,segments \
+  --profile mac-workstation \
+  --network-mode explicit-fetch \
+  --allow-network-fetch \
+  --prepare-cwa-imagery \
+  --route-corridor-m 500
+```
+
+Required checks:
+
+- `SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1` is an operator-controlled capability
+  attestation; profile text alone never authorizes image-heavy work;
+- ARM and Raspberry Pi hosts fail closed even when a workstation profile is
+  supplied;
+- raw image cache root is outside the project workspace and repository;
+- each image is capped at 8 MiB and 20 megapixels, each product is capped at 24
+  evenly spaced frames across the requested window, and jobs are serialized
+  with a retry cooldown;
+- `project.json` contains `cwa_weather_imagery_manifest_ref`,
+  `route_weather_risk_package_ref`, and `route_weather_lora_alert_ref` after a
+  successful run;
+- manifests expose latest plus 3/6/9/12-hour windows without pretending a
+  latest-only source backfilled missing history;
+- source timestamp, fetched-at time, image type, extent, expected delay,
+  computed data delay, and candidate-only boundary are present;
+- Pi/mobile profiles report
+  `blocked_server_side_imagery_preparation_required` and perform no image work;
+- `/admin/pretrip`, `/admin/debug`, and `/admin` render only prepared cached
+  assets with product, opacity, and timeline controls;
+- `outputs/route_weather_lora_alert.json` has `sent=false` and does not invoke
+  radio or outbound providers.
+
+Do not add a recurring fetch schedule automatically. Long-term background
+monitoring requires a separately reviewed operator deployment/approval.
+
 When `SCOUT_PRETRIP_DURABLE_EVIDENCE_SOURCE_ROOT` is set, the wrapper performs
 a final durable evidence restore after route context collection. This is not a
 manual patch step; it is part of the reproducible reference-equivalence SOP.
@@ -2489,4 +2536,136 @@ Focused pretrip/admin/debug/API/view pytest: PASS (177 passed, 8 subtests passed
 32-layer repo gate: PASS
 32-layer workspace gate: PASS
 Admin UI visual smoke: PASS
+```
+
+## Run Log: 2026-07-11 Dashboard Segment Visibility Repair
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Attempt:
+
+```text
+Attempt 1 of 10
+Attempt type: read-only artifact diagnosis plus admin presentation repair
+Full import or layer-preparation rerun: not run; existing Segment evidence was valid
+```
+
+Issue encountered:
+
+- Symptom: the Dashboard Map appeared to have lost the Segment layer even
+  though the Segment checkbox remained enabled.
+- Root cause: the live SVG contained 239 Segment paths, but the paths used a
+  dark stroke with `opacity=.24` and were inserted below 3,576 baseline risk
+  paths, 3,576 calibrated paths, environmental overlays, and dense risk
+  points. The canonical `MAP_LAYER_RANKS` correctly keeps Segment before risk
+  overlays, so source append order alone cannot and should not override the
+  contract. The Dashboard fallback renderer also redrew the full route path
+  instead of consuming individual Segment display geometry.
+- Fix applied: render the pretrip Segment overlay as a high-contrast dashed
+  line with a dark contrast halo and keep scale-aware width at 5.6 px. Preserve
+  the canonical layer rank so the bright 92%-opacity Segment line remains
+  readable through the intentionally translucent risk overlays without
+  changing the 32-layer order. Build fallback Dashboard Segment paths from each candidate's
+  `display_geometry.coordinate_segments`; do not substitute the generic route
+  path when Segment evidence is missing.
+- SOP change: a layer contract PASS proves control/group structure, not human
+  visibility. Segment acceptance must also verify checked state, non-hidden
+  DOM group, nonzero path count, distinguishable computed stroke/opacity, and
+  a live screenshot with normal risk overlays enabled.
+
+Known warning:
+
+- `outputs/overpass_aligned_segments.json` and
+  `outputs/overpass_aligned_segment_display_geometry.json` still carry the
+  older internal project id `chilai_nanhua_day1_scoutAI_test0630_1`. This UI
+  repair does not rewrite evidence provenance.
+
+Validation snapshot:
+
+```text
+Live 9099 Segment control: PASS (checked; hidden=false)
+Live 9099 Segment paths: PASS (239 non-empty; 239 unique)
+Live 9099 Segment style: PASS (rgb(0, 212, 255); 5.6px; dash 7/4; opacity .92; dark halo)
+Live 9099 canonical order: PASS (retreat -> segments -> risk-ribbon -> risk-heatmap -> risk-delta -> risk-score)
+Live 9099 Dashboard fallback Segment paths: PASS (239 paths; 239 unique ids; 239 unique d values; 0 route-path matches)
+Live 9099 console/4xx errors: PASS (0 / 0)
+Live 9099 horizontal overflow: PASS (false)
+Focused pretrip/dashboard/layer-contract pytest: PASS (54 passed)
+pnpm lint/typecheck/test: PASS
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS
+Admin UI visual smoke: PASS
+Screenshot: /tmp/scout-segments-dashboard-fixed.png
+```
+
+## Run Log: 2026-07-11 Overpass-Aligned Segment Provenance Repair
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Attempt:
+
+```text
+Attempt 1 of 10
+Attempt type: isolated deterministic provenance rebuild plus provenance-closure replacement
+Full import or in-place layer-preparation rerun: not run
+Backup root: /tmp/scout-provenance-repair.fgZG1X/backup
+```
+
+Issue encountered:
+
+- Symptom: `outputs/overpass_aligned_segments.json` and
+  `outputs/overpass_aligned_segment_display_geometry.json` contained the old
+  project id `chilai_nanhua_day1_scoutAI_test0630_1` in artifact identity,
+  route refs, source paths, and risk-ribbon feature provenance.
+- Root cause: the aligned artifacts had been retained from the older workspace.
+  Their upstream risk ribbon also used the old route id, so rerunning alignment
+  against the in-place ribbon would have preserved thousands of stale
+  `source_feature_id` values.
+- Fix applied: assemble a minimal isolated workspace from the current project
+  inputs, regenerate the Overpass-backed risk centerline there, run the
+  supported alignment function, and verify numeric geometry parity. Copy back
+  the two requested aligned Segment artifacts plus 13 deterministic upstream
+  risk artifacts required for their `source_feature_id` references and the
+  baseline/calibrated risk-delta join to resolve. The producer now stamps the
+  current `project_id` and
+  `route_artifact_id` onto new aligned envelopes and records instead of
+  inheriting stale source identity fields.
+- SOP change: never repair these artifacts with a global string replacement.
+  If the risk ribbon also carries an old project id, regenerate the risk
+  centerline in an isolated workspace first; accept the replacement only when
+  candidate ids, point geometry, alignment status counts, and candidate-only
+  boundaries remain unchanged.
+
+Validation snapshot:
+
+```text
+Aligned Segment candidates: PASS (239 ids; status distribution unchanged)
+Aligned Segment display geometry: PASS (239 logical segments; 239 parts; 5,131 points)
+Numeric lat/lon parity: PASS (10,262 coordinate occurrences unchanged)
+Old project-id fields: PASS (4,604 -> 0 in aligned segments; 8,059 -> 0 in display geometry)
+Current display identity: PASS (chilai_nanhua_day1_scoutAI / artifact.gpx.chilai_nanhua_day1_scoutAI)
+Candidate boundary: PASS (candidate_only=true; runtime_safety_truth=false)
+Risk provenance closure: PASS (7,152/7,152 ribbon sample refs resolved)
+Aligned Segment source refs: PASS (3,648/3,648 resolved)
+Aligned display source refs: PASS (7,578/7,578 resolved)
+Upstream risk artifacts: PASS (13 files; stale ID count 0)
+Focused alignment pytest: PASS (6 passed)
+pnpm lint/typecheck/test: PASS
+32-layer repo gate: PASS
+32-layer workspace gate: PASS
+Workspace spec alignment: PASS (0 errors; 5 existing layout-metadata warnings)
+Admin UI visual smoke: PASS
+Live 9099 Segment render: PASS (239 non-empty paths; control checked; no horizontal overflow)
+Live 9099 risk render: PASS (3,576 baseline; 3,576 calibrated; 3,672 delta SVG paths)
+Live 9099 console/4xx errors: PASS (0 / 0)
+Backup retained: /tmp/scout-provenance-repair.fgZG1X/backup
 ```
