@@ -54,6 +54,59 @@ def test_layer_preparation_preview_is_metadata_only_and_no_write(
     assert "<trkpt" not in json.dumps(preview, ensure_ascii=False).lower()
 
 
+def test_same_run_overpass_alignment_precedes_cwa_preparation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    project_path = project_root / "project.json"
+    aligned_ref = "outputs/overpass_aligned_segment_display_geometry.json"
+    call_order: list[str] = []
+
+    def align_before_cwa(*, project_root: Path, manifest: dict[str, object]) -> dict[str, object]:
+        call_order.append("alignment")
+        project = _load(project_path)
+        project["overpass_aligned_segment_display_geometry_ref"] = aligned_ref
+        project_path.write_text(
+            json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "status": "completed",
+            "output_refs": {
+                "overpass_aligned_segment_display_geometry_ref": aligned_ref,
+            },
+            "counts": {"snapped_point_count": 1, "kept_gpx_point_count": 0},
+        }
+
+    def prepare_environment(_request: LayerPreparationRequest) -> None:
+        call_order.append("environment")
+        project = _load(project_path)
+        assert project.get("overpass_aligned_segment_display_geometry_ref") == aligned_ref
+
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_overpass_route_alignment_after_layer_preparation",
+        align_before_cwa,
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_maybe_prepare_environment_evidence",
+        prepare_environment,
+    )
+
+    run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("overpass", "cwa-qpf"),
+            prepared_at="2026-07-13T03:00:00+00:00",
+        )
+    )
+
+    assert call_order == ["alignment", "environment"]
+
+
 def test_project_source_refs_accept_directory_refs(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     cache_dir = project_root / "outputs" / "layers" / "cache" / "raster_label_ocr_tiles"
