@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -57,6 +58,8 @@ def test_admin_weather_imagery_manifest_and_asset_are_cache_only(
     asset_path.write_bytes(b"cached-overlay")
     manifest = {
         "artifactKind": "weatherImageryTimelineManifest",
+        "schemaVersion": "weatherImageryTimelineManifest.v1",
+        "projectId": "fixture-route",
         "layerId": "cwa-weather",
         "animationWindowsHours": [3, 6, 9, 12],
         "childOverlays": {
@@ -139,6 +142,79 @@ def test_admin_weather_imagery_manifest_and_asset_are_cache_only(
     assert client.get(
         "/admin/pretrip/projects/fixture-route/weather-imagery/satellite.full-disk.raw"
     ).status_code == 404
+
+
+def test_admin_weather_imagery_recomputes_freshness_and_hides_missing_assets(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    workspace_root = tmp_path / "workspaces"
+    project_root = workspace_root / "fixture-route"
+    manifest_ref = "outputs/environment/cwa/imagery/weather_imagery_manifest.json"
+    manifest_path = project_root / manifest_ref
+    manifest_path.parent.mkdir(parents=True)
+    cache_root = tmp_path / "external-cache"
+    asset_ref = "frames/radar/stale.display.png"
+    asset_path = cache_root / asset_ref
+    asset_path.parent.mkdir(parents=True)
+    asset_path.write_bytes(b"stale-overlay")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "artifactKind": "weatherImageryTimelineManifest",
+                "schemaVersion": "weatherImageryTimelineManifest.v1",
+                "projectId": "fixture-route",
+                "childOverlays": {
+                    "radar": {
+                        "frames": [
+                            {
+                                "frameId": "radar.stale.001",
+                                "sourceTimestamp": "2026-07-11T03:20:00Z",
+                                "fetchedAt": "2026-07-11T03:27:00Z",
+                                "updateIntervalMinutes": 10,
+                                "expectedDelayMinutes": 10,
+                                "assetRef": asset_ref,
+                                "mapOverlaySupported": True,
+                            }
+                        ]
+                    },
+                    "satellite": {"frames": []},
+                },
+                "processingBoundary": {"candidateOnly": True, "runtimeSafetyTruth": False},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "fixture-route",
+                "cwa_weather_imagery_manifest_ref": manifest_ref,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCOUT_CWA_IMAGERY_CACHE_ROOT", str(cache_root))
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            now_factory=lambda: datetime.fromisoformat("2026-07-11T06:30:00+00:00"),
+        )
+    )
+
+    stale = client.get("/admin/pretrip/projects/fixture-route/weather-imagery").json()
+    frame = stale["childOverlays"]["radar"]["frames"][0]
+    assert stale["status"] == "stale_data"
+    assert frame["freshness"]["status"] == "stale_data"
+    assert frame["assetStatus"] == "available"
+    assert frame["assetUrl"].endswith("/weather-imagery/radar.stale.001")
+
+    asset_path.unlink()
+    missing = client.get("/admin/pretrip/projects/fixture-route/weather-imagery").json()
+    missing_frame = missing["childOverlays"]["radar"]["frames"][0]
+    assert missing["status"] == "cache_missing"
+    assert missing_frame["assetStatus"] == "cache_missing"
+    assert "assetUrl" not in missing_frame
 
 
 def test_pretrip_view_summary_keeps_only_compact_weather_imagery_features() -> None:
