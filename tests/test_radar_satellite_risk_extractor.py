@@ -208,6 +208,13 @@ def test_server_job_writes_compact_manifests_and_rejects_pi_processing(tmp_path:
     refs = run_server_side_cwa_imagery_job(
         project_root=project_root,
         route_id="fixture-route",
+        route_identity={
+            "projectId": "fixture-route",
+            "routeRef": "outputs/segments/overpass_aligned.json",
+            "routeSha256": "a" * 64,
+            "routeBasis": "overpass_aligned_segment_display_geometry",
+            "pointCount": 2,
+        },
         route_points=[(24.0, 121.0), (24.0, 121.02)],
         terrain_segments=[],
         radar_ingestor=radar_ingestor,
@@ -237,6 +244,23 @@ def test_server_job_writes_compact_manifests_and_rejects_pi_processing(tmp_path:
     assert manifest["childOverlays"]["radar"]["frames"]
     assert manifest["childOverlays"]["satellite"]["frames"]
     assert "fixture-image" not in json.dumps(manifest)
+    assert manifest["projectId"] == "fixture-route"
+    assert manifest["routeRef"] == "outputs/segments/overpass_aligned.json"
+    assert manifest["routeSha256"] == "a" * 64
+    assert manifest["routeBasis"] == "overpass_aligned_segment_display_geometry"
+    assert manifest["pairId"]
+    assert set(manifest["sourceFrameIds"]) == {"radar", "satellite"}
+    for ref_key in (
+        "cwa_radar_frames_manifest_ref",
+        "cwa_satellite_frames_manifest_ref",
+        "route_imagery_sampling_ref",
+        "route_weather_risk_package_ref",
+    ):
+        artifact = json.loads((project_root / refs[ref_key]).read_text())
+        assert artifact["projectId"] == "fixture-route"
+        assert artifact["routeRef"] == "outputs/segments/overpass_aligned.json"
+        assert artifact["routeSha256"] == "a" * 64
+        assert artifact["pairId"] == manifest["pairId"]
 
     try:
         run_server_side_cwa_imagery_job(
