@@ -1779,3 +1779,101 @@ def _body_index_metric(name: str, values: list[float]) -> dict[str, object]:
         "name": name,
         "data": [{"qty": value, "source": "fixture.watch"} for value in values],
     }
+
+
+def test_dashboard_cwa_truth_state_play_guard_and_single_product_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+
+    for marker in (
+        "CWA_UI_STATUSES",
+        "dashboardCwaDerivedStatus",
+        "stale_data",
+        "no_coverage",
+        "zero_precipitation",
+        "unavailable",
+        "formatCwaTimestamp",
+        'data-dashboard-cwa-panel-toggle',
+        'data-dashboard-cwa-sheet-state',
+    ):
+        assert marker in html
+
+    assert 'productId: "radar"' in html
+    assert 'play.disabled = !bridgeReady || Number(snapshot.maxFrameIndex || 0) < 1;' in html
+    assert "freshness: snapshot.freshness" in html
+    assert "coverageStatus: snapshot.coverageStatus" in html
+
+    assert "function cwaDerivedStatus" in pretrip_html
+    assert 'productId: "radar"' in pretrip_html
+    assert "playableFrameCount < 2" in pretrip_html
+    assert "button.disabled = playableFrameCount < 2" in pretrip_html
+    assert "freshness:" in pretrip_html
+    assert "coverageStatus:" in pretrip_html
+
+
+def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    for marker in (
+        "function loadWeatherData",
+        "function renderWeatherLiveSummary",
+        "/rainfall-grids",
+        "/weather-imagery",
+        'data-weather-status',
+        'data-weather-open-map',
+        "cache-only",
+        "示例規則",
+        "Preview",
+    ):
+        assert marker in html
+
+    assert "CHANGE_PLAN" not in html.split("function renderWeatherPage", 1)[1].split(
+        "function renderNavigationPage", 1
+    )[0]
+
+
+def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_state() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    project_id_candidates = html.split("function pretripDataProjectIds()", 1)[1].split(
+        "async function fetchJson", 1
+    )[0]
+    assert "replace(/_scoutAI$/" not in project_id_candidates
+    assert "PRETRIP_DATA_PROJECT_ID" not in project_id_candidates
+    assert "return [projectId()]" in project_id_candidates
+
+    for marker in (
+        "ROUTE_DATA_SCOPES",
+        "loadDataForRoute",
+        "loadedDataScopes",
+        "debugEndpointStates",
+        "DEGRADED",
+        'data-debug-retry',
+    ):
+        assert marker in html
+
+
+def test_dashboard_primary_information_architecture_and_mobile_shell_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert html.count("data-nav-primary") == 8
+    for label in (
+        "Overview",
+        "Plan Trip",
+        "Map & Evidence",
+        "Team & Pace",
+        "Safety Decisions",
+        "Assistant",
+        "System",
+        "Labs / Preview",
+    ):
+        assert label in html
+
+    assert 'data-route-truth="live"' in html
+    assert 'data-route-truth="partial"' in html
+    assert 'data-route-truth="preview"' in html
+    assert 'id="dashboardNavToggle"' in html
+    assert 'aria-controls="dashboardSidebar"' in html
+    assert "bindMobileNavigation" in html
+    assert "70dvh" in html
+    assert "env(safe-area-inset-bottom)" in html

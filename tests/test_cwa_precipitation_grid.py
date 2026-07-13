@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cwa_precipitation_grid import parse_qpesums_grid
+from cwa_precipitation_grid import CwaPrecipitationGrid, parse_qpesums_grid
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "cwa" / "qpesums"
@@ -119,3 +119,32 @@ def test_structured_origin_wins_and_records_provider_description_discrepancy() -
     assert grid.source_metadata_warnings == (
         "content_description_origin_disagrees_with_structured_parameter_set",
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "unsafe_value"),
+    [
+        ("candidate_only", False),
+        ("runtime_safety_truth", True),
+        ("server_side_only", False),
+        ("raspberry_pi_grid_processing", True),
+        ("mobile_grid_processing", True),
+    ],
+)
+def test_grid_contract_rejects_unsafe_boundary_overrides(
+    field: str,
+    unsafe_value: bool,
+) -> None:
+    grid = parse_qpesums_grid(
+        _fixture("O-B0045-001"),
+        fetched_at="2026-07-13T10:42:00+08:00",
+        coordinate_transformer=_identity,
+    )
+    payload = grid.model_dump(mode="python")
+    payload["boundary"] = {
+        **payload["boundary"],
+        field: unsafe_value,
+    }
+
+    with pytest.raises(ValueError, match="boundary"):
+        CwaPrecipitationGrid.model_validate(payload)

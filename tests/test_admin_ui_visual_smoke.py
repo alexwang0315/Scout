@@ -43,7 +43,7 @@ def test_admin_ui_visual_smoke_script_covers_routes_viewports_and_boundaries():
 
     for route in ("/admin/debug", "/admin/pretrip", "/admin/hardware-readiness", "/admin", "/admin/dashboard"):
         assert route in script
-    assert "/admin/dashboard?projectId=chilai_nanhua_day1#map" in script
+    assert "/admin/dashboard?projectId=chilai_nanhua_day1_scoutAI#map" in script
 
     for selector in (
         "#runtimeMap",
@@ -96,6 +96,10 @@ def test_admin_ui_visual_smoke_script_covers_routes_viewports_and_boundaries():
     assert "rangeChangedFromKeyboard" in script
     assert "cwaOverlayImages" in script
     assert "cwaOverlayDomUpdated" in script
+    assert "cwaSheetFitsViewport" in script
+    assert "cwaMapVisibleHeight" in script
+    assert "minTouchTargetPx: 44" in script
+    assert "SCOUT_ADMIN_UI_STARTUP_TIMEOUT_MS" in script
     assert "cwaImageryFixtureManifest" in script
     assert 'id: "compact", width: 320' in script
     assert "data-dashboard-cwa-imagery-window" in script

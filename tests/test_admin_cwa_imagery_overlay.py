@@ -28,6 +28,20 @@ def test_pretrip_map_renders_numeric_rainfall_cells_with_product_and_opacity_con
         assert marker in html
 
 
+def test_debug_and_after_action_disclose_persisted_rainfall_render_support() -> None:
+    debug_html = (ROOT / "docs/admin/phase-3-5-runtime-debug.html").read_text(
+        encoding="utf-8"
+    )
+    admin_html = (ROOT / "docs/admin/phase1-after-action.html").read_text(
+        encoding="utf-8"
+    )
+
+    for html in (debug_html, admin_html):
+        assert 'data-cwa-rainfall-support="legacy_projection"' in html
+        assert "Persisted rainfall grid is available in Pre-trip and Dashboard Map" in html
+        assert "candidate-only" in html
+
+
 def test_admin_weather_imagery_manifest_and_asset_are_cache_only(
     tmp_path: Path,
     monkeypatch,

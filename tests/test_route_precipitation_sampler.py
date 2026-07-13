@@ -117,3 +117,59 @@ def test_expired_qpf_is_stale_with_zero_confidence() -> None:
     assert package["status"] == "stale_data"
     assert package["confidence"] == 0
     assert package["dataFreshness"]["qpfExpired"] is True
+
+
+def test_route_trend_never_reports_ready_without_route_or_point_coverage() -> None:
+    package = build_route_precipitation_trend(
+        qpe_grid=_grid("O-B0045-001"),
+        qpf_grid=_grid("F-B0046-001"),
+        route_points=[(22.0, 120.0), (22.1, 120.1)],
+        current_position={
+            "lat": 22.0,
+            "lon": 120.0,
+            "observedAt": "2026-07-13T10:40:00+08:00",
+        },
+        target_position={"lat": 22.1, "lon": 120.1, "id": "OUTSIDE"},
+    )
+
+    assert package["currentPosition"]["status"] == "outside_grid"
+    assert package["target"]["status"] == "outside_grid"
+    assert package["corridor"]["coveredRouteSampleCount"] == 0
+    assert package["confidence"] == 0
+    assert package["status"] != "ready"
+
+
+def test_route_trend_never_reports_ready_for_no_data_positions() -> None:
+    package = build_route_precipitation_trend(
+        qpe_grid=_grid("O-B0045-001"),
+        qpf_grid=_grid("F-B0046-001"),
+        route_points=[(23.0, 121.0), (23.0125, 121.025)],
+        current_position={
+            "lat": 23.0,
+            "lon": 121.025,
+            "observedAt": "2026-07-13T10:40:00+08:00",
+        },
+        target_position={"lat": 23.0, "lon": 121.025, "id": "NO-DATA"},
+    )
+
+    assert package["currentPosition"]["status"] == "missing_cell"
+    assert package["target"]["status"] == "missing_cell"
+    assert package["status"] != "ready"
+
+
+def test_current_position_observed_at_is_compared_with_evaluated_at() -> None:
+    package = build_route_precipitation_trend(
+        qpe_grid=_grid("O-B0045-001"),
+        qpf_grid=_grid("F-B0046-001"),
+        route_points=[(23.0, 121.0), (23.0125, 121.025)],
+        current_position={
+            "lat": 23.0,
+            "lon": 121.0,
+            "observedAt": "2026-07-13T13:00:00+08:00",
+        },
+        target_position={"lat": 23.0125, "lon": 121.025, "id": "CP-02"},
+        evaluated_at="2026-07-13T13:00:00+08:00",
+    )
+
+    assert package["status"] == "stale_data"
+    assert package["confidence"] == 0
