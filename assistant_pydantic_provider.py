@@ -8,10 +8,10 @@ import threading
 import urllib.request
 from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from assistant_model_config import (
     AI_HAT_PLUS_2_ACCELERATOR,
@@ -26,7 +26,10 @@ from assistant_models import (
     ScoutAssistantQuery,
     ScoutAssistantResponse,
 )
-from assistant_workspace_total_info import TOTAL_INFO_SOURCE_ID
+from assistant_workspace_total_info import (
+    TOTAL_INFO_SOURCE_ID,
+    public_workspace_total_info_summary,
+)
 from assistant_offline_fallback_contract import (
     OFFLINE_FALLBACK_SCHEMA_VERSION,
     build_offline_fallback_schema_prompt,
@@ -40,12 +43,24 @@ from pydantic_ai_runtime_compat import (
     pydantic_result_output,
 )
 from scout.agents.model_policy import resolve_model_policy
+from scout.schemas.agent_runtime import (
+    AgentRequestLedger,
+    AgentRunBudget,
+    AgentRunLedger,
+    ContextHandle,
+    EvidenceCard,
+    GroundingVerification,
+    ToolCard,
+)
+from scout.services.bounded_agent_runtime import BoundedAgentRuntime, estimate_tokens
 from scout_ai_tool_contracts import (
     ScoutAiToolImplementationStatus,
     ScoutAiToolStatus,
     tool_registry_output,
 )
+from scout_ai_context_registry import discover_scout_ai_context_sources
 from scout_ai_tool_executor import execute_scout_ai_tool
+from scout_ai_tool_planner import plan_scout_ai_tools
 from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
@@ -83,6 +98,187 @@ DEFAULT_TIMEOUT_SECONDS = 8
 DEFAULT_MAX_CONTEXT_CHARS = 12000
 DEFAULT_WORKSPACE_TOOL_LIMIT = 5
 DEFAULT_WORKSPACE_MODEL_MAX_TOKENS = 768
+MIN_GROUNDING_REPAIR_OUTPUT_HEADROOM = 1_024
+MAX_GROUNDING_REPAIR_MODEL_TOKENS = 256
+HARD_BUDGET_FAIL_CLOSED_OUTPUT = (
+    "Scout bounded runtime discarded the model answer because the actual provider "
+    "usage exceeded a hard token or tool budget."
+)
+MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT = (
+    "目前沒有取得可驗證的 Scout 證據，因此不會提供未驗證答案。"
+)
+
+REDACTED_MODEL_VALUE = "[REDACTED]"
+SENSITIVE_KEY_FRAGMENTS = (
+    "access_key",
+    "api_key",
+    "authorization",
+    "client_secret",
+    "cookie",
+    "credential",
+    "password",
+    "private_key",
+    "secret",
+    "session_id",
+    "token",
+)
+SUPPORTED_WORKSPACE_MANIFEST_REF_KEYS = frozenset(
+    {
+        "checkpoint_candidates_ref",
+        "contour_interpretation_candidates_ref",
+        "dtm_coverage_summary_ref",
+        "gis_perception_ai_judgements_ref",
+        "gis_perception_candidates_ref",
+        "map_context_ref",
+        "mcp_candidates_ref",
+        "mcp_cp_support_reconciliation_ref",
+        "mcp_named_point_evidence_ref",
+        "mcp_ocr_labels_ref",
+        "overpass_map_context_ref",
+        "readiness_report_ref",
+        "risk_ribbon_metadata_ref",
+        "risk_ribbon_ref",
+        "route_summary_ref",
+        "segment_candidates_ref",
+        "segment_dtm_coverage_ref",
+        "weather_daylight_evidence_ref",
+    }
+)
+MODEL_CONTROLLED_PATH_SUFFIXES = (
+    "_dir",
+    "_dirs",
+    "_path",
+    "_paths",
+    "_ref",
+    "_refs",
+)
+MODEL_ASSERTED_OBSERVATION_ARGUMENTS = frozenset(
+    {
+        "admission_state",
+        "all_accounted_for",
+        "battery_percent",
+        "body_battery_or_provider_energy",
+        "checkin_overdue_minutes",
+        "communication_status",
+        "current_delay_minutes",
+        "current_location_status",
+        "evidence_refs",
+        "fix_quality",
+        "gpx_loaded",
+        "heart_rate_bpm",
+        "horizontal_accuracy_m",
+        "injury_status",
+        "last_heard_minutes",
+        "lat",
+        "latitude",
+        "lon",
+        "longitude",
+        "minutes_to_next_cp",
+        "nearest_route_distance_m",
+        "offline_map_ready",
+        "overnight_risk",
+        "phone_battery_percent",
+        "power_bank_percent",
+        "remaining_safety_buffer_minutes",
+        "requested_duration_minutes",
+        "reserve_band",
+        "reserve_score",
+        "risk_score",
+        "risk_source",
+        "route_progress_m",
+        "split_team",
+        "staleness_s",
+        "subjective_difficulty",
+        "team_status",
+        "terrain_risk_level",
+        "watch_battery_percent",
+        "water_liters",
+        "weather_exposure",
+        "weather_matched_expectation",
+    }
+)
+SECRET_VALUE_PATTERNS = (
+    re.compile(r"(?i)\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}"),
+    re.compile(
+        r"(?i)\b(?:sk-|gh[pousr]_|github_pat_|xox[baprs]-|AIza|AKIA)"
+        r"[A-Za-z0-9_-]{8,}"
+    ),
+    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"),
+    re.compile(
+        r"(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)"
+        r"\s*[:=]\s*\S+"
+    ),
+)
+
+
+class WorkspacePathRejected(ValueError):
+    """Raised before a tool sees a model-controlled path outside its project."""
+
+
+class BoundedRequestBudgetStop(RuntimeError):
+    """Raised by deterministic preflight before a provider request is sent."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+PYDANTIC_USAGE_FIELDS = (
+    "requests",
+    "tool_calls",
+    "input_tokens",
+    "cache_write_tokens",
+    "cache_read_tokens",
+    "output_tokens",
+    "input_audio_tokens",
+    "cache_audio_read_tokens",
+    "output_audio_tokens",
+)
+
+
+def _serialize_pydantic_result_usage(result: object) -> dict[str, int]:
+    usage_value = getattr(result, "usage", None)
+    usage = usage_value() if callable(usage_value) else usage_value
+    if usage is None:
+        return {}
+    serialized = {
+        field: int(value)
+        for field in PYDANTIC_USAGE_FIELDS
+        if isinstance((value := getattr(usage, field, None)), int)
+    }
+    details = getattr(usage, "details", None)
+    if isinstance(details, dict):
+        serialized.update(
+            {
+                str(key): int(value)
+                for key, value in details.items()
+                if isinstance(value, int)
+            }
+        )
+    return serialized
+
+
+def _serialize_pydantic_response_metadata(result: object) -> dict[str, str]:
+    response_value = getattr(result, "response", None)
+    response = response_value() if callable(response_value) else response_value
+    if response is None:
+        return {}
+    fields = (
+        "finish_reason",
+        "model_name",
+        "provider_name",
+        "provider_response_id",
+    )
+    return {
+        field: str(value)
+        for field in fields
+        if (value := getattr(response, field, None)) is not None
+    }
+
+
+def _request_timeout(timeout_seconds: int | None) -> float | None:
+    if timeout_seconds is None:
+        return None
+    return float(max(1, timeout_seconds - 1))
 
 WORKSPACE_EVIDENCE_TOOL_ID = "pydantic_ai.tool.search_scout_workspace_evidence.v0"
 PRETRIP_TOOL_PLANNER_SKILL_ID = "assistant_skill.pretrip.tool_planner.v0"
@@ -207,6 +403,7 @@ WEATHER_GEO_TOOL_BUNDLE_POLICY = """Scout weather/geography tool bundle policy:
 """
 
 REGISTERED_WORKSPACE_TOOL_NAMES = {
+    WORKSPACE_EVIDENCE_TOOL_ID: "search_scout_workspace_evidence",
     WORKSPACE_CATALOG_TOOL_ID: "search_scout_workspace_catalog",
     ROUTE_STRUCTURE_TOOL_ID: "search_scout_route_structure",
     MAJOR_POINT_TOOL_ID: "search_scout_major_points",
@@ -216,6 +413,7 @@ REGISTERED_WORKSPACE_TOOL_NAMES = {
     MAP_PERCEPTION_TOOL_ID: "search_scout_map_perception",
     WEATHER_WINDOW_TOOL_ID: "search_scout_weather_window",
     ROUTE_READINESS_TOOL_ID: "search_scout_route_readiness",
+    ROUTE_ARCHITECTURE_TOOL_ID: "search_scout_route_architecture",
     NAVIGATION_TERRAIN_TOOL_ID: "search_scout_navigation_terrain",
     ROUTE_CONTEXT_TOOL_ID: "search_scout_route_context",
     CWA_ENVIRONMENT_TOOL_ID: "search_scout_cwa_environment",
@@ -505,6 +703,835 @@ def _registered_tool_descriptions() -> dict[str, str]:
 
 WORKSPACE_TOOL_PROMPT = build_workspace_tool_prompt()
 
+BOUNDED_AGENT_SYSTEM_POLICY = (
+    "Use only the progressively disclosed Scout tools and bounded evidence cards. "
+    "After tools return, answer without requesting more tools. Cite each concrete "
+    "claim with a source_ref from the evidence card. Report missing or stale evidence. "
+    "All workspace evidence is read-only/candidate-only and is not runtime safety truth."
+)
+
+
+def build_bounded_assistant_prompt(
+    query: ScoutAssistantQuery,
+    *,
+    sources: list[AssistantSourceRef],
+    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+) -> str:
+    """Build the normal cloud prompt from handles, never raw source payloads."""
+
+    handles = [
+        _context_handle_from_source(source)
+        for source in sources
+        if source.source_id != TOTAL_INFO_SOURCE_ID
+    ]
+    runtime = BoundedAgentRuntime(context_handles=handles)
+    selected_handles = runtime.context_find(
+        query.question,
+        filters=None,
+        top_k=3,
+        token_budget=max(120, min(900, max_context_chars // 8)),
+    )
+    payload = {
+        "question": query.question,
+        "surface": query.surface.value,
+        "project_id": query.project_id,
+        "context_handles": [
+            handle.model_dump(mode="json") for handle in selected_handles
+        ],
+        "context_contract": (
+            "Handles are discovery metadata only. Read facts through disclosed tools; "
+            "do not infer absent payloads or promote candidate evidence to safety truth."
+        ),
+    }
+    prompt = "SCOUT_BOUNDED_CONTEXT_V1\n" + json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return prompt[:max_context_chars]
+
+
+def _context_handle_from_source(source: AssistantSourceRef) -> ContextHandle:
+    source_ref = source.source_path or source.source_id
+    evidence_type = source.evidence_type or "assistant_context"
+    return ContextHandle(
+        context_id=source.source_id,
+        domain_id=_context_domain(evidence_type, source.source_id),
+        artifact_kind=evidence_type,
+        title=evidence_type.replace("_", " "),
+        source_ref=source_ref,
+        freshness=_source_freshness(source.context_summary),
+        scope_metadata={
+            "selected": source.selected,
+            "available_fields": _safe_context_field_names(source.context_summary),
+        },
+        relevance_score=0.6 if source.selected else 0.25,
+        estimated_tokens=max(
+            12,
+            estimate_tokens(
+                f"{source.source_id} {source_ref} {evidence_type}"
+            ),
+        ),
+        sensitivity="internal",
+    )
+
+
+def _safe_context_field_names(summary: dict[str, Any] | None) -> list[str]:
+    if not isinstance(summary, dict):
+        return []
+    return [
+        str(key)
+        for key in sorted(summary)
+        if not _is_sensitive_key_name(key) and "raw" not in str(key).casefold()
+    ][:16]
+
+
+def _is_sensitive_key_name(value: object) -> bool:
+    normalized = str(value).casefold()
+    return any(fragment in normalized for fragment in SENSITIVE_KEY_FRAGMENTS)
+
+
+def _looks_like_secret_value(value: str) -> bool:
+    return any(pattern.search(value) for pattern in SECRET_VALUE_PATTERNS)
+
+
+def _redact_model_egress(value: Any, *, parent_key: str | None = None) -> Any:
+    """Return a recursively redacted copy safe to place in a model request."""
+
+    if parent_key is not None and _is_sensitive_key_name(parent_key):
+        return REDACTED_MODEL_VALUE
+    if isinstance(value, dict):
+        return {
+            str(key): _redact_model_egress(item, parent_key=str(key))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_model_egress(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_model_egress(item) for item in value]
+    if isinstance(value, str) and _looks_like_secret_value(value):
+        return REDACTED_MODEL_VALUE
+    return value
+
+
+def _context_domain(evidence_type: str, source_id: str) -> str:
+    normalized = f"{evidence_type} {source_id}".casefold()
+    for domain in (
+        "weather",
+        "terrain",
+        "route",
+        "risk",
+        "navigation",
+        "team",
+        "health",
+        "device",
+        "workspace",
+    ):
+        if domain in normalized:
+            return domain
+    return "scout"
+
+
+def _source_freshness(summary: dict[str, Any] | None) -> str:
+    if not isinstance(summary, dict):
+        return "unknown"
+    for key in ("freshness", "stale_risk", "status"):
+        value = summary.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:80]
+    return "unknown"
+
+
+def _bounded_tool_cards() -> list[ToolCard]:
+    cards = [
+        ToolCard(
+            tool_id=contract.tool_id,
+            purpose=contract.description[:320],
+            required_inputs=list(
+                (contract.argument_schema.get("properties") or {}).keys()
+            )[:12]
+            or ["query"],
+            output_artifact_kind=contract.output_artifact_kind,
+            risk_level="low",
+            estimated_cost=0.0,
+            availability="available",
+            implementation_status=contract.implementation_status.value,
+        )
+        for contract in tool_registry_output(include_not_implemented=False).tools
+        if contract.tool_id in REGISTERED_WORKSPACE_TOOL_NAMES
+        and contract.implementation_status
+        == ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+    ]
+    cards.append(
+        ToolCard(
+            tool_id=WORKSPACE_EVIDENCE_TOOL_ID,
+            purpose="Search the local Scout workspace evidence index by text and evidence type.",
+            required_inputs=["query"],
+            output_artifact_kind="scout_workspace_evidence_search",
+            risk_level="low",
+            estimated_cost=0.0,
+            availability="available",
+            implementation_status="ready_current_tool",
+        )
+    )
+    return cards
+
+
+def _workspace_context_handles(
+    tool_context: "ScoutWorkspaceToolContext",
+) -> list[ContextHandle]:
+    project_root = tool_context._project_root()
+    if project_root is None or not project_root.exists():
+        return []
+    try:
+        registry = discover_scout_ai_context_sources(
+            project_root,
+            include_missing=True,
+        )
+    except (OSError, ValueError):
+        registry = None
+    handles: list[ContextHandle] = []
+    for entry in registry.sources if registry is not None else []:
+        if entry.domain in {"health", "team"}:
+            continue
+        safe_source_refs = [
+            canonical
+            for source_path in entry.source_paths
+            if (
+                canonical := _canonical_workspace_ref(project_root, source_path)
+            )
+            is not None
+        ]
+        if entry.source_paths and not safe_source_refs:
+            continue
+        source_ref = safe_source_refs[0] if safe_source_refs else (
+            f"workspace-context:{entry.source_id}"
+        )
+        artifact_kind = (
+            entry.evidence_types[0]
+            if entry.evidence_types
+            else "workspace_context_catalog"
+        )
+        handles.append(
+            ContextHandle(
+                context_id=entry.source_id,
+                domain_id=entry.domain,
+                artifact_kind=artifact_kind,
+                title=entry.label,
+                source_ref=source_ref,
+                freshness=entry.status.value,
+                scope_metadata={
+                    "tool_ids": entry.tool_ids,
+                    "evidence_types": entry.evidence_types,
+                    "missing_fields": entry.missing_fields[:12],
+                },
+                relevance_score=(
+                    0.8 if entry.status.value == "available" else 0.5
+                ),
+                estimated_tokens=max(
+                    12,
+                    estimate_tokens(
+                        " ".join(
+                            [
+                                entry.source_id,
+                                entry.domain,
+                                entry.label,
+                                source_ref,
+                                *entry.tool_ids,
+                                *entry.evidence_types,
+                            ]
+                        )
+                    ),
+                ),
+                sensitivity="internal",
+            )
+        )
+    handles.extend(_workspace_project_ref_handles(project_root))
+    return list({handle.context_id: handle for handle in handles}.values())
+
+
+def _workspace_project_ref_handles(project_root: Path) -> list[ContextHandle]:
+    project_path = project_root / "project.json"
+    try:
+        if project_path.stat().st_size > 2_000_000:
+            return []
+        project = json.loads(project_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(project, dict):
+        return []
+    handles: list[ContextHandle] = []
+    for key, value in project.items():
+        ref_key = str(key)
+        if (
+            ref_key not in SUPPORTED_WORKSPACE_MANIFEST_REF_KEYS
+            or not isinstance(value, str)
+        ):
+            continue
+        source_ref = value.strip()
+        if not source_ref:
+            continue
+        canonical_ref = _canonical_workspace_ref(project_root, source_ref)
+        if canonical_ref is None:
+            continue
+        resolved = _resolve_workspace_context_path(project_root, canonical_ref)
+        exists = resolved is not None and resolved.is_file()
+        domain = _context_domain(f"{ref_key} {canonical_ref}", ref_key)
+        handles.append(
+            ContextHandle(
+                context_id=f"workspace.artifact.{ref_key}",
+                domain_id=domain,
+                artifact_kind=ref_key.removesuffix("_ref"),
+                title=ref_key.removesuffix("_ref").replace("_", " "),
+                source_ref=canonical_ref,
+                freshness="available" if exists else "missing",
+                scope_metadata={"ref_key": ref_key, "exists": exists},
+                relevance_score=0.75 if exists else 0.25,
+                estimated_tokens=max(
+                    12,
+                    estimate_tokens(f"{ref_key} {canonical_ref} {domain}"),
+                ),
+                sensitivity="internal",
+            )
+        )
+    return handles
+
+
+def _resolve_workspace_context_path(
+    project_root: Path,
+    source_ref: str,
+) -> Path | None:
+    if "://" in source_ref or source_ref.startswith("workspace-context:"):
+        return None
+    normalized = source_ref.casefold()
+    blocked_fragments = (
+        ".env",
+        "api_key",
+        "credential",
+        "id_ed25519",
+        "id_rsa",
+        "password",
+        "private_key",
+        "secret",
+        "token",
+    )
+    if any(fragment in normalized for fragment in blocked_fragments):
+        return None
+    if any(part.startswith(".") for part in Path(source_ref).parts):
+        return None
+    try:
+        root = project_root.resolve()
+        candidate = Path(source_ref)
+        resolved = (
+            candidate if candidate.is_absolute() else root / candidate
+        ).resolve()
+    except (OSError, RuntimeError):
+        return None
+    return resolved if resolved == root or resolved.is_relative_to(root) else None
+
+
+def _canonical_workspace_ref(project_root: Path, source_ref: str) -> str | None:
+    resolved = _resolve_workspace_context_path(project_root, source_ref)
+    if resolved is None:
+        return None
+    try:
+        relative = resolved.relative_to(project_root.resolve())
+    except (OSError, ValueError):
+        return None
+    return relative.as_posix() or "."
+
+
+def _read_workspace_context(
+    project_root: Path,
+    handle: ContextHandle,
+    *,
+    token_budget: int,
+) -> dict[str, Any] | None:
+    if handle.sensitivity not in {"public", "internal"}:
+        return None
+    manifest_prefix = "workspace.artifact."
+    if handle.context_id.startswith(manifest_prefix):
+        ref_key = handle.context_id.removeprefix(manifest_prefix)
+        if ref_key not in SUPPORTED_WORKSPACE_MANIFEST_REF_KEYS:
+            return None
+    path = _resolve_workspace_context_path(project_root, handle.source_ref)
+    if path is None or path.name == "project.json" or not path.is_file():
+        return None
+    try:
+        if path.stat().st_size > 2_000_000:
+            payload: Any = {
+                "status": "bounded_read_required",
+                "source_ref": handle.source_ref,
+                "size_bytes": path.stat().st_size,
+            }
+        elif path.suffix.casefold() == ".json":
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        elif path.suffix.casefold() == ".jsonl":
+            payload = []
+            with path.open("r", encoding="utf-8", errors="replace") as stream:
+                for index, line in enumerate(stream):
+                    if index >= 20:
+                        break
+                    try:
+                        payload.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        else:
+            payload = path.read_text(encoding="utf-8", errors="replace")[:64_000]
+    except (OSError, json.JSONDecodeError):
+        return None
+    payload = _redact_model_egress(payload)
+    runtime = BoundedAgentRuntime(
+        context_handles=[handle],
+        context_payloads={handle.context_id: payload},
+    )
+    result = runtime.context_read(
+        handle.context_id,
+        token_budget=token_budget,
+    ).model_dump(mode="json")
+    return _redact_model_egress(result)
+
+
+def _is_model_controlled_path_key(key: object) -> bool:
+    normalized = str(key).casefold()
+    return normalized == "source_ref" or normalized.endswith(
+        MODEL_CONTROLLED_PATH_SUFFIXES
+    )
+
+
+def _confine_model_controlled_tool_arguments(
+    project_root: Path,
+    arguments: dict[str, object],
+) -> dict[str, object]:
+    """Return copied tool arguments with every model-controlled ref confined."""
+
+    return {
+        str(key): _confine_tool_argument_value(
+            project_root,
+            value,
+            key=str(key),
+            path_controlled=_is_model_controlled_path_key(key),
+        )
+        for key, value in arguments.items()
+    }
+
+
+def _discard_model_asserted_observation_arguments(
+    arguments: dict[str, object],
+) -> tuple[dict[str, object], list[str]]:
+    """Remove untrusted values that would otherwise masquerade as observations."""
+
+    ignored = sorted(
+        str(key)
+        for key, value in arguments.items()
+        if str(key).casefold() in MODEL_ASSERTED_OBSERVATION_ARGUMENTS
+        and value is not None
+    )
+    safe_arguments = {
+        str(key): value
+        for key, value in arguments.items()
+        if str(key).casefold() not in MODEL_ASSERTED_OBSERVATION_ARGUMENTS
+    }
+    return safe_arguments, ignored
+
+
+def _confine_tool_argument_value(
+    project_root: Path,
+    value: object,
+    *,
+    key: str,
+    path_controlled: bool,
+) -> object:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {
+            str(child_key): _confine_tool_argument_value(
+                project_root,
+                child,
+                key=str(child_key),
+                path_controlled=(
+                    path_controlled or _is_model_controlled_path_key(child_key)
+                ),
+            )
+            for child_key, child in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [
+            _confine_tool_argument_value(
+                project_root,
+                child,
+                key=key,
+                path_controlled=path_controlled,
+            )
+            for child in value
+        ]
+    if not path_controlled:
+        return value
+    if not isinstance(value, str):
+        raise WorkspacePathRejected(f"{key} must be a workspace-relative string")
+    if not value.strip():
+        return value
+    canonical = _canonical_workspace_ref(project_root, value)
+    if canonical is None:
+        raise WorkspacePathRejected(f"{key} is outside the selected project")
+    return canonical
+
+
+def _public_tool_invocation_summary(
+    invocation: dict[str, object],
+    *,
+    project_root: Path | None,
+) -> dict[str, object]:
+    safe_keys = {"tool_id", "status", "source_refs", "result_count", "digest"}
+    if set(invocation) == safe_keys and isinstance(invocation.get("digest"), str):
+        return dict(invocation)
+    serialized = json.dumps(
+        invocation,
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    result_count = invocation.get("result_count")
+    if not isinstance(result_count, int) or result_count < 0:
+        results = invocation.get("results")
+        result_count = len(results) if isinstance(results, list) else 0
+    return {
+        "tool_id": str(invocation.get("tool_id") or "unknown_tool"),
+        "status": str(invocation.get("status") or "unknown")[:80],
+        "source_refs": _public_source_refs(
+            invocation,
+            project_root=project_root,
+        ),
+        "result_count": result_count,
+        "digest": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
+    }
+
+
+def _public_source_refs(
+    value: object,
+    *,
+    project_root: Path | None,
+) -> list[str]:
+    refs: list[str] = []
+
+    def add(candidate: object) -> None:
+        if not isinstance(candidate, str):
+            return
+        safe = _sanitize_public_source_ref(candidate, project_root=project_root)
+        if safe is not None and safe not in refs:
+            refs.append(safe)
+
+    def visit(item: object, *, depth: int) -> None:
+        if depth > 5 or len(refs) >= 12:
+            return
+        if isinstance(item, dict):
+            for key, child in item.items():
+                normalized = str(key).casefold()
+                if normalized in {
+                    "artifact_ref",
+                    "normalized_artifact_ref",
+                    "path",
+                    "source_path",
+                    "source_ref",
+                }:
+                    add(child)
+                elif normalized in {"source_paths", "source_refs"}:
+                    if isinstance(child, dict):
+                        for candidate in child.values():
+                            add(candidate)
+                    elif isinstance(child, (list, tuple)):
+                        for candidate in child:
+                            if isinstance(candidate, dict):
+                                visit(candidate, depth=depth + 1)
+                            else:
+                                add(candidate)
+                    else:
+                        add(child)
+                else:
+                    visit(child, depth=depth + 1)
+        elif isinstance(item, (list, tuple)):
+            for child in item[:20]:
+                visit(child, depth=depth + 1)
+
+    visit(value, depth=0)
+    return refs[:12]
+
+
+def _sanitize_public_source_ref(
+    value: str,
+    *,
+    project_root: Path | None,
+) -> str | None:
+    ref = value.strip()
+    if not ref or _is_sensitive_key_name(ref) or _looks_like_secret_value(ref):
+        return None
+    if "://" in ref:
+        parsed = urlsplit(ref)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return None
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    if project_root is not None:
+        return _canonical_workspace_ref(project_root, ref)
+    path = Path(ref)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    if any(part.startswith(".") for part in path.parts):
+        return None
+    return path.as_posix()
+
+
+def _progressive_tool_runtime(
+    tool_context: "ScoutWorkspaceToolContext",
+) -> tuple[BoundedAgentRuntime, list[str], list[str], list[object]]:
+    cards = _bounded_tool_cards()
+    context_handles = _workspace_context_handles(tool_context)
+    discovery_runtime = BoundedAgentRuntime(
+        context_handles=context_handles,
+        tool_cards=cards,
+    )
+    project_root = tool_context._project_root()
+    planner_plan = plan_scout_ai_tools(
+        tool_context.query,
+        project_root=project_root,
+        limit=tool_context.default_limit,
+    )
+    planner_ids = [
+        item.tool_id
+        for item in planner_plan.selected_tools
+        if item.tool_id in REGISTERED_WORKSPACE_TOOL_NAMES
+        and item.implementation_status
+        == ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+    ]
+    if planner_ids:
+        compound = len(planner_ids) > 3
+        selected_ids = planner_ids[: 5 if compound else 3]
+    else:
+        context_matches = discovery_runtime.context_find(
+            tool_context.query.question,
+            top_k=3,
+            token_budget=600,
+        )
+        if context_matches:
+            selected_ids = []
+        else:
+            selected_cards = discovery_runtime.tool_find(
+                intent=tool_context.query.question,
+                domain=tool_context.query.surface.value,
+                risk="low",
+                top_k=3,
+            )
+            selected_ids = [card.tool_id for card in selected_cards]
+    selected_names = [
+        name
+        for tool_id in selected_ids
+        if (name := REGISTERED_WORKSPACE_TOOL_NAMES.get(tool_id)) is not None
+    ]
+    runtime = BoundedAgentRuntime(
+        context_handles=context_handles,
+        tool_cards=cards,
+        budget=AgentRunBudget(
+            max_requests=3,
+            max_tool_calls=5 if len(selected_ids) > 3 else 3,
+        ),
+    )
+    selected_id_set = set(selected_ids)
+    selected_plan_items = [
+        item for item in planner_plan.selected_tools if item.tool_id in selected_id_set
+    ]
+    return runtime, selected_ids, selected_names, selected_plan_items
+
+
+def _request_overhead(request_context: object) -> dict[str, int]:
+    parameters = getattr(request_context, "model_request_parameters", None)
+    tool_defs = list(getattr(parameters, "function_tools", []) or [])
+    tool_schema_payload = [
+        {
+            "name": getattr(tool, "name", ""),
+            "description": getattr(tool, "description", None),
+            "parameters_json_schema": getattr(tool, "parameters_json_schema", {}),
+        }
+        for tool in tool_defs
+    ]
+    system_chars = 0
+    tool_result_chars = 0
+    user_history_chars = 0
+    for message in list(getattr(request_context, "messages", []) or []):
+        instructions = getattr(message, "instructions", None)
+        if isinstance(instructions, str):
+            system_chars += len(instructions)
+        for part in list(getattr(message, "parts", []) or []):
+            part_name = type(part).__name__
+            chars = _safe_serialized_chars(part)
+            if part_name in {"SystemPromptPart", "InstructionPart"}:
+                system_chars += chars
+            elif part_name in {
+                "ToolReturnPart",
+                "NativeToolReturnPart",
+                "LoadCapabilityReturnPart",
+            }:
+                tool_result_chars += chars
+            else:
+                user_history_chars += chars
+    return {
+        "system_chars": system_chars,
+        "tool_schema_count": len(tool_defs),
+        "tool_schema_chars": (
+            len(json.dumps(tool_schema_payload, ensure_ascii=False, sort_keys=True))
+            if tool_defs
+            else 0
+        ),
+        "user_history_chars": user_history_chars,
+        "tool_result_chars": tool_result_chars,
+    }
+
+
+def _request_retry_prompt_count(request_context: object) -> int:
+    return sum(
+        1
+        for message in list(getattr(request_context, "messages", []) or [])
+        for part in list(getattr(message, "parts", []) or [])
+        if type(part).__name__ == "RetryPromptPart"
+    )
+
+
+def _estimated_request_input_tokens(overhead: dict[str, int]) -> int:
+    total_chars = sum(
+        max(0, int(overhead.get(field, 0)))
+        for field in (
+            "system_chars",
+            "tool_schema_chars",
+            "user_history_chars",
+            "tool_result_chars",
+        )
+    )
+    return max(1, (total_chars + 3) // 4)
+
+
+def _bounded_request_max_tokens(
+    *,
+    budget: AgentRunBudget,
+    prior_ledger: AgentRunLedger,
+    estimated_input_tokens: int,
+    configured_max_tokens: int | None,
+) -> int:
+    if prior_ledger.request_count >= budget.max_requests:
+        raise BoundedRequestBudgetStop("request_count budget reached before request")
+    remaining_input = budget.max_input_tokens - prior_ledger.input_tokens
+    if remaining_input <= 0 or estimated_input_tokens > remaining_input:
+        raise BoundedRequestBudgetStop("input_tokens budget exceeded before request")
+    remaining_output = budget.max_output_tokens - prior_ledger.output_tokens
+    if remaining_output <= 0:
+        raise BoundedRequestBudgetStop("output_tokens budget reached before request")
+    remaining_total = (
+        budget.max_total_tokens
+        - prior_ledger.input_tokens
+        - prior_ledger.output_tokens
+    )
+    available_output = min(
+        remaining_output,
+        remaining_total - estimated_input_tokens,
+    )
+    if available_output <= 0:
+        raise BoundedRequestBudgetStop("total_tokens budget exceeded before request")
+    if configured_max_tokens is not None:
+        available_output = min(available_output, configured_max_tokens)
+    if available_output <= 0:
+        raise BoundedRequestBudgetStop("output_tokens budget reached before request")
+    return int(available_output)
+
+
+def _bounded_repair_max_tokens(
+    *,
+    remaining_output_tokens: int,
+    configured_max_tokens: int | None,
+) -> int | None:
+    if remaining_output_tokens < MIN_GROUNDING_REPAIR_OUTPUT_HEADROOM:
+        return None
+    repair_cap = min(
+        MAX_GROUNDING_REPAIR_MODEL_TOKENS,
+        remaining_output_tokens // 4,
+    )
+    if configured_max_tokens is not None:
+        repair_cap = min(repair_cap, configured_max_tokens)
+    return repair_cap if repair_cap > 0 else None
+
+
+def _safe_serialized_chars(value: object) -> int:
+    try:
+        return len(
+            json.dumps(asdict(value), ensure_ascii=False, sort_keys=True, default=str)
+        )
+    except (TypeError, ValueError):
+        return len(str(value))
+
+
+def _response_usage_fields(response: object) -> dict[str, int]:
+    usage = getattr(response, "usage", None)
+    return {
+        field: int(value)
+        for field in (
+            "input_tokens",
+            "cache_write_tokens",
+            "cache_read_tokens",
+            "output_tokens",
+        )
+        if isinstance((value := getattr(usage, field, None)), int)
+    }
+
+
+def _response_tool_call_count(response: object) -> int:
+    return sum(
+        1
+        for part in list(getattr(response, "parts", []) or [])
+        if type(part).__name__ in {"ToolCallPart", "NativeToolCallPart"}
+    )
+
+
+def _finalize_agent_run_ledger(
+    runtime: BoundedAgentRuntime,
+    request_records: list[dict[str, Any]],
+    *,
+    selected_tool_ids: list[str],
+    executed_tool_ids: list[str],
+    stop_reason: str | None = None,
+) -> AgentRunLedger:
+    ledger = AgentRunLedger(budget=runtime.budget)
+    for record in request_records:
+        ledger = runtime.record_request(
+            ledger,
+            AgentRequestLedger.model_validate(record),
+            selected_tool_ids=selected_tool_ids,
+            executed_tool_ids=executed_tool_ids,
+        )
+        selected_tool_ids = []
+        executed_tool_ids = []
+    if stop_reason and ledger.budget_stop_reason is None:
+        ledger = ledger.model_copy(update={"budget_stop_reason": stop_reason})
+    return ledger
+
+
+def _actual_budget_overrun_reason(ledger: AgentRunLedger) -> str | None:
+    budget = ledger.budget
+    if ledger.input_tokens > budget.max_input_tokens:
+        return "input_tokens budget exceeded"
+    if ledger.output_tokens > budget.max_output_tokens:
+        return "output_tokens budget exceeded"
+    if ledger.input_tokens + ledger.output_tokens > budget.max_total_tokens:
+        return "total_tokens budget exceeded"
+    if ledger.tool_call_count > budget.max_tool_calls:
+        return "tool_call_count budget exceeded"
+    if ledger.repair_count > budget.max_repairs:
+        return "repair_count budget exceeded"
+    if ledger.request_count > budget.max_requests:
+        return "request_count budget exceeded"
+    if (
+        budget.max_estimated_cost is not None
+        and ledger.estimated_cost > budget.max_estimated_cost
+    ):
+        return "estimated_cost budget exceeded"
+    return None
+
 MUTATION_INTENT_FRAGMENTS = (
     "ignore previous",
     "ignore prior",
@@ -546,6 +1573,7 @@ class ScoutWorkspaceToolContext:
         self.pretrip_workspace_root = pretrip_workspace_root
         self.default_limit = default_limit
         self.invocations: list[dict[str, object]] = []
+        self.model_arguments_untrusted = False
 
     @classmethod
     def from_query_and_env(
@@ -1001,6 +2029,37 @@ class ScoutWorkspaceToolContext:
             )
         self.invocations.append(result)
         return result
+
+    def search_scout_route_architecture(
+        self,
+        query: str,
+        limit: int | None = None,
+        current_cp_id: str | None = None,
+        current_time: str | None = None,
+        target_cp_id: str | None = None,
+        route_summary_path: str | None = None,
+        checkpoint_candidates_path: str | None = None,
+        segment_candidates_path: str | None = None,
+        segment_policy_candidates_path: str | None = None,
+        retreat_routes_path: str | None = None,
+        planned_eta_path: str | None = None,
+        risk_ribbon_metadata_path: str | None = None,
+    ) -> dict[str, object]:
+        return self._run_registered_read_only_tool(
+            ROUTE_ARCHITECTURE_TOOL_ID,
+            query=query,
+            limit=limit,
+            current_cp_id=current_cp_id,
+            current_time=current_time,
+            target_cp_id=target_cp_id,
+            route_summary_path=route_summary_path,
+            checkpoint_candidates_path=checkpoint_candidates_path,
+            segment_candidates_path=segment_candidates_path,
+            segment_policy_candidates_path=segment_policy_candidates_path,
+            retreat_routes_path=retreat_routes_path,
+            planned_eta_path=planned_eta_path,
+            risk_ribbon_metadata_path=risk_ribbon_metadata_path,
+        )
 
     def search_scout_navigation_terrain(
         self,
@@ -1501,13 +2560,22 @@ class ScoutWorkspaceToolContext:
         project_root = self._project_root()
         if project_root is None:
             raise RuntimeError("pretrip_workspace_unavailable")
+        ignored_model_fields: list[str] = []
+        if self.model_arguments_untrusted:
+            arguments, ignored_model_fields = (
+                _discard_model_asserted_observation_arguments(arguments)
+            )
+        confined_arguments = _confine_model_controlled_tool_arguments(
+            project_root,
+            arguments,
+        )
         request = {
             "tool_id": tool_id,
             "arguments": {
                 "project_root": str(project_root),
                 "query": query,
                 "limit": limit,
-                **arguments,
+                **confined_arguments,
             },
         }
         result = execute_scout_ai_tool(request)
@@ -1522,6 +2590,8 @@ class ScoutWorkspaceToolContext:
         payload = dict(result.payload)
         payload.setdefault("tool_id", result.tool_id)
         payload.setdefault("status", "completed")
+        if ignored_model_fields:
+            payload["ignored_model_asserted_fields"] = ignored_model_fields
         payload.setdefault(
             "boundary",
             {
@@ -1532,7 +2602,12 @@ class ScoutWorkspaceToolContext:
         )
         return payload
 
-    def tool_source_ref(self, tool_id: str | None = None) -> AssistantSourceRef | None:
+    def tool_source_ref(
+        self,
+        tool_id: str | None = None,
+        *,
+        include_raw: bool = False,
+    ) -> AssistantSourceRef | None:
         invocations = [
             invocation
             for invocation in self.invocations
@@ -1588,6 +2663,10 @@ class ScoutWorkspaceToolContext:
         else:
             source_path = "assistant_pydantic_provider.search_scout_workspace_evidence"
             evidence_type = "assistant_workspace_tool_invocation"
+        public_latest = _public_tool_invocation_summary(
+            latest,
+            project_root=self._project_root(),
+        )
         return AssistantSourceRef(
             source_id=latest_tool_id,
             source_path=source_path,
@@ -1596,14 +2675,18 @@ class ScoutWorkspaceToolContext:
             context_summary={
                 "tool_id": latest_tool_id,
                 "invocation_count": len(invocations),
-                "latest": latest,
+                "latest": latest if include_raw else public_latest,
                 "read_only": True,
                 "runtime_safety_truth": False,
                 "raw_payloads_embedded": False,
             },
         )
 
-    def tool_source_refs(self) -> list[AssistantSourceRef]:
+    def tool_source_refs(
+        self,
+        *,
+        include_raw: bool = False,
+    ) -> list[AssistantSourceRef]:
         refs = []
         for tool_id in _dedupe_preserving_order(
             [
@@ -1611,7 +2694,7 @@ class ScoutWorkspaceToolContext:
                 for invocation in self.invocations
             ]
         ):
-            ref = self.tool_source_ref(tool_id=tool_id)
+            ref = self.tool_source_ref(tool_id=tool_id, include_raw=include_raw)
             if ref is not None:
                 refs.append(ref)
         return refs
@@ -1622,13 +2705,24 @@ class ScoutWorkspaceToolContext:
         project_id = self.query.project_id or self.query.context_ref
         if not project_id:
             return None
-        root = self.pretrip_workspace_root
-        if (root / "project.json").exists() and (
+        try:
+            root = self.pretrip_workspace_root.expanduser().resolve()
+        except (OSError, RuntimeError):
+            return None
+        if _confined_project_manifest_exists(root) and (
             root.name == project_id or _project_json_matches_id(root, project_id)
         ):
             return root
-        candidate = root / project_id
-        if (candidate / "project.json").exists():
+        try:
+            candidate = (root / project_id).resolve()
+        except (OSError, RuntimeError):
+            return None
+        if candidate != root and not candidate.is_relative_to(root):
+            return None
+        if (
+            _confined_project_manifest_exists(candidate)
+            and _project_json_matches_id(candidate, project_id)
+        ):
             return candidate
         return None
 
@@ -1707,7 +2801,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if catalog_result.get("status") == "completed":
-            catalog_source = tool_context.tool_source_ref(tool_id=WORKSPACE_CATALOG_TOOL_ID)
+            catalog_source = tool_context.tool_source_ref(
+                tool_id=WORKSPACE_CATALOG_TOOL_ID,
+                include_raw=True,
+            )
             if catalog_source is not None:
                 augmented = [catalog_source, *augmented]
 
@@ -1719,7 +2816,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if route_result.get("status") == "completed":
-            route_source = tool_context.tool_source_ref(tool_id=ROUTE_STRUCTURE_TOOL_ID)
+            route_source = tool_context.tool_source_ref(
+                tool_id=ROUTE_STRUCTURE_TOOL_ID,
+                include_raw=True,
+            )
             if route_source is not None:
                 augmented = [route_source, *augmented]
 
@@ -1731,7 +2831,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if major_result.get("status") == "completed":
-            major_source = tool_context.tool_source_ref(tool_id=MAJOR_POINT_TOOL_ID)
+            major_source = tool_context.tool_source_ref(
+                tool_id=MAJOR_POINT_TOOL_ID,
+                include_raw=True,
+            )
             if major_source is not None:
                 augmented = [major_source, *augmented]
 
@@ -1743,7 +2846,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if fulltext_result.get("status") == "completed":
-            fulltext_source = tool_context.tool_source_ref(tool_id=EVIDENCE_FULLTEXT_TOOL_ID)
+            fulltext_source = tool_context.tool_source_ref(
+                tool_id=EVIDENCE_FULLTEXT_TOOL_ID,
+                include_raw=True,
+            )
             if fulltext_source is not None:
                 augmented = [fulltext_source, *augmented]
 
@@ -1755,7 +2861,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if risk_result.get("status") == "completed":
-            risk_source = tool_context.tool_source_ref(tool_id=RISK_SCORE_TOOL_ID)
+            risk_source = tool_context.tool_source_ref(
+                tool_id=RISK_SCORE_TOOL_ID,
+                include_raw=True,
+            )
             if risk_source is not None:
                 augmented = [risk_source, *augmented]
 
@@ -1767,7 +2876,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if terrain_result.get("status") == "completed":
-            terrain_source = tool_context.tool_source_ref(tool_id=TERRAIN_SCORE_TOOL_ID)
+            terrain_source = tool_context.tool_source_ref(
+                tool_id=TERRAIN_SCORE_TOOL_ID,
+                include_raw=True,
+            )
             if terrain_source is not None:
                 risk_sources = [
                     source for source in augmented if source.source_id == RISK_SCORE_TOOL_ID
@@ -1785,7 +2897,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if map_result.get("status") == "completed":
-            map_source = tool_context.tool_source_ref(tool_id=MAP_PERCEPTION_TOOL_ID)
+            map_source = tool_context.tool_source_ref(
+                tool_id=MAP_PERCEPTION_TOOL_ID,
+                include_raw=True,
+            )
             if map_source is not None:
                 priority_sources = [
                     source
@@ -1807,7 +2922,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if cwa_result.get("status") == "completed":
-            cwa_source = tool_context.tool_source_ref(tool_id=CWA_ENVIRONMENT_TOOL_ID)
+            cwa_source = tool_context.tool_source_ref(
+                tool_id=CWA_ENVIRONMENT_TOOL_ID,
+                include_raw=True,
+            )
             if cwa_source is not None:
                 augmented = [cwa_source, *augmented]
 
@@ -1819,7 +2937,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if gee_result.get("status") == "completed":
-            gee_source = tool_context.tool_source_ref(tool_id=GEE_ENVIRONMENT_TOOL_ID)
+            gee_source = tool_context.tool_source_ref(
+                tool_id=GEE_ENVIRONMENT_TOOL_ID,
+                include_raw=True,
+            )
             if gee_source is not None:
                 augmented = [gee_source, *augmented]
 
@@ -1829,7 +2950,10 @@ def augment_sources_with_workspace_evidence_tool(
             limit=limit,
         )
         if result.get("status") == "completed":
-            tool_source = tool_context.tool_source_ref(tool_id=WORKSPACE_EVIDENCE_TOOL_ID)
+            tool_source = tool_context.tool_source_ref(
+                tool_id=WORKSPACE_EVIDENCE_TOOL_ID,
+                include_raw=True,
+            )
             if tool_source is not None:
                 risk_sources = [
                     source for source in augmented if source.source_id == RISK_SCORE_TOOL_ID
@@ -5033,7 +6157,12 @@ class PydanticAIAssistantProvider:
     ) -> ScoutAssistantResponse:
         _reset_runner_observability_state(self.runner)
         resolved_sources = list(sources or [])
-        prompt = build_assistant_prompt(
+        prompt_builder = (
+            build_bounded_assistant_prompt
+            if _runner_supports_bounded_context(self.runner)
+            else build_assistant_prompt
+        )
+        prompt = prompt_builder(
             query,
             sources=resolved_sources,
             max_context_chars=self.max_context_chars,
@@ -5059,7 +6188,11 @@ class PydanticAIAssistantProvider:
                 sources=resolved_sources,
             )
             if unavailable is not None:
-                return unavailable
+                return unavailable.model_copy(
+                    update={
+                        "sources": _public_assistant_sources(unavailable.sources),
+                    }
+                )
             pre_grounded_response = build_workspace_tool_fallback_response(
                 query,
                 sources=resolved_sources,
@@ -5191,6 +6324,9 @@ class PydanticAIAssistantProvider:
                         "answer": deterministic_answer,
                         "evidence_backed_answer": unresolved_tool_response.answer,
                         "limitations": deterministic_limitations,
+                        "sources": _public_assistant_sources(
+                            unresolved_tool_response.sources
+                        ),
                     }
                 )
         if unresolved_tool_response is not None and requested_ai_hat_fallback:
@@ -5649,7 +6785,7 @@ class PydanticAIAssistantProvider:
                 else []
             ),
             evidence_backed_answer=evidence_backed_answer,
-            sources=response_sources,
+            sources=_public_assistant_sources(response_sources),
             boundary=AssistantBoundary(surface=query.surface),
             limitations=limitations,
             offline_fallback=offline_fallback,
@@ -5843,11 +6979,29 @@ class PydanticAIEnvRunner:
         self.backend = backend
         self.hardware_accelerator = hardware_accelerator
         self.workspace_tools_enabled = workspace_tools_enabled
+        uses_local_token_budget = _uses_local_workspace_token_budget(
+            profile_name=profile_name,
+            backend=backend,
+            hardware_accelerator=hardware_accelerator,
+            base_url=base_url,
+        )
         self.workspace_model_max_tokens = (
-            workspace_model_max_tokens or _workspace_model_max_tokens_from_env()
+            workspace_model_max_tokens
+            if workspace_model_max_tokens is not None
+            else _workspace_model_max_tokens_from_env(
+                local_model=uses_local_token_budget,
+            )
         )
         self.model_policy = resolve_model_policy(self.model_name)
+        self.bounded_agent_runtime_enabled = True
         self.last_workspace_tool_invocations: list[dict[str, object]] = []
+        self.last_model_usage: dict[str, int] = {}
+        self.last_model_response_metadata: dict[str, str] = {}
+        self.last_agent_run_ledger: dict[str, Any] = {}
+        self.last_evidence_cards: list[dict[str, Any]] = []
+        self.last_grounding_verification: dict[str, Any] = {}
+        self.last_context_handles: list[dict[str, Any]] = []
+        self.last_context_reads: list[dict[str, Any]] = []
 
     @classmethod
     def from_profile(
@@ -5874,8 +7028,27 @@ class PydanticAIEnvRunner:
             workspace_model_max_tokens=_workspace_model_max_tokens_from_settings(
                 profile.model_settings,
                 environ=resolved_environ,
+                local_model=profile.profile == "local",
             ),
         )
+
+    def clone_for_isolated_run(self) -> "PydanticAIEnvRunner":
+        """Return a state-isolated runner for one eval case or timed request."""
+
+        clone = PydanticAIEnvRunner(
+            model_name=self.model_name,
+            base_url=self.base_url,
+            token_id=self.token_id,
+            token_env_var=self.token_env_var,
+            api_key=self.api_key,
+            profile_name=self.profile_name,
+            backend=self.backend,
+            hardware_accelerator=self.hardware_accelerator,
+            workspace_tools_enabled=self.workspace_tools_enabled,
+            workspace_model_max_tokens=self.workspace_model_max_tokens,
+        )
+        clone.bounded_agent_runtime_enabled = self.bounded_agent_runtime_enabled
+        return clone
 
     def connect(self, *, timeout_seconds: int) -> None:
         self.run(
@@ -5884,8 +7057,15 @@ class PydanticAIEnvRunner:
         )
 
     def run(self, prompt: str, *, timeout_seconds: int) -> str:
+        self.last_model_usage = {}
+        self.last_model_response_metadata = {}
+        self.last_agent_run_ledger = {}
+        self.last_evidence_cards = []
+        self.last_grounding_verification = {}
+        self.last_context_handles = []
+        self.last_context_reads = []
         executor = ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(self._run_model, prompt)
+        future = executor.submit(self._run_model, prompt, timeout_seconds)
         try:
             return future.result(timeout=timeout_seconds)
         except TimeoutError as exc:
@@ -5901,10 +7081,30 @@ class PydanticAIEnvRunner:
         timeout_seconds: int,
         tool_context: ScoutWorkspaceToolContext,
     ) -> str:
-        if not self.workspace_tools_enabled:
+        self.last_model_usage = {}
+        self.last_model_response_metadata = {}
+        self.last_agent_run_ledger = {}
+        self.last_evidence_cards = []
+        self.last_grounding_verification = {}
+        self.last_context_handles = []
+        self.last_context_reads = []
+        if (
+            not self.workspace_tools_enabled
+            and not self.bounded_agent_runtime_enabled
+        ):
             return self.run(prompt, timeout_seconds=timeout_seconds)
         executor = ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(self._run_model_with_workspace_tools, prompt, tool_context)
+        run_args: tuple[object, ...] = (
+            prompt,
+            tool_context,
+            timeout_seconds,
+        )
+        if not self.workspace_tools_enabled:
+            run_args = (*run_args, False)
+        future = executor.submit(
+            self._run_model_with_workspace_tools,
+            *run_args,
+        )
         try:
             return future.result(timeout=timeout_seconds)
         except TimeoutError as exc:
@@ -5913,14 +7113,85 @@ class PydanticAIEnvRunner:
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
 
-    def _run_model(self, prompt: str) -> str:
+    def _run_model(
+        self,
+        prompt: str,
+        request_timeout_seconds: int | None = None,
+    ) -> str:
+        bounded = bool(self.bounded_agent_runtime_enabled)
+        bounded_runtime: BoundedAgentRuntime | None = None
+        estimated_input_tokens = 0
+        request_max_tokens = self.workspace_model_max_tokens
+        if bounded:
+            bounded_runtime = BoundedAgentRuntime(
+                budget=AgentRunBudget(
+                    max_requests=1,
+                    max_tool_calls=0,
+                    max_repairs=0,
+                )
+            )
+            estimated_input_tokens = estimate_tokens(
+                f"{GLOBAL_ASSISTANT_PROMPT}\n{prompt}"
+            )
+            try:
+                request_max_tokens = _bounded_request_max_tokens(
+                    budget=bounded_runtime.budget,
+                    prior_ledger=AgentRunLedger(budget=bounded_runtime.budget),
+                    estimated_input_tokens=estimated_input_tokens,
+                    configured_max_tokens=self.workspace_model_max_tokens,
+                )
+            except BoundedRequestBudgetStop as exc:
+                ledger = _finalize_agent_run_ledger(
+                    bounded_runtime,
+                    [],
+                    selected_tool_ids=[],
+                    executed_tool_ids=[],
+                    stop_reason=exc.reason,
+                )
+                self.last_agent_run_ledger = ledger.model_dump(mode="json")
+                self.last_model_usage = {
+                    "requests": 0,
+                    "tool_calls": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+                return "Bounded runtime budget exhausted before provider request."
         if self.backend == "hailo_ollama":
-            return self._run_hailo_ollama_chat(
+            output = self._run_hailo_ollama_chat(
                 prompt,
                 system_prompt=GLOBAL_ASSISTANT_PROMPT,
+                max_tokens=request_max_tokens if bounded else None,
             )
+            if bounded_runtime is not None:
+                input_tokens = self.last_hailo_prompt_eval_count
+                output_tokens = self.last_hailo_eval_count
+                request_record = AgentRequestLedger(
+                    request_index=1,
+                    system_chars=len(GLOBAL_ASSISTANT_PROMPT),
+                    user_history_chars=len(prompt),
+                    input_tokens=(
+                        input_tokens
+                        if isinstance(input_tokens, int)
+                        else estimated_input_tokens
+                    ),
+                    output_tokens=(
+                        output_tokens
+                        if isinstance(output_tokens, int)
+                        else estimate_tokens(output)
+                    ),
+                )
+                ledger = _finalize_agent_run_ledger(
+                    bounded_runtime,
+                    [request_record.model_dump(mode="json")],
+                    selected_tool_ids=[],
+                    executed_tool_ids=[],
+                )
+                self.last_agent_run_ledger = ledger.model_dump(mode="json")
+                if _actual_budget_overrun_reason(ledger) is not None:
+                    return HARD_BUDGET_FAIL_CLOSED_OUTPUT
+            return output
 
-        from pydantic_ai import Agent
+        from pydantic_ai import Agent, UsageLimits
 
         chat_model_name = self.model_policy.model_for_agent or self.model_name
         agent = Agent(
@@ -5933,39 +7204,317 @@ class PydanticAIEnvRunner:
             capabilities=self._native_capabilities(),
             **pydantic_agent_runtime_kwargs(),
         )
-        result = agent.run_sync(
-            prompt,
-            model_settings={"max_tokens": self.workspace_model_max_tokens},
-        )
-        return str(pydantic_result_output(result))
+        run_kwargs: dict[str, object] = {
+            "model_settings": _workspace_request_model_settings(
+                max_tokens=request_max_tokens,
+                timeout_seconds=request_timeout_seconds,
+                workspace_tools=False,
+            )
+        }
+        if bounded_runtime is not None:
+            run_kwargs["usage_limits"] = UsageLimits(
+                request_limit=1,
+                tool_calls_limit=0,
+                input_tokens_limit=bounded_runtime.budget.max_input_tokens,
+                output_tokens_limit=bounded_runtime.budget.max_output_tokens,
+                total_tokens_limit=bounded_runtime.budget.max_total_tokens,
+            )
+        result = agent.run_sync(prompt, **run_kwargs)
+        usage = _serialize_pydantic_result_usage(result)
+        self.last_model_usage = usage
+        self.last_model_response_metadata = _serialize_pydantic_response_metadata(result)
+        output = str(pydantic_result_output(result))
+        if bounded_runtime is not None:
+            request_record = AgentRequestLedger(
+                request_index=1,
+                system_chars=len(GLOBAL_ASSISTANT_PROMPT),
+                user_history_chars=len(prompt),
+                input_tokens=int(usage.get("input_tokens", estimated_input_tokens)),
+                cache_write_tokens=int(usage.get("cache_write_tokens", 0)),
+                cache_read_tokens=int(usage.get("cache_read_tokens", 0)),
+                output_tokens=int(usage.get("output_tokens", estimate_tokens(output))),
+                tool_call_count=int(usage.get("tool_calls", 0)),
+            )
+            ledger = _finalize_agent_run_ledger(
+                bounded_runtime,
+                [request_record.model_dump(mode="json")],
+                selected_tool_ids=[],
+                executed_tool_ids=[],
+            )
+            self.last_agent_run_ledger = ledger.model_dump(mode="json")
+            if _actual_budget_overrun_reason(ledger) is not None:
+                return HARD_BUDGET_FAIL_CLOSED_OUTPUT
+        return output
 
     def _run_model_with_workspace_tools(
         self,
         prompt: str,
         tool_context: ScoutWorkspaceToolContext,
+        request_timeout_seconds: int | None = None,
+        allow_workspace_tools: bool = True,
     ) -> str:
+        chat_model_name = self.model_policy.model_for_agent or self.model_name
+        (
+            bounded_runtime,
+            selected_tool_ids,
+            selected_tool_names,
+            selected_plan_items,
+        ) = (
+            _progressive_tool_runtime(tool_context)
+        )
+        if not allow_workspace_tools:
+            selected_tool_ids = []
+            selected_tool_names = []
+            selected_plan_items = []
         if self.backend == "hailo_ollama":
-            return self._run_hailo_ollama_chat(
-                prompt,
-                system_prompt=f"{GLOBAL_ASSISTANT_PROMPT}\n{WORKSPACE_TOOL_PROMPT}",
+            return self._run_hailo_bounded_workspace(
+                tool_context=tool_context,
+                bounded_runtime=bounded_runtime,
+                selected_tool_ids=selected_tool_ids,
+                selected_plan_items=selected_plan_items,
+                request_timeout_seconds=request_timeout_seconds,
             )
 
-        from pydantic_ai import Agent
+        tool_context.model_arguments_untrusted = True
+        from pydantic_ai import Agent, UsageLimits
+        from pydantic_ai.capabilities import Hooks
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+        selected_context_handles = bounded_runtime.context_find(
+            " ".join([tool_context.query.question, *selected_tool_ids]),
+            top_k=3,
+            token_budget=600,
+        )
+        self.last_context_handles = [
+            handle.model_dump(mode="json") for handle in selected_context_handles
+        ]
+        context_reads: list[dict[str, Any]] = []
+        project_root = tool_context._project_root()
+        if not selected_tool_ids and project_root is not None:
+            for handle in selected_context_handles:
+                context_read = _read_workspace_context(
+                    project_root,
+                    handle,
+                    token_budget=500,
+                )
+                if context_read is not None:
+                    context_reads.append(context_read)
+        self.last_context_reads = list(context_reads)
+        selected_tool_name_set = set(selected_tool_names)
+        tool_id_by_name = {
+            name: tool_id
+            for tool_id, name in REGISTERED_WORKSPACE_TOOL_NAMES.items()
+            if name in selected_tool_name_set
+        }
+        request_records: list[dict[str, Any]] = []
+        evidence_cards: list[dict[str, Any]] = []
+        for context_read in context_reads:
+            context_id = str(context_read.get("context_id") or "unknown")
+            card = bounded_runtime.evidence_from_tool_result(
+                f"context.read:{context_id}",
+                {
+                    "status": "completed",
+                    "claim_summary": f"Bounded context read for {context_id}.",
+                    "context": context_read.get("content"),
+                    "source_ref": context_read.get("source_ref"),
+                },
+                token_budget=700,
+            )
+            evidence_cards.append(card.model_dump(mode="json"))
+        if (
+            not selected_tool_ids
+            and not evidence_cards
+            and not _is_simple_greeting_question(tool_context.query.question)
+        ):
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                repair_items=[
+                    "workspace_evidence_required",
+                    "fail_closed_no_grounded_answer",
+                ],
+            )
+            ledger = _finalize_agent_run_ledger(
+                bounded_runtime,
+                [],
+                selected_tool_ids=[],
+                executed_tool_ids=[],
+                stop_reason="workspace_evidence_unavailable",
+            )
+            self.last_agent_run_ledger = ledger.model_dump(mode="json")
+            self.last_evidence_cards = []
+            self.last_grounding_verification = verification.model_dump(mode="json")
+            self.last_model_usage = {
+                "requests": 0,
+                "tool_calls": 0,
+                "input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "output_tokens": 0,
+            }
+            return MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT
+        executed_tool_names: set[str] = set()
+        repair_mode = False
+        preflight_stop_reason: str | None = None
 
-        chat_model_name = self.model_policy.model_for_agent or self.model_name
+        async def prepare_tools(_ctx: object, tool_defs: list[object]) -> list[object]:
+            return [
+                tool_def
+                for tool_def in tool_defs
+                if getattr(tool_def, "name", None) in selected_tool_name_set
+                and getattr(tool_def, "name", None) not in executed_tool_names
+            ]
+
+        async def before_model_request(
+            _ctx: object,
+            request_context: object,
+        ) -> object:
+            nonlocal preflight_stop_reason
+            observed_retry_count = _request_retry_prompt_count(request_context)
+            recorded_retry_count = sum(
+                int(item.get("retry_count") or 0) for item in request_records
+            )
+            new_retry_count = max(0, observed_retry_count - recorded_retry_count)
+            if (
+                executed_tool_names
+                and selected_tool_name_set.issubset(executed_tool_names)
+                and not repair_mode
+            ):
+                validated_cards = [
+                    EvidenceCard.model_validate(card) for card in evidence_cards
+                ]
+                missing_evidence = [
+                    f"{card.tool_id}:{field}"
+                    for card in validated_cards
+                    for field in card.missing_fields
+                ]
+                synthesis_prompt = bounded_runtime.build_no_tool_synthesis_prompt(
+                    question=tool_context.query.question,
+                    evidence_cards=validated_cards,
+                    missing_evidence=missing_evidence,
+                )
+                request_context = replace(
+                    request_context,
+                    messages=[
+                        ModelRequest(parts=[UserPromptPart(synthesis_prompt)])
+                    ],
+                )
+            overhead = _request_overhead(request_context)
+            if evidence_cards:
+                evidence_chars = sum(
+                    len(json.dumps(card, ensure_ascii=False, sort_keys=True))
+                    for card in evidence_cards
+                )
+                overhead["tool_result_chars"] = evidence_chars
+                overhead["user_history_chars"] = max(
+                    0,
+                    overhead["user_history_chars"] - evidence_chars,
+                )
+            estimated_input_tokens = _estimated_request_input_tokens(overhead)
+            prior_ledger = _finalize_agent_run_ledger(
+                bounded_runtime,
+                request_records,
+                selected_tool_ids=[],
+                executed_tool_ids=[],
+            )
+            try:
+                max_tokens = _bounded_request_max_tokens(
+                    budget=bounded_runtime.budget,
+                    prior_ledger=prior_ledger,
+                    estimated_input_tokens=estimated_input_tokens,
+                    configured_max_tokens=self.workspace_model_max_tokens,
+                )
+            except BoundedRequestBudgetStop as exc:
+                preflight_stop_reason = exc.reason
+                raise
+            current_settings = dict(
+                getattr(request_context, "model_settings", None) or {}
+            )
+            requested_max_tokens = current_settings.get("max_tokens")
+            if (
+                isinstance(requested_max_tokens, int)
+                and requested_max_tokens > 0
+            ):
+                max_tokens = min(max_tokens, requested_max_tokens)
+            request_context = replace(
+                request_context,
+                model_settings={**current_settings, "max_tokens": max_tokens},
+            )
+            request_records.append(
+                {
+                    "request_index": len(request_records) + 1,
+                    **overhead,
+                    "input_tokens": estimated_input_tokens,
+                    "cache_write_tokens": 0,
+                    "cache_read_tokens": 0,
+                    "output_tokens": 0,
+                    "tool_call_count": 0,
+                    "retry_count": new_retry_count,
+                    "repair_count": 1 if repair_mode else 0,
+                    "estimated_cost": 0.0,
+                }
+            )
+            return request_context
+
+        async def after_model_request(
+            _ctx: object,
+            *,
+            request_context: object,
+            response: object,
+        ) -> object:
+            del request_context
+            if request_records:
+                request_records[-1].update(_response_usage_fields(response))
+                request_records[-1]["tool_call_count"] = _response_tool_call_count(
+                    response
+                )
+            return response
+
+        async def after_tool_execute(
+            _ctx: object,
+            *,
+            call: object,
+            tool_def: object,
+            args: object,
+            result: object,
+        ) -> dict[str, Any]:
+            del call, args
+            tool_name = str(getattr(tool_def, "name", ""))
+            executed_tool_names.add(tool_name)
+            tool_id = tool_id_by_name.get(tool_name, tool_name or "unknown_tool")
+            card = bounded_runtime.evidence_from_tool_result(tool_id, result)
+            serialized = card.model_dump(mode="json")
+            evidence_cards.append(serialized)
+            return serialized
+
+        hooks = Hooks(
+            prepare_tools=prepare_tools,
+            before_model_request=before_model_request,
+            after_model_request=after_model_request,
+            after_tool_execute=after_tool_execute,
+        )
         agent = Agent(
             build_chat_model(
                 model_name=chat_model_name,
                 base_url=self.base_url,
                 api_key=self.api_key,
             ),
-            system_prompt=f"{GLOBAL_ASSISTANT_PROMPT}\n{WORKSPACE_TOOL_PROMPT}",
-            capabilities=self._native_capabilities(),
+            system_prompt=f"{GLOBAL_ASSISTANT_PROMPT}\n{BOUNDED_AGENT_SYSTEM_POLICY}",
+            capabilities=[hooks],
             **pydantic_agent_runtime_kwargs(),
         )
         tool_descriptions = _registered_tool_descriptions()
 
-        @agent.tool_plain(
+        def progressive_tool_plain(**kwargs: object):
+            name = str(kwargs.get("name") or "")
+            if name in selected_tool_name_set:
+                return agent.tool_plain(**kwargs)
+
+            def leave_unregistered(function):
+                return function
+
+            return leave_unregistered
+
+        @progressive_tool_plain(
             name="search_scout_workspace_evidence",
             description=(
                 "Search Scout's local pretrip workspace evidence. This tool is read-only, "
@@ -5983,7 +7532,7 @@ class PydanticAIEnvRunner:
                 evidence_types=evidence_types,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_workspace_catalog",
             description=tool_descriptions[WORKSPACE_CATALOG_TOOL_ID],
         )
@@ -6000,7 +7549,7 @@ class PydanticAIEnvRunner:
                 limit=limit,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_route_structure",
             description=tool_descriptions[ROUTE_STRUCTURE_TOOL_ID],
         )
@@ -6017,7 +7566,7 @@ class PydanticAIEnvRunner:
                 limit=limit,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_major_points",
             description=tool_descriptions[MAJOR_POINT_TOOL_ID],
         )
@@ -6034,7 +7583,7 @@ class PydanticAIEnvRunner:
                 point_kinds=point_kinds,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_evidence_fulltext",
             description=tool_descriptions[EVIDENCE_FULLTEXT_TOOL_ID],
         )
@@ -6049,7 +7598,7 @@ class PydanticAIEnvRunner:
                 evidence_types=evidence_types,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_risk_scores",
             description=tool_descriptions[RISK_SCORE_TOOL_ID],
         )
@@ -6082,7 +7631,7 @@ class PydanticAIEnvRunner:
                 sort=sort,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_terrain_scores",
             description=tool_descriptions[TERRAIN_SCORE_TOOL_ID],
         )
@@ -6115,7 +7664,7 @@ class PydanticAIEnvRunner:
                 sort=sort,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_map_perception",
             description=tool_descriptions[MAP_PERCEPTION_TOOL_ID],
         )
@@ -6140,7 +7689,7 @@ class PydanticAIEnvRunner:
                 sort=sort,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_weather_window",
             description=tool_descriptions[WEATHER_WINDOW_TOOL_ID],
         )
@@ -6165,7 +7714,7 @@ class PydanticAIEnvRunner:
                 stale_after_hours=stale_after_hours,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_route_readiness",
             description=tool_descriptions[ROUTE_READINESS_TOOL_ID],
         )
@@ -6188,7 +7737,40 @@ class PydanticAIEnvRunner:
                 remote_contact_confirmed=remote_contact_confirmed,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
+            name="search_scout_route_architecture",
+            description=tool_descriptions[ROUTE_ARCHITECTURE_TOOL_ID],
+        )
+        def search_scout_route_architecture(
+            query: str,
+            limit: int = 6,
+            current_cp_id: str | None = None,
+            current_time: str | None = None,
+            target_cp_id: str | None = None,
+            route_summary_path: str | None = None,
+            checkpoint_candidates_path: str | None = None,
+            segment_candidates_path: str | None = None,
+            segment_policy_candidates_path: str | None = None,
+            retreat_routes_path: str | None = None,
+            planned_eta_path: str | None = None,
+            risk_ribbon_metadata_path: str | None = None,
+        ) -> dict[str, object]:
+            return tool_context.search_scout_route_architecture(
+                query=query,
+                limit=limit,
+                current_cp_id=current_cp_id,
+                current_time=current_time,
+                target_cp_id=target_cp_id,
+                route_summary_path=route_summary_path,
+                checkpoint_candidates_path=checkpoint_candidates_path,
+                segment_candidates_path=segment_candidates_path,
+                segment_policy_candidates_path=segment_policy_candidates_path,
+                retreat_routes_path=retreat_routes_path,
+                planned_eta_path=planned_eta_path,
+                risk_ribbon_metadata_path=risk_ribbon_metadata_path,
+            )
+
+        @progressive_tool_plain(
             name="search_scout_navigation_terrain",
             description=tool_descriptions[NAVIGATION_TERRAIN_TOOL_ID],
         )
@@ -6215,7 +7797,7 @@ class PydanticAIEnvRunner:
                 terrain_risk_layers_understood=terrain_risk_layers_understood,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_route_context",
             description=tool_descriptions[ROUTE_CONTEXT_TOOL_ID],
         )
@@ -6240,7 +7822,7 @@ class PydanticAIEnvRunner:
                 route_briefing_path=route_briefing_path,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_cwa_environment",
             description=tool_descriptions.get(
                 CWA_ENVIRONMENT_TOOL_ID,
@@ -6262,7 +7844,7 @@ class PydanticAIEnvRunner:
                 stale_after_hours=stale_after_hours,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_gee_environment",
             description=tool_descriptions.get(
                 GEE_ENVIRONMENT_TOOL_ID,
@@ -6284,7 +7866,7 @@ class PydanticAIEnvRunner:
                 stale_after_hours=stale_after_hours,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="explain_scout_safety_boundary",
             description=tool_descriptions[SAFETY_BOUNDARY_TOOL_ID],
         )
@@ -6305,7 +7887,7 @@ class PydanticAIEnvRunner:
                 evidence_refs=evidence_refs,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_review_gap",
             description=tool_descriptions[REVIEW_GAP_TOOL_ID],
         )
@@ -6328,7 +7910,7 @@ class PydanticAIEnvRunner:
                 include_decision_recorded=include_decision_recorded,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="search_scout_runtime_ingress_status",
             description=tool_descriptions[RUNTIME_INGRESS_STATUS_TOOL_ID],
         )
@@ -6351,7 +7933,7 @@ class PydanticAIEnvRunner:
                 include_recent_records=include_recent_records,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_live_navigation_state",
             description=tool_descriptions[LIVE_NAVIGATION_STATE_TOOL_ID],
         )
@@ -6376,7 +7958,7 @@ class PydanticAIEnvRunner:
                 route_progress_m=route_progress_m,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_post_trip_review",
             description=tool_descriptions[POST_TRIP_REVIEW_TOOL_ID],
         )
@@ -6393,7 +7975,7 @@ class PydanticAIEnvRunner:
                 weather_matched_expectation=weather_matched_expectation,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_energy_vitals",
             description=tool_descriptions[ENERGY_VITALS_TOOL_ID],
         )
@@ -6416,7 +7998,7 @@ class PydanticAIEnvRunner:
                 staleness_s=staleness_s,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="analyze_scout_ins_dr_trace",
             description=tool_descriptions[INS_DR_TRACE_TOOL_ID],
         )
@@ -6439,7 +8021,7 @@ class PydanticAIEnvRunner:
                 max_horizontal_accuracy_m=max_horizontal_accuracy_m,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_contextual_permission",
             description=tool_descriptions[CONTEXTUAL_PERMISSION_TOOL_ID],
         )
@@ -6464,7 +8046,7 @@ class PydanticAIEnvRunner:
                 terrain_risk_level=terrain_risk_level,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="explain_scout_survival_incident_playbook",
             description=tool_descriptions[SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID],
         )
@@ -6489,7 +8071,7 @@ class PydanticAIEnvRunner:
                 overnight_risk=overnight_risk,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_pace_guardian",
             description=tool_descriptions[PACE_GUARDIAN_TOOL_ID],
         )
@@ -6510,7 +8092,7 @@ class PydanticAIEnvRunner:
                 team_status_path=team_status_path,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_equipment_resource",
             description=tool_descriptions[EQUIPMENT_RESOURCE_TOOL_ID],
         )
@@ -6535,7 +8117,7 @@ class PydanticAIEnvRunner:
                 water_liters=water_liters,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_team_status",
             description=tool_descriptions[TEAM_STATUS_TOOL_ID],
         )
@@ -6558,7 +8140,7 @@ class PydanticAIEnvRunner:
                 last_heard_minutes=last_heard_minutes,
             )
 
-        @agent.tool_plain(
+        @progressive_tool_plain(
             name="assess_scout_media_literacy",
             description=tool_descriptions[MEDIA_LITERACY_TOOL_ID],
         )
@@ -6581,19 +8163,589 @@ class PydanticAIEnvRunner:
                 user_experience_level=user_experience_level,
             )
 
-        tool_prompt = f"{WORKSPACE_TOOL_PROMPT}\n{prompt}"
-        result = agent.run_sync(
-            tool_prompt,
-            model_settings={
-                "max_tokens": self.workspace_model_max_tokens,
-                "temperature": 0,
-                "parallel_tool_calls": True,
-            },
+        cards_by_id = {card.tool_id: card for card in _bounded_tool_cards()}
+        selected_cards = [
+            cards_by_id[tool_id].model_dump(mode="json")
+            for tool_id in selected_tool_ids
+            if tool_id in cards_by_id
+        ]
+        tool_prompt = (
+            f"{prompt}\nProgressive ContextHandle shortlist:\n"
+            f"{json.dumps(self.last_context_handles, ensure_ascii=False, sort_keys=True)}"
+            "\nBounded ContextRead results:\n"
+            f"{json.dumps(context_reads, ensure_ascii=False, sort_keys=True)}"
+            "\nProgressive ToolCard shortlist:\n"
+            f"{json.dumps(selected_cards, ensure_ascii=False, sort_keys=True)}"
         )
-        self.last_workspace_tool_invocations = list(tool_context.invocations)
-        return str(pydantic_result_output(result))
+        run_error: str | None = None
+        result: object | None = None
+        output = ""
+        verification: GroundingVerification | None = None
+        ledger = AgentRunLedger(budget=bounded_runtime.budget)
+        initial_max_tokens = min(
+            bounded_runtime.budget.max_output_tokens,
+            self.workspace_model_max_tokens
+            if self.workspace_model_max_tokens is not None
+            else bounded_runtime.budget.max_output_tokens,
+        )
+        try:
+            result = agent.run_sync(
+                tool_prompt,
+                model_settings=_workspace_request_model_settings(
+                    max_tokens=initial_max_tokens,
+                    timeout_seconds=request_timeout_seconds,
+                    workspace_tools=True,
+                ),
+                usage_limits=UsageLimits(
+                    request_limit=bounded_runtime.budget.max_requests,
+                    tool_calls_limit=bounded_runtime.budget.max_tool_calls,
+                    input_tokens_limit=bounded_runtime.budget.max_input_tokens,
+                    output_tokens_limit=bounded_runtime.budget.max_output_tokens,
+                    total_tokens_limit=bounded_runtime.budget.max_total_tokens,
+                ),
+            )
+            output = str(pydantic_result_output(result))
+            validated_cards = [
+                EvidenceCard.model_validate(card) for card in evidence_cards
+            ]
+            executed_tool_ids = [
+                str(item.get("tool_id"))
+                for item in tool_context.invocations
+                if isinstance(item.get("tool_id"), str)
+            ]
+            missing_selected_tool_ids = [
+                tool_id
+                for tool_id in selected_tool_ids
+                if tool_id not in executed_tool_ids
+            ]
+            if missing_selected_tool_ids:
+                run_error = "selected_tools_partially_executed"
+                verification = GroundingVerification(
+                    passed=False,
+                    output_disposition="fail_closed",
+                    rejected_draft_claims=[output] if output.strip() else [],
+                    repair_items=[
+                        *(
+                            f"missing_selected_tool_evidence:{tool_id}"
+                            for tool_id in missing_selected_tool_ids
+                        ),
+                        "fail_closed_no_grounded_answer",
+                    ],
+                )
+                output = (
+                    "目前沒有取得所選 Scout 工具的證據，因此不會提供未驗證答案。"
+                )
+            elif validated_cards:
+                verification = bounded_runtime.verify_synthesis(
+                    output,
+                    evidence_cards=validated_cards,
+                )
+                partial_ledger = _finalize_agent_run_ledger(
+                    bounded_runtime,
+                    request_records,
+                    selected_tool_ids=selected_tool_ids,
+                    executed_tool_ids=[
+                        str(item.get("tool_id"))
+                        for item in tool_context.invocations
+                        if isinstance(item.get("tool_id"), str)
+                    ],
+                )
+                remaining_output_for_repair = max(
+                    0,
+                    bounded_runtime.budget.max_output_tokens
+                    - partial_ledger.output_tokens,
+                )
+                repair_max_tokens = _bounded_repair_max_tokens(
+                    remaining_output_tokens=remaining_output_for_repair,
+                    configured_max_tokens=self.workspace_model_max_tokens,
+                )
+                repair_allowed = (
+                    not verification.passed
+                    and bounded_runtime.budget.max_repairs > 0
+                    and repair_max_tokens is not None
+                    and partial_ledger.budget_stop_reason is None
+                    and partial_ledger.request_count
+                    < bounded_runtime.budget.max_requests
+                )
+                if repair_allowed:
+                    repair_mode = True
+                    repair_prompt = bounded_runtime.build_grounding_repair_prompt(
+                        question=tool_context.query.question,
+                        draft_answer=output,
+                        verification=verification,
+                        evidence_cards=validated_cards,
+                    )
+                    repair_hooks = Hooks(
+                        before_model_request=before_model_request,
+                        after_model_request=after_model_request,
+                    )
+                    repair_agent = Agent(
+                        build_chat_model(
+                            model_name=chat_model_name,
+                            base_url=self.base_url,
+                            api_key=self.api_key,
+                        ),
+                        system_prompt=(
+                            "Repair the answer from the supplied evidence delta only. "
+                            "Do not call tools or add unsupported claims."
+                        ),
+                        capabilities=[repair_hooks],
+                        **pydantic_agent_runtime_kwargs(),
+                    )
+                    remaining_input = max(
+                        1,
+                        bounded_runtime.budget.max_input_tokens
+                        - partial_ledger.input_tokens,
+                    )
+                    remaining_output = max(
+                        1,
+                        bounded_runtime.budget.max_output_tokens
+                        - partial_ledger.output_tokens,
+                    )
+                    remaining_total = max(
+                        1,
+                        bounded_runtime.budget.max_total_tokens
+                        - partial_ledger.input_tokens
+                        - partial_ledger.output_tokens,
+                    )
+                    assert repair_max_tokens is not None
+                    result = repair_agent.run_sync(
+                        repair_prompt,
+                        model_settings=_workspace_request_model_settings(
+                            max_tokens=repair_max_tokens,
+                            timeout_seconds=request_timeout_seconds,
+                            workspace_tools=False,
+                        ),
+                        usage_limits=UsageLimits(
+                            request_limit=1,
+                            tool_calls_limit=0,
+                            input_tokens_limit=remaining_input,
+                            output_tokens_limit=remaining_output,
+                            total_tokens_limit=remaining_total,
+                        ),
+                    )
+                    output = str(pydantic_result_output(result))
+                    verification = bounded_runtime.verify_synthesis(
+                        output,
+                        evidence_cards=validated_cards,
+                    )
+                if not verification.passed:
+                    run_error = (
+                        "grounding_verification_failed_after_repair"
+                        if repair_mode
+                        else "grounding_verification_failed_repair_unavailable"
+                    )
+                    rejected_claims = list(
+                        dict.fromkeys(
+                            [
+                                *verification.rejected_draft_claims,
+                                *verification.unsupported_claims,
+                            ]
+                        )
+                    )
+                    verification = verification.model_copy(
+                        update={
+                            "output_disposition": "fail_closed",
+                            "unsupported_claims": [],
+                            "rejected_draft_claims": rejected_claims,
+                            "repair_items": list(
+                                dict.fromkeys(
+                                    [
+                                        *verification.repair_items,
+                                        "fail_closed_no_grounded_answer",
+                                    ]
+                                )
+                            ),
+                        }
+                    )
+                    output = (
+                        "目前無法從已驗證的 Scout 證據產生可靠答案；"
+                        "回答未通過證據引用檢查。"
+                    )
+            elif not _is_simple_greeting_question(tool_context.query.question):
+                run_error = "workspace_evidence_unavailable"
+                verification = GroundingVerification(
+                    passed=False,
+                    output_disposition="fail_closed",
+                    rejected_draft_claims=[output] if output.strip() else [],
+                    repair_items=[
+                        "workspace_evidence_required",
+                        "fail_closed_no_grounded_answer",
+                    ],
+                )
+                output = MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT
+        except BoundedRequestBudgetStop as exc:
+            run_error = exc.reason
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                repair_items=["bounded_budget_stop_before_request"],
+            )
+            output = (
+                "Scout bounded runtime stopped before a provider request because "
+                "the request budget was exhausted."
+            )
+        except Exception as exc:
+            if "UsageLimit" in type(exc).__name__:
+                run_error = preflight_stop_reason or (
+                    f"provider_usage_limit_before_request:{type(exc).__name__}"
+                )
+                verification = GroundingVerification(
+                    passed=False,
+                    output_disposition="fail_closed",
+                    repair_items=["provider_usage_limit_stop"],
+                )
+                output = (
+                    "Scout bounded runtime stopped before another provider request "
+                    "because a usage limit was reached."
+                )
+            else:
+                run_error = f"provider_runtime_error:{type(exc).__name__}"
+                raise
+        finally:
+            self.last_workspace_tool_invocations = list(tool_context.invocations)
+            executed_tool_ids = [
+                str(item.get("tool_id"))
+                for item in tool_context.invocations
+                if isinstance(item.get("tool_id"), str)
+            ]
+            ledger = _finalize_agent_run_ledger(
+                bounded_runtime,
+                request_records,
+                selected_tool_ids=selected_tool_ids,
+                executed_tool_ids=executed_tool_ids,
+                stop_reason=run_error,
+            )
+            budget_overrun_reason = _actual_budget_overrun_reason(ledger)
+            if budget_overrun_reason is not None:
+                rejected_claims = [output] if output.strip() else []
+                verification = GroundingVerification(
+                    passed=False,
+                    output_disposition="fail_closed",
+                    rejected_draft_claims=rejected_claims,
+                    repair_items=[
+                        f"hard_budget_overrun:{budget_overrun_reason}",
+                        "fail_closed_no_grounded_answer",
+                    ],
+                )
+                output = HARD_BUDGET_FAIL_CLOSED_OUTPUT
+            self.last_agent_run_ledger = ledger.model_dump(mode="json")
+            self.last_evidence_cards = list(evidence_cards)
+            self.last_grounding_verification = (
+                verification.model_dump(mode="json") if verification else {}
+            )
+        self.last_model_usage = {
+            "requests": ledger.request_count,
+            "tool_calls": ledger.tool_call_count,
+            "input_tokens": ledger.input_tokens,
+            "cache_write_tokens": ledger.cache_write_tokens,
+            "cache_read_tokens": ledger.cache_read_tokens,
+            "output_tokens": ledger.output_tokens,
+        }
+        self.last_model_response_metadata = (
+            _serialize_pydantic_response_metadata(result) if result is not None else {}
+        )
+        return output
 
-    def _run_hailo_ollama_chat(self, prompt: str, *, system_prompt: str) -> str:
+    def _run_hailo_bounded_workspace(
+        self,
+        *,
+        tool_context: ScoutWorkspaceToolContext,
+        bounded_runtime: BoundedAgentRuntime,
+        selected_tool_ids: list[str],
+        selected_plan_items: list[object],
+        request_timeout_seconds: int | None,
+    ) -> str:
+        """Execute read-only tools deterministically, then let Hailo synthesize."""
+
+        question = tool_context.query.question
+        handles = bounded_runtime.context_find(
+            " ".join([question, *selected_tool_ids]),
+            top_k=3,
+            token_budget=600,
+        )
+        self.last_context_handles = [
+            handle.model_dump(mode="json") for handle in handles
+        ]
+        context_reads: list[dict[str, Any]] = []
+        project_root = tool_context._project_root()
+        if not selected_tool_ids and project_root is not None:
+            for handle in handles:
+                context_read = _read_workspace_context(
+                    project_root,
+                    handle,
+                    token_budget=500,
+                )
+                if context_read is not None:
+                    context_reads.append(context_read)
+        self.last_context_reads = list(context_reads)
+
+        evidence_cards: list[EvidenceCard] = []
+        for context_read in context_reads:
+            context_id = str(context_read.get("context_id") or "unknown")
+            evidence_cards.append(
+                bounded_runtime.evidence_from_tool_result(
+                    f"context.read:{context_id}",
+                    {
+                        "status": "completed",
+                        "claim_summary": f"Bounded context read for {context_id}.",
+                        "context": context_read.get("content"),
+                        "source_ref": context_read.get("source_ref"),
+                    },
+                    token_budget=700,
+                )
+            )
+
+        attempted_tool_ids: list[str] = []
+        for item in selected_plan_items:
+            tool_id = str(getattr(item, "tool_id", "") or "")
+            request = getattr(item, "request", None)
+            if not tool_id or not isinstance(request, dict):
+                continue
+            raw_arguments = request.get("arguments")
+            arguments = (
+                dict(raw_arguments) if isinstance(raw_arguments, dict) else {}
+            )
+            arguments.pop("project_root", None)
+            tool_query = str(arguments.pop("query", question) or question)
+            raw_limit = arguments.pop("limit", tool_context.default_limit)
+            limit = (
+                raw_limit
+                if isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
+                else tool_context.default_limit
+            )
+            result = tool_context._run_registered_read_only_tool(
+                tool_id,
+                query=tool_query,
+                limit=limit,
+                **arguments,
+            )
+            attempted_tool_ids.append(tool_id)
+            evidence_cards.append(
+                bounded_runtime.evidence_from_tool_result(tool_id, result)
+            )
+
+        missing_selected_tool_ids = [
+            tool_id
+            for tool_id in selected_tool_ids
+            if tool_id not in attempted_tool_ids
+        ]
+        if missing_selected_tool_ids:
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                repair_items=[
+                    *(
+                        f"missing_selected_tool_evidence:{tool_id}"
+                        for tool_id in missing_selected_tool_ids
+                    ),
+                    "fail_closed_no_grounded_answer",
+                ],
+            )
+            ledger = _finalize_agent_run_ledger(
+                bounded_runtime,
+                [],
+                selected_tool_ids=selected_tool_ids,
+                executed_tool_ids=attempted_tool_ids,
+                stop_reason="selected_tools_partially_executed",
+            )
+            self._store_bounded_hailo_run(
+                ledger=ledger,
+                evidence_cards=evidence_cards,
+                verification=verification,
+            )
+            return MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT
+
+        if not evidence_cards and not _is_simple_greeting_question(question):
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                repair_items=[
+                    "workspace_evidence_required",
+                    "fail_closed_no_grounded_answer",
+                ],
+            )
+            ledger = _finalize_agent_run_ledger(
+                bounded_runtime,
+                [],
+                selected_tool_ids=selected_tool_ids,
+                executed_tool_ids=attempted_tool_ids,
+                stop_reason="workspace_evidence_unavailable",
+            )
+            self._store_bounded_hailo_run(
+                ledger=ledger,
+                evidence_cards=evidence_cards,
+                verification=verification,
+            )
+            return MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT
+
+        missing_evidence = [
+            f"{card.tool_id}:{field}"
+            for card in evidence_cards
+            for field in card.missing_fields
+        ]
+        synthesis_prompt = (
+            bounded_runtime.build_no_tool_synthesis_prompt(
+                question=question,
+                evidence_cards=evidence_cards,
+                missing_evidence=missing_evidence,
+            )
+            if evidence_cards
+            else question
+        )
+        system_prompt = f"{GLOBAL_ASSISTANT_PROMPT}\n{BOUNDED_AGENT_SYSTEM_POLICY}"
+        estimated_input_tokens = estimate_tokens(
+            f"{system_prompt}\n{synthesis_prompt}"
+        )
+        try:
+            request_max_tokens = _bounded_request_max_tokens(
+                budget=bounded_runtime.budget,
+                prior_ledger=AgentRunLedger(budget=bounded_runtime.budget),
+                estimated_input_tokens=estimated_input_tokens,
+                configured_max_tokens=self.workspace_model_max_tokens,
+            )
+        except BoundedRequestBudgetStop as exc:
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                repair_items=[
+                    f"hard_budget_overrun:{exc.reason}",
+                    "fail_closed_no_grounded_answer",
+                ],
+            )
+            ledger = _finalize_agent_run_ledger(
+                bounded_runtime,
+                [],
+                selected_tool_ids=selected_tool_ids,
+                executed_tool_ids=attempted_tool_ids,
+                stop_reason=exc.reason,
+            )
+            self._store_bounded_hailo_run(
+                ledger=ledger,
+                evidence_cards=evidence_cards,
+                verification=verification,
+            )
+            return HARD_BUDGET_FAIL_CLOSED_OUTPUT
+
+        output = self._run_hailo_ollama_chat(
+            synthesis_prompt,
+            system_prompt=system_prompt,
+            max_tokens=request_max_tokens,
+        )
+        evidence_chars = sum(
+            len(card.model_dump_json()) for card in evidence_cards
+        )
+        prompt_eval_count = getattr(self, "last_hailo_prompt_eval_count", None)
+        output_eval_count = getattr(self, "last_hailo_eval_count", None)
+        request_record = AgentRequestLedger(
+            request_index=1,
+            system_chars=len(system_prompt),
+            user_history_chars=max(0, len(synthesis_prompt) - evidence_chars),
+            tool_result_chars=evidence_chars,
+            input_tokens=(
+                prompt_eval_count
+                if isinstance(prompt_eval_count, int)
+                else estimated_input_tokens
+            ),
+            output_tokens=(
+                output_eval_count
+                if isinstance(output_eval_count, int)
+                else estimate_tokens(output)
+            ),
+            tool_call_count=len(attempted_tool_ids),
+        )
+        ledger = _finalize_agent_run_ledger(
+            bounded_runtime,
+            [request_record.model_dump(mode="json")],
+            selected_tool_ids=selected_tool_ids,
+            executed_tool_ids=attempted_tool_ids,
+        )
+        verification = (
+            bounded_runtime.verify_synthesis(
+                output,
+                evidence_cards=evidence_cards,
+            )
+            if evidence_cards
+            else GroundingVerification(
+                passed=True,
+                output_disposition="grounded",
+            )
+        )
+        budget_overrun_reason = _actual_budget_overrun_reason(ledger)
+        if budget_overrun_reason is not None:
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                rejected_draft_claims=[output] if output.strip() else [],
+                repair_items=[
+                    f"hard_budget_overrun:{budget_overrun_reason}",
+                    "fail_closed_no_grounded_answer",
+                ],
+            )
+            output = HARD_BUDGET_FAIL_CLOSED_OUTPUT
+        elif not verification.passed:
+            rejected_claims = list(
+                dict.fromkeys(
+                    [
+                        *verification.rejected_draft_claims,
+                        *verification.unsupported_claims,
+                    ]
+                )
+            )
+            verification = verification.model_copy(
+                update={
+                    "output_disposition": "fail_closed",
+                    "unsupported_claims": [],
+                    "rejected_draft_claims": rejected_claims,
+                    "repair_items": list(
+                        dict.fromkeys(
+                            [
+                                *verification.repair_items,
+                                "fail_closed_no_grounded_answer",
+                            ]
+                        )
+                    ),
+                }
+            )
+            output = (
+                "目前無法從已驗證的 Scout 證據產生可靠答案；"
+                "回答未通過證據引用檢查。"
+            )
+        self._store_bounded_hailo_run(
+            ledger=ledger,
+            evidence_cards=evidence_cards,
+            verification=verification,
+        )
+        return output
+
+    def _store_bounded_hailo_run(
+        self,
+        *,
+        ledger: AgentRunLedger,
+        evidence_cards: list[EvidenceCard],
+        verification: GroundingVerification,
+    ) -> None:
+        self.last_agent_run_ledger = ledger.model_dump(mode="json")
+        self.last_evidence_cards = [
+            card.model_dump(mode="json") for card in evidence_cards
+        ]
+        self.last_grounding_verification = verification.model_dump(mode="json")
+        self.last_model_usage = {
+            "requests": ledger.request_count,
+            "tool_calls": ledger.tool_call_count,
+            "input_tokens": ledger.input_tokens,
+            "cache_write_tokens": ledger.cache_write_tokens,
+            "cache_read_tokens": ledger.cache_read_tokens,
+            "output_tokens": ledger.output_tokens,
+        }
+
+    def _run_hailo_ollama_chat(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str,
+        max_tokens: int | None = None,
+    ) -> str:
         self.last_hailo_response_received = False
         self.last_hailo_response_model = None
         self.last_hailo_prompt_eval_count = None
@@ -6775,14 +8927,19 @@ class PydanticAIEnvRunner:
             )
         if "AI_HAT_TYPED_DECISION_V1" in prompt:
             system_prompt = "只輸出一個分類 token。"
+        local_max_tokens = (
+            self.workspace_model_max_tokens or DEFAULT_WORKSPACE_MODEL_MAX_TOKENS
+        )
+        if max_tokens is not None:
+            local_max_tokens = min(local_max_tokens, max_tokens)
         num_predict = (
-            min(self.workspace_model_max_tokens, 8)
+            min(local_max_tokens, 8)
             if "AI_HAT_TYPED_DECISION_V1" in prompt
             else (
-                min(self.workspace_model_max_tokens, 20)
+                min(local_max_tokens, 20)
                 if "AI_HAT_MISSING_CONTEXT_ACTION_V1" in prompt
                 else (
-                    min(self.workspace_model_max_tokens, 160)
+                    min(local_max_tokens, 160)
                     if (
                         "AI_HAT_RAW_SELF_REVIEW_V1" in prompt
                         or "AI_HAT_RAW_BOUNDARY_REPAIR_V1" in prompt
@@ -6805,12 +8962,12 @@ class PydanticAIEnvRunner:
                         or "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in prompt
                         or "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in prompt
                     )
-                    else min(self.workspace_model_max_tokens, 128)
+                    else min(local_max_tokens, 128)
                     if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt
-                    else min(self.workspace_model_max_tokens, 128)
+                    else min(local_max_tokens, 128)
                     if "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" in prompt
                     else (
-                    min(self.workspace_model_max_tokens, 64)
+                    min(local_max_tokens, 64)
                     if (
                         "AI_HAT_EVIDENCE_SYNTHESIS_V2" in prompt
                         or "AI_HAT_EVIDENCE_REPAIR_V2" in prompt
@@ -6824,12 +8981,12 @@ class PydanticAIEnvRunner:
                         or "AI_HAT_TERRAIN_FACTS_SENTENCE_V1" in prompt
                         or "AI_HAT_TERRAIN_BOUNDARY_SENTENCE_V1" in prompt
                     )
-                    else min(self.workspace_model_max_tokens, 128)
+                    else min(local_max_tokens, 128)
                     if (
                         "AI_HAT_FIELD_STATE_SKILL_V1" in prompt
                         or "AI_HAT_FIELD_STATE_TIME_UNKNOWN_V1" in prompt
                     )
-                    else self.workspace_model_max_tokens
+                    else local_max_tokens
                     )
                 )
             )
@@ -7017,6 +9174,8 @@ class PydanticAIEnvRunner:
         )
 
     def _native_capabilities(self) -> list[object]:
+        if self.bounded_agent_runtime_enabled and not self.workspace_tools_enabled:
+            return []
         if self.profile_name == "local" or _is_local_assistant_base_url(self.base_url):
             return []
         return pydantic_native_research_capabilities(self.model_policy)
@@ -7267,6 +9426,19 @@ def _registry_tool_source_ids(sources: list[AssistantSourceRef]) -> list[str]:
 def _has_mutation_intent(text: str) -> bool:
     lowered = text.lower()
     return any(fragment in lowered for fragment in MUTATION_INTENT_FRAGMENTS)
+
+
+def _runner_supports_bounded_context(runner: object) -> bool:
+    if bool(getattr(runner, "bounded_agent_runtime_enabled", False)):
+        return True
+    return any(
+        bool(getattr(candidate, "bounded_agent_runtime_enabled", False))
+        for candidate in (
+            getattr(runner, "primary_runner", None),
+            getattr(runner, "fallback_runner", None),
+        )
+        if candidate is not None
+    )
 
 
 def _run_with_optional_workspace_tools(
@@ -13039,6 +15211,14 @@ def _reset_runner_observability_state(runner: PydanticAIRunner) -> None:
         "last_hailo_prompt_eval_count",
         "last_hailo_eval_count",
         "last_hailo_total_duration_ns",
+        "last_model_usage",
+        "last_model_response_metadata",
+        "last_agent_run_ledger",
+        "last_workspace_tool_invocations",
+        "last_evidence_cards",
+        "last_grounding_verification",
+        "last_context_handles",
+        "last_context_reads",
     ):
         if hasattr(runner, name):
             setattr(runner, name, None)
@@ -13396,8 +15576,6 @@ def _workspace_tool_source_refs(
     tool_context: ScoutWorkspaceToolContext,
 ) -> list[AssistantSourceRef]:
     invocations = _workspace_tool_invocations(runner, tool_context)
-    if not invocations:
-        return []
     context = ScoutWorkspaceToolContext(
         query=tool_context.query,
         sources=tool_context.sources,
@@ -13405,7 +15583,153 @@ def _workspace_tool_source_refs(
         default_limit=tool_context.default_limit,
     )
     context.invocations = invocations
-    return context.tool_source_refs()
+    refs = context.tool_source_refs(include_raw=True)
+    context_reads = getattr(runner, "last_context_reads", [])
+    if isinstance(context_reads, list):
+        for item in context_reads:
+            if not isinstance(item, dict):
+                continue
+            context_id = str(item.get("context_id") or "").strip()
+            source_ref = _sanitize_public_source_ref(
+                str(item.get("source_ref") or ""),
+                project_root=context._project_root(),
+            )
+            if not context_id or not source_ref:
+                continue
+            refs.append(
+                AssistantSourceRef(
+                    source_id=f"context.read:{context_id}",
+                    source_path=source_ref,
+                    evidence_type="assistant_workspace_context_read",
+                    selected=True,
+                    context_summary={
+                        "context_id": context_id,
+                        "estimated_tokens": item.get("estimated_tokens"),
+                        "truncated": bool(item.get("truncated")),
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                        "raw_payloads_embedded": False,
+                    },
+                )
+            )
+    return list(
+        {
+            (ref.source_id, ref.source_path): ref
+            for ref in refs
+        }.values()
+    )
+
+
+def _public_assistant_sources(
+    sources: list[AssistantSourceRef],
+) -> list[AssistantSourceRef]:
+    public_sources: list[AssistantSourceRef] = []
+    for source in sources:
+        summary = source.context_summary
+        if not isinstance(summary, dict):
+            public_sources.append(source)
+            continue
+        if source.source_id == TOTAL_INFO_SOURCE_ID:
+            public_sources.append(
+                source.model_copy(
+                    update={
+                        "context_summary": _public_total_info_summary(summary)
+                    }
+                )
+            )
+            continue
+        latest = summary.get("latest")
+        if isinstance(latest, dict):
+            tool_id = str(summary.get("tool_id") or source.source_id)
+            public_sources.append(
+                source.model_copy(
+                    update={
+                        "context_summary": {
+                            "tool_id": tool_id,
+                            "status": str(
+                                summary.get("status")
+                                or latest.get("status")
+                                or "unknown"
+                            ),
+                            "invocation_count": _optional_nonnegative_int(
+                                summary.get("invocation_count")
+                            )
+                            or 0,
+                            "latest": _public_tool_invocation_summary(
+                                latest,
+                                project_root=None,
+                            ),
+                            "read_only": True,
+                            "runtime_safety_truth": False,
+                            "raw_payloads_embedded": False,
+                        }
+                    }
+                )
+            )
+            continue
+        if source.source_id.startswith("context.read:"):
+            public_sources.append(
+                source.model_copy(
+                    update={
+                        "context_summary": _redact_model_egress(
+                            {
+                                "context_id": summary.get("context_id"),
+                                "estimated_tokens": summary.get("estimated_tokens"),
+                                "truncated": bool(summary.get("truncated")),
+                                "candidate_only": True,
+                                "runtime_safety_truth": False,
+                                "raw_payloads_embedded": False,
+                            }
+                        )
+                    }
+                )
+            )
+            continue
+        public_sources.append(
+            source.model_copy(
+                update={
+                    "context_summary": _public_generic_source_summary(summary)
+                }
+            )
+        )
+    return public_sources
+
+
+def _public_total_info_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    return public_workspace_total_info_summary(summary)
+
+
+def _public_generic_source_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    allowed_keys = (
+        "artifact_kind",
+        "artifact_version",
+        "project_id",
+        "resolver",
+        "tool_id",
+        "status",
+        "source_count",
+        "available_source_count",
+        "partial_source_count",
+        "missing_source_count",
+        "invocation_count",
+        "read_only",
+        "candidate_only",
+        "runtime_safety_truth",
+        "raw_payloads_embedded",
+    )
+    public = {
+        key: summary.get(key)
+        for key in allowed_keys
+        if isinstance(summary.get(key), (str, bool, int, float))
+    }
+    public.update(
+        {
+            "read_only": True,
+            "runtime_safety_truth": False,
+            "raw_payloads_embedded": False,
+        }
+    )
+    return _redact_model_egress(public)
 
 
 def _first_workspace_tool_source(
@@ -13485,6 +15809,20 @@ def _project_json_matches_id(project_root: Path, project_id: str) -> bool:
     if not isinstance(payload, dict):
         return False
     return str(payload.get("project_id") or payload.get("id") or "") == project_id
+
+
+def _confined_project_manifest_exists(project_root: Path) -> bool:
+    manifest = project_root / "project.json"
+    try:
+        resolved_manifest = manifest.resolve()
+        resolved_root = project_root.resolve()
+    except (OSError, RuntimeError):
+        return False
+    return (
+        manifest.is_file()
+        and resolved_manifest.is_file()
+        and resolved_manifest.is_relative_to(resolved_root)
+    )
 
 
 def _bounded_tool_limit(
@@ -13778,35 +16116,88 @@ def _dedupe_preserving_order(values: list[str]) -> list[str]:
 def _workspace_model_max_tokens_from_env(
     *,
     environ: dict[str, str] | None = None,
-) -> int:
+    local_model: bool = True,
+) -> int | None:
     resolved_environ = environ or os.environ
-    raw_value = str(
-        resolved_environ.get(
+    scoped_key = (
+        "SCOUT_AI_LOCAL_MODEL_MAX_TOKENS"
+        if local_model
+        else "SCOUT_AI_CLOUD_MODEL_MAX_TOKENS"
+    )
+    raw_value = resolved_environ.get(scoped_key)
+    if raw_value is None and local_model:
+        raw_value = resolved_environ.get(
             "SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS",
             DEFAULT_WORKSPACE_MODEL_MAX_TOKENS,
         )
-    ).strip()
+    if raw_value is None:
+        return None
     try:
-        parsed = int(raw_value)
+        parsed = int(str(raw_value).strip())
     except ValueError:
-        return DEFAULT_WORKSPACE_MODEL_MAX_TOKENS
-    return _clamp_workspace_model_max_tokens(parsed)
+        return DEFAULT_WORKSPACE_MODEL_MAX_TOKENS if local_model else None
+    if local_model:
+        return _clamp_workspace_model_max_tokens(parsed)
+    return max(32, parsed)
 
 
 def _workspace_model_max_tokens_from_settings(
     model_settings: dict[str, object],
     *,
     environ: dict[str, str] | None = None,
-) -> int:
+    local_model: bool = True,
+) -> int | None:
     for key in ("max_tokens", "num_predict"):
         value = model_settings.get(key)
         if value is None:
             continue
         try:
-            return _clamp_workspace_model_max_tokens(int(value))
+            parsed = int(value)
         except (TypeError, ValueError):
             continue
-    return _workspace_model_max_tokens_from_env(environ=environ)
+        if local_model:
+            return _clamp_workspace_model_max_tokens(parsed)
+        return max(32, parsed)
+    return _workspace_model_max_tokens_from_env(
+        environ=environ,
+        local_model=local_model,
+    )
+
+
+def _uses_local_workspace_token_budget(
+    *,
+    profile_name: str | None,
+    backend: str,
+    hardware_accelerator: str,
+    base_url: str | None,
+) -> bool:
+    if profile_name == "local":
+        return True
+    if backend in {"ollama", "hailo_ollama"}:
+        return True
+    if hardware_accelerator != "none":
+        return True
+    return bool(base_url and _is_local_assistant_base_url(base_url))
+
+
+def _workspace_request_model_settings(
+    *,
+    max_tokens: int | None,
+    timeout_seconds: int | None,
+    workspace_tools: bool,
+) -> dict[str, object]:
+    settings: dict[str, object] = {
+        "timeout": _request_timeout(timeout_seconds),
+    }
+    if workspace_tools:
+        settings = {
+            **settings,
+            "temperature": 0,
+            "parallel_tool_calls": True,
+        }
+    if max_tokens is not None:
+        settings = {**settings, "max_tokens": max_tokens}
+    return settings
 
 
 def _clamp_workspace_model_max_tokens(value: int) -> int:

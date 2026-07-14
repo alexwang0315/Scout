@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -44,8 +45,9 @@ def build_workspace_total_info_source_ref(
 ) -> AssistantSourceRef | None:
     if query.surface != AssistantSurface.PRETRIP or project_root is None:
         return None
-    root = Path(project_root).expanduser()
-    project = _load_json_object(root / "project.json")
+    root = Path(project_root).expanduser().resolve()
+    manifest_path = _project_manifest_path(root)
+    project = _load_json_object(manifest_path)
     if not project:
         return None
 
@@ -81,6 +83,35 @@ def build_workspace_total_info_source_ref(
         selected=True,
         context_summary=summary,
     )
+
+
+def public_workspace_total_info_summary(
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Project total-info evidence to metadata safe for API consumers."""
+
+    context_statuses = {
+        str(key): str(value.get("status") or "unknown")
+        for key, value in summary.items()
+        if str(key).endswith("_context") and isinstance(value, dict)
+    }
+    missing = summary.get("missing_or_partial_context")
+    return {
+        "artifact_kind": str(
+            summary.get("artifact_kind")
+            or "assistant_workspace_total_info_context"
+        ),
+        "artifact_version": str(summary.get("artifact_version") or "unknown"),
+        "project_id": str(summary.get("project_id") or "unknown"),
+        "context_statuses": dict(sorted(context_statuses.items())),
+        "missing_or_partial_context_count": (
+            len(missing) if isinstance(missing, list) else 0
+        ),
+        "read_only": True,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "raw_payloads_embedded": False,
+    }
 
 
 def _route_context(root: Path, project: dict[str, Any]) -> dict[str, Any]:
@@ -631,13 +662,35 @@ def _read_jsonl_tail_object(path: Path) -> dict[str, Any]:
 
 
 def _load_json_object(path: Path | None) -> dict[str, Any]:
-    if path is None or not path.exists():
+    if path is None or path.is_symlink():
         return {}
+    descriptor: int | None = None
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return {}
+        with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+            descriptor = None
+            value = json.load(stream)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return {}
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
     return value if isinstance(value, dict) else {}
+
+
+def _project_manifest_path(root: Path) -> Path | None:
+    manifest = root / "project.json"
+    if manifest.is_symlink():
+        return None
+    try:
+        resolved = manifest.resolve(strict=True)
+        resolved.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    return resolved if resolved.is_file() else None
 
 
 def _project_path(root: Path, ref: object) -> Path | None:

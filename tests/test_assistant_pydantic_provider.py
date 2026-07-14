@@ -66,6 +66,342 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
 
 
+def test_pydantic_result_usage_is_serialized_for_eval_observability():
+    class FakeUsage:
+        requests = 2
+        tool_calls = 3
+        input_tokens = 1200
+        cache_write_tokens = 0
+        cache_read_tokens = 400
+        output_tokens = 180
+        input_audio_tokens = 0
+        cache_audio_read_tokens = 0
+        output_audio_tokens = 0
+        details = {"reasoning_tokens": 42}
+
+    class FakeResult:
+        def usage(self):
+            return FakeUsage()
+
+    assert assistant_provider_module._serialize_pydantic_result_usage(FakeResult()) == {
+        "requests": 2,
+        "tool_calls": 3,
+        "input_tokens": 1200,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 400,
+        "output_tokens": 180,
+        "input_audio_tokens": 0,
+        "cache_audio_read_tokens": 0,
+        "output_audio_tokens": 0,
+        "reasoning_tokens": 42,
+    }
+
+    class PydanticV29Result:
+        usage = FakeUsage()
+
+    assert assistant_provider_module._serialize_pydantic_result_usage(
+        PydanticV29Result()
+    )["input_tokens"] == 1200
+
+
+def test_pydantic_response_metadata_is_serialized_for_eval_observability():
+    class FakeResponse:
+        finish_reason = "length"
+        model_name = "z-ai/glm-5.2"
+        provider_name = "openrouter"
+        provider_response_id = "generation-test-id"
+
+    class FakeResult:
+        response = FakeResponse()
+
+    assert assistant_provider_module._serialize_pydantic_response_metadata(
+        FakeResult()
+    ) == {
+        "finish_reason": "length",
+        "model_name": "z-ai/glm-5.2",
+        "provider_name": "openrouter",
+        "provider_response_id": "generation-test-id",
+    }
+
+
+def test_pydantic_runner_forwards_timeout_to_workspace_model_request(monkeypatch):
+    runner = PydanticAIEnvRunner(
+        model_name="nvidia:z-ai/glm-5.2",
+        api_key="test-token",
+    )
+    captured = {}
+
+    def fake_run(prompt, tool_context, request_timeout_seconds=None):
+        captured["prompt"] = prompt
+        captured["tool_context"] = tool_context
+        captured["request_timeout_seconds"] = request_timeout_seconds
+        return "ok"
+
+    monkeypatch.setattr(runner, "_run_model_with_workspace_tools", fake_run)
+
+    assert runner.run_with_workspace_tools(
+        "prompt",
+        timeout_seconds=17,
+        tool_context="context",
+    ) == "ok"
+    assert captured["request_timeout_seconds"] == 17
+
+
+def test_cloud_runner_does_not_apply_local_default_token_limit(monkeypatch):
+    monkeypatch.delenv("SCOUT_AI_CLOUD_MODEL_MAX_TOKENS", raising=False)
+    monkeypatch.setenv("SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS", "768")
+
+    runner = PydanticAIEnvRunner(
+        model_name="openrouter:z-ai/glm-5.2",
+        base_url="https://openrouter.ai/api/v1",
+        profile_name="cloud",
+    )
+
+    assert runner.workspace_model_max_tokens is None
+    request_settings = assistant_provider_module._workspace_request_model_settings(
+        max_tokens=runner.workspace_model_max_tokens,
+        timeout_seconds=30,
+        workspace_tools=True,
+    )
+    assert "max_tokens" not in request_settings
+    assert request_settings["temperature"] == 0
+    assert request_settings["parallel_tool_calls"] is True
+    assert request_settings["timeout"] == 29.0
+
+
+def test_cloud_runner_accepts_explicit_cloud_token_override(monkeypatch):
+    monkeypatch.setenv("SCOUT_AI_CLOUD_MODEL_MAX_TOKENS", "8192")
+
+    runner = PydanticAIEnvRunner(
+        model_name="openrouter:z-ai/glm-5.2",
+        profile_name="cloud",
+    )
+
+    assert runner.workspace_model_max_tokens == 8192
+
+
+def test_local_runner_keeps_bounded_default_token_limit(monkeypatch):
+    monkeypatch.delenv("SCOUT_AI_LOCAL_MODEL_MAX_TOKENS", raising=False)
+    monkeypatch.delenv("SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS", raising=False)
+
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen2.5-instruct:1.5b",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        profile_name="local",
+    )
+
+    assert (
+        runner.workspace_model_max_tokens
+        == assistant_provider_module.DEFAULT_WORKSPACE_MODEL_MAX_TOKENS
+    )
+
+
+def test_bounded_runner_without_workspace_tools_disables_native_research(monkeypatch):
+    monkeypatch.setattr(
+        assistant_provider_module,
+        "pydantic_native_research_capabilities",
+        lambda _policy: ["WebSearch", "WebFetch"],
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="openrouter:z-ai/glm-5.2",
+        base_url="https://openrouter.ai/api/v1",
+        profile_name="cloud",
+        workspace_tools_enabled=False,
+    )
+
+    assert runner._native_capabilities() == []
+
+    runner.bounded_agent_runtime_enabled = False
+    assert runner._native_capabilities() == ["WebSearch", "WebFetch"]
+
+
+def test_bounded_runner_without_workspace_tools_retains_request_limits(monkeypatch):
+    import pydantic_ai
+
+    captured: dict[str, object] = {}
+
+    class FakeUsage:
+        requests = 1
+        tool_calls = 0
+        input_tokens = 120
+        cache_write_tokens = 0
+        cache_read_tokens = 0
+        output_tokens = 24
+
+    class FakeResult:
+        output = "bounded answer"
+
+        def usage(self):
+            return FakeUsage()
+
+    class FakeAgent:
+        def __init__(self, _model, **kwargs):
+            captured["capabilities"] = kwargs.get("capabilities")
+
+        def run_sync(self, prompt, **kwargs):
+            captured["prompt"] = prompt
+            captured["model_settings"] = kwargs.get("model_settings")
+            captured["usage_limits"] = kwargs.get("usage_limits")
+            return FakeResult()
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(
+        assistant_provider_module,
+        "build_chat_model",
+        lambda **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        assistant_provider_module,
+        "pydantic_native_research_capabilities",
+        lambda _policy: ["WebSearch", "WebFetch"],
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="openrouter:z-ai/glm-5.2",
+        base_url="https://openrouter.ai/api/v1",
+        profile_name="cloud",
+        workspace_tools_enabled=False,
+    )
+
+    assert runner._run_model("bounded prompt", 10) == "bounded answer"
+
+    assert captured["capabilities"] == []
+    usage_limits = captured["usage_limits"]
+    assert usage_limits.request_limit == 1
+    assert usage_limits.tool_calls_limit == 0
+    assert usage_limits.count_tokens_before_request is False
+    model_settings = captured["model_settings"]
+    assert 0 < model_settings["max_tokens"] <= 2_000
+    assert runner.last_agent_run_ledger["request_count"] == 1
+    assert runner.last_agent_run_ledger["budget_stop_reason"] is None
+
+
+def test_bounded_runner_without_workspace_tools_fails_closed_without_evidence(
+    monkeypatch,
+):
+    runner = PydanticAIEnvRunner(
+        model_name="openrouter:z-ai/glm-5.2",
+        base_url="https://openrouter.ai/api/v1",
+        profile_name="cloud",
+        workspace_tools_enabled=False,
+    )
+    monkeypatch.setattr(
+        runner,
+        "_run_model",
+        lambda _prompt, _timeout: "CP 3 是目前最危險的位置。",
+    )
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前哪個 CP 最危險？",
+            project_id="missing-project",
+        ),
+        sources=[],
+    )
+
+    output = runner.run_with_workspace_tools(
+        "bounded prompt",
+        timeout_seconds=10,
+        tool_context=context,
+    )
+
+    assert output == assistant_provider_module.MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT
+    assert runner.last_grounding_verification["passed"] is False
+    assert runner.last_grounding_verification["output_disposition"] == "fail_closed"
+
+
+def test_hailo_workspace_path_uses_bounded_evidence_without_full_tool_prompt(
+    monkeypatch,
+):
+    captured: dict[str, object] = {}
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen2.5-instruct:1.5b",
+        base_url="http://127.0.0.1:11434/v1",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        profile_name="local",
+        workspace_tools_enabled=True,
+    )
+
+    def fake_hailo_chat(prompt, *, system_prompt, max_tokens=None):
+        captured["prompt"] = prompt
+        captured["system_prompt"] = system_prompt
+        captured["max_tokens"] = max_tokens
+        runner.last_hailo_prompt_eval_count = 300
+        runner.last_hailo_eval_count = 80
+        return "CP 3 是目前最危險的位置。"
+
+    monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_hailo_chat)
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前這條路線有多少個 CP 點？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    output = runner.run_with_workspace_tools(
+        "bounded prompt",
+        timeout_seconds=10,
+        tool_context=context,
+    )
+
+    assert assistant_provider_module.WORKSPACE_TOOL_PROMPT not in str(
+        captured["system_prompt"]
+    )
+    assert "SCOUT_BOUNDED_SYNTHESIS_V1" in str(captured["prompt"])
+    assert context.invocations
+    assert runner.last_agent_run_ledger["tool_call_count"] >= 1
+    assert runner.last_grounding_verification["passed"] is False
+    assert output != "CP 3 是目前最危險的位置。"
+
+
+def test_bounded_runner_stops_before_request_when_prompt_exhausts_budget(monkeypatch):
+    import pydantic_ai
+
+    calls = {"run_sync": 0}
+
+    class FakeAgent:
+        def __init__(self, _model, **_kwargs):
+            pass
+
+        def run_sync(self, _prompt, **_kwargs):
+            calls["run_sync"] += 1
+            return "must not run"
+
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
+    monkeypatch.setattr(
+        assistant_provider_module,
+        "build_chat_model",
+        lambda **_kwargs: object(),
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="openrouter:z-ai/glm-5.2",
+        base_url="https://openrouter.ai/api/v1",
+        profile_name="cloud",
+        workspace_tools_enabled=False,
+    )
+    oversized_prompt = "x" * (
+        assistant_provider_module.AgentRunBudget().max_input_tokens * 4 + 4_000
+    )
+
+    output = runner._run_model(oversized_prompt, 10)
+
+    assert calls["run_sync"] == 0
+    assert "budget" in output.casefold()
+    assert "before request" in runner.last_agent_run_ledger["budget_stop_reason"]
+
+
+def test_grounding_repair_requires_headroom_and_uses_conservative_output_cap():
+    repair_cap = assistant_provider_module._bounded_repair_max_tokens
+
+    assert repair_cap(remaining_output_tokens=404, configured_max_tokens=1_800) is None
+    assert repair_cap(remaining_output_tokens=1_200, configured_max_tokens=1_800) == 256
+    assert repair_cap(remaining_output_tokens=1_200, configured_max_tokens=128) == 128
+
+
 class FakeRunner:
     def __init__(
         self,
@@ -538,6 +874,300 @@ def test_workspace_tool_context_accepts_direct_project_root_env(monkeypatch):
     assert result["summaries"]["checkpoint_count"] == 124
 
 
+def test_workspace_tool_context_rejects_project_symlink_escape(tmp_path: Path):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    workspace_root.mkdir()
+    outside_project = tmp_path / "outside-project"
+    outside_project.mkdir()
+    (outside_project / "project.json").write_text(
+        json.dumps({"project_id": "escaped"}),
+        encoding="utf-8",
+    )
+    (workspace_root / "escaped").symlink_to(
+        outside_project,
+        target_is_directory=True,
+    )
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="有多少個 CP?",
+            project_id="escaped",
+        ),
+        sources=[],
+        pretrip_workspace_root=workspace_root,
+    )
+
+    result = context.search_scout_route_structure(query="有多少個 CP?", limit=2)
+
+    assert context._project_root() is None
+    assert result["status"] == "failed"
+    assert result["error_type"] == "pretrip_workspace_unavailable"
+
+
+@pytest.mark.parametrize(
+    "controlled_path",
+    ["../outside.json", "outputs/escape.json"],
+)
+def test_workspace_tool_context_confines_model_controlled_paths_before_execution(
+    tmp_path: Path,
+    monkeypatch,
+    controlled_path: str,
+):
+    workspace_root = tmp_path / "pretrip-workspaces"
+    project_root = workspace_root / "bounded-project"
+    (project_root / "outputs").mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": "bounded-project"}),
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    (project_root / "outputs" / "escape.json").symlink_to(outside)
+    called = {"executor": False}
+
+    def forbidden_executor(_request):
+        called["executor"] = True
+        raise AssertionError("tool executor must not receive an escaped path")
+
+    monkeypatch.setattr(
+        assistant_provider_module,
+        "execute_scout_ai_tool",
+        forbidden_executor,
+    )
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="GPS snapshot 是否可信？",
+            project_id="bounded-project",
+        ),
+        sources=[],
+        pretrip_workspace_root=workspace_root,
+    )
+
+    result = context.assess_scout_live_navigation_state(
+        query="GPS snapshot 是否可信？",
+        live_navigation_snapshot_path=controlled_path,
+    )
+
+    assert called["executor"] is False
+    assert result["status"] == "failed"
+    assert result["error_type"] == "WorkspacePathRejected"
+
+
+def test_workspace_tool_context_discards_model_asserted_observations_before_execution(
+    monkeypatch,
+):
+    captured_request: dict[str, object] = {}
+
+    class CompletedToolResult:
+        status = assistant_provider_module.ScoutAiToolStatus.COMPLETED
+        errors: list[str] = []
+        warnings: list[str] = []
+        payload = {
+            "status": "completed",
+            "claim_summary": "Workspace-backed evidence only.",
+            "source_refs": ["outputs/evidence.json"],
+        }
+        tool_id = LIVE_NAVIGATION_STATE_TOOL_ID
+
+        class Boundary:
+            @staticmethod
+            def model_dump(*, mode: str) -> dict[str, bool]:
+                assert mode == "json"
+                return {
+                    "read_only": True,
+                    "runtime_safety_truth": False,
+                }
+
+        boundary = Boundary()
+
+    def capture_executor(request):
+        captured_request.update(request)
+        return CompletedToolResult()
+
+    monkeypatch.setattr(
+        assistant_provider_module,
+        "execute_scout_ai_tool",
+        capture_executor,
+    )
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="我現在是否偏離路線？",
+            project_id=PROJECT_ROOT.name,
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+    context.model_arguments_untrusted = True
+
+    result = context._execute_registered_tool(
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        query="我現在是否偏離路線？",
+        limit=3,
+        live_navigation_snapshot_path="outputs/navigation.json",
+        lat=23.123,
+        lon=121.456,
+        heart_rate_bpm=180,
+        remaining_safety_buffer_minutes=5,
+    )
+
+    arguments = captured_request["arguments"]
+    assert isinstance(arguments, dict)
+    assert arguments["live_navigation_snapshot_path"] == "outputs/navigation.json"
+    assert "lat" not in arguments
+    assert "lon" not in arguments
+    assert "heart_rate_bpm" not in arguments
+    assert "remaining_safety_buffer_minutes" not in arguments
+    assert result["ignored_model_asserted_fields"] == [
+        "heart_rate_bpm",
+        "lat",
+        "lon",
+        "remaining_safety_buffer_minutes",
+    ]
+
+
+def test_workspace_manifest_context_reads_deny_private_refs_and_redact_secrets(
+    tmp_path: Path,
+):
+    project_root = tmp_path / "bounded-project"
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True)
+    (outputs / "route-summary.json").write_text(
+        json.dumps(
+            {
+                "summary": "safe route summary",
+                "nested": {
+                    "api_key": "sk-secret-key-value",
+                    "items": [
+                        {
+                            "note": "Bearer secret-bearer-value",
+                            "safe": "retained",
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (outputs / "private.json").write_text(
+        json.dumps({"team": "private team record"}),
+        encoding="utf-8",
+    )
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "bounded-project",
+                "route_summary_ref": "outputs/route-summary.json",
+                "checkpoint_candidates_ref": ".env",
+                "team_status_ref": "outputs/private.json",
+                "unsupported_ref": "outputs/private.json",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    handles = assistant_provider_module._workspace_project_ref_handles(project_root)
+
+    assert [handle.context_id for handle in handles] == [
+        "workspace.artifact.route_summary_ref"
+    ]
+    context_read = assistant_provider_module._read_workspace_context(
+        project_root,
+        handles[0],
+        token_budget=500,
+    )
+    serialized = json.dumps(context_read, ensure_ascii=False, sort_keys=True)
+    assert "safe route summary" in serialized
+    assert "retained" in serialized
+    assert "sk-secret-key-value" not in serialized
+    assert "secret-bearer-value" not in serialized
+    assert "private team record" not in serialized
+    assert "[REDACTED]" in serialized
+
+
+def test_tool_source_context_summary_omits_raw_invocation_payload():
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="route evidence?",
+            project_id="bounded-project",
+        ),
+        sources=[],
+    )
+    context.invocations.append(
+        {
+            "tool_id": ROUTE_STRUCTURE_TOOL_ID,
+            "status": "completed",
+            "query": "raw model query must not escape",
+            "result_count": 1,
+            "results": [
+                {
+                    "answer": "raw tool result must not escape",
+                    "source_ref": "outputs/route-summary.json",
+                }
+            ],
+            "api_key": "sk-raw-tool-secret",
+        }
+    )
+
+    ref = context.tool_source_ref(ROUTE_STRUCTURE_TOOL_ID)
+
+    assert ref is not None
+    latest = ref.context_summary["latest"]
+    assert set(latest) == {
+        "tool_id",
+        "status",
+        "source_refs",
+        "result_count",
+        "digest",
+    }
+    assert latest["tool_id"] == ROUTE_STRUCTURE_TOOL_ID
+    assert latest["status"] == "completed"
+    assert latest["source_refs"] == ["outputs/route-summary.json"]
+    assert latest["result_count"] == 1
+    assert len(latest["digest"]) == 64
+    serialized = json.dumps(ref.context_summary, ensure_ascii=False, sort_keys=True)
+    assert "raw model query must not escape" not in serialized
+    assert "raw tool result must not escape" not in serialized
+    assert "sk-raw-tool-secret" not in serialized
+
+
+def test_context_reads_are_projected_as_public_response_sources() -> None:
+    class ContextReadRunner:
+        last_workspace_tool_invocations = []
+        last_context_reads = [
+            {
+                "context_id": "workspace.artifact.readiness_report_ref",
+                "source_ref": "outputs/readiness_report.json",
+                "estimated_tokens": 120,
+                "truncated": False,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ]
+
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="readiness report 有哪些 blocker？",
+        project_id="chilai_nanhua_day1",
+    )
+    tool_context = ScoutWorkspaceToolContext(
+        query=query,
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT.parent,
+    )
+
+    refs = assistant_provider_module._workspace_tool_source_refs(
+        ContextReadRunner(),
+        tool_context,
+    )
+
+    assert [ref.source_path for ref in refs] == ["outputs/readiness_report.json"]
+    assert refs[0].source_id == "context.read:workspace.artifact.readiness_report_ref"
+    assert refs[0].context_summary["raw_payloads_embedded"] is False
+
+
 def test_workspace_tool_error_includes_root_diagnostics(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(tmp_path / "missing"))
     query = ScoutAssistantQuery(
@@ -557,6 +1187,31 @@ def test_workspace_tool_error_includes_root_diagnostics(tmp_path: Path, monkeypa
     assert "candidate_paths" in diagnostics
     assert "project_json_exists" in diagnostics
     assert "SCOUT_PRETRIP_WORKSPACE_ROOT" in diagnostics["hint"]
+
+
+def _assert_public_tool_source_summary(
+    source: AssistantSourceRef,
+    *,
+    tool_id: str,
+) -> dict[str, object]:
+    summary = source.context_summary
+    assert summary is not None
+    latest = summary["latest"]
+    assert latest["tool_id"] == tool_id
+    assert latest["status"] == "completed"
+    assert set(latest) == {
+        "tool_id",
+        "status",
+        "source_refs",
+        "result_count",
+        "digest",
+    }
+    assert len(latest["digest"]) == 64
+    assert summary["raw_payloads_embedded"] is False
+    serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+    assert '"results"' not in serialized
+    assert '"query"' not in serialized
+    return latest
 
 
 def test_pydantic_ai_provider_is_opt_in_read_only_and_uses_injected_runner():
@@ -619,14 +1274,11 @@ def test_pydantic_ai_provider_can_answer_with_read_only_workspace_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == WORKSPACE_EVIDENCE_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
-    assert latest["retrieval_engine"] == "sqlite_fts5_bm25"
-    evidence_types = {item["evidence_type"] for item in latest["results"]}
-    assert "pretrip_mcp_named_point" in evidence_types
-    assert "pretrip_mcp_cp_support_reconciliation" in evidence_types
-    assert "pretrip_major_critical_point_candidate" in evidence_types
-    assert latest["boundary"]["runtime_safety_truth"] is False
+    latest = _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=WORKSPACE_EVIDENCE_TOOL_ID,
+    )
+    assert latest["result_count"] > 0
     assert response.boundary.phase1_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
     assert any("workspace_tool_invocations=1" in item for item in response.limitations)
@@ -656,12 +1308,11 @@ def test_pydantic_ai_provider_can_answer_with_read_only_risk_score_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == RISK_SCORE_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
-    assert latest["summaries"]["baseline"]["available"] is True
+    latest = _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=RISK_SCORE_TOOL_ID,
+    )
     assert latest["result_count"] > 0
-    assert latest["results"][0]["surface"] == "baseline"
-    assert latest["boundary"]["runtime_safety_truth"] is False
     assert response.boundary.phase1_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
     assert any(RISK_SCORE_TOOL_ID in item for item in response.limitations)
@@ -8128,12 +8779,11 @@ def test_pydantic_ai_provider_can_answer_with_read_only_terrain_score_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == TERRAIN_SCORE_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
-    assert latest["metric"] == "slope"
+    latest = _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=TERRAIN_SCORE_TOOL_ID,
+    )
     assert latest["result_count"] > 0
-    assert latest["results"][0]["score_field"] == "slope_degrees"
-    assert latest["boundary"]["runtime_safety_truth"] is False
     assert response.boundary.phase1_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
     assert any(TERRAIN_SCORE_TOOL_ID in item for item in response.limitations)
@@ -8160,12 +8810,11 @@ def test_pydantic_ai_provider_can_answer_with_read_only_map_perception_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == MAP_PERCEPTION_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
+    latest = _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=MAP_PERCEPTION_TOOL_ID,
+    )
     assert latest["result_count"] > 0
-    assert latest["results"][0]["evidence_type"] == "ocr_label"
-    assert latest["results"][0]["label_text"] == "雲海保線所"
-    assert latest["boundary"]["runtime_safety_truth"] is False
     assert response.boundary.phase1_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
     assert any(MAP_PERCEPTION_TOOL_ID in item for item in response.limitations)
@@ -8192,13 +8841,10 @@ def test_pydantic_ai_provider_can_answer_with_read_only_route_context_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == ROUTE_CONTEXT_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
-    assert latest["answerability"] == "route_context_available"
-    assert latest["route_context"]["role"] == "Experience Guide"
-    assert latest["route_briefing"]["candidate_only"] is True
-    assert latest["route_briefing"]["runtime_safety_truth"] is False
-    assert latest["boundary"]["runtime_safety_truth"] is False
+    _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=ROUTE_CONTEXT_TOOL_ID,
+    )
     assert response.boundary.phase1_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
     assert any(ROUTE_CONTEXT_TOOL_ID in item for item in response.limitations)
@@ -8225,10 +8871,10 @@ def test_pydantic_ai_provider_can_answer_with_workspace_catalog_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == WORKSPACE_CATALOG_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
-    assert latest["summaries"]["artifact_ref_count"] >= 60
-    assert latest["boundary"]["runtime_safety_truth"] is False
+    _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=WORKSPACE_CATALOG_TOOL_ID,
+    )
     assert any(WORKSPACE_CATALOG_TOOL_ID in item for item in response.limitations)
 
 
@@ -8253,11 +8899,10 @@ def test_pydantic_ai_provider_can_answer_with_route_structure_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == ROUTE_STRUCTURE_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
-    assert latest["summaries"]["checkpoint_count"] == 124
-    assert latest["summaries"]["segment_count"] == 123
-    assert latest["boundary"]["runtime_safety_truth"] is False
+    _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=ROUTE_STRUCTURE_TOOL_ID,
+    )
     assert any(ROUTE_STRUCTURE_TOOL_ID in item for item in response.limitations)
 
 
@@ -8282,11 +8927,10 @@ def test_pydantic_ai_provider_can_answer_with_major_point_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == MAJOR_POINT_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
-    assert latest["results"][0]["candidate_id"] == "mcp.heishuitang.002"
-    assert latest["results"][0]["nearest_cp_candidate_id"] == "cp.002"
-    assert latest["boundary"]["runtime_safety_truth"] is False
+    _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=MAJOR_POINT_TOOL_ID,
+    )
     assert any(MAJOR_POINT_TOOL_ID in item for item in response.limitations)
 
 
@@ -8311,11 +8955,11 @@ def test_pydantic_ai_provider_can_answer_with_evidence_fulltext_tool(
 
     assert runner.tool_calls
     assert response.sources[0].source_id == EVIDENCE_FULLTEXT_TOOL_ID
-    latest = response.sources[0].context_summary["latest"]
-    assert latest["status"] == "completed"
+    latest = _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=EVIDENCE_FULLTEXT_TOOL_ID,
+    )
     assert latest["result_count"] >= 1
-    assert latest["results"][0]["record_id"] == "mcp.heishuitang.002"
-    assert latest["boundary"]["runtime_safety_truth"] is False
     assert any(EVIDENCE_FULLTEXT_TOOL_ID in item for item in response.limitations)
 
 
@@ -8353,7 +8997,10 @@ def test_pydantic_ai_fallback_runner_preserves_workspace_tool_context(
     assert runner.failover_count == 1
     assert local.tool_calls
     assert response.sources[0].source_id == WORKSPACE_EVIDENCE_TOOL_ID
-    assert response.sources[0].context_summary["latest"]["status"] == "completed"
+    _assert_public_tool_source_summary(
+        response.sources[0],
+        tool_id=WORKSPACE_EVIDENCE_TOOL_ID,
+    )
     assert "local tool answer" in response.answer
     assert any("local model fallback was used" in item for item in response.limitations)
 
@@ -9362,20 +10009,33 @@ def test_hailo_workspace_tool_path_uses_native_chat_not_generic_agent(monkeypatc
         hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
         workspace_tools_enabled=True,
     )
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
-    def fake_chat(prompt: str, *, system_prompt: str) -> str:
+    def fake_chat(
+        prompt: str,
+        *,
+        system_prompt: str,
+        max_tokens: int | None = None,
+    ) -> str:
         captured["prompt"] = prompt
         captured["system_prompt"] = system_prompt
+        captured["max_tokens"] = max_tokens
         return "本地工具上下文回答"
 
     monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_chat)
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(surface="pretrip", question="嗨"),
+        sources=[],
+    )
 
-    output = runner._run_model_with_workspace_tools("Total Info: fixture", object())
+    output = runner._run_model_with_workspace_tools("Total Info: fixture", context)
 
     assert output == "本地工具上下文回答"
-    assert captured["prompt"] == "Total Info: fixture"
-    assert "read-only Scout AI tools" in captured["system_prompt"]
+    assert captured["prompt"] == "嗨"
+    assert assistant_provider_module.WORKSPACE_TOOL_PROMPT not in str(
+        captured["system_prompt"]
+    )
+    assert captured["max_tokens"] is not None
 
 
 def test_hailo_ollama_runner_uses_short_system_prompt_for_grounded_synthesis(monkeypatch):

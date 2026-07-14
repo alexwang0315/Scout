@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from scout.schemas.agent_runtime import AgentRequestLedger
+
 
 class AssistantSurface(str, Enum):
     DEBUG = "debug"
@@ -69,6 +71,26 @@ class AssistantObservability(BaseModel):
     model_profile_used: str | None = None
     failover_reason: str | None = None
     local_model_name: str | None = None
+    request_count: int | None = Field(default=None, ge=0)
+    tool_call_count: int | None = Field(default=None, ge=0)
+    input_tokens: int | None = Field(default=None, ge=0)
+    cache_write_tokens: int | None = Field(default=None, ge=0)
+    cache_read_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
+    system_chars: int | None = Field(default=None, ge=0)
+    tool_schema_count: int | None = Field(default=None, ge=0)
+    tool_schema_chars: int | None = Field(default=None, ge=0)
+    user_history_chars: int | None = Field(default=None, ge=0)
+    tool_result_chars: int | None = Field(default=None, ge=0)
+    estimated_cost: float | None = Field(default=None, ge=0.0)
+    cost_estimate_available: bool | None = None
+    budget_remaining: dict[str, int | float | None] | None = None
+    budget_stop_reason: str | None = None
+    selected_tool_ids: list[str] = Field(default_factory=list)
+    executed_tool_ids: list[str] = Field(default_factory=list)
+    retry_count: int | None = Field(default=None, ge=0)
+    repair_count: int | None = Field(default=None, ge=0, le=1)
+    request_ledger: list[AgentRequestLedger] = Field(default_factory=list)
 
 
 class AssistantOfflineFallbackSummary(BaseModel):

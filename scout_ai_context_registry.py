@@ -15,6 +15,7 @@ from scout_ai_tool_contracts import (
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_ins_dr_trace_tool import INS_DR_TRACE_TOOL_ID
 from scout_map_perception_tool import MAP_PERCEPTION_TOOL_ID
+from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_weather_window_tool import FRESH_WEATHER_FIELDS, WEATHER_WINDOW_TOOL_ID
@@ -191,7 +192,7 @@ def _source_specs() -> list[dict[str, Any]]:
                 "segment_candidates_ref",
             ],
             "count_keys": ["checkpoint_candidate_count", "segment_candidate_count"],
-            "tool_ids": [ROUTE_STRUCTURE_TOOL_ID],
+            "tool_ids": [ROUTE_STRUCTURE_TOOL_ID, ROUTE_ARCHITECTURE_TOOL_ID],
             "evidence_types": ["route_summary", "checkpoint", "segment"],
         },
         {

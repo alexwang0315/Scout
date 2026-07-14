@@ -132,6 +132,46 @@ returns the `scout_ui_action_plan.v0` artifact and application hint; it does
 not mutate Scout safety truth, send outbound messages, drive hardware, or apply
 browser state by itself.
 
+## Bounded Assistant Thin Waist
+
+Workspace-grounded Scout Assistant turns use the same AIOS rule as the typed
+agents: the model chooses a bounded plan while deterministic services own
+discovery, execution, limits, provenance, and verification.
+
+```text
+question
+  -> compact intent and context discovery
+  -> top-3 ContextHandle shortlist
+  -> deterministic ToolPlan (3 tools, or 5 for a compound bundle)
+  -> selected ToolCards and selected full schemas only
+  -> deterministic workspace tool execution
+  -> one bounded EvidenceCard per result
+  -> no-tool synthesis
+  -> citation and budget verification
+  -> at most one bounded repair, otherwise fail closed
+```
+
+The portable contracts live in `scout.schemas.agent_runtime`; context/tool
+discovery, evidence projection, budget accounting, and grounding verification
+live in `scout.services.bounded_agent_runtime`. The large assistant provider is
+an adapter over this thin waist, not a separate unbounded agent stack.
+
+Normal workspace answering does not preload Total Info, complete workspace
+artifacts, all tool schemas, or unselected provider-native capabilities. Raw
+tool output remains server-side for audit; the synthesis request receives only
+recursively sanitized bounded evidence and source references. Private evidence
+cards, credentialed URLs, secret-like values, and paths outside the workspace
+are withheld before model egress. Actual provider usage is checked after every
+response; an over-budget response is discarded even when the provider returns
+text. General non-workspace provider calls
+retain the trusted native research policy. A future workspace research path
+must first expose WebSearch/WebFetch as discoverable compact ToolCards so those
+capabilities are selected rather than globally attached.
+
+Computer Use remains outside this loop until context retrieval, tool recall,
+grounding, and growth gates pass. A returned UI action plan is not an execution
+receipt and must not be reported as an applied browser action.
+
 ## MVP Limitations
 
 This MVP does not implement:

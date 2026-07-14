@@ -7,7 +7,11 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI
 
 from assistant_context import AssistantContextResolver, query_source_refs
-from assistant_workspace_total_info import build_workspace_total_info_source_ref
+from assistant_workspace_total_info import (
+    TOTAL_INFO_SOURCE_ID,
+    build_workspace_total_info_source_ref,
+    public_workspace_total_info_summary,
+)
 from assistant_models import (
     AssistantBoundary,
     AssistantObservability,
@@ -83,6 +87,7 @@ def answer_assistant_query_safely(
     sources: list[AssistantSourceRef] | None = None,
     started_at: float | None = None,
 ) -> ScoutAssistantResponse:
+    _reset_provider_request_observability(provider)
     resolved_sources = _augment_sources_with_tool_registry_context(list(sources or []))
     resolved_sources = _augment_sources_with_workspace_total_info(
         query,
@@ -102,15 +107,16 @@ def answer_assistant_query_safely(
                 started_at=resolved_started_at,
                 safe_failure=False,
             )
-        resolved_sources = _augment_pretrip_evidence_first_sources(
-            query,
-            sources=resolved_sources,
-        )
-        resolved_sources = _augment_pydantic_workspace_tool_sources(
-            provider,
-            query,
-            sources=resolved_sources,
-        )
+        if not _provider_uses_bounded_agent_runtime(provider):
+            resolved_sources = _augment_pretrip_evidence_first_sources(
+                query,
+                sources=resolved_sources,
+            )
+            resolved_sources = _augment_pydantic_workspace_tool_sources(
+                provider,
+                query,
+                sources=resolved_sources,
+            )
         response = provider.answer(query, sources=resolved_sources)
         return _with_observability(
             response,
@@ -120,9 +126,18 @@ def answer_assistant_query_safely(
             safe_failure=isinstance(provider, FailedAssistantProvider),
         )
     except Exception as exc:
-        workspace_tool_fallback = _workspace_tool_fallback_response(
+        fallback_sources = _augment_pretrip_evidence_first_sources(
             query,
             sources=resolved_sources,
+        )
+        fallback_sources = _augment_pydantic_workspace_tool_sources(
+            provider,
+            query,
+            sources=fallback_sources,
+        )
+        workspace_tool_fallback = _workspace_tool_fallback_response(
+            query,
+            sources=fallback_sources,
             provider_error_type=type(exc).__name__,
         )
         if workspace_tool_fallback is not None:
@@ -557,7 +572,15 @@ def _pretrip_workspace_project_root_from_env(
         return None
     if candidate == root:
         return None
-    if (candidate / "project.json").exists():
+    manifest = candidate / "project.json"
+    if manifest.is_symlink():
+        return None
+    try:
+        resolved_manifest = manifest.resolve(strict=True)
+        resolved_manifest.relative_to(candidate)
+    except (OSError, ValueError):
+        return None
+    if resolved_manifest.is_file():
         return candidate
     return None
 
@@ -664,6 +687,14 @@ def _with_observability(
         )
     )
     model_profile_used = _provider_metadata(provider, "last_profile")
+    run_ledger = _provider_runtime_value(provider, "last_agent_run_ledger")
+    ledger = run_ledger if isinstance(run_ledger, dict) else {}
+    raw_cost_estimate_available = ledger.get("cost_estimate_available")
+    cost_estimate_available = (
+        raw_cost_estimate_available
+        if isinstance(raw_cost_estimate_available, bool)
+        else None
+    )
     observability = AssistantObservability(
         provider_class=type(provider).__name__,
         source_count=len(sources),
@@ -679,16 +710,157 @@ def _with_observability(
             if model_profile_used == "local"
             else None
         ),
+        request_count=_optional_nonnegative_int(ledger.get("request_count")),
+        tool_call_count=_optional_nonnegative_int(ledger.get("tool_call_count")),
+        input_tokens=_optional_nonnegative_int(ledger.get("input_tokens")),
+        cache_write_tokens=_optional_nonnegative_int(ledger.get("cache_write_tokens")),
+        cache_read_tokens=_optional_nonnegative_int(ledger.get("cache_read_tokens")),
+        output_tokens=_optional_nonnegative_int(ledger.get("output_tokens")),
+        system_chars=_optional_nonnegative_int(ledger.get("system_chars")),
+        tool_schema_count=_optional_nonnegative_int(ledger.get("tool_schema_count")),
+        tool_schema_chars=_optional_nonnegative_int(ledger.get("tool_schema_chars")),
+        user_history_chars=_optional_nonnegative_int(ledger.get("user_history_chars")),
+        tool_result_chars=_optional_nonnegative_int(ledger.get("tool_result_chars")),
+        estimated_cost=(
+            None
+            if cost_estimate_available is False
+            else _optional_nonnegative_float(ledger.get("estimated_cost"))
+        ),
+        cost_estimate_available=cost_estimate_available,
+        budget_remaining=(
+            dict(ledger["budget_remaining"])
+            if isinstance(ledger.get("budget_remaining"), dict)
+            else None
+        ),
+        budget_stop_reason=(
+            str(ledger["budget_stop_reason"])
+            if ledger.get("budget_stop_reason")
+            else None
+        ),
+        selected_tool_ids=_string_list(ledger.get("selected_tool_ids")),
+        executed_tool_ids=_string_list(ledger.get("executed_tool_ids")),
+        retry_count=_optional_nonnegative_int(ledger.get("retry_count")),
+        repair_count=_optional_nonnegative_int(ledger.get("repair_count")),
+        request_ledger=(
+            list(ledger["requests"])
+            if isinstance(ledger.get("requests"), list)
+            else []
+        ),
     )
-    return response.model_copy(update={"observability": observability})
+    public_sources = [
+        source.model_copy(
+            update={
+                "context_summary": public_workspace_total_info_summary(
+                    source.context_summary
+                )
+            }
+        )
+        if source.source_id == TOTAL_INFO_SOURCE_ID
+        and isinstance(source.context_summary, dict)
+        else source
+        for source in response.sources
+    ]
+    return response.model_copy(
+        update={"observability": observability, "sources": public_sources}
+    )
 
 
 def _provider_metadata(provider: ScoutAssistantProvider, name: str) -> str | None:
-    value = getattr(provider, name, None)
-    if value is None:
-        runner = getattr(provider, "runner", None)
-        value = getattr(runner, name, None)
+    value = _provider_runtime_value(provider, name)
     return str(value) if value is not None else None
+
+
+def _reset_provider_request_observability(provider: ScoutAssistantProvider) -> None:
+    defaults: dict[str, object | None] = {
+        "last_profile": None,
+        "last_error_type": None,
+        "last_failover_reason": None,
+        "last_model_usage": {},
+        "last_model_response_metadata": {},
+        "last_agent_run_ledger": {},
+        "last_workspace_tool_invocations": [],
+        "last_evidence_cards": [],
+        "last_grounding_verification": {},
+        "last_context_handles": [],
+        "last_context_reads": [],
+    }
+    runner = getattr(provider, "runner", None)
+    candidates = (
+        provider,
+        runner,
+        getattr(runner, "primary_runner", None),
+        getattr(runner, "fallback_runner", None),
+    )
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        for name, default in defaults.items():
+            if hasattr(candidate, name):
+                setattr(
+                    candidate,
+                    name,
+                    default.copy() if isinstance(default, (dict, list)) else default,
+                )
+
+
+def _provider_uses_bounded_agent_runtime(provider: ScoutAssistantProvider) -> bool:
+    runner = getattr(provider, "runner", None)
+    candidates = (
+        provider,
+        runner,
+        getattr(runner, "primary_runner", None),
+        getattr(runner, "fallback_runner", None),
+    )
+    return any(
+        getattr(candidate, "bounded_agent_runtime_enabled", False) is True
+        for candidate in candidates
+        if candidate is not None
+    )
+
+
+def _provider_runtime_value(provider: ScoutAssistantProvider, name: str) -> object | None:
+    runner = getattr(provider, "runner", None)
+    candidates = [provider, runner]
+    if runner is not None:
+        last_profile = getattr(runner, "last_profile", None)
+        primary_profile = getattr(runner, "primary_profile", "cloud")
+        fallback_profile = getattr(runner, "fallback_profile", "local")
+        if last_profile == primary_profile:
+            candidates.append(getattr(runner, "primary_runner", None))
+        elif last_profile == fallback_profile:
+            candidates.append(getattr(runner, "fallback_runner", None))
+        else:
+            candidates.extend(
+                [
+                    getattr(runner, "primary_runner", None),
+                    getattr(runner, "fallback_runner", None),
+                ]
+            )
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        value = getattr(candidate, name, None)
+        if value not in (None, {}, []):
+            return value
+    return None
+
+
+def _optional_nonnegative_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return max(0, value)
+
+
+def _optional_nonnegative_float(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return max(0.0, float(value))
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str) and item]
 
 
 def create_assistant_provider_from_env(
