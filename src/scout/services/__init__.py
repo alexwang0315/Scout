@@ -1,6 +1,7 @@
 """Deterministic services for Scout AI OS."""
 
 from scout.services.application_router import ApplicationRouter, RequestRoute, RoutedRequest
+from scout.services.bounded_agent_runtime import BoundedAgentRuntime, estimate_tokens
 from scout.services.capability_registry import CapabilityRecord, CapabilityRegistry
 from scout.services.db import (
     REQUIRED_TABLES,
@@ -48,6 +49,7 @@ from scout.services.workflow_store import WorkflowRecord, WorkflowStore
 
 
 __all__ = [
+    "BoundedAgentRuntime",
     "CapabilityRegistry",
     "ApplicationRouter",
     "CapabilityRecord",
@@ -88,6 +90,7 @@ __all__ = [
     "WorkflowRecord",
     "WorkflowStore",
     "connect_database",
+    "estimate_tokens",
     "evaluate_outbound_standing_grant",
     "generated_package_hash",
     "initialize_database",

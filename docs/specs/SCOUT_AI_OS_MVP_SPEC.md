@@ -873,6 +873,60 @@ Planner rules:
   route architecture, navigation terrain, weather window, CWA, GEE, pace, and
   equipment evidence when available.
 
+### 7.9 Bounded Context and Progressive Tool Disclosure
+
+The workspace-grounded Pydantic AI assistant must use a bounded AIOS thin
+waist. It must not expose every registered tool, Total Info, full workspace
+artifacts, or unselected native provider capabilities at the start of a turn.
+
+Required flow:
+
+1. discover top-three `ContextHandle` records;
+2. create a hard-capped `ToolPlan` from compact `ToolCard` records;
+3. register only the selected full tool schemas;
+4. execute tools through deterministic workspace services;
+5. project raw results into bounded `EvidenceCard` records;
+6. remove all tools before answer synthesis;
+7. verify citations and numeric claims deterministically;
+8. allow at most one bounded repair and otherwise fail closed.
+
+The typed contracts are `ContextHandle`, `ContextReadResult`, `ToolCard`,
+`PlannedToolCall`, `ToolPlan`, `EvidenceCard`, `AgentRunBudget`,
+`AgentRequestLedger`, `AgentRunLedger`, and `GroundingVerification` in
+`scout.schemas.agent_runtime`.
+
+Hard limits:
+
+- ordinary turns select at most three tools;
+- compound evidence bundles select at most five tools;
+- one turn uses at most three provider requests, including schema retries and
+  synthesis repair;
+- each tool result is projected to at most 1,000 estimated tokens;
+- synthesis receives no tool definitions and cannot call another tool;
+- a fail-closed response is not counted as a completed grounded answer;
+- rejected draft claims remain audit metadata but are not user-visible claims.
+- deterministic preflight limits cap each request, and actual provider usage is
+  checked again after the response; an over-budget model answer is discarded;
+- non-greeting workspace questions with no selected tool evidence or bounded
+  context evidence fail closed instead of returning an unverified direct answer;
+- EvidenceCard projection recursively removes sensitive keys and secret-like
+  values, rejects credentialed URLs and absolute paths, and withholds evidence
+  explicitly marked private, secret, restricted, or confidential.
+
+The additive `/assistant/query` observability fields report per-request and
+turn totals for system, history, schema, result, input, cache, output, request,
+tool call, retry, repair, selected/executed tools, and budget stop reason.
+Existing response fields must not be removed or renamed.
+
+Provider-native WebSearch/WebFetch remain available to general trusted
+provider calls. The bounded workspace path does not attach them unless a
+future reviewed research ToolCard selects them; this prevents an unrelated
+provider capability from increasing schemas or blocking models that do not
+support the native form.
+
+The regression and measurement contract is documented in
+`docs/specs/scout-ai-bounded-context-progressive-disclosure.md`.
+
 ---
 
 ## 8. Deterministic Services

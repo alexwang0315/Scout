@@ -10,6 +10,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from assistant_api import create_assistant_app
+from assistant_api import answer_assistant_query_safely
 from assistant_api import create_assistant_context_registry_status
 from assistant_api import create_assistant_provider_from_env
 from assistant_api import create_assistant_provider_status
@@ -27,6 +28,7 @@ from assistant_skill_router import (
     PRETRIP_TOOL_PLANNER_SKILL_ID,
     augment_pretrip_sources_with_local_evidence_search,
 )
+from assistant_workspace_total_info import TOTAL_INFO_SOURCE_ID
 from admin_assistant_context import build_admin_assistant_context
 from pretrip_assistant_context import build_pretrip_assistant_context
 from runtime_debug_log import MemoryRuntimeDebugEventLog
@@ -397,7 +399,12 @@ class AssistantApiTests(unittest.TestCase):
         self.assertIn(payload["observability"]["latency_class"], {"fast", "slow", "timeout_or_error"})
         self.assertFalse(payload["observability"]["safe_failure"])
         self.assertNotIn("api_key", json.dumps(payload["observability"]).lower())
-        self.assertNotIn("token", json.dumps(payload["observability"]).lower())
+        serialized_observability = json.dumps(payload["observability"]).lower()
+        self.assertNotIn("api_key", serialized_observability)
+        self.assertNotIn("bearer ", serialized_observability)
+        self.assertIsNone(payload["observability"]["input_tokens"])
+        self.assertIsNone(payload["observability"]["estimated_cost"])
+        self.assertIsNone(payload["observability"]["cost_estimate_available"])
         source_ids = {source["source_id"] for source in payload["sources"]}
         self.assertIn("assistant_context.tool_registry", source_ids)
         tool_registry_source = _source_by_id(payload, "assistant_context.tool_registry")
@@ -439,6 +446,261 @@ class AssistantApiTests(unittest.TestCase):
 
         self.assertIsNone(observed.observability.model_profile_used)
         self.assertIsNone(observed.observability.local_model_name)
+
+    def test_observability_projects_total_info_before_api_response(self):
+        class Provider:
+            pass
+
+        source = AssistantSourceRef(
+            source_id=TOTAL_INFO_SOURCE_ID,
+            source_path="workspace.total_info_entry",
+            evidence_type="assistant_workspace_total_info",
+            selected=True,
+            context_summary={
+                "artifact_kind": "assistant_workspace_total_info_context",
+                "artifact_version": "assistant_workspace_total_info_context.v0",
+                "project_id": "fixture",
+                "location_context": {
+                    "status": "available",
+                    "lat": 23.1,
+                    "lon": 121.2,
+                },
+                "body_resource_context": {
+                    "status": "available",
+                    "heart_rate": 170,
+                },
+                "sensor_snapshot_context": {
+                    "status": "available",
+                    "imu": [1, 2, 3],
+                },
+                "missing_or_partial_context": ["weather_environment_context"],
+            },
+        )
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="bounded answer",
+            sources=[source],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=Provider(),
+            sources=[source],
+            started_at=0,
+            safe_failure=False,
+        )
+
+        summary = observed.sources[0].context_summary
+        self.assertEqual(
+            summary["context_statuses"],
+            {
+                "body_resource_context": "available",
+                "location_context": "available",
+                "sensor_snapshot_context": "available",
+            },
+        )
+        self.assertEqual(summary["missing_or_partial_context_count"], 1)
+        serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn("23.1", serialized)
+        self.assertNotIn("121.2", serialized)
+        self.assertNotIn("170", serialized)
+        self.assertNotIn("imu", serialized)
+
+    def test_observability_projects_bounded_request_ledger_additively(self):
+        class ProviderWithLedger:
+            last_agent_run_ledger = {
+                "request_count": 2,
+                "tool_call_count": 1,
+                "system_chars": 900,
+                "tool_schema_count": 1,
+                "tool_schema_chars": 700,
+                "user_history_chars": 650,
+                "tool_result_chars": 500,
+                "input_tokens": 1_100,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 100,
+                "output_tokens": 90,
+                "estimated_cost": 0.001,
+                "cost_estimate_available": True,
+                "budget_remaining": {"input_tokens": 18_900},
+                "budget_stop_reason": None,
+                "selected_tool_ids": [
+                    "pydantic_ai.tool.search_scout_route_structure.v0"
+                ],
+                "executed_tool_ids": [
+                    "pydantic_ai.tool.search_scout_route_structure.v0"
+                ],
+                "retry_count": 0,
+                "repair_count": 0,
+                "requests": [
+                    {
+                        "request_index": 1,
+                        "system_chars": 450,
+                        "tool_schema_count": 1,
+                        "tool_schema_chars": 700,
+                        "user_history_chars": 350,
+                        "input_tokens": 600,
+                        "output_tokens": 40,
+                        "tool_call_count": 1,
+                    },
+                    {
+                        "request_index": 2,
+                        "system_chars": 450,
+                        "user_history_chars": 300,
+                        "tool_result_chars": 500,
+                        "input_tokens": 500,
+                        "cache_read_tokens": 100,
+                        "output_tokens": 50,
+                    },
+                ],
+            }
+
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="bounded answer",
+            sources=[],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=ProviderWithLedger(),
+            sources=[],
+            started_at=0,
+            safe_failure=False,
+        )
+
+        self.assertEqual(observed.observability.request_count, 2)
+        self.assertEqual(observed.observability.tool_schema_chars, 700)
+        self.assertEqual(observed.observability.tool_result_chars, 500)
+        self.assertTrue(observed.observability.cost_estimate_available)
+        self.assertEqual(observed.observability.estimated_cost, 0.001)
+        self.assertEqual(len(observed.observability.request_ledger), 2)
+        self.assertEqual(
+            observed.observability.request_ledger[0].tool_schema_count,
+            1,
+        )
+        serialized = json.dumps(
+            observed.observability.model_dump(mode="json"),
+            ensure_ascii=False,
+        ).lower()
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("bearer ", serialized)
+
+    def test_new_request_does_not_reuse_previous_provider_ledger(self):
+        class ProviderWithStaleLedger:
+            last_agent_run_ledger = {
+                "request_count": 9,
+                "tool_call_count": 7,
+                "input_tokens": 99_999,
+                "selected_tool_ids": ["stale.tool"],
+                "requests": [],
+            }
+
+            def answer(self, query, *, sources):
+                return ScoutAssistantResponse(
+                    surface=query.surface,
+                    answer="fresh answer",
+                    sources=sources,
+                    boundary=AssistantBoundary(surface=query.surface),
+                )
+
+        response = answer_assistant_query_safely(
+            ProviderWithStaleLedger(),
+            ScoutAssistantQuery(surface="debug", question="fresh request"),
+            sources=[],
+        )
+
+        self.assertIsNone(response.observability.request_count)
+        self.assertIsNone(response.observability.tool_call_count)
+        self.assertIsNone(response.observability.input_tokens)
+        self.assertEqual(response.observability.selected_tool_ids, [])
+
+    def test_observability_does_not_present_unknown_cost_as_zero(self):
+        class ProviderWithUnknownCost:
+            last_agent_run_ledger = {
+                "request_count": 1,
+                "estimated_cost": 0.0,
+                "cost_estimate_available": False,
+                "requests": [],
+            }
+
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="bounded answer",
+            sources=[],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=ProviderWithUnknownCost(),
+            sources=[],
+            started_at=0,
+            safe_failure=False,
+        )
+
+        self.assertFalse(observed.observability.cost_estimate_available)
+        self.assertIsNone(observed.observability.estimated_cost)
+
+    def test_bounded_runtime_capability_skips_deterministic_preexecution(self):
+        class RecordingProvider:
+            def __init__(self, *, capability_location: str):
+                bounded_runner = type(
+                    "BoundedRunner",
+                    (),
+                    {"bounded_agent_runtime_enabled": True},
+                )()
+                if capability_location == "runner":
+                    self.runner = bounded_runner
+                elif capability_location == "nested_runner":
+                    self.runner = type(
+                        "FallbackRunner",
+                        (),
+                        {"fallback_runner": bounded_runner},
+                    )()
+                else:
+                    self.bounded_agent_runtime_enabled = True
+
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                resolved_sources = list(sources or [])
+                return ScoutAssistantResponse(
+                    surface=query.surface,
+                    answer="bounded answer",
+                    sources=resolved_sources,
+                    boundary=AssistantBoundary(surface=query.surface),
+                )
+
+        for capability_location in ("provider", "runner", "nested_runner"):
+            with self.subTest(capability_location=capability_location):
+                provider = RecordingProvider(
+                    capability_location=capability_location,
+                )
+                with (
+                    patch(
+                        "assistant_api._augment_pretrip_evidence_first_sources",
+                        side_effect=lambda query, *, sources: sources,
+                    ) as augment_pretrip,
+                    patch(
+                        "assistant_api._augment_pydantic_workspace_tool_sources",
+                        side_effect=lambda provider, query, *, sources: sources,
+                    ) as augment_workspace,
+                ):
+                    client = TestClient(
+                        create_assistant_app(
+                            provider=provider,
+                            context_resolver=lambda query: [],
+                        )
+                    )
+                    response = client.post(
+                        "/assistant/query",
+                        json={"surface": "pretrip", "question": "Route status?"},
+                    )
+
+                self.assertEqual(response.status_code, 200)
+                augment_pretrip.assert_not_called()
+                augment_workspace.assert_not_called()
 
     def test_provider_failure_is_isolated_as_safe_response(self):
         class FailingProvider:

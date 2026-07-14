@@ -121,7 +121,9 @@ def test_response_observability_is_non_authoritative_metadata():
     assert payload["observability"]["failover_reason"] == "primary_run_error:TimeoutError"
     assert payload["observability"]["local_model_name"] == "qwen2.5:0.5b"
     assert "api_key" not in str(payload).lower()
-    assert "token" not in str(payload).lower()
+    assert "api_key" not in str(payload).lower()
+    assert "bearer " not in str(payload).lower()
+    assert payload["observability"]["input_tokens"] is None
 
     with pytest.raises(ValidationError):
         AssistantObservability(
