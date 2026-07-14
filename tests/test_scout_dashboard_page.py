@@ -1584,7 +1584,8 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "Model audit" in html
     assert "single Scout AI model call" in html
     assert "canonical briefing unchanged" in html
-    assert "Calling Scout AI via OpenRouter" in html
+    assert "Calling Scout AI, then rebuilding briefing artifact" in html
+    assert "Calling Scout AI via OpenRouter" not in html
     assert "Open briefing" in html
     assert "outputs/briefings/route_context_briefing.html" in html
     assert "scout-route-context-briefing skill" in html

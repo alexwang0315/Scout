@@ -9,6 +9,7 @@ from admin_api import (
     _compact_pretrip_project_view,
     _ensure_scout_src_on_path,
     _route_context_briefing_max_tokens,
+    _run_route_context_briefing_scout_ai,
     create_admin_app,
 )
 from admin_local_raster_tiles import raster_tile_cache_path
@@ -727,7 +728,7 @@ def test_pretrip_project_route_context_briefing_regenerate_calls_scout_ai(
         json={
             "confirm_regenerate": True,
             "operator_alias": "dashboard_operator",
-            "model": "openrouter:z-ai/glm-5.2",
+            "model": "nvidia:z-ai/glm-5.2",
         },
     )
 
@@ -735,8 +736,8 @@ def test_pretrip_project_route_context_briefing_regenerate_calls_scout_ai(
     payload = response.json()
     assert payload["status"] == "completed"
     assert payload["operator_triggered"] is True
-    assert payload["scout_ai"]["provider"] == "openrouter"
-    assert payload["scout_ai"]["model_name"] == "openrouter:z-ai/glm-5.2"
+    assert payload["scout_ai"]["provider"] == "nvidia"
+    assert payload["scout_ai"]["model_name"] == "nvidia:z-ai/glm-5.2"
     assert payload["scout_ai"]["external_model_call_performed"] is True
     assert payload["boundary"]["runtime_safety_truth"] is False
     assert payload["boundary"]["live_safety_automation_triggered"] is False
@@ -757,12 +758,13 @@ def test_pretrip_project_route_context_briefing_regenerate_calls_scout_ai(
     )
 
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    assert project["route_context_briefing_regenerated_by"] == "scout_ai_nvidia"
     regeneration_ref = project["route_context_briefing_regeneration_ref"]
     regeneration_payload = json.loads(
         (project_root / regeneration_ref).read_text(encoding="utf-8")
     )
     assert regeneration_payload["external_model_call_performed"] is True
-    assert regeneration_payload["model_provider"] == "openrouter"
+    assert regeneration_payload["model_provider"] == "nvidia"
     assert regeneration_payload["boundary"]["raw_prompt_embedded"] is False
     assert regeneration_payload["boundary"]["api_key_embedded"] is False
     assert regeneration_payload["route_context_collection"]["writes_performed"] is True
@@ -1014,6 +1016,43 @@ def test_route_context_briefing_runner_adds_src_to_python_path(
     _ensure_scout_src_on_path()
 
     assert sys.path[0] == src_path
+
+
+def test_route_context_briefing_runner_disables_native_research_tools(
+    monkeypatch,
+) -> None:
+    import assistant_pydantic_provider
+
+    captured: dict[str, object] = {}
+
+    class FakeRunner:
+        def __init__(self, **kwargs: object) -> None:
+            captured["runner_kwargs"] = kwargs
+
+        def run(self, prompt: str, *, timeout_seconds: int) -> str:
+            captured["prompt"] = prompt
+            captured["timeout_seconds"] = timeout_seconds
+            return "route-context-plan"
+
+    monkeypatch.setattr(
+        assistant_pydantic_provider,
+        "PydanticAIEnvRunner",
+        FakeRunner,
+    )
+
+    output = _run_route_context_briefing_scout_ai(
+        "Generate the deterministic route-context plan without tools.",
+        model_name="nvidia:z-ai/glm-5.2",
+        timeout_seconds=45,
+        runner=None,
+    )
+
+    assert output == "route-context-plan"
+    runner_kwargs = captured["runner_kwargs"]
+    assert isinstance(runner_kwargs, dict)
+    assert runner_kwargs["model_name"] == "nvidia:z-ai/glm-5.2"
+    assert runner_kwargs["workspace_tools_enabled"] is False
+    assert captured["timeout_seconds"] == 45
 
 
 def test_route_context_briefing_max_tokens_defaults_above_short_answer_limit(
