@@ -3715,6 +3715,7 @@ def create_admin_router(
 
         try:
             model_name = _route_context_briefing_openrouter_model_name(request.model)
+            model_provider = model_name.partition(":")[0]
             if route_context_briefing_ai_runner is None:
                 _ensure_route_context_briefing_model_credentials(model_name)
             prompt = _route_context_briefing_regeneration_prompt(
@@ -3767,7 +3768,7 @@ def create_admin_router(
                 "operator_triggered": True,
                 "scout_ai_required": True,
                 "external_model_call_performed": True,
-                "model_provider": "openrouter",
+                "model_provider": model_provider,
                 "model_name": model_name,
                 "prompt_sha256": prompt_hash,
                 "model_output_sha256": model_output_hash,
@@ -3793,7 +3794,9 @@ def create_admin_router(
                 {
                     "route_context_briefing_regeneration_ref": regeneration_ref,
                     "route_context_briefing_regenerated_at": regenerated_at,
-                    "route_context_briefing_regenerated_by": "scout_ai_openrouter",
+                    "route_context_briefing_regenerated_by": (
+                        f"scout_ai_{model_provider}"
+                    ),
                 },
             )
         except RuntimeError as exc:
@@ -3814,7 +3817,7 @@ def create_admin_router(
             "status": "completed",
             "operator_triggered": True,
             "scout_ai": {
-                "provider": "openrouter",
+                "provider": model_provider,
                 "model_name": model_name,
                 "external_model_call_performed": True,
                 "model_output_sha256": model_output_hash,
@@ -7542,6 +7545,7 @@ def _run_route_context_briefing_scout_ai(
     return PydanticAIEnvRunner(
         model_name=model_name,
         workspace_model_max_tokens=_route_context_briefing_max_tokens(),
+        workspace_tools_enabled=False,
     ).run(
         prompt,
         timeout_seconds=timeout_seconds,
