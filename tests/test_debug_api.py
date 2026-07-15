@@ -4,6 +4,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from debug_api import create_debug_app
+from debug_event_provenance import DebugEventIngestionChannel
 from mock_outbound_transport import MockOutboundTransport
 from mock_voice_transport import MockVoiceTransport
 from runtime_debug_log import MemoryRuntimeDebugEventLog
@@ -57,6 +58,12 @@ class DebugApiTests(unittest.TestCase):
         events = client.get("/debug/events", params={"kind": "safety_event_emitted"})
         self.assertEqual(events.status_code, 200)
         self.assertEqual([event["kind"] for event in events.json()["events"]], ["safety_event_emitted"])
+        self.assertEqual(events.json()["events"][0]["event_provenance"], "runtime")
+        self.assertEqual(
+            events.json()["events"][0]["provenance_contract"]["ingestion_channel"],
+            "runtime_log",
+        )
+        self.assertTrue(events.json()["event_provenance_contract"]["authoritative"])
 
         state = client.get("/debug/state")
         self.assertEqual(state.status_code, 200)
@@ -75,6 +82,34 @@ class DebugApiTests(unittest.TestCase):
         self.assertEqual(client.post("/debug/events", json={}).status_code, 405)
         self.assertEqual(client.patch("/debug/state", json={}).status_code, 405)
         self.assertEqual(client.delete("/debug/messages").status_code, 405)
+
+    def test_debug_log_channel_is_server_owned_and_fixture_cannot_claim_runtime(self):
+        log = MemoryRuntimeDebugEventLog()
+        log.append(
+            _event(
+                sequence=1,
+                kind="debug_session_started",
+                payload={"event_provenance": "runtime", "transport": "connected"},
+            )
+        )
+        client = TestClient(
+            create_debug_app(
+                debug_log=log,
+                debug_log_ingestion_channel=DebugEventIngestionChannel.FIXTURE_REPLAY,
+            )
+        )
+
+        first = client.get("/debug/events").json()["events"][0]
+        second = client.get("/debug/events").json()["events"][0]
+        stream_event = _sse_json_payload(
+            client.get("/debug/stream", params={"once": "true"}).text
+        )["events"]["events"][0]
+
+        self.assertEqual(first["event_provenance"], "fixture_replay")
+        self.assertEqual(first["provenance_contract"]["ingestion_channel"], "fixture_replay")
+        self.assertTrue(first["provenance_contract"]["payload_claims_ignored"])
+        self.assertEqual(second["provenance_contract"], first["provenance_contract"])
+        self.assertEqual(stream_event["event_provenance"], "fixture_replay")
 
     def test_debug_stream_pushes_read_only_snapshot_over_sse(self):
         log = MemoryRuntimeDebugEventLog()
@@ -98,6 +133,7 @@ class DebugApiTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["read_only"])
         self.assertEqual(payload["events"]["events"][0]["kind"], "debug_session_started")
+        self.assertEqual(payload["events"]["events"][0]["event_provenance"], "runtime")
         self.assertEqual(payload["state"]["event_count"], 2)
         self.assertEqual(payload["messages"]["messages"][0]["transport"], "mock")
         self.assertEqual(payload["mobile_wearable_ingress"]["status"], "unavailable")
@@ -203,6 +239,7 @@ class DebugApiTests(unittest.TestCase):
         self.assertEqual(event_payload["kind"], "agent_tool_invocation")
         self.assertEqual(event_payload["sequence"], 2)
         self.assertEqual(event_payload["payload"]["tool_id"], "scout.cp.proposal_preview")
+        self.assertEqual(event_payload["event_provenance"], "historical")
         self.assertFalse(event_payload["payload"]["live_safety_api_calls_allowed"])
         self.assertFalse(event_payload["payload"]["phase1_safety_mutation_allowed"])
         self.assertEqual(state.status_code, 200)
@@ -266,6 +303,10 @@ class DebugApiTests(unittest.TestCase):
         )
         self.assertEqual([event["sequence"] for event in event_payloads], [1, 2, 3])
         self.assertEqual(trigger_events.status_code, 200)
+        self.assertEqual(
+            [event["event_provenance"] for event in event_payloads],
+            ["runtime", "projection", "projection"],
+        )
         trigger_payload = trigger_events.json()["events"][0]["payload"]
         self.assertEqual(trigger_payload["status"], "triggered")
         self.assertEqual(trigger_payload["imprint_id"], "spatial_imprint.debug.001")

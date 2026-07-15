@@ -135,6 +135,30 @@ def test_debug_projection_rejects_mismatched_cwa_project_identity(
     assert "project identity" in response.json()["detail"].lower()
 
 
+def test_debug_projection_events_are_stamped_by_server_ingestion_channel() -> None:
+    fixture_workspace_root = ROOT / "tests" / "fixtures" / "pretrip" / "projects"
+    client = TestClient(
+        create_admin_app(pretrip_workspace_root=fixture_workspace_root)
+    )
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/debug-projection-events"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["event_provenance_contract"]["authoritative"] is True
+    assert payload["event_provenance_contract"]["transport_independent"] is True
+    assert payload["events"]
+    assert {event["event_provenance"] for event in payload["events"]} == {
+        "fixture_replay"
+    }
+    assert {
+        event["provenance_contract"]["ingestion_channel"]
+        for event in payload["events"]
+    } == {"fixture_replay"}
+
+
 def _write_small_gpx(
     path: Path,
     *,
@@ -938,6 +962,74 @@ def test_pretrip_project_route_context_briefing_variants_generate_calls_scout_ai
     assert index_response.headers["x-scout-runtime-safety-truth"] == "false"
     assert index_response.headers["x-scout-route-context-briefing-variants"] == "true"
     assert "Scout AI 一次產生的 5 版 Route Briefing" in index_response.text
+    for file_ref in [item["file_ref"] for item in payload["variants"]]:
+        assert f'?ref={file_ref}' in index_response.text
+        linked_response = client.get(
+            f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/file",
+            params={"ref": file_ref},
+        )
+        assert linked_response.status_code == 200
+    assert '?ref=route_context_variant_comparison.md' in index_response.text
+    assert '?ref=route_context_variant_comparison.json' in index_response.text
+
+    legacy_ref = payload["variants"][0]["file_ref"]
+    (output_dir / "index.html").write_text(
+        f'<a href="{legacy_ref}">legacy generated card</a>',
+        encoding="utf-8",
+    )
+    legacy_index_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/file",
+        params={"ref": "index.html"},
+    )
+    assert legacy_index_response.status_code == 200
+    assert f'?ref={legacy_ref}' in legacy_index_response.text
+    assert f'href="{legacy_ref}"' not in legacy_index_response.text
+
+
+def test_pretrip_project_route_context_briefing_variants_provider_failure_is_fail_closed(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    project_path = project_root / "project.json"
+    project_before = project_path.read_text(encoding="utf-8")
+
+    class FailingVariantsRunner:
+        model_name = "nvidia:z-ai/glm-5.2"
+        last_usage = {
+            "provider_reported": False,
+            "input_tokens": None,
+            "output_tokens": None,
+            "total_tokens": None,
+            "requests": 1,
+            "tool_calls": 0,
+        }
+
+        def run(self, _prompt: str, *, timeout_seconds: int) -> str:
+            assert timeout_seconds == 300
+            raise RuntimeError("synthetic provider unavailable")
+
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            route_context_briefing_variants_runner_factory=(
+                lambda _model_name, _model_max_tokens: FailingVariantsRunner()
+            ),
+        )
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/generate",
+        json={
+            "confirm_generate": True,
+            "model": "nvidia:z-ai/glm-5.2",
+            "timeout_seconds": 300,
+            "model_max_tokens": 7000,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "synthetic provider unavailable"
+    assert project_path.read_text(encoding="utf-8") == project_before
 
 
 def _route_context_briefing_variants_plan() -> dict[str, object]:

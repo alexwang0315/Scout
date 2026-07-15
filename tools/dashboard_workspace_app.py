@@ -21,6 +21,7 @@ from assistant_api import (  # noqa: E402
 )
 from assistant_context import create_assistant_context_resolver  # noqa: E402
 from debug_api import create_debug_page_router, create_debug_router  # noqa: E402
+from debug_event_provenance import DebugEventIngestionChannel  # noqa: E402
 from hardware_readiness_api import create_hardware_readiness_router  # noqa: E402
 from mock_outbound_transport import MockOutboundTransport  # noqa: E402
 from runtime_debug_log import MemoryRuntimeDebugEventLog  # noqa: E402
@@ -55,7 +56,11 @@ def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
         timestamp_factory=lambda: "2026-07-09T00:00:00Z",
     )
     app.include_router(
-        create_debug_router(debug_log=debug_log, message_source=transport)
+        create_debug_router(
+            debug_log=debug_log,
+            debug_log_ingestion_channel=DebugEventIngestionChannel.SMOKE_HARNESS,
+            message_source=transport,
+        )
     )
     app.include_router(create_debug_page_router())
     app.include_router(create_hardware_readiness_router())

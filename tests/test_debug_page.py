@@ -850,6 +850,25 @@ class DebugPageTests(unittest.TestCase):
             self.assertIn('type="checkbox"', layer_input)
             self.assertIn("data-layer=", layer_input)
 
+    def test_static_debug_page_separates_transport_from_event_provenance(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("function debugEventProvenance", html)
+        provenance_function = html.split("function debugEventProvenance", 1)[1].split(
+            "function debugProvenanceSummary", 1
+        )[0]
+        self.assertIn("event.event_provenance", provenance_function)
+        self.assertIn("Unknown", provenance_function)
+        self.assertNotIn("haystack", provenance_function)
+        self.assertNotIn("event.summary", provenance_function)
+        self.assertNotIn("event.payload", provenance_function)
+        self.assertIn("function debugProvenanceSummary", html)
+        self.assertIn("Transport connected", html)
+        self.assertIn("Fixture replay", html)
+        self.assertIn("Smoke test", html)
+        self.assertIn('aria-label="Event provenance"', html)
+        self.assertNotIn('setText("loadStatus", "Live debug stream connected.")', html)
+
 
 if __name__ == "__main__":
     unittest.main()

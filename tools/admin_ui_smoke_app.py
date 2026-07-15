@@ -15,6 +15,7 @@ from admin_api import create_admin_router
 from assistant_api import create_assistant_router
 from assistant_context import create_assistant_context_resolver
 from debug_api import create_debug_page_router, create_debug_router
+from debug_event_provenance import DebugEventIngestionChannel
 from hardware_readiness_api import create_hardware_readiness_router
 from mock_outbound_transport import MockOutboundTransport
 from runtime_debug_log import MemoryRuntimeDebugEventLog
@@ -38,7 +39,13 @@ def create_smoke_app() -> FastAPI:
         subject_ref="incident_package.admin_ui_smoke",
         body_preview="Scout would send this mock alert during a smoke check.",
     )
-    app.include_router(create_debug_router(debug_log=debug_log, message_source=transport))
+    app.include_router(
+        create_debug_router(
+            debug_log=debug_log,
+            debug_log_ingestion_channel=DebugEventIngestionChannel.SMOKE_HARNESS,
+            message_source=transport,
+        )
+    )
     app.include_router(create_debug_page_router())
     app.include_router(create_hardware_readiness_router())
     app.include_router(

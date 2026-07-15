@@ -13,13 +13,27 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Literal
+from urllib.parse import quote
 from xml.etree.ElementTree import ParseError
 
 import yaml
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from starlette.middleware.gzip import GZipMiddleware
+
+from debug_event_provenance import (
+    DebugEventIngestionChannel,
+    debug_event_provenance_contract,
+    stamp_debug_events,
+)
 
 from admin_after_action import PRETRIP_CASE_ID, ROOT, build_admin_case_view, list_admin_cases
 from admin_local_raster_tiles import (
@@ -1591,6 +1605,31 @@ class PreTripRouteContextBriefingVariantsGenerateRequest(BaseModel):
     max_reference_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class DashboardTripIntakeValidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str = Field(min_length=1)
+    golden_route_gpx: str = Field(min_length=1)
+
+    @field_validator("project_id")
+    @classmethod
+    def normalize_dashboard_trip_intake_project_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized or not _dashboard_body_index_project_id(normalized):
+            raise ValueError(
+                "project_id may only contain letters, numbers, dot, underscore, and dash"
+            )
+        return normalized
+
+    @field_validator("golden_route_gpx")
+    @classmethod
+    def normalize_dashboard_trip_intake_gpx(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("golden_route_gpx must not be blank")
+        return normalized
+
+
 class DashboardBodyIndexImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2125,6 +2164,17 @@ def create_admin_router(
         snapshot = _load_dashboard_body_index_snapshot(project_id)
         return Response(
             json.dumps(snapshot, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/dashboard/trip-intake/validate")
+    def scout_dashboard_trip_intake_validate(
+        request: DashboardTripIntakeValidateRequest,
+    ) -> Response:
+        payload = _validate_dashboard_trip_intake(request)
+        return Response(
+            json.dumps(payload, ensure_ascii=False),
             media_type="application/json",
             headers={"Cache-Control": "no-store"},
         )
@@ -3528,8 +3578,14 @@ def create_admin_router(
         if not path.exists() or not path.is_file():
             raise HTTPException(status_code=404, detail="route context variant not found")
         media_type = _route_context_briefing_variant_media_type(path)
+        response_text = path.read_text(encoding="utf-8")
+        if path.name == "index.html":
+            response_text = _rewrite_route_context_variant_index_links(
+                response_text,
+                output_dir=output_dir,
+            )
         return Response(
-            path.read_text(encoding="utf-8"),
+            response_text,
             media_type=media_type,
             headers={
                 "Cache-Control": "no-store",
@@ -4602,10 +4658,23 @@ def create_admin_router(
             project_id=project_id,
         )
         try:
-            return load_pretrip_debug_projection_events(
+            payload = load_pretrip_debug_projection_events(
                 project_id,
                 project_root=project_root,
             )
+            ingestion_channel = (
+                DebugEventIngestionChannel.FIXTURE_REPLAY
+                if _pretrip_project_root_is_repo_fixture(project_root)
+                else DebugEventIngestionChannel.PRETRIP_PROJECTION
+            )
+            return {
+                **payload,
+                "events": stamp_debug_events(
+                    list(payload.get("events") or []),
+                    ingestion_channel=ingestion_channel,
+                ),
+                "event_provenance_contract": debug_event_provenance_contract(),
+            }
         except KeyError as exc:
             raise HTTPException(
                 status_code=404,
@@ -7738,6 +7807,33 @@ def _route_context_briefing_variant_media_type(path: Path) -> str:
     return "text/plain"
 
 
+def _rewrite_route_context_variant_index_links(
+    index_html: str,
+    *,
+    output_dir: Path,
+) -> str:
+    """Keep legacy generated indexes navigable through the canonical file endpoint."""
+    try:
+        relative_refs = sorted(
+            candidate.relative_to(output_dir).as_posix()
+            for candidate in output_dir.rglob("*")
+            if candidate.is_file() and candidate.name != "index.html"
+        )
+    except OSError:
+        return index_html
+    rewritten = index_html
+    for relative_ref in relative_refs:
+        canonical_href = f"?ref={quote(relative_ref, safe='')}"
+        rewritten = rewritten.replace(
+            f'href="{relative_ref}"',
+            f'href="{canonical_href}"',
+        ).replace(
+            f"href='{relative_ref}'",
+            f"href='{canonical_href}'",
+        )
+    return rewritten
+
+
 def _route_context_briefing_variants_payload(
     *,
     project_id: str,
@@ -8110,6 +8206,79 @@ def _validate_pretrip_import_project_id(project_id: str) -> None:
         or any(char not in allowed for char in project_id)
     ):
         raise ValueError(f"project_id contains unsafe characters: {project_id}")
+
+
+def _validate_dashboard_trip_intake(
+    request: DashboardTripIntakeValidateRequest,
+) -> dict[str, Any]:
+    source = Path(request.golden_route_gpx).expanduser()
+    if not source.is_absolute():
+        raise HTTPException(
+            status_code=422,
+            detail="Golden route GPX path must be absolute",
+        )
+    try:
+        source = source.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=422, detail="File not found") from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Golden route GPX path could not be resolved",
+        ) from exc
+    if not source.is_file():
+        raise HTTPException(
+            status_code=422,
+            detail="Golden route GPX path must identify a regular file",
+        )
+    if source.suffix.lower() != ".gpx":
+        raise HTTPException(
+            status_code=422,
+            detail="Golden route source must use the .gpx extension",
+        )
+    if not os.access(source, os.R_OK):
+        raise HTTPException(
+            status_code=422,
+            detail="Golden route GPX file is not readable",
+        )
+    try:
+        file_size_bytes = source.stat().st_size
+    except OSError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Golden route GPX file metadata is unavailable",
+        ) from exc
+    if file_size_bytes <= 0:
+        raise HTTPException(status_code=422, detail="Golden route GPX file is empty")
+    if file_size_bytes > 100 * 1024 * 1024:
+        raise HTTPException(
+            status_code=422,
+            detail="Golden route GPX file exceeds the 100 MiB validation limit",
+        )
+    try:
+        summary = summarize_gpx(
+            source,
+            artifact_id=f"dashboard.trip-intake.{request.project_id}",
+        )
+    except (ParseError, KeyError, OSError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Golden route source is not a valid GPX track",
+        ) from exc
+    return {
+        "status": "validated",
+        "validation_stage": "gpx_parsed",
+        "project_id": request.project_id,
+        "point_count": summary.point_count,
+        "distance_m": summary.distance_m,
+        "file_size_bytes": file_size_bytes,
+        "boundary": {
+            "filesystem_mutation_performed": False,
+            "runtime_safety_truth": False,
+            "raw_gpx_embedded": False,
+            "coordinates_embedded": False,
+        },
+    }
 
 
 def _pretrip_workspace_review_log_path(

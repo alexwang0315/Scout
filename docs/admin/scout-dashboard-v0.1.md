@@ -2264,3 +2264,152 @@ Verification:
   Segment control, no horizontal overflow, and zero console/4xx errors.
 - Evidence screenshot: `/tmp/scout-provenance-repair-live-9099-final.png`.
 - Backup: `/tmp/scout-provenance-repair.fgZG1X/backup`.
+
+### 2026-07-15 - Joint Dashboard Truth, Workflow, And Usability Remediation
+
+Source review:
+
+- Implemented the P0-P2 findings from the joint Dashboard usability review in
+  `/Users/alexwang0315/.codex/gpt-pro-collaboration/20260715-121919-dashboard-usability-review/final-report.md`.
+- Kept the work in local Construction Mode. No workspace artifact, runtime
+  safety truth, private HealthExport data, hardware, broker, or outbound
+  transport was mutated.
+
+P0 truth and broken-workflow repairs:
+
+- Assistant maturity is `partial`; configured, connected, repository-ready,
+  failed, unavailable, and checking states are separate. Green is possible
+  only after both transport and repository readiness are verified.
+- Trip Intake now calls a server GPX parser. Missing, unreadable, malformed,
+  non-GPX, oversized, and directory paths fail closed; stage intent remains
+  disabled until the exact input has a matching successful validation receipt.
+- Route Context variant links use canonical `?ref=` URLs. The server also
+  rewrites legacy bare relative links in existing generated indexes without
+  mutating those workspace artifacts.
+- Pace controls are labelled and rendered as read-only parameters, not fake
+  buttons.
+- Debug separates transport state from event provenance and labels live
+  runtime, fixture replay, smoke, historical, and projected rows explicitly.
+
+P1 truth, scope, and scale repairs:
+
+- Every one of the 23 routes has a five-axis truth contract: Surface, Data,
+  Action, Verification, and Provenance/Readiness. Dynamic loading, failure,
+  stale, no-coverage, embedded-frame, Assistant, Settings, Map, and Debug
+  states override static route copy and do not retain an `Operational` suffix
+  while degraded.
+- Workspace/import CTAs record intent only and emit explicit receipts stating
+  that no filesystem mutation occurred.
+- Assistant rejects blank and whitespace-only questions before a request.
+- Timeline and Map evidence are windowed to 100 items per page, preserve the
+  selected source/page across category changes, and expose total counts.
+- Layer copy states `32 canonical layers; Pre-trip and Debug expose 31;
+  completed-track is after-action only`.
+- Permission is a `Permission Class Selector Preview` with a static rule set
+  and no runtime decision or authorization claim.
+
+P2 information architecture, Settings, mobile, and accessibility repairs:
+
+- Overview starts with a Current Decision Brief for route context,
+  weather/terrain freshness, and evidence gaps. Workspace metadata and preview
+  taxonomy are secondary context; dense drill-downs remain available.
+- Preview mode is explicit: Product Preview, Technical Prototype, Reference,
+  or Static rule set.
+- Settings validates project/API inputs, catches and rolls back synthetic
+  storage failures, preserves success/failure receipts across background
+  re-renders, enables reload only for changed values, and forces a real reload
+  when the target URL is unchanged.
+- Removed duplicate `dashboardMap` and `dashboardMapStatus` IDs. This fixes the
+  Home-to-Map transition that previously selected a hidden preview instead of
+  the real Map iframe, which made Map and Segment appear to disappear.
+- Six Axis tablists support Arrow keys, Home, and End while preserving focus on
+  the newly selected tab after route render.
+- Disabled Assistant Send and Stage Import controls expose reasons through
+  titles/status associations. Embedded surfaces provide a keyboard-activatable
+  `Skip embedded surface` control that moves focus to an explicit exit marker.
+
+Browser evidence:
+
+- Desktop route smoke: 23/23 routes had the expected hash, active sidebar
+  item, title, maturity, five truth fields, visible content, and no horizontal
+  overflow.
+- Settings: invalid `ftp:` was rejected; a reversible same-origin value was
+  saved, survived background re-render, reloaded through the UI, restored to
+  blank/same-origin, and reloaded to a clean disabled state.
+- Route variants: all five cards in the existing index opened their generated
+  HTML successfully.
+- Timeline: 13,196 Map/Risk items remained bounded to 100 visible controls;
+  next-page selection and category round-trip restored page and focus.
+- Standard direct Pre-trip Map: five measured Segment cycles (10 real
+  `setChecked` actions) ended `checked=true`, `isConnected=true`; console log
+  count was zero. Longer single automation batches exceeded the harness time
+  limit but did not establish a product detach.
+- Mobile viewport was proven at 390x844 with both 1120px and 620px breakpoints
+  active. Overview, Map, Timeline, Assistant, and embedded Pre-trip had
+  `scrollWidth=clientWidth=390`. Home-to-Map produced a 390x602 iframe and a
+  370x270 evidence rail (under 70dvh), with Segment visible and no duplicate
+  IDs. Timeline showed 100 controls per page; the mobile drawer closed with
+  Escape and restored focus.
+- Embedded Pre-trip, Admin, and Debug frames reported `Inner surface ready -
+  content verified`; Debug content exposed Transport and Event provenance.
+- Emergency approval remained sandboxed: `decision=agree_send` could be
+  reviewed locally while `external_send_performed=false`,
+  `safety_api_called=false`, and `sent=false` remained unchanged.
+
+Focused executable evidence before the final full-suite gate:
+
+- Synthetic HealthExport invalid, sanitized/deduped import, and watcher
+  lifecycle; Route Context model success and provider failure; Emergency
+  sandbox: 7 passed.
+- Assistant readiness matrix, Weather fresh/source-failure/stale/no-coverage,
+  Settings validation/storage failure, and UI contract checks are covered by
+  executable Node-in-pytest contracts.
+- Final Dashboard and Debug suites: 59 passed. Final Admin API suite: 85
+  passed. `pnpm lint` and `pnpm typecheck` passed.
+- Repo and real-workspace layer verifiers both returned `ok=true` with 32
+  canonical layers, 239 workspace Segments, and completed-track restricted to
+  after-action controls.
+- `pnpm test` completed 15/17 checks; the two failures are unrelated,
+  pre-existing AI OS documentation assertions requiring legacy Phase 9 and
+  safety-copy tokens in `AGENTS.md`. No Dashboard implementation test failed.
+
+GPT Pro closure corrections:
+
+- Debug provenance is now a server-ingestion contract, not a frontend text
+  heuristic. The immutable enum is `runtime`, `fixture_replay`, `smoke`,
+  `historical`, `projection`, or `unknown`; missing/untrusted channel values
+  fail closed to `unknown`. Runtime, smoke, historical, spatial projection,
+  repo fixture, and workspace pre-trip projection paths supply their channel
+  server-side. Event message/source/payload text cannot promote a row to live.
+- The Dashboard workspace runner explicitly marks its built-in Admin UI replay
+  as `smoke_harness`. With all Debug endpoints loaded, the browser showed
+  `Transport connected` alongside `0 live runtime · 4 non-live`; all four rows
+  were `Smoke test`. The full `/admin/debug` surface showed the same result.
+  Repeated GET, stream rehydration, connected transport metadata, and a fixture
+  payload attempting to claim `runtime` are covered by focused regressions.
+- Overview's primary DOM and visual order is now explicit:
+  `workspace/trip -> current decision -> blocking truth -> next action`.
+  Verification tasks and full evidence follow; Admin and Debug drill-downs do
+  not appear in the first viewport. At desktop 1280x720 all four primary fields
+  were fully visible. At 390x844 they occupied y=302..546 in the same order,
+  used x=37..353, and the document remained `scrollWidth=clientWidth=390`.
+  `stale_data` produced `HOLD · review blocking truth`; the first focusable
+  Overview action was `Review route context`, before Weather, Evidence, Admin,
+  or Debug actions.
+- Reporting remains scope-qualified: the mobile claim covers the tested
+  390x844 critical-route smoke, accessibility covers targeted keyboard/focus/
+  naming checks, synthetic integrations are not live-provider evidence, and
+  the configured secret-pattern scan is not a full security audit.
+- Post-correction affected suites passed 82 tests; the complete Admin API file
+  passed 86 tests. Python compilation, `pnpm lint`, `pnpm typecheck`, and scoped
+  `git diff --check` passed; the high-risk secret-value pattern count was zero.
+  Repository `pnpm test` remains 15/17 for the two disclosed legacy docs
+  assertions. An additional, non-gating `tests/test_debug_api_mount.py` run in
+  the project venv remains 1/4 because the current unrelated server composition
+  exposes `/admin/debug` unconditionally and includes `_IncludedRouter` entries
+  without `.path`; neither server composition nor that legacy test was changed
+  in this Dashboard remediation.
+- GPT Pro's second implementation review accepted both remaining issues
+  (`SCOUT-OBS-001` and `SCOUT-IA-001`), found no remaining false claim or
+  evidence gap blocking the original 16 issues, and explicitly concluded:
+  `我同意原 report 的 P0-P2 remediation 已完成（approval-dependent real effects 保持 fail-closed）。`

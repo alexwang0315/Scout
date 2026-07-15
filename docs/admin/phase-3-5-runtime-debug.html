@@ -5235,6 +5235,40 @@
       boundaryNode.title = boundaryMemo;
     }
 
+    function debugEventProvenance(event = {}) {
+      const provenanceByKey = {
+        runtime: { key: "runtime", label: "Live runtime", tone: "ok" },
+        fixture_replay: { key: "fixture_replay", label: "Fixture replay", tone: "warn" },
+        smoke: { key: "smoke", label: "Smoke test", tone: "warn" },
+        historical: { key: "historical", label: "Historical", tone: "info" },
+        projection: { key: "projection", label: "Projected evidence", tone: "info" },
+        unknown: { key: "unknown", label: "Unknown", tone: "warn" },
+      };
+      const key = String(event.event_provenance || "unknown").toLowerCase();
+      return provenanceByKey[key] || provenanceByKey.unknown;
+    }
+
+    function debugProvenanceSummary(events = []) {
+      const counts = events.reduce((summary, event) => {
+        const key = debugEventProvenance(event).key;
+        summary[key] = (summary[key] || 0) + 1;
+        return summary;
+      }, {});
+      const runtimeCount = Number(counts.runtime || 0);
+      const replayCount = Number(counts.fixture_replay || 0) + Number(counts.smoke || 0) + Number(counts.historical || 0) + Number(counts.projection || 0);
+      const unknownCount = Number(counts.unknown || 0);
+      return {
+        runtimeCount,
+        replayCount,
+        unknownCount,
+        label: runtimeCount
+          ? `${runtimeCount} live runtime · ${replayCount} non-live${unknownCount ? ` · ${unknownCount} unknown` : ""}`
+          : replayCount
+            ? `0 live runtime · ${replayCount} non-live${unknownCount ? ` · ${unknownCount} unknown` : ""}`
+            : unknownCount ? `${unknownCount} unknown` : "no classified events",
+      };
+    }
+
     function applyDebugStreamSnapshot(payload) {
       const eventPayload = payload.events || {};
       const streamEvents = Array.isArray(eventPayload.events) ? eventPayload.events : [];
@@ -5264,7 +5298,8 @@
           renderEndpointPayloads(timelinePayload || {}, resolvedState || {}, messagePayload || {});
         }
       }
-      setText("loadStatus", "Live debug stream connected.");
+      const provenance = debugProvenanceSummary(timelineEvents);
+      setText("loadStatus", `Transport connected · ${provenance.label}. Event provenance remains explicit.`);
     }
 
     function startDebugEventStream() {
@@ -5286,10 +5321,10 @@
         }
       });
       source.addEventListener("open", () => {
-        setText("loadStatus", "Live debug stream connected.");
+        setText("loadStatus", "Transport connected. Awaiting events; transport state is not event provenance.");
       });
       source.addEventListener("error", () => {
-        setText("loadStatus", "Live debug stream reconnecting...");
+        setText("loadStatus", "Transport reconnecting; existing event provenance is unchanged.");
       });
     }
 
@@ -6522,12 +6557,14 @@
       const title = options.title || event.kind;
       const summary = options.summary || event.summary;
       const groupMeta = options.groupMeta || "";
+      const provenance = debugEventProvenance(event);
       return `
           <div class="item timeline-node${extraClass} phase-${escapeHtml(event.phase)}" role="button" tabindex="-1" aria-current="false" data-event-id="${escapeHtml(event.event_id || "")}" data-event-index="${index}" data-map-ref="${escapeHtml(mapRefsForEvent(event).join(" "))}">
             <div class="item-line">
               <h3 title="${escapeHtml(title)}">${escapeHtml(title)}</h3>
               <div class="timeline-meta">
                 ${groupMeta}
+                <span class="pill ${escapeHtml(provenance.tone)}" aria-label="Event provenance">${escapeHtml(provenance.label)}</span>
                 <span class="${pillClass(event.severity)}">${escapeHtml(event.phase)} #${escapeHtml(event.sequence)}</span>
                 <span class="${levelBadgeClassForEvent(event)}" aria-label="L state at this timeline node">${escapeHtml(levelBadgeForEvent(event))}</span>
               </div>
