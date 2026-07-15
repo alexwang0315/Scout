@@ -99,6 +99,7 @@ def search_project_workspace_catalog(
     resolved_limit = _bounded_limit(limit)
     requested_domains = _normalize_domains(domains) or _domains_from_query(query)
     terms = _query_terms(query)
+    identity = _workspace_identity_summary(root, project)
 
     items = _catalog_items(root, project)
     filtered: list[dict[str, Any]] = []
@@ -120,6 +121,11 @@ def search_project_workspace_catalog(
         "tool_id": WORKSPACE_CATALOG_TOOL_ID,
         "status": "completed",
         "project_id": project_id,
+        "route_name": identity["route_name"],
+        "primary_gpx_filename": identity["primary_gpx_filename"],
+        "reference_gpx_count": identity["reference_gpx_count"],
+        "reference_gpx_filenames": identity["reference_gpx_filenames"],
+        "source_refs": identity["source_refs"],
         "query": query,
         "filters": {
             "domains": sorted(requested_domains) if requested_domains else None,
@@ -133,6 +139,84 @@ def search_project_workspace_catalog(
         "results": filtered[:resolved_limit],
         "boundary": _closed_boundary(),
     }
+
+
+def _workspace_identity_summary(
+    root: Path,
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    import_manifest_ref = str(
+        project.get("import_manifest_ref") or "outputs/import_manifest.json"
+    )
+    reference_tracks_ref = str(
+        project.get("reference_tracks_ref") or "outputs/reference_tracks.json"
+    )
+    route_summary_ref = str(
+        project.get("route_summary_ref") or "normalized/routes/route_summary.json"
+    )
+    import_manifest = _load_json_object(_project_path(root, import_manifest_ref))
+    reference_tracks = _load_json_object(_project_path(root, reference_tracks_ref))
+    route_summary = _load_json_object(_project_path(root, route_summary_ref))
+    import_manifest = import_manifest if isinstance(import_manifest, dict) else {}
+    reference_tracks = reference_tracks if isinstance(reference_tracks, dict) else {}
+    route_summary = route_summary if isinstance(route_summary, dict) else {}
+
+    inputs = import_manifest.get("inputs")
+    inputs = inputs if isinstance(inputs, dict) else {}
+    golden_route_input = inputs.get("golden_route_gpx")
+    golden_route_input = (
+        golden_route_input if isinstance(golden_route_input, dict) else {}
+    )
+    golden_route = reference_tracks.get("golden_route")
+    golden_route = golden_route if isinstance(golden_route, dict) else {}
+    reference_inputs = inputs.get("reference_tracks")
+    reference_inputs = reference_inputs if isinstance(reference_inputs, list) else []
+    reference_filenames = [
+        filename
+        for item in reference_inputs
+        if isinstance(item, dict)
+        if (filename := _source_basename(item.get("uri"))) is not None
+    ]
+    configured_count = reference_tracks.get("reference_track_count")
+    reference_count = (
+        int(configured_count)
+        if isinstance(configured_count, int) and not isinstance(configured_count, bool)
+        else len(reference_filenames)
+    )
+    route_name = str(
+        project.get("route_name")
+        or route_summary.get("route_name")
+        or golden_route.get("route_name")
+        or ""
+    ).strip()
+    primary_filename = _source_basename(
+        golden_route_input.get("uri") or golden_route.get("source_uri")
+    )
+    refs = [
+        ref
+        for ref in (
+            "project.json",
+            import_manifest_ref,
+            reference_tracks_ref,
+            route_summary_ref,
+        )
+        if not Path(ref).is_absolute() and _project_path(root, ref).is_file()
+    ]
+    return {
+        "route_name": route_name or None,
+        "primary_gpx_filename": primary_filename,
+        "reference_gpx_count": reference_count,
+        "reference_gpx_filenames": reference_filenames[:5],
+        "source_refs": list(dict.fromkeys(refs)),
+    }
+
+
+def _source_basename(value: Any) -> str | None:
+    normalized = str(value or "").strip().replace("\\", "/")
+    if not normalized:
+        return None
+    filename = normalized.rsplit("/", 1)[-1].strip()
+    return filename or None
 
 
 def search_project_route_structure(

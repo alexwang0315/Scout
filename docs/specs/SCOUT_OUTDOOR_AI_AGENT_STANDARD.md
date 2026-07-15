@@ -1157,6 +1157,55 @@ Scout 不只是提醒使用者「不要被媒體影響」，而是在使用者�
 10. **是否能被記錄與檢討？**
    每次決策都應有可追溯的輸入、理由與結果。
 
+11. **是否遵守統一的 Scout AI 執行預算？**
+
+    以下是所有 Scout AI 題型的最高指導驗收標準。此表優先於下層規格、
+    eval prompt、舊報告或實作中較低的 request/tool-call 門檻。
+
+    | Question class | Max tool calls | Max model requests |
+    |---|---:|---:|
+    | `static_workspace_fact` | 10 | 10 |
+    | `aggregate_workspace_fact` | 10 | 10 |
+    | `cross_artifact_join` | 10 | 10 |
+    | `spatial_route_fact` | 10 | 10 |
+    | `weather_terrain_compound` | 10 | 10 |
+    | `live_runtime_fact` | 10 | 10 |
+    | `safety_decision` | 10 | 10 |
+    | any new or unclassified question | 10 | 10 |
+
+    `10/10` 是每個 attempt 與每個 recovery stage 保證可用的容量，不是整個
+    失敗案例共用一次，也不是必須耗盡的配額。取得足夠證據後
+    應立即停止；完全相同的工具呼叫、連續無新增證據與已確認的終端 evidence
+    gap 仍應提前停止。但不得再以 static 平均 3 次、p95 5 次、特定 stage
+    1 至 3 次或其他較低門檻，截斷仍在產生新證據的有效工作。
+
+    Planner、Retriever、Synthesis、Verifier、Reviewer、Repair、Retry、
+    Replan、Browser、Subagent 若獨立計量，預設上限也不得低於 10。
+    Aggressive Construction Mode 不執行 Scout 自訂的 input/output/total token、
+    EvidenceCard、context characters、cost、answer time 或 replay time ceiling；
+    這些欄位只保留 telemetry。若 provider、OS 或平台有硬限制，必須保存
+    evidence、call trace 與 state，在有意義的 phase boundary compact，建立
+    continuation 並繼續，不得偽裝成 Scout AI 推理失敗。
+
+12. **失敗是否依有限流程處理，而非在單題無限消耗？**
+
+    解除資源瓶頸後仍失敗時，依序執行：
+
+    1. 確認並修正 tool、adapter、schema、retrieval path、evidence format、
+       context finding 或 eval harness，以新的 10/10 只重跑失敗題。
+    2. 工具路徑正確但模型仍失敗時，改用另一個模型，以新的 10/10 重跑。
+    3. 再失敗時，建立 Codex review artifact，至少含原題、成功條件、evidence、
+       source refs、完整 call trace、tool outputs、models、repairs、failure symptom
+       與 candidate answer；Codex 判定 Tool Gap、Model Weakness、Missing
+       Evidence、Ambiguous Expectation、Harness Failure 或 Benchmark Defect。
+    4. Codex 也無法妥善回答或診斷時，登錄 stable `KNOWN_ISSUE`，包含
+       reproduction、last evidence、tool repairs、models tried、current blocker
+       與 explicit unblock condition，然後繼續下一題。
+
+    secret redaction、workspace containment、read-only/runtime safety truth
+    boundary 與 permission gate 是安全邊界，不屬於為省成本設定的資源限制，
+    不因本條而取消。
+
 ---
 
 ## 24. MVP Scope

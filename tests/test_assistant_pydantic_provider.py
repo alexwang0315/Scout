@@ -60,10 +60,48 @@ from assistant_skill_router import (
 from scout_agent_kb import write_local_evidence_sqlite_index
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
+from scout.schemas.workspace_query import parse_workspace_query_request
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+
+
+def test_pre_provider_limit_checkpoints_and_enters_fresh_recovery_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = PydanticAIEnvRunner(
+        model_name="fixture-model",
+        backend="pydantic",
+        workspace_tools_enabled=False,
+    )
+
+    def fail_preflight(**_kwargs: object) -> int:
+        raise assistant_provider_module.BoundedRequestBudgetStop(
+            "external provider context limit"
+        )
+
+    monkeypatch.setattr(
+        assistant_provider_module,
+        "_bounded_request_max_tokens",
+        fail_preflight,
+    )
+
+    output = runner._run_model("fixture question")
+    recovery = runner.last_agent_recovery
+
+    assert "budget exhausted" not in output.casefold()
+    assert recovery["status"] == "tool_repair_required"
+    assert [attempt["recovery_stage"] for attempt in recovery["attempts"]] == [
+        "initial",
+        "continuation",
+        "tool_repair",
+    ]
+    assert all(
+        attempt["budget"]["max_requests"] >= 10
+        and attempt["budget"]["max_tool_calls"] >= 10
+        for attempt in recovery["attempts"]
+    )
 
 
 def test_pydantic_result_usage_is_serialized_for_eval_observability():
@@ -180,7 +218,7 @@ def test_cloud_runner_accepts_explicit_cloud_token_override(monkeypatch):
     assert runner.workspace_model_max_tokens == 8192
 
 
-def test_local_runner_keeps_bounded_default_token_limit(monkeypatch):
+def test_local_runner_has_no_scout_default_token_limit(monkeypatch):
     monkeypatch.delenv("SCOUT_AI_LOCAL_MODEL_MAX_TOKENS", raising=False)
     monkeypatch.delenv("SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS", raising=False)
 
@@ -191,10 +229,10 @@ def test_local_runner_keeps_bounded_default_token_limit(monkeypatch):
         profile_name="local",
     )
 
-    assert (
-        runner.workspace_model_max_tokens
-        == assistant_provider_module.DEFAULT_WORKSPACE_MODEL_MAX_TOKENS
-    )
+    assert runner.workspace_model_max_tokens is None
+    assert assistant_provider_module.DEFAULT_TIMEOUT_SECONDS is None
+    assert assistant_provider_module.DEFAULT_MAX_CONTEXT_CHARS is None
+    assert assistant_provider_module.DEFAULT_WORKSPACE_TOOL_LIMIT == 10
 
 
 def test_bounded_runner_without_workspace_tools_disables_native_research(monkeypatch):
@@ -214,6 +252,160 @@ def test_bounded_runner_without_workspace_tools_disables_native_research(monkeyp
 
     runner.bounded_agent_runtime_enabled = False
     assert runner._native_capabilities() == ["WebSearch", "WebFetch"]
+
+
+def test_progressive_runtime_uses_question_class_budget_and_follow_up_query() -> None:
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前這條路線有多少個 CP 點？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    runtime, selected_ids, selected_names, plan_items, planner_plan = (
+        assistant_provider_module._progressive_tool_runtime(context)
+    )
+
+    assert runtime.budget.max_requests == 10
+    assert runtime.budget.max_tool_calls == 10
+    assert assistant_provider_module.WORKSPACE_QUERY_TOOL_ID in selected_ids
+    assert "query_scout_workspace" in selected_names
+    assert assistant_provider_module.WORKSPACE_QUERY_TOOL_ID not in {
+        item.tool_id for item in plan_items
+    }
+    assert [item.value for item in planner_plan.expected_operations] == ["count"]
+
+
+def test_progressive_runtime_gives_field_weather_decision_a_safety_budget() -> None:
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="白牆下這段還適合走嗎？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    runtime, selected_ids, _selected_names, _plan_items, planner_plan = (
+        assistant_provider_module._progressive_tool_runtime(context)
+    )
+
+    assert planner_plan.question_class == "safety_decision"
+    assert planner_plan.requires_live_state is True
+    assert runtime.budget.max_requests == 10
+    assert runtime.budget.max_tool_calls == 10
+    assert assistant_provider_module.WORKSPACE_QUERY_TOOL_ID not in selected_ids
+
+
+def test_progressive_disclosure_hides_query_schema_until_domain_evidence_exists() -> None:
+    query_name = "query_scout_workspace"
+    route_name = "search_scout_route_structure"
+
+    initial = assistant_provider_module._progressive_available_tool_names(
+        selected_tool_names=[route_name, query_name],
+        query_tool_name=query_name,
+        required_tool_names={route_name},
+        executed_tool_names=set(),
+        expected_operations={"count"},
+        executed_operations=set(),
+        stop_reason=None,
+    )
+    follow_up = assistant_provider_module._progressive_available_tool_names(
+        selected_tool_names=[route_name, query_name],
+        query_tool_name=query_name,
+        required_tool_names={route_name},
+        executed_tool_names={route_name},
+        expected_operations={"count"},
+        executed_operations=set(),
+        stop_reason=None,
+    )
+    complete = assistant_provider_module._progressive_available_tool_names(
+        selected_tool_names=[route_name, query_name],
+        query_tool_name=query_name,
+        required_tool_names={route_name},
+        executed_tool_names={route_name},
+        expected_operations={"count"},
+        executed_operations={"count"},
+        stop_reason=None,
+    )
+
+    assert initial == [route_name]
+    assert follow_up == [query_name]
+    assert complete == []
+
+
+@pytest.mark.parametrize(
+    "request_value",
+    [
+        {"operation": "inspect", "artifact": {"source_ref": "project.json"}},
+        json.dumps(
+            {"operation": "inspect", "artifact": {"source_ref": "project.json"}}
+        ),
+        parse_workspace_query_request(
+            {"operation": "inspect", "artifact": {"source_ref": "project.json"}}
+        ),
+    ],
+)
+def test_progressive_runtime_reads_operation_from_provider_query_arguments(
+    request_value: object,
+) -> None:
+    assert (
+        assistant_provider_module._workspace_query_operation_from_arguments(
+            {"request": request_value}
+        )
+        == "inspect"
+    )
+
+
+@pytest.mark.parametrize("serialize_request", [False, True])
+def test_workspace_query_context_executes_record_query_and_records_invocation(
+    serialize_request: bool,
+) -> None:
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前這條路線有多少個 CP 點？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    request = {
+        "operation": "count",
+        "artifact": {"project_ref_key": "checkpoint_candidates_ref"},
+    }
+    result = context.query_scout_workspace(
+        request=json.dumps(request) if serialize_request else request
+    )
+
+    assert result["tool_id"] == assistant_provider_module.WORKSPACE_QUERY_TOOL_ID
+    assert result["status"] == "success"
+    assert result["result_count"] == 124
+    assert result["results"][0]["evidence_id"].startswith("ev_")
+    assert context.invocations[-1] == result
+
+
+def test_workspace_query_context_rejects_non_object_json_string() -> None:
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前這條路線有多少個 CP 點？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    result = context.query_scout_workspace(request='["not", "an", "object"]')
+
+    assert result["status"] == "error"
+    assert result["root_cause"] == "workspace_query_request_json_not_object"
+    assert context.invocations[-1] == result
 
 
 def test_bounded_runner_without_workspace_tools_retains_request_limits(monkeypatch):
@@ -267,11 +459,11 @@ def test_bounded_runner_without_workspace_tools_retains_request_limits(monkeypat
 
     assert captured["capabilities"] == []
     usage_limits = captured["usage_limits"]
-    assert usage_limits.request_limit == 1
-    assert usage_limits.tool_calls_limit == 0
+    assert usage_limits.request_limit == 10
+    assert usage_limits.tool_calls_limit == 10
     assert usage_limits.count_tokens_before_request is False
     model_settings = captured["model_settings"]
-    assert 0 < model_settings["max_tokens"] <= 2_000
+    assert "max_tokens" not in model_settings
     assert runner.last_agent_run_ledger["request_count"] == 1
     assert runner.last_agent_run_ledger["budget_stop_reason"] is None
 
@@ -323,10 +515,17 @@ def test_hailo_workspace_path_uses_bounded_evidence_without_full_tool_prompt(
         workspace_tools_enabled=True,
     )
 
-    def fake_hailo_chat(prompt, *, system_prompt, max_tokens=None):
+    def fake_hailo_chat(
+        prompt,
+        *,
+        system_prompt,
+        max_tokens=None,
+        timeout_seconds=None,
+    ):
         captured["prompt"] = prompt
         captured["system_prompt"] = system_prompt
         captured["max_tokens"] = max_tokens
+        captured["timeout_seconds"] = timeout_seconds
         runner.last_hailo_prompt_eval_count = 300
         runner.last_hailo_eval_count = 80
         return "CP 3 是目前最危險的位置。"
@@ -358,7 +557,7 @@ def test_hailo_workspace_path_uses_bounded_evidence_without_full_tool_prompt(
     assert output != "CP 3 是目前最危險的位置。"
 
 
-def test_bounded_runner_stops_before_request_when_prompt_exhausts_budget(monkeypatch):
+def test_construction_runner_does_not_stop_on_scout_input_token_telemetry(monkeypatch):
     import pydantic_ai
 
     calls = {"run_sync": 0}
@@ -383,23 +582,22 @@ def test_bounded_runner_stops_before_request_when_prompt_exhausts_budget(monkeyp
         profile_name="cloud",
         workspace_tools_enabled=False,
     )
-    oversized_prompt = "x" * (
-        assistant_provider_module.AgentRunBudget().max_input_tokens * 4 + 4_000
-    )
+    oversized_prompt = "x" * 100_000
 
     output = runner._run_model(oversized_prompt, 10)
 
-    assert calls["run_sync"] == 0
-    assert "budget" in output.casefold()
-    assert "before request" in runner.last_agent_run_ledger["budget_stop_reason"]
+    assert calls["run_sync"] == 1
+    assert output == "must not run"
+    assert runner.last_agent_run_ledger["budget_stop_reason"] is None
 
 
-def test_grounding_repair_requires_headroom_and_uses_conservative_output_cap():
+def test_grounding_repair_requires_headroom_and_uses_remaining_output_budget():
     repair_cap = assistant_provider_module._bounded_repair_max_tokens
 
     assert repair_cap(remaining_output_tokens=404, configured_max_tokens=1_800) is None
-    assert repair_cap(remaining_output_tokens=1_200, configured_max_tokens=1_800) == 256
+    assert repair_cap(remaining_output_tokens=1_200, configured_max_tokens=1_800) == 1_200
     assert repair_cap(remaining_output_tokens=1_200, configured_max_tokens=128) == 128
+    assert repair_cap(remaining_output_tokens=30_000, configured_max_tokens=None) == 30_000
 
 
 class FakeRunner:
@@ -9616,22 +9814,24 @@ def test_operator_requested_ai_hat_plus_2_fallback_reports_unavailable_when_not_
     assert any("No cloud model request was made" in item for item in response.limitations)
 
 
-def test_ai_hat_plus_2_prompt_compaction_stays_within_small_local_context():
+def test_ai_hat_plus_2_prompt_keeps_complete_context_in_construction_mode():
     prompt = (
         "Question:\n我現在是否應該下撤？\n"
         "Total Info:\n"
         + ("現況資料" * 2000)
         + "\nContext:\n"
         + ("workspace evidence " * 2000)
+        + "TAIL_EVIDENCE_MARKER"
     )
 
     compact = assistant_provider_module._compact_hailo_ollama_prompt(prompt)
 
-    assert len(compact) <= 3800
+    assert len(compact) > 3800
     assert "我現在是否應該下撤？" in compact
     assert "AI HAT+ 2 本地備援模型" in compact
     assert "如果問題只是問候" in compact
     assert "回答要求" in compact
+    assert "TAIL_EVIDENCE_MARKER" in compact
 
 
 def test_ai_hat_plus_2_prompt_compaction_uses_greeting_fast_path():
@@ -9690,13 +9890,14 @@ def test_ai_hat_plus_2_prompt_compaction_adds_rain_risk_evidence_hint():
     assert "不要改寫成一般雨天常識" in compact
 
 
-def test_ai_hat_raw_eval_prompt_compaction_fits_hailo_context() -> None:
+def test_ai_hat_raw_eval_prompt_keeps_all_facts_without_scout_byte_cap() -> None:
     prompt = (
         "AI_HAT_RAW_SINGLE_PASS_EVAL_V1\n"
         "這是本地模型品質評測。" + ("冗長規則" * 200) + "\n"
         "使用者問題：哪些地方下雨後會變危險？\n"
         "Scout typed answer brief（facts only）："
         "事實=CP 213；score=99.58；bucket=extreme；"
+        "事實2=" + ("完整長證據" * 100) + "；"
         "缺少資料=有效天氣時間窗；判斷限制=行前候選\n"
         "回答："
     )
@@ -9707,8 +9908,9 @@ def test_ai_hat_raw_eval_prompt_compaction_fits_hailo_context() -> None:
     assert "哪些地方下雨後會變危險" in compact
     assert "CP 213" in compact
     assert "score=99.58" in compact
+    assert "完整長證據" * 100 in compact
     assert "有效天氣時間窗" in compact
-    assert len(compact.encode("utf-8")) <= 420
+    assert len(compact.encode("utf-8")) > 420
     model_prompt = assistant_provider_module._strip_hailo_control_markers(compact)
     assert "事實：" not in model_prompt
     assert "缺口：" not in model_prompt
@@ -10016,10 +10218,12 @@ def test_hailo_workspace_tool_path_uses_native_chat_not_generic_agent(monkeypatc
         *,
         system_prompt: str,
         max_tokens: int | None = None,
+        timeout_seconds: int | None = None,
     ) -> str:
         captured["prompt"] = prompt
         captured["system_prompt"] = system_prompt
         captured["max_tokens"] = max_tokens
+        captured["timeout_seconds"] = timeout_seconds
         return "本地工具上下文回答"
 
     monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_chat)
@@ -10035,7 +10239,7 @@ def test_hailo_workspace_tool_path_uses_native_chat_not_generic_agent(monkeypatc
     assert assistant_provider_module.WORKSPACE_TOOL_PROMPT not in str(
         captured["system_prompt"]
     )
-    assert captured["max_tokens"] is not None
+    assert captured["max_tokens"] is None
 
 
 def test_hailo_ollama_runner_uses_short_system_prompt_for_grounded_synthesis(monkeypatch):
@@ -10121,7 +10325,7 @@ def test_hailo_ollama_runner_uses_bounded_sampling_for_evidence_synthesis(monkey
 
     payload = captured["payload"]
     assert "mountain hiking route facts" in payload["messages"][0]["content"]
-    assert payload["options"]["num_predict"] == 64
+    assert "num_predict" not in payload["options"]
     assert payload["options"]["temperature"] == pytest.approx(0.2)
     assert payload["options"]["top_p"] == pytest.approx(0.9)
 
@@ -10164,7 +10368,7 @@ def test_hailo_terrain_fact_stage_keeps_grounded_model_sampling(monkeypatch):
     )
 
     payload = captured["payload"]
-    assert payload["options"]["num_predict"] == 64
+    assert "num_predict" not in payload["options"]
     assert payload["options"]["temperature"] == pytest.approx(0.2)
     assert payload["options"]["top_p"] == pytest.approx(0.9)
 
@@ -10223,7 +10427,7 @@ def test_hailo_facts_only_eval_uses_deterministic_sampling(monkeypatch):
     assert "示範問題" not in payload["messages"][1]["content"]
     assert "示範 facts" not in payload["messages"][1]["content"]
     assert len(payload["messages"][0]["content"].encode("utf-8")) <= 180
-    assert payload["options"]["num_predict"] == 128
+    assert "num_predict" not in payload["options"]
     assert payload["options"]["temperature"] == 0
     assert payload["options"]["top_p"] == 1
     assert runner.last_hailo_response_received is True
@@ -10462,7 +10666,7 @@ def test_hailo_raw_self_review_uses_no_few_shot_and_zero_temperature(monkeypatch
 
     payload = captured["payload"]
     assert len(payload["messages"]) == 2
-    assert payload["options"]["num_predict"] == 160
+    assert "num_predict" not in payload["options"]
     assert payload["options"]["temperature"] == 0
     assert payload["options"]["top_p"] == 1
     assert "\n需要修正：" in payload["options"]["stop"]
@@ -10682,7 +10886,7 @@ def test_hailo_ollama_runner_limits_typed_decision_to_eight_tokens(monkeypatch):
 
     assert output == "REPLAN"
     payload = captured["payload"]
-    assert payload["options"]["num_predict"] == 8
+    assert payload["options"]["num_predict"] == 128
     assert payload["options"]["temperature"] == 0
     assert payload["messages"][0]["content"] == "只輸出一個分類 token。"
 

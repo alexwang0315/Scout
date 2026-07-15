@@ -37,6 +37,31 @@ def test_workspace_catalog_search_lists_local_artifact_families() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_workspace_catalog_exposes_bounded_project_and_gpx_identity() -> None:
+    result = search_project_workspace_catalog(
+        PROJECT_ROOT,
+        query="project_id route_name primary GPX reference GPX",
+        limit=6,
+    )
+
+    assert result["project_id"] == "chilai_nanhua_day1"
+    assert result["route_name"] == "2013-10-08 10:58:50 每日記錄"
+    assert result["primary_gpx_filename"] == "能高安東軍縱走.gpx.gpx"
+    assert result["reference_gpx_count"] == 23
+    assert result["reference_gpx_filenames"][:3] == [
+        "20161119_20奇萊連峰.gpx",
+        "2024-09-14馬君山_萬里池(萬馬線)_ㄚ國_p.gpx",
+        "990418能高安東軍GDB檔.gpx",
+    ]
+    assert result["source_refs"] == [
+        "project.json",
+        "outputs/import_manifest.json",
+        "outputs/reference_tracks.json",
+        "normalized/routes/route_summary.json",
+    ]
+    assert all("/" not in filename for filename in result["reference_gpx_filenames"])
+
+
 def test_workspace_catalog_search_includes_preparation_metadata_files(tmp_path: Path) -> None:
     workspace = tmp_path / "chilai_nanhua_day1"
     shutil.copytree(PROJECT_ROOT, workspace)

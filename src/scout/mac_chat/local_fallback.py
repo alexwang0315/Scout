@@ -24,8 +24,8 @@ class PydanticAIV2MacLocalFallback:
     """
 
     model_name: str = DEFAULT_MAC_LOCAL_FALLBACK_MODEL
-    timeout_seconds: int = 90
-    max_context_chars: int = 12000
+    timeout_seconds: int | None = None
+    max_context_chars: int | None = None
     workspace_root: str | None = None
     project_id: str | None = None
 
@@ -89,8 +89,10 @@ class PydanticAIV2MacLocalFallback:
         environ = dict(os.environ)
         environ["SCOUT_AI_ASSISTANT_PROVIDER"] = "pydantic_ai"
         environ["SCOUT_AI_ASSISTANT_MODEL"] = self.model_name
-        environ["SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS"] = str(self.timeout_seconds)
-        environ["SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS"] = str(self.max_context_chars)
+        if self.timeout_seconds is not None:
+            environ["SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS"] = str(self.timeout_seconds)
+        if self.max_context_chars is not None:
+            environ["SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS"] = str(self.max_context_chars)
         if self.workspace_root:
             environ["SCOUT_PRETRIP_WORKSPACE_ROOT"] = str(Path(self.workspace_root).expanduser())
         return environ
@@ -116,7 +118,7 @@ class PydanticAIV2MacLocalFallback:
             workspace_model_max_tokens=_int_from_environ(
                 environ,
                 "SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS",
-                768,
+                None,
             ),
         )
         setattr(runner, "last_profile", "mac_local_fallback")
@@ -205,9 +207,16 @@ def _requires_nvidia_key(model_name: str) -> bool:
     }
 
 
-def _int_from_environ(environ: Mapping[str, str], key: str, default: int) -> int:
+def _int_from_environ(
+    environ: Mapping[str, str],
+    key: str,
+    default: int | None,
+) -> int | None:
+    raw = environ.get(key)
+    if raw is None:
+        return default
     try:
-        return int(environ.get(key, str(default)))
+        return int(raw)
     except (TypeError, ValueError):
         return default
 

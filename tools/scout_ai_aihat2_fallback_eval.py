@@ -191,7 +191,7 @@ def select_questions(
 def build_total_info(project_root: Path, question: str, project_id: str) -> dict[str, Any] | None:
     query = ScoutAssistantQuery(
         surface=AssistantSurface.PRETRIP,
-        question=question[:2000],
+        question=question,
         project_id=project_id,
     )
     source = build_workspace_total_info_source_ref(query, project_root=project_root)
@@ -550,19 +550,19 @@ def _compact_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "tool_id": result.get("tool_id"),
         "status": result.get("status"),
         "missing_fields": result.get("missing_fields") or [],
-        "warnings": (result.get("warnings") or [])[:5],
-        "errors": (result.get("errors") or [])[:3],
-        "summary": _truncate_json(summary, 2000),
-        "resource_state": _truncate_json(payload.get("resource_state"), 1500),
-        "provided_fields": _truncate_json(payload.get("provided_fields"), 1500),
-        "source_report": _truncate_json(source_report, 3000),
+        "warnings": result.get("warnings") or [],
+        "errors": result.get("errors") or [],
+        "summary": summary,
+        "resource_state": payload.get("resource_state"),
+        "provided_fields": payload.get("provided_fields"),
+        "source_report": source_report,
         "records": _compact_records_for_fallback(records),
     }
 
 
 def _compact_records_for_fallback(records: Any) -> Any:
     if not isinstance(records, list):
-        return _truncate_json(records, 5000)
+        return records
     compact: list[Any] = []
     preferred = (
         "readable_location",
@@ -594,7 +594,7 @@ def _compact_records_for_fallback(records: Any) -> Any:
         "candidate_only",
         "runtime_safety_truth",
     )
-    for item in records[:6]:
+    for item in records:
         if isinstance(item, dict):
             record = {key: item[key] for key in preferred if key in item}
             decision_output = item.get("decision_output")
@@ -607,7 +607,7 @@ def _compact_records_for_fallback(records: Any) -> Any:
                         "reason": first_layer.get("reason"),
                         "next_step": first_layer.get("nextStep"),
                     }
-                record["main_reasons"] = (decision_output.get("mainReasons") or [])[:4]
+                record["main_reasons"] = decision_output.get("mainReasons") or []
                 record["next_action"] = decision_output.get("nextAction")
                 record["confidence"] = decision_output.get("confidence")
             compact.append(record)
@@ -639,7 +639,7 @@ def _top_level_record_for_fallback(payload: dict[str, Any]) -> dict[str, Any]:
                 "reason": first_layer.get("reason"),
                 "next_step": first_layer.get("nextStep"),
             }
-        record["main_reasons"] = (decision_output.get("mainReasons") or [])[:4]
+        record["main_reasons"] = decision_output.get("mainReasons") or []
         record["next_action"] = decision_output.get("nextAction")
         record["confidence"] = decision_output.get("confidence")
     return record
@@ -652,6 +652,44 @@ def _truncate_json(value: Any, limit: int) -> Any:
     if len(text) <= limit:
         return value
     return {"truncated": True, "text": text[:limit]}
+
+
+def _hailo_plain_value(value: Any, max_bytes: int) -> str:
+    del max_bytes
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        text = "；".join(
+            f"{key}={_hailo_plain_value(item, 240)}"
+            for key, item in value.items()
+        )
+    elif isinstance(value, list):
+        text = "、".join(_hailo_plain_value(item, 280) for item in value)
+    else:
+        text = str(value)
+    text = re.sub(r"[\x00-\x1f\x7f-\x9f]+", " ", text)
+    text = text.replace("\\", "／").replace('"', "＂")
+    return text.strip()
+
+
+def _hailo_tool_evidence_lines(tool_results: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for result in tool_results:
+        parts = [
+            f"工具={result.get('tool_id') or 'unknown'}",
+            f"狀態={result.get('status') or 'unknown'}",
+        ]
+        summary = _hailo_plain_value(result.get("summary"), 420)
+        if summary:
+            parts.append(f"摘要={summary}")
+        records = _hailo_plain_value(result.get("records"), 760)
+        if records:
+            parts.append(f"紀錄={records}")
+        missing_fields = _hailo_plain_value(result.get("missing_fields"), 240)
+        if missing_fields:
+            parts.append(f"缺欄位={missing_fields}")
+        lines.append("；".join(parts))
+    return lines
 
 
 def build_prompt(
@@ -673,6 +711,7 @@ def build_prompt(
     )
     hint = resolved_context.get("deterministic_answer_hint")
     if hint:
+        missing_line = _hailo_plain_value(missing_evidence, 420)
         return (
             "你是 Scout AI 的 AI HAT+2 本地 fallback。"
             "下列「Scout 工具摘要」是 deterministic tools 取得的證據，不是你的最終答案模板。"
@@ -684,25 +723,29 @@ def build_prompt(
             "不得宣稱已送出求救、修改 /safety、控制硬體或寫入 runtime truth。"
             "使用繁體中文，格式固定為：結論：... 依據：... 下一步：...\n\n"
             f"使用者問題：{question}\n\n"
-            f"Scout 工具摘要：{hint}\n\n"
-            "簡短上下文："
-            f"{json.dumps({'missing_tools': missing_tools[:3], 'missing_evidence': missing_evidence[:6]}, ensure_ascii=False, sort_keys=True)}"
+            f"Scout 工具摘要：{_hailo_plain_value(hint, 1200)}\n\n"
+            f"證據缺口：{missing_line or '無'}"
         )
-    return (
+    evidence_lines = _hailo_tool_evidence_lines(tool_results)
+    missing_tool_line = _hailo_plain_value(
+        [item.get("tool_id") for item in missing_tools],
+        240,
+    )
+    missing_evidence_line = _hailo_plain_value(missing_evidence, 520)
+    prompt = (
         "你是 Scout AI 的 AI HAT+2 本地 fallback。"
-        "只能根據提供的短上下文回答，不可說已查雲端或外部服務。"
+        "只能根據下列 Scout 工具證據回答，不可說已查雲端或外部服務。"
         "即使資料不完整，也要給保守可執行答案；不要空白、不要只說無法回答。"
-        "若 deterministic_answer_hint 存在，必須使用它的具體資訊，但不能整段照抄。"
         "若關鍵資料缺失，要先給安全傾向，再說最少需要補哪一項。"
-        "結論不要寫「無法確定」；改寫成「目前以不利情境處理：建議延後/撤退/停下重查」。"
-        "範例：體能或配速缺資料時，結論寫「目前不能視為有足夠 buffer，先延後或降級目標」。"
-        "範例：定位缺資料時，結論寫「先停止移動並檢查 GNSS/手機定位」。"
         "不得宣稱已送出求救、修改 /safety、控制硬體或寫入 runtime truth。"
         "使用繁體中文，格式固定為：結論：... 依據：... 下一步：...\n\n"
         f"使用者問題：{question}\n\n"
-        "Scout 短上下文 JSON:\n"
-        f"{json.dumps(resolved_context, ensure_ascii=False, sort_keys=True)[:4500]}"
+        "Scout 工具證據：\n"
+        + ("\n".join(evidence_lines) if evidence_lines else "沒有工具結果")
+        + f"\n缺少工具：{missing_tool_line or '無'}"
+        + f"\n證據缺口：{missing_evidence_line or '無'}"
     )
+    return prompt
 
 
 def _compact_aihat_context(
@@ -713,15 +756,15 @@ def _compact_aihat_context(
     missing_tools: list[dict[str, Any]],
     missing_evidence: list[str],
 ) -> dict[str, Any]:
-    """Keep AI HAT prompts within small local-model context limits."""
+    """Compose relevant AI HAT evidence without Scout-defined text truncation."""
 
     return {
         "intent": {
             "id": qeval.get("id"),
             "category": qeval.get("category"),
             "answerability": qeval.get("answerability"),
-            "current_tool_ids": (qeval.get("current_tool_ids") or [])[:6],
-            "recommended_tool_ids": (qeval.get("recommended_tool_ids") or [])[:6],
+            "current_tool_ids": qeval.get("current_tool_ids") or [],
+            "recommended_tool_ids": qeval.get("recommended_tool_ids") or [],
         },
         "deterministic_answer_hint": _deterministic_answer_hint(
             qeval=qeval,
@@ -730,9 +773,9 @@ def _compact_aihat_context(
             missing_evidence=missing_evidence,
         ),
         "total_info": _compact_total_info(total_info),
-        "tools": [_compact_aihat_tool_result(item) for item in tool_results[:6]],
-        "missing_tools": missing_tools[:6],
-        "missing_evidence": missing_evidence[:10],
+        "tools": [_compact_aihat_tool_result(item) for item in tool_results],
+        "missing_tools": missing_tools,
+        "missing_evidence": missing_evidence,
         "fallback_policy": {
             "must_answer": True,
             "prefer_conservative_action": True,
@@ -809,7 +852,7 @@ def _compact_total_info(total_info: dict[str, Any] | None) -> dict[str, Any] | N
             "status": body.get("status"),
             "energy_snapshot_available": body.get("energy_vitals_snapshot_available"),
         },
-        "missing_or_partial_context": (total_info.get("missing_or_partial_context") or [])[:8],
+        "missing_or_partial_context": total_info.get("missing_or_partial_context") or [],
         "boundary": total_info.get("boundary"),
     }
 
@@ -1436,14 +1479,14 @@ def _compact_aihat_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "tool_id": result.get("tool_id"),
         "status": result.get("status"),
-        "missing_fields": (result.get("missing_fields") or [])[:8],
-        "warnings": (result.get("warnings") or [])[:3],
-        "errors": (result.get("errors") or [])[:2],
-        "summary": _truncate_for_prompt(result.get("summary"), 600),
-        "resource_state": _truncate_for_prompt(result.get("resource_state"), 700),
-        "provided_fields": _truncate_for_prompt(result.get("provided_fields"), 700),
-        "records": _truncate_for_prompt(result.get("records"), 800),
-        "source_report": _truncate_for_prompt(result.get("source_report"), 600),
+        "missing_fields": result.get("missing_fields") or [],
+        "warnings": result.get("warnings") or [],
+        "errors": result.get("errors") or [],
+        "summary": result.get("summary"),
+        "resource_state": result.get("resource_state"),
+        "provided_fields": result.get("provided_fields"),
+        "records": result.get("records"),
+        "source_report": result.get("source_report"),
     }
 
 
@@ -1456,6 +1499,19 @@ def _truncate_for_prompt(value: Any, limit: int) -> Any:
     return {"truncated": True, "text": text[:limit]}
 
 
+def _normalize_hailo_chat_content(content: str) -> str:
+    """Flatten control characters rejected by Hailo Ollama 5.3 chat parsing."""
+    normalized = re.sub(r"[\x00-\x1f\x7f-\x9f]+", " ", content).strip()
+    return normalized.replace("\\", "／").replace('"', "＂")
+
+
+def _truncate_utf8(value: str, max_bytes: int) -> str:
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    return encoded[:max_bytes].decode("utf-8", errors="ignore").rstrip()
+
+
 def call_hailo_model(
     *,
     endpoint: str,
@@ -1463,12 +1519,12 @@ def call_hailo_model(
     prompt: str,
     timeout_seconds: int,
 ) -> tuple[str, dict[str, Any]]:
+    chat_content = _normalize_hailo_chat_content(prompt)
     payload = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": chat_content}],
         "options": {
             "temperature": 0.2,
-            "num_predict": 160,
         },
         "stream": False,
     }
@@ -1480,7 +1536,8 @@ def call_hailo_model(
     )
     started = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        request_timeout = timeout_seconds if timeout_seconds > 0 else None
+        with urllib.request.urlopen(request, timeout=request_timeout) as response:
             raw = response.read().decode("utf-8", errors="replace")
     except (TimeoutError, urllib.error.URLError) as exc:
         return "", {"error": f"{type(exc).__name__}: {exc}", "latency_ms": int((time.monotonic() - started) * 1000)}
@@ -1943,8 +2000,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workspace-root", type=Path, default=DEFAULT_WORKSPACE_ROOT)
     parser.add_argument("--endpoint", default=DEFAULT_HAILO_ENDPOINT)
     parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument("--timeout-seconds", type=int, default=90)
-    parser.add_argument("--max-tools", type=int, default=5)
+    parser.add_argument("--timeout-seconds", type=int, default=0)
+    parser.add_argument("--max-tools", type=int, default=10)
     parser.add_argument(
         "--synthetic-field-context",
         dest="synthetic_field_context",
@@ -1963,8 +2020,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--case-offset must be >= 0")
     if args.max_cases is not None and args.max_cases <= 0:
         parser.error("--max-cases must be positive")
-    if args.timeout_seconds <= 0:
-        parser.error("--timeout-seconds must be positive")
+    if args.timeout_seconds < 0:
+        parser.error("--timeout-seconds must be >= 0")
     args._started_monotonic = time.monotonic()
     report = run_eval(args)
     json_path, md_path = write_report(report, args.output_dir)

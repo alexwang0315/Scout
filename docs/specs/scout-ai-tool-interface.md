@@ -6,10 +6,10 @@ knowledge.
 
 ## Implementation Update 2026-06-30
 
-Scout AI now runs against Pydantic AI v2.8.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.9.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.8.0 for Pi admin/live
+- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.9.0 for Pi admin/live
   runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -20,6 +20,11 @@ tracks. Tool execution remains deterministic and read-only by default:
   while preserving `z-ai/glm-5.2` as the outbound model id.
 - OpenRouter model strings use the dedicated Pydantic AI OpenRouter provider
   through the `openrouter:<vendor/model>` prefix and `OPENROUTER_API_KEY`.
+- Aggressive Construction Mode gives local and cloud models no Scout-defined
+  output-token cap by default. `SCOUT_AI_LOCAL_MODEL_MAX_TOKENS`, legacy
+  `SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS`, and
+  `SCOUT_AI_CLOUD_MODEL_MAX_TOKENS` are explicit operator/Productization
+  overrides, not hidden defaults.
 - Direct OpenAI model strings must use `openai-chat:<model>`. If an operator
   supplies `openai:<model>`, Scout normalizes it to `openai-chat:<model>` to
   preserve the existing Chat-Completions-like Scout tool/output contract rather
@@ -783,6 +788,67 @@ missing-evidence gaps when model synthesis is unavailable. It does not write
 JSON/Markdown files itself; the report and Markdown are returned in the tool
 payload so callers can decide where to persist review artifacts.
 
+## Deterministic Workspace Query Tool
+
+Manifest id:
+
+```text
+scout.ai.workspace.query.v1
+```
+
+This is the progressive follow-up tool after domain discovery. Its request is
+a Pydantic discriminated union; Pydantic AI receives the full operation schema
+instead of an untyped dictionary. Supported operations are:
+
+```text
+inspect exists count distinct filter group_by top_k argmax diff freshness
+nearest interval route_forward
+```
+
+An artifact selector contains exactly one controlled `source_ref` or
+`project_ref_key` and may include a bounded `collection_path`. Fields use a
+restricted dotted-name grammar. Predicates are typed comparisons; no JSONPath,
+SQL, Python, JavaScript, shell, or model-authored expression is evaluated.
+
+Example:
+
+```json
+{
+  "operation": "argmax",
+  "artifact": {
+    "project_ref_key": "segment_candidates_ref",
+    "collection_path": "segments"
+  },
+  "field": "distance_m",
+  "fields": [
+    "candidate_id",
+    "from_candidate_id",
+    "to_candidate_id",
+    "distance_m"
+  ]
+}
+```
+
+Every response has stable `status` and `answerability` fields, bounded results,
+scan/result counts, source refs, limitations, missing fields, next actions,
+root cause, safe-retry state, and stop condition. Each record carries:
+
+- execution-scoped `evidence_id`;
+- `source_ref`, `source_hash`, `record_id`, and locator;
+- bounded projected data and available observation/validity times;
+- `candidate_only=true` and `runtime_safety_truth=false`.
+
+`null` and missing are different. An explicit null remains in the result. A
+field absent from all selected records produces a warning with
+`answerability=missing_required_fields`; already available evidence is still
+returned. An empty existing collection produces a grounded zero result.
+
+The service confines resolved files to the project root, rejects traversal and
+symlink escape, permits JSON/GeoJSON only, and enforces artifact bytes, scanned
+records, returned records, nesting depth, string length, stable ordering, and
+diff-path limits. It performs no network or workspace write and never mutates
+Phase 1, `/safety/*`, Phase 2 Brain, incident, outbound, or hardware state.
+
 ## Pydantic AI Provider Integration
 
 The Pydantic AI assistant provider keeps the existing `search_scout_*` tool
@@ -795,6 +861,30 @@ Current provider behavior:
   tool ids, implementation status, descriptions, and optional fields.
 - `ScoutWorkspaceToolContext.search_scout_route_structure()` and the other
   current deterministic tools execute through `execute_scout_ai_tool()`.
+- `ScoutWorkspaceToolContext.query_scout_workspace()` accepts the typed
+  `WorkspaceQueryRequest` union and executes `scout.ai.workspace.query.v1`
+  inside the resolved project root. The model cannot supply a different root.
+- `AgentBudgetPolicy` selects the Scout `AgentRunBudget` from question class,
+  expected operations, joins, live-state requirements, and selected domains.
+  The Pydantic adapter only maps that budget to `UsageLimits`; the Scout ledger
+  independently verifies actual request/tool/token usage.
+- Every question class has the same executable ceiling: 10 tool calls and 10
+  model requests per attempt and per recovery stage, including unknown/new
+  classes. Stage, surface, average, p95, and static-fact policies may stop early
+  on sufficient evidence or no progress, but may not impose lower capacity.
+- Planner, retriever, synthesis, verifier, reviewer, repair, retry, replan,
+  browser, and subagent categories also default to at least 10 when separately
+  metered.
+- Construction Mode leaves token, EvidenceCard, context, cost, answer-time, and
+  replay-time ceilings unset. External platform limits create a checkpoint and
+  continuation with a fresh 10/10 budget.
+- Typed executor statuses `completed`, `success`, and `ok` are successful tool
+  outcomes for evaluation and ledger matching. They must not be reclassified
+  as transport errors merely because adapters use different success labels.
+- Failures follow the finite ladder in `SCOUT_OUTDOOR_AI_AGENT_STANDARD.md`:
+  fix tools/evidence/harness with fresh 10/10, switch model with fresh 10/10,
+  build the complete Codex review artifact, then register a stable known issue
+  with an explicit unblock condition.
 - Legacy `search_scout_workspace_evidence()` remains available for local
   evidence-index fallback, but the newer structured tools should be preferred
   when the question maps to route, MCP, full-text, risk, terrain, map

@@ -51,6 +51,8 @@ def test_loads_cloud_and_local_model_profiles_from_external_json(tmp_path: Path)
     assert config.local_model.base_url == "http://127.0.0.1:11434/v1"
     assert config.timeout_seconds == 4
     assert config.max_context_chars == 9000
+    assert config.effective_timeout_seconds() is None
+    assert config.effective_max_context_chars() is None
     assert config.connect_on_startup is True
     assert config.fallback_to_local_on_error is True
     assert config.local_fallback_fixed_schema is True
@@ -90,6 +92,32 @@ def test_model_config_can_disable_local_fallback_without_removing_local_profile(
     assert config.fallback_to_local_on_error is False
     assert config.local_fallback_fixed_schema is False
     assert config.local_model.model_name == "local"
+    assert config.timeout_seconds is None
+    assert config.max_context_chars is None
+    assert config.aggressive_construction_mode is True
+    assert config.max_tool_calls_per_attempt == 10
+    assert config.max_model_requests_per_attempt == 10
+    assert config.planner_call_limit == 10
+    assert config.retriever_call_limit == 10
+    assert config.synthesis_call_limit == 10
+    assert config.verifier_call_limit == 10
+    assert config.reviewer_call_limit == 10
+    assert config.repair_call_limit == 10
+    assert config.retry_call_limit == 10
+    assert config.replan_call_limit == 10
+    assert config.browser_call_limit == 10
+    assert config.subagent_call_limit == 10
+
+
+def test_model_config_rejects_call_ceilings_below_ten() -> None:
+    with pytest.raises(ValidationError):
+        AssistantModelConfig.model_validate(
+            {
+                "cloud_model": {"profile": "cloud", "model_name": "cloud"},
+                "local_model": {"profile": "local", "model_name": "local"},
+                "planner_call_limit": 9,
+            }
+        )
 
 
 def test_model_config_ignores_router_metadata_without_disabling_profiles():

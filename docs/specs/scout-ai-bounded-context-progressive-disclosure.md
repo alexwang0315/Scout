@@ -14,16 +14,17 @@ tools, bounds evidence, accounts usage, verifies grounding, and stops.
 
 ```text
 question
-  -> context.find(top_k=3)
-  -> optional context.read(token_budget)
+  -> context.find(top_k=10)
+  -> optional context.read
   -> tool.find/tool.describe
-  -> ToolPlan (3 ordinary, 5 compound)
+  -> typed question class and AgentRunBudget
   -> selected schemas only
-  -> deterministic execution
-  -> EvidenceCard (<=1,000 estimated tokens per tool)
+  -> discover/query/optional join/verify
+  -> sanitized EvidenceCard with stable provenance
   -> no-tool synthesis
   -> GroundingVerification
-  -> zero or one repair
+  -> verified no-tool repair/replan when needed
+  -> external-limit checkpoint and fresh-budget continuation
 ```
 
 `ContextHandle` and `EvidenceCard` always preserve provenance, freshness,
@@ -46,15 +47,42 @@ is safe when its cited evidence says it is not safe.
 
 ## Budgets
 
-| Turn | Input target | Requests | Tools |
-| --- | ---: | ---: | ---: |
-| Simple | <=3,000 | 1 target | <=2 |
-| Normal | <=8,000 | <=2 target | <=3 |
-| Compound | <=15,000 target; 20,000 hard | <=3 hard | <=5 |
+`AgentBudgetPolicy.for_query()` is the deterministic policy source. Pydantic
+AI `UsageLimits` only enforces the resulting request/tool/token limits; it does
+not choose them. `AgentRunLedger` then verifies actual provider usage against
+the same `AgentRunBudget` after the call.
 
-One schema-validation retry or one synthesis repair may consume the third
-request; both cannot expand the turn beyond the same hard budget. A budget
-stop reports the gap and does not continue an unbounded tool loop.
+| Question class | Tool calls | Model requests |
+| --- | ---: | ---: |
+| `static_workspace_fact` | 10 | 10 |
+| `aggregate_workspace_fact` | 10 | 10 |
+| `cross_artifact_join` | 10 | 10 |
+| `spatial_route_fact` | 10 | 10 |
+| `weather_terrain_compound` | 10 | 10 |
+| `live_runtime_fact` | 10 | 10 |
+| `safety_decision` | 10 | 10 |
+| any new or unclassified class | 10 | 10 |
+
+The schema guarantees at least 10 tool calls and 10 model requests per attempt
+and per recovery stage. Independently metered planner, retriever, synthesis,
+verifier, reviewer, repair, retry, replan, browser, and subagent categories also
+default to 10. Unused capacity stops early and is not a target to consume.
+
+Stages are deterministic: discover, query, join, and verify each expose the
+same 10-call capacity. One attempt may use at most its 10 tool calls and 10 model
+requests; a continuation, tool repair, model switch, or Codex-review stage gets
+a fresh 10/10 rather than inheriting exhausted counters. Synthesis and repair
+have no tools.
+
+Aggressive Construction Mode leaves Scout-defined input/output/total-token,
+tool-result-token, context-character, estimated-cost, answer-time, and replay-
+time ceilings unset. Counters remain telemetry. External provider/platform
+limits checkpoint evidence, call trace, and state, then resume through a
+continuation instead of being reported as Scout reasoning failure.
+The runtime stops when two calls add no evidence ID, a canonical tool call is
+duplicated, a safe retry repeats the same root cause, a required artifact or
+field is explicitly absent, live state is absent, or safety evidence remains
+insufficient.
 
 ## Evaluation Contract
 
@@ -70,7 +98,7 @@ Use the deterministic protocol replay before a live provider run:
 
 ```bash
 ./venv/bin/python tools/scout_ai_bounded_runtime_replay.py \
-  --timeout-seconds 90 \
+  --timeout-seconds 0 \
   --output-dir outputs/evals/bounded_context_progressive_disclosure
 ```
 
@@ -83,8 +111,7 @@ Then run a provider without printing the key:
   --api-key-env-var OPENROUTER_API_KEY \
   --project-id chilai_nanhua_day1_scoutAI \
   --workspace-root /Users/alexwang0315/workspace \
-  --max-context-chars 2000 \
-  --model-max-tokens 1800
+  --timeout-seconds 0
 ```
 
 Reports must keep harness/tool architecture, model tool selection, evidence
@@ -143,18 +170,25 @@ status failures, and 22 answer-grounding failures. Only two cases passed every
 tool, evidence, completion, and grounding gate.
 
 The live run also exposed three turns whose provider-reported cumulative output
-usage exceeded the 2,000-token budget after a repair request (maximum 2,401).
-The runtime now skips repair without 1,024 output tokens of headroom and caps a
-repair request at 256 model tokens or one quarter of remaining output,
-whichever is lower. The request hook preserves that lower repair cap, and a
-post-response usage check discards any answer whose actual provider usage still
-crosses a hard request, tool, input, output, total-token, repair, or cost limit.
-Focused tests cover both preflight and post-response behavior. A second live
-100-case confirmation is pending because the same run exhausted the free-tier
-daily allowance; therefore the provider-level hard-output gate remains live
-verification pending, not claimed as passed.
+usage exceeded the historical 2,000-token budget after a repair request
+(maximum 2,401). The former 256-token/quarter-remaining repair cap was itself a
+quality regression: a grounded repair could be truncated before any response
+was produced. It is retired. The Productization-only finite envelope retains a
+1,024-token repair-headroom preflight when an operator explicitly enables token
+enforcement. Aggressive Construction Mode has no Scout-defined output headroom
+gate; only an explicit local/operator model limit may cap that request.
+Post-response usage checks still enforce the governing call envelope. Focused
+tests cover both preflight and post-response behavior.
 
-The original report labeled a 96% any-hit rate as Context Top-3 recall. The
+The current Construction Mode envelope is 10 tool calls and 10 model requests
+per attempt/recovery stage, with no Scout-defined token, evidence-card,
+context-character, cost, answer-time, or replay-time ceiling. These are
+available capacities, not utilization targets, and duplicate/no-progress stops
+still apply.
+
+The original report labeled a 96% any-hit rate as Context Top-3 recall. Those
+Top-3 labels are retained only as historical artifact field names. The current
+runtime may disclose up to ten ranked handles. The
 corrected evaluator reports micro recall, macro recall, any-hit, and exact match
 separately; excludes health/team contexts that the bounded model path does not
 disclose; and gives exact selected tool IDs priority over generic lexical
@@ -174,36 +208,122 @@ Provider pricing was unavailable in the response metadata. Observability marks
 `cost_estimate_available=false`; it must not present the zero accumulator as a
 measured zero-dollar cost.
 
+## 2026-07-14 Deterministic Workspace Query Slice
+
+`scout.ai.workspace.query.v1` adds bounded record retrieval after domain-tool
+discovery. Its typed operations are `inspect`, `exists`, `count`, `distinct`,
+`filter`, `group_by`, `top_k`, `argmax`, `diff`, `freshness`, `nearest`,
+`interval`, and `route_forward`. Result records retain an execution-scoped
+evidence ID, source ref/hash, record ID, locator, timestamps, and candidate
+boundary. Explicit `null` is a value; an absent requested field returns
+`answerability=missing_required_fields` without discarding other evidence.
+
+The 100-case operation gold is
+`tests/fixtures/scout_ai_workspace_query_gold_100.json`. The evaluator
+`tools/scout_ai_workspace_query_eval.py` is an offline deterministic
+operation-level architecture replay. It does not call a cloud model and must
+not be cited as model quality.
+
+Latest real-workspace replay on
+`/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI`:
+
+| Metric | 2026-07-13 baseline | 2026-07-14 query slice |
+| --- | ---: | ---: |
+| Artifact selection | not recorded at operation level | 100% |
+| Operation selection | not recorded | 100% |
+| Required-tool pass | 97% legacy tool oracle | 100% |
+| Exact required tool set | 97% | 100% |
+| Answer completion | 26% | 100% deterministic fact/gap result |
+| Grounded result | 26% | 100% |
+| Deterministic fact accuracy | not recorded | 100% |
+| Unsupported claims | 0 | 0 |
+| Tool calls mean / p95 | not recorded | 1.23 / 2 |
+| Model requests mean / p95 | not comparable | 3.19 / 4 budget estimate |
+| Input tokens mean / p95 | not comparable | 1,771.63 / 5,072 estimate |
+| Duplicate calls / budget exhaustion | not recorded | 0 / 0 |
+
+The completion value means every case returned either its deterministic fact
+or its explicitly labeled evidence gap. It does not mean a language model
+answered every question. A separate provider-backed Pydantic AI run is
+required for OpenRouter model selection and synthesis quality.
+
+Root-cause findings:
+
+| Hypothesis | Result | Implementation/eval evidence |
+| --- | --- | --- |
+| Catalog summaries were insufficient for record facts | CONFIRMED | The old replay completed and grounded 26/100; record operations now resolve exact counts, IDs, extrema, intervals, and spatial results. |
+| Fixed request/tool caps prevented discover-query-join-verify | CONFIRMED | `AgentBudgetPolicy` now assigns fresh 10/10 to every typed or unknown question class and recovery stage while retaining evidence/no-progress and safety boundaries. |
+| Source refs could be lost before grounding | CONFIRMED | Query evidence now carries source ref/hash and evidence ID through execution and verification. |
+| Unrelated missing tools should reject a supported static fact | REJECTED as desired behavior | Grounding accepts the structured supported claim while safety/live/weather gaps remain fail closed. |
+| Empty collection and missing field are equivalent | REJECTED | Empty collections are deterministic zero results; missing fields are warning gaps and explicit null remains present. |
+| The previous generic classifier was adequate for compound queries | REJECTED | Before correction, operation selection was 69% and required-tool pass 73%; compound operation and explicit workspace-domain routing now reach 100%. |
+
+### Focused 15K cross-artifact replay
+
+The 2026-07-14 real-workspace replay used
+`/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI` and the executable
+`--workspace-15k-join-replay` path. It completed exactly ten deterministic tool
+calls: manifest discovery, mileage schema inspection, 15K filtering, 15K count,
+checkpoint schema inspection, nearest-CP join, exact-CP contradiction check,
+mileage freshness, checkpoint freshness, and manifest/source verification.
+
+The verified answer placed 15K at `24.034234788, 121.280180449`; the nearest
+checkpoint was `cp.128`, about 268.21 metres away. Both concrete claims carried
+their own workspace source refs. Source hashes were internally consistent,
+grounding passed with two citations, and no stage-limit stop occurred. This is
+a `WORKING PROTOTYPE` proof of
+`search -> drilldown -> filter/count -> spatial join -> freshness and source
+verification -> answer`; it is not a cloud-model quality benchmark.
+
 ## Acceptance Gates
 
-- Context Top-3 recall >=95%.
+- Ranked context-discovery micro recall >=95% at the configured shortlist width.
 - Required tool micro recall >=95%.
 - Exact required tool-set match >=90%.
 - Final user-visible unsupported claims = 0.
 - Every concrete conclusion cites a source ref.
 - Tenfold workspace growth increases p95 tokens by <=10%.
 - Tenfold ToolCard growth does not load all schemas.
-- Exceeding a budget stops and records `budget_stop_reason`.
+- Reaching a stage call ceiling records the reason, checkpoints useful evidence,
+  and transitions to a fresh continuation/recovery budget.
 
-The unchanged corpus currently contains three cases whose expected sets have
-6, 9, and 10 tools. Under the required five-tool hard cap their theoretical
-maximum combined recall is 180/190 (94.74%). This is a corpus-versus-runtime
-contract conflict, not permission to weaken the hard cap. Keep the cases and
-report the gap explicitly until expected evidence bundles are represented by
-bounded composite tools or the corpus oracle is reviewed.
+The governing budget is identical for every question class:
+
+| Question class | Max tool calls | Max model requests |
+|---|---:|---:|
+| `static_workspace_fact` | 10 | 10 |
+| `aggregate_workspace_fact` | 10 | 10 |
+| `cross_artifact_join` | 10 | 10 |
+| `spatial_route_fact` | 10 | 10 |
+| `weather_terrain_compound` | 10 | 10 |
+| `live_runtime_fact` | 10 | 10 |
+| `safety_decision` | 10 | 10 |
+| any new or unclassified class | 10 | 10 |
+
+No lower average, p95, per-stage, or static-fact threshold is an acceptance
+gate. The unchanged corpus cases requiring 6, 9, or 10 tools now fit the typed
+runtime contract.
 
 Current gate disposition:
 
-- PASS: corrected Context Top-3 micro recall, deterministic exact tool set, bounded schema
+- PASS: corrected ranked-context micro recall, deterministic exact tool set, bounded schema
   disclosure, tenfold workspace growth, tenfold ToolCard growth, and zero
   user-visible unsupported claims.
-- FAIL: unchanged-corpus required-tool recall, because 94.74% is the maximum
-  under the five-tool cap.
-- FAIL: OpenRouter `/free` model quality, with 45.79% live tool recall and 2%
-  end-to-end pass.
-- VERIFICATION PENDING: provider-level hard output consumption after the
-  conservative repair-cap fix.
+- PASS: unchanged-corpus tool bundles fit the current 10-tool ceiling.
+- HISTORICAL FAIL: the 2026-07-13 OpenRouter `/free` run recorded 45.79% live
+  tool recall and 2% end-to-end pass under the retired lower resource envelope.
+- PASS (one-case smoke): `openrouter:tencent/hy3:free` selected the required
+  workspace-catalog tool, completed three model requests and three tool calls,
+  passed grounding, and stayed within the relaxed envelope on 2026-07-14.
+- VERIFICATION PENDING: full-corpus provider-backed quality under the relaxed
+  envelope; report it separately by concrete routed model rather than treating
+  `openrouter/free` as one stable model.
 - NOT APPLICABLE: Computer Use receipts because Slice 7 is still gated.
+
+Failures are finite work items rather than reasons to reduce the budget again:
+fix a faulty tool/evidence/schema/harness, switch model if the tools are sound,
+export remaining cases for human review, obtain an independent Codex answer,
+then register a known issue and stop if no grounded answer is available.
 
 ## Computer Use Gate
 

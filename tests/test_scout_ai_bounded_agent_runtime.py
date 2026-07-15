@@ -6,16 +6,25 @@ import pytest
 from pydantic import ValidationError
 
 from scout.schemas.agent_runtime import (
+    AgentAttemptStatus,
+    AgentProgressState,
+    AgentQueryStage,
+    AgentRecoveryStage,
     AgentRequestLedger,
     AgentRunBudget,
     AgentRunLedger,
+    AgentStageBudget,
     ContextHandle,
     EvidenceCard,
+    EvidenceRecord,
     PlannedToolCall,
+    QuestionClass,
     ToolCard,
     ToolPlan,
 )
-from scout.services.bounded_agent_runtime import BoundedAgentRuntime
+from scout.services.agent_budget_policy import AgentBudgetPolicy
+from scout.services.agent_recovery import AgentRecoveryOrchestrator
+from scout.services.bounded_agent_runtime import BoundedAgentRuntime, estimate_tokens
 
 
 def _context_handle(index: int, *, relevance: float = 0.5) -> ContextHandle:
@@ -83,7 +92,16 @@ def test_runtime_contracts_are_small_and_preserve_safety_boundary() -> None:
         )
 
 
-def test_tool_plan_rejects_more_than_five_tools() -> None:
+def test_tool_plan_guarantees_ten_tools_and_allows_explicit_larger_capacity() -> None:
+    supported_calls = [
+        PlannedToolCall(
+            tool_id=f"scout.tool.{index}.v0",
+            arguments={"query": "route"},
+            reason="Required evidence",
+            expected_evidence=["route evidence"],
+        )
+        for index in range(10)
+    ]
     calls = [
         PlannedToolCall(
             tool_id=f"scout.tool.{index}.v0",
@@ -91,18 +109,357 @@ def test_tool_plan_rejects_more_than_five_tools() -> None:
             reason="Required evidence",
             expected_evidence=["route evidence"],
         )
-        for index in range(6)
+        for index in range(11)
     ]
 
-    with pytest.raises(ValidationError, match="at most 5"):
-        ToolPlan(
-            selected_tool_ids=[call.tool_id for call in calls],
-            tool_calls=calls,
-            estimated_input_tokens=1000,
-            estimated_output_tokens=500,
-            required_bundle_expansion=[],
-            stop_or_replan_condition="Stop when evidence is sufficient.",
+    supported = ToolPlan(
+        selected_tool_ids=[call.tool_id for call in supported_calls],
+        tool_calls=supported_calls,
+        estimated_input_tokens=1000,
+        estimated_output_tokens=500,
+        required_bundle_expansion=[],
+        stop_or_replan_condition="Stop when evidence is sufficient.",
+    )
+
+    assert len(supported.tool_calls) == 10
+    expanded = ToolPlan(
+        selected_tool_ids=[call.tool_id for call in calls],
+        tool_calls=calls,
+        estimated_input_tokens=1000,
+        estimated_output_tokens=500,
+        required_bundle_expansion=[],
+        stop_or_replan_condition="Stop when evidence is sufficient.",
+    )
+
+    assert len(expanded.tool_calls) == 11
+
+
+def test_runtime_tool_plan_allows_useful_retrievals_until_stage_budget() -> None:
+    runtime = BoundedAgentRuntime(budget=AgentRunBudget())
+
+    plan = runtime.build_tool_plan(
+        selected_tool_ids=[f"scout.tool.{index}.v0" for index in range(12)]
+    )
+
+    assert len(plan.tool_calls) == 10
+    assert "at most one" not in plan.stop_or_replan_condition
+    assert "10-call budget" in plan.stop_or_replan_condition
+
+
+@pytest.mark.parametrize(
+    ("question_class", "tool_calls", "requests"),
+    [
+        (QuestionClass.STATIC_WORKSPACE_FACT, 10, 10),
+        (QuestionClass.AGGREGATE_WORKSPACE_FACT, 10, 10),
+        (QuestionClass.CROSS_ARTIFACT_JOIN, 10, 10),
+        (QuestionClass.SPATIAL_ROUTE_FACT, 10, 10),
+        (QuestionClass.WEATHER_TERRAIN_COMPOUND, 10, 10),
+        (QuestionClass.LIVE_RUNTIME_FACT, 10, 10),
+        (QuestionClass.SAFETY_DECISION, 10, 10),
+        (QuestionClass.UNKNOWN, 10, 10),
+    ],
+)
+def test_agent_budget_policy_is_typed_and_complexity_aware(
+    question_class: QuestionClass,
+    tool_calls: int,
+    requests: int,
+) -> None:
+    budget = AgentBudgetPolicy.for_query(
+        question_class=question_class,
+        expected_operations=["count"],
+        selected_tool_ids=["scout.tool.fixture.v0"],
+        requires_join=question_class == QuestionClass.CROSS_ARTIFACT_JOIN,
+        requires_live_state=question_class == QuestionClass.LIVE_RUNTIME_FACT,
+    )
+
+    assert budget.max_tool_calls == tool_calls
+    assert budget.max_requests == requests
+    assert budget.max_repairs == 10
+    assert budget.max_tool_calls == 10
+    assert budget.max_requests == 10
+    assert isinstance(budget.stage_budget, AgentStageBudget)
+    assert budget.stage_budget.discover_tool_calls == 10
+    assert budget.stage_budget.query_tool_calls == 10
+    assert budget.stage_budget.join_tool_calls == 10
+    assert budget.stage_budget.verify_tool_calls == 10
+
+
+def test_agent_budget_defaults_and_policy_guarantee_at_least_ten_calls() -> None:
+    default_budget = AgentRunBudget()
+    expanded_budget = AgentBudgetPolicy.for_query(
+        question_class=QuestionClass.CROSS_ARTIFACT_JOIN,
+        expected_operations=[f"operation-{index}" for index in range(12)],
+        selected_tool_ids=[f"scout.tool.{index}.v0" for index in range(12)],
+        requires_join=True,
+    )
+
+    assert default_budget.max_requests == 10
+    assert default_budget.max_tool_calls == 10
+    assert default_budget.max_input_tokens is None
+    assert default_budget.max_output_tokens is None
+    assert default_budget.max_total_tokens is None
+    assert default_budget.max_tool_result_tokens is None
+    assert default_budget.max_estimated_cost is None
+    assert default_budget.enforce_resource_limits is False
+    assert expanded_budget.max_requests == 10
+    assert expanded_budget.max_tool_calls == 24
+
+    assert AgentRunBudget(max_requests=11).max_requests == 11
+    assert AgentRunBudget(max_tool_calls=12).max_tool_calls == 12
+    with pytest.raises(ValidationError):
+        AgentRunBudget(max_requests=9)
+    with pytest.raises(ValidationError):
+        AgentRunBudget(max_tool_calls=9)
+
+
+def test_all_independently_metered_agent_categories_default_to_ten() -> None:
+    stage = AgentStageBudget()
+
+    assert stage.discover_tool_calls == 10
+    assert stage.query_tool_calls == 10
+    assert stage.join_tool_calls == 10
+    assert stage.verify_tool_calls == 10
+    assert stage.planner_model_requests == 10
+    assert stage.retriever_model_requests == 10
+    assert stage.synthesis_model_requests == 10
+    assert stage.verifier_model_requests == 10
+    assert stage.reviewer_model_requests == 10
+    assert stage.repair_model_requests == 10
+    assert stage.retry_model_requests == 10
+    assert stage.replan_model_requests == 10
+    assert stage.browser_model_requests == 10
+    assert stage.subagent_model_requests == 10
+
+    with pytest.raises(ValidationError):
+        AgentStageBudget(browser_model_requests=9)
+
+
+def test_unknown_class_and_each_recovery_stage_receive_fresh_ten_ten_budget() -> None:
+    initial = AgentBudgetPolicy.for_query(question_class="new_unclassified_class")
+    repaired = AgentBudgetPolicy.for_recovery(
+        prior_budget=initial,
+        recovery_stage=AgentRecoveryStage.TOOL_REPAIR,
+    )
+    switched = AgentBudgetPolicy.for_recovery(
+        prior_budget=repaired,
+        recovery_stage=AgentRecoveryStage.MODEL_SWITCH,
+    )
+
+    assert initial.question_class == QuestionClass.UNKNOWN
+    assert initial.recovery_stage == AgentRecoveryStage.INITIAL
+    assert initial.attempt_index == 1
+    assert repaired.recovery_stage == AgentRecoveryStage.TOOL_REPAIR
+    assert repaired.attempt_index == 2
+    assert switched.recovery_stage == AgentRecoveryStage.MODEL_SWITCH
+    assert switched.attempt_index == 3
+    assert all(
+        budget.max_tool_calls == budget.max_requests == 10
+        for budget in (initial, repaired, switched)
+    )
+    assert all(
+        budget.enforce_resource_limits is False
+        for budget in (initial, repaired, switched)
+    )
+
+
+def test_continuation_and_recovery_stages_receive_fresh_ledgers_and_budget() -> None:
+    orchestrator = AgentRecoveryOrchestrator()
+    initial = orchestrator.start_attempt(
+        question="本次路徑的 15K 在哪裡？",
+        question_class=QuestionClass.CROSS_ARTIFACT_JOIN,
+        model_id="openrouter:test",
+    )
+    exhausted_ledger = AgentRunLedger(
+        budget=initial.budget,
+        request_count=10,
+        tool_call_count=10,
+        budget_stop_reason="request_count stage capacity reached",
+    )
+    exhausted = initial.model_copy(
+        update={
+            "ledger": exhausted_ledger,
+            "status": AgentAttemptStatus.STAGE_COMPLETE,
+        }
+    )
+    checkpoint = orchestrator.checkpoint_external_limit(
+        attempt=exhausted,
+        reason="provider_context_window",
+        evidence=[{"evidence_id": "ev-15k"}],
+        source_refs=["outputs/route/mileage.json"],
+        call_trace=[{"operation": "filter"}],
+        state={"next_operation": "nearest"},
+    )
+    continuation = orchestrator.continue_attempt(
+        prior_attempt=exhausted,
+        checkpoint=checkpoint,
+    )
+    repaired = orchestrator.advance_attempt(
+        prior_attempt=continuation,
+        recovery_stage=AgentRecoveryStage.TOOL_REPAIR,
+        model_id="openrouter:test",
+    )
+    switched = orchestrator.advance_attempt(
+        prior_attempt=repaired,
+        recovery_stage=AgentRecoveryStage.MODEL_SWITCH,
+        model_id="openrouter:alternate",
+    )
+
+    assert checkpoint.external_limit is True
+    assert checkpoint.compacted is True
+    assert continuation.recovery_stage == AgentRecoveryStage.CONTINUATION
+    assert repaired.recovery_stage == AgentRecoveryStage.TOOL_REPAIR
+    assert switched.recovery_stage == AgentRecoveryStage.MODEL_SWITCH
+    assert [attempt.attempt_index for attempt in (initial, continuation, repaired, switched)] == [
+        1,
+        2,
+        3,
+        4,
+    ]
+    for attempt in (continuation, repaired, switched):
+        assert attempt.budget.max_tool_calls == 10
+        assert attempt.budget.max_requests == 10
+        assert attempt.ledger.request_count == 0
+        assert attempt.ledger.tool_call_count == 0
+        assert attempt.ledger.budget_stop_reason is None
+
+
+def test_construction_evidence_card_is_not_truncated_by_scout_token_telemetry() -> None:
+    runtime = BoundedAgentRuntime()
+    card = runtime.evidence_from_tool_result(
+        "scout.tool.large.v0",
+        {
+            "status": "completed",
+            "source_ref": "outputs/large.json",
+            "content": "x" * 50_000,
+        },
+        token_budget=50,
+    )
+
+    assert card.truncated is False
+    assert card.continuation_handle is None
+
+
+def test_stage_budget_stops_query_calls_even_when_global_budget_remains() -> None:
+    budget = AgentRunBudget(
+        max_requests=12,
+        max_tool_calls=12,
+        stage_budget=AgentStageBudget(query_tool_calls=10),
+    )
+    runtime = BoundedAgentRuntime(budget=budget)
+    state = AgentProgressState(stage=AgentQueryStage.QUERY)
+    for index in range(11):
+        state = runtime.record_tool_progress(
+            state,
+            tool_id="scout.ai.workspace.query.v1",
+            arguments={"operation": "count", "index": index},
+            evidence_ids=[f"ev-{index}"],
         )
+
+    assert state.stage_tool_call_counts == {AgentQueryStage.QUERY: 11}
+    assert state.stop_reason == "stage_tool_call_limit_exceeded:query"
+
+
+def test_no_progress_tracker_stops_duplicate_and_two_empty_retrievals() -> None:
+    runtime = BoundedAgentRuntime()
+    initial = AgentProgressState(stage=AgentQueryStage.QUERY)
+    progressed = runtime.record_tool_progress(
+        initial,
+        tool_id="scout.ai.workspace.query.v1",
+        arguments={"operation": "count", "artifact": {"source_ref": "a.json"}},
+        evidence_ids=["ev_one"],
+    )
+    duplicate = runtime.record_tool_progress(
+        progressed,
+        tool_id="scout.ai.workspace.query.v1",
+        arguments={"artifact": {"source_ref": "a.json"}, "operation": "count"},
+        evidence_ids=["ev_one"],
+    )
+    empty_once = runtime.record_tool_progress(
+        initial,
+        tool_id="scout.ai.workspace.query.v1",
+        arguments={"operation": "filter", "artifact": {"source_ref": "a.json"}},
+        evidence_ids=[],
+    )
+    empty_twice = runtime.record_tool_progress(
+        empty_once,
+        tool_id="scout.ai.workspace.query.v1",
+        arguments={"operation": "filter", "artifact": {"source_ref": "b.json"}},
+        evidence_ids=[],
+    )
+
+    assert progressed.stop_reason is None
+    assert duplicate.stop_reason == "duplicate_canonical_tool_call"
+    assert empty_once.stop_reason is None
+    assert empty_twice.stop_reason == "two_tool_calls_without_new_evidence"
+
+
+def test_no_progress_tracker_stops_terminal_missing_live_state() -> None:
+    runtime = BoundedAgentRuntime()
+    stopped = runtime.record_tool_progress(
+        AgentProgressState(stage=AgentQueryStage.QUERY),
+        tool_id="scout.ai.workspace.query.v1",
+        arguments={"operation": "route_forward"},
+        evidence_ids=[],
+        root_cause="current_route_position_missing",
+        safe_retry=False,
+    )
+
+    assert stopped.stop_reason == "terminal_evidence_gap:current_route_position_missing"
+
+
+def test_record_evidence_id_grounding_preserves_values_and_numeric_tolerance() -> None:
+    runtime = BoundedAgentRuntime()
+    evidence = EvidenceCard(
+        tool_id="scout.ai.workspace.query.v1",
+        claim_summary="Longest segment query completed.",
+        source_refs=["outputs/segments.json"],
+        evidence_records=[
+            EvidenceRecord(
+                evidence_id="ev_longest_segment",
+                source_ref="outputs/segments.json",
+                record_id="seg.132",
+                locator="/segments/132",
+                source_hash="sha256:fixture",
+                data={
+                    "candidate_id": "seg.132",
+                    "from_candidate_id": "cp.129",
+                    "to_candidate_id": "cp.130",
+                    "distance_m": 2008.6282038658276,
+                },
+            )
+        ],
+    )
+
+    passed = runtime.verify_synthesis(
+        "最長路段是 seg.132，約 2008.63 公尺 [evidence:ev_longest_segment]。",
+        evidence_cards=[evidence],
+    )
+    failed = runtime.verify_synthesis(
+        "最長路段是 seg.999，約 9000 公尺 [evidence:ev_longest_segment]。",
+        evidence_cards=[evidence],
+    )
+
+    assert passed.passed is True
+    assert passed.cited_source_refs == ["evidence:ev_longest_segment"]
+    assert failed.passed is False
+
+
+def test_chinese_checkpoint_claim_is_grounded_by_checkpoint_count_evidence() -> None:
+    runtime = BoundedAgentRuntime()
+    evidence = EvidenceCard(
+        tool_id="scout.ai.workspace.query.v1",
+        claim_summary="Checkpoint count query completed.",
+        key_values={"checkpoint_count": 124},
+        source_refs=["candidates/checkpoints.json"],
+        result_count=1,
+    )
+
+    verification = runtime.verify_synthesis(
+        "這條路線有 124 個檢查點 [candidates/checkpoints.json]。",
+        evidence_cards=[evidence],
+    )
+
+    assert verification.passed is True
 
 
 def test_context_find_is_top_k_and_token_bounded_at_ten_x_growth() -> None:
@@ -246,7 +603,9 @@ def test_tool_find_returns_no_tools_when_every_card_has_zero_relevance() -> None
 
 
 def test_tool_result_is_compacted_to_evidence_card_without_raw_payload() -> None:
-    runtime = BoundedAgentRuntime()
+    runtime = BoundedAgentRuntime(
+        budget=AgentRunBudget(enforce_resource_limits=True)
+    )
     result = {
         "status": "completed",
         "field_answer": "CP 12 is the highest candidate risk point.",
@@ -287,6 +646,93 @@ def test_tool_result_is_compacted_to_evidence_card_without_raw_payload() -> None
     assert "large detail " * 30 not in card.model_dump_json()
 
 
+def test_construction_evidence_card_preserves_complete_list() -> None:
+    runtime = BoundedAgentRuntime()
+
+    card = runtime.evidence_from_tool_result(
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        {
+            "status": "completed",
+            "reference_gpx_filenames": [f"reference-{index}.gpx" for index in range(8)],
+            "source_ref": "outputs/reference_tracks.json",
+        },
+    )
+
+    assert card.key_values["reference_gpx_filenames"] == [
+        f"reference-{index}.gpx" for index in range(8)
+    ]
+
+
+def test_evidence_card_preserves_selected_field_scalar_values() -> None:
+    runtime = BoundedAgentRuntime()
+    card = runtime.evidence_from_tool_result(
+        "scout.ai.workspace.query.v1",
+        {
+            "status": "success",
+            "source_refs": ["project.json"],
+            "results": [
+                {
+                    "evidence_id": "ev-project",
+                    "source_ref": "project.json",
+                    "record_id": "inspect",
+                    "locator": "/$aggregate/inspect",
+                    "source_hash": "sha256:" + "a" * 64,
+                    "data": {
+                        "selected_fields": {
+                            "project_id": "fixture",
+                            "route_name": "route-a",
+                        }
+                    },
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            ],
+        },
+    )
+
+    assert card.evidence_records[0].data["selected_fields"] == {
+        "project_id": "fixture",
+        "route_name": "route-a",
+    }
+
+
+def test_evidence_record_payload_cannot_bypass_tool_result_token_budget() -> None:
+    runtime = BoundedAgentRuntime(
+        budget=AgentRunBudget(enforce_resource_limits=True)
+    )
+    result = {
+        "status": "success",
+        "results": [
+            {
+                "evidence_id": f"ev-{index}",
+                "source_ref": "outputs/risk/risk.geojson",
+                "record_id": f"risk-{index}",
+                "locator": f"/features/{index}",
+                "source_hash": "sha256:" + "a" * 64,
+                "data": {
+                    "score": 90 + index,
+                    "detail": "oversized record evidence " * 500,
+                },
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+            for index in range(20)
+        ],
+        "source_refs": ["outputs/risk/risk.geojson"],
+    }
+
+    card = runtime.evidence_from_tool_result(
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        result,
+        token_budget=220,
+    )
+
+    assert card.truncated is True
+    assert card.estimated_tokens == estimate_tokens(card.model_dump_json())
+    assert card.estimated_tokens <= 220
+    assert "oversized record evidence " * 10 not in card.model_dump_json()
+
+
 def test_bounded_evidence_redacts_sensitive_keys_and_source_query_strings() -> None:
     runtime = BoundedAgentRuntime()
 
@@ -311,7 +757,9 @@ def test_bounded_evidence_redacts_sensitive_keys_and_source_query_strings() -> N
 
 
 def test_bounded_evidence_never_reintroduces_secret_values_in_truncated_preview() -> None:
-    runtime = BoundedAgentRuntime()
+    runtime = BoundedAgentRuntime(
+        budget=AgentRunBudget(enforce_resource_limits=True)
+    )
 
     card = runtime.evidence_from_tool_result(
         "scout.tool.safe_projection.v0",
@@ -378,14 +826,15 @@ def test_evidence_card_preserves_nested_source_path_mapping() -> None:
 
 def test_request_ledger_aggregates_overhead_and_stops_over_budget() -> None:
     budget = AgentRunBudget(
-        max_requests=2,
-        max_tool_calls=3,
+        max_requests=10,
+        max_tool_calls=10,
         max_input_tokens=2000,
         max_output_tokens=500,
         max_total_tokens=2400,
-        max_repairs=1,
+        max_repairs=10,
         max_tool_result_tokens=800,
         max_estimated_cost=0.05,
+        enforce_resource_limits=True,
     )
     runtime = BoundedAgentRuntime(budget=budget)
     ledger = AgentRunLedger(budget=budget)
@@ -441,6 +890,26 @@ def test_request_ledger_aggregates_overhead_and_stops_over_budget() -> None:
     assert runtime.can_continue(stopped) is False
 
 
+def test_request_and_tool_call_limits_are_counted_independently() -> None:
+    budget = AgentRunBudget(max_requests=10, max_tool_calls=10)
+    runtime = BoundedAgentRuntime(budget=budget)
+    ledger = runtime.record_request(
+        AgentRunLedger(budget=budget),
+        AgentRequestLedger(
+            request_index=1,
+            input_tokens=100,
+            output_tokens=20,
+            tool_call_count=11,
+        ),
+    )
+
+    assert ledger.request_count == 1
+    assert ledger.tool_call_count == 11
+    assert ledger.budget_remaining["requests"] == 9
+    assert ledger.budget_remaining["tool_calls"] == 0
+    assert ledger.budget_stop_reason == "tool_call_count budget exceeded"
+
+
 def test_no_tool_synthesis_prompt_and_citation_verifier_are_bounded() -> None:
     runtime = BoundedAgentRuntime()
     evidence = EvidenceCard(
@@ -465,6 +934,9 @@ def test_no_tool_synthesis_prompt_and_citation_verifier_are_bounded() -> None:
     assert "tool schema" not in prompt.lower()
     assert "arguments" not in prompt.lower()
     assert "outputs/route/summary.json" in prompt
+    assert "exact strings from source_refs" in prompt
+    assert "Never cite continuation_handle" in prompt
+    assert "at most three short sentences" in prompt
     assert len(prompt) <= 1600
 
     passed = runtime.verify_synthesis(

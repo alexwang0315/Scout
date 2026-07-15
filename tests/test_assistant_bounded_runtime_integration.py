@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -23,7 +24,13 @@ from assistant_workspace_total_info import (
     TOTAL_INFO_SOURCE_ID,
     build_workspace_total_info_source_ref,
 )
-from scout.schemas.agent_runtime import ContextHandle
+from scout.schemas.agent_runtime import (
+    AgentRunBudget,
+    AgentRunLedger,
+    ContextHandle,
+    EvidenceCard,
+    QuestionClass,
+)
 from scout.services.bounded_agent_runtime import BoundedAgentRuntime
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_workspace_search_tools import ROUTE_STRUCTURE_TOOL_ID
@@ -31,6 +38,46 @@ from scout_workspace_search_tools import ROUTE_STRUCTURE_TOOL_ID
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+ROUTE_STRUCTURE_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
+    ROUTE_STRUCTURE_TOOL_ID
+]
+WORKSPACE_QUERY_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
+    provider_module.WORKSPACE_QUERY_TOOL_ID
+]
+
+
+def _checkpoint_count_response(
+    info: AgentInfo,
+    *,
+    final_text: str,
+) -> ModelResponse:
+    tool_names = {tool.name for tool in info.function_tools}
+    if ROUTE_STRUCTURE_TOOL_NAME in tool_names:
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=ROUTE_STRUCTURE_TOOL_NAME,
+                    args={"query": "route checkpoints", "limit": 6},
+                )
+            ]
+        )
+    if WORKSPACE_QUERY_TOOL_NAME in tool_names:
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=WORKSPACE_QUERY_TOOL_NAME,
+                    args={
+                        "request": {
+                            "operation": "count",
+                            "artifact": {
+                                "project_ref_key": "checkpoint_candidates_ref"
+                            },
+                        }
+                    },
+                )
+            ]
+        )
+    return ModelResponse(parts=[TextPart(final_text)])
 
 
 def test_bounded_prompt_contains_handles_not_duplicate_fixed_prompts() -> None:
@@ -72,16 +119,20 @@ def test_pydantic_agent_progressively_discloses_and_then_removes_tools(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(PROJECT_ROOT.parent))
-    monkeypatch.setattr(
-        provider_module,
-        "build_chat_model",
-        lambda **_kwargs: TestModel(
-            call_tools="all",
-            custom_output_text=(
+
+    def model_function(_messages: list[object], info: AgentInfo) -> ModelResponse:
+        return _checkpoint_count_response(
+            info,
+            final_text=(
                 "There are checkpoints in the route evidence "
                 "[candidates/checkpoints.json]."
             ),
-        ),
+        )
+
+    monkeypatch.setattr(
+        provider_module,
+        "build_chat_model",
+        lambda **_kwargs: FunctionModel(model_function),
     )
     query = ScoutAssistantQuery(
         surface="pretrip",
@@ -107,25 +158,34 @@ def test_pydantic_agent_progressively_discloses_and_then_removes_tools(
         "There are checkpoints in the route evidence "
         "[candidates/checkpoints.json]."
     )
-    assert ledger["request_count"] == 2
-    assert ledger["selected_tool_ids"] == [ROUTE_STRUCTURE_TOOL_ID]
-    assert ledger["executed_tool_ids"] == [ROUTE_STRUCTURE_TOOL_ID]
-    assert ledger["tool_call_count"] == 1
+    assert ledger["request_count"] == 3
+    assert ledger["selected_tool_ids"] == [
+        ROUTE_STRUCTURE_TOOL_ID,
+        provider_module.WORKSPACE_QUERY_TOOL_ID,
+    ]
+    assert ledger["executed_tool_ids"] == [
+        ROUTE_STRUCTURE_TOOL_ID,
+        provider_module.WORKSPACE_QUERY_TOOL_ID,
+    ]
+    assert ledger["tool_call_count"] == 2
     assert ledger["requests"][0]["tool_schema_chars"] > 0
     assert ledger["requests"][0]["tool_schema_count"] == 1
-    assert ledger["requests"][1]["tool_schema_chars"] == 0
-    assert ledger["requests"][1]["tool_schema_count"] == 0
-    assert ledger["tool_schema_chars"] < 6_000
+    assert ledger["requests"][1]["tool_schema_chars"] > 0
+    assert ledger["requests"][1]["tool_schema_count"] == 1
+    assert ledger["requests"][2]["tool_schema_chars"] == 0
+    assert ledger["requests"][2]["tool_schema_count"] == 0
+    assert ledger["tool_schema_chars"] < 20_000
     assert ledger["tool_result_chars"] > 0
-    assert ledger["tool_result_chars"] < 4_000
+    assert ledger["tool_result_chars"] < 20_000
     assert ledger["budget_stop_reason"] is None
     selected_context_ids = [
         item["context_id"] for item in runner.last_context_handles
     ]
     assert "scout.context.route_structure" in selected_context_ids
-    assert len(selected_context_ids) <= 3
+    assert len(selected_context_ids) <= 10
     assert [item["tool_id"] for item in runner.last_workspace_tool_invocations] == [
-        ROUTE_STRUCTURE_TOOL_ID
+        ROUTE_STRUCTURE_TOOL_ID,
+        provider_module.WORKSPACE_QUERY_TOOL_ID,
     ]
 
 
@@ -145,7 +205,8 @@ def test_pydantic_agent_fails_closed_when_selected_tool_is_not_executed(
             BoundedAgentRuntime(),
             selected_ids,
             selected_names,
-            [],
+            [SimpleNamespace(tool_id=tool_id) for tool_id in selected_ids],
+            SimpleNamespace(expected_operations=[]),
         ),
     )
     request_count = 0
@@ -249,7 +310,13 @@ def test_pydantic_agent_fails_closed_when_substantive_question_has_no_evidence(
     monkeypatch.setattr(
         provider_module,
         "_progressive_tool_runtime",
-        lambda _tool_context: (BoundedAgentRuntime(), [], [], []),
+        lambda _tool_context: (
+            BoundedAgentRuntime(),
+            [],
+            [],
+            [],
+            SimpleNamespace(expected_operations=[]),
+        ),
     )
     monkeypatch.setattr(
         provider_module,
@@ -279,7 +346,7 @@ def test_pydantic_agent_fails_closed_when_substantive_question_has_no_evidence(
     assert runner.last_grounding_verification["output_disposition"] == "fail_closed"
 
 
-def test_pydantic_agent_discards_answer_when_actual_usage_exceeds_hard_budget(
+def test_pydantic_agent_does_not_discard_answer_for_token_telemetry(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
@@ -290,7 +357,10 @@ def test_pydantic_agent_discards_answer_when_actual_usage_exceeds_hard_budget(
     monkeypatch.setattr(
         provider_module,
         "_response_usage_fields",
-        lambda _response: {"input_tokens": 1, "output_tokens": 2_001},
+        lambda _response: {
+            "input_tokens": 1,
+            "output_tokens": 1_000_000,
+        },
     )
     query = ScoutAssistantQuery(surface="pretrip", question="嗨")
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
@@ -306,15 +376,11 @@ def test_pydantic_agent_discards_answer_when_actual_usage_exceeds_hard_budget(
         request_timeout_seconds=10,
     )
 
-    assert output != "嗨，我是 Scout AI。"
-    assert "hard token or tool budget" in output
-    assert runner.last_agent_run_ledger["budget_stop_reason"] == (
-        "output_tokens budget exceeded"
-    )
-    assert runner.last_grounding_verification["output_disposition"] == "fail_closed"
+    assert output == "嗨，我是 Scout AI。"
+    assert runner.last_agent_run_ledger["budget_stop_reason"] is None
 
 
-def test_bounded_plain_model_discards_answer_after_actual_usage_overrun(
+def test_bounded_plain_model_does_not_discard_answer_for_token_telemetry(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
@@ -329,7 +395,7 @@ def test_bounded_plain_model_discards_answer_after_actual_usage_overrun(
             "requests": 1,
             "tool_calls": 0,
             "input_tokens": 1,
-            "output_tokens": 2_001,
+            "output_tokens": 1_000_000,
         },
     )
     runner = PydanticAIEnvRunner(
@@ -340,11 +406,67 @@ def test_bounded_plain_model_discards_answer_after_actual_usage_overrun(
 
     output = runner._run_model("question", request_timeout_seconds=10)
 
-    assert output != "unbounded answer"
-    assert "hard token or tool budget" in output
-    assert runner.last_agent_run_ledger["budget_stop_reason"] == (
-        "output_tokens budget exceeded"
+    assert output == "unbounded answer"
+    assert runner.last_agent_run_ledger["budget_stop_reason"] is None
+
+
+def test_workspace_external_limit_checkpoints_and_continues_with_fresh_budget(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        provider_module,
+        "build_chat_model",
+        lambda **_kwargs: TestModel(
+            custom_output_text=(
+                "最高候選是 CP 213 [outputs/risk/candidates.json]。"
+            )
+        ),
     )
+    runner = PydanticAIEnvRunner(
+        model_name="test:model",
+        profile_name="local",
+        workspace_tools_enabled=True,
+    )
+    budget = AgentRunBudget(question_class=QuestionClass.CROSS_ARTIFACT_JOIN)
+    initial_ledger = AgentRunLedger(
+        budget=budget,
+        budget_stop_reason="provider_usage_limit_before_request:UsageLimitExceeded",
+    )
+    card = EvidenceCard(
+        tool_id=RISK_SCORE_TOOL_ID,
+        claim_summary="CP 213 is the highest candidate route-risk location.",
+        key_values={"cp": "CP 213"},
+        source_refs=["outputs/risk/candidates.json"],
+        result_count=1,
+    )
+
+    output = runner._recover_workspace_external_limit(
+        question="哪個 CP 的候選風險最高？",
+        question_class=QuestionClass.CROSS_ARTIFACT_JOIN,
+        model_id="test:model",
+        initial_ledger=initial_ledger,
+        evidence_cards=[card.model_dump(mode="json")],
+        call_trace=[{"operation": "argmax", "status": "completed"}],
+        reason="provider_usage_limit_before_request:UsageLimitExceeded",
+        timeout_seconds=None,
+    )
+
+    recovery = runner.last_agent_recovery
+    attempts = recovery["attempts"]
+    assert "budget exhausted" not in output.casefold()
+    assert output == "最高候選是 CP 213 [outputs/risk/candidates.json]。"
+    assert recovery["status"] == "continued_successfully"
+    assert recovery["checkpoint"]["external_limit"] is True
+    assert [item["recovery_stage"] for item in attempts] == [
+        "initial",
+        "continuation",
+    ]
+    assert [item["attempt_index"] for item in attempts] == [1, 2]
+    assert all(item["budget"]["max_tool_calls"] >= 10 for item in attempts)
+    assert all(item["budget"]["max_requests"] >= 10 for item in attempts)
+    assert attempts[0]["status"] == "external_limit"
+    assert attempts[1]["status"] == "succeeded"
+    assert runner.last_grounding_verification["passed"] is True
 
 
 def test_bounded_workspace_path_does_not_disclose_unselected_native_capabilities(
@@ -377,7 +499,7 @@ def test_bounded_workspace_path_does_not_disclose_unselected_native_capabilities
     assert runner.last_agent_run_ledger["tool_schema_count"] == 0
 
 
-def test_workspace_artifact_context_is_read_without_registering_tools(
+def test_workspace_artifact_context_is_read_through_progressive_tools(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -403,14 +525,50 @@ def test_workspace_artifact_context_is_read_without_registering_tools(
         encoding="utf-8",
     )
     monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(tmp_path))
+    catalog_tool_name = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
+        provider_module.WORKSPACE_CATALOG_TOOL_ID
+    ]
+
+    def model_function(_messages: list[object], info: AgentInfo) -> ModelResponse:
+        tool_names = {tool.name for tool in info.function_tools}
+        if catalog_tool_name in tool_names:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name=catalog_tool_name,
+                        args={"query": "readiness report", "limit": 6},
+                    )
+                ]
+            )
+        if WORKSPACE_QUERY_TOOL_NAME in tool_names:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name=WORKSPACE_QUERY_TOOL_NAME,
+                        args={
+                            "request": {
+                                "operation": "inspect",
+                                "artifact": {
+                                    "source_ref": "outputs/readiness_report.json"
+                                },
+                            }
+                        },
+                    )
+                ]
+            )
+        return ModelResponse(
+            parts=[
+                TextPart(
+                    "Readiness still requires review "
+                    "[outputs/readiness_report.json]."
+                )
+            ]
+        )
+
     monkeypatch.setattr(
         provider_module,
         "build_chat_model",
-        lambda **_kwargs: TestModel(
-            custom_output_text=(
-                "Readiness still requires review [outputs/readiness_report.json]."
-            )
-        ),
+        lambda **_kwargs: FunctionModel(model_function),
     )
     query = ScoutAssistantQuery(
         surface="pretrip",
@@ -434,12 +592,13 @@ def test_workspace_artifact_context_is_read_without_registering_tools(
     assert output == (
         "Readiness still requires review [outputs/readiness_report.json]."
     )
-    assert runner.last_agent_run_ledger["request_count"] == 1
-    assert runner.last_agent_run_ledger["tool_schema_count"] == 0
-    assert runner.last_agent_run_ledger["selected_tool_ids"] == []
-    assert runner.last_context_reads[0]["source_ref"] == (
-        "outputs/readiness_report.json"
-    )
+    assert runner.last_agent_run_ledger["request_count"] == 3
+    assert runner.last_agent_run_ledger["tool_schema_count"] == 2
+    assert runner.last_agent_run_ledger["selected_tool_ids"] == [
+        provider_module.WORKSPACE_CATALOG_TOOL_ID,
+        provider_module.WORKSPACE_QUERY_TOOL_ID,
+    ]
+    assert runner.last_context_reads == []
     assert runner.last_grounding_verification["passed"] is True
 
 
@@ -528,15 +687,19 @@ def test_ten_x_workspace_growth_keeps_user_turn_tokens_within_ten_percent(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(PROJECT_ROOT.parent))
+
+    def model_function(_messages: list[object], info: AgentInfo) -> ModelResponse:
+        return _checkpoint_count_response(
+            info,
+            final_text=(
+                "Route evidence is available [candidates/checkpoints.json]."
+            ),
+        )
+
     monkeypatch.setattr(
         provider_module,
         "build_chat_model",
-        lambda **_kwargs: TestModel(
-            call_tools="all",
-            custom_output_text=(
-                "Route evidence is available [candidates/checkpoints.json]."
-            ),
-        ),
+        lambda **_kwargs: FunctionModel(model_function),
     )
     query = ScoutAssistantQuery(
         surface="pretrip",
@@ -602,7 +765,7 @@ def test_ten_x_workspace_growth_keeps_user_turn_tokens_within_ten_percent(
     expanded = run_with_sources(expanded_sources)
 
     assert int(expanded["input_tokens"]) <= int(baseline["input_tokens"]) * 1.10
-    assert expanded["tool_schema_count"] == baseline["tool_schema_count"] == 1
+    assert expanded["tool_schema_count"] == baseline["tool_schema_count"] == 2
     assert int(expanded["tool_schema_chars"]) == int(baseline["tool_schema_chars"])
 
 
@@ -612,13 +775,9 @@ def test_pydantic_agent_runs_one_no_tool_grounding_repair(monkeypatch) -> None:
 
     def model_function(messages: list[object], info: AgentInfo) -> ModelResponse:
         if info.function_tools:
-            return ModelResponse(
-                parts=[
-                    ToolCallPart(
-                        tool_name=info.function_tools[0].name,
-                        args={"query": "目前這條 route 有多少個 CP？"},
-                    )
-                ]
+            return _checkpoint_count_response(
+                info,
+                final_text="unused while tools are available",
             )
         if "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1" in str(messages):
             repair_max_tokens.append(info.model_settings.get("max_tokens"))
@@ -657,30 +816,28 @@ def test_pydantic_agent_runs_one_no_tool_grounding_repair(monkeypatch) -> None:
     )
 
     assert output == "這條路線有 124 個檢查點 [candidates/checkpoints.json]。"
-    assert runner.last_agent_run_ledger["request_count"] == 3
+    assert runner.last_agent_run_ledger["request_count"] == 4
     assert runner.last_agent_run_ledger["repair_count"] == 1
-    assert runner.last_agent_run_ledger["requests"][2]["tool_schema_count"] == 0
-    assert runner.last_agent_run_ledger["requests"][2]["repair_count"] == 1
+    assert runner.last_agent_run_ledger["requests"][3]["tool_schema_count"] == 0
+    assert runner.last_agent_run_ledger["requests"][3]["repair_count"] == 1
     assert runner.last_grounding_verification["passed"] is True
-    assert repair_max_tokens == [256]
+    assert repair_max_tokens == [None]
 
 
 def test_cloud_profile_grounding_repair_supports_unbounded_model_max_tokens(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(PROJECT_ROOT.parent))
+    repair_max_tokens: list[int | None] = []
 
     def model_function(messages: list[object], info: AgentInfo) -> ModelResponse:
         if info.function_tools:
-            return ModelResponse(
-                parts=[
-                    ToolCallPart(
-                        tool_name=info.function_tools[0].name,
-                        args={"query": "目前這條 route 有多少個 CP？"},
-                    )
-                ]
+            return _checkpoint_count_response(
+                info,
+                final_text="unused while tools are available",
             )
         if "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1" in str(messages):
+            repair_max_tokens.append(info.model_settings.get("max_tokens"))
             return ModelResponse(
                 parts=[
                     TextPart(
@@ -718,34 +875,39 @@ def test_cloud_profile_grounding_repair_supports_unbounded_model_max_tokens(
 
     assert output == "這條路線有 124 個檢查點 [candidates/checkpoints.json]。"
     assert runner.last_grounding_verification["passed"] is True
+    assert repair_max_tokens
+    assert repair_max_tokens[0] is None
 
 
 def test_pydantic_agent_allows_one_schema_retry_before_bounded_synthesis(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(PROJECT_ROOT.parent))
-    request_count = 0
+    route_request_count = 0
 
     def model_function(messages: list[object], info: AgentInfo) -> ModelResponse:
-        nonlocal request_count
-        request_count += 1
-        if info.function_tools and request_count == 1:
+        del messages
+        nonlocal route_request_count
+        tool_names = {tool.name for tool in info.function_tools}
+        if ROUTE_STRUCTURE_TOOL_NAME in tool_names:
+            route_request_count += 1
             return ModelResponse(
                 parts=[
                     ToolCallPart(
-                        tool_name=info.function_tools[0].name,
-                        args={"query": "route checkpoints", "limit": "invalid"},
+                        tool_name=ROUTE_STRUCTURE_TOOL_NAME,
+                        args={
+                            "query": "route checkpoints",
+                            "limit": (
+                                "invalid" if route_request_count == 1 else 3
+                            ),
+                        },
                     )
                 ]
             )
-        if info.function_tools:
-            return ModelResponse(
-                parts=[
-                    ToolCallPart(
-                        tool_name=info.function_tools[0].name,
-                        args={"query": "route checkpoints", "limit": 3},
-                    )
-                ]
+        if WORKSPACE_QUERY_TOOL_NAME in tool_names:
+            return _checkpoint_count_response(
+                info,
+                final_text="unused while tools are available",
             )
         return ModelResponse(
             parts=[
@@ -783,7 +945,7 @@ def test_pydantic_agent_allows_one_schema_retry_before_bounded_synthesis(
     assert output == (
         "Route evidence is available [candidates/checkpoints.json]."
     )
-    assert runner.last_agent_run_ledger["request_count"] == 3
+    assert runner.last_agent_run_ledger["request_count"] == 4
     assert runner.last_agent_run_ledger["retry_count"] == 1
     assert runner.last_agent_run_ledger["repair_count"] == 0
     assert runner.last_agent_run_ledger["budget_stop_reason"] is None
@@ -792,13 +954,17 @@ def test_pydantic_agent_allows_one_schema_retry_before_bounded_synthesis(
 
 def test_pydantic_agent_fails_closed_after_one_bad_repair(monkeypatch) -> None:
     monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(PROJECT_ROOT.parent))
+
+    def model_function(_messages: list[object], info: AgentInfo) -> ModelResponse:
+        return _checkpoint_count_response(
+            info,
+            final_text="這條路線有 999 個檢查點。",
+        )
+
     monkeypatch.setattr(
         provider_module,
         "build_chat_model",
-        lambda **_kwargs: TestModel(
-            call_tools="all",
-            custom_output_text="這條路線有 999 個檢查點。",
-        ),
+        lambda **_kwargs: FunctionModel(model_function),
     )
     query = ScoutAssistantQuery(
         surface="pretrip",
@@ -821,7 +987,7 @@ def test_pydantic_agent_fails_closed_after_one_bad_repair(monkeypatch) -> None:
 
     assert "999" not in output
     assert "未通過證據引用檢查" in output
-    assert runner.last_agent_run_ledger["request_count"] == 3
+    assert runner.last_agent_run_ledger["request_count"] == 4
     assert runner.last_agent_run_ledger["repair_count"] == 1
     assert runner.last_agent_run_ledger["budget_stop_reason"] == (
         "grounding_verification_failed_after_repair"

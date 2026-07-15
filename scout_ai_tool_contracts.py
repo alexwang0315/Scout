@@ -113,6 +113,11 @@ from scout_runtime_ingress_status_tool import (
     RUNTIME_INGRESS_STATUS_REQUIRED_FIELDS,
     RUNTIME_INGRESS_STATUS_TOOL_ID,
 )
+from scout_workspace_query_tool import (
+    WORKSPACE_QUERY_OUTPUT_KIND,
+    WORKSPACE_QUERY_TOOL_ID,
+    workspace_query_request_json_schema,
+)
 
 ARTIFACT_KIND_REGISTRY = "scout_ai_tool_registry"
 ARTIFACT_VERSION_REGISTRY = "scout_ai_tool_registry.v0"
@@ -226,6 +231,10 @@ class ScoutAiToolRegistryOutput(ScoutAiToolBaseModel):
 
 
 EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
+    WORKSPACE_QUERY_TOOL_ID: [
+        "scout.ai.workspace_query",
+        "scout.ai.workspace.query",
+    ],
     "pydantic_ai.tool.search_scout_workspace_catalog.v0": [
         "scout.ai.workspace_catalog.search",
     ],
@@ -351,6 +360,7 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
 
 
 EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
+    WORKSPACE_QUERY_TOOL_ID: WORKSPACE_QUERY_OUTPUT_KIND,
     "pydantic_ai.tool.search_scout_workspace_catalog.v0": "scout_ai_workspace_catalog_tool_output",
     "pydantic_ai.tool.search_scout_route_structure.v0": "scout_ai_route_structure_tool_output",
     "pydantic_ai.tool.search_scout_major_points.v0": "scout_ai_major_points_tool_output",
@@ -506,7 +516,11 @@ def _add_question_eval_tools(contracts: dict[str, ScoutAiToolContract]) -> None:
             implementation_status=ScoutAiToolImplementationStatus.READY_CURRENT_TOOL,
             description=str(raw.get("evidence_scope") or raw.get("label") or tool_id),
             data_bundles=[str(raw.get("evidence_scope") or "local Scout workspace evidence")],
-            required_fields=["project_root"],
+            required_fields=(
+                ["project_root", "request"]
+                if tool_id == WORKSPACE_QUERY_TOOL_ID
+                else ["project_root"]
+            ),
             optional_fields=_optional_fields_for(tool_id),
             workflow_steps=[
                 "resolve project root",
@@ -657,6 +671,52 @@ def _argument_schema_for(tool_id: str) -> dict[str, Any]:
     for field in _optional_fields_for(tool_id):
         properties[field] = {"type": ["string", "number", "boolean", "array", "null"]}
     required = ["project_root"]
+    if tool_id == WORKSPACE_QUERY_TOOL_ID:
+        try:
+            request_schema = workspace_query_request_json_schema()
+        except ImportError:
+            request_schema = {
+                "type": "object",
+                "description": (
+                    "Typed deterministic workspace query request with an "
+                    "operation discriminator."
+                ),
+                "properties": {
+                    "operation": {
+                        "type": "string",
+                        "enum": [
+                            "inspect",
+                            "exists",
+                            "count",
+                            "distinct",
+                            "filter",
+                            "group_by",
+                            "top_k",
+                            "argmax",
+                            "diff",
+                            "freshness",
+                            "nearest",
+                            "interval",
+                            "route_forward",
+                        ],
+                    }
+                },
+                "required": ["operation"],
+            }
+        definitions = request_schema.pop("$defs", {})
+        properties = {
+            "project_root": {"type": "string"},
+            "request": request_schema,
+        }
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["project_root", "request"],
+            "properties": properties,
+        }
+        if definitions:
+            schema["$defs"] = definitions
+        return schema
     if tool_id == "pydantic_ai.tool.search_scout_evidence_fulltext.v0":
         required.append("query")
     return {
@@ -684,6 +744,8 @@ def _future_argument_schema(required_fields: list[str]) -> dict[str, Any]:
 
 
 def _optional_fields_for(tool_id: str) -> list[str]:
+    if tool_id == WORKSPACE_QUERY_TOOL_ID:
+        return []
     if tool_id == "pydantic_ai.tool.search_scout_workspace_catalog.v0":
         return ["domains", "include_missing"]
     if tool_id == "pydantic_ai.tool.search_scout_route_structure.v0":

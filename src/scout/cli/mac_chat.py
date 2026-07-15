@@ -84,9 +84,11 @@ def main(argv: list[str] | None = None) -> int:
             ),
             timeout_seconds=(
                 args.fallback_timeout_seconds
-                or _int_env("SCOUT_AI_MAC_CHAT_FALLBACK_TIMEOUT_SECONDS", 90)
+                or _optional_int_env("SCOUT_AI_MAC_CHAT_FALLBACK_TIMEOUT_SECONDS")
             ),
-            max_context_chars=_int_env("SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS", 12000),
+            max_context_chars=_optional_int_env(
+                "SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS"
+            ),
             workspace_root=args.fallback_workspace_root
             or os.getenv("SCOUT_PRETRIP_WORKSPACE_ROOT"),
             project_id=args.fallback_project_id or os.getenv("SCOUT_AI_MAC_CHAT_PROJECT_ID"),
@@ -108,11 +110,14 @@ def _truthy_env(key: str) -> bool:
     return os.getenv(key, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _int_env(key: str, default: int) -> int:
+def _optional_int_env(key: str) -> int | None:
+    raw = os.getenv(key)
+    if raw is None or not raw.strip():
+        return None
     try:
-        return int(os.getenv(key, str(default)))
+        return int(raw)
     except (TypeError, ValueError):
-        return default
+        return None
 
 
 __all__ = ["main"]

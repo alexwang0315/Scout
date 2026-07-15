@@ -8,6 +8,9 @@ from typing import Any, Literal
 from pydantic import Field
 
 from assistant_models import ScoutAssistantQuery
+from scout.schemas.agent_runtime import QuestionClass
+from scout.services.agent_budget_policy import AgentBudgetPolicy
+from scout.schemas.workspace_query import WorkspaceQueryOperation
 from scout_ai_tool_contracts import (
     ScoutAiToolBaseModel,
     ScoutAiToolBoundary,
@@ -41,6 +44,7 @@ from scout_workspace_search_tools import (
     ROUTE_STRUCTURE_TOOL_ID,
     WORKSPACE_CATALOG_TOOL_ID,
 )
+from scout_workspace_query_tool import WORKSPACE_QUERY_TOOL_ID
 
 
 ARTIFACT_KIND = "scout_ai_tool_plan"
@@ -76,6 +80,13 @@ class ScoutAiToolPlan(ScoutAiToolBaseModel):
     surface: str
     question: str
     project_root: str | None = None
+    question_class: QuestionClass = QuestionClass.STATIC_WORKSPACE_FACT
+    expected_operations: list[WorkspaceQueryOperation] = Field(default_factory=list)
+    requires_join: bool = False
+    requires_live_state: bool = False
+    follow_up_tool_ids: list[str] = Field(default_factory=list)
+    max_tool_calls_per_attempt: int = Field(default=10, ge=10)
+    max_model_requests_per_attempt: int = Field(default=10, ge=10)
     selected_tools: list[ScoutAiToolPlanItem] = Field(default_factory=list)
     planner_notes: list[str] = Field(default_factory=list)
     boundary: ScoutAiToolBoundary = Field(default_factory=ScoutAiToolBoundary)
@@ -89,6 +100,21 @@ def plan_scout_ai_tools(
 ) -> ScoutAiToolPlan:
     contracts = default_tool_contracts()
     normalized_question = _normalize(query.question)
+    (
+        question_class,
+        expected_operations,
+        requires_join,
+        requires_live_state,
+    ) = classify_workspace_query_requirements(normalized_question)
+    progressive_fields = {
+        "question_class": question_class,
+        "expected_operations": expected_operations,
+        "requires_join": requires_join,
+        "requires_live_state": requires_live_state,
+        "follow_up_tool_ids": (
+            [WORKSPACE_QUERY_TOOL_ID] if expected_operations else []
+        ),
+    }
     selected: list[tuple[str, str]] = []
     product_identity_question = _looks_like_product_identity_question(
         normalized_question,
@@ -103,6 +129,20 @@ def plan_scout_ai_tools(
         normalized_question,
     )
     route_context_question = _looks_like_route_context_question(normalized_question)
+    workspace_catalog_question = _looks_like_workspace_catalog_question(
+        normalized_question,
+    )
+    workspace_metadata_question = workspace_catalog_question and _has_any(
+        normalized_question,
+        (
+            "workspace",
+            "project_id",
+            "routename",
+            "route_name",
+            "importmanifest",
+            "import_manifest",
+        ),
+    )
     workspace_inventory_question = looks_like_workspace_inventory_question(
         normalized_question,
     )
@@ -120,6 +160,7 @@ def plan_scout_ai_tools(
             question=query.question,
             project_root=str(project_root) if project_root is not None else None,
             selected_tools=[],
+            **progressive_fields,
             planner_notes=[
                 "Product identity questions are answered from the deterministic Scout outdoor standard formatter, not route/weather/catalog tools."
             ],
@@ -130,6 +171,7 @@ def plan_scout_ai_tools(
             question=query.question,
             project_root=str(project_root) if project_root is not None else None,
             selected_tools=[],
+            **progressive_fields,
             planner_notes=[
                 "Standard glossary questions are answered from the deterministic Scout outdoor standard formatter, not route/risk/pace tools."
             ],
@@ -140,8 +182,7 @@ def plan_scout_ai_tools(
     if six_power_overview_question:
         _append_standard_six_power_tools(selected)
     if (
-        _looks_like_workspace_catalog_question(normalized_question)
-        or workspace_inventory_question
+        workspace_catalog_question or workspace_inventory_question
     ):
         selected.append(
             (
@@ -279,6 +320,7 @@ def plan_scout_ai_tools(
     if (
         _looks_like_energy_vitals_question(normalized_question)
         and not workspace_inventory_question
+        and not workspace_metadata_question
     ):
         selected.append(
             (
@@ -341,9 +383,37 @@ def plan_scout_ai_tools(
         )
     if _looks_like_rescue_site_evidence_question(normalized_question):
         _append_rescue_site_evidence_tools(selected)
-    if (
+    pure_workspace_count = (
+        question_class == QuestionClass.AGGREGATE_WORKSPACE_FACT
+        and expected_operations == [WorkspaceQueryOperation.COUNT]
+        and not _has_any(
+            normalized_question,
+            (
+                "我現在",
+                "目前位置",
+                "現在位置",
+                "前方",
+                "這裡",
+                "这里",
+                "這段",
+                "这段",
+                "gps",
+                "gnss",
+                "imu",
+                "pdr",
+                "即時",
+                "live",
+            ),
+        )
+    )
+    live_navigation_needed = requires_live_state or (
         _looks_like_live_navigation_state_question(normalized_question)
+        and not pure_workspace_count
+    )
+    if (
+        live_navigation_needed
         and not workspace_inventory_question
+        and not workspace_metadata_question
     ):
         selected.append(
             (
@@ -394,6 +464,28 @@ def plan_scout_ai_tools(
             )
         )
 
+    workspace_domain_tools = _explicit_workspace_evidence_tools(
+        normalized_question,
+        expected_operations=expected_operations,
+    )
+    if workspace_domain_tools is not None:
+        adjacent_verification_tools = [
+            (tool_id, reason)
+            for tool_id, reason in selected
+            if tool_id == ROUTE_ARCHITECTURE_TOOL_ID
+            and _looks_like_route_architecture_question(normalized_question)
+        ]
+        selected = [
+            (
+                tool_id,
+                "Explicit workspace evidence query selected this bounded domain tool.",
+            )
+            for tool_id in workspace_domain_tools
+        ]
+        for tool_id, reason in adjacent_verification_tools:
+            if not _has_tool(selected, tool_id):
+                selected.append((tool_id, reason))
+
     items = [
         _plan_item(
             contracts[tool_id],
@@ -410,13 +502,772 @@ def plan_scout_ai_tools(
         notes.append(
             "No deterministic registry-backed tool matched this question; model synthesis must treat context as insufficient unless other sources are provided."
         )
+    plan_budget = AgentBudgetPolicy.for_query(
+        question_class=question_class,
+        expected_operations=[item.value for item in expected_operations],
+        selected_tool_ids=[item.tool_id for item in items],
+        requires_join=requires_join,
+        requires_live_state=requires_live_state,
+    )
     return ScoutAiToolPlan(
         surface=query.surface.value,
         question=query.question,
         project_root=str(project_root) if project_root is not None else None,
+        **progressive_fields,
+        max_tool_calls_per_attempt=plan_budget.max_tool_calls,
+        max_model_requests_per_attempt=plan_budget.max_requests,
         selected_tools=items,
         planner_notes=notes,
     )
+
+
+def classify_workspace_query_requirements(
+    normalized_question: str,
+) -> tuple[
+    QuestionClass,
+    list[WorkspaceQueryOperation],
+    bool,
+    bool,
+]:
+    """Classify deterministic follow-up operations without case-specific facts."""
+
+    question = _normalize(normalized_question)
+    weather = _has_any(
+        question,
+        (
+            "天氣",
+            "大雨",
+            "下雨",
+            "降雨",
+            "雨後",
+            "風雨",
+            "白牆",
+            "起霧",
+            "濃霧",
+            "能見度",
+            "風寒",
+            "濕衣",
+        ),
+    ) or bool(re.search(r"weather|(?<!ter)rain", question))
+    terrain = _has_any(
+        question,
+        ("地形", "坡度", "高坡", "崩", "落石", "風險"),
+    ) or bool(re.search(r"terrain|slope|risk", question))
+    field_safety_decision = weather and _has_any(
+        question,
+        (
+            "適合走",
+            "繼續走",
+            "繼續前進",
+            "該不該",
+            "應不應該",
+            "要不要",
+            "是否撤退",
+            "該撤退",
+            "能不能通過",
+        ),
+    )
+    if field_safety_decision:
+        return (
+            QuestionClass.SAFETY_DECISION,
+            [],
+            False,
+            True,
+        )
+    if weather and terrain:
+        return (
+            QuestionClass.WEATHER_TERRAIN_COMPOUND,
+            [WorkspaceQueryOperation.FILTER, WorkspaceQueryOperation.TOP_K],
+            True,
+            False,
+        )
+
+    route_forward = _has_any(
+        question,
+        ("前方", "往前", "下一個", "下個", "還有多遠", "forward", "ahead"),
+    ) and _has_any(
+        question,
+        ("水源", "cp", "checkpoint", "補水", "山屋", "營地", "目標", "point"),
+    )
+    if route_forward:
+        return (
+            QuestionClass.SPATIAL_ROUTE_FACT,
+            [WorkspaceQueryOperation.ROUTE_FORWARD],
+            False,
+            True,
+        )
+
+    mileage_reference = bool(
+        re.search(r"(?<![a-z0-9])\d+(?:\.\d+)?\s*k(?=[^a-z0-9]|$)", question)
+    )
+    if mileage_reference and _has_any(
+        question,
+        ("對應", "segment", "路段", "區間", "落在"),
+    ):
+        return (
+            QuestionClass.CROSS_ARTIFACT_JOIN,
+            [WorkspaceQueryOperation.FILTER, WorkspaceQueryOperation.INTERVAL],
+            True,
+            False,
+        )
+
+    explicit_workspace_operations = _classify_explicit_workspace_operations(question)
+    if explicit_workspace_operations is not None:
+        operations, requires_join = explicit_workspace_operations
+        if requires_join:
+            question_class = QuestionClass.CROSS_ARTIFACT_JOIN
+        elif any(
+            operation
+            in {
+                WorkspaceQueryOperation.ARGMAX,
+                WorkspaceQueryOperation.COUNT,
+                WorkspaceQueryOperation.DISTINCT,
+                WorkspaceQueryOperation.GROUP_BY,
+                WorkspaceQueryOperation.TOP_K,
+            }
+            for operation in operations
+        ):
+            question_class = QuestionClass.AGGREGATE_WORKSPACE_FACT
+        else:
+            question_class = QuestionClass.STATIC_WORKSPACE_FACT
+        return question_class, operations, requires_join, False
+
+    summary_artifact_question = "summary" in question and not bool(
+        re.search(r"(?:多少|幾)(?:個|筆|條|feature|frame)", question)
+    )
+    route_scalar_summary = _has_any(
+        question,
+        ("總里程", "點數", "最低與最高海拔", "總爬升", "總下降", "平均坡度"),
+    )
+    if summary_artifact_question or route_scalar_summary:
+        return (
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.INSPECT],
+            False,
+            False,
+        )
+
+    maximum = _has_any(
+        question,
+        ("最高", "最大", "最長", "最久", "最多", "argmax", "maximum"),
+    )
+    top_k = _has_any(
+        question,
+        ("前幾", "前五", "排名", "top ", "top-", "最高幾個", "最高的五個"),
+    ) or bool(re.search(r"(?:最高|最大|最長)的?[一二三四五六七八九十\d]+個", question))
+    grouped_count = _has_any(
+        question,
+        (
+            "各 bucket",
+            "各bucket",
+            "各有多少",
+            "分別有多少",
+            "分類統計",
+            "分布",
+            "group by",
+        ),
+    )
+    nearest = _has_any(question, ("nearest", "最靠近", "最近的", "最近 cp", "最近cp"))
+    if _has_any(question, ("最近累積", "最新", "名稱最接近")):
+        nearest = False
+    if maximum and nearest:
+        return (
+            QuestionClass.CROSS_ARTIFACT_JOIN,
+            [WorkspaceQueryOperation.ARGMAX, WorkspaceQueryOperation.NEAREST],
+            True,
+            False,
+        )
+    if mileage_reference and nearest:
+        return (
+            QuestionClass.CROSS_ARTIFACT_JOIN,
+            [WorkspaceQueryOperation.FILTER, WorkspaceQueryOperation.NEAREST],
+            True,
+            False,
+        )
+    if top_k:
+        return (
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.TOP_K],
+            False,
+            False,
+        )
+    if grouped_count:
+        return (
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.GROUP_BY],
+            False,
+            False,
+        )
+    candidate_reviewed_comparison = (
+        _has_any(question, ("candidate", "候選"))
+        and _has_any(question, ("reviewed", "已審", "核准"))
+        and _has_any(question, ("差異", "一致", "比較", "版本"))
+    )
+    if candidate_reviewed_comparison or _has_any(
+        question,
+        ("差異", "不同", "前後變更", "diff", "改了什麼"),
+    ):
+        return (
+            QuestionClass.CROSS_ARTIFACT_JOIN,
+            [WorkspaceQueryOperation.DIFF],
+            True,
+            False,
+        )
+    if nearest:
+        return (
+            QuestionClass.SPATIAL_ROUTE_FACT,
+            [WorkspaceQueryOperation.NEAREST],
+            False,
+            False,
+        )
+    if maximum:
+        return (
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.ARGMAX],
+            False,
+            False,
+        )
+    if _has_any(question, ("之間", "區間", "interval", "範圍內", "附近")):
+        return (
+            QuestionClass.SPATIAL_ROUTE_FACT,
+            [WorkspaceQueryOperation.INTERVAL],
+            False,
+            False,
+        )
+    if _has_any(question, ("過期", "多久前", "新不新", "fresh", "stale")):
+        return (
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.FRESHNESS],
+            False,
+            False,
+        )
+    summary_metric_question = (
+        len(
+            {
+                term
+                for term in ("max", "mean", "p95", "latest", "trend", "peak window")
+                if term in question
+            }
+        )
+        >= 2
+    )
+    if summary_metric_question:
+        return (
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.INSPECT],
+            False,
+            False,
+        )
+    if _has_any(question, ("多少", "幾個", "數量", "總數", "count")):
+        return (
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.COUNT],
+            False,
+            False,
+        )
+    if _has_any(
+        question,
+        (
+            "有哪些類型",
+            "不重複",
+            "distinct",
+            "種類",
+            "dataset id",
+            "來源網域",
+            "candidate類型",
+            "candidate 類型",
+        ),
+    ):
+        return (
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.DISTINCT],
+            False,
+            False,
+        )
+    if _has_any(question, ("有沒有", "是否存在", "exists")):
+        return (
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.EXISTS],
+            False,
+            False,
+        )
+    if _has_any(question, ("哪些", "哪幾", "符合", "filter")):
+        return (
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.FILTER],
+            False,
+            False,
+        )
+    if _has_any(
+        question,
+        ("該不該", "是否安全", "撤退", "繼續走", "go/no-go", "go or not go"),
+    ):
+        return QuestionClass.SAFETY_DECISION, [], False, False
+    if _has_any(question, ("現在", "目前位置", "即時", "live", "current")):
+        return QuestionClass.LIVE_RUNTIME_FACT, [], False, True
+    if _looks_like_workspace_fact_question(question):
+        return (
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.INSPECT],
+            False,
+            False,
+        )
+    return QuestionClass.STATIC_WORKSPACE_FACT, [], False, False
+
+
+def _classify_explicit_workspace_operations(
+    question: str,
+) -> tuple[list[WorkspaceQueryOperation], bool] | None:
+    """Recognize common compound workspace queries without case-specific data."""
+
+    asks_count = _has_any(
+        question,
+        (
+            "多少",
+            "幾個",
+            "幾條",
+            "幾筆",
+            "多少筆",
+            "多少條",
+            "多少張",
+            "共有",
+            "總共",
+            "總數",
+            "數量",
+            "資料點數",
+            "count",
+        ),
+    )
+    asks_list = _has_any(
+        question,
+        ("列出", "哪些", "哪幾", "各段名稱", "分別靠近", "項目有哪些"),
+    )
+    root_document = _has_any(
+        question,
+        (
+            "catalog",
+            "manifest",
+            "report",
+            "bundle",
+            "package",
+            "matrix",
+            "visualization",
+            "diagnostic",
+        ),
+    )
+
+    if _has_any(question, ("riskdelta", "risk delta", "風險差值")):
+        return [WorkspaceQueryOperation.DIFF], True
+    if _has_any(question, ("之間的距離最長", "之間距離最長")):
+        return [WorkspaceQueryOperation.ARGMAX], False
+    if _has_any(question, ("資料點數是否一致", "點數是否一致")):
+        return [WorkspaceQueryOperation.COUNT], False
+    if _has_any(question, ("warninglayer", "warning layer")) and asks_count:
+        return [WorkspaceQueryOperation.COUNT], False
+    if _has_any(question, ("最新觀測", "最新測站")):
+        return [WorkspaceQueryOperation.TOP_K], False
+    if _has_any(question, ("stale", "過期")) and _has_any(
+        question,
+        ("revalidation", "freshness", "validtime"),
+    ):
+        return [WorkspaceQueryOperation.FRESHNESS], False
+    if _has_any(question, ("每一段各有多少", "每段各有多少")):
+        return [WorkspaceQueryOperation.FILTER], False
+    if _has_any(question, ("來源網域", "抓取時間")) and "manifest" in question:
+        return [WorkspaceQueryOperation.FILTER, WorkspaceQueryOperation.INSPECT], False
+    if (
+        "mediamanifest" in question
+        or ("media" in question and "manifest" in question)
+    ) and asks_count:
+        return [WorkspaceQueryOperation.COUNT, WorkspaceQueryOperation.INSPECT], False
+    if _has_any(question, ("referencegpx", "reference gpx")) and _has_any(
+        question,
+        ("前五", "前5", "top5"),
+    ):
+        return [WorkspaceQueryOperation.INSPECT, WorkspaceQueryOperation.TOP_K], False
+    if "referencetracks" in question and _has_any(
+        question,
+        ("名稱最接近", "nameclosest"),
+    ):
+        return [WorkspaceQueryOperation.INSPECT, WorkspaceQueryOperation.FILTER], False
+    if asks_count and _has_any(question, ("主要分類", "分類統計")):
+        return [WorkspaceQueryOperation.COUNT, WorkspaceQueryOperation.GROUP_BY], False
+    if asks_count and _has_any(question, ("類型是什麼", "種類是什麼")):
+        return [WorkspaceQueryOperation.COUNT, WorkspaceQueryOperation.DISTINCT], False
+    if asks_count and asks_list and not _has_any(
+        question,
+        ("各有多少個preparedframes", "各有多少preparedframes"),
+    ):
+        return [WorkspaceQueryOperation.COUNT, WorkspaceQueryOperation.FILTER], False
+    if _has_any(question, ("preparedframes", "prepared frames")) and asks_count:
+        return [WorkspaceQueryOperation.COUNT], False
+    if _has_any(question, ("高候選區", "最高候選區")):
+        return [WorkspaceQueryOperation.TOP_K], False
+    if _has_any(question, ("route notes", "routenotes", "route note")) and _has_any(
+        question,
+        ("靠近calibratedhighrisk", "靠近高風險", "nearhighrisk"),
+    ):
+        return [WorkspaceQueryOperation.ARGMAX, WorkspaceQueryOperation.NEAREST], True
+    if _has_any(question, ("checkpoint", "cp")) and _has_any(
+        question,
+        ("靠近routenote", "靠近route note", "靠近地圖標註"),
+    ):
+        return [WorkspaceQueryOperation.FILTER, WorkspaceQueryOperation.NEAREST], True
+    if _has_any(question, ("是否有", "是否保存", "是否存在")) and _has_any(
+        question,
+        ("evidence", "snapshot", "resource", "裝置清單", "sensor"),
+    ):
+        return [WorkspaceQueryOperation.EXISTS], False
+    if "workspace" in question and asks_list and _has_any(
+        question,
+        ("equipmentresource", "sensor snapshot", "sensorsnapshot"),
+    ):
+        return [WorkspaceQueryOperation.EXISTS], False
+    if _has_any(question, ("diagnostic", "attributiondiagnostic")):
+        return [WorkspaceQueryOperation.INSPECT], False
+    if _has_any(
+        question,
+        ("catalog", "bundle", "matrix", "visualization"),
+    ) and asks_list:
+        return [WorkspaceQueryOperation.INSPECT], False
+    if "package" in question and asks_list:
+        return [WorkspaceQueryOperation.INSPECT], False
+    if "report" in question and asks_list and "resumesegmentreport" not in question:
+        return [WorkspaceQueryOperation.INSPECT], False
+    if root_document and _has_any(
+        question,
+        (
+            "目前有哪些",
+            "列出的",
+            "引用了哪些",
+            "記錄的",
+            "是否都已準備",
+            "哪些因素已有資料",
+            "哪些仍缺失",
+            "包含哪些",
+            "為何",
+        ),
+    ):
+        return [WorkspaceQueryOperation.INSPECT], False
+    return None
+
+
+def _looks_like_workspace_fact_question(question: str) -> bool:
+    return _has_any(
+        question,
+        (
+            "workspace",
+            "artifact",
+            "manifest",
+            "package",
+            "report",
+            "route",
+            "gpx",
+            "segment",
+            "checkpoint",
+            " cp",
+            "mcp",
+            "risk",
+            "terrain",
+            "cwa",
+            "qpf",
+            "smap",
+            "environment",
+            "briefing",
+            "review",
+            "sensor",
+            "navigation state",
+            "astronomy",
+            "tide marine",
+            "gpm imerg",
+        ),
+    )
+
+
+def _explicit_workspace_evidence_tools(
+    question: str,
+    *,
+    expected_operations: list[WorkspaceQueryOperation],
+) -> list[str] | None:
+    if _looks_like_checkpoint_placement_question(question):
+        return None
+    if not expected_operations or not _has_any(
+        question,
+        (
+            "workspace",
+            "catalog",
+            "manifest",
+            "report",
+            "bundle",
+            "package",
+            "artifact",
+            "primaryroute",
+            "routesummary",
+            "segment",
+            "checkpoint",
+            "bosspoint",
+            "mcp",
+            "ocr",
+            "mileage",
+            "risk",
+            "heatmap",
+            "terrain",
+            "dtm",
+            "cwa",
+            "qpf",
+            "smap",
+            "gpm",
+            "environment",
+            "routecontext",
+            "routenote",
+            "anchor",
+            "landslide",
+            "wetnessflashflood",
+            "antecedentrain",
+            "historicalgpx",
+            "extremewarning",
+            "proposal",
+            "humanreview",
+            "missiongraph",
+            "livenavigationstate",
+            "post-trip",
+            "posttrip",
+        ),
+    ):
+        return None
+
+    selected: list[str] = []
+
+    def add(tool_id: str) -> None:
+        if tool_id not in selected:
+            selected.append(tool_id)
+
+    route_context = _has_any(
+        question,
+        (
+            "routecontext",
+            "contextpack",
+            "歷史脈絡",
+            "文化或地名",
+            "自然或地形觀察",
+            "停留三分鐘",
+        ),
+    )
+    live_navigation = _has_any(
+        question,
+        ("livenavigationstate", "live navigation state"),
+    )
+    catalog = _has_any(
+        question,
+        (
+            "workspace",
+            "catalog",
+            "importmanifest",
+            "layerpreparation",
+            "layervalidation",
+            "readinessreport",
+            "routeevidencebundle",
+            "sourceinbox",
+            "workspacefulltext",
+            "tilecache",
+            "相關輸出",
+        ),
+    )
+    if live_navigation:
+        catalog = False
+    if _has_any(
+        question,
+        (
+            "路線結構資料中的referencetracks",
+            "路線結構資料顯示primaryroute",
+            "routecontextbriefingartifact",
+            "reviewedpretrippackage",
+            "compiledmissiongraph",
+        ),
+    ):
+        catalog = True
+    if catalog:
+        add(WORKSPACE_CATALOG_TOOL_ID)
+
+    route_structure = _has_any(
+        question,
+        (
+            "primaryroute",
+            "routesummary",
+            "路線結構",
+            "segment",
+            "checkpoint",
+            "reference track",
+            "referencetrack",
+            "resume segment",
+            "restarea",
+            "retreatroute",
+            "historicalgpx",
+            "cpevents",
+        ),
+    ) or bool(re.search(r"(?<![a-z])cp(?![a-z])", question))
+    workspace_reference_inventory = "workspace" in question and _has_any(
+        question,
+        ("referencegpx", "reference gpx"),
+    )
+    major_point_context = _has_any(question, ("bosspoint", "mcp", "namedpoint"))
+    terrain_record_context = _has_any(
+        question,
+        ("terrain", "teii", "trailobscurity", "wetnessflashflood"),
+    )
+    if (
+        route_structure
+        and not route_context
+        and not workspace_reference_inventory
+        and not major_point_context
+        and "reviewqueue" not in question
+        and (not terrain_record_context or "retreatroute" in question)
+        and not _has_any(question, ("15k", "20k"))
+    ):
+        add(ROUTE_STRUCTURE_TOOL_ID)
+
+    if major_point_context:
+        add(MAJOR_POINT_TOOL_ID)
+
+    mileage_context = _has_any(
+        question,
+        ("里程", "mileage", "kanchor", "k anchor", "15k", "20k"),
+    )
+    if _has_any(
+        question,
+        ("ocr", "rasterlabel", "地圖標註", "mileagealignment", "mileagetag"),
+    ) or ("kanchor" in question and not _has_any(question, ("15k", "20k"))):
+        add(MAP_PERCEPTION_TOOL_ID)
+    if route_context or (
+        _has_any(question, ("15k", "20k"))
+        and not _has_any(question, ("risk", "bucket", "calibrated"))
+    ):
+        add(ROUTE_CONTEXT_TOOL_ID)
+    if "routemileagekanchors" in question:
+        add(MAP_PERCEPTION_TOOL_ID)
+        add(ROUTE_CONTEXT_TOOL_ID)
+
+    environmental_terrain = _has_any(
+        question,
+        (
+            "terrain",
+            "dtm",
+            "elevation",
+            "slope",
+            "hillshade",
+            "landslide",
+            "trailobscurity",
+            "wetnessflashflood",
+            "坡度",
+            "總爬升",
+            "總下降",
+        ),
+    )
+    if environmental_terrain:
+        add(TERRAIN_SCORE_TOOL_ID)
+
+    risk_score_context = _has_any(
+        question,
+        (
+            "riskscore",
+            "risk score",
+            "calibratedrisk",
+            "riskdelta",
+            "riskribbon",
+            "heatmap",
+            "riskattribution",
+            "environmentriskderivatives",
+            "extremewarningcp",
+            "very_highrisk",
+        ),
+    ) or (
+        "risk" in question
+        and not environmental_terrain
+        and not _has_any(question, ("cwa", "qpf", "smap", "gpm", "environment"))
+    )
+    if risk_score_context:
+        add(RISK_SCORE_TOOL_ID)
+
+    cwa = _has_any(
+        question,
+        (
+            "cwa",
+            "qpf",
+            "astronomy",
+            "tide",
+            "marine",
+            "radar",
+            "satelliteimagery",
+            "antecedentrain",
+            "gpmimerg",
+            "environmentfactormatrix",
+            "routerevalidation",
+            "environmentevidencepackage",
+            "go/no-goreview",
+        ),
+    )
+    gee = _has_any(
+        question,
+        (
+            "smap",
+            "gpm",
+            "antecedentrain",
+            "environmentfactormatrix",
+            "environmentriskderivatives",
+            "routerevalidation",
+            "environmentevidencepackage",
+            "go/no-goreview",
+            "landslide",
+            "trailobscurity",
+            "wetnessflashflood",
+        ),
+    )
+    weather_window = _has_any(
+        question,
+        (
+            "forecasttimeline",
+            "qpfcorridorsummary",
+            "劇烈天氣3小時",
+            "astronomytimeline",
+            "go/no-goreview",
+        ),
+    ) or (
+        "qpf" in question
+        and _has_any(question, ("smap", "recentrain", "terrain"))
+    )
+    if weather_window:
+        add(WEATHER_WINDOW_TOOL_ID)
+    if cwa:
+        add(CWA_ENVIRONMENT_TOOL_ID)
+    if gee:
+        add(GEE_ENVIRONMENT_TOOL_ID)
+
+    if _has_any(
+        question,
+        (
+            "reviewqueue",
+            "humanreviews",
+            "provenancerefs",
+            "reviewedpretrippackage",
+            "missiongraph",
+            "資料問題無法可靠回答",
+        ),
+    ):
+        add(REVIEW_GAP_TOOL_ID)
+    if _has_any(question, ("equipmentresource", "裝置清單")):
+        add(EQUIPMENT_RESOURCE_TOOL_ID)
+    if _has_any(question, ("gnss", "imu", "pdr", "sensorsnapshot")):
+        add(INS_DR_TRACE_TOOL_ID)
+    if live_navigation:
+        add(LIVE_NAVIGATION_STATE_TOOL_ID)
+    if _has_any(question, ("teamstatus", "隊員位置", "生命徵兆evidence")):
+        add(TEAM_STATUS_TOOL_ID)
+    if _has_any(question, ("post-tripreview", "posttripreview")):
+        add(POST_TRIP_REVIEW_TOOL_ID)
+
+    if not selected and mileage_context:
+        add(ROUTE_CONTEXT_TOOL_ID)
+    return selected or None
 
 
 def _append_pretrip_go_no_go_support_tools(selected: list[tuple[str, str]]) -> None:
@@ -3026,6 +3877,7 @@ def _has_complete_route_readiness_confirmation_bundle(text: str) -> bool:
 
 
 def _looks_like_energy_vitals_question(text: str) -> bool:
+    text = text.replace("workspace", "")
     return _has_any(
         text,
         (

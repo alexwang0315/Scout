@@ -1822,6 +1822,8 @@ class AssistantApiTests(unittest.TestCase):
         )
         self.assertIn("safe pydantic response", response.answer)
         self.assertTrue(response.read_only)
+        self.assertIsNone(pydantic_provider.timeout_seconds)
+        self.assertIsNone(pydantic_provider.max_context_chars)
 
     def test_provider_factory_loads_external_model_config_and_connects_on_startup(self):
         class FakeRunner:
@@ -1872,7 +1874,7 @@ class AssistantApiTests(unittest.TestCase):
                 pydantic_runner=runner,
             )
 
-        self.assertEqual(runner.connect_calls, [3])
+        self.assertEqual(runner.connect_calls, [None])
         response = provider.answer(
             ScoutAssistantQuery(surface="debug", question="Explain state."),
             sources=[],

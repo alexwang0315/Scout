@@ -129,6 +129,18 @@ class FakeFailedToolRunner(FakeWeatherToolRunner):
         return "The required tool failed."
 
 
+class FakeSuccessStatusToolRunner(FakeWeatherToolRunner):
+    def run_with_workspace_tools(self, prompt, *, timeout_seconds, tool_context):
+        output = super().run_with_workspace_tools(
+            prompt,
+            timeout_seconds=timeout_seconds,
+            tool_context=tool_context,
+        )
+        tool_context.invocations[1]["status"] = "success"
+        self.last_workspace_tool_invocations = list(tool_context.invocations)
+        return output
+
+
 class FakeProviderErrorAfterDraftRunner(FakeWeatherToolRunner):
     last_grounding_verification = {
         "passed": False,
@@ -328,6 +340,28 @@ def test_live_eval_does_not_pass_failed_required_tool_execution() -> None:
     assert sample["failure_category"] == "tool_status_error"
     assert report["passed_count"] == 0
     assert report["pass_rate"] == 0.0
+
+
+def test_live_eval_accepts_typed_workspace_query_success_status() -> None:
+    case = EvalCase(
+        "field-031",
+        "白牆下這段還適合走嗎？",
+        (
+            "scout.ai.weather_window.assess.v0",
+            "scout.ai.cwa_environment.assess.v0",
+        ),
+    )
+
+    report = run_live_tool_selection_eval(
+        cases=(case,),
+        runner=FakeSuccessStatusToolRunner(),
+        workspace_root=WORKSPACE_ROOT,
+    )
+
+    sample = report["samples"][0]
+    assert sample["required_tools_matched"] is True
+    assert sample["failure_category"] == "ok"
+    assert report["passed_count"] == 1
 
 
 def test_live_eval_does_not_count_fail_closed_text_as_answer_or_unsupported_claim() -> None:

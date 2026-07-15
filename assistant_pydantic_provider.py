@@ -41,17 +41,27 @@ from pydantic_ai_runtime_compat import (
     pydantic_agent_runtime_kwargs,
     pydantic_native_research_capabilities,
     pydantic_result_output,
+    pydantic_usage_limits_from_budget,
 )
 from scout.agents.model_policy import resolve_model_policy
 from scout.schemas.agent_runtime import (
+    AgentAttemptState,
+    AgentAttemptStatus,
+    AgentProgressState,
+    AgentQueryStage,
+    AgentRecoveryStage,
     AgentRequestLedger,
     AgentRunBudget,
     AgentRunLedger,
     ContextHandle,
     EvidenceCard,
     GroundingVerification,
+    QuestionClass,
     ToolCard,
 )
+from scout.schemas.workspace_query import WorkspaceQueryRequest
+from scout.services.agent_budget_policy import AgentBudgetPolicy
+from scout.services.agent_recovery import AgentRecoveryOrchestrator
 from scout.services.bounded_agent_runtime import BoundedAgentRuntime, estimate_tokens
 from scout_ai_tool_contracts import (
     ScoutAiToolImplementationStatus,
@@ -90,16 +100,21 @@ from scout_workspace_search_tools import (
     ROUTE_STRUCTURE_TOOL_ID,
     WORKSPACE_CATALOG_TOOL_ID,
 )
+from scout_workspace_query_tool import (
+    WORKSPACE_QUERY_OUTPUT_KIND,
+    WORKSPACE_QUERY_TOOL_ID,
+)
 from skill_registry import load_skill_manifest
 from skill_registry_models import SkillAnswerContract
 
 
-DEFAULT_TIMEOUT_SECONDS = 8
-DEFAULT_MAX_CONTEXT_CHARS = 12000
-DEFAULT_WORKSPACE_TOOL_LIMIT = 5
-DEFAULT_WORKSPACE_MODEL_MAX_TOKENS = 768
+DEFAULT_TIMEOUT_SECONDS: int | None = None
+DEFAULT_MAX_CONTEXT_CHARS: int | None = None
+DEFAULT_WORKSPACE_TOOL_LIMIT = 10
+# Local Hailo/Ollama needs a finite generation contract; cloud/construction
+# requests remain uncapped unless explicitly configured.
+DEFAULT_WORKSPACE_MODEL_MAX_TOKENS: int | None = None
 MIN_GROUNDING_REPAIR_OUTPUT_HEADROOM = 1_024
-MAX_GROUNDING_REPAIR_MODEL_TOKENS = 256
 HARD_BUDGET_FAIL_CLOSED_OUTPUT = (
     "Scout bounded runtime discarded the model answer because the actual provider "
     "usage exceeded a hard token or tool budget."
@@ -403,6 +418,7 @@ WEATHER_GEO_TOOL_BUNDLE_POLICY = """Scout weather/geography tool bundle policy:
 """
 
 REGISTERED_WORKSPACE_TOOL_NAMES = {
+    WORKSPACE_QUERY_TOOL_ID: "query_scout_workspace",
     WORKSPACE_EVIDENCE_TOOL_ID: "search_scout_workspace_evidence",
     WORKSPACE_CATALOG_TOOL_ID: "search_scout_workspace_catalog",
     ROUTE_STRUCTURE_TOOL_ID: "search_scout_route_structure",
@@ -496,6 +512,8 @@ def build_workspace_tool_prompt(*, include_contract_only: bool = False) -> str:
 
 
 def _prompt_args_for_tool(tool_id: str) -> str:
+    if tool_id == WORKSPACE_QUERY_TOOL_ID:
+        return "request"
     if tool_id == WORKSPACE_CATALOG_TOOL_ID:
         return "query, domains=None, include_missing=True, limit=6"
     if tool_id == ROUTE_STRUCTURE_TOOL_ID:
@@ -705,8 +723,12 @@ WORKSPACE_TOOL_PROMPT = build_workspace_tool_prompt()
 
 BOUNDED_AGENT_SYSTEM_POLICY = (
     "Use only the progressively disclosed Scout tools and bounded evidence cards. "
-    "After tools return, answer without requesting more tools. Cite each concrete "
-    "claim with a source_ref from the evidence card. Report missing or stale evidence. "
+    "Use domain tools to discover artifacts, then query_scout_workspace for bounded "
+    "record operations when the prompt lists expected operations. Never repeat the same "
+    "canonical request; stop when no new evidence is returned. Synthesis and repair "
+    "stages cannot call tools, and each recovery stage receives a fresh 10/10 call "
+    "budget. Cite each concrete claim with a source_ref or "
+    "record evidence_id from the evidence card. Report missing or stale evidence. "
     "All workspace evidence is read-only/candidate-only and is not runtime safety truth."
 )
 
@@ -715,7 +737,7 @@ def build_bounded_assistant_prompt(
     query: ScoutAssistantQuery,
     *,
     sources: list[AssistantSourceRef],
-    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    max_context_chars: int | None = DEFAULT_MAX_CONTEXT_CHARS,
 ) -> str:
     """Build the normal cloud prompt from handles, never raw source payloads."""
 
@@ -728,8 +750,12 @@ def build_bounded_assistant_prompt(
     selected_handles = runtime.context_find(
         query.question,
         filters=None,
-        top_k=3,
-        token_budget=max(120, min(900, max_context_chars // 8)),
+        top_k=10,
+        token_budget=(
+            None
+            if max_context_chars is None
+            else max(4_000, max_context_chars // 4)
+        ),
     )
     payload = {
         "question": query.question,
@@ -748,7 +774,7 @@ def build_bounded_assistant_prompt(
         ensure_ascii=False,
         sort_keys=True,
     )
-    return prompt[:max_context_chars]
+    return prompt if max_context_chars is None else prompt[:max_context_chars]
 
 
 def _context_handle_from_source(source: AssistantSourceRef) -> ContextHandle:
@@ -1223,7 +1249,7 @@ def _public_source_refs(
             refs.append(safe)
 
     def visit(item: object, *, depth: int) -> None:
-        if depth > 5 or len(refs) >= 12:
+        if depth > 32:
             return
         if isinstance(item, dict):
             for key, child in item.items():
@@ -1251,11 +1277,11 @@ def _public_source_refs(
                 else:
                     visit(child, depth=depth + 1)
         elif isinstance(item, (list, tuple)):
-            for child in item[:20]:
+            for child in item:
                 visit(child, depth=depth + 1)
 
     visit(value, depth=0)
-    return refs[:12]
+    return refs
 
 
 def _sanitize_public_source_ref(
@@ -1283,7 +1309,7 @@ def _sanitize_public_source_ref(
 
 def _progressive_tool_runtime(
     tool_context: "ScoutWorkspaceToolContext",
-) -> tuple[BoundedAgentRuntime, list[str], list[str], list[object]]:
+) -> tuple[BoundedAgentRuntime, list[str], list[str], list[object], object]:
     cards = _bounded_tool_cards()
     context_handles = _workspace_context_handles(tool_context)
     discovery_runtime = BoundedAgentRuntime(
@@ -1303,14 +1329,26 @@ def _progressive_tool_runtime(
         and item.implementation_status
         == ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
     ]
+    budget = AgentBudgetPolicy.for_query(
+        question_class=planner_plan.question_class,
+        expected_operations=[item.value for item in planner_plan.expected_operations],
+        selected_tool_ids=planner_ids,
+        requires_join=planner_plan.requires_join,
+        requires_live_state=planner_plan.requires_live_state,
+    )
+    follow_up_ids = [
+        tool_id
+        for tool_id in planner_plan.follow_up_tool_ids
+        if tool_id in REGISTERED_WORKSPACE_TOOL_NAMES
+    ]
     if planner_ids:
-        compound = len(planner_ids) > 3
-        selected_ids = planner_ids[: 5 if compound else 3]
+        domain_cap = max(0, budget.max_tool_calls - len(follow_up_ids))
+        selected_ids = planner_ids[:domain_cap]
     else:
         context_matches = discovery_runtime.context_find(
             tool_context.query.question,
-            top_k=3,
-            token_budget=600,
+            top_k=10,
+            token_budget=None,
         )
         if context_matches:
             selected_ids = []
@@ -1322,6 +1360,9 @@ def _progressive_tool_runtime(
                 top_k=3,
             )
             selected_ids = [card.tool_id for card in selected_cards]
+    selected_ids = list(dict.fromkeys([*selected_ids, *follow_up_ids]))[
+        : budget.max_tool_calls
+    ]
     selected_names = [
         name
         for tool_id in selected_ids
@@ -1330,16 +1371,37 @@ def _progressive_tool_runtime(
     runtime = BoundedAgentRuntime(
         context_handles=context_handles,
         tool_cards=cards,
-        budget=AgentRunBudget(
-            max_requests=3,
-            max_tool_calls=5 if len(selected_ids) > 3 else 3,
-        ),
+        budget=budget,
     )
     selected_id_set = set(selected_ids)
     selected_plan_items = [
         item for item in planner_plan.selected_tools if item.tool_id in selected_id_set
     ]
-    return runtime, selected_ids, selected_names, selected_plan_items
+    return runtime, selected_ids, selected_names, selected_plan_items, planner_plan
+
+
+def _progressive_available_tool_names(
+    *,
+    selected_tool_names: list[str],
+    query_tool_name: str,
+    required_tool_names: set[str],
+    executed_tool_names: set[str],
+    expected_operations: set[str],
+    executed_operations: set[str],
+    stop_reason: str | None,
+) -> list[str]:
+    """Expose record-query schema only after required domain evidence exists."""
+
+    domain_tools_complete = required_tool_names.issubset(executed_tool_names)
+    operations_complete = expected_operations.issubset(executed_operations)
+    available: list[str] = []
+    for name in selected_tool_names:
+        if name == query_tool_name:
+            if domain_tools_complete and stop_reason is None and not operations_complete:
+                available.append(name)
+        elif name not in executed_tool_names:
+            available.append(name)
+    return available
 
 
 def _request_overhead(request_context: object) -> dict[str, int]:
@@ -1386,6 +1448,38 @@ def _request_overhead(request_context: object) -> dict[str, int]:
     }
 
 
+def _tool_argument_mapping(args: object) -> dict[str, Any]:
+    if isinstance(args, dict):
+        return dict(args)
+    model_dump = getattr(args, "model_dump", None)
+    if callable(model_dump):
+        value = model_dump(mode="json")
+        if isinstance(value, dict):
+            return value
+    if isinstance(args, str):
+        try:
+            value = json.loads(args)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
+def _workspace_query_operation_from_arguments(args: object) -> str:
+    request = _tool_argument_mapping(args).get("request")
+    if isinstance(request, str):
+        try:
+            request = json.loads(request)
+        except json.JSONDecodeError:
+            return ""
+    elif not isinstance(request, dict):
+        request = _tool_argument_mapping(request)
+    if not isinstance(request, dict):
+        return ""
+    return str(request.get("operation") or "").strip()
+
+
 def _request_retry_prompt_count(request_context: object) -> int:
     return sum(
         1
@@ -1414,46 +1508,70 @@ def _bounded_request_max_tokens(
     prior_ledger: AgentRunLedger,
     estimated_input_tokens: int,
     configured_max_tokens: int | None,
-) -> int:
+) -> int | None:
     if prior_ledger.request_count >= budget.max_requests:
         raise BoundedRequestBudgetStop("request_count budget reached before request")
-    remaining_input = budget.max_input_tokens - prior_ledger.input_tokens
-    if remaining_input <= 0 or estimated_input_tokens > remaining_input:
+    if not budget.enforce_resource_limits:
+        return configured_max_tokens
+    if budget.max_input_tokens is None:
+        remaining_input = None
+    else:
+        remaining_input = budget.max_input_tokens - prior_ledger.input_tokens
+    if remaining_input is not None and (
+        remaining_input <= 0 or estimated_input_tokens > remaining_input
+    ):
         raise BoundedRequestBudgetStop("input_tokens budget exceeded before request")
-    remaining_output = budget.max_output_tokens - prior_ledger.output_tokens
-    if remaining_output <= 0:
+    remaining_output = (
+        None
+        if budget.max_output_tokens is None
+        else budget.max_output_tokens - prior_ledger.output_tokens
+    )
+    if remaining_output is not None and remaining_output <= 0:
         raise BoundedRequestBudgetStop("output_tokens budget reached before request")
     remaining_total = (
-        budget.max_total_tokens
+        None
+        if budget.max_total_tokens is None
+        else budget.max_total_tokens
         - prior_ledger.input_tokens
         - prior_ledger.output_tokens
     )
-    available_output = min(
-        remaining_output,
-        remaining_total - estimated_input_tokens,
-    )
-    if available_output <= 0:
+    candidates = [
+        value
+        for value in (
+            remaining_output,
+            (
+                None
+                if remaining_total is None
+                else remaining_total - estimated_input_tokens
+            ),
+            configured_max_tokens,
+        )
+        if value is not None
+    ]
+    available_output = min(candidates) if candidates else None
+    if available_output is not None and available_output <= 0:
         raise BoundedRequestBudgetStop("total_tokens budget exceeded before request")
-    if configured_max_tokens is not None:
-        available_output = min(available_output, configured_max_tokens)
-    if available_output <= 0:
-        raise BoundedRequestBudgetStop("output_tokens budget reached before request")
-    return int(available_output)
+    return int(available_output) if available_output is not None else None
 
 
 def _bounded_repair_max_tokens(
     *,
-    remaining_output_tokens: int,
+    remaining_output_tokens: int | None,
     configured_max_tokens: int | None,
 ) -> int | None:
-    if remaining_output_tokens < MIN_GROUNDING_REPAIR_OUTPUT_HEADROOM:
+    if (
+        remaining_output_tokens is not None
+        and remaining_output_tokens < MIN_GROUNDING_REPAIR_OUTPUT_HEADROOM
+    ):
         return None
-    repair_cap = min(
-        MAX_GROUNDING_REPAIR_MODEL_TOKENS,
-        remaining_output_tokens // 4,
-    )
-    if configured_max_tokens is not None:
-        repair_cap = min(repair_cap, configured_max_tokens)
+    candidates = [
+        value
+        for value in (remaining_output_tokens, configured_max_tokens)
+        if value is not None
+    ]
+    if not candidates:
+        return None
+    repair_cap = min(candidates)
     return repair_cap if repair_cap > 0 else None
 
 
@@ -1513,12 +1631,23 @@ def _finalize_agent_run_ledger(
 
 def _actual_budget_overrun_reason(ledger: AgentRunLedger) -> str | None:
     budget = ledger.budget
-    if ledger.input_tokens > budget.max_input_tokens:
-        return "input_tokens budget exceeded"
-    if ledger.output_tokens > budget.max_output_tokens:
-        return "output_tokens budget exceeded"
-    if ledger.input_tokens + ledger.output_tokens > budget.max_total_tokens:
-        return "total_tokens budget exceeded"
+    if budget.enforce_resource_limits:
+        if (
+            budget.max_input_tokens is not None
+            and ledger.input_tokens > budget.max_input_tokens
+        ):
+            return "input_tokens budget exceeded"
+        if (
+            budget.max_output_tokens is not None
+            and ledger.output_tokens > budget.max_output_tokens
+        ):
+            return "output_tokens budget exceeded"
+        if (
+            budget.max_total_tokens is not None
+            and ledger.input_tokens + ledger.output_tokens
+            > budget.max_total_tokens
+        ):
+            return "total_tokens budget exceeded"
     if ledger.tool_call_count > budget.max_tool_calls:
         return "tool_call_count budget exceeded"
     if ledger.repair_count > budget.max_repairs:
@@ -1526,7 +1655,8 @@ def _actual_budget_overrun_reason(ledger: AgentRunLedger) -> str | None:
     if ledger.request_count > budget.max_requests:
         return "request_count budget exceeded"
     if (
-        budget.max_estimated_cost is not None
+        budget.enforce_resource_limits
+        and budget.max_estimated_cost is not None
         and ledger.estimated_cost > budget.max_estimated_cost
     ):
         return "estimated_cost budget exceeded"
@@ -1555,7 +1685,7 @@ MUTATION_INTENT_FRAGMENTS = (
 
 
 class PydanticAIRunner(Protocol):
-    def run(self, prompt: str, *, timeout_seconds: int) -> str:
+    def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
         ...
 
 
@@ -1633,6 +1763,74 @@ class ScoutWorkspaceToolContext:
             }
         except Exception as exc:  # Defensive: tool failures must stay read-only.
             result = self._tool_error(type(exc).__name__, search_text, bounded_limit)
+        self.invocations.append(result)
+        return result
+
+    def query_scout_workspace(
+        self,
+        request: WorkspaceQueryRequest | dict[str, object] | str,
+    ) -> dict[str, object]:
+        if isinstance(request, str):
+            try:
+                decoded_request = json.loads(request)
+            except json.JSONDecodeError:
+                return self._workspace_query_request_error(
+                    "workspace_query_request_json_invalid"
+                )
+            if not isinstance(decoded_request, dict):
+                return self._workspace_query_request_error(
+                    "workspace_query_request_json_not_object"
+                )
+            bounded_request = decoded_request
+        elif isinstance(request, dict):
+            bounded_request = dict(request)
+        else:
+            bounded_request = request.model_dump(mode="json")
+        if self.model_arguments_untrusted and str(
+            bounded_request.get("operation") or ""
+        ) == "route_forward":
+            bounded_request = {
+                key: value
+                for key, value in bounded_request.items()
+                if key not in {"current_position", "current_route_distance_m"}
+            }
+        return self._run_registered_read_only_tool(
+            WORKSPACE_QUERY_TOOL_ID,
+            query=self.query.question,
+            limit=1,
+            request=bounded_request,
+        )
+
+    def _workspace_query_request_error(self, root_cause: str) -> dict[str, object]:
+        result: dict[str, object] = {
+            "artifact_kind": WORKSPACE_QUERY_OUTPUT_KIND,
+            "tool_id": WORKSPACE_QUERY_TOOL_ID,
+            "status": "error",
+            "answerability": "missing_required_fields",
+            "operation": "inspect",
+            "summary": "workspace query request JSON must decode to an object",
+            "results": [],
+            "result_count": 0,
+            "scanned_record_count": 0,
+            "source_refs": [],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "freshness": {},
+            "limitations": ["provider_json_string_compatibility_input_rejected"],
+            "missing_fields": ["request"],
+            "next_actions": [],
+            "root_cause": root_cause,
+            "safe_retry": False,
+            "stop_condition": root_cause,
+            "boundary": {
+                "read_only": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "network_access": False,
+                "workspace_write_allowed": False,
+                "phase1_safety_mutation_allowed": False,
+            },
+        }
         self.invocations.append(result)
         return result
 
@@ -6119,8 +6317,8 @@ class PydanticAIAssistantProvider:
         self,
         *,
         runner: PydanticAIRunner,
-        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
-        max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+        timeout_seconds: int | None = DEFAULT_TIMEOUT_SECONDS,
+        max_context_chars: int | None = DEFAULT_MAX_CONTEXT_CHARS,
     ):
         self.runner = runner
         self.timeout_seconds = timeout_seconds
@@ -6828,7 +7026,7 @@ class FallbackPydanticAIRunner:
         self._fallback_semaphore = threading.BoundedSemaphore(self.max_fallback_concurrency)
         self.failover_count = 0
 
-    def connect(self, *, timeout_seconds: int) -> None:
+    def connect(self, *, timeout_seconds: int | None) -> None:
         try:
             _connect_runner(self.primary_runner, timeout_seconds=timeout_seconds)
             self.last_profile = self.primary_profile
@@ -6845,7 +7043,7 @@ class FallbackPydanticAIRunner:
             self.last_failover_reason = f"local_connect_error:{type(exc).__name__}"
             raise
 
-    def run(self, prompt: str, *, timeout_seconds: int) -> str:
+    def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
         try:
             result = self.primary_runner.run(prompt, timeout_seconds=timeout_seconds)
             self.last_profile = self.primary_profile
@@ -6867,7 +7065,7 @@ class FallbackPydanticAIRunner:
         self,
         prompt: str,
         *,
-        timeout_seconds: int,
+        timeout_seconds: int | None,
         tool_context: ScoutWorkspaceToolContext,
     ) -> str:
         try:
@@ -6998,6 +7196,7 @@ class PydanticAIEnvRunner:
         self.last_model_usage: dict[str, int] = {}
         self.last_model_response_metadata: dict[str, str] = {}
         self.last_agent_run_ledger: dict[str, Any] = {}
+        self.last_agent_recovery: dict[str, Any] = {}
         self.last_evidence_cards: list[dict[str, Any]] = []
         self.last_grounding_verification: dict[str, Any] = {}
         self.last_context_handles: list[dict[str, Any]] = []
@@ -7050,16 +7249,17 @@ class PydanticAIEnvRunner:
         clone.bounded_agent_runtime_enabled = self.bounded_agent_runtime_enabled
         return clone
 
-    def connect(self, *, timeout_seconds: int) -> None:
+    def connect(self, *, timeout_seconds: int | None) -> None:
         self.run(
             "Scout assistant connectivity check. Reply with OK.",
             timeout_seconds=timeout_seconds,
         )
 
-    def run(self, prompt: str, *, timeout_seconds: int) -> str:
+    def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
         self.last_model_usage = {}
         self.last_model_response_metadata = {}
         self.last_agent_run_ledger = {}
+        self.last_agent_recovery = {}
         self.last_evidence_cards = []
         self.last_grounding_verification = {}
         self.last_context_handles = []
@@ -7067,7 +7267,11 @@ class PydanticAIEnvRunner:
         executor = ThreadPoolExecutor(max_workers=1)
         future = executor.submit(self._run_model, prompt, timeout_seconds)
         try:
-            return future.result(timeout=timeout_seconds)
+            return (
+                future.result()
+                if timeout_seconds is None or timeout_seconds <= 0
+                else future.result(timeout=timeout_seconds)
+            )
         except TimeoutError as exc:
             future.cancel()
             raise TimeoutError("pydantic assistant provider timed out") from exc
@@ -7078,12 +7282,13 @@ class PydanticAIEnvRunner:
         self,
         prompt: str,
         *,
-        timeout_seconds: int,
+        timeout_seconds: int | None,
         tool_context: ScoutWorkspaceToolContext,
     ) -> str:
         self.last_model_usage = {}
         self.last_model_response_metadata = {}
         self.last_agent_run_ledger = {}
+        self.last_agent_recovery = {}
         self.last_evidence_cards = []
         self.last_grounding_verification = {}
         self.last_context_handles = []
@@ -7106,7 +7311,11 @@ class PydanticAIEnvRunner:
             *run_args,
         )
         try:
-            return future.result(timeout=timeout_seconds)
+            return (
+                future.result()
+                if timeout_seconds is None or timeout_seconds <= 0
+                else future.result(timeout=timeout_seconds)
+            )
         except TimeoutError as exc:
             future.cancel()
             raise TimeoutError("pydantic assistant provider timed out") from exc
@@ -7124,11 +7333,7 @@ class PydanticAIEnvRunner:
         request_max_tokens = self.workspace_model_max_tokens
         if bounded:
             bounded_runtime = BoundedAgentRuntime(
-                budget=AgentRunBudget(
-                    max_requests=1,
-                    max_tool_calls=0,
-                    max_repairs=0,
-                )
+                budget=AgentRunBudget()
             )
             estimated_input_tokens = estimate_tokens(
                 f"{GLOBAL_ASSISTANT_PROMPT}\n{prompt}"
@@ -7155,12 +7360,22 @@ class PydanticAIEnvRunner:
                     "input_tokens": 0,
                     "output_tokens": 0,
                 }
-                return "Bounded runtime budget exhausted before provider request."
+                return self._recover_workspace_external_limit(
+                    question=prompt,
+                    question_class=QuestionClass.UNKNOWN,
+                    model_id=self.model_name,
+                    initial_ledger=ledger,
+                    evidence_cards=[],
+                    call_trace=[],
+                    reason=exc.reason,
+                    timeout_seconds=request_timeout_seconds,
+                )
         if self.backend == "hailo_ollama":
             output = self._run_hailo_ollama_chat(
                 prompt,
                 system_prompt=GLOBAL_ASSISTANT_PROMPT,
                 max_tokens=request_max_tokens if bounded else None,
+                timeout_seconds=request_timeout_seconds,
             )
             if bounded_runtime is not None:
                 input_tokens = self.last_hailo_prompt_eval_count
@@ -7191,7 +7406,7 @@ class PydanticAIEnvRunner:
                     return HARD_BUDGET_FAIL_CLOSED_OUTPUT
             return output
 
-        from pydantic_ai import Agent, UsageLimits
+        from pydantic_ai import Agent
 
         chat_model_name = self.model_policy.model_for_agent or self.model_name
         agent = Agent(
@@ -7212,12 +7427,8 @@ class PydanticAIEnvRunner:
             )
         }
         if bounded_runtime is not None:
-            run_kwargs["usage_limits"] = UsageLimits(
-                request_limit=1,
-                tool_calls_limit=0,
-                input_tokens_limit=bounded_runtime.budget.max_input_tokens,
-                output_tokens_limit=bounded_runtime.budget.max_output_tokens,
-                total_tokens_limit=bounded_runtime.budget.max_total_tokens,
+            run_kwargs["usage_limits"] = pydantic_usage_limits_from_budget(
+                bounded_runtime.budget,
             )
         result = agent.run_sync(prompt, **run_kwargs)
         usage = _serialize_pydantic_result_usage(result)
@@ -7259,6 +7470,7 @@ class PydanticAIEnvRunner:
             selected_tool_ids,
             selected_tool_names,
             selected_plan_items,
+            planner_plan,
         ) = (
             _progressive_tool_runtime(tool_context)
         )
@@ -7266,6 +7478,10 @@ class PydanticAIEnvRunner:
             selected_tool_ids = []
             selected_tool_names = []
             selected_plan_items = []
+        required_tool_ids = [item.tool_id for item in selected_plan_items]
+        expected_operations = {
+            item.value for item in planner_plan.expected_operations
+        }
         if self.backend == "hailo_ollama":
             return self._run_hailo_bounded_workspace(
                 tool_context=tool_context,
@@ -7276,13 +7492,13 @@ class PydanticAIEnvRunner:
             )
 
         tool_context.model_arguments_untrusted = True
-        from pydantic_ai import Agent, UsageLimits
+        from pydantic_ai import Agent
         from pydantic_ai.capabilities import Hooks
         from pydantic_ai.messages import ModelRequest, UserPromptPart
         selected_context_handles = bounded_runtime.context_find(
             " ".join([tool_context.query.question, *selected_tool_ids]),
-            top_k=3,
-            token_budget=600,
+            top_k=10,
+            token_budget=None,
         )
         self.last_context_handles = [
             handle.model_dump(mode="json") for handle in selected_context_handles
@@ -7294,12 +7510,17 @@ class PydanticAIEnvRunner:
                 context_read = _read_workspace_context(
                     project_root,
                     handle,
-                    token_budget=500,
+                    token_budget=None,
                 )
                 if context_read is not None:
                     context_reads.append(context_read)
         self.last_context_reads = list(context_reads)
         selected_tool_name_set = set(selected_tool_names)
+        required_tool_name_set = {
+            REGISTERED_WORKSPACE_TOOL_NAMES[tool_id]
+            for tool_id in required_tool_ids
+            if tool_id in REGISTERED_WORKSPACE_TOOL_NAMES
+        }
         tool_id_by_name = {
             name: tool_id
             for tool_id, name in REGISTERED_WORKSPACE_TOOL_NAMES.items()
@@ -7317,7 +7538,7 @@ class PydanticAIEnvRunner:
                     "context": context_read.get("content"),
                     "source_ref": context_read.get("source_ref"),
                 },
-                token_budget=700,
+                token_budget=bounded_runtime.budget.max_tool_result_tokens,
             )
             evidence_cards.append(card.model_dump(mode="json"))
         if (
@@ -7353,15 +7574,28 @@ class PydanticAIEnvRunner:
             }
             return MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT
         executed_tool_names: set[str] = set()
+        executed_operations: set[str] = set()
+        progress_state = AgentProgressState(stage=AgentQueryStage.DISCOVER)
         repair_mode = False
         preflight_stop_reason: str | None = None
 
         async def prepare_tools(_ctx: object, tool_defs: list[object]) -> list[object]:
+            query_tool_name = REGISTERED_WORKSPACE_TOOL_NAMES[WORKSPACE_QUERY_TOOL_ID]
+            available_names = set(
+                _progressive_available_tool_names(
+                    selected_tool_names=selected_tool_names,
+                    query_tool_name=query_tool_name,
+                    required_tool_names=required_tool_name_set,
+                    executed_tool_names=executed_tool_names,
+                    expected_operations=expected_operations,
+                    executed_operations=executed_operations,
+                    stop_reason=progress_state.stop_reason,
+                )
+            )
             return [
                 tool_def
                 for tool_def in tool_defs
-                if getattr(tool_def, "name", None) in selected_tool_name_set
-                and getattr(tool_def, "name", None) not in executed_tool_names
+                if getattr(tool_def, "name", None) in available_names
             ]
 
         async def before_model_request(
@@ -7374,9 +7608,14 @@ class PydanticAIEnvRunner:
                 int(item.get("retry_count") or 0) for item in request_records
             )
             new_retry_count = max(0, observed_retry_count - recorded_retry_count)
-            if (
+            required_tools_complete = required_tool_name_set.issubset(
                 executed_tool_names
-                and selected_tool_name_set.issubset(executed_tool_names)
+            )
+            operations_complete = expected_operations.issubset(executed_operations)
+            if (
+                (executed_tool_names or evidence_cards)
+                and required_tools_complete
+                and (operations_complete or progress_state.stop_reason is not None)
                 and not repair_mode
             ):
                 validated_cards = [
@@ -7434,10 +7673,19 @@ class PydanticAIEnvRunner:
                 isinstance(requested_max_tokens, int)
                 and requested_max_tokens > 0
             ):
-                max_tokens = min(max_tokens, requested_max_tokens)
+                max_tokens = (
+                    requested_max_tokens
+                    if max_tokens is None
+                    else min(max_tokens, requested_max_tokens)
+                )
+            next_settings = dict(current_settings)
+            if max_tokens is not None:
+                next_settings["max_tokens"] = max_tokens
+            else:
+                next_settings.pop("max_tokens", None)
             request_context = replace(
                 request_context,
-                model_settings={**current_settings, "max_tokens": max_tokens},
+                model_settings=next_settings,
             )
             request_records.append(
                 {
@@ -7477,13 +7725,42 @@ class PydanticAIEnvRunner:
             args: object,
             result: object,
         ) -> dict[str, Any]:
-            del call, args
+            nonlocal progress_state
+            del call
             tool_name = str(getattr(tool_def, "name", ""))
             executed_tool_names.add(tool_name)
             tool_id = tool_id_by_name.get(tool_name, tool_name or "unknown_tool")
             card = bounded_runtime.evidence_from_tool_result(tool_id, result)
             serialized = card.model_dump(mode="json")
             evidence_cards.append(serialized)
+            if tool_id == WORKSPACE_QUERY_TOOL_ID:
+                argument_map = _tool_argument_mapping(args)
+                operation = _workspace_query_operation_from_arguments(argument_map)
+                if operation:
+                    executed_operations.add(operation)
+                result_map = result if isinstance(result, dict) else {}
+                progress_state = bounded_runtime.record_tool_progress(
+                    progress_state.model_copy(
+                        update={
+                            "stage": (
+                                AgentQueryStage.JOIN
+                                if planner_plan.requires_join
+                                else AgentQueryStage.QUERY
+                            )
+                        }
+                    ),
+                    tool_id=tool_id,
+                    arguments=argument_map,
+                    evidence_ids=[
+                        item.evidence_id for item in card.evidence_records
+                    ],
+                    root_cause=(
+                        str(result_map.get("root_cause"))
+                        if result_map.get("root_cause")
+                        else None
+                    ),
+                    safe_retry=bool(result_map.get("safe_retry", False)),
+                )
             return serialized
 
         hooks = Hooks(
@@ -7531,6 +7808,20 @@ class PydanticAIEnvRunner:
                 limit=limit,
                 evidence_types=evidence_types,
             )
+
+        @progressive_tool_plain(
+            name="query_scout_workspace",
+            description=(
+                tool_descriptions[WORKSPACE_QUERY_TOOL_ID]
+                + " Pass request as a JSON object. Providers that serialize nested "
+                "tool arguments as a JSON-object string may pass that string; Scout "
+                "will decode it and apply the same discriminated-union validation."
+            ),
+        )
+        def query_scout_workspace(
+            request: WorkspaceQueryRequest | str,
+        ) -> dict[str, object]:
+            return tool_context.query_scout_workspace(request=request)
 
         @progressive_tool_plain(
             name="search_scout_workspace_catalog",
@@ -8176,18 +8467,28 @@ class PydanticAIEnvRunner:
             f"{json.dumps(context_reads, ensure_ascii=False, sort_keys=True)}"
             "\nProgressive ToolCard shortlist:\n"
             f"{json.dumps(selected_cards, ensure_ascii=False, sort_keys=True)}"
+            "\nExpected deterministic workspace operations:\n"
+            f"{json.dumps(sorted(expected_operations), ensure_ascii=False)}"
+            "\nAgentRunBudget:\n"
+            f"{bounded_runtime.budget.model_dump_json()}"
         )
         run_error: str | None = None
+        external_limit_reason: str | None = None
         result: object | None = None
         output = ""
         verification: GroundingVerification | None = None
         ledger = AgentRunLedger(budget=bounded_runtime.budget)
-        initial_max_tokens = min(
-            bounded_runtime.budget.max_output_tokens,
-            self.workspace_model_max_tokens
-            if self.workspace_model_max_tokens is not None
-            else bounded_runtime.budget.max_output_tokens,
-        )
+        initial_max_tokens = self.workspace_model_max_tokens
+        if (
+            bounded_runtime.budget.enforce_resource_limits
+            and bounded_runtime.budget.max_output_tokens is not None
+        ):
+            initial_max_tokens = min(
+                bounded_runtime.budget.max_output_tokens,
+                self.workspace_model_max_tokens
+                if self.workspace_model_max_tokens is not None
+                else bounded_runtime.budget.max_output_tokens,
+            )
         try:
             result = agent.run_sync(
                 tool_prompt,
@@ -8196,12 +8497,8 @@ class PydanticAIEnvRunner:
                     timeout_seconds=request_timeout_seconds,
                     workspace_tools=True,
                 ),
-                usage_limits=UsageLimits(
-                    request_limit=bounded_runtime.budget.max_requests,
-                    tool_calls_limit=bounded_runtime.budget.max_tool_calls,
-                    input_tokens_limit=bounded_runtime.budget.max_input_tokens,
-                    output_tokens_limit=bounded_runtime.budget.max_output_tokens,
-                    total_tokens_limit=bounded_runtime.budget.max_total_tokens,
+                usage_limits=pydantic_usage_limits_from_budget(
+                    bounded_runtime.budget
                 ),
             )
             output = str(pydantic_result_output(result))
@@ -8213,12 +8510,22 @@ class PydanticAIEnvRunner:
                 for item in tool_context.invocations
                 if isinstance(item.get("tool_id"), str)
             ]
+            executed_operations.update(
+                str(item.get("operation"))
+                for item in tool_context.invocations
+                if item.get("tool_id") == WORKSPACE_QUERY_TOOL_ID
+                and isinstance(item.get("operation"), str)
+                and item.get("status") in {"success", "completed"}
+            )
             missing_selected_tool_ids = [
                 tool_id
-                for tool_id in selected_tool_ids
+                for tool_id in required_tool_ids
                 if tool_id not in executed_tool_ids
             ]
-            if missing_selected_tool_ids:
+            missing_expected_operations = sorted(
+                expected_operations - executed_operations
+            )
+            if missing_selected_tool_ids or missing_expected_operations:
                 run_error = "selected_tools_partially_executed"
                 verification = GroundingVerification(
                     passed=False,
@@ -8228,6 +8535,10 @@ class PydanticAIEnvRunner:
                         *(
                             f"missing_selected_tool_evidence:{tool_id}"
                             for tool_id in missing_selected_tool_ids
+                        ),
+                        *(
+                            f"missing_expected_operation:{operation}"
+                            for operation in missing_expected_operations
                         ),
                         "fail_closed_no_grounded_answer",
                     ],
@@ -8250,19 +8561,29 @@ class PydanticAIEnvRunner:
                         if isinstance(item.get("tool_id"), str)
                     ],
                 )
-                remaining_output_for_repair = max(
-                    0,
-                    bounded_runtime.budget.max_output_tokens
-                    - partial_ledger.output_tokens,
-                )
-                repair_max_tokens = _bounded_repair_max_tokens(
-                    remaining_output_tokens=remaining_output_for_repair,
-                    configured_max_tokens=self.workspace_model_max_tokens,
-                )
+                if bounded_runtime.budget.enforce_resource_limits:
+                    remaining_output_for_repair = (
+                        None
+                        if bounded_runtime.budget.max_output_tokens is None
+                        else max(
+                            0,
+                            bounded_runtime.budget.max_output_tokens
+                            - partial_ledger.output_tokens,
+                        )
+                    )
+                    repair_max_tokens = _bounded_repair_max_tokens(
+                        remaining_output_tokens=remaining_output_for_repair,
+                        configured_max_tokens=self.workspace_model_max_tokens,
+                    )
+                else:
+                    repair_max_tokens = self.workspace_model_max_tokens
                 repair_allowed = (
                     not verification.passed
                     and bounded_runtime.budget.max_repairs > 0
-                    and repair_max_tokens is not None
+                    and (
+                        repair_max_tokens is not None
+                        or not bounded_runtime.budget.enforce_resource_limits
+                    )
                     and partial_ledger.budget_stop_reason is None
                     and partial_ledger.request_count
                     < bounded_runtime.budget.max_requests
@@ -8292,23 +8613,34 @@ class PydanticAIEnvRunner:
                         capabilities=[repair_hooks],
                         **pydantic_agent_runtime_kwargs(),
                     )
-                    remaining_input = max(
-                        1,
-                        bounded_runtime.budget.max_input_tokens
-                        - partial_ledger.input_tokens,
+                    remaining_input = (
+                        None
+                        if bounded_runtime.budget.max_input_tokens is None
+                        else max(
+                            1,
+                            bounded_runtime.budget.max_input_tokens
+                            - partial_ledger.input_tokens,
+                        )
                     )
-                    remaining_output = max(
-                        1,
-                        bounded_runtime.budget.max_output_tokens
-                        - partial_ledger.output_tokens,
+                    remaining_output = (
+                        None
+                        if bounded_runtime.budget.max_output_tokens is None
+                        else max(
+                            1,
+                            bounded_runtime.budget.max_output_tokens
+                            - partial_ledger.output_tokens,
+                        )
                     )
-                    remaining_total = max(
-                        1,
-                        bounded_runtime.budget.max_total_tokens
-                        - partial_ledger.input_tokens
-                        - partial_ledger.output_tokens,
+                    remaining_total = (
+                        None
+                        if bounded_runtime.budget.max_total_tokens is None
+                        else max(
+                            1,
+                            bounded_runtime.budget.max_total_tokens
+                            - partial_ledger.input_tokens
+                            - partial_ledger.output_tokens,
+                        )
                     )
-                    assert repair_max_tokens is not None
                     result = repair_agent.run_sync(
                         repair_prompt,
                         model_settings=_workspace_request_model_settings(
@@ -8316,9 +8648,8 @@ class PydanticAIEnvRunner:
                             timeout_seconds=request_timeout_seconds,
                             workspace_tools=False,
                         ),
-                        usage_limits=UsageLimits(
-                            request_limit=1,
-                            tool_calls_limit=0,
+                        usage_limits=pydantic_usage_limits_from_budget(
+                            bounded_runtime.budget,
                             input_tokens_limit=remaining_input,
                             output_tokens_limit=remaining_output,
                             total_tokens_limit=remaining_total,
@@ -8376,29 +8707,25 @@ class PydanticAIEnvRunner:
                 output = MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT
         except BoundedRequestBudgetStop as exc:
             run_error = exc.reason
+            external_limit_reason = exc.reason
             verification = GroundingVerification(
                 passed=False,
                 output_disposition="fail_closed",
-                repair_items=["bounded_budget_stop_before_request"],
+                repair_items=["checkpoint_and_continue_with_fresh_budget"],
             )
-            output = (
-                "Scout bounded runtime stopped before a provider request because "
-                "the request budget was exhausted."
-            )
+            output = "Scout saved the interrupted stage for continuation."
         except Exception as exc:
             if "UsageLimit" in type(exc).__name__:
                 run_error = preflight_stop_reason or (
                     f"provider_usage_limit_before_request:{type(exc).__name__}"
                 )
+                external_limit_reason = run_error
                 verification = GroundingVerification(
                     passed=False,
                     output_disposition="fail_closed",
-                    repair_items=["provider_usage_limit_stop"],
+                    repair_items=["checkpoint_and_continue_with_fresh_budget"],
                 )
-                output = (
-                    "Scout bounded runtime stopped before another provider request "
-                    "because a usage limit was reached."
-                )
+                output = "Scout saved the interrupted provider stage for continuation."
             else:
                 run_error = f"provider_runtime_error:{type(exc).__name__}"
                 raise
@@ -8434,6 +8761,29 @@ class PydanticAIEnvRunner:
             self.last_grounding_verification = (
                 verification.model_dump(mode="json") if verification else {}
             )
+        if external_limit_reason is not None:
+            call_trace = [
+                {"kind": "model_request", **item}
+                for item in request_records
+            ]
+            call_trace.extend(
+                {"kind": "tool_invocation", **item}
+                for item in tool_context.invocations
+            )
+            return self._recover_workspace_external_limit(
+                question=tool_context.query.question,
+                question_class=getattr(
+                    planner_plan,
+                    "question_class",
+                    QuestionClass.UNKNOWN,
+                ),
+                model_id=chat_model_name,
+                initial_ledger=ledger,
+                evidence_cards=evidence_cards,
+                call_trace=call_trace,
+                reason=external_limit_reason,
+                timeout_seconds=request_timeout_seconds,
+            )
         self.last_model_usage = {
             "requests": ledger.request_count,
             "tool_calls": ledger.tool_call_count,
@@ -8446,6 +8796,262 @@ class PydanticAIEnvRunner:
             _serialize_pydantic_response_metadata(result) if result is not None else {}
         )
         return output
+
+    def _recover_workspace_external_limit(
+        self,
+        *,
+        question: str,
+        question_class: QuestionClass | str | None,
+        model_id: str,
+        initial_ledger: AgentRunLedger,
+        evidence_cards: list[dict[str, Any]],
+        call_trace: list[dict[str, Any]],
+        reason: str,
+        timeout_seconds: int | None,
+    ) -> str:
+        """Checkpoint one external limit and resume with a fresh 10/10 stage."""
+
+        orchestrator = AgentRecoveryOrchestrator()
+        initial_attempt = orchestrator.start_attempt(
+            question=question,
+            question_class=question_class,
+            model_id=model_id,
+            budget=initial_ledger.budget,
+        ).model_copy(
+            update={
+                "ledger": initial_ledger,
+                "status": AgentAttemptStatus.EXTERNAL_LIMIT,
+            }
+        )
+        validated_cards = [
+            EvidenceCard.model_validate(card) for card in evidence_cards
+        ]
+        source_refs = list(
+            dict.fromkeys(
+                ref
+                for card in validated_cards
+                for ref in card.source_refs
+            )
+        )
+        checkpoint = orchestrator.checkpoint_external_limit(
+            attempt=initial_attempt,
+            reason=reason,
+            evidence=evidence_cards,
+            source_refs=source_refs,
+            call_trace=call_trace,
+            state={"ledger": initial_ledger.model_dump(mode="json")},
+        )
+        continuation = orchestrator.continue_attempt(
+            prior_attempt=initial_attempt,
+            checkpoint=checkpoint,
+        )
+        attempts = [initial_attempt]
+
+        if not validated_cards:
+            continuation = continuation.model_copy(
+                update={"status": AgentAttemptStatus.FAILED}
+            )
+            tool_repair = orchestrator.advance_attempt(
+                prior_attempt=continuation,
+                recovery_stage=AgentRecoveryStage.TOOL_REPAIR,
+                model_id=model_id,
+            )
+            attempts.extend([continuation, tool_repair])
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                repair_items=[
+                    "workspace_evidence_required",
+                    "tool_repair_stage_started_with_fresh_budget",
+                ],
+            )
+            self._store_workspace_recovery(
+                status="tool_repair_required",
+                attempts=attempts,
+                checkpoint=checkpoint.model_dump(mode="json"),
+                ledger=initial_ledger,
+                evidence_cards=evidence_cards,
+                verification=verification,
+                initial_ledger=initial_ledger,
+            )
+            return (
+                "目前沒有足夠證據完成 continuation；Scout 已保存外部限制 "
+                "checkpoint，並以全新 10/10 預算轉入 tool_repair 階段。"
+            )
+
+        runtime = BoundedAgentRuntime(budget=continuation.budget)
+        missing_evidence = [
+            f"{card.tool_id}:{field}"
+            for card in validated_cards
+            for field in card.missing_fields
+        ]
+        synthesis_prompt = runtime.build_no_tool_synthesis_prompt(
+            question=question,
+            evidence_cards=validated_cards,
+            missing_evidence=missing_evidence,
+        )
+        continuation_ledger = AgentRunLedger(budget=continuation.budget)
+        output = ""
+        verification = GroundingVerification(
+            passed=False,
+            output_disposition="fail_closed",
+        )
+        continuation_error: str | None = None
+        result: object | None = None
+        try:
+            from pydantic_ai import Agent
+
+            agent = Agent(
+                build_chat_model(
+                    model_name=model_id,
+                    base_url=self.base_url,
+                    api_key=self.api_key,
+                ),
+                system_prompt=(
+                    "Continue the interrupted Scout answer from the supplied "
+                    "evidence only. Do not call tools or invent facts."
+                ),
+                **pydantic_agent_runtime_kwargs(),
+            )
+            result = agent.run_sync(
+                synthesis_prompt,
+                model_settings=_workspace_request_model_settings(
+                    max_tokens=self.workspace_model_max_tokens,
+                    timeout_seconds=timeout_seconds,
+                    workspace_tools=False,
+                ),
+                usage_limits=pydantic_usage_limits_from_budget(
+                    continuation.budget
+                ),
+            )
+            output = str(pydantic_result_output(result))
+            usage = _serialize_pydantic_result_usage(result)
+            request = AgentRequestLedger(
+                request_index=1,
+                system_chars=len(GLOBAL_ASSISTANT_PROMPT),
+                user_history_chars=len(synthesis_prompt),
+                input_tokens=int(
+                    usage.get("input_tokens", estimate_tokens(synthesis_prompt))
+                ),
+                cache_write_tokens=int(usage.get("cache_write_tokens", 0)),
+                cache_read_tokens=int(usage.get("cache_read_tokens", 0)),
+                output_tokens=int(
+                    usage.get("output_tokens", estimate_tokens(output))
+                ),
+                tool_call_count=int(usage.get("tool_calls", 0)),
+            )
+            continuation_ledger = runtime.record_request(
+                continuation_ledger,
+                request,
+            )
+            verification = runtime.verify_synthesis(
+                output,
+                evidence_cards=validated_cards,
+            )
+        except Exception as exc:
+            continuation_error = (
+                f"continuation_provider_error:{type(exc).__name__}"
+            )
+            continuation_ledger = continuation_ledger.model_copy(
+                update={"budget_stop_reason": continuation_error}
+            )
+
+        if verification.passed:
+            continuation = continuation.model_copy(
+                update={
+                    "ledger": continuation_ledger,
+                    "status": AgentAttemptStatus.SUCCEEDED,
+                }
+            )
+            attempts.append(continuation)
+            self._store_workspace_recovery(
+                status="continued_successfully",
+                attempts=attempts,
+                checkpoint=checkpoint.model_dump(mode="json"),
+                ledger=continuation_ledger,
+                evidence_cards=evidence_cards,
+                verification=verification,
+                initial_ledger=initial_ledger,
+            )
+            if result is not None:
+                self.last_model_response_metadata = (
+                    _serialize_pydantic_response_metadata(result)
+                )
+            return output
+
+        continuation = continuation.model_copy(
+            update={
+                "ledger": continuation_ledger,
+                "status": AgentAttemptStatus.FAILED,
+            }
+        )
+        tool_repair = orchestrator.advance_attempt(
+            prior_attempt=continuation,
+            recovery_stage=AgentRecoveryStage.TOOL_REPAIR,
+            model_id=model_id,
+        )
+        attempts.extend([continuation, tool_repair])
+        verification = verification.model_copy(
+            update={
+                "output_disposition": "fail_closed",
+                "repair_items": list(
+                    dict.fromkeys(
+                        [
+                            *verification.repair_items,
+                            continuation_error or "continuation_grounding_failed",
+                            "tool_repair_stage_started_with_fresh_budget",
+                        ]
+                    )
+                ),
+            }
+        )
+        self._store_workspace_recovery(
+            status="tool_repair_required",
+            attempts=attempts,
+            checkpoint=checkpoint.model_dump(mode="json"),
+            ledger=continuation_ledger,
+            evidence_cards=evidence_cards,
+            verification=verification,
+            initial_ledger=initial_ledger,
+        )
+        return (
+            "Scout 已保存外部限制 checkpoint；continuation 未通過證據驗證，"
+            "已以全新 10/10 預算轉入 tool_repair 階段。"
+        )
+
+    def _store_workspace_recovery(
+        self,
+        *,
+        status: str,
+        attempts: list[AgentAttemptState],
+        checkpoint: dict[str, Any],
+        ledger: AgentRunLedger,
+        evidence_cards: list[dict[str, Any]],
+        verification: GroundingVerification,
+        initial_ledger: AgentRunLedger,
+    ) -> None:
+        self.last_agent_recovery = {
+            "status": status,
+            "checkpoint": checkpoint,
+            "attempts": [
+                attempt.model_dump(mode="json") for attempt in attempts
+            ],
+        }
+        self.last_agent_run_ledger = ledger.model_dump(mode="json")
+        self.last_evidence_cards = list(evidence_cards)
+        self.last_grounding_verification = verification.model_dump(mode="json")
+        self.last_model_usage = {
+            "requests": initial_ledger.request_count + ledger.request_count,
+            "tool_calls": initial_ledger.tool_call_count + ledger.tool_call_count,
+            "input_tokens": initial_ledger.input_tokens + ledger.input_tokens,
+            "cache_write_tokens": (
+                initial_ledger.cache_write_tokens + ledger.cache_write_tokens
+            ),
+            "cache_read_tokens": (
+                initial_ledger.cache_read_tokens + ledger.cache_read_tokens
+            ),
+            "output_tokens": initial_ledger.output_tokens + ledger.output_tokens,
+        }
 
     def _run_hailo_bounded_workspace(
         self,
@@ -8461,8 +9067,8 @@ class PydanticAIEnvRunner:
         question = tool_context.query.question
         handles = bounded_runtime.context_find(
             " ".join([question, *selected_tool_ids]),
-            top_k=3,
-            token_budget=600,
+            top_k=10,
+            token_budget=None,
         )
         self.last_context_handles = [
             handle.model_dump(mode="json") for handle in handles
@@ -8474,7 +9080,7 @@ class PydanticAIEnvRunner:
                 context_read = _read_workspace_context(
                     project_root,
                     handle,
-                    token_budget=500,
+                    token_budget=None,
                 )
                 if context_read is not None:
                     context_reads.append(context_read)
@@ -8492,11 +9098,16 @@ class PydanticAIEnvRunner:
                         "context": context_read.get("content"),
                         "source_ref": context_read.get("source_ref"),
                     },
-                    token_budget=700,
+                    token_budget=bounded_runtime.budget.max_tool_result_tokens,
                 )
             )
 
         attempted_tool_ids: list[str] = []
+        required_tool_ids = [
+            str(getattr(item, "tool_id", "") or "")
+            for item in selected_plan_items
+            if str(getattr(item, "tool_id", "") or "")
+        ]
         for item in selected_plan_items:
             tool_id = str(getattr(item, "tool_id", "") or "")
             request = getattr(item, "request", None)
@@ -8526,9 +9137,7 @@ class PydanticAIEnvRunner:
             )
 
         missing_selected_tool_ids = [
-            tool_id
-            for tool_id in selected_tool_ids
-            if tool_id not in attempted_tool_ids
+            tool_id for tool_id in required_tool_ids if tool_id not in attempted_tool_ids
         ]
         if missing_selected_tool_ids:
             verification = GroundingVerification(
@@ -8545,7 +9154,7 @@ class PydanticAIEnvRunner:
             ledger = _finalize_agent_run_ledger(
                 bounded_runtime,
                 [],
-                selected_tool_ids=selected_tool_ids,
+                selected_tool_ids=required_tool_ids,
                 executed_tool_ids=attempted_tool_ids,
                 stop_reason="selected_tools_partially_executed",
             )
@@ -8568,7 +9177,7 @@ class PydanticAIEnvRunner:
             ledger = _finalize_agent_run_ledger(
                 bounded_runtime,
                 [],
-                selected_tool_ids=selected_tool_ids,
+                selected_tool_ids=required_tool_ids,
                 executed_tool_ids=attempted_tool_ids,
                 stop_reason="workspace_evidence_unavailable",
             )
@@ -8616,7 +9225,7 @@ class PydanticAIEnvRunner:
             ledger = _finalize_agent_run_ledger(
                 bounded_runtime,
                 [],
-                selected_tool_ids=selected_tool_ids,
+                selected_tool_ids=required_tool_ids,
                 executed_tool_ids=attempted_tool_ids,
                 stop_reason=exc.reason,
             )
@@ -8631,6 +9240,7 @@ class PydanticAIEnvRunner:
             synthesis_prompt,
             system_prompt=system_prompt,
             max_tokens=request_max_tokens,
+            timeout_seconds=request_timeout_seconds,
         )
         evidence_chars = sum(
             len(card.model_dump_json()) for card in evidence_cards
@@ -8657,7 +9267,7 @@ class PydanticAIEnvRunner:
         ledger = _finalize_agent_run_ledger(
             bounded_runtime,
             [request_record.model_dump(mode="json")],
-            selected_tool_ids=selected_tool_ids,
+            selected_tool_ids=required_tool_ids,
             executed_tool_ids=attempted_tool_ids,
         )
         verification = (
@@ -8745,6 +9355,7 @@ class PydanticAIEnvRunner:
         *,
         system_prompt: str,
         max_tokens: int | None = None,
+        timeout_seconds: int | None = None,
     ) -> str:
         self.last_hailo_response_received = False
         self.last_hailo_response_model = None
@@ -8927,69 +9538,10 @@ class PydanticAIEnvRunner:
             )
         if "AI_HAT_TYPED_DECISION_V1" in prompt:
             system_prompt = "只輸出一個分類 token。"
-        local_max_tokens = (
-            self.workspace_model_max_tokens or DEFAULT_WORKSPACE_MODEL_MAX_TOKENS
-        )
-        if max_tokens is not None:
-            local_max_tokens = min(local_max_tokens, max_tokens)
         num_predict = (
-            min(local_max_tokens, 8)
-            if "AI_HAT_TYPED_DECISION_V1" in prompt
-            else (
-                min(local_max_tokens, 20)
-                if "AI_HAT_MISSING_CONTEXT_ACTION_V1" in prompt
-                else (
-                    min(local_max_tokens, 160)
-                    if (
-                        "AI_HAT_RAW_SELF_REVIEW_V1" in prompt
-                        or "AI_HAT_RAW_BOUNDARY_REPAIR_V1" in prompt
-                        or "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_RISK_LOCATION_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_LOW_TOLERANCE_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_UNKNOWN_APPEND_MISSING_V1" in prompt
-                        or "AI_HAT_RAW_ALTITUDE_SELF_CHECK_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_FIELD_GUIDANCE_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_FIELD_BOUNDARY_APPEND_V1" in prompt
-                        or "AI_HAT_RAW_VISIBILITY_CANDIDATE_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_LOW_BATTERY_PRIORITY_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_RIDGE_SIGNAL_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_VISUAL_MARKER_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_RESCUE_EVIDENCE_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_STRUCTURED_INCIDENT_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_INJURY_REPORT_RELAY_APPEND_V1" in prompt
-                        or "AI_HAT_RAW_TOPIC_RETRY_V1" in prompt
-                        or "AI_HAT_RAW_LIST_TO_SENTENCES_V1" in prompt
-                        or "AI_HAT_RAW_DELAYED_DEPARTURE_RETRY_V1" in prompt
-                    )
-                    else min(local_max_tokens, 128)
-                    if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt
-                    else min(local_max_tokens, 128)
-                    if "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" in prompt
-                    else (
-                    min(local_max_tokens, 64)
-                    if (
-                        "AI_HAT_EVIDENCE_SYNTHESIS_V2" in prompt
-                        or "AI_HAT_EVIDENCE_REPAIR_V2" in prompt
-                        or "AI_HAT_RISK_CANDIDATE_SENTENCE_V1" in prompt
-                        or "AI_HAT_RISK_BOUNDARY_SENTENCE_V1" in prompt
-                        or "AI_HAT_WEATHER_GAP_SENTENCE_V1" in prompt
-                        or "AI_HAT_MISSING_FACT_SENTENCE_V1" in prompt
-                        or "AI_HAT_MISSING_ACTION_SENTENCE_V1" in prompt
-                        or "AI_HAT_CHECKPOINT_CANDIDATE_SENTENCE_V1" in prompt
-                        or "AI_HAT_CHECKPOINT_BOUNDARY_SENTENCE_V1" in prompt
-                        or "AI_HAT_TERRAIN_FACTS_SENTENCE_V1" in prompt
-                        or "AI_HAT_TERRAIN_BOUNDARY_SENTENCE_V1" in prompt
-                    )
-                    else min(local_max_tokens, 128)
-                    if (
-                        "AI_HAT_FIELD_STATE_SKILL_V1" in prompt
-                        or "AI_HAT_FIELD_STATE_TIME_UNKNOWN_V1" in prompt
-                    )
-                    else local_max_tokens
-                    )
-                )
-            )
+            max_tokens
+            if max_tokens is not None
+            else self.workspace_model_max_tokens
         )
         messages = [{"role": "system", "content": system_prompt}]
         if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt:
@@ -9009,7 +9561,11 @@ class PydanticAIEnvRunner:
             "messages": messages,
             "stream": False,
             "options": {
-                "num_predict": num_predict,
+                **(
+                    {"num_predict": num_predict}
+                    if num_predict is not None
+                    else {}
+                ),
                 "temperature": (
                     0
                     if (
@@ -9145,7 +9701,10 @@ class PydanticAIEnvRunner:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=_request_timeout(timeout_seconds),
+        ) as response:
             response_payload = json.loads(response.read().decode("utf-8"))
         self.last_hailo_response_received = True
         self.last_hailo_response_model = str(response_payload.get("model") or model_name)
@@ -9185,7 +9744,7 @@ def build_assistant_prompt(
     query: ScoutAssistantQuery,
     *,
     sources: list[AssistantSourceRef],
-    max_context_chars: int = DEFAULT_MAX_CONTEXT_CHARS,
+    max_context_chars: int | None = DEFAULT_MAX_CONTEXT_CHARS,
 ) -> str:
     context = {
         "surface": query.surface.value,
@@ -9199,7 +9758,7 @@ def build_assistant_prompt(
     }
     total_info_json = _total_info_prompt_summary(sources)
     context_json = json.dumps(context, ensure_ascii=False, sort_keys=True)
-    if len(context_json) > max_context_chars:
+    if max_context_chars is not None and len(context_json) > max_context_chars:
         context_json = f"{context_json[:max_context_chars]}\n[context truncated]"
     total_info_section = (
         f"Total Info:\n{total_info_json}\n" if total_info_json else ""
@@ -15284,13 +15843,13 @@ def _normalize_hailo_ollama_model_name(model_name: str) -> str:
     return model_name
 
 
-def _compact_total_info_for_local_model(total_info: str, *, max_chars: int) -> str:
+def _compact_total_info_for_local_model(total_info: str) -> str:
     try:
         payload = json.loads(total_info)
     except (json.JSONDecodeError, TypeError):
-        return total_info[:max_chars]
+        return total_info
     if not isinstance(payload, dict):
-        return total_info[:max_chars]
+        return total_info
 
     priority_keys = (
         "missing_or_partial_context",
@@ -15312,36 +15871,33 @@ def _compact_total_info_for_local_model(total_info: str, *, max_chars: int) -> s
         ensure_ascii=False,
         separators=(",", ":"),
     )
-    return serialized[:max_chars]
+    return serialized
 
 
 def _compact_hailo_ollama_prompt(prompt: str) -> str:
     if "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" in prompt:
         return _compact_hailo_raw_eval_prompt(prompt)
     if "Context:" not in prompt:
-        return prompt[:3600]
+        return prompt
     question = _extract_context_question(prompt)
     if not question:
-        return prompt[:3600]
+        return prompt
     if _is_simple_greeting_question(question):
         return (
             "你是 Scout AI 的 AI HAT+ 2 本地備援模型。"
             "使用者只是問候或確認你是否在線。"
             "請用繁體中文自然短答一句，明確說你正在以本地備援模式服務；"
             "不要摘要 context，不要要求工具摘要，不要列資料缺口。"
-            f"\n使用者：{question[:80]}\n"
+            f"\n使用者：{question}\n"
             "回答："
         )
     total_info = _extract_prompt_section(prompt, "Total Info:", "Context:")
     context = _extract_prompt_section(prompt, "Context:", "")
     answer_hint = _hailo_answer_hint(question, total_info=total_info, context=context)
     answer_hint_line = f"\n答案提示（最高優先）：{answer_hint}\n" if answer_hint else ""
-    compact_total_info = _compact_total_info_for_local_model(
-        total_info,
-        max_chars=1200,
-    )
+    compact_total_info = _compact_total_info_for_local_model(total_info)
     total_info_line = f"\n現況摘要：{compact_total_info}\n" if total_info else "\n"
-    context_line = f"\n可用上下文：{context[:1600]}\n" if context else "\n"
+    context_line = f"\n可用上下文：{context}\n" if context else "\n"
     return (
         "你是 Scout AI 的 AI HAT+ 2 本地備援模型。"
         "Scout AI 是使用者面向的全能入口；本地模型是它的備援推理層，"
@@ -15359,7 +15915,7 @@ def _compact_hailo_ollama_prompt(prompt: str) -> str:
         f"{total_info_line}"
         f"{context_line}"
         "回答要求：先給結論，再給依據與下一步；使用繁體中文。"
-    )[:3800]
+    )
 
 
 def _compact_hailo_raw_eval_prompt(prompt: str) -> str:
@@ -15394,20 +15950,20 @@ def _compact_hailo_raw_eval_prompt(prompt: str) -> str:
         and "回答主題" not in item
         and not item.startswith("判斷類型=")
         and "禁止推論" not in item
-    ][:3]
+    ]
 
     lines = ["AI_HAT_RAW_SINGLE_PASS_EVAL_V1"]
     if question:
-        lines.append(f"請回答「{_truncate_utf8(question, 72)}」。")
+        lines.append(f"請回答「{question}」。")
     if facts:
         fact_text = "；".join(_hailo_brief_field_value(item) for item in facts)
-        lines.append(f"已知{_truncate_utf8(fact_text, 120)}。")
+        lines.append(f"已知{fact_text}。")
     if missing:
-        lines.append(f"尚缺{_truncate_utf8(_hailo_brief_field_value(missing), 72)}。")
+        lines.append(f"尚缺{_hailo_brief_field_value(missing)}。")
     if boundary:
-        lines.append(f"只能{_truncate_utf8(_hailo_brief_field_value(boundary), 60)}。")
+        lines.append(f"只能{_hailo_brief_field_value(boundary)}。")
     lines.append("用自己的繁中短答，未知明說，禁止捏造。")
-    return _truncate_utf8("\n".join(lines), 420)
+    return "\n".join(lines)
 
 
 def _hailo_brief_field_value(value: str) -> str:
@@ -15831,8 +16387,8 @@ def _bounded_tool_limit(
     default_limit: int,
 ) -> int:
     if not isinstance(value, int):
-        return default_limit
-    return max(1, min(value, 8))
+        return max(10, default_limit)
+    return max(10, value)
 
 
 def _compact_tool_kb_result(item: dict[str, object]) -> dict[str, object]:
@@ -16126,19 +16682,14 @@ def _workspace_model_max_tokens_from_env(
     )
     raw_value = resolved_environ.get(scoped_key)
     if raw_value is None and local_model:
-        raw_value = resolved_environ.get(
-            "SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS",
-            DEFAULT_WORKSPACE_MODEL_MAX_TOKENS,
-        )
+        raw_value = resolved_environ.get("SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS")
     if raw_value is None:
         return None
     try:
         parsed = int(str(raw_value).strip())
     except ValueError:
-        return DEFAULT_WORKSPACE_MODEL_MAX_TOKENS if local_model else None
-    if local_model:
-        return _clamp_workspace_model_max_tokens(parsed)
-    return max(32, parsed)
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _workspace_model_max_tokens_from_settings(
@@ -16155,9 +16706,7 @@ def _workspace_model_max_tokens_from_settings(
             parsed = int(value)
         except (TypeError, ValueError):
             continue
-        if local_model:
-            return _clamp_workspace_model_max_tokens(parsed)
-        return max(32, parsed)
+        return parsed if parsed > 0 else None
     return _workspace_model_max_tokens_from_env(
         environ=environ,
         local_model=local_model,
@@ -16171,8 +16720,9 @@ def _uses_local_workspace_token_budget(
     hardware_accelerator: str,
     base_url: str | None,
 ) -> bool:
-    if profile_name == "local":
-        return True
+    # A profile label alone is not a provider constraint. Only concrete local
+    # runtimes/hardware retain the finite generation contract in construction.
+    del profile_name
     if backend in {"ollama", "hailo_ollama"}:
         return True
     if hardware_accelerator != "none":
@@ -16200,10 +16750,6 @@ def _workspace_request_model_settings(
     return settings
 
 
-def _clamp_workspace_model_max_tokens(value: int) -> int:
-    return max(32, min(value, 4096))
-
-
 def _optional_nonnegative_int(value: object) -> int | None:
     try:
         parsed = int(value)
@@ -16212,7 +16758,11 @@ def _optional_nonnegative_int(value: object) -> int | None:
     return parsed if parsed >= 0 else None
 
 
-def _connect_runner(runner: PydanticAIRunner, *, timeout_seconds: int) -> None:
+def _connect_runner(
+    runner: PydanticAIRunner,
+    *,
+    timeout_seconds: int | None,
+) -> None:
     connector = getattr(runner, "connect", None)
     if callable(connector):
         connector(timeout_seconds=timeout_seconds)

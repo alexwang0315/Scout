@@ -35,7 +35,7 @@ architecture. The implemented core includes:
 - local notification gateway and runtime tick loop;
 - provider-backed agent facades with a local `FunctionModel` default;
 - model policy, timeout/cost SLA gateway, and external-model fallback handling;
-- Pydantic AI v2.8.0 compatibility helpers;
+- Pydantic AI v2.9.0 compatibility helpers;
 - generated capability sandbox verification;
 - FastAPI routes and focused API/runtime tests;
 - Scout AI read-only workspace tool workflow:
@@ -94,7 +94,7 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
-- Pydantic AI v2.8.0 model execution with explicit model policy, OpenRouter and
+- Pydantic AI v2.9.0 model execution with explicit model policy, OpenRouter and
   OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
@@ -304,8 +304,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai-slim[openai,openrouter] == 2.8.0
-pydantic-evals == 2.8.0
+pydantic-ai-slim[openai,openrouter] == 2.9.0
+pydantic-evals == 2.9.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -328,13 +328,19 @@ dbos
 mcp clients
 ```
 
-Pydantic AI v2.8.0 operating rules:
+Pydantic AI v2.9.0 operating rules:
 
 - Scout's package path uses `pydantic-ai-slim` with `openai` and `openrouter`
   extras for Pi compatibility.
 - `pydantic_ai.Agent` calls must keep `end_strategy="early"` unless a future
   reviewed design proves that continuing same-turn tool execution cannot
   violate Scout's no-side-effect defaults.
+- Pydantic AI v2.9.0 now honors `end_strategy="early"` for native, prompted,
+  and image outputs. Scout keeps regression coverage on the existing early-stop
+  contract instead of adding a compatibility workaround.
+- `RunContext.usage_limits` is available to tools and capabilities in v2.9.0.
+  It may be used for telemetry and local preflight decisions, but it does not
+  replace Scout's deterministic permission, cost, timeout, or execution gates.
 - NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and requires
   `NVIDIA_API_KEY`. Scout routes the request to NVIDIA's OpenAI-compatible
   endpoint and sends `z-ai/glm-5.2` as the provider model id.
@@ -768,9 +774,9 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Pydantic AI v2.8.0 Provider Policy
+### 7.6 Pydantic AI v2.9.0 Provider Policy
 
-Scout AI OS uses Pydantic AI v2.8.0 as a typed provider facade, not as an
+Scout AI OS uses Pydantic AI v2.9.0 as a typed provider facade, not as an
 unbounded autonomous runtime.
 
 Provider modes:
@@ -881,37 +887,54 @@ artifacts, or unselected native provider capabilities at the start of a turn.
 
 Required flow:
 
-1. discover top-three `ContextHandle` records;
+1. discover up to ten ranked `ContextHandle` records without loading their full
+   artifacts;
 2. create a hard-capped `ToolPlan` from compact `ToolCard` records;
 3. register only the selected full tool schemas;
 4. execute tools through deterministic workspace services;
-5. project raw results into bounded `EvidenceCard` records;
+5. project raw results into sanitized, provenance-bearing `EvidenceCard` records;
 6. remove all tools before answer synthesis;
 7. verify citations and numeric claims deterministically;
-8. allow at most one bounded repair and otherwise fail closed.
+8. verify or repair without tools, using the attempt's available call capacity;
+9. checkpoint external limits and resume with a fresh recovery-stage budget.
 
 The typed contracts are `ContextHandle`, `ContextReadResult`, `ToolCard`,
 `PlannedToolCall`, `ToolPlan`, `EvidenceCard`, `AgentRunBudget`,
 `AgentRequestLedger`, `AgentRunLedger`, and `GroundingVerification` in
 `scout.schemas.agent_runtime`.
 
-Hard limits:
+Construction call capacity and resource policy:
 
-- ordinary turns select at most three tools;
-- compound evidence bundles select at most five tools;
-- one turn uses at most three provider requests, including schema retries and
-  synthesis repair;
-- each tool result is projected to at most 1,000 estimated tokens;
+- every typed or unknown question class receives at least ten tool calls and ten
+  model requests per attempt and per recovery stage; no surface, stage,
+  average, p95, or static-fact policy may silently impose a lower capacity;
+- independently metered planner, retriever, synthesis, verifier, reviewer,
+  repair, retry, replan, browser, and subagent categories also default to ten;
+- Aggressive Construction Mode sets Scout-defined input/output/total-token,
+  tool-result-token, context-character, estimated-cost, answer-time, and
+  replay-time ceilings to `null`; counters remain observability telemetry;
+- explicit Productization/operator settings may restore resource SLOs, but must
+  not silently lower an agent call category below ten;
 - synthesis receives no tool definitions and cannot call another tool;
 - a fail-closed response is not counted as a completed grounded answer;
 - rejected draft claims remain audit metadata but are not user-visible claims.
-- deterministic preflight limits cap each request, and actual provider usage is
-  checked again after the response; an over-budget model answer is discarded;
+- deterministic preflight and post-response checks enforce call counts. Reaching
+  ten closes only the current stage; a checkpoint/continuation or next recovery
+  stage receives a fresh 10/10 budget;
 - non-greeting workspace questions with no selected tool evidence or bounded
   context evidence fail closed instead of returning an unverified direct answer;
 - EvidenceCard projection recursively removes sensitive keys and secret-like
   values, rejects credentialed URLs and absolute paths, and withholds evidence
   explicitly marked private, secret, restricted, or confidential.
+
+Ten is guaranteed available capacity rather than a utilization target. Duplicate canonical calls,
+two consecutive calls without new evidence, and confirmed terminal evidence
+gaps still stop early. A provider's technical limit checkpoints evidence, call
+trace, and state and is reported as an external limit. After a failed attempt,
+follow the finite ladder in `SCOUT_OUTDOOR_AI_AGENT_STANDARD.md`: fix the
+tool/evidence/harness and rerun with fresh 10/10, switch model with fresh 10/10,
+build the complete Codex review artifact, then register a stable `KNOWN_ISSUE`
+with an explicit unblock condition if Codex cannot resolve it.
 
 The additive `/assistant/query` observability fields report per-request and
 turn totals for system, history, schema, result, input, cache, output, request,

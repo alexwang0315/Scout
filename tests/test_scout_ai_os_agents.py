@@ -103,7 +103,7 @@ def test_model_policy_defaults_to_local_function_model() -> None:
     assert policy.model_for_agent is None
     assert policy.requires_network is False
     assert policy.missing_credential_env == []
-    assert policy.timeout_seconds == 30.0
+    assert policy.timeout_seconds is None
     assert policy.max_cost_usd is None
     assert policy.estimated_call_cost_usd == 0.0
     assert policy.fallback_model == "local FunctionModel"
@@ -188,7 +188,7 @@ def test_model_policy_supports_nvidia_api_key_models() -> None:
     assert "nvapi-test-secret" not in str(with_key.model_dump(mode="json"))
 
 
-def test_model_policy_reports_rollout_timeout_budget_and_fallback() -> None:
+def test_model_policy_records_but_does_not_enforce_resource_limits_in_construction() -> None:
     policy = resolve_model_policy(
         "openrouter:openai/gpt-4o-mini",
         env={
@@ -199,11 +199,32 @@ def test_model_policy_reports_rollout_timeout_budget_and_fallback() -> None:
         },
     )
 
-    assert policy.timeout_seconds == 12.5
-    assert policy.max_cost_usd == 0.02
+    assert policy.aggressive_construction_mode is True
+    assert policy.resource_limits_enforced is False
+    assert policy.configured_timeout_seconds == 12.5
+    assert policy.configured_max_cost_usd == 0.02
+    assert policy.timeout_seconds is None
+    assert policy.max_cost_usd is None
     assert policy.estimated_call_cost_usd == 0.001
     assert policy.fallback_model == "openrouter:google/gemma-3-27b-it"
     assert "sk-test-secret" not in str(policy.model_dump(mode="json"))
+
+
+def test_model_policy_enforces_resource_limits_only_when_construction_is_disabled() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={
+            "OPENROUTER_API_KEY": "sk-test-secret",
+            "SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE": "0",
+            "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS": "12.5",
+            "SCOUT_AI_OS_MODEL_MAX_COST_USD": "0.02",
+        },
+    )
+
+    assert policy.aggressive_construction_mode is False
+    assert policy.resource_limits_enforced is True
+    assert policy.timeout_seconds == 12.5
+    assert policy.max_cost_usd == 0.02
 
 
 def test_model_policy_reports_estimated_call_cost() -> None:
