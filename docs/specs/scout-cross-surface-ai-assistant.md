@@ -24,7 +24,7 @@ keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
 2026-07-06 update: Scout AI is the full-capability user entrypoint. Pydantic AI
-provider compatibility targets v2.8.0. The assistant and Mac-local fallback
+provider compatibility targets v2.9.0. The assistant and Mac-local fallback
 paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
 provider for `openrouter:<vendor/model>`. Native WebSearch and WebFetch are
@@ -279,7 +279,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.8.0;
+- supported runtime family: Pydantic AI v2.9.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;
@@ -298,10 +298,14 @@ Proposed flags:
 ```text
 SCOUT_AI_ASSISTANT_ENABLED=1
 SCOUT_AI_ASSISTANT_PROVIDER=mock|pydantic_ai
-SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS=8
-SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS=12000
+SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE=1
 SCOUT_AI_ASSISTANT_CONFIG_PATH=/secure/local/scout-assistant-models.json
 ```
+
+Aggressive Construction Mode leaves assistant timeout and context-character
+limits unset. `SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS` and
+`SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS` are explicit Productization/operator
+overrides and become effective only when aggressive construction mode is off.
 
 The Pydantic AI provider should be separate from `/navigate`. It may reuse
 shared model configuration, but it should have its own system prompt and tools
@@ -1433,6 +1437,57 @@ Milestone 10.2 Slice 11 hardware experiment assets are complete when:
 After Milestone 10.2 Slice 11, the hardware experiment assets remain optional
 operator-run evidence and must not be promoted into the assistant readiness
 gate without a separate spec decision.
+
+## Progressive Workspace Evidence Retrieval
+
+All assistant surfaces use the same evidence flow for explicit workspace
+questions:
+
+```text
+classify question
+  -> discover the minimum domain tools/artifacts
+  -> inspect schema when necessary
+  -> call scout.ai.workspace.query.v1 for deterministic records/aggregates
+  -> perform a bounded join only when classified as join/spatial
+  -> verify evidence IDs, source hashes, freshness, and boundaries
+  -> synthesize with tools disabled
+  -> verified no-tool repair/replan when needed
+  -> external-limit checkpoint and fresh-budget continuation
+```
+
+Budgets are selected by the typed `AgentBudgetPolicy`; surfaces do not choose
+their own request/tool counts. Every typed or unknown question class has at
+least 10 tool calls and 10 model requests per attempt and per recovery stage.
+Stage budgets and no-progress rules still stop early when evidence is
+sufficient. Planner, retriever, synthesis, verifier, reviewer, repair, retry,
+replan, browser, and subagent counters also default to at least 10. Pydantic AI
+`UsageLimits` enforces the current attempt and the Scout ledger checks actual
+usage afterward.
+
+Aggressive Construction Mode leaves Scout-defined token, evidence-card,
+context-character, cost, answer-time, and replay-time ceilings unset. External
+provider/platform limits are reported as external limits, checkpoint current
+evidence/call trace/state, and resume with a fresh continuation budget.
+
+The runtime stops before spending remaining budget when calls repeat canonical
+arguments, two calls add no evidence ID, a safe retry repeats a root cause, or
+the artifact/field/live/safety gap is terminal. Missing live position, team or
+health state, current field danger, stale weather, Go/No-Go evidence, retreat
+safety, and water-source state remain fail closed. A supported static fact is
+not rejected only because an unrelated live tool lacks data.
+
+Cross-surface responses may render complete facts, partial evidence, or an
+explicit evidence gap. They must not convert candidate evidence into runtime
+safety truth. Deterministic operation replay and cloud-model evaluation are
+reported separately; an offline 100% operation/fact score is not proof that an
+OpenRouter or local model selected tools or wrote a good answer.
+
+After a failed attempt, all surfaces follow the same finite ladder: repair the
+tool/evidence/schema/harness with fresh 10/10, switch model with fresh 10/10,
+build a complete Codex review artifact, and register a stable known issue with
+an explicit unblock condition if the question remains unresolved. This ladder
+does not relax secret redaction, workspace containment, permission gates, or
+runtime-safety-truth boundaries.
 
 ## Resolved Implementation Choices
 

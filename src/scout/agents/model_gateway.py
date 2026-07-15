@@ -97,7 +97,7 @@ class ModelProviderHealthMonitor:
         self,
         *,
         provider_id: str = "external_model",
-        failure_threshold: int = 2,
+        failure_threshold: int = 10,
         recovery_seconds: float = 60.0,
         clock: Callable[[], float] | None = None,
     ) -> None:
@@ -178,7 +178,7 @@ class ModelSlaCallResult:
     output: Any
     status: ModelSlaStatus
     elapsed_seconds: float
-    timeout_seconds: float
+    timeout_seconds: float | None
     estimated_cost_usd: float
     spent_usd: float
     fallback_used: bool
@@ -213,7 +213,11 @@ class ModelSlaGateway:
         health_monitor: ModelProviderHealthMonitor | None = None,
     ) -> None:
         self.policy = policy
-        self.ledger = ledger or ModelCallLedger(max_cost_usd=policy.max_cost_usd)
+        self.ledger = ledger or ModelCallLedger(
+            max_cost_usd=(
+                policy.max_cost_usd if policy.resource_limits_enforced else None
+            )
+        )
         self.health_monitor = health_monitor or ModelProviderHealthMonitor()
 
     def run_sync(
@@ -223,7 +227,7 @@ class ModelSlaGateway:
         *,
         fallback_call: Callable[[], Any] | None = None,
         estimated_cost_usd: float | None = None,
-        max_retries: int = 0,
+        max_retries: int = 10,
     ) -> ModelSlaCallResult:
         if max_retries < 0:
             raise ValueError("max_retries cannot be negative")
@@ -244,7 +248,10 @@ class ModelSlaGateway:
                 error="model provider circuit is open",
                 attempts=0,
             )
-        if not self.ledger.can_spend(estimated_cost):
+        if (
+            self.policy.resource_limits_enforced
+            and not self.ledger.can_spend(estimated_cost)
+        ):
             return self._fallback_or_terminal(
                 operation=operation,
                 started_at=started_at,
@@ -262,7 +269,14 @@ class ModelSlaGateway:
             executor = ThreadPoolExecutor(max_workers=1)
             future = executor.submit(call)
             try:
-                output = future.result(timeout=self.policy.timeout_seconds)
+                output = (
+                    future.result()
+                    if (
+                        not self.policy.resource_limits_enforced
+                        or self.policy.timeout_seconds is None
+                    )
+                    else future.result(timeout=self.policy.timeout_seconds)
+                )
             except TimeoutError:
                 future.cancel()
                 error = f"model call exceeded {self.policy.timeout_seconds:g}s"

@@ -262,6 +262,81 @@ They must not be cited as 100% answer quality, and the next 100-question run mus
 not start until the first ten browser-visible answers pass human review without
 reference-answer injection.
 
+## 2026-07-13 Workspace-Grounded 100-Question Rerun
+
+This rerun used a new 100-question corpus derived only from artifacts present in
+the `chilai_nanhua_day1_scoutAI` workspace. It has zero exact-question overlap
+with the earlier 200-question corpus. No synthetic field context was injected.
+
+The run used Scout's Hailo Ollama service through an SSH tunnel to the
+host-local endpoint, model `qwen3:1.7b`, HEF format, on
+`pci/0001:01:00.0 HAILO10H`. Remote journal and `hailortcli monitor` evidence
+attested hardware execution; a tunnel response alone was not treated as
+hardware proof.
+
+Two direct-eval transport defects were found before the accepted run:
+
+- C0/C1 control characters in the message content triggered Hailo 5.3 prompt
+  rendering failures.
+- Nested JSON evidence briefs could be truncated inside an escape sequence by
+  the Hailo renderer and become invalid JSON.
+
+The accepted run used a bounded plain-text evidence brief with normalized
+control characters. After the fix, the 100-question window produced zero new
+`Failed to render prompt` journal entries.
+
+Artifacts:
+
+- corpus: `outputs/evals/scout_ai_workspace_grounded_100_questions_20260713.json`
+- combined JSON: `outputs/evals/workspace_grounded_100_20260713_qwen3/combined_workspace_grounded_100_qwen3_aihat2.json`
+- combined Markdown: `outputs/evals/workspace_grounded_100_20260713_qwen3/combined_workspace_grounded_100_qwen3_aihat2.md`
+
+Pipeline classifications were `answered=81`,
+`answered_with_missing_evidence_gap=17`, and
+`weak_or_refusal_like_answer=2`. The separate automatic quality screen reported
+41 pass-requires-human-review, 47 fail, and 12 needs-review. These values are
+not correctness scores. Manual spot checks found fabricated reference GPX
+names/counts, route-level point counts misreported as per-segment counts, and
+missed boss-point evidence. Therefore this model/run does not pass the local
+answer-quality gate even though all 100 requests reached the model and returned
+non-empty text.
+
+Observed health envelope during the accepted run:
+
+- AI HAT+ 2 on-die temperature: approximately 58.2 to 61.5 C;
+- Scout CPU temperature: approximately 51.8 to 57.3 C;
+- Hailo NNC utilization while generating: approximately 91 to 97 percent;
+- Linux RAM used: approximately 1.10 GiB of 8.06 GiB, swap 0;
+- Hailo Ollama RSS: approximately 135 MiB, `NRestarts=0`;
+- `get_throttled=0x50000`: no current low bits, but historical undervoltage and
+  throttling occurred during this boot;
+- UPS/battery telemetry: unavailable and must not be reported as healthy.
+
+## Local Versus Cloud Token Budgets
+
+The historical `768` workspace generation limit was designed for the AI HAT+2
+local fallback, where bounded output controls latency and memory use. It must
+not be inherited by an external cloud model. A 2026-07-13 OpenRouter GLM-5.2
+run exposed this configuration leak: 14 first-pass cases exhausted the imposed
+token budget and several nominally successful answers ended mid-sentence.
+
+The runtime contract is now:
+
+- local fallback default: bounded by
+  `SCOUT_AI_LOCAL_MODEL_MAX_TOKENS` or the legacy local-only
+  `SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS`;
+- cloud default: omit `max_tokens` and let the selected provider/model apply
+  its native completion capability;
+- optional cloud override: `SCOUT_AI_CLOUD_MODEL_MAX_TOKENS`, used only when an
+  operator deliberately requests a cap;
+- request pacing and per-question timeout are transport controls, not output
+  token limits, and must be reported separately in eval artifacts.
+
+Cloud-model comparisons must report `finish_reason`, non-empty completed-answer
+rate, provider errors, model-native tool calls, and any retries. Exact matching
+against the deterministic planner's suggested tool set remains diagnostic and
+is not an answer-correctness score.
+
 ## Boundary
 
 All AI HAT+2 fallback outputs remain advisory and candidate-only:

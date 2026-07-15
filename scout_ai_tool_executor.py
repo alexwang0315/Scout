@@ -37,6 +37,7 @@ from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_runtime_ingress_status_tool import RUNTIME_INGRESS_STATUS_TOOL_ID
+from scout_workspace_query_tool import WORKSPACE_QUERY_TOOL_ID
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -132,6 +133,14 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
     project_root = str(arguments["project_root"])
     query = str(arguments.get("query") or "")
     limit = _int_arg(arguments, "limit", default=6)
+
+    if tool_id == WORKSPACE_QUERY_TOOL_ID:
+        from scout_workspace_query_tool import query_project_workspace
+
+        request = arguments.get("request")
+        if not isinstance(request, dict):
+            raise ValueError("workspace query request must be an object")
+        return query_project_workspace(project_root, request=request)
 
     if tool_id == "pydantic_ai.tool.search_scout_workspace_catalog.v0":
         from scout_workspace_search_tools import search_project_workspace_catalog
@@ -888,6 +897,10 @@ def _missing_executable_fields(tool_id: str, arguments: dict[str, Any]) -> list[
         and not _str_or_none(arguments.get("query"))
     ):
         missing.append("query")
+    if tool_id == WORKSPACE_QUERY_TOOL_ID and not isinstance(
+        arguments.get("request"), dict
+    ):
+        missing.append("request")
     return missing
 
 
@@ -941,6 +954,7 @@ def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str
         INS_DR_TRACE_TOOL_ID,
         RUNTIME_INGRESS_STATUS_TOOL_ID,
         NMEA_ROUTE_RISK_PROBE_TOOL_ID,
+        WORKSPACE_QUERY_TOOL_ID,
     }:
         return []
     value = payload.get("missing_fields")

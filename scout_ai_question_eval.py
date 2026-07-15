@@ -15,6 +15,10 @@ DEFAULT_CORPUS_PATH = Path("docs/specs/scout-ai-200-question-corpus.json")
 
 
 CURRENT_TOOLS = {
+    "scout.ai.workspace.query.v1": {
+        "label": "deterministic workspace query",
+        "evidence_scope": "bounded record-level inspect, count, distinct, filter, group-by, top-k, argmax, diff, freshness, nearest, interval, and route-forward queries over local JSON/GeoJSON artifacts",
+    },
     "pydantic_ai.tool.search_scout_workspace_catalog.v0": {
         "label": "workspace catalog",
         "evidence_scope": "workspace artifact inventory and layer/material availability",

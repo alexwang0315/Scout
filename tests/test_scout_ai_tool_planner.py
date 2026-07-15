@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from assistant_models import AssistantSurface, ScoutAssistantQuery
+from scout.schemas.agent_runtime import QuestionClass
+from scout.schemas.workspace_query import WorkspaceQueryOperation
 from scout_ai_tool_planner import (
     CONTEXTUAL_PERMISSION_TOOL_ID,
     ENERGY_VITALS_TOOL_ID,
@@ -37,6 +39,7 @@ from scout_workspace_search_tools import (
     ROUTE_STRUCTURE_TOOL_ID,
     WORKSPACE_CATALOG_TOOL_ID,
 )
+from scout_workspace_query_tool import WORKSPACE_QUERY_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +60,147 @@ def test_planner_selects_route_structure_for_cp_count_question() -> None:
     assert item.request is not None
     assert item.request["tool_id"] == ROUTE_STRUCTURE_TOOL_ID
     assert plan.boundary.runtime_safety_truth is False
+    assert plan.question_class == QuestionClass.AGGREGATE_WORKSPACE_FACT
+    assert plan.max_tool_calls_per_attempt >= 10
+    assert plan.max_model_requests_per_attempt >= 10
+    assert plan.expected_operations == [WorkspaceQueryOperation.COUNT]
+    assert plan.follow_up_tool_ids == [WORKSPACE_QUERY_TOOL_ID]
+
+
+def test_static_count_wording_does_not_add_live_navigation_tool() -> None:
+    plan = plan_scout_ai_tools(
+        _query("目前這條路線有多少個 CP 點？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    assert plan.question_class == QuestionClass.AGGREGATE_WORKSPACE_FACT
+    assert plan.requires_live_state is False
+    assert LIVE_NAVIGATION_STATE_TOOL_ID not in _tool_ids(plan)
+
+
+@pytest.mark.parametrize(
+    ("question", "question_class", "operations", "requires_join", "requires_live"),
+    [
+        (
+            "哪一段距離最長？",
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            [WorkspaceQueryOperation.ARGMAX],
+            False,
+            False,
+        ),
+        (
+            "距離最高風險點最近的 CP 是哪一個？",
+            QuestionClass.CROSS_ARTIFACT_JOIN,
+            [WorkspaceQueryOperation.ARGMAX, WorkspaceQueryOperation.NEAREST],
+            True,
+            False,
+        ),
+        (
+            "前方最近水源還有多遠？",
+            QuestionClass.SPATIAL_ROUTE_FACT,
+            [WorkspaceQueryOperation.ROUTE_FORWARD],
+            False,
+            True,
+        ),
+        (
+            "哪些高坡度地段在大雨後風險最高？",
+            QuestionClass.WEATHER_TERRAIN_COMPOUND,
+            [WorkspaceQueryOperation.FILTER, WorkspaceQueryOperation.TOP_K],
+            True,
+            False,
+        ),
+        (
+            "白牆下這段還適合走嗎？",
+            QuestionClass.SAFETY_DECISION,
+            [],
+            False,
+            True,
+        ),
+    ],
+)
+def test_planner_classifies_progressive_workspace_operations(
+    question: str,
+    question_class: QuestionClass,
+    operations: list[WorkspaceQueryOperation],
+    requires_join: bool,
+    requires_live: bool,
+) -> None:
+    plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+
+    assert plan.question_class == question_class
+    assert plan.expected_operations == operations
+    assert plan.requires_join is requires_join
+    assert plan.requires_live_state is requires_live
+    assert plan.follow_up_tool_ids == (
+        [WORKSPACE_QUERY_TOOL_ID] if operations else []
+    )
+    assert WORKSPACE_QUERY_TOOL_ID not in _tool_ids(plan)
+
+
+@pytest.mark.parametrize(
+    ("question", "operations", "question_class", "requires_join"),
+    [
+        (
+            "目前 workspace 的 project_id、route_name 與 primary GPX 檔名分別是什麼？",
+            [WorkspaceQueryOperation.INSPECT],
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            False,
+        ),
+        (
+            "calibrated risk score 最高的五個位置在哪裡？",
+            [WorkspaceQueryOperation.TOP_K],
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            False,
+        ),
+        (
+            "risk score 各 bucket 分別有多少個點？",
+            [WorkspaceQueryOperation.GROUP_BY],
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            False,
+        ),
+        (
+            "QPF corridor summary 的 max、mean、p95 與 peak window 是多少？",
+            [WorkspaceQueryOperation.INSPECT],
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            False,
+        ),
+        (
+            "本次路徑的 20K 對應哪個 route segment？",
+            [WorkspaceQueryOperation.FILTER, WorkspaceQueryOperation.INTERVAL],
+            QuestionClass.CROSS_ARTIFACT_JOIN,
+            True,
+        ),
+        (
+            "compiled mission graph 的 candidate 與 reviewed 版本是否一致？",
+            [WorkspaceQueryOperation.DIFF],
+            QuestionClass.CROSS_ARTIFACT_JOIN,
+            True,
+        ),
+        (
+            "workspace 中最新的 live navigation state 是何時，資料是否過期？",
+            [WorkspaceQueryOperation.FRESHNESS],
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            False,
+        ),
+        (
+            "terrain route samples 中坡度最高的位置與數值是多少？",
+            [WorkspaceQueryOperation.ARGMAX],
+            QuestionClass.AGGREGATE_WORKSPACE_FACT,
+            False,
+        ),
+    ],
+)
+def test_workspace_operation_classifier_uses_query_semantics_not_substrings(
+    question: str,
+    operations: list[WorkspaceQueryOperation],
+    question_class: QuestionClass,
+    requires_join: bool,
+) -> None:
+    plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+
+    assert plan.expected_operations == operations
+    assert plan.question_class == question_class
+    assert plan.requires_join is requires_join
 
 
 def test_planner_selects_workspace_catalog_for_outputs_preparation_metadata_question() -> None:
@@ -71,6 +215,24 @@ def test_planner_selects_workspace_catalog_for_outputs_preparation_metadata_ques
     assert item.missing_fields == []
     assert item.request is not None
     assert item.request["tool_id"] == WORKSPACE_CATALOG_TOOL_ID
+
+
+@pytest.mark.parametrize(
+    "question",
+    (
+        "目前 workspace 的 project_id、route_name 與 primary GPX 檔名分別是什麼？",
+        "請從 workspace catalog 查出 import manifest 記錄的來源類型與檔案數量。",
+    ),
+)
+def test_planner_keeps_catalog_metadata_queries_out_of_live_state_tools(
+    question: str,
+) -> None:
+    plan = plan_scout_ai_tools(
+        _query(question),
+        project_root=PROJECT_ROOT,
+    )
+
+    assert _tool_ids(plan) == {WORKSPACE_CATALOG_TOOL_ID}
 
 
 def test_planner_treats_departure_bundle_as_workspace_inventory() -> None:

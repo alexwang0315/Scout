@@ -12,12 +12,14 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from scout.schemas.agent_runtime import (
+    AgentProgressState,
     AgentRequestLedger,
     AgentRunBudget,
     AgentRunLedger,
     ContextHandle,
     ContextReadResult,
     EvidenceCard,
+    EvidenceRecord,
     GroundingVerification,
     PlannedToolCall,
     ToolCard,
@@ -108,6 +110,14 @@ _SAFETY_CONCEPT_PHRASES = {
     "safe": ("安全",),
     "unsafe": ("不安全",),
 }
+_GROUNDING_CONCEPT_ALIASES = {
+    "checkpoint": ("checkpoint", "checkpoints", "cp", "檢查點", "控制點"),
+    "mileage": ("mileage", "kilometer", "kilometre", "里程", "公里", "k標"),
+    "route": ("route", "track", "trail", "路線", "路徑", "航跡"),
+    "risk_score": ("risk_score", "score", "風險分數", "風險值"),
+    "terrain": ("terrain", "slope", "地形", "坡度"),
+    "weather": ("weather", "rain", "wind", "天氣", "降雨", "風勢"),
+}
 
 
 def estimate_tokens(value: str | bytes | object) -> int:
@@ -148,13 +158,13 @@ class BoundedAgentRuntime:
         query: str,
         *,
         filters: Mapping[str, object] | None = None,
-        top_k: int = 3,
-        token_budget: int = 600,
+        top_k: int = 10,
+        token_budget: int | None = None,
     ) -> list[ContextHandle]:
         """Return only compact handles, ranked and bounded by top-k and tokens."""
 
         resolved_top_k = max(1, min(int(top_k), 10))
-        resolved_budget = max(1, int(token_budget))
+        resolved_budget = None if token_budget is None else max(1, int(token_budget))
         filter_values = dict(filters or {})
         self.last_context_catalog_scan_count = len(self._context_handles)
         ranked = sorted(
@@ -173,7 +183,7 @@ class BoundedAgentRuntime:
             if score <= 0.0:
                 continue
             cost = max(1, handle.estimated_tokens)
-            if used_tokens + cost > resolved_budget:
+            if resolved_budget is not None and used_tokens + cost > resolved_budget:
                 continue
             selected.append(handle.model_copy(update={"relevance_score": min(1.0, score)}))
             used_tokens += cost
@@ -185,7 +195,7 @@ class BoundedAgentRuntime:
         context_id: str,
         *,
         selector: str | None = None,
-        token_budget: int = 800,
+        token_budget: int | None = None,
     ) -> ContextReadResult:
         """Read one selected context and return a bounded projection."""
 
@@ -197,10 +207,11 @@ class BoundedAgentRuntime:
             raise KeyError(f"unknown context handle: {context_id}")
         payload = self._context_payloads.get(context_id)
         selected = _select_payload(payload, selector)
-        max_chars = max(80, int(token_budget) * 4)
         serialized = _json_dumps(selected)
-        truncated = len(serialized) > max_chars
+        max_chars = None if token_budget is None else max(80, int(token_budget) * 4)
+        truncated = max_chars is not None and len(serialized) > max_chars
         if truncated:
+            assert max_chars is not None
             preview_limit = max(20, max_chars - 160)
             content: Any = {"preview": serialized[:preview_limit]}
         else:
@@ -208,7 +219,12 @@ class BoundedAgentRuntime:
         continuation = (
             _continuation_handle("context", context_id, serialized) if truncated else None
         )
-        estimated = min(int(token_budget), estimate_tokens(_json_dumps(content)))
+        estimated_tokens = estimate_tokens(_json_dumps(content))
+        estimated = (
+            estimated_tokens
+            if token_budget is None
+            else min(int(token_budget), estimated_tokens)
+        )
         return ContextReadResult(
             context_id=context_id,
             source_ref=handle.source_ref,
@@ -229,7 +245,7 @@ class BoundedAgentRuntime:
     ) -> list[ToolCard]:
         """Rank compact cards without touching their full schemas."""
 
-        resolved_top_k = max(1, min(int(top_k), 5))
+        resolved_top_k = max(1, min(int(top_k), 12))
         candidates = [
             card
             for card in self._tool_cards
@@ -266,7 +282,7 @@ class BoundedAgentRuntime:
     def tool_describe(self, tool_ids: Sequence[str]) -> dict[str, dict[str, Any]]:
         """Load full schemas only for an already bounded shortlist."""
 
-        selected_ids = list(dict.fromkeys(tool_ids))[:5]
+        selected_ids = list(dict.fromkeys(tool_ids))[:12]
         described = {
             tool_id: self._tool_schemas[tool_id]
             for tool_id in selected_ids
@@ -286,7 +302,7 @@ class BoundedAgentRuntime:
     ) -> ToolPlan:
         """Create a typed plan and apply the general/compound hard cap."""
 
-        hard_cap = 5 if compound else 3
+        hard_cap = self.budget.max_tool_calls
         selected = list(dict.fromkeys(selected_tool_ids))[:hard_cap]
         arguments = dict(arguments_by_tool or {})
         reasons = dict(reasons_by_tool or {})
@@ -306,13 +322,15 @@ class BoundedAgentRuntime:
             estimated_input_tokens=sum(
                 estimate_tokens(call.model_dump_json()) for call in calls
             ),
-            estimated_output_tokens=min(
-                self.budget.max_tool_result_tokens * len(calls),
-                self.budget.max_input_tokens,
+            estimated_output_tokens=(
+                0
+                if self.budget.max_tool_result_tokens is None
+                else self.budget.max_tool_result_tokens * len(calls)
             ),
             required_bundle_expansion=[],
             stop_or_replan_condition=(
-                "Stop after sufficient evidence; allow at most one bounded supplemental retrieval."
+                "Stop after sufficient verified evidence; otherwise continue useful "
+                "supplemental retrievals within this stage's 10-call budget."
             ),
         )
 
@@ -325,9 +343,15 @@ class BoundedAgentRuntime:
     ) -> EvidenceCard:
         """Project a raw server-side result into one bounded EvidenceCard."""
 
-        resolved_budget = min(
-            max(50, int(token_budget or self.budget.max_tool_result_tokens)),
-            self.budget.max_tool_result_tokens,
+        configured_budget = (
+            token_budget
+            if token_budget is not None
+            else self.budget.max_tool_result_tokens
+        )
+        resolved_budget = (
+            None
+            if configured_budget is None
+            else max(50, int(configured_budget))
         )
         raw_result = result if isinstance(result, dict) else {"value": result}
         sensitivity = str(raw_result.get("sensitivity") or "").strip().casefold()
@@ -338,14 +362,25 @@ class BoundedAgentRuntime:
                 "missing_fields": ["private_evidence_withheld"],
             }
         else:
-            sanitized = _sanitize_model_value(raw_result, depth=0)
+            sanitized = _sanitize_model_value(
+                raw_result,
+                depth=0,
+                bounded=self.budget.enforce_resource_limits,
+            )
             result_dict = sanitized if isinstance(sanitized, dict) else {}
         serialized = _json_dumps(result_dict)
         source_refs = _extract_source_refs(result_dict)
+        evidence_records = _extract_evidence_records(
+            result_dict,
+            bounded=self.budget.enforce_resource_limits,
+        )
         missing_fields = _string_list(result_dict.get("missing_fields"))
         claim_summary = _claim_summary(result_dict)
         result_count = _result_count(result_dict)
-        key_values = _bounded_key_values(result_dict)
+        key_values = _bounded_key_values(
+            result_dict,
+            bounded=self.budget.enforce_resource_limits,
+        )
         card = EvidenceCard(
             tool_id=tool_id,
             claim_summary=claim_summary,
@@ -354,32 +389,84 @@ class BoundedAgentRuntime:
             freshness=_freshness(result_dict),
             quality=_quality(result_dict),
             source_refs=source_refs,
+            evidence_records=evidence_records,
             result_count=result_count,
             truncated=False,
             estimated_tokens=0,
         )
         card_tokens = estimate_tokens(card.model_dump_json())
-        truncated = len(serialized) > resolved_budget * 4 or card_tokens > resolved_budget
-        if card_tokens > resolved_budget:
-            compact_key_values = {
-                key: value for key, value in list(key_values.items())[:3]
-            }
-            card = card.model_copy(
-                update={
-                    "claim_summary": claim_summary[:240],
-                    "key_values": compact_key_values,
-                }
-            )
+        truncated = self.budget.enforce_resource_limits and resolved_budget is not None and (
+            len(serialized) > resolved_budget * 4 or card_tokens > resolved_budget
+        )
         continuation = (
             _continuation_handle("tool", tool_id, serialized) if truncated else None
         )
-        final_tokens = min(resolved_budget, estimate_tokens(card.model_dump_json()))
-        return card.model_copy(
+        card = card.model_copy(
             update={
                 "truncated": truncated,
                 "continuation_handle": continuation,
-                "estimated_tokens": final_tokens,
             }
+        )
+        if truncated:
+            assert resolved_budget is not None
+            card = _fit_evidence_card_to_budget(card, resolved_budget)
+        final_tokens = estimate_tokens(card.model_dump_json())
+        card = card.model_copy(update={"estimated_tokens": final_tokens})
+        final_tokens = estimate_tokens(card.model_dump_json())
+        return card.model_copy(update={"estimated_tokens": final_tokens})
+
+    def record_tool_progress(
+        self,
+        state: AgentProgressState,
+        *,
+        tool_id: str,
+        arguments: Mapping[str, Any],
+        evidence_ids: Sequence[str],
+        root_cause: str | None = None,
+        safe_retry: bool = False,
+    ) -> AgentProgressState:
+        """Return a new state and stop deterministic no-progress loops."""
+
+        canonical_key = hashlib.sha256(
+            _json_dumps({"tool_id": tool_id, "arguments": arguments}).encode("utf-8")
+        ).hexdigest()
+        stage_counts = dict(state.stage_tool_call_counts)
+        stage_counts[state.stage] = stage_counts.get(state.stage, 0) + 1
+        if canonical_key in state.canonical_call_keys:
+            return state.model_copy(
+                update={
+                    "stage_tool_call_counts": stage_counts,
+                    "stop_reason": "duplicate_canonical_tool_call",
+                }
+            )
+        known_evidence = set(state.evidence_ids)
+        new_evidence = [item for item in evidence_ids if item not in known_evidence]
+        no_progress = (
+            0
+            if new_evidence
+            else state.consecutive_calls_without_new_evidence + 1
+        )
+        root_causes = list(state.safe_retry_root_causes)
+        stop_reason: str | None = None
+        stage_limit = self.budget.stage_budget.tool_call_limit(state.stage)
+        if stage_counts[state.stage] > stage_limit:
+            stop_reason = f"stage_tool_call_limit_exceeded:{state.stage.value}"
+        elif root_cause and not safe_retry:
+            stop_reason = f"terminal_evidence_gap:{root_cause}"
+        elif root_cause and root_cause in root_causes:
+            stop_reason = f"repeated_safe_retry_root_cause:{root_cause}"
+        elif no_progress >= 2:
+            stop_reason = "two_tool_calls_without_new_evidence"
+        if root_cause and safe_retry:
+            root_causes.append(root_cause)
+        return AgentProgressState(
+            stage=state.stage,
+            canonical_call_keys=[*state.canonical_call_keys, canonical_key],
+            evidence_ids=_dedupe([*state.evidence_ids, *new_evidence]),
+            consecutive_calls_without_new_evidence=no_progress,
+            safe_retry_root_causes=root_causes,
+            stage_tool_call_counts=stage_counts,
+            stop_reason=stop_reason,
         )
 
     def record_request(
@@ -418,13 +505,17 @@ class BoundedAgentRuntime:
         remaining: dict[str, int | float | None] = {
             "requests": max(0, budget.max_requests - len(requests)),
             "tool_calls": max(0, budget.max_tool_calls - int(totals["tool_call_count"])),
-            "input_tokens": max(0, budget.max_input_tokens - int(totals["input_tokens"])),
-            "output_tokens": max(0, budget.max_output_tokens - int(totals["output_tokens"])),
-            "total_tokens": max(
-                0,
-                budget.max_total_tokens
-                - int(totals["input_tokens"])
-                - int(totals["output_tokens"]),
+            "input_tokens": _remaining_optional_limit(
+                budget.max_input_tokens,
+                int(totals["input_tokens"]),
+            ),
+            "output_tokens": _remaining_optional_limit(
+                budget.max_output_tokens,
+                int(totals["output_tokens"]),
+            ),
+            "total_tokens": _remaining_optional_limit(
+                budget.max_total_tokens,
+                int(totals["input_tokens"]) + int(totals["output_tokens"]),
             ),
             "repairs": max(0, budget.max_repairs - int(totals["repair_count"])),
             "estimated_cost": (
@@ -477,7 +568,7 @@ class BoundedAgentRuntime:
         question: str,
         evidence_cards: Sequence[EvidenceCard],
         missing_evidence: Sequence[str],
-        token_budget: int = 2_000,
+        token_budget: int | None = None,
     ) -> str:
         """Build a bounded final prompt with evidence only and no tool definitions."""
 
@@ -486,13 +577,21 @@ class BoundedAgentRuntime:
             "evidence_cards": [card.model_dump(mode="json") for card in evidence_cards],
             "missing_evidence": list(missing_evidence),
             "answer_contract": (
-                "Answer only from evidence_cards. Cite source refs in square brackets "
-                "after every concrete claim. Report missing evidence. Candidate evidence "
-                "is not runtime safety truth. Do not call tools."
+                "Answer only from evidence_cards in at most three short sentences. "
+                "After every concrete claim, cite exact strings from source_refs as "
+                "[exact/source/ref] or a record as [evidence:exact_evidence_id]. "
+                "Never cite continuation_handle, tool_id, "
+                "or add a source: prefix. Report only missing evidence listed in "
+                "missing_evidence. Candidate evidence is not runtime safety truth. "
+                "Do not use headings or lists. Do not call tools."
             ),
         }
         prompt = "SCOUT_BOUNDED_SYNTHESIS_V1\n" + _json_dumps(payload)
-        return prompt[: max(200, int(token_budget) * 4)]
+        return (
+            prompt
+            if token_budget is None
+            else prompt[: max(200, int(token_budget) * 4)]
+        )
 
     def build_grounding_repair_prompt(
         self,
@@ -501,7 +600,7 @@ class BoundedAgentRuntime:
         draft_answer: str,
         verification: GroundingVerification,
         evidence_cards: Sequence[EvidenceCard],
-        token_budget: int = 1_000,
+        token_budget: int | None = None,
     ) -> str:
         """Build the sole allowed repair request from failures and evidence delta."""
 
@@ -514,22 +613,32 @@ class BoundedAgentRuntime:
                 "freshness": card.freshness,
                 "quality": card.quality,
                 "source_refs": card.source_refs,
+                "evidence_records": [
+                    item.model_dump(mode="json") for item in card.evidence_records
+                ],
             }
             for card in evidence_cards
         ]
         payload = {
             "question": question,
-            "draft_answer": draft_answer[:1_200],
+            "draft_answer": draft_answer,
             "repair_items": verification.repair_items,
             "evidence_delta": evidence_delta,
             "answer_contract": (
                 "Rewrite only the unsupported or invalidly cited statements. "
-                "Every factual sentence must cite a listed source_ref in square "
-                "brackets. Do not add facts, tools, or unstated numbers."
+                "Every factual sentence must cite an exact listed source_ref using "
+                "[exact/source/ref] or a record using [evidence:exact_evidence_id]. "
+                "Never cite continuation_handle, tool_id, or add a "
+                "source: prefix. Use at most three short sentences. Do not add facts, "
+                "tools, or unstated numbers."
             ),
         }
         prompt = "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1\n" + _json_dumps(payload)
-        return prompt[: max(200, int(token_budget) * 4)]
+        return (
+            prompt
+            if token_budget is None
+            else prompt[: max(200, int(token_budget) * 4)]
+        )
 
     @staticmethod
     def verify_synthesis(
@@ -539,7 +648,13 @@ class BoundedAgentRuntime:
     ) -> GroundingVerification:
         """Reject factual sentences without valid evidence citations."""
 
-        valid_refs = {ref for card in evidence_cards for ref in card.source_refs}
+        valid_refs = {
+            ref for card in evidence_cards for ref in card.source_refs
+        } | {
+            f"evidence:{record.evidence_id}"
+            for card in evidence_cards
+            for record in card.evidence_records
+        }
         cited = _dedupe(_citation_refs(answer))
         invalid = [ref for ref in cited if ref not in valid_refs]
         unsupported: list[str] = []
@@ -551,7 +666,14 @@ class BoundedAgentRuntime:
             supporting_cards = [
                 card
                 for card in evidence_cards
-                if any(ref in card.source_refs for ref in sentence_refs)
+                if any(
+                    ref in card.source_refs
+                    or any(
+                        ref == f"evidence:{record.evidence_id}"
+                        for record in card.evidence_records
+                    )
+                    for ref in sentence_refs
+                )
             ]
             if not _claim_has_evidence_overlap(sentence, supporting_cards):
                 unsupported.append(sentence.strip())
@@ -561,7 +683,10 @@ class BoundedAgentRuntime:
             evidence_numbers = set(
                 _NUMBER_PATTERN.findall(_grounding_evidence_text(supporting_cards))
             )
-            if any(number not in evidence_numbers for number in numbers):
+            if any(
+                not _number_is_grounded(number, evidence_numbers)
+                for number in numbers
+            ):
                 unsupported.append(sentence.strip())
         unsupported = _dedupe([item for item in unsupported if item])
         unsupported_safety_claims = [
@@ -674,7 +799,11 @@ def _select_payload(payload: Any, selector: str | None) -> Any:
     return current
 
 
-def _bounded_key_values(payload: Mapping[str, Any]) -> dict[str, Any]:
+def _bounded_key_values(
+    payload: Mapping[str, Any],
+    *,
+    bounded: bool,
+) -> dict[str, Any]:
     excluded = {
         "boundary",
         "candidate_only",
@@ -691,14 +820,20 @@ def _bounded_key_values(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
     output: dict[str, Any] = {}
     for key, value in payload.items():
-        if key in excluded or _is_sensitive_key(key) or len(output) >= 10:
+        if key in excluded or _is_sensitive_key(key):
             continue
-        output[str(key)] = _bounded_value(value, depth=0)
+        if bounded and len(output) >= 10:
+            break
+        output[str(key)] = (
+            _bounded_value(value, depth=0)
+            if bounded
+            else _sanitize_model_value(value, depth=0, bounded=False)
+        )
     return output
 
 
 def _bounded_value(value: Any, *, depth: int) -> Any:
-    if depth >= 2:
+    if depth >= 3:
         return "[nested content omitted]"
     if isinstance(value, str):
         return value if len(value) <= 240 else f"{value[:237]}..."
@@ -709,18 +844,98 @@ def _bounded_value(value: Any, *, depth: int) -> Any:
             if not _is_sensitive_key(key)
         }
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [_bounded_value(item, depth=depth + 1) for item in list(value)[:3]]
+        return [_bounded_value(item, depth=depth + 1) for item in list(value)[:5]]
     if value is None or isinstance(value, (bool, int, float)):
         return value
     return str(value)[:240]
 
 
-def _sanitize_model_value(value: Any, *, depth: int) -> Any:
-    if depth > 6:
+def _fit_evidence_card_to_budget(
+    card: EvidenceCard,
+    token_budget: int,
+) -> EvidenceCard:
+    """Drop bounded previews until the serialized card fits its model budget."""
+
+    records = [
+        record.model_copy(
+            update={
+                "data": (
+                    bounded
+                    if isinstance(
+                        bounded := _bounded_value(record.data, depth=0),
+                        dict,
+                    )
+                    else {}
+                )
+            }
+        )
+        for record in card.evidence_records[:8]
+    ]
+    key_values = {
+        key: _bounded_value(value, depth=0)
+        for key, value in list(card.key_values.items())[:3]
+    }
+    source_refs = list(card.source_refs)
+    missing_fields = list(card.missing_fields)
+    claim_summary = card.claim_summary[:240]
+
+    for _ in range(128):
+        candidate = card.model_copy(
+            update={
+                "claim_summary": claim_summary,
+                "key_values": key_values,
+                "missing_fields": missing_fields,
+                "source_refs": source_refs,
+                "evidence_records": records,
+                "estimated_tokens": token_budget,
+            }
+        )
+        if estimate_tokens(candidate.model_dump_json()) <= token_budget:
+            return candidate
+        if len(records) > 1:
+            records = records[:-1]
+            continue
+        if records and records[0].data:
+            data_items = list(records[0].data.items())
+            compact_data = (
+                {str(data_items[0][0]): _bounded_value(data_items[0][1], depth=0)}
+                if len(data_items) > 1
+                else {}
+            )
+            records = [records[0].model_copy(update={"data": compact_data})]
+            continue
+        if records:
+            records = []
+            continue
+        if key_values:
+            key_values = dict(list(key_values.items())[:-1])
+            continue
+        if len(source_refs) > 1:
+            source_refs = source_refs[:1]
+            continue
+        if len(missing_fields) > 1:
+            missing_fields = missing_fields[:1]
+            continue
+        if len(claim_summary) > 80:
+            claim_summary = claim_summary[:80]
+            continue
+        if claim_summary:
+            claim_summary = ""
+            continue
+        return candidate
+    return candidate
+
+
+def _sanitize_model_value(value: Any, *, depth: int, bounded: bool) -> Any:
+    if depth > (6 if bounded else 32):
         return "[nested content omitted]"
     if isinstance(value, Mapping):
         return {
-            str(key): _sanitize_model_value(item, depth=depth + 1)
+            str(key): _sanitize_model_value(
+                item,
+                depth=depth + 1,
+                bounded=bounded,
+            )
             for key, item in value.items()
             if not _is_sensitive_key(key)
         }
@@ -728,8 +943,12 @@ def _sanitize_model_value(value: Any, *, depth: int) -> Any:
         value, (str, bytes, bytearray)
     ):
         return [
-            _sanitize_model_value(item, depth=depth + 1)
-            for item in list(value)[:100]
+            _sanitize_model_value(
+                item,
+                depth=depth + 1,
+                bounded=bounded,
+            )
+            for item in (list(value)[:100] if bounded else value)
         ]
     if isinstance(value, str):
         stripped = value.strip()
@@ -744,14 +963,15 @@ def _sanitize_model_value(value: Any, *, depth: int) -> Any:
         return value
     if value is None or isinstance(value, (bool, int, float)):
         return value
-    return str(value)[:240]
+    text = str(value)
+    return text[:240] if bounded else text
 
 
 def _extract_source_refs(value: Any) -> list[str]:
     refs: list[str] = []
 
     def visit(item: Any, *, depth: int) -> None:
-        if depth > 4:
+        if depth > 32:
             return
         if isinstance(item, Mapping):
             for key, child in item.items():
@@ -784,11 +1004,76 @@ def _extract_source_refs(value: Any) -> list[str]:
         elif isinstance(item, Sequence) and not isinstance(
             item, (str, bytes, bytearray)
         ):
-            for child in list(item)[:20]:
+            for child in item:
                 visit(child, depth=depth + 1)
 
     visit(value, depth=0)
-    return _dedupe(refs)[:12]
+    return _dedupe(refs)
+
+
+def _extract_evidence_records(
+    payload: Mapping[str, Any],
+    *,
+    bounded: bool,
+) -> list[EvidenceRecord]:
+    raw_records = payload.get("results")
+    if not isinstance(raw_records, Sequence) or isinstance(
+        raw_records, (str, bytes, bytearray)
+    ):
+        return []
+    records: list[EvidenceRecord] = []
+    resolved_records = list(raw_records)[:100] if bounded else raw_records
+    for raw in resolved_records:
+        if not isinstance(raw, Mapping):
+            continue
+        required = {
+            "evidence_id",
+            "source_ref",
+            "record_id",
+            "locator",
+            "source_hash",
+        }
+        if not required.issubset(raw):
+            continue
+        safe_ref = _safe_source_ref(str(raw.get("source_ref") or ""))
+        if safe_ref is None:
+            continue
+        try:
+            bounded_data = (
+                _bounded_value(raw.get("data", {}), depth=0)
+                if bounded
+                else _sanitize_model_value(
+                    raw.get("data", {}),
+                    depth=0,
+                    bounded=False,
+                )
+            )
+            records.append(
+                EvidenceRecord.model_validate(
+                    {
+                        **{
+                            key: raw.get(key)
+                            for key in (
+                                "evidence_id",
+                                "record_id",
+                                "locator",
+                                "source_hash",
+                                "observed_at",
+                                "valid_from",
+                                "valid_to",
+                                "candidate_only",
+                                "runtime_safety_truth",
+                            )
+                            if key in raw
+                        },
+                        "data": bounded_data if isinstance(bounded_data, dict) else {},
+                        "source_ref": safe_ref,
+                    }
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return records
 
 
 def _is_sensitive_key(value: object) -> bool:
@@ -853,6 +1138,10 @@ def _claim_has_evidence_overlap(
         return False
     if _safety_polarity_conflicts(claim_text, evidence_text):
         return False
+    claim_concepts = _grounding_concepts(claim_text)
+    evidence_concepts = _grounding_concepts(evidence_text)
+    if claim_concepts and claim_concepts.issubset(evidence_concepts):
+        return True
     evidence_tokens = _search_tokens(evidence_text)
     overlap_count = len(informative & evidence_tokens)
     return overlap_count >= 2 or overlap_count / len(informative) >= 0.34
@@ -929,16 +1218,48 @@ def _safety_polarity(value: str) -> dict[str, bool]:
 def _grounding_evidence_text(evidence_cards: Sequence[EvidenceCard]) -> str:
     claim_payloads = [
         {
+            "tool_id": card.tool_id,
             "claim_summary": card.claim_summary,
             "freshness": card.freshness,
             "key_values": card.key_values,
             "missing_fields": card.missing_fields,
             "quality": card.quality,
             "result_count": card.result_count,
+            "source_refs": card.source_refs,
+            "evidence_records": [
+                item.model_dump(mode="json") for item in card.evidence_records
+            ],
         }
         for card in evidence_cards
     ]
     return _json_dumps(claim_payloads)
+
+
+def _grounding_concepts(value: str) -> set[str]:
+    normalized = value.casefold().replace(" ", "")
+    concepts = {
+        concept
+        for concept, aliases in _GROUNDING_CONCEPT_ALIASES.items()
+        if any(alias.casefold().replace(" ", "") in normalized for alias in aliases)
+    }
+    if len(concepts) > 1:
+        concepts.discard("route")
+    return concepts
+
+
+def _number_is_grounded(number: str, evidence_numbers: set[str]) -> bool:
+    try:
+        claim_value = float(number)
+    except ValueError:
+        return False
+    for raw in evidence_numbers:
+        try:
+            evidence_value = float(raw)
+        except ValueError:
+            continue
+        if math.isclose(claim_value, evidence_value, rel_tol=1e-3, abs_tol=0.02):
+            return True
+    return False
 
 
 def _safety_concepts(value: str) -> set[str]:
@@ -962,7 +1283,7 @@ def _claim_summary(payload: Mapping[str, Any]) -> str:
     for key in ("field_answer", "claim_summary", "answer", "summary", "message"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()[:500]
+            return value.strip()
     status = str(payload.get("status") or "unknown")
     kind = str(payload.get("artifact_kind") or payload.get("output_artifact_kind") or "evidence")
     return f"{kind}: status={status}"
@@ -998,21 +1319,40 @@ def _budget_stop_reason(
     request_count: int,
     totals: Mapping[str, int | float],
 ) -> str | None:
-    if int(totals["input_tokens"]) > budget.max_input_tokens:
-        return "input_tokens budget exceeded"
-    if int(totals["output_tokens"]) > budget.max_output_tokens:
-        return "output_tokens budget exceeded"
-    if int(totals["input_tokens"]) + int(totals["output_tokens"]) > budget.max_total_tokens:
-        return "total_tokens budget exceeded"
+    if budget.enforce_resource_limits:
+        if (
+            budget.max_input_tokens is not None
+            and int(totals["input_tokens"]) > budget.max_input_tokens
+        ):
+            return "input_tokens budget exceeded"
+        if (
+            budget.max_output_tokens is not None
+            and int(totals["output_tokens"]) > budget.max_output_tokens
+        ):
+            return "output_tokens budget exceeded"
+        if (
+            budget.max_total_tokens is not None
+            and int(totals["input_tokens"]) + int(totals["output_tokens"])
+            > budget.max_total_tokens
+        ):
+            return "total_tokens budget exceeded"
     if int(totals["tool_call_count"]) > budget.max_tool_calls:
         return "tool_call_count budget exceeded"
     if int(totals["repair_count"]) > budget.max_repairs:
         return "repair_count budget exceeded"
-    if budget.max_estimated_cost is not None and float(totals["estimated_cost"]) > budget.max_estimated_cost:
+    if (
+        budget.enforce_resource_limits
+        and budget.max_estimated_cost is not None
+        and float(totals["estimated_cost"]) > budget.max_estimated_cost
+    ):
         return "estimated_cost budget exceeded"
     if request_count > budget.max_requests:
         return "request_count budget exceeded"
     return None
+
+
+def _remaining_optional_limit(limit: int | None, used: int) -> int | None:
+    return None if limit is None else max(0, limit - used)
 
 
 def _continuation_handle(kind: str, identity: str, payload: str) -> str:

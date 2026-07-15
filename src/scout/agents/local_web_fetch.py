@@ -12,8 +12,8 @@ from pydantic_ai import RunContext
 from pydantic_ai.exceptions import ModelRetry
 
 
-DEFAULT_TIMEOUT_SECONDS = 20.0
-DEFAULT_MAX_CONTENT_TOKENS = 12_000
+DEFAULT_TIMEOUT_SECONDS: float | None = None
+DEFAULT_MAX_CONTENT_TOKENS: int | None = None
 _MAX_TRACKED_RUNS = 1_024
 
 
@@ -51,8 +51,8 @@ def _fetch_url(
     *,
     allowed_domains: list[str] | None,
     blocked_domains: list[str] | None,
-    max_content_tokens: int,
-    timeout_seconds: float,
+    max_content_tokens: int | None,
+    timeout_seconds: float | None,
 ) -> dict[str, Any]:
     _validate_url(
         url,
@@ -66,7 +66,6 @@ def _fetch_url(
             "User-Agent": "ScoutAI/1.0 trusted-research-fetch",
         },
     )
-    max_bytes = max(1, max_content_tokens) * 4
     with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310
         final_url = response.geturl()
         _validate_url(
@@ -74,9 +73,14 @@ def _fetch_url(
             allowed_domains=allowed_domains,
             blocked_domains=blocked_domains,
         )
-        payload = response.read(max_bytes + 1)
-        truncated = len(payload) > max_bytes
-        payload = payload[:max_bytes]
+        if max_content_tokens is None:
+            payload = response.read()
+            truncated = False
+        else:
+            max_bytes = max(1, max_content_tokens) * 4
+            payload = response.read(max_bytes + 1)
+            truncated = len(payload) > max_bytes
+            payload = payload[:max_bytes]
         charset = response.headers.get_content_charset() or "utf-8"
         text = payload.decode(charset, errors="replace")
         return {
@@ -92,9 +96,9 @@ def build_local_web_fetch(
     *,
     allowed_domains: list[str] | None = None,
     blocked_domains: list[str] | None = None,
-    max_uses: int = 5,
-    max_content_tokens: int = DEFAULT_MAX_CONTENT_TOKENS,
-    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    max_uses: int = 10,
+    max_content_tokens: int | None = DEFAULT_MAX_CONTENT_TOKENS,
+    timeout_seconds: float | None = DEFAULT_TIMEOUT_SECONDS,
 ) -> Any:
     """Return a per-run bounded local fallback accepted by ``WebFetch``."""
 

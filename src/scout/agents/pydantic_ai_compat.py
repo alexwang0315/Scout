@@ -7,6 +7,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from scout.agents.model_policy import ModelPolicy
+from scout.schemas.agent_runtime import AgentRunBudget
 
 
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
@@ -28,6 +29,80 @@ def pydantic_ai_runtime_version() -> str:
 
 def pydantic_agent_runtime_kwargs() -> dict[str, Any]:
     return {"end_strategy": "early"}
+
+
+def pydantic_usage_limits_from_budget(
+    budget: AgentRunBudget,
+    *,
+    request_limit: int | None = None,
+    tool_calls_limit: int | None = None,
+    input_tokens_limit: int | None = None,
+    output_tokens_limit: int | None = None,
+    total_tokens_limit: int | None = None,
+) -> Any:
+    """Translate Scout policy into Pydantic AI enforcement limits.
+
+    Optional values are for a bounded sub-run such as grounding repair. They
+    may narrow the Scout budget, but can never expand it.
+    """
+
+    from pydantic_ai import UsageLimits
+
+    return UsageLimits(
+        request_limit=_call_capacity(
+            "request_limit", request_limit, budget.max_requests
+        ),
+        tool_calls_limit=_call_capacity(
+            "tool_calls_limit", tool_calls_limit, budget.max_tool_calls
+        ),
+        input_tokens_limit=(
+            _narrow_limit(
+                "input_tokens_limit", input_tokens_limit, budget.max_input_tokens
+            )
+            if budget.enforce_resource_limits
+            else None
+        ),
+        output_tokens_limit=(
+            _narrow_limit(
+                "output_tokens_limit", output_tokens_limit, budget.max_output_tokens
+            )
+            if budget.enforce_resource_limits
+            else None
+        ),
+        total_tokens_limit=(
+            _narrow_limit(
+                "total_tokens_limit", total_tokens_limit, budget.max_total_tokens
+            )
+            if budget.enforce_resource_limits
+            else None
+        ),
+    )
+
+
+def _call_capacity(name: str, requested: int | None, maximum: int) -> int:
+    value = maximum if requested is None else requested
+    if value < 10:
+        raise ValueError(f"{name} must preserve at least 10 calls per attempt")
+    if value > maximum:
+        raise ValueError(f"{name} cannot exceed the Scout AgentRunBudget")
+    return value
+
+
+def _narrow_limit(
+    name: str,
+    requested: int | None,
+    maximum: int | None,
+) -> int | None:
+    if maximum is None:
+        if requested is not None and requested < 0:
+            raise ValueError(f"{name} must be non-negative")
+        return requested
+    value = maximum if requested is None else requested
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")
+    if value > maximum:
+        raise ValueError(f"{name} cannot exceed the Scout AgentRunBudget")
+    return value
 
 
 def pydantic_result_output(result: Any) -> Any:
@@ -79,8 +154,9 @@ def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
                 ),
                 allowed_domains=policy.native_research_allowed_domains or None,
                 blocked_domains=policy.native_research_blocked_domains or None,
+                max_uses=policy.native_research_max_fetches,
                 enable_citations=True,
-                max_content_tokens=12000,
+                max_content_tokens=None,
                 description=(
                     "Scout trusted native web fetch. No per-query approval is "
                     "required, but fetched content is candidate-only and is not "
@@ -111,7 +187,8 @@ def build_chat_model(
         except ImportError:
             model_name = normalized_name
             base_url = base_url or "https://openrouter.ai/api/v1"
-    if _is_nvidia_model(model_name=model_name, base_url=base_url):
+    is_nvidia_model = _is_nvidia_model(model_name=model_name, base_url=base_url)
+    if is_nvidia_model:
         model_name = _strip_nvidia_prefix(model_name)
         base_url = base_url or NVIDIA_BASE_URL
         api_key = api_key or os.getenv(NVIDIA_KEY_ENV)
@@ -125,12 +202,29 @@ def build_chat_model(
         from pydantic_ai.models.openai import OpenAIModel as OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
 
+    resolved_api_key = _resolve_openai_compatible_api_key(
+        base_url=base_url,
+        api_key=api_key,
+    )
+    if is_nvidia_model:
+        from openai import AsyncOpenAI
+
+        provider = OpenAIProvider(
+            openai_client=AsyncOpenAI(
+                base_url=base_url,
+                api_key=resolved_api_key,
+                max_retries=0,
+            )
+        )
+    else:
+        provider = OpenAIProvider(
+            base_url=base_url,
+            api_key=resolved_api_key,
+        )
+
     return OpenAIChatModel(
         _strip_openai_chat_prefix(model_name),
-        provider=OpenAIProvider(
-            base_url=base_url,
-            api_key=_resolve_openai_compatible_api_key(base_url=base_url, api_key=api_key),
-        ),
+        provider=provider,
     )
 
 

@@ -16,6 +16,19 @@
     "profile": "local",
     "token_id": "ollama-local-no-token"
   },
-  "max_context_chars": 12000,
-  "timeout_seconds": 8
+  "aggressive_construction_mode": true,
+  "max_context_chars": null,
+  "timeout_seconds": null,
+  "max_tool_calls_per_attempt": 10,
+  "max_model_requests_per_attempt": 10,
+  "planner_call_limit": 10,
+  "retriever_call_limit": 10,
+  "synthesis_call_limit": 10,
+  "verifier_call_limit": 10,
+  "reviewer_call_limit": 10,
+  "repair_call_limit": 10,
+  "retry_call_limit": 10,
+  "replan_call_limit": 10,
+  "browser_call_limit": 10,
+  "subagent_call_limit": 10
 }

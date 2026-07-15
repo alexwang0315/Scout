@@ -36,6 +36,31 @@ def pydantic_agent_runtime_kwargs() -> dict[str, Any]:
     return {"end_strategy": "early"}
 
 
+def pydantic_usage_limits_from_budget(
+    budget: Any,
+    *,
+    request_limit: int | None = None,
+    tool_calls_limit: int | None = None,
+    input_tokens_limit: int | None = None,
+    output_tokens_limit: int | None = None,
+    total_tokens_limit: int | None = None,
+) -> Any:
+    """Map Scout's typed run budget to Pydantic AI enforcement limits."""
+
+    from scout.agents.pydantic_ai_compat import (
+        pydantic_usage_limits_from_budget as packaged_usage_limits_from_budget,
+    )
+
+    return packaged_usage_limits_from_budget(
+        budget,
+        request_limit=request_limit,
+        tool_calls_limit=tool_calls_limit,
+        input_tokens_limit=input_tokens_limit,
+        output_tokens_limit=output_tokens_limit,
+        total_tokens_limit=total_tokens_limit,
+    )
+
+
 def pydantic_result_output(result: Any) -> Any:
     """Read the output field used by Pydantic AI v2, with v1 fallback."""
 
@@ -61,7 +86,7 @@ def pydantic_native_research_capabilities(policy: Any) -> list[Any]:
         capabilities.append(
             WebSearch(
                 native=True,
-                max_uses=getattr(policy, "native_research_max_searches", 3),
+                max_uses=getattr(policy, "native_research_max_searches", 10),
                 allowed_domains=allowed_domains,
                 blocked_domains=blocked_domains,
                 description=(
@@ -75,7 +100,7 @@ def pydantic_native_research_capabilities(policy: Any) -> list[Any]:
         from pydantic_ai.capabilities.web_fetch import WebFetch
         from scout.agents.local_web_fetch import build_local_web_fetch
 
-        max_fetches = getattr(policy, "native_research_max_fetches", 5)
+        max_fetches = getattr(policy, "native_research_max_fetches", 10)
 
         capabilities.append(
             WebFetch(
@@ -87,8 +112,9 @@ def pydantic_native_research_capabilities(policy: Any) -> list[Any]:
                 ),
                 allowed_domains=allowed_domains,
                 blocked_domains=blocked_domains,
+                max_uses=max_fetches,
                 enable_citations=True,
-                max_content_tokens=12000,
+                max_content_tokens=None,
                 description=(
                     "Scout trusted native web fetch. No per-query approval is "
                     "required, but fetched content is candidate-only and is not "
@@ -129,7 +155,8 @@ def build_chat_model(
             # OpenRouter provider; keep the OpenAI-compatible path available.
             model_name = normalized_name
             base_url = base_url or "https://openrouter.ai/api/v1"
-    if _is_nvidia_model(model_name=model_name, base_url=base_url):
+    is_nvidia_model = _is_nvidia_model(model_name=model_name, base_url=base_url)
+    if is_nvidia_model:
         model_name = _strip_nvidia_prefix(model_name)
         base_url = base_url or NVIDIA_BASE_URL
         api_key = api_key or os.getenv(NVIDIA_KEY_ENV)
@@ -143,12 +170,29 @@ def build_chat_model(
         from pydantic_ai.models.openai import OpenAIModel as OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
 
+    resolved_api_key = _resolve_openai_compatible_api_key(
+        base_url=base_url,
+        api_key=api_key,
+    )
+    if is_nvidia_model:
+        from openai import AsyncOpenAI
+
+        provider = OpenAIProvider(
+            openai_client=AsyncOpenAI(
+                base_url=base_url,
+                api_key=resolved_api_key,
+                max_retries=0,
+            )
+        )
+    else:
+        provider = OpenAIProvider(
+            base_url=base_url,
+            api_key=resolved_api_key,
+        )
+
     return OpenAIChatModel(
         _strip_openai_chat_prefix(model_name),
-        provider=OpenAIProvider(
-            base_url=base_url,
-            api_key=_resolve_openai_compatible_api_key(base_url=base_url, api_key=api_key),
-        ),
+        provider=provider,
     )
 
 

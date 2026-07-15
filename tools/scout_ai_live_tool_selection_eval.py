@@ -35,6 +35,8 @@ DEFAULT_MODEL = "openrouter:z-ai/glm-5.2"
 DEFAULT_PROJECT_ID = "chilai_nanhua_day1"
 DEFAULT_WORKSPACE_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects"
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "scout_ai_live_tool_selection"
+CONTEXT_HANDLE_EVAL_WIDTH = 10
+INTERNAL_COMPOSITION_TOOL_IDS = frozenset({"scout.ai.workspace.query.v1"})
 SECRET_NAME_FRAGMENTS = ("KEY", "TOKEN", "SECRET", "PASSWORD")
 SECRET_TEXT_PATTERNS = (
     re.compile(r"(?i)\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}"),
@@ -65,6 +67,7 @@ class WorkspaceToolRunner(Protocol):
     last_model_usage: dict[str, int]
     last_model_response_metadata: dict[str, str]
     last_agent_run_ledger: dict[str, Any]
+    last_agent_recovery: dict[str, Any]
     last_context_handles: list[dict[str, Any]]
     last_evidence_cards: list[dict[str, Any]]
     last_grounding_verification: dict[str, Any]
@@ -235,8 +238,8 @@ def run_live_tool_selection_eval(
     runner: WorkspaceToolRunner,
     project_id: str = DEFAULT_PROJECT_ID,
     workspace_root: Path = DEFAULT_WORKSPACE_ROOT,
-    timeout_seconds: int = 45,
-    max_context_chars: int = 12000,
+    timeout_seconds: int = 0,
+    max_context_chars: int | None = None,
     delay_between_cases_seconds: float = 0.0,
 ) -> dict[str, Any]:
     started_at = _utc_now()
@@ -412,7 +415,7 @@ def _run_one_case(
     project_id: str,
     workspace_root: Path,
     timeout_seconds: int,
-    max_context_chars: int,
+    max_context_chars: int | None,
 ) -> dict[str, Any]:
     clone_for_isolated_run = getattr(runner, "clone_for_isolated_run", None)
     case_runner = (
@@ -438,7 +441,7 @@ def _run_one_case(
     planned = plan_scout_ai_tools(
         query,
         project_root=workspace_root / project_id,
-        limit=8,
+        limit=10,
     )
     planned_tool_ids = [item.tool_id for item in planned.selected_tools]
     started_at = _utc_now()
@@ -469,10 +472,20 @@ def _run_one_case(
         for invocation in tool_context.invocations
         if isinstance(invocation, dict)
     ]
-    native_tool_ids = [
+    all_native_tool_ids = [
         str(invocation.get("tool_id") or "")
         for invocation in invocations
         if invocation.get("tool_id")
+    ]
+    internal_composition_tool_ids = [
+        tool_id
+        for tool_id in all_native_tool_ids
+        if tool_id in INTERNAL_COMPOSITION_TOOL_IDS
+    ]
+    native_tool_ids = [
+        tool_id
+        for tool_id in all_native_tool_ids
+        if tool_id not in INTERNAL_COMPOSITION_TOOL_IDS
     ]
     required = list(case.required_tool_ids)
     missing_required = [tool_id for tool_id in required if tool_id not in native_tool_ids]
@@ -506,6 +519,9 @@ def _run_one_case(
     agent_run_ledger = getattr(case_runner, "last_agent_run_ledger", {})
     if not isinstance(agent_run_ledger, dict):
         agent_run_ledger = {}
+    agent_recovery = getattr(case_runner, "last_agent_recovery", {})
+    if not isinstance(agent_recovery, dict):
+        agent_recovery = {}
     context_handles = getattr(case_runner, "last_context_handles", [])
     if not isinstance(context_handles, list):
         context_handles = []
@@ -515,7 +531,7 @@ def _run_one_case(
     ]
     selected_context_tool_ids = {
         tool_id
-        for handle in context_handles[:3]
+        for handle in context_handles[:CONTEXT_HANDLE_EVAL_WIDTH]
         if isinstance(handle, dict)
         for tool_id in _string_list(
             (handle.get("scope_metadata") or {}).get("tool_ids")
@@ -586,8 +602,7 @@ def _run_one_case(
     )
     selected_tool_ids = _string_list(agent_run_ledger.get("selected_tool_ids"))
     tool_statuses_ok = all(
-        str(item.get("status")) in {"completed", "None", ""}
-        for item in invocations
+        _tool_status_succeeded(item.get("status")) for item in invocations
     )
     required_tools_matched = (
         required_tools_selected and error is None and tool_statuses_ok
@@ -616,6 +631,10 @@ def _run_one_case(
         "error": error,
         "model_native_tool_call_count": len(native_tool_ids),
         "model_native_tool_ids": native_tool_ids,
+        "internal_composition_tool_call_count": len(
+            internal_composition_tool_ids
+        ),
+        "internal_composition_tool_ids": internal_composition_tool_ids,
         "required_tool_ids": required,
         "missing_required_tool_ids": missing_required,
         "extra_native_tool_ids": extra_native,
@@ -644,10 +663,14 @@ def _run_one_case(
         "model_response_metadata": _public_model_response_metadata(
             model_response_metadata
         ),
-        "agent_run_ledger": _redacted_agent_run_ledger(agent_run_ledger),
+        "agent_run_ledger": _eval_agent_run_ledger(
+            agent_run_ledger,
+            internal_composition_tool_count=len(internal_composition_tool_ids),
+        ),
+        "agent_recovery": agent_recovery,
         "context_handles": [
             _public_context_handle(item)
-            for item in context_handles[:3]
+            for item in context_handles[:CONTEXT_HANDLE_EVAL_WIDTH]
             if isinstance(item, dict)
         ],
         "context_evaluable_required_tool_ids": context_evaluable_required,
@@ -682,6 +705,23 @@ def _sum_model_usage(samples: list[dict[str, Any]]) -> dict[str, int]:
             if isinstance(value, int):
                 totals[key] = totals.get(key, 0) + value
     return totals
+
+
+def _eval_agent_run_ledger(
+    ledger: dict[str, Any],
+    *,
+    internal_composition_tool_count: int,
+) -> dict[str, Any]:
+    public = _redacted_agent_run_ledger(ledger)
+    selected_tool_ids = public.get("selected_tool_ids")
+    if isinstance(selected_tool_ids, list):
+        unique_ids = {str(tool_id) for tool_id in selected_tool_ids}
+        internal_count = len(unique_ids & INTERNAL_COMPOSITION_TOOL_IDS)
+        public["internal_composition_tool_schema_count"] = internal_count
+        public["domain_tool_schema_count"] = len(unique_ids) - internal_count
+    elif internal_composition_tool_count:
+        public["internal_composition_tool_schema_count"] = 1
+    return public
 
 
 def _sum_agent_run_ledgers(samples: list[dict[str, Any]]) -> dict[str, int | float]:
@@ -754,7 +794,7 @@ def _failure_category(
         return "missing_required_tools"
     if extra_native:
         return "extra_tools_exact_miss"
-    if any(str(item.get("status")) not in {"completed", "None", ""} for item in invocations):
+    if any(not _tool_status_succeeded(item.get("status")) for item in invocations):
         return "tool_status_error"
     if (
         grounding_verification is not None
@@ -768,6 +808,12 @@ def _failure_category(
     if grounding_verification is not None and not grounding_verification.get("passed"):
         return "answer_grounding_failed"
     return "ok"
+
+
+def _tool_status_succeeded(value: object) -> bool:
+    if value is None:
+        return True
+    return str(value).strip().casefold() in {"", "completed", "ok", "success"}
 
 
 def _failure_class(
@@ -978,7 +1024,7 @@ def normalize_report_for_storage(report: dict[str, Any]) -> dict[str, Any]:
             _public_context_handle(item)
             for item in sample.get("context_handles") or []
             if isinstance(item, dict)
-        ][:3]
+        ][:CONTEXT_HANDLE_EVAL_WIDTH]
         sample["grounding_verification"] = _public_grounding_verification(
             sample.get("grounding_verification")
         )
@@ -1194,10 +1240,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project-id", default=DEFAULT_PROJECT_ID)
     parser.add_argument("--workspace-root", type=Path, default=DEFAULT_WORKSPACE_ROOT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--timeout-seconds", type=int, default=45)
+    parser.add_argument("--timeout-seconds", type=int, default=0)
     parser.add_argument("--case-offset", type=int, default=0)
     parser.add_argument("--max-cases", type=int, default=None)
-    parser.add_argument("--max-context-chars", type=int, default=12000)
+    parser.add_argument("--max-context-chars", type=int, default=None)
     parser.add_argument("--model-max-tokens", type=int, default=None)
     parser.add_argument("--delay-between-cases-seconds", type=float, default=0.0)
     args = parser.parse_args(argv)

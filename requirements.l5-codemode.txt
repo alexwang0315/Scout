@@ -1,0 +1,3 @@
+# Optional under-construction runtime. This is intentionally not a production dependency.
+pydantic-ai-harness[codemode]==0.7.0
+pydantic-monty==0.0.18

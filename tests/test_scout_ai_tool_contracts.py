@@ -28,6 +28,7 @@ from scout_live_navigation_state_tool import (
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_ai_tool_contracts import tool_registry_output
 from scout_ai_tool_executor import execute_scout_ai_tool
+from scout_workspace_query_tool import WORKSPACE_QUERY_TOOL_ID
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +66,17 @@ def test_tool_registry_lists_current_and_future_contracts() -> None:
 
     assert registry.artifact_kind == "scout_ai_tool_registry"
     assert "pydantic_ai.tool.search_scout_risk_scores.v0" in by_id
+    assert WORKSPACE_QUERY_TOOL_ID in by_id
+    assert by_id[WORKSPACE_QUERY_TOOL_ID].required_fields == [
+        "project_root",
+        "request",
+    ]
+    assert by_id[WORKSPACE_QUERY_TOOL_ID].argument_schema["additionalProperties"] is False
+    request_schema = by_id[WORKSPACE_QUERY_TOOL_ID].argument_schema["properties"][
+        "request"
+    ]
+    assert request_schema["discriminator"]["propertyName"] == "operation"
+    assert len(request_schema["oneOf"]) == 13
     assert "pydantic_ai.tool.search_scout_terrain_scores.v0" in by_id
     assert "pydantic_ai.tool.search_scout_map_perception.v0" in by_id
     assert "scout.ai.ins_dr_trace.analyze.v0" in by_id
@@ -268,6 +280,33 @@ def test_execute_ready_current_tool_returns_uniform_result() -> None:
     assert "sample" not in highest["readable_location"].lower()
     assert result.boundary.runtime_safety_truth is False
     assert result.boundary.phase1_safety_mutation_allowed is False
+
+
+def test_execute_workspace_query_returns_record_level_evidence() -> None:
+    result = execute_scout_ai_tool(
+        {
+            "tool_id": WORKSPACE_QUERY_TOOL_ID,
+            "project_root": str(PROJECT_ROOT),
+            "arguments": {
+                "request": {
+                    "operation": "count",
+                    "artifact": {
+                        "project_ref_key": "checkpoint_candidates_ref",
+                    },
+                }
+            },
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.tool_id == WORKSPACE_QUERY_TOOL_ID
+    assert result.payload["artifact_kind"] == "scout_ai_workspace_query_tool_output"
+    assert result.payload["operation"] == "count"
+    assert result.payload["result_count"] == 124
+    assert result.payload["results"][0]["evidence_id"].startswith("ev_")
+    assert result.payload["source_refs"] == ["candidates/checkpoints.json"]
+    assert result.payload["candidate_only"] is True
+    assert result.payload["runtime_safety_truth"] is False
 
 
 def test_execute_terrain_scores_returns_conservative_missing_decision() -> None:

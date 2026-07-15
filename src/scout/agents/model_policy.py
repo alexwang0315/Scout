@@ -18,6 +18,7 @@ MODEL_TIMEOUT_ENV = "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS"
 MODEL_MAX_COST_ENV = "SCOUT_AI_OS_MODEL_MAX_COST_USD"
 MODEL_ESTIMATED_CALL_COST_ENV = "SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD"
 MODEL_FALLBACK_ENV = "SCOUT_AI_OS_MODEL_FALLBACK"
+AGGRESSIVE_CONSTRUCTION_MODE_ENV = "SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE"
 NATIVE_RESEARCH_ENV = "SCOUT_AI_OS_NATIVE_RESEARCH"
 NATIVE_WEB_SEARCH_ENV = "SCOUT_AI_OS_NATIVE_WEB_SEARCH"
 NATIVE_WEB_FETCH_ENV = "SCOUT_AI_OS_NATIVE_WEB_FETCH"
@@ -25,10 +26,10 @@ NATIVE_RESEARCH_MAX_SEARCHES_ENV = "SCOUT_AI_OS_NATIVE_RESEARCH_MAX_SEARCHES"
 NATIVE_RESEARCH_MAX_FETCHES_ENV = "SCOUT_AI_OS_NATIVE_RESEARCH_MAX_FETCHES"
 NATIVE_RESEARCH_ALLOWED_DOMAINS_ENV = "SCOUT_AI_OS_NATIVE_RESEARCH_ALLOWED_DOMAINS"
 NATIVE_RESEARCH_BLOCKED_DOMAINS_ENV = "SCOUT_AI_OS_NATIVE_RESEARCH_BLOCKED_DOMAINS"
-DEFAULT_MODEL_TIMEOUT_SECONDS = 30.0
+DEFAULT_MODEL_TIMEOUT_SECONDS: float | None = None
 DEFAULT_EXTERNAL_MODEL_ESTIMATED_CALL_COST_USD = 0.001
-DEFAULT_NATIVE_RESEARCH_MAX_SEARCHES = 3
-DEFAULT_NATIVE_RESEARCH_MAX_FETCHES = 5
+DEFAULT_NATIVE_RESEARCH_MAX_SEARCHES = 10
+DEFAULT_NATIVE_RESEARCH_MAX_FETCHES = 10
 
 
 class ModelPolicyMode(str, Enum):
@@ -55,7 +56,11 @@ class ModelPolicy(SchemaModel):
     requires_network: bool
     required_credential_env: list[str] = []
     missing_credential_env: list[str] = []
-    timeout_seconds: float = DEFAULT_MODEL_TIMEOUT_SECONDS
+    aggressive_construction_mode: bool = True
+    resource_limits_enforced: bool = False
+    configured_timeout_seconds: float | None = None
+    configured_max_cost_usd: float | None = None
+    timeout_seconds: float | None = DEFAULT_MODEL_TIMEOUT_SECONDS
     max_cost_usd: float | None = None
     estimated_call_cost_usd: float = 0.0
     fallback_model: str = DEFAULT_LOCAL_MODEL_LABEL
@@ -83,17 +88,26 @@ def resolve_model_policy(
     """Resolve model precedence for Pydantic AI smoke and API wiring."""
 
     env_map = os.environ if env is None else env
-    timeout_seconds = _float_env(
+    configured_timeout_seconds = _optional_float_env(
         env_map,
         MODEL_TIMEOUT_ENV,
-        default=DEFAULT_MODEL_TIMEOUT_SECONDS,
         minimum=0.001,
     )
-    max_cost_usd = _optional_float_env(
+    configured_max_cost_usd = _optional_float_env(
         env_map,
         MODEL_MAX_COST_ENV,
         minimum=0.0,
     )
+    aggressive_construction_mode = _bool_env(
+        env_map,
+        AGGRESSIVE_CONSTRUCTION_MODE_ENV,
+        default=True,
+    )
+    resource_limits_enforced = not aggressive_construction_mode
+    timeout_seconds = (
+        configured_timeout_seconds if resource_limits_enforced else None
+    )
+    max_cost_usd = configured_max_cost_usd if resource_limits_enforced else None
     estimated_call_cost_usd = _optional_float_env(
         env_map,
         MODEL_ESTIMATED_CALL_COST_ENV,
@@ -116,6 +130,10 @@ def resolve_model_policy(
             pydantic_ai_model=None,
             display_name=DEFAULT_LOCAL_MODEL_LABEL,
             requires_network=False,
+            aggressive_construction_mode=aggressive_construction_mode,
+            resource_limits_enforced=resource_limits_enforced,
+            configured_timeout_seconds=configured_timeout_seconds,
+            configured_max_cost_usd=configured_max_cost_usd,
             timeout_seconds=timeout_seconds,
             max_cost_usd=max_cost_usd,
             estimated_call_cost_usd=estimated_call_cost_usd or 0.0,
@@ -141,6 +159,10 @@ def resolve_model_policy(
         requires_network=True,
         required_credential_env=required_credential_env,
         missing_credential_env=missing_credential_env,
+        aggressive_construction_mode=aggressive_construction_mode,
+        resource_limits_enforced=resource_limits_enforced,
+        configured_timeout_seconds=configured_timeout_seconds,
+        configured_max_cost_usd=configured_max_cost_usd,
         timeout_seconds=timeout_seconds,
         max_cost_usd=max_cost_usd,
         estimated_call_cost_usd=(
@@ -270,13 +292,13 @@ def _native_research_policy(env: dict[str, str]) -> dict[str, Any]:
             env,
             NATIVE_RESEARCH_MAX_SEARCHES_ENV,
             default=DEFAULT_NATIVE_RESEARCH_MAX_SEARCHES,
-            minimum=1,
+            minimum=10,
         ),
         "native_research_max_fetches": _int_env(
             env,
             NATIVE_RESEARCH_MAX_FETCHES_ENV,
             default=DEFAULT_NATIVE_RESEARCH_MAX_FETCHES,
-            minimum=1,
+            minimum=10,
         ),
         "native_research_allowed_domains": _csv_env(
             env.get(NATIVE_RESEARCH_ALLOWED_DOMAINS_ENV)

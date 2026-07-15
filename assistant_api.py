@@ -893,8 +893,8 @@ def create_assistant_provider_from_env(
             )
             provider = PydanticAIAssistantProvider(
                 runner=runner,
-                timeout_seconds=model_config.timeout_seconds,
-                max_context_chars=model_config.max_context_chars,
+                timeout_seconds=model_config.effective_timeout_seconds(),
+                max_context_chars=model_config.effective_max_context_chars(),
             )
             if model_config.connect_on_startup:
                 _connect_provider_safely(provider)
@@ -905,15 +905,28 @@ def create_assistant_provider_from_env(
                 error_message=str(exc),
             )
 
-    timeout_seconds = _int_from_env(
+    aggressive_construction_mode = _bool_from_env(
         resolved_environ,
-        "SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS",
-        DEFAULT_TIMEOUT_SECONDS,
+        "SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE",
+        default=True,
     )
-    max_context_chars = _int_from_env(
-        resolved_environ,
-        "SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS",
-        DEFAULT_MAX_CONTEXT_CHARS,
+    timeout_seconds = (
+        None
+        if aggressive_construction_mode
+        else _int_from_env(
+            resolved_environ,
+            "SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS",
+            DEFAULT_TIMEOUT_SECONDS,
+        )
+    )
+    max_context_chars = (
+        None
+        if aggressive_construction_mode
+        else _int_from_env(
+            resolved_environ,
+            "SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS",
+            DEFAULT_MAX_CONTEXT_CHARS,
+        )
     )
     provider = PydanticAIAssistantProvider(
         runner=pydantic_runner or PydanticAIEnvRunner(),
@@ -923,11 +936,33 @@ def create_assistant_provider_from_env(
     return provider
 
 
-def _int_from_env(environ: dict[str, str], key: str, default: int) -> int:
+def _int_from_env(
+    environ: dict[str, str], key: str, default: int | None
+) -> int | None:
+    raw = environ.get(key)
+    if raw is None:
+        return default
     try:
-        return int(environ.get(key, str(default)))
+        return int(raw)
     except (TypeError, ValueError):
         return default
+
+
+def _bool_from_env(
+    environ: dict[str, str],
+    key: str,
+    *,
+    default: bool,
+) -> bool:
+    raw = environ.get(key)
+    if raw is None or not raw.strip():
+        return default
+    normalized = raw.strip().casefold()
+    if normalized in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "disabled"}:
+        return False
+    return default
 
 
 def _configured_value(*values: object | None) -> bool:

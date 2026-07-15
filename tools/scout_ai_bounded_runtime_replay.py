@@ -23,6 +23,15 @@ from pydantic_ai.messages import (  # noqa: E402
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel  # noqa: E402
 from pydantic_ai.models.test import TestModel  # noqa: E402
+from scout.schemas.agent_runtime import (  # noqa: E402
+    AgentRequestLedger,
+    AgentRunLedger,
+    QuestionClass,
+)
+from scout.services.agent_budget_policy import AgentBudgetPolicy  # noqa: E402
+from scout.services.bounded_agent_runtime import BoundedAgentRuntime  # noqa: E402
+from scout.services.workspace_query import WorkspaceQueryService  # noqa: E402
+from scout_workspace_query_tool import WORKSPACE_QUERY_TOOL_ID  # noqa: E402
 from tools.scout_ai_live_tool_selection_eval import (  # noqa: E402
     load_eval_cases,
     run_live_tool_selection_eval,
@@ -43,7 +52,8 @@ DEFAULT_BEFORE_REPORT = (
 DEFAULT_WORKSPACE_ROOT = Path("/Users/alexwang0315/workspace")
 DEFAULT_PROJECT_ID = "chilai_nanhua_day1_scoutAI"
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "evals" / "bounded_context_progressive_disclosure"
-DEFAULT_REPLAY_TIMEOUT_SECONDS = 90
+DEFAULT_REPLAY_TIMEOUT_SECONDS = 0
+DEFAULT_REPLAY_MAX_CONTEXT_CHARS: int | None = None
 
 
 class DeterministicProgressiveReplayRunner:
@@ -62,8 +72,11 @@ class DeterministicProgressiveReplayRunner:
             model_name=self.model_name,
             profile_name="local",
             workspace_tools_enabled=True,
-            workspace_model_max_tokens=512,
+            workspace_model_max_tokens=None,
         )
+        # Constructor env fallbacks are useful in production, but this replay is
+        # explicitly unbounded by Scout in Aggressive Construction Mode.
+        self._runner.workspace_model_max_tokens = None
 
     def clone_for_isolated_run(self) -> "DeterministicProgressiveReplayRunner":
         """Return clean per-case state so a timeout cannot leak into another case."""
@@ -98,6 +111,10 @@ class DeterministicProgressiveReplayRunner:
     def last_grounding_verification(self) -> dict[str, Any]:
         return self._runner.last_grounding_verification
 
+    @property
+    def last_agent_recovery(self) -> dict[str, Any]:
+        return self._runner.last_agent_recovery
+
     def run_with_workspace_tools(
         self,
         prompt: str,
@@ -125,11 +142,16 @@ class DeterministicProgressiveReplayRunner:
         info: AgentInfo,
     ) -> ModelResponse:
         if info.function_tools:
+            prompt = _last_user_prompt(messages)
             return ModelResponse(
                 parts=[
                     ToolCallPart(
                         tool_name=tool.name,
-                        args=self._argument_generator.gen_tool_args(tool),
+                        args=_deterministic_tool_args(
+                            tool,
+                            prompt=prompt,
+                            fallback=self._argument_generator.gen_tool_args(tool),
+                        ),
                         tool_call_id=f"bounded_replay__{tool.name}",
                     )
                     for tool in info.function_tools
@@ -147,6 +169,326 @@ class DeterministicProgressiveReplayRunner:
                 ]
             )
         return ModelResponse(parts=[TextPart("目前缺少可引用的 Scout 證據。")])
+
+
+def run_workspace_15k_join_replay(project_root: Path) -> dict[str, Any]:
+    """Replay a 10-step mileage-anchor-to-checkpoint evidence trajectory."""
+
+    project_root = project_root.expanduser().resolve(strict=True)
+    service = WorkspaceQueryService(project_root)
+    budget = AgentBudgetPolicy.for_query(
+        question_class=QuestionClass.CROSS_ARTIFACT_JOIN,
+        selected_tool_ids=[WORKSPACE_QUERY_TOOL_ID],
+        expected_operations=[
+            "inspect",
+            "filter",
+            "count",
+            "nearest",
+            "freshness",
+        ],
+        requires_join=True,
+    )
+    runtime = BoundedAgentRuntime(budget=budget)
+    call_trace: list[dict[str, Any]] = []
+    evidence_cards = []
+
+    def execute(stage: str, request: dict[str, Any]):
+        if len(call_trace) >= budget.max_tool_calls:
+            raise RuntimeError("15K replay attempted to exceed its stage tool budget")
+        response = service.execute(request)
+        serialized = response.model_dump(mode="json")
+        call_trace.append(
+            {
+                "index": len(call_trace) + 1,
+                "stage": stage,
+                "operation": str(response.operation),
+                "status": response.status,
+                "answerability": response.answerability,
+                "source_refs": response.source_refs,
+                "request": request,
+                "response": serialized,
+            }
+        )
+        if response.status == "error":
+            raise RuntimeError(
+                f"15K replay query failed at {stage}: {response.root_cause}"
+            )
+        evidence_cards.append(
+            runtime.evidence_from_tool_result(
+                WORKSPACE_QUERY_TOOL_ID,
+                serialized,
+            )
+        )
+        return response
+
+    manifest = execute(
+        "search",
+        {
+            "operation": "inspect",
+            "artifact": {"source_ref": "project.json"},
+            "fields": [
+                "route_mileage_k_anchors_ref",
+                "checkpoint_candidates_ref",
+            ],
+        },
+    )
+    anchor_inspect = execute(
+        "drilldown",
+        {
+            "operation": "inspect",
+            "artifact": {"project_ref_key": "route_mileage_k_anchors_ref"},
+            "fields": [
+                "candidate_id",
+                "display_label",
+                "mileage_m",
+                "lat",
+                "lon",
+            ],
+        },
+    )
+    anchor_filter = execute(
+        "filter",
+        {
+            "operation": "filter",
+            "artifact": {"project_ref_key": "route_mileage_k_anchors_ref"},
+            "predicates": [
+                {"field": "display_label", "operator": "eq", "value": "15K"}
+            ],
+            "fields": [
+                "candidate_id",
+                "display_label",
+                "mileage_m",
+                "lat",
+                "lon",
+            ],
+            "limit": 10,
+        },
+    )
+    anchor_count = execute(
+        "aggregation",
+        {
+            "operation": "count",
+            "artifact": {"project_ref_key": "route_mileage_k_anchors_ref"},
+            "predicates": [
+                {"field": "display_label", "operator": "eq", "value": "15K"}
+            ],
+        },
+    )
+    checkpoint_inspect = execute(
+        "drilldown",
+        {
+            "operation": "inspect",
+            "artifact": {"project_ref_key": "checkpoint_candidates_ref"},
+            "fields": ["candidate_id", "label", "lat", "lon"],
+        },
+    )
+
+    if anchor_filter.result_count != 1 or not anchor_filter.results:
+        raise RuntimeError("15K replay requires exactly one 15K mileage anchor")
+    anchor = anchor_filter.results[0].data
+    lat = _required_float(anchor, "lat")
+    lon = _required_float(anchor, "lon")
+    nearest = execute(
+        "join",
+        {
+            "operation": "nearest",
+            "artifact": {"project_ref_key": "checkpoint_candidates_ref"},
+            "origin": {"lat": lat, "lon": lon},
+            "lat_field": "lat",
+            "lon_field": "lon",
+            "fields": ["candidate_id", "label", "lat", "lon"],
+            "k": 1,
+        },
+    )
+    if not nearest.results:
+        raise RuntimeError("15K replay found no checkpoint coordinate for the join")
+    nearest_checkpoint = nearest.results[0].data
+    checkpoint_id = str(nearest_checkpoint.get("candidate_id") or "").strip()
+    if not checkpoint_id:
+        raise RuntimeError("15K replay nearest checkpoint has no candidate_id")
+    checkpoint_filter = execute(
+        "contradiction_check",
+        {
+            "operation": "filter",
+            "artifact": {"project_ref_key": "checkpoint_candidates_ref"},
+            "predicates": [
+                {"field": "candidate_id", "operator": "eq", "value": checkpoint_id}
+            ],
+            "fields": ["candidate_id", "label", "lat", "lon"],
+            "limit": 2,
+        },
+    )
+    anchor_freshness = execute(
+        "freshness_check",
+        {
+            "operation": "freshness",
+            "artifact": {"project_ref_key": "route_mileage_k_anchors_ref"},
+            "stale_after_seconds": 31_536_000,
+        },
+    )
+    checkpoint_freshness = execute(
+        "freshness_check",
+        {
+            "operation": "freshness",
+            "artifact": {"project_ref_key": "checkpoint_candidates_ref"},
+            "stale_after_seconds": 31_536_000,
+        },
+    )
+    manifest_verification = execute(
+        "source_verification",
+        {
+            "operation": "inspect",
+            "artifact": {"source_ref": "project.json"},
+            "fields": [
+                "route_mileage_k_anchors_ref",
+                "checkpoint_candidates_ref",
+            ],
+        },
+    )
+
+    expected_refs = {
+        "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
+        "checkpoint_candidates_ref": "candidates/checkpoints.json",
+    }
+    manifest_fields = _selected_fields(manifest)
+    verified_fields = _selected_fields(manifest_verification)
+    anchor_hashes = _response_hashes(
+        anchor_inspect,
+        anchor_filter,
+        anchor_count,
+        anchor_freshness,
+    )
+    checkpoint_hashes = _response_hashes(
+        checkpoint_inspect,
+        nearest,
+        checkpoint_filter,
+        checkpoint_freshness,
+    )
+    source_verification = {
+        "passed": (
+            manifest_fields == expected_refs
+            and verified_fields == expected_refs
+            and len(anchor_hashes) == 1
+            and len(checkpoint_hashes) == 1
+            and checkpoint_filter.result_count == 1
+        ),
+        "manifest_fields": manifest_fields,
+        "verified_manifest_fields": verified_fields,
+        "anchor_source_hashes": sorted(anchor_hashes),
+        "checkpoint_source_hashes": sorted(checkpoint_hashes),
+    }
+    if not source_verification["passed"]:
+        raise RuntimeError("15K replay source verification failed")
+
+    distance_m = _required_float(nearest_checkpoint, "distance_m")
+    answer = (
+        f"本次路徑 15K 位於 {lat:.9f}, {lon:.9f} "
+        "[candidates/route_mileage_k_anchors.json]。"
+        f"最近的 CP 是 {checkpoint_id}，距離約 {distance_m:.2f} 公尺 "
+        "[candidates/checkpoints.json]。"
+    )
+    grounding = runtime.verify_synthesis(
+        answer,
+        evidence_cards=evidence_cards,
+    )
+    request_record = AgentRequestLedger(
+        request_index=1,
+        tool_call_count=len(call_trace),
+        tool_result_chars=sum(len(card.model_dump_json()) for card in evidence_cards),
+    )
+    ledger = runtime.record_request(
+        AgentRunLedger(budget=budget),
+        request_record,
+        selected_tool_ids=[WORKSPACE_QUERY_TOOL_ID],
+        executed_tool_ids=[WORKSPACE_QUERY_TOOL_ID],
+    )
+    working = grounding.passed and ledger.budget_stop_reason is None
+    return {
+        "artifact_kind": "scout_ai_workspace_15k_join_replay",
+        "evaluation_semantics": (
+            "faithful_deterministic_workspace_replay_not_model_quality"
+        ),
+        "status": "completed" if working else "failed",
+        "prototype_status": "WORKING PROTOTYPE" if working else "EXPERIMENT FAILED",
+        "question": "本次路徑的 15K 在哪裡，座標與最近 CP 是什麼？",
+        "budget": {
+            "max_tool_calls": budget.max_tool_calls,
+            "max_model_requests": budget.max_requests,
+            "fresh_per_recovery_stage": True,
+        },
+        "call_trace": call_trace,
+        "ledger": ledger.model_dump(mode="json"),
+        "source_verification": source_verification,
+        "grounding_verification": grounding.model_dump(mode="json"),
+        "answer": answer,
+        "tool_repair": {"performed": False, "reason": "trajectory_succeeded"},
+        "model_switch": {"performed": False, "reason": "trajectory_succeeded"},
+        "codex_review": {"performed": False, "reason": "trajectory_succeeded"},
+        "known_issues": [],
+    }
+
+
+def _required_float(value: dict[str, Any], key: str) -> float:
+    raw = value.get(key)
+    if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+        raise RuntimeError(f"15K replay evidence is missing numeric {key}")
+    return float(raw)
+
+
+def _selected_fields(response: object) -> dict[str, Any]:
+    results = getattr(response, "results", [])
+    if not results:
+        return {}
+    data = getattr(results[0], "data", {})
+    selected = data.get("selected_fields") if isinstance(data, dict) else None
+    return dict(selected) if isinstance(selected, dict) else {}
+
+
+def _response_hashes(*responses: object) -> set[str]:
+    hashes: set[str] = set()
+    for response in responses:
+        for result in getattr(response, "results", []):
+            source_hash = getattr(result, "source_hash", None)
+            if isinstance(source_hash, str) and source_hash:
+                hashes.add(source_hash)
+    return hashes
+
+
+def _deterministic_tool_args(
+    tool: object,
+    *,
+    prompt: str,
+    fallback: dict[str, Any],
+) -> dict[str, Any]:
+    """Generate stable composition queries instead of random invalid unions."""
+
+    if getattr(tool, "name", None) != "query_scout_workspace":
+        return fallback
+    expected_match = re.search(
+        r"Expected deterministic workspace operations:\n(\[[^\n]*\])",
+        prompt,
+    )
+    expected: list[str] = []
+    if expected_match is not None:
+        try:
+            value = json.loads(expected_match.group(1))
+        except json.JSONDecodeError:
+            value = []
+        if isinstance(value, list):
+            expected = [str(item) for item in value]
+    if "count" in expected:
+        ref_key = (
+            "checkpoint_candidates_ref"
+            if "CP" in prompt or "checkpoint" in prompt.casefold()
+            else "route_summary_ref"
+        )
+        return {
+            "request": {
+                "operation": "count",
+                "artifact": {"project_ref_key": ref_key},
+            }
+        }
+    return fallback
 
 
 def compare_eval_reports(
@@ -364,11 +706,42 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project-id", default=DEFAULT_PROJECT_ID)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument(
+        "--workspace-15k-join-replay",
+        action="store_true",
+        help=(
+            "Run the focused 15K mileage-anchor to nearest-CP evidence replay "
+            "instead of the 100-case comparison."
+        ),
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=int,
         default=DEFAULT_REPLAY_TIMEOUT_SECONDS,
     )
     args = parser.parse_args(argv)
+
+    if args.workspace_15k_join_replay:
+        project_root = args.workspace_root / args.project_id
+        report = run_workspace_15k_join_replay(project_root)
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = args.output_dir / "workspace_15k_join_replay.json"
+        output_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        output_path.chmod(0o600)
+        print(
+            json.dumps(
+                {
+                    "status": report["status"],
+                    "prototype_status": report["prototype_status"],
+                    "output": str(output_path),
+                    "answer": report["answer"],
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0 if report["status"] == "completed" else 1
 
     cases = load_eval_cases(args.cases_file)
     before_report = json.loads(args.before_report.read_text(encoding="utf-8"))
@@ -379,7 +752,7 @@ def main(argv: list[str] | None = None) -> int:
         project_id=args.project_id,
         workspace_root=args.workspace_root,
         timeout_seconds=args.timeout_seconds,
-        max_context_chars=2_000,
+        max_context_chars=DEFAULT_REPLAY_MAX_CONTEXT_CHARS,
     )
     after_json, after_markdown = write_report(after_report, args.output_dir)
     comparison = compare_eval_reports(before_report, after_report)

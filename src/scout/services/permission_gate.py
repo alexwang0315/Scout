@@ -12,6 +12,7 @@ from scout.schemas.capability import (
     CapabilitySpec,
     GeneratedCapabilityPackage,
 )
+from scout.schemas.l5_code_mode import L5ActivationDecision, L5ActivationRequest
 from scout.schemas.permissions import PermissionDecision
 from scout.schemas.outbound import (
     OutboundActionIntent,
@@ -27,6 +28,7 @@ from scout.schemas.workflow import (
     WorkflowSpec,
 )
 from scout.services.outbound_standing_grant import evaluate_outbound_standing_grant
+from scout.services.l5_code_mode import L5CodeModePolicy
 
 
 APPROVAL_PERMISSION_KEYWORDS = (
@@ -185,6 +187,14 @@ class PermissionGate:
             now=self._clock(),
             prior_send_count=self._outbound_send_count(),
         )
+
+    def evaluate_l5_code_mode(
+        self,
+        request: L5ActivationRequest,
+    ) -> L5ActivationDecision:
+        """Evaluate L5 eligibility without granting additional action authority."""
+
+        return L5CodeModePolicy().evaluate(request)
 
     def _evaluate_ui_workflow_action(self, action: ActionSpec) -> PermissionDecision:
         plan = _ui_action_plan_from_action(action)
