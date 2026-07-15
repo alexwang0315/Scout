@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import quote
 
 import yaml
 
@@ -1450,6 +1451,10 @@ def _comparison_markdown(comparison: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _variant_file_href(ref: str) -> str:
+    return f"?ref={quote(ref, safe='')}"
+
+
 def _index_html(comparison: dict[str, Any]) -> str:
     cards = []
     for item in comparison["variants"]:
@@ -1460,7 +1465,7 @@ def _index_html(comparison: dict[str, Any]) -> str:
             )
         cards.append(
             "<article>"
-            f'<h2><a href="{_esc(item["relative_ref"])}">{_esc(item["slug"])}</a></h2>'
+            f'<h2><a href="{_esc(_variant_file_href(item["relative_ref"]))}">{_esc(item["slug"])}</a></h2>'
             f'<p>{_esc(item.get("concept") or item.get("tone") or "")}</p>'
             f"<ul><li>richness {item['richness_score']}</li>"
             f"<li>innovation {item['innovation_score']}</li>"
@@ -1488,8 +1493,8 @@ def _index_html(comparison: dict[str, Any]) -> str:
         "<p>這組頁面由 route-context-intelligence skill 的單次模型 plan 驅動，renderer 只使用 workspace evidence 排版。</p>"
         f"{gate_html}"
         f'<div class="grid">{"".join(cards)}</div>'
-        '<p><a href="route_context_variant_comparison.md">comparison markdown</a> · '
-        '<a href="route_context_variant_comparison.json">comparison json</a></p>'
+        f'<p><a href="{_esc(_variant_file_href("route_context_variant_comparison.md"))}">comparison markdown</a> · '
+        f'<a href="{_esc(_variant_file_href("route_context_variant_comparison.json"))}">comparison json</a></p>'
         "</body></html>"
     )
 

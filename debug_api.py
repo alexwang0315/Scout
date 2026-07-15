@@ -3,11 +3,18 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
+
+from debug_event_provenance import (
+    DebugEventIngestionChannel,
+    debug_event_provenance_contract,
+    stamp_debug_event,
+)
 
 from mobile_wearable_ingress_debug import (
     load_mobile_wearable_ingress_debug_status,
@@ -44,9 +51,16 @@ class DebugMessageSource(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class _TrustedDebugEventEnvelope:
+    event: Any
+    ingestion_channel: DebugEventIngestionChannel | Any
+
+
 def create_debug_app(
     *,
     debug_log: DebugEventLog | None = None,
+    debug_log_ingestion_channel: DebugEventIngestionChannel | Any = DebugEventIngestionChannel.RUNTIME_LOG,
     message_source: DebugMessageSource | None = None,
     agent_trace_log_path: Path | str | None = None,
     spatial_imprint_store_path: Path | str | None = None,
@@ -58,6 +72,7 @@ def create_debug_app(
     app.include_router(
         create_debug_router(
             debug_log=debug_log,
+            debug_log_ingestion_channel=debug_log_ingestion_channel,
             message_source=message_source,
             agent_trace_log_path=agent_trace_log_path,
             spatial_imprint_store_path=spatial_imprint_store_path,
@@ -72,6 +87,7 @@ def create_debug_app(
 def create_debug_router(
     *,
     debug_log: DebugEventLog | None = None,
+    debug_log_ingestion_channel: DebugEventIngestionChannel | Any = DebugEventIngestionChannel.RUNTIME_LOG,
     message_source: DebugMessageSource | None = None,
     agent_trace_log_path: Path | str | None = None,
     spatial_imprint_store_path: Path | str | None = None,
@@ -85,6 +101,7 @@ def create_debug_router(
     def debug_root() -> dict[str, Any]:
         events = _combined_events(
             resolved_log,
+            debug_log_ingestion_channel=debug_log_ingestion_channel,
             agent_trace_log_path=agent_trace_log_path,
             spatial_imprint_store_path=spatial_imprint_store_path,
             spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
@@ -107,8 +124,9 @@ def create_debug_router(
         since_sequence: int | None = Query(default=None, ge=0),
         limit: int | None = Query(default=None, ge=0),
     ) -> dict[str, Any]:
-        events_payload = _combined_events(
+        event_envelopes = _combined_event_envelopes(
             resolved_log,
+            debug_log_ingestion_channel=debug_log_ingestion_channel,
             agent_trace_log_path=agent_trace_log_path,
             spatial_imprint_store_path=spatial_imprint_store_path,
             spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
@@ -118,9 +136,13 @@ def create_debug_router(
         )
         return {
             "events": [
-                event.model_dump(mode="json")
-                for event in events_payload
+                stamp_debug_event(
+                    envelope.event,
+                    ingestion_channel=envelope.ingestion_channel,
+                )
+                for envelope in event_envelopes
             ],
+            "event_provenance_contract": debug_event_provenance_contract(),
             "debug_boundary": _debug_boundary(),
         }
 
@@ -128,6 +150,7 @@ def create_debug_router(
     def state() -> dict[str, Any]:
         events = _combined_events(
             resolved_log,
+            debug_log_ingestion_channel=debug_log_ingestion_channel,
             agent_trace_log_path=agent_trace_log_path,
             spatial_imprint_store_path=spatial_imprint_store_path,
             spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
@@ -139,6 +162,7 @@ def create_debug_router(
     def monitoring() -> dict[str, Any]:
         events = _combined_events(
             resolved_log,
+            debug_log_ingestion_channel=debug_log_ingestion_channel,
             agent_trace_log_path=agent_trace_log_path,
             spatial_imprint_store_path=spatial_imprint_store_path,
             spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
@@ -150,6 +174,7 @@ def create_debug_router(
     def messages(state: str | None = None) -> dict[str, Any]:
         events = _combined_events(
             resolved_log,
+            debug_log_ingestion_channel=debug_log_ingestion_channel,
             agent_trace_log_path=agent_trace_log_path,
             spatial_imprint_store_path=spatial_imprint_store_path,
             spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
@@ -172,6 +197,7 @@ def create_debug_router(
         return StreamingResponse(
             _debug_stream_snapshots(
                 resolved_log,
+                debug_log_ingestion_channel=debug_log_ingestion_channel,
                 message_source=message_source,
                 agent_trace_log_path=agent_trace_log_path,
                 spatial_imprint_store_path=spatial_imprint_store_path,
@@ -343,6 +369,7 @@ def _state_payload(events: list[Any], messages: list[dict[str, Any]]) -> dict[st
 async def _debug_stream_snapshots(
     debug_log: DebugEventLog,
     *,
+    debug_log_ingestion_channel: DebugEventIngestionChannel | Any,
     message_source: DebugMessageSource | None,
     agent_trace_log_path: Path | str | None,
     spatial_imprint_store_path: Path | str | None,
@@ -355,6 +382,7 @@ async def _debug_stream_snapshots(
     while True:
         payload = _debug_stream_snapshot_payload(
             debug_log,
+            debug_log_ingestion_channel=debug_log_ingestion_channel,
             message_source=message_source,
             agent_trace_log_path=agent_trace_log_path,
             spatial_imprint_store_path=spatial_imprint_store_path,
@@ -378,19 +406,22 @@ async def _debug_stream_snapshots(
 def _debug_stream_snapshot_payload(
     debug_log: DebugEventLog,
     *,
+    debug_log_ingestion_channel: DebugEventIngestionChannel | Any,
     message_source: DebugMessageSource | None,
     agent_trace_log_path: Path | str | None,
     spatial_imprint_store_path: Path | str | None,
     spatial_imprint_trigger_report_path: Path | str | None,
     mobile_wearable_ingress_status_path: Path | str | None,
 ) -> dict[str, Any]:
-    events = _combined_events(
+    event_envelopes = _combined_event_envelopes(
         debug_log,
+        debug_log_ingestion_channel=debug_log_ingestion_channel,
         agent_trace_log_path=agent_trace_log_path,
         spatial_imprint_store_path=spatial_imprint_store_path,
         spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
         limit=200,
     )
+    events = [envelope.event for envelope in event_envelopes]
     messages = _messages(message_source, events)
     return {
         "artifact_kind": "scout_debug_stream_snapshot",
@@ -398,7 +429,14 @@ def _debug_stream_snapshot_payload(
         "stream": "debug",
         "read_only": True,
         "events": {
-            "events": [event.model_dump(mode="json") for event in events],
+            "events": [
+                stamp_debug_event(
+                    envelope.event,
+                    ingestion_channel=envelope.ingestion_channel,
+                )
+                for envelope in event_envelopes
+            ],
+            "event_provenance_contract": debug_event_provenance_contract(),
             "debug_boundary": _debug_boundary(),
         },
         "state": _state_payload(events, messages),
@@ -455,6 +493,7 @@ def _latest_event_payload(events: list[Any], kind: str) -> dict[str, Any]:
 def _combined_events(
     debug_log: DebugEventLog,
     *,
+    debug_log_ingestion_channel: DebugEventIngestionChannel | Any,
     agent_trace_log_path: Path | str | None,
     spatial_imprint_store_path: Path | str | None,
     spatial_imprint_trigger_report_path: Path | str | None,
@@ -462,6 +501,32 @@ def _combined_events(
     since_sequence: int | None = None,
     limit: int | None = None,
 ) -> list[Any]:
+    return [
+        envelope.event
+        for envelope in _combined_event_envelopes(
+            debug_log,
+            debug_log_ingestion_channel=debug_log_ingestion_channel,
+            agent_trace_log_path=agent_trace_log_path,
+            spatial_imprint_store_path=spatial_imprint_store_path,
+            spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
+            kind=kind,
+            since_sequence=since_sequence,
+            limit=limit,
+        )
+    ]
+
+
+def _combined_event_envelopes(
+    debug_log: DebugEventLog,
+    *,
+    debug_log_ingestion_channel: DebugEventIngestionChannel | Any,
+    agent_trace_log_path: Path | str | None,
+    spatial_imprint_store_path: Path | str | None,
+    spatial_imprint_trigger_report_path: Path | str | None,
+    kind: RuntimeDebugEventKind | None = None,
+    since_sequence: int | None = None,
+    limit: int | None = None,
+) -> list[_TrustedDebugEventEnvelope]:
     runtime_events = list(debug_log.list_events())
     sequence_offset = max(
         [int(getattr(event, "sequence", 0) or 0) for event in runtime_events],
@@ -480,17 +545,52 @@ def _combined_events(
         trigger_report_path=spatial_imprint_trigger_report_path,
         sequence_offset=spatial_sequence_offset,
     )
-    events: list[Any] = [*runtime_events, *agent_events, *spatial_events]
+    event_envelopes = [
+        *(
+            _TrustedDebugEventEnvelope(
+                event=event,
+                ingestion_channel=debug_log_ingestion_channel,
+            )
+            for event in runtime_events
+        ),
+        *(
+            _TrustedDebugEventEnvelope(
+                event=event,
+                ingestion_channel=DebugEventIngestionChannel.HISTORICAL_ARCHIVE,
+            )
+            for event in agent_events
+        ),
+        *(
+            _TrustedDebugEventEnvelope(
+                event=event,
+                ingestion_channel=DebugEventIngestionChannel.PRETRIP_PROJECTION,
+            )
+            for event in spatial_events
+        ),
+    ]
     if kind is not None:
-        events = [event for event in events if event.kind == kind]
+        event_envelopes = [
+            envelope for envelope in event_envelopes if envelope.event.kind == kind
+        ]
     if since_sequence is not None:
-        events = [event for event in events if event.sequence > since_sequence]
-    events = sorted(events, key=lambda event: (event.sequence, event.timestamp, event.event_id))
+        event_envelopes = [
+            envelope
+            for envelope in event_envelopes
+            if envelope.event.sequence > since_sequence
+        ]
+    event_envelopes = sorted(
+        event_envelopes,
+        key=lambda envelope: (
+            envelope.event.sequence,
+            envelope.event.timestamp,
+            envelope.event.event_id,
+        ),
+    )
     if limit is not None:
         if limit <= 0:
             return []
-        events = events[-limit:]
-    return events
+        event_envelopes = event_envelopes[-limit:]
+    return event_envelopes
 
 
 def _agent_tool_count(events: list[Any]) -> int:

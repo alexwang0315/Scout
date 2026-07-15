@@ -276,6 +276,35 @@
       gap: 7px;
     }
 
+    .truth-item {
+      min-width: 112px;
+      max-width: 220px;
+      display: grid;
+      gap: 1px;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .truth-item span {
+      color: var(--subtle);
+      font: 800 9px var(--mono);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .truth-item strong {
+      color: var(--text);
+      font-size: 11px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .truth-item[data-tone="warn"] { border-color: rgba(213, 166, 66, .5); }
+    .truth-item[data-tone="bad"] { border-color: rgba(208, 99, 99, .5); }
+    .truth-item[data-tone="ok"] { border-color: rgba(120, 191, 117, .45); }
+
     .chip {
       display: inline-flex;
       align-items: center;
@@ -748,6 +777,16 @@
       cursor: not-allowed;
     }
 
+    .agent-composer-status {
+      grid-column: 1 / -1;
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .agent-composer-status[data-tone="warn"] { color: var(--warn); }
+    .agent-composer-status[data-tone="bad"] { color: var(--bad); }
+
     .agent-status-dot {
       display: inline-block;
       width: 9px;
@@ -763,7 +802,7 @@
     }
 
     .agent-status-dot.fail {
-      background: var(--danger);
+      background: var(--bad);
       box-shadow: 0 0 0 3px rgba(234, 120, 120, .12);
     }
 
@@ -860,6 +899,16 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
+    }
+
+    .force-row.overview-primary-row {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .overview-primary-row [data-overview-step="next-action"] button {
+      width: 100%;
+      min-width: 0;
+      white-space: normal;
     }
 
     .force-row button {
@@ -1313,6 +1362,28 @@
       gap: 9px;
     }
 
+    .evidence-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 10px 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .02);
+    }
+
+    .evidence-pagination span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .evidence-pagination-actions {
+      display: flex;
+      gap: 6px;
+    }
+
     .pretrip-evidence-group {
       border: 1px solid var(--line);
       border-left: 3px solid var(--category-color, var(--accent));
@@ -1666,7 +1737,7 @@
       gap: 8px;
     }
 
-    .pace-action-tile {
+    .pace-parameter-tile {
       min-height: 54px;
       display: grid;
       place-items: center;
@@ -1678,17 +1749,11 @@
       text-align: center;
     }
 
-    .pace-action-tile.is-active {
-      border-color: rgba(98, 181, 196, .74);
-      background: rgba(98, 181, 196, .13);
-      color: #d9f6fb;
-    }
-
-    .pace-action-tile strong {
+    .pace-parameter-tile strong {
       font-size: 13px;
     }
 
-    .pace-action-tile span {
+    .pace-parameter-tile span {
       color: var(--muted);
       font-size: 11px;
     }
@@ -2963,6 +3028,22 @@
       gap: 12px;
     }
 
+    .small-note,
+    #settingsStatus {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    #settingsStatus {
+      min-height: 19px;
+      margin-top: 10px;
+    }
+
+    #settingsStatus[data-tone="ok"] { color: var(--ok); }
+    #settingsStatus[data-tone="bad"] { color: var(--bad); }
+
     .workspace-ops {
       display: grid;
       gap: 12px;
@@ -3444,10 +3525,14 @@
         min-height: 0;
       }
       .topbar {
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: 1fr;
       }
       .status-strip {
         justify-content: flex-start;
+      }
+      .truth-item {
+        flex: 1 1 150px;
+        max-width: none;
       }
       .content-grid {
         grid-template-columns: 1fr;
@@ -3500,7 +3585,8 @@
       .route-briefing-variant-grid {
         grid-template-columns: 1fr;
       }
-      .force-row {
+      .force-row,
+      .force-row.overview-primary-row {
         grid-template-columns: 1fr;
       }
       .surface-frame-header {
@@ -3646,7 +3732,7 @@
             <button class="nav-item" type="button" data-route="outdoor-permission" data-route-truth="preview"><span class="mark"></span><span>Permission</span></button>
           </div>
         </details>
-        <button class="nav-item" type="button" data-nav-primary data-route="agent" data-route-truth="live"><span class="mark"></span><span>Assistant</span></button>
+        <button class="nav-item" type="button" data-nav-primary data-route="agent" data-route-truth="partial"><span class="mark"></span><span>Assistant</span></button>
         <details class="nav-section" data-nav-primary>
           <summary><span class="mark"></span><span>System</span></summary>
           <div class="nav-subtree">
@@ -3677,8 +3763,13 @@
           <button class="dashboard-nav-toggle" type="button" id="dashboardNavToggle" aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Open dashboard navigation">☰</button>
           <h2 id="pageTitle">Home</h2>
         </div>
-        <div class="status-strip" aria-label="Dashboard boundary status">
-          <span class="chip ok" id="readinessChip">ready</span>
+        <div class="status-strip" id="dashboardTruthStrip" aria-label="Dashboard truth status" aria-live="polite">
+          <span class="chip warn" id="maturityChip">partial</span>
+          <div class="truth-item" data-truth-field="surface"><span>Surface</span><strong>Loading</strong></div>
+          <div class="truth-item" data-truth-field="data"><span>Data</span><strong>Unknown</strong></div>
+          <div class="truth-item" data-truth-field="action"><span>Action</span><strong>Read-only</strong></div>
+          <div class="truth-item" data-truth-field="verification"><span>Verification</span><strong>Untested</strong></div>
+          <div class="truth-item" data-truth-field="provenance"><span>Provenance / Readiness</span><strong>Unknown</strong></div>
         </div>
       </header>
 
@@ -3710,21 +3801,20 @@
             <div class="agent-app-actions">
               <span class="chip info" id="agentProviderChip">provider checking</span>
               <span class="chip warn">No live safety</span>
-              <span class="chip ok"><span class="agent-status-dot" id="agentStatusDot"></span> <span id="agentStatusText">checking</span></span>
+              <span class="chip info">SCOUT_AI_ASSISTANT_ENABLED=1 still requires a readiness probe</span>
+              <span class="chip warn" id="agentStatusChip" role="status" aria-live="polite"><span class="agent-status-dot" id="agentStatusDot" aria-hidden="true"></span> <span id="agentStatusText">checking</span></span>
             </div>
           </div>
           <div class="agent-chat-panel">
             <div class="agent-chat-transcript" id="agentTranscript" aria-live="polite">
               <div class="agent-chat-empty">
-                Scout AI is connected through this dashboard when the 9099 server has
-                <span class="mono">SCOUT_AI_ASSISTANT_ENABLED=1</span>. Ask route, weather,
-                navigation, rescue handoff, workspace, or tool questions for
-                <span class="mono">chilai_nanhua_day1_scoutAI</span>.
+                Provider status is being checked. A configured provider is not treated as a verified connection.
               </div>
             </div>
             <form class="agent-composer" id="agentComposer">
-              <textarea id="agentQuestionInput" rows="2" placeholder="Ask Scout AI..." aria-label="Ask Scout AI"></textarea>
-              <button type="submit" id="agentAskButton">Send</button>
+              <textarea id="agentQuestionInput" rows="2" placeholder="Ask Scout AI..." aria-label="Ask Scout AI" aria-describedby="agentComposerStatus"></textarea>
+              <button type="submit" id="agentAskButton" aria-describedby="agentComposerStatus" title="Enter a non-blank question before sending" disabled>Send</button>
+              <p class="agent-composer-status" id="agentComposerStatus" role="status" aria-live="polite">Enter a question before sending.</p>
             </form>
           </div>
         </section>
@@ -3750,6 +3840,7 @@
     const BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status";
     const BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start";
     const BODY_INDEX_WATCH_STOP_PATH = "/admin/dashboard/body-index/watch/stop";
+    const TRIP_INTAKE_VALIDATE_PATH = "/admin/dashboard/trip-intake/validate";
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 640;
     const MAP_PADDING = 58;
@@ -3766,11 +3857,37 @@
       unavailable: {label: "unavailable", tone: "bad"},
       error: {label: "error", tone: "bad"},
     });
+    const EVIDENCE_PAGE_SIZE = 100;
+    const ROUTE_TRUTH = Object.freeze({
+      "home": Object.freeze({maturity: "live", surface: "Operational", data: "Mixed project evidence", action: "Read-only navigation", verification: "Route shell verified", provenance: "Workspace + runtime projections", mode: "Operational"}),
+      "features-workspace": Object.freeze({maturity: "partial", surface: "Operational", data: "Workspace projection", action: "Intent-only · no mutation", verification: "Intent capture verified", provenance: "Local workspace metadata", mode: "Operational"}),
+      "features-import-new-trip": Object.freeze({maturity: "partial", surface: "Operational", data: "GPX validation required", action: "Intent-only · no mutation", verification: "Awaiting server validation", provenance: "Operator-selected local GPX", mode: "Operational"}),
+      "features-country-material-pool": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Projected provider defaults", action: "Read-only selector", verification: "UI verified", provenance: "Country material registry", mode: "Product Preview"}),
+      "surface-pretrip": Object.freeze({maturity: "live", surface: "Operational", data: "Workspace candidate evidence", action: "Embedded controls · verify inner receipt", verification: "Full page + layer toggle verified", provenance: "Pre-trip admin surface", mode: "Operational"}),
+      "map": Object.freeze({maturity: "live", surface: "Operational", data: "Loading map evidence", action: "Read-only layer controls", verification: "Layer toggle verified", provenance: "Pre-trip + cache-only CWA", mode: "Operational"}),
+      "timeline": Object.freeze({maturity: "partial", surface: "Operational", data: "Paginated evidence", action: "Read-only focus", verification: "Tabs + focus verified", provenance: "Pre-trip evidence tree", mode: "Operational"}),
+      "features-lbs": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Projected location context", action: "Read-only · no tracking", verification: "Layer controls verified", provenance: "Candidate map projection", mode: "Product Preview"}),
+      "outdoor-route-context": Object.freeze({maturity: "partial", surface: "Operational", data: "Artifact-backed briefing", action: "Model generation approval required", verification: "Existing artifacts verified", provenance: "Route Context Intelligence", mode: "Operational"}),
+      "outdoor-pace-fit": Object.freeze({maturity: "partial", surface: "Preview UI", data: "Static pace parameters", action: "Read-only preview", verification: "Presentation verified", provenance: "Synthetic projection", mode: "Product Preview"}),
+      "outdoor-pace-fit-body-index": Object.freeze({maturity: "partial", surface: "Operational", data: "Sanitized provider metrics", action: "Private import approval required", verification: "Synthetic lifecycle verified", provenance: "Source-provider only", mode: "Operational"}),
+      "emergency": Object.freeze({maturity: "partial", surface: "Preview UI", data: "Sample packet", action: "Read-only · no outbound", verification: "No-outbound boundary verified", provenance: "Fixture sample", mode: "Product Preview"}),
+      "outdoor-weather": Object.freeze({maturity: "partial", surface: "Operational", data: "Cache-only loading", action: "Read-only", verification: "State handling verified", provenance: "CWA prepared cache", mode: "Operational"}),
+      "agent": Object.freeze({maturity: "partial", surface: "Degraded", data: "Local evidence context", action: "Operator-triggered model request", verification: "Connection not checked", provenance: "Provider configured · readiness unknown", mode: "Operational"}),
+      "surface-admin": Object.freeze({maturity: "live", surface: "Operational", data: "After-action evidence", action: "Embedded controls · verify inner receipt", verification: "Full page verified", provenance: "Admin after-action surface", mode: "Operational"}),
+      "surface-debug": Object.freeze({maturity: "live", surface: "Operational", data: "Runtime + replay evidence", action: "Diagnostics · projected clear is explicit", verification: "Full page verified", provenance: "Per-event provenance", mode: "Operational"}),
+      "debug": Object.freeze({maturity: "partial", surface: "Operational", data: "Runtime + replay evidence", action: "Read-only · retry", verification: "Endpoints + tabs verified", provenance: "Per-event provenance", mode: "Technical Prototype"}),
+      "settings": Object.freeze({maturity: "live", surface: "Operational", data: "Browser-local settings", action: "Local browser mutation only", verification: "Validation + save path", provenance: "Browser settings", mode: "Operational"}),
+      "outdoor-pace-fit-emergency": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Sample packet", action: "No outbound · approval required", verification: "Sandbox UI verified", provenance: "Fixture sample", mode: "Product Preview"}),
+      "outdoor-permission": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Static class descriptions", action: "Read-only selector", verification: "No runtime decision", provenance: "Static rule set", mode: "Static rule set"}),
+      "observer": Object.freeze({maturity: "preview", surface: "Technical prototype", data: "Projected ingress · broker unverified", action: "Read-only · no publish", verification: "Connection/data lifecycle unverified", provenance: "Debug ingress references", mode: "Technical Prototype"}),
+      "outdoor-architecture": Object.freeze({maturity: "preview", surface: "Reference only", data: "Architecture reference", action: "Read-only", verification: "Reference rendered", provenance: "Build documentation", mode: "Reference"}),
+      "outdoor-navigation": Object.freeze({maturity: "preview", surface: "Reference only", data: "Navigation reference", action: "Read-only", verification: "Reference rendered", provenance: "Static rule set", mode: "Reference"}),
+    });
     const ROUTE_DATA_SCOPES = Object.freeze({
       project: ["home", "map", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-pretrip", "surface-admin", "surface-debug", "emergency", "outdoor-route-context", "outdoor-architecture", "outdoor-navigation", "outdoor-weather"],
       briefing: ["outdoor-route-context"],
       body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index", "outdoor-pace-fit-emergency"],
-      weather: ["outdoor-weather"],
+      weather: ["home", "outdoor-weather"],
       debug: ["debug"],
       hardware: ["debug"],
     });
@@ -4154,6 +4271,9 @@
         hardware: {status: "idle"},
       },
       dataScopeErrors: {},
+      surfaceFrameHealth: {},
+      settingsSaveState: {status: "idle", detail: "Not changed in this view", reloadPending: false},
+      pendingTabFocus: null,
       weatherData: {
         status: "idle",
         rainfall: null,
@@ -4164,6 +4284,10 @@
       activeDebugDetail: "state",
       activeEvidenceTab: "default",
       activeMapEvidenceTab: "default",
+      evidencePageByContext: {
+        timeline: {},
+        map: {},
+      },
       activeCountryMaterialPool: "TW",
       mapEvidenceCollapsed: false,
       selectedMapEvidenceSourceId: "",
@@ -4220,6 +4344,10 @@
       agentBusy: false,
       agentUseAiHatFallback: false,
       agentUseAiHatRawEval: true,
+      agentComposerStatus: {
+        tone: "info",
+        text: "Enter a question before sending.",
+      },
       agentStatus: {
         checked: false,
         ok: false,
@@ -4269,6 +4397,11 @@
         osmPbfCacheTtlDays: "30",
         osmiumBin: "osmium",
         preparedAt: "",
+      },
+      importTripValidation: {
+        status: "idle",
+        projectId: "",
+        goldenRouteGpx: "",
       },
       layerEnabled: Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, true])),
     };
@@ -4622,7 +4755,9 @@
 
     function refreshCurrentDataView() {
       const readiness = state.project?.readiness?.status || state.project?.readiness_status || "loading";
-      document.getElementById("readinessChip").textContent = readiness;
+      const readinessChip = document.getElementById("readinessChip");
+      if (readinessChip) readinessChip.textContent = readiness;
+      renderTruthStrip(state.route);
       if (state.route === "map") {
         renderMapEvidenceRail();
         bindMapEvidenceControls();
@@ -4692,6 +4827,167 @@
       return raw || "home";
     }
 
+    function truthTone(value) {
+      const lowered = String(value || "").toLowerCase();
+      if (/unavailable|failed|error|not ready|broken/.test(lowered)) return "bad";
+      if (/degraded|stale|no coverage|unknown|not checked|untested|partial|approval|required|fixture|fallback/.test(lowered)) return "warn";
+      if (/operational|ready|verified|live runtime/.test(lowered)) return "ok";
+      return "info";
+    }
+
+    function deriveAssistantReadiness(status = state.agentStatus || {}) {
+      if (!status.checked) {
+        return {level: "checking", tone: "warn", label: "Checking provider readiness", verification: "Connection not checked"};
+      }
+      if (status.error || status.provider === "unavailable") {
+        return {level: "unavailable", tone: "bad", label: "Assistant status unavailable", verification: "Status endpoint unavailable"};
+      }
+      const raw = status.raw || {};
+      const startup = String(raw.startup_connection_status || "not_checked");
+      const repositoryReady = raw.assistant_workflow?.repository_readiness_ok ?? raw.repository_readiness_ok;
+      if (startup.startsWith("failed:")) {
+        return {level: "unavailable", tone: "bad", label: `Connection failed · ${startup.slice(7) || "unknown"}`, verification: "Provider connection failed"};
+      }
+      if (startup === "not_checked" || startup === "not_supported") {
+        const repository = repositoryReady === false ? " · repository not ready" : "";
+        return {level: "not_checked", tone: "warn", label: `Provider configured · connection not checked${repository}`, verification: repositoryReady === false ? "Repository not ready" : "Connection not checked"};
+      }
+      if (!startup.startsWith("connected:")) {
+        return {level: "unknown", tone: "warn", label: `Provider configured · ${startup || "connection unknown"}`, verification: "Connection state unknown"};
+      }
+      if (repositoryReady !== true) {
+        return {level: "degraded", tone: "warn", label: "Provider connected · repository not ready", verification: "Repository not ready"};
+      }
+      return {level: "ready", tone: "ok", label: `Connected · ${startup.slice("connected:".length) || "provider"}`, verification: "Connection + repository verified"};
+    }
+
+    function debugEventProvenance(event = {}) {
+      const provenanceByKey = {
+        runtime: {key: "runtime", label: "Live runtime", tone: "ok"},
+        fixture_replay: {key: "fixture_replay", label: "Fixture replay", tone: "warn"},
+        smoke: {key: "smoke", label: "Smoke test", tone: "warn"},
+        historical: {key: "historical", label: "Historical", tone: "info"},
+        projection: {key: "projection", label: "Projected evidence", tone: "info"},
+        unknown: {key: "unknown", label: "Unknown", tone: "warn"},
+      };
+      const key = String(event.event_provenance || "unknown").toLowerCase();
+      return provenanceByKey[key] || provenanceByKey.unknown;
+    }
+
+    function debugProvenanceSummary(events = debugAllEvents()) {
+      const counts = asArray(events).reduce((summary, event) => {
+        const key = debugEventProvenance(event).key;
+        return {...summary, [key]: (summary[key] || 0) + 1};
+      }, {});
+      const runtimeCount = Number(counts.runtime || 0);
+      const replayCount = Number(counts.fixture_replay || 0) + Number(counts.smoke || 0) + Number(counts.historical || 0) + Number(counts.projection || 0);
+      const unknownCount = Number(counts.unknown || 0);
+      const label = runtimeCount
+        ? `${runtimeCount} live runtime · ${replayCount} non-live${unknownCount ? ` · ${unknownCount} unknown` : ""}`
+        : replayCount
+          ? `0 live runtime · ${replayCount} non-live${unknownCount ? ` · ${unknownCount} unknown` : ""}`
+          : unknownCount ? `${unknownCount} unknown` : "No classified events";
+      return {counts, runtimeCount, replayCount, unknownCount, label};
+    }
+
+    function resolveRouteTruth(route) {
+      const base = ROUTE_TRUTH[route] || ROUTE_TRUTH.home;
+      const truth = {...base};
+      if (route === "agent") {
+        const readiness = deriveAssistantReadiness();
+        truth.surface = readiness.level === "ready" ? "Operational" : readiness.level === "unavailable" ? "Unavailable" : "Degraded";
+        truth.verification = readiness.verification;
+        truth.provenance = readiness.label;
+        truth.mode = readiness.level === "ready" ? "Operational" : "Not operational";
+      }
+      if (route === "map" || route === "outdoor-weather") {
+        const status = route === "outdoor-weather"
+          ? dashboardWeatherDerivedStatus()
+          : dashboardCwaDerivedStatus(state.dashboardCwaImagery || {});
+        const dataLabels = {
+          ready: "Live prepared cache",
+          stale_data: "Stale · cache-only",
+          no_coverage: "No coverage · unknown, not zero",
+          zero_precipitation: "Covered · zero precipitation",
+          loading: "Loading prepared cache",
+          partial: "Partial prepared cache",
+          error: "Source failure",
+          unavailable: "Fallback · data unavailable",
+        };
+        if (route === "map") {
+          const mapData = buildMapData();
+          const geometryMode = mapData.connected ? "Projection geometry" : "Fallback geometry";
+          truth.data = `${geometryMode} · ${dataLabels[status] || "Unknown prepared cache"}`;
+          truth.surface = mapData.connected && ["ready", "zero_precipitation"].includes(status) ? "Operational" : "Degraded";
+          truth.provenance = `${mapData.connected ? mapData.sourceId : "fallback geometry"} · cache-only CWA`;
+          truth.mode = truth.surface === "Operational" ? "Operational" : "Degraded";
+        } else {
+          truth.data = dataLabels[status] || "Unknown prepared cache";
+          truth.surface = ["ready", "zero_precipitation"].includes(status) ? "Operational" : "Degraded";
+          truth.mode = truth.surface === "Operational" ? "Operational" : "Degraded";
+        }
+      }
+      if (route.startsWith("surface-")) {
+        const frameHealth = state.surfaceFrameHealth?.[route] || {status: "loading", detail: "Inner surface loading"};
+        truth.surface = frameHealth.status === "ready" ? "Operational" : frameHealth.status === "failed" ? "Unavailable" : "Degraded";
+        truth.verification = frameHealth.detail;
+        truth.mode = frameHealth.status === "ready" ? "Operational" : frameHealth.status === "failed" ? "Unavailable" : "Loading";
+      }
+      if (route === "debug" || route === "surface-debug") {
+        const provenance = debugProvenanceSummary();
+        truth.data = provenance.label;
+        truth.provenance = provenance.replayCount ? "Per-event provenance · fixture/replay present" : "Per-event provenance";
+        if (provenance.replayCount && !provenance.runtimeCount) truth.surface = "Degraded truth context";
+      }
+      if (route === "features-import-new-trip") {
+        const validation = state.importTripValidation || {};
+        truth.data = validation.status === "validated" ? "GPX parsed and validated" : validation.status === "failed" ? "GPX validation failed" : "GPX validation required";
+        truth.verification = validation.status === "validated" ? "Server GPX validation verified" : validation.status === "failed" ? "Broken input rejected" : "Awaiting server validation";
+      }
+      if (route === "settings") {
+        const saveState = state.settingsSaveState || {};
+        truth.verification = saveState.status === "failed"
+          ? `Save failed · ${saveState.detail || "browser storage unavailable"}`
+          : saveState.status === "saved"
+            ? `Browser-local save verified · ${saveState.detail || "saved"}`
+            : "Input validation + browser-local save";
+        if (saveState.status === "failed") truth.surface = "Degraded";
+        if (saveState.status === "failed") truth.mode = "Degraded";
+      }
+      const requiredScopes = dataScopesForRoute(route);
+      const loadingScopes = requiredScopes.filter((scope) => !loadedDataScopes.has(scope) && !state.dataScopeErrors?.[scope]);
+      if (loadingScopes.length) {
+        truth.surface = "Degraded";
+        truth.verification = `Loading data · ${loadingScopes.join(", ")}`;
+        truth.mode = "Loading";
+      }
+      const failedScopes = Object.keys(state.dataScopeErrors || {});
+      if (failedScopes.length && dataScopesForRoute(route).some(scope => failedScopes.includes(scope))) {
+        truth.surface = "Degraded";
+        truth.verification = `Data load failed · ${failedScopes.join(", ")}`;
+        truth.mode = "Degraded";
+      }
+      return truth;
+    }
+
+    function renderTruthStrip(route) {
+      const strip = document.getElementById("dashboardTruthStrip");
+      if (!strip) return;
+      const truth = resolveRouteTruth(route);
+      const maturityTone = truth.maturity === "live" ? "ok" : truth.maturity === "partial" ? "warn" : "info";
+      const fields = [
+        ["surface", "Surface", truth.surface],
+        ["data", "Data", truth.data],
+        ["action", "Action", truth.action],
+        ["verification", "Verification", truth.verification],
+        ["provenance", "Provenance / Readiness", `${truth.provenance} · ${truth.mode}`],
+      ];
+      strip.innerHTML = `
+        <span class="chip ${maturityTone}" id="maturityChip">${escapeHtml(truth.maturity)}</span>
+        ${fields.map(([field, label, value]) => `<div class="truth-item" data-truth-field="${field}" data-tone="${truthTone(value)}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
+      `;
+    }
+
     function setRoute(route, {loadRouteData = false} = {}) {
       state.route = route;
       document.querySelectorAll("[data-route]").forEach((button) => {
@@ -4714,6 +5010,7 @@
       const dashboardMap = document.getElementById("dashboardMap");
       const dashboardAgent = document.getElementById("dashboardAgent");
       const route = state.route;
+      renderTruthStrip(route);
       const frameFull = routeUsesFullFrame(route);
       const frameWide = routeUsesWideFrame(route);
       contentGrid?.classList.toggle("is-frame-full", frameFull);
@@ -4763,6 +5060,16 @@
       } else {
         workspace.focus({ preventScroll: true });
       }
+      const pendingTabFocus = state.pendingTabFocus;
+      if (pendingTabFocus) {
+        state.pendingTabFocus = null;
+        window.requestAnimationFrame(() => {
+          const selector = pendingTabFocus.route
+            ? `[role="tab"][data-route="${cssEscape(pendingTabFocus.route)}"]`
+            : `[role="tab"][data-evidence-tab="${cssEscape(pendingTabFocus.evidenceTab || "")}"]`;
+          document.querySelector(selector)?.focus({preventScroll: true});
+        });
+      }
     }
 
     function renderStandardPage(route) {
@@ -4774,6 +5081,7 @@
       if (route === "features-country-material-pool") return renderCountryMaterialPoolPage();
       if (route === "surface-pretrip") {
         return renderSurfaceFrame({
+          route,
           title: "Pre-trip Planning",
           src: surfaceSrc("/admin/pretrip"),
           summary: "Import, edits, layers, review, handoff.",
@@ -4781,6 +5089,7 @@
       }
       if (route === "surface-admin") {
         return renderSurfaceFrame({
+          route,
           title: "Admin After-Action",
           src: surfaceSrc("/admin"),
           summary: "Map, evidence, narrative, review state.",
@@ -4788,6 +5097,7 @@
       }
       if (route === "surface-debug") {
         return renderSurfaceFrame({
+          route,
           title: "Runtime Debug",
           src: surfaceSrc("/admin/debug"),
           summary: "Runtime state, timeline, messages, boundary.",
@@ -4803,33 +5113,79 @@
 
     function renderHomePage() {
       const counts = projectCounts();
+      const weatherStatus = dashboardWeatherDerivedStatus();
+      const failedScopes = Object.keys(state.dataScopeErrors || {});
+      const decisionTone = failedScopes.length || ["error", "unavailable", "stale_data", "no_coverage"].includes(weatherStatus) ? "warn" : "ok";
+      const tripIdentity = state.project?.trip_id || state.project?.project_id || projectId();
+      const currentDecision = decisionTone === "warn" ? "HOLD · review blocking truth" : "READY · review route context";
+      const blockingTruth = `readiness=${counts.readiness} · weather=${weatherStatus} · data gaps=${failedScopes.length ? failedScopes.join(", ") : "none reported"}`;
       return `
-        <div class="grid-2">
-          <section class="panel">
-            <div class="panel-header"><h3>Exploring for Six Axis</h3></div>
-            <div class="panel-body">
-              <div class="force-list">
-                ${SIX_FORCES.map((force) => renderForceRow(force)).join("")}
+        <section class="panel" data-overview-priority="current-decision">
+          <div class="panel-header">
+            <h3>Current Decision Brief</h3>
+            <span class="chip ${decisionTone}">${failedScopes.length ? `${failedScopes.length} data gaps` : escapeHtml(counts.readiness)}</span>
+          </div>
+          <div class="panel-body">
+            <div class="force-list" data-overview-task-order="workspace-decision-blocker-action">
+              <div class="force-row overview-primary-row">
+                <div class="label-stack" data-overview-step="workspace-identity"><strong>Workspace / trip</strong><span class="mono">${escapeHtml(projectId())} / ${escapeHtml(tripIdentity)}</span></div>
+                <div class="label-stack" data-overview-step="current-decision"><strong>Current decision</strong><span>${escapeHtml(currentDecision)}</span></div>
+                <div class="label-stack" data-overview-step="blocking-truth"><strong>Blocking truth</strong><span>${escapeHtml(blockingTruth)}</span></div>
+                <div class="label-stack" data-overview-step="next-action"><strong>Next action</strong><button type="button" data-route="outdoor-route-context">Review route context</button></div>
               </div>
             </div>
-          </section>
+            <div class="force-list" data-overview-secondary="verification" style="margin-top:9px">
+              <div class="force-row">
+                <div class="label-stack"><strong>Verify weather and terrain</strong><span>Distinguish fresh, stale, no coverage and source failure before a decision.</span></div>
+                <div class="label-stack"><strong>Weather data</strong><span>${escapeHtml(weatherStatus)}</span></div>
+                <div class="label-stack"><strong>Terrain</strong><span>${counts.terrainTiles} prepared tiles</span></div>
+                <button type="button" data-route="outdoor-weather">Inspect</button>
+              </div>
+              <div class="force-row">
+                <div class="label-stack"><strong>Resolve evidence gaps</strong><span>Open the paginated evidence catalog and inspect source provenance.</span></div>
+                <div class="label-stack"><strong>Load failures</strong><span>${failedScopes.length ? escapeHtml(failedScopes.join(", ")) : "none reported"}</span></div>
+                <div class="label-stack"><strong>Action</strong><span>read-only review</span></div>
+                <button type="button" data-route="timeline">Open evidence</button>
+              </div>
+            </div>
+          </div>
+        </section>
+        <div style="height:12px"></div>
+        <div class="grid-2">
           <section class="panel">
-            <div class="panel-header"><h3>Alpha Workspace</h3><span class="chip ok">${escapeHtml(counts.readiness)}</span></div>
+            <div class="panel-header"><h3>Alpha Workspace</h3><span class="chip info">context</span></div>
             <div class="panel-body">
               <div class="metric-line">
                 <div class="metric-row"><span>Project</span><span class="mono">${escapeHtml(projectId())}</span></div>
                 <div class="metric-row"><span>Workspace root</span><span class="mono">${escapeHtml(WORKSPACE_ROOT)}</span></div>
-                <div class="metric-row"><span>Checkpoints</span><span>${counts.checkpoints}</span></div>
-                <div class="metric-row"><span>Segments</span><span>${counts.segments}</span></div>
-                <div class="metric-row"><span>Terrain tiles</span><span>${counts.terrainTiles}</span></div>
                 <div class="metric-row"><span>Runtime</span><span>handoff/export/load is operator-triggered only</span></div>
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h3>Preview Taxonomy</h3><span class="chip info">truth labels</span></div>
+            <div class="panel-body">
+              <div class="metric-line">
+                <div class="metric-row"><span>Product Preview</span><span>interactive concept; no runtime decision</span></div>
+                <div class="metric-row"><span>Technical Prototype</span><span>executable local slice with scoped verification</span></div>
+                <div class="metric-row"><span>Reference</span><span>documentation or navigation reference</span></div>
+                <div class="metric-row"><span>Static rule set</span><span>descriptive classes; not an evaluated policy</span></div>
               </div>
             </div>
           </section>
         </div>
         <div style="height:12px"></div>
-        <section class="panel">
-          <div class="panel-header"><h3>Admin Surfaces</h3></div>
+        <details class="panel optional-parameters-frame">
+          <summary><span>Exploring for Six Axis</span><small>drill down</small></summary>
+          <div class="panel-body">
+            <div class="force-list">
+              ${SIX_FORCES.map((force) => renderForceRow(force)).join("")}
+            </div>
+          </div>
+        </details>
+        <div style="height:12px"></div>
+        <details class="panel optional-parameters-frame">
+          <summary><span>Admin Surfaces</span><small>technical drill down</small></summary>
           <div class="panel-body">
             <div class="force-list">
               ${renderSurfaceRow("Pre-trip", surfaceSrc("/admin/pretrip"), "Import, workspace edits, layer preparation, review queues, handoff/export/load tooling.", "surface-pretrip")}
@@ -4837,9 +5193,12 @@
               ${renderSurfaceRow("Debug", surfaceSrc("/admin/debug"), "Runtime/debug timeline, projection messages, observer boundaries and diagnostics.", "surface-debug")}
             </div>
           </div>
-        </section>
+        </details>
         <div style="height:12px"></div>
-        ${renderMapPanel()}
+        <details class="panel optional-parameters-frame">
+          <summary><span>Map preview</span><small>technical drill down</small></summary>
+          <div class="panel-body">${renderMapPanel()}</div>
+        </details>
       `;
     }
 
@@ -4854,9 +5213,11 @@
       `;
     }
 
-    function renderSurfaceFrame({ title, src, summary }) {
+    function renderSurfaceFrame({ route, title, src, summary }) {
+      const frameHealth = state.surfaceFrameHealth?.[route] || {status: "loading", detail: "Inner surface loading"};
+      const frameTone = frameHealth.status === "ready" ? "ok" : frameHealth.status === "failed" ? "bad" : "warn";
       return `
-        <section class="panel surface-frame-panel">
+        <section class="panel surface-frame-panel" data-surface-route="${escapeHtml(route)}">
           <div class="surface-frame-header">
             <div>
               <h3>${escapeHtml(title)}</h3>
@@ -4864,10 +5225,13 @@
             </div>
             <div class="surface-frame-actions">
               <a class="chip info" href="${escapeHtml(src)}" target="_blank" rel="noreferrer">Open full page</a>
-              <span class="chip warn">same-origin frame</span>
+              <span class="chip ${frameTone}" id="surfaceFrameHealth">${escapeHtml(frameHealth.detail)}</span>
+              <span class="chip warn">same-origin embedded surface</span>
             </div>
           </div>
-          <iframe class="surface-frame" id="surfaceFrame" title="${escapeHtml(title)}" src="${escapeHtml(src)}" loading="eager"></iframe>
+          <button type="button" class="surface-frame-skip" data-surface-frame-skip>Skip embedded surface</button>
+          <iframe class="surface-frame" id="surfaceFrame" data-surface-route="${escapeHtml(route)}" title="${escapeHtml(title)}" src="${escapeHtml(src)}" loading="eager"></iframe>
+          <button type="button" class="surface-frame-exit" id="surfaceFrameExit">Continue after embedded surface</button>
         </section>
       `;
     }
@@ -4909,6 +5273,12 @@
         event.preventDefault();
         submitAgentQuestion();
       });
+      input.addEventListener("input", () => {
+        state.agentComposerStatus = input.value.trim()
+          ? {tone: "info", text: "Question ready. Sending is operator-triggered and read-only."}
+          : {tone: "info", text: "Enter a question before sending."};
+        renderAgentStatus();
+      });
       const fallbackToggle = document.getElementById("agentFallbackToggle");
       fallbackToggle?.addEventListener("change", () => {
         state.agentUseAiHatFallback = Boolean(fallbackToggle.checked);
@@ -4924,64 +5294,93 @@
     async function refreshAgentStatus() {
       state.agentStatus = {
         ...state.agentStatus,
-        checked: true,
+        checked: false,
+        checking: true,
         ok: false,
         text: "checking",
       };
       renderAgentStatus();
       try {
         const status = await fetchJson(ASSISTANT_STATUS_PATH);
-        state.agentStatus = {
+        const nextStatus = {
           checked: true,
-          ok: true,
           provider: String(status.provider || "unknown"),
           providerClass: String(status.provider_class || "unknown"),
-          text: status.startup_connection_status ? String(status.startup_connection_status) : "connected",
           raw: status,
+        };
+        const readiness = deriveAssistantReadiness(nextStatus);
+        state.agentStatus = {
+          ...nextStatus,
+          ok: readiness.level === "ready",
+          level: readiness.level,
+          tone: readiness.tone,
+          text: readiness.label,
         };
       } catch (error) {
         state.agentStatus = {
           checked: true,
           ok: false,
+          level: "unavailable",
+          tone: "bad",
           provider: "unavailable",
           providerClass: "not mounted",
-          text: `disconnected: ${error.message || error}`,
+          text: `Assistant status unavailable: ${error.message || error}`,
+          error: String(error?.message || error),
         };
       }
       renderAgentStatus();
+      renderAgentTranscript();
+      renderTruthStrip(state.route);
     }
 
     function renderAgentStatus() {
       const dot = document.getElementById("agentStatusDot");
       const statusText = document.getElementById("agentStatusText");
+      const statusChip = document.getElementById("agentStatusChip");
       const providerChip = document.getElementById("agentProviderChip");
       const projectChip = document.getElementById("agentProjectChip");
       const fallbackToggle = document.getElementById("agentFallbackToggle");
       const rawEvalToggle = document.getElementById("agentRawEvalToggle");
       const input = document.getElementById("agentQuestionInput");
       const button = document.getElementById("agentAskButton");
+      const composerStatus = document.getElementById("agentComposerStatus");
       const status = state.agentStatus || {};
-      dot?.classList.toggle("ok", Boolean(status.ok));
-      dot?.classList.toggle("fail", status.checked && !status.ok);
-      if (statusText) statusText.textContent = status.text || "unknown";
+      const readiness = deriveAssistantReadiness(status);
+      dot?.classList.toggle("ok", readiness.level === "ready");
+      dot?.classList.toggle("fail", readiness.level === "unavailable");
+      if (statusChip) {
+        statusChip.classList.remove("ok", "warn", "bad", "info");
+        statusChip.classList.add(readiness.tone);
+      }
+      if (statusText) statusText.textContent = readiness.label;
       if (providerChip) {
-        providerChip.textContent = status.ok
-          ? `${status.provider || "provider"} / ${status.providerClass || "provider class"}`
-          : status.provider || "assistant unavailable";
+        providerChip.textContent = status.provider && status.provider !== "unavailable"
+          ? `${status.provider} configured / ${status.providerClass || "provider class"}`
+          : "assistant status unavailable";
       }
       if (projectChip) projectChip.textContent = `project=${projectId()}`;
       if (fallbackToggle) fallbackToggle.checked = Boolean(state.agentUseAiHatFallback);
       if (rawEvalToggle) rawEvalToggle.checked = Boolean(state.agentUseAiHatRawEval);
       if (input) input.disabled = state.agentBusy;
-      if (button) button.disabled = state.agentBusy;
+      const questionAvailable = Boolean(input?.value.trim());
+      if (button) button.disabled = state.agentBusy || !questionAvailable;
+      if (composerStatus) {
+        composerStatus.textContent = state.agentComposerStatus?.text || "Enter a question before sending.";
+        composerStatus.dataset.tone = state.agentComposerStatus?.tone || "info";
+      }
     }
 
     async function submitAgentQuestion() {
       const input = document.getElementById("agentQuestionInput");
       if (!input || state.agentBusy) return;
       const question = input.value.trim();
-      if (!question) return;
+      if (!question) {
+        state.agentComposerStatus = {tone: "warn", text: "Enter a question before sending."};
+        renderAgentStatus();
+        return;
+      }
       input.value = "";
+      state.agentComposerStatus = {tone: "info", text: "Request in progress. No runtime safety mutation is allowed."};
       state.agentMessages.push({
         role: "user",
         text: question,
@@ -5027,6 +5426,7 @@
         if (!state.agentStatus.ok) {
           refreshAgentStatus();
         }
+        state.agentComposerStatus = {tone: "info", text: "Response received. Enter another question when ready."};
       } catch (error) {
         state.agentMessages = state.agentMessages.filter((message) => !message.pending);
         state.agentMessages.push({
@@ -5041,7 +5441,9 @@
           provider: "unavailable",
           providerClass: "request failed",
           text: `request failed: ${error.message || error}`,
+          error: String(error?.message || error),
         };
+        state.agentComposerStatus = {tone: "bad", text: `Request failed: ${error.message || error}`};
       } finally {
         state.agentBusy = false;
         renderAgentStatus();
@@ -5374,12 +5776,12 @@
       const transcript = document.getElementById("agentTranscript");
       if (!transcript) return;
       if (!state.agentMessages.length) {
+        const readiness = deriveAssistantReadiness();
         transcript.innerHTML = `
           <div class="agent-chat-empty">
-            Scout AI is connected through this dashboard when the 9099 server has
-            <span class="mono">SCOUT_AI_ASSISTANT_ENABLED=1</span>. Ask route, weather,
-            navigation, rescue handoff, workspace, or tool questions for
-            <span class="mono">${escapeHtml(projectId())}</span>.
+            ${escapeHtml(readiness.label)}. Provider configuration, transport connection,
+            and repository readiness are reported separately above. Questions remain
+            operator-triggered and read-only for <span class="mono">${escapeHtml(projectId())}</span>.
           </div>
         `;
         return;
@@ -5420,7 +5822,7 @@
             ["Route projection", "admin-projection + debug-projection"],
             ["Map target ids", "CP, segment, route-note, mcp, boss-point"],
             ["Position truth", "candidate projection only in alpha dashboard"],
-            ["Boundary", "no Phase 1 runtime mutation"],
+            ["Boundary", "no Phase 1 runtime mutation · no background tracking"],
           ])}
           ${renderMetricPanel("Location Evidence", [
             ["Reference route", "Overpass-backed risk ribbon preferred"],
@@ -5536,11 +5938,11 @@
           <div class="panel-body">
             <div class="workspace-ops">
               <div class="workspace-action-grid" aria-label="Workspace operation actions">
-                <button type="button" data-workspace-action="clone">Clone</button>
-                <button type="button" data-workspace-action="transfer">Transfer</button>
-                <button type="button" data-workspace-action="pack">Pack</button>
-                <button type="button" data-workspace-action="restore">Restore</button>
-                <button type="button" data-workspace-action="delete" data-danger="true">Delete</button>
+                <button type="button" data-workspace-action="clone">Record clone request</button>
+                <button type="button" data-workspace-action="transfer">Record transfer request</button>
+                <button type="button" data-workspace-action="pack">Record package request</button>
+                <button type="button" data-workspace-action="restore">Record restore request</button>
+                <button type="button" data-workspace-action="delete" data-danger="true">Request deletion review</button>
                 <button type="button" data-route="features-import-new-trip">Import New Trip</button>
               </div>
               <div class="workspace-switch-row">
@@ -5551,7 +5953,7 @@
                 <button type="button" id="workspaceSwitchProject">Switch workspace</button>
               </div>
               <p class="workspace-status" id="workspaceOperationStatus">
-                Clone, transfer, pack, restore and delete are recorded as operator-triggered alpha intents only. No filesystem mutation is performed by this dashboard.
+                Intent capture only. No filesystem mutation is performed by this dashboard. Destructive requests still require approval in external operator tooling.
               </p>
             </div>
           </div>
@@ -5797,7 +6199,7 @@
                 )}
                 <div class="import-trip-actions" aria-label="Import new trip actions">
                   <button type="button" data-import-trip-action="validate">Validate Intake</button>
-                  <button type="button" data-import-trip-action="stage">Stage Import</button>
+                  <button type="button" data-import-trip-action="stage" aria-describedby="importTripStatus" ${state.importTripValidation?.status === "validated" ? "" : "disabled"} title="Server GPX validation is required first">Record stage-import request</button>
                   <button type="button" data-import-trip-action="open">Open Workspace</button>
                   <button type="button" data-route="features-country-material-pool">Material Pool</button>
                 </div>
@@ -5825,7 +6227,7 @@
               </div>
             </div>
             <p class="workspace-status" id="importTripStatus">
-              Provide a trip id and Golden route GPX path, then validate. Stage Import records operator intent only; import execution stays in the existing admin/import tooling.
+              Provide a trip id and Golden route GPX path, then run server validation. The stage-import request records intent only and never mutates the filesystem; execution stays in approved operator tooling.
             </p>
           </div>
         </section>
@@ -6202,7 +6604,10 @@
         `)}
         ${renderDebugDrawerPanel("Recent Debug Events", `
           <div class="debug-slim-list">
-            ${debugAllEvents().slice(0, 5).map((event) => debugSlimRow(debugEventLabel(event), event.summary || event.description || event.message || "projection event", event.source || event.kind || "debug", "info")).join("") || debugSlimRow("No runtime events", "waiting for debug stream", "empty", "warn")}
+            ${debugAllEvents().slice(0, 5).map((event) => {
+              const provenance = debugEventProvenance(event);
+              return debugSlimRow(debugEventLabel(event), event.summary || event.description || event.message || "projection event", provenance.label, provenance.tone);
+            }).join("") || debugSlimRow("No classified events", "waiting for debug transport", "empty", "warn")}
           </div>
         `)}
       `;
@@ -6219,7 +6624,8 @@
         ? `DEGRADED ${endpointErrorCount}/${endpointStates.length} endpoints unavailable`
         : endpointLoadingCount
           ? `loading ${endpointLoadingCount}/${endpointStates.length}`
-          : "connected";
+          : "endpoints ready";
+      const provenance = debugProvenanceSummary();
       const boundary = {
         ...(state.runtimeDebugEventPayload?.debug_boundary || {}),
         ...(runtime.debug_boundary || {}),
@@ -6232,6 +6638,8 @@
       return `
         <div class="debug-telemetry-bar" aria-label="Debug dashboard telemetry">
           ${debugTelemetryCell("Debug health", debugHealthLabel, endpointErrorCount ? "retry available" : "read-only endpoints", endpointErrorCount ? "warn" : endpointLoadingCount ? "info" : "ok")}
+          ${debugTelemetryCell("Transport", endpointErrorCount ? "degraded" : endpointLoadingCount ? "connecting" : "connected", "transport state only", endpointErrorCount ? "warn" : endpointLoadingCount ? "info" : "ok")}
+          ${debugTelemetryCell("Event provenance", provenance.label, "runtime and fixture remain distinct", provenance.replayCount ? "warn" : provenance.runtimeCount ? "ok" : "info")}
           ${debugTelemetryCell("Route / Workspace", projectId(), state.pretripDataProjectId || "projection", "info")}
           ${debugTelemetryCell("Selected View", active.label, `${formatInteger(active.count)} refs`, active.count ? "ok" : "info")}
           ${debugTelemetryCell("Runtime", runtime.runtime_profile || (endpointErrorCount ? "unavailable" : "loading"), `events ${formatInteger(runtime.event_count ?? state.runtimeDebugEvents.length)}`, endpointErrorCount ? "warn" : "info")}
@@ -6291,16 +6699,20 @@
           <div class="panel-header"><h3>${escapeHtml(title)}</h3><span class="chip info">${formatInteger(asArray(events).length)} events</span></div>
           <div class="panel-body debug-table-wrap">
             <table class="table debug-table">
-              <thead><tr><th>Time</th><th>Event</th><th>Source</th><th>Summary</th></tr></thead>
+              <thead><tr><th>Time</th><th>Event</th><th>Source</th><th>Provenance</th><th>Summary</th></tr></thead>
               <tbody>
-                ${rows.length ? rows.map((event) => `
+                ${rows.length ? rows.map((event) => {
+                  const provenance = debugEventProvenance(event);
+                  return `
                   <tr>
                     <td class="mono">${escapeHtml(debugEventTime(event) || "--")}</td>
                     <td>${escapeHtml(event.kind || event.event_kind || event.title || "debug event")}</td>
                     <td>${escapeHtml(event.source || event.subject_ref || "debug")}</td>
+                    <td><span class="debug-pill ${debugToneClass(provenance.tone)}">${escapeHtml(provenance.label)}</span></td>
                     <td>${escapeHtml(event.summary || event.description || event.message || "read-only projection event")}</td>
                   </tr>
-                `).join("") : `<tr><td colspan="4">No runtime debug events loaded.</td></tr>`}
+                `;
+                }).join("") : `<tr><td colspan="5">No classified debug events loaded.</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -6704,17 +7116,24 @@
     }
 
     function renderSettingsPage() {
+      const saveState = state.settingsSaveState || {};
+      const statusText = saveState.status === "idle"
+        ? "No settings changes saved in this view."
+        : saveState.detail || "Settings state unavailable.";
+      const statusTone = saveState.status === "failed" ? "bad" : saveState.status === "saved" ? "ok" : "info";
       return `
         <div class="settings-grid">
           <section class="panel">
             <div class="panel-header"><h3>API</h3><span class="chip info">browser local</span></div>
             <div class="panel-body">
               <div class="metric-line">
-                <label class="metric-row"><span>Admin API base</span><input id="apiBaseInput" value="${escapeHtml(apiBase())}" placeholder="same origin"></label>
-                <label class="metric-row"><span>Project</span><input id="projectInput" value="${escapeHtml(projectId())}"></label>
+                <label class="metric-row"><span>Admin API base</span><input id="apiBaseInput" value="${escapeHtml(apiBase())}" placeholder="same origin" aria-describedby="settingsStatus"></label>
+                <label class="metric-row"><span>Project</span><input id="projectInput" value="${escapeHtml(projectId())}" aria-describedby="settingsStatus"></label>
               </div>
               <div style="height:10px"></div>
               <button type="button" id="saveSettings">Save browser settings</button>
+              <button type="button" id="reloadSettings" ${saveState.reloadPending ? "" : "disabled"}>Reload to apply</button>
+              <p id="settingsStatus" role="status" aria-live="polite" data-tone="${statusTone}">${escapeHtml(statusText)}</p>
             </div>
           </section>
           ${renderMetricPanel("Configure Boundary", [
@@ -6726,6 +7145,80 @@
           ])}
         </div>
       `;
+    }
+
+    function validateDashboardSettings(apiBaseValue, projectValue) {
+      const normalizedProject = String(projectValue || "").trim();
+      if (!/^[A-Za-z0-9_.-]+$/.test(normalizedProject)) {
+        return {ok: false, message: "Settings were not saved: project must use letters, numbers, underscore, dash or dot only."};
+      }
+      const rawApiBase = String(apiBaseValue || "").trim();
+      if (!rawApiBase) return {ok: true, apiBase: "", projectId: normalizedProject};
+      try {
+        const parsed = new URL(rawApiBase);
+        if (!["http:", "https:"].includes(parsed.protocol)) {
+          return {ok: false, message: "Settings were not saved: API base must use http or https."};
+        }
+        if (parsed.username || parsed.password) {
+          return {ok: false, message: "Settings were not saved: credentials are not allowed in the API base URL."};
+        }
+        if (parsed.search || parsed.hash) {
+          return {ok: false, message: "Settings were not saved: API base cannot include a query or fragment."};
+        }
+        return {ok: true, apiBase: parsed.toString().replace(/\/$/, ""), projectId: normalizedProject};
+      } catch (_error) {
+        return {ok: false, message: "Settings were not saved: API base must be an absolute http(s) URL or blank for same origin."};
+      }
+    }
+
+    function setDashboardSettingsStatus(message, tone = "info", reloadPending = false) {
+      state.settingsSaveState = {
+        status: tone === "bad" ? "failed" : tone === "ok" ? "saved" : "idle",
+        detail: message,
+        reloadPending,
+      };
+      const status = document.getElementById("settingsStatus");
+      if (!status) return;
+      status.textContent = message;
+      status.dataset.tone = tone;
+      renderTruthStrip(state.route);
+    }
+
+    function saveDashboardSettings() {
+      const apiInput = document.getElementById("apiBaseInput");
+      const projectInput = document.getElementById("projectInput");
+      const reloadButton = document.getElementById("reloadSettings");
+      if (!apiInput || !projectInput) return false;
+      const validation = validateDashboardSettings(apiInput.value, projectInput.value);
+      if (!validation.ok) {
+        setDashboardSettingsStatus(validation.message, "bad");
+        if (reloadButton) reloadButton.disabled = true;
+        return false;
+      }
+      let previousApi = "";
+      let previousProject = PROJECT_ID;
+      try {
+        previousApi = localStorage.getItem("scout.dashboardApiBase") || "";
+        previousProject = localStorage.getItem("scout.dashboardProjectId") || PROJECT_ID;
+        localStorage.setItem("scout.dashboardApiBase", validation.apiBase);
+        localStorage.setItem("scout.dashboardProjectId", validation.projectId);
+      } catch (error) {
+        try {
+          localStorage.setItem("scout.dashboardApiBase", previousApi);
+          localStorage.setItem("scout.dashboardProjectId", previousProject);
+        } catch (_rollbackError) {
+          // Browser storage can be unavailable; the status below remains fail-closed.
+        }
+        setDashboardSettingsStatus(`Settings were not saved: browser storage failed (${error.message || error}).`, "bad");
+        if (reloadButton) reloadButton.disabled = true;
+        return false;
+      }
+      const changed = [];
+      if (previousApi !== validation.apiBase) changed.push(`API base: ${previousApi || "same origin"} → ${validation.apiBase || "same origin"}`);
+      if (previousProject !== validation.projectId) changed.push(`Project: ${previousProject} → ${validation.projectId}`);
+      setDashboardSettingsStatus(changed.length ? `Saved browser-local settings. Changed ${changed.join("; ")}. Reload to apply.` : "Settings already match the saved browser-local values; no change was made.", "ok", Boolean(changed.length));
+      if (reloadButton) reloadButton.disabled = !changed.length;
+      return true;
     }
 
     function renderOutdoorPage(route) {
@@ -6743,7 +7236,7 @@
     function outdoorTabs(activeRoute) {
       return `
         <div class="route-tabs" role="tablist" aria-label="Exploring for Six Axis">
-          ${SIX_FORCES.map((force) => `<button type="button" class="${force.route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(force.route)}">${escapeHtml(force.label)}</button>`).join("")}
+          ${SIX_FORCES.map((force) => `<button type="button" role="tab" aria-selected="${force.route === activeRoute ? "true" : "false"}" class="${force.route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(force.route)}">${escapeHtml(force.label)}</button>`).join("")}
         </div>
       `;
     }
@@ -6755,7 +7248,7 @@
             ["outdoor-pace-fit", "Pace Dashboard"],
             ["outdoor-pace-fit-body-index", "Body Index"],
             ["outdoor-pace-fit-emergency", "Emergency UI"],
-          ].map(([route, label]) => `<button type="button" class="${route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(route)}">${escapeHtml(label)}</button>`).join("")}
+          ].map(([route, label]) => `<button type="button" role="tab" aria-selected="${route === activeRoute ? "true" : "false"}" class="${route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(route)}">${escapeHtml(label)}</button>`).join("")}
         </div>
       `;
     }
@@ -6765,8 +7258,10 @@
         ${outdoorTabs(force.route)}
         <div class="grid-2">
           <section class="panel">
-            <div class="panel-header"><h3>Action Selector</h3><span class="chip warn">risk budget</span></div>
+            <div class="panel-header"><h3>Permission Class Selector Preview</h3><span class="chip warn">No runtime decision</span></div>
             <div class="panel-body">
+              <p class="small-note">Static rule set preview only. Selecting a class changes this browser view; it does not evaluate permission, mutate runtime safety truth or authorize an action.</p>
+              <div style="height:12px"></div>
               <div class="action-grid">
                 ${[
                   ["stop", "停留"],
@@ -6779,7 +7274,7 @@
                   ["reroute", "改線"],
                   ["retreat", "撤退"],
                   ["rain", "穿雨衣"],
-                ].map(([value, label]) => `<button type="button" class="action-chip ${state.selectedAction === value ? "is-selected" : ""}" data-action="${value}">${label}</button>`).join("")}
+                ].map(([value, label]) => `<button type="button" class="action-chip ${state.selectedAction === value ? "is-selected" : ""}" data-action="${value}" aria-pressed="${state.selectedAction === value ? "true" : "false"}">${label}</button>`).join("")}
               </div>
               <div style="height:12px"></div>
               ${renderBudgetList([
@@ -6820,14 +7315,7 @@
       const coverageStatus = preferredRainfall
         ? (availableCells > 0 ? "covered" : "no_coverage")
         : "unavailable";
-      const derived = dashboardCwaDerivedStatus({
-        status: weather.status,
-        bridgeReady: true,
-        current: currentImagery,
-        rainfallCurrent: preferredRainfall,
-        freshness,
-        coverageStatus,
-      });
+      const derived = dashboardWeatherDerivedStatus(weather);
       const statusMeta = CWA_UI_STATUSES[derived] || CWA_UI_STATUSES.unavailable;
       return `
         <section class="panel" data-weather-status="${escapeHtml(derived)}">
@@ -6880,12 +7368,12 @@
         ${outdoorTabs(force.route)}
         <div class="grid-2">
           ${renderMapPanel("navigation")}
-          ${renderMetricPanel("Navigation Readiness", [
+          ${renderMetricPanel("Navigation Reference", [
             ["Offline maps", "Rudy+TW, imagery, OSM cache"],
             ["GPX", "route and reference tracks available"],
             ["Terrain literacy", "contour, ridge, valley, saddle"],
             ["Fallback", "battery, GPS drift and manual retreat direction"],
-            ["Decision rule", "high map demand + low map skill => GUIDED_ONLY"],
+            ["Reference rule", "high map demand + low map skill => GUIDED_ONLY; not evaluated here"],
           ])}
         </div>
       `;
@@ -6895,7 +7383,7 @@
       return `
         ${outdoorTabs(force.route)}
         <div class="grid-2">
-          ${renderMetricPanel("CP Graph", [
+          ${renderMetricPanel("Architecture Reference · CP Graph", [
             ["Nodes", `${projectCounts().checkpoints} checkpoints`],
             ["Segments", `${projectCounts().segments} segment frames`],
             ["Retreat", "branch A + emergency camp candidates"],
@@ -6940,21 +7428,22 @@
           <div class="pace-fit-workbench">
             <div class="pace-fit-stack">
               <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Pace Controls</h3><span class="chip warn">operator-triggered</span></div>
+                <div class="pace-fit-card-head"><h3>Pace Parameters</h3><span class="chip info">Read-only preview</span></div>
                 <div class="pace-fit-card-body">
-                  <div class="pace-action-grid" aria-label="Pace fit action selector">
+                  <div class="pace-action-grid" role="list" aria-label="Read-only pace parameter examples">
                     ${[
-                      ["Stay", "6 min", "is-active"],
-                      ["Short Break", "3 min", ""],
-                      ["Lunch", "15 min", ""],
-                      ["Wait Fog", "10 min", ""],
-                      ["Team Wait", "8 min", ""],
-                      ["Reroute", "shorter line", ""],
-                      ["Retreat", "branch A", ""],
-                      ["Rain Gear", "2 min", ""],
-                      ["Photo Stop", "4 min", ""],
-                    ].map(([label, detail, active]) => `<div class="pace-action-tile ${active}"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></div>`).join("")}
+                      ["Stay example", "6 min"],
+                      ["Short break", "3 min"],
+                      ["Lunch window", "15 min"],
+                      ["Fog wait", "10 min"],
+                      ["Team wait", "8 min"],
+                      ["Shorter-line scenario", "reference only"],
+                      ["Retreat branch", "branch A"],
+                      ["Rain gear allowance", "2 min"],
+                      ["Photo-stop allowance", "4 min"],
+                    ].map(([label, detail]) => `<div class="pace-parameter-tile" role="listitem"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></div>`).join("")}
                   </div>
+                  <p class="status">Static planning examples only. No pace action engine or runtime decision is attached.</p>
                 </div>
               </section>
 
@@ -7874,9 +8363,10 @@
         <section class="panel map-panel">
           <div class="panel-header">
             <h3>Scout Map</h3>
-            <span class="chip ${mapData.connected ? "ok" : "warn"}" id="dashboardMapStatus" data-map-connected="${mapData.connected ? "true" : "false"}">${sourceLabel}</span>
-            <span class="chip info">32 layers</span>
+            <span class="chip ${mapData.connected ? "ok" : "warn"}" id="dashboardMapPreviewStatus" data-map-connected="${mapData.connected ? "true" : "false"}">${sourceLabel}</span>
+            <span class="chip info">32 canonical layers</span>
           </div>
+          <p class="small-note" style="padding:0 12px 10px">Pre-trip and Debug expose 31; completed-track is after-action only.</p>
           <div class="map-toolbar" id="layerToolbar">
             ${SCOUT_LAYER_IDS.map((layerId) => `
               <label class="layer-control">
@@ -7885,7 +8375,7 @@
               </label>
             `).join("")}
           </div>
-          <div class="scout-map" id="dashboardMap" aria-label="Scout dashboard map preview">
+          <div class="scout-map" id="dashboardMapPreview" aria-label="Scout dashboard map preview">
             <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="chilai_nanhua_day1_scoutAI route map">
               ${SCOUT_LAYER_IDS.map((layerId, index) => mapLayerSvg(layerId, index, mode, compact, mapData)).join("")}
             </svg>
@@ -8158,6 +8648,8 @@
         <section class="panel">
           <div class="panel-header"><h3>Layer Contract</h3><span class="chip ok">${SCOUT_LAYER_IDS.length} layers</span></div>
           <div class="panel-body">
+            <p class="small-note"><strong>32 canonical layers.</strong> Pre-trip and Debug expose 31; completed-track is after-action only.</p>
+            <div style="height:10px"></div>
             <table class="table">
               <thead><tr><th>Layer</th><th>Dashboard use</th><th>Boundary</th></tr></thead>
               <tbody>
@@ -8194,7 +8686,9 @@
       const groups = pretripEvidenceGroups(view);
       const activeTab = EVIDENCE_TREE_TABS.some((tab) => tab.id === state.activeEvidenceTab) ? state.activeEvidenceTab : "default";
       const tabCounts = evidenceTabCounts(groups);
-      const visibleGroups = groups.filter((group) => group.tabId === activeTab);
+      const activeGroups = groups.filter((group) => group.tabId === activeTab);
+      const pagination = paginateEvidenceGroups(activeGroups, evidencePage("timeline", activeTab));
+      const visibleGroups = pagination.groups;
       const totalItems = groups.reduce((sum, group) => sum + group.count, 0);
       const sourceProject = state.pretripDataProjectId || projectId();
       return `
@@ -8219,6 +8713,7 @@
                 </button>
               `).join("")}
             </div>
+            ${renderEvidencePagination(pagination, "timeline", activeTab)}
             <div class="pretrip-evidence-groups" id="dashboardTimeline">
               ${visibleGroups.length ? visibleGroups.map((group, index) => renderPretripEvidenceGroup(group, index)).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
             </div>
@@ -8253,7 +8748,9 @@
       const groups = pretripEvidenceGroups(view);
       const activeTab = EVIDENCE_TREE_TABS.some((tab) => tab.id === state.activeMapEvidenceTab) ? state.activeMapEvidenceTab : "default";
       const tabCounts = evidenceTabCounts(groups);
-      const visibleGroups = groups.filter((group) => group.tabId === activeTab);
+      const activeGroups = groups.filter((group) => group.tabId === activeTab);
+      const pagination = paginateEvidenceGroups(activeGroups, evidencePage("map", activeTab));
+      const visibleGroups = pagination.groups;
       const totalItems = groups.reduce((sum, group) => sum + group.count, 0);
       const focusStatus = state.selectedMapEvidenceSourceId ? "Evidence focus ready" : "Select an item to focus the map.";
       rail.innerHTML = `
@@ -8282,6 +8779,7 @@
               </button>
             `).join("")}
           </div>
+          ${renderEvidencePagination(pagination, "map", activeTab)}
           <div class="pretrip-evidence-groups" id="dashboardMapEvidenceTimeline">
             ${visibleGroups.length ? visibleGroups.map((group, index) => renderPretripEvidenceGroup(group, index, {defaultOpen: false})).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
           </div>
@@ -8304,6 +8802,40 @@
       if (snapshot.status === "partial") return "partial";
       if (snapshot.current || snapshot.rainfallCurrent || snapshot.status === "ready") return "ready";
       return "unavailable";
+    }
+
+    function dashboardWeatherDerivedStatus(weather = state.weatherData || {}, project = state.project || {}) {
+      if (weather.status === "idle" || weather.status === "loading") return "loading";
+      if (weather.status === "error") return "error";
+      const compactRainfallProducts = asArray(project?.cwa_qpf?.rainfall_products);
+      const rainfallProducts = asArray(weather.rainfall?.products).length
+        ? asArray(weather.rainfall.products).map((product) => ({
+            ...(compactRainfallProducts.find((item) => item.gridKind === product.gridKind) || {}),
+            ...product,
+          }))
+        : compactRainfallProducts;
+      const preferredRainfall = rainfallProducts.find((item) => item.gridKind === "qpf_next_1h") || rainfallProducts[0] || null;
+      const currentImagery = ["radar", "satellite"].map((family) => {
+        const overlay = weather.imagery?.childOverlays?.[family] || {};
+        const frames = asArray(overlay.frames);
+        return frames.find((frame) => frame.frameId === overlay.latestFrameId) || frames[frames.length - 1] || null;
+      }).find(Boolean) || null;
+      const imageryStatus = String(weather.imagery?.status || "");
+      const freshness = preferredRainfall?.freshness?.status
+        || (imageryStatus.includes("stale") ? "stale_data" : weather.rainfall?.status)
+        || "unknown_freshness";
+      const availableCells = Number(preferredRainfall?.availableCellCount || 0);
+      const coverageStatus = preferredRainfall
+        ? (availableCells > 0 ? "covered" : "no_coverage")
+        : "unavailable";
+      return dashboardCwaDerivedStatus({
+        status: weather.status === "partial" ? "partial" : imageryStatus === "cache_missing" ? "unavailable" : "ready",
+        bridgeReady: true,
+        current: currentImagery,
+        rainfallCurrent: preferredRainfall,
+        freshness,
+        coverageStatus,
+      });
     }
 
     function formatCwaTimestamp(value, semanticLabel = "") {
@@ -8415,9 +8947,13 @@
 
     function renderPretripEvidenceGroup(group, index, options = {}) {
       const defaultOpen = options.defaultOpen ?? pretripEvidenceGroupOpen(group, index);
+      const visibleItemCount = asArray(group.items).length;
+      const countLabel = visibleItemCount === Number(group.count)
+        ? `${group.count} items`
+        : `${visibleItemCount} shown · ${group.count} total`;
       return `
         <details class="pretrip-evidence-group" style="--category-color:${categoryColor(group.category)}" ${defaultOpen ? "open" : ""}>
-          <summary>${escapeHtml(group.title)} <span>${group.count} items</span></summary>
+          <summary>${escapeHtml(group.title)} <span>${escapeHtml(countLabel)}</span></summary>
           ${group.items.length ? `
             <div class="pretrip-evidence-items">
               ${group.items.map((item) => `
@@ -8591,6 +9127,76 @@
         counts[group.tabId] = (counts[group.tabId] || 0) + group.count;
         return counts;
       }, {});
+    }
+
+    function paginateEvidenceGroups(groups, requestedPage = 1, pageSize = EVIDENCE_PAGE_SIZE) {
+      const safePageSize = Math.max(1, Number(pageSize) || EVIDENCE_PAGE_SIZE);
+      const itemCount = groups.reduce((sum, group) => sum + asArray(group.items).length, 0);
+      const pageCount = Math.max(1, Math.ceil(itemCount / safePageSize));
+      const page = Math.min(pageCount, Math.max(1, Number(requestedPage) || 1));
+      const startIndex = (page - 1) * safePageSize;
+      const endIndex = Math.min(itemCount, startIndex + safePageSize);
+      let cursor = 0;
+      const pageGroups = [];
+      groups.forEach((group) => {
+        const items = asArray(group.items);
+        const groupStart = cursor;
+        const groupEnd = groupStart + items.length;
+        const sliceStart = Math.max(0, startIndex - groupStart);
+        const sliceEnd = Math.min(items.length, endIndex - groupStart);
+        if (sliceStart < sliceEnd) {
+          pageGroups.push({...group, items: items.slice(sliceStart, sliceEnd)});
+        } else if (!itemCount && page === 1) {
+          pageGroups.push({...group, items: []});
+        }
+        cursor = groupEnd;
+      });
+      return {
+        groups: pageGroups,
+        itemCount,
+        page,
+        pageCount,
+        start: itemCount ? startIndex + 1 : 0,
+        end: endIndex,
+        pageSize: safePageSize,
+      };
+    }
+
+    function evidencePageForSource(groups, sourceId, pageSize = EVIDENCE_PAGE_SIZE) {
+      let itemIndex = 0;
+      for (const group of groups) {
+        for (const item of asArray(group.items)) {
+          if (item.sourceId === sourceId) return Math.floor(itemIndex / pageSize) + 1;
+          itemIndex += 1;
+        }
+      }
+      return null;
+    }
+
+    function evidencePage(context, tabId) {
+      return Number(state.evidencePageByContext?.[context]?.[tabId] || 1);
+    }
+
+    function setEvidencePage(context, tabId, page) {
+      state.evidencePageByContext = {
+        ...(state.evidencePageByContext || {}),
+        [context]: {
+          ...(state.evidencePageByContext?.[context] || {}),
+          [tabId]: Math.max(1, Number(page) || 1),
+        },
+      };
+    }
+
+    function renderEvidencePagination(pagination, context, tabId) {
+      return `
+        <nav class="evidence-pagination" aria-label="Evidence pagination">
+          <span>Showing ${pagination.start.toLocaleString()}–${pagination.end.toLocaleString()} of ${pagination.itemCount.toLocaleString()} loaded items · page ${pagination.page} of ${pagination.pageCount}</span>
+          <div class="evidence-pagination-actions">
+            <button type="button" data-evidence-page-action="previous" data-evidence-page-context="${escapeHtml(context)}" data-evidence-page-tab="${escapeHtml(tabId)}" ${pagination.page <= 1 ? "disabled" : ""}>Previous</button>
+            <button type="button" data-evidence-page-action="next" data-evidence-page-context="${escapeHtml(context)}" data-evidence-page-tab="${escapeHtml(tabId)}" ${pagination.page >= pagination.pageCount ? "disabled" : ""}>Next</button>
+          </div>
+        </nav>
+      `;
     }
 
     function asArray(value) {
@@ -9076,6 +9682,20 @@
     function bindRenderedControls() {
       const pretripMapFrame = document.getElementById("pretripMapFrame");
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
+      const surfaceFrame = document.getElementById("surfaceFrame");
+      if (surfaceFrame) bindSurfaceFrameHealth(surfaceFrame);
+      const surfaceFrameSkip = document.querySelector("[data-surface-frame-skip]");
+      if (surfaceFrameSkip) {
+        const skipEmbeddedSurface = () => {
+          document.getElementById("surfaceFrameExit")?.focus({preventScroll: true});
+        };
+        surfaceFrameSkip.addEventListener("click", skipEmbeddedSurface);
+        surfaceFrameSkip.addEventListener("keydown", (event) => {
+          if (!["Enter", " ", "Spacebar"].includes(event.key)) return;
+          event.preventDefault();
+          skipEmbeddedSurface();
+        });
+      }
 
       document.querySelectorAll("[data-route]").forEach((button) => {
         button.addEventListener("click", () => { window.location.hash = button.dataset.route || "home"; });
@@ -9101,6 +9721,7 @@
       bindDebugDetailControls();
       bindRouteContextBriefingControls();
       bindBodyIndexControls();
+      bindRovingTablists();
       document.querySelector("[data-weather-open-map]")?.addEventListener("click", () => {
         window.location.hash = "map";
       });
@@ -9109,15 +9730,95 @@
       });
       const saveSettings = document.getElementById("saveSettings");
       if (saveSettings) {
-        saveSettings.addEventListener("click", () => {
-          localStorage.setItem("scout.dashboardApiBase", document.getElementById("apiBaseInput").value.trim());
-          const nextProjectId = document.getElementById("projectInput").value.trim() || PROJECT_ID;
-          localStorage.setItem("scout.dashboardProjectId", nextProjectId);
+        saveSettings.addEventListener("click", saveDashboardSettings);
+      }
+      const reloadSettings = document.getElementById("reloadSettings");
+      if (reloadSettings) {
+        reloadSettings.addEventListener("click", () => {
+          const nextProjectId = document.getElementById("projectInput")?.value.trim() || PROJECT_ID;
           const nextUrl = new URL(window.location.href);
           nextUrl.searchParams.set("projectId", nextProjectId);
-          window.location.replace(nextUrl.toString());
+          const nextHref = nextUrl.toString();
+          if (nextHref === window.location.href) {
+            window.location.reload();
+          } else {
+            window.location.replace(nextHref);
+          }
         });
       }
+    }
+
+    function bindSurfaceFrameHealth(frame) {
+      if (frame.dataset.surfaceHealthBound === "true") return;
+      frame.dataset.surfaceHealthBound = "true";
+      const route = frame.dataset.surfaceRoute || state.route;
+      const publish = (status, detail) => {
+        state.surfaceFrameHealth = {
+          ...(state.surfaceFrameHealth || {}),
+          [route]: {status, detail},
+        };
+        const chip = document.getElementById("surfaceFrameHealth");
+        if (chip && state.route === route) {
+          chip.textContent = detail;
+          chip.className = `chip ${status === "ready" ? "ok" : status === "failed" ? "bad" : "warn"}`;
+        }
+        renderTruthStrip(state.route);
+      };
+      const inspect = () => {
+        try {
+          const documentRef = frame.contentDocument;
+          const title = String(documentRef?.title || "").trim();
+          const preview = String(documentRef?.body?.textContent || "").trim().slice(0, 500);
+          if (!documentRef || !preview || /\b404\b|not found|internal server error/i.test(`${title} ${preview}`)) {
+            publish("failed", "Inner surface failed content verification");
+            return;
+          }
+          publish("ready", "Inner surface ready · content verified");
+        } catch (_error) {
+          publish("unknown", "Inner surface loaded · cross-origin health unverified");
+        }
+      };
+      frame.addEventListener("load", inspect);
+      frame.addEventListener("error", () => publish("failed", "Inner surface failed to load"));
+      if (frame.contentDocument?.readyState === "complete") window.queueMicrotask(inspect);
+    }
+
+    function bindRovingTablists() {
+      document.querySelectorAll('[role="tablist"]').forEach((tablist) => {
+        const tabs = [...tablist.querySelectorAll('[role="tab"], button')]
+          .filter((tab) => tab.closest('[role="tablist"]') === tablist);
+        if (!tabs.length) return;
+        const selectedIndex = Math.max(0, tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true" || tab.classList.contains("is-active")));
+        tabs.forEach((tab, index) => {
+          if (!tab.hasAttribute("role")) tab.setAttribute("role", "tab");
+          if (!tab.hasAttribute("aria-selected")) tab.setAttribute("aria-selected", index === selectedIndex ? "true" : "false");
+          tab.tabIndex = index === selectedIndex ? 0 : -1;
+          if (tab.dataset.rovingTabBound === "true") return;
+          tab.dataset.rovingTabBound = "true";
+          tab.addEventListener("keydown", (event) => {
+            const currentIndex = tabs.indexOf(tab);
+            let nextIndex = currentIndex;
+            if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (currentIndex + 1) % tabs.length;
+            if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            if (event.key === "Home") nextIndex = 0;
+            if (event.key === "End") nextIndex = tabs.length - 1;
+            if (nextIndex === currentIndex) return;
+            event.preventDefault();
+            const nextTab = tabs[nextIndex];
+            const route = nextTab.dataset.route || "";
+            const evidenceTab = nextTab.dataset.evidenceTab || "";
+            nextTab.focus();
+            if (route) state.pendingTabFocus = {route, evidenceTab: ""};
+            nextTab.click();
+            if (!route) window.requestAnimationFrame(() => {
+              const selector = route
+                ? `[role="tab"][data-route="${cssEscape(route)}"]`
+                : `[role="tab"][data-evidence-tab="${cssEscape(evidenceTab)}"]`;
+              document.querySelector(selector)?.focus();
+            });
+          });
+        });
+      });
     }
 
     function bindBodyIndexControls() {
@@ -9320,6 +10021,23 @@
       status.dataset.status = tone;
     }
 
+    function importTripValidationMatches(projectIdValue, gpxPath) {
+      const validation = state.importTripValidation || {};
+      return validation.status === "validated"
+        && validation.projectId === String(projectIdValue || "").trim()
+        && validation.goldenRouteGpx === String(gpxPath || "").trim();
+    }
+
+    function updateImportStageButton(projectIdValue, gpxPath) {
+      const stageButton = document.querySelector('[data-import-trip-action="stage"]');
+      if (!stageButton) return;
+      const valid = importTripValidationMatches(projectIdValue, gpxPath);
+      stageButton.disabled = !valid;
+      stageButton.title = valid
+        ? "Records intent only; no filesystem mutation"
+        : "Server GPX validation is required first";
+    }
+
     function splitImportReferenceGpxSources(rawValue) {
       return String(rawValue || "")
         .split(/[\n,;]+/)
@@ -9422,6 +10140,15 @@
           preparedAt: fieldValue("preparePreparedAt"),
         };
         state.activeCountryMaterialPool = state.importTripDraft.countryMaterialPool;
+        if (!importTripValidationMatches(targetNameValue(), goldenRouteInput.value)) {
+          state.importTripValidation = {
+            status: "idle",
+            projectId: targetNameValue(),
+            goldenRouteGpx: goldenRouteInput.value.trim(),
+          };
+        }
+        updateImportStageButton(targetNameValue(), goldenRouteInput.value);
+        renderTruthStrip(state.route);
       };
 
       const syncWorkspace = () => {
@@ -9451,7 +10178,7 @@
       });
 
       document.querySelectorAll("[data-import-trip-action]").forEach((button) => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           const action = button.dataset.importTripAction || "validate";
           updateDraft();
           const tripId = tripInput.value.trim();
@@ -9496,11 +10223,49 @@
             return;
           }
           if (action === "validate") {
-            setImportTripStatus(`Validated ${nextProjectId}: ${materialPool.label}, workspace ${workspaceRoot}, ${layers.length} layers.`, "ok");
+            state.importTripValidation = {
+              status: "validating",
+              projectId: nextProjectId,
+              goldenRouteGpx,
+            };
+            button.disabled = true;
+            setImportTripStatus(`Validating ${nextProjectId} on the server: file, readability and GPX parse...`, "info");
+            renderTruthStrip(state.route);
+            try {
+              const validation = await postJson(TRIP_INTAKE_VALIDATE_PATH, {
+                project_id: nextProjectId,
+                golden_route_gpx: goldenRouteGpx,
+              });
+              state.importTripValidation = {
+                status: "validated",
+                projectId: nextProjectId,
+                goldenRouteGpx,
+                pointCount: Number(validation.point_count || 0),
+                distanceM: Number(validation.distance_m || 0),
+              };
+              setImportTripStatus(`GPX parsed and validated for ${nextProjectId}: ${validation.point_count || 0} points, ${formatDistanceKm(validation.distance_m || 0)}. No filesystem mutation was performed.`, "ok");
+            } catch (error) {
+              state.importTripValidation = {
+                status: "failed",
+                projectId: nextProjectId,
+                goldenRouteGpx,
+                error: String(error?.message || error),
+              };
+              setImportTripStatus(`Validation failed: ${error.message || error}. Stage intent remains disabled.`, "bad");
+            } finally {
+              button.disabled = false;
+              updateImportStageButton(nextProjectId, goldenRouteGpx);
+              renderTruthStrip(state.route);
+            }
             return;
           }
           if (action === "stage") {
-            setImportTripStatus(`Stage Import intent recorded for ${nextProjectId}. No filesystem mutation is performed by this dashboard.`, "warn");
+            if (!importTripValidationMatches(nextProjectId, goldenRouteGpx)) {
+              setImportTripStatus("Server GPX validation is required before recording the stage-import request.", "warn");
+              updateImportStageButton(nextProjectId, goldenRouteGpx);
+              return;
+            }
+            setImportTripStatus(`Intent recorded. No filesystem mutation was performed. Stage-import request recorded for ${nextProjectId}; execute only in approved operator tooling.`, "warn");
             return;
           }
           if (action === "open") {
@@ -9534,15 +10299,15 @@
         button.addEventListener("click", () => {
           const action = button.dataset.workspaceAction || "workspace";
           const labels = {
-            clone: "Clone",
-            transfer: "Transfer",
-            pack: "Pack",
-            restore: "Restore",
-            delete: "Delete",
+            clone: "Record clone request",
+            transfer: "Record transfer request",
+            pack: "Record package request",
+            restore: "Record restore request",
+            delete: "Request deletion review",
           };
           const destructiveNote = action === "delete" ? " Delete requires an explicit destructive approval outside this dashboard." : "";
           if (status) {
-            status.textContent = `${labels[action] || action} intent recorded for ${projectId()} at ${WORKSPACE_ROOT}. No filesystem mutation is performed by this dashboard; use the operator tooling surface to execute it.${destructiveNote}`;
+            status.textContent = `Intent recorded. No filesystem mutation was performed. ${labels[action] || action} for ${projectId()} at ${WORKSPACE_ROOT}; use approved operator tooling to execute it.${destructiveNote}`;
           }
         });
       });
@@ -9578,12 +10343,36 @@
       document.querySelectorAll("[data-evidence-tab]").forEach((button) => {
         button.addEventListener("click", () => {
           const selectedTab = button.dataset.evidenceTab || "default";
+          const tabGroups = state.project
+            ? pretripEvidenceGroups(state.project).filter((group) => group.tabId === selectedTab)
+            : [];
+          const selectedPage = state.selectedMapEvidenceSourceId
+            ? evidencePageForSource(tabGroups, state.selectedMapEvidenceSourceId) || 1
+            : 1;
           if (state.route === "map") {
             state.activeMapEvidenceTab = selectedTab;
+            setEvidencePage("map", selectedTab, selectedPage);
             renderMapEvidenceRail();
             bindMapEvidenceControls();
           } else {
             state.activeEvidenceTab = selectedTab;
+            setEvidencePage("timeline", selectedTab, selectedPage);
+            render();
+          }
+        });
+      });
+      document.querySelectorAll("[data-evidence-page-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const context = button.dataset.evidencePageContext === "map" ? "map" : "timeline";
+          const tabId = button.dataset.evidencePageTab || "default";
+          const delta = button.dataset.evidencePageAction === "previous" ? -1 : 1;
+          setEvidencePage(context, tabId, evidencePage(context, tabId) + delta);
+          if (context === "map") {
+            state.activeMapEvidenceTab = tabId;
+            renderMapEvidenceRail();
+            bindMapEvidenceControls();
+          } else {
+            state.activeEvidenceTab = tabId;
             render();
           }
         });
@@ -9592,6 +10381,7 @@
         button.addEventListener("click", () => focusDashboardMapEvidence(button.dataset.mapEvidenceSource || ""));
       });
       bindDashboardCwaImageryControls();
+      bindRovingTablists();
     }
 
     function dashboardCwaImageryController() {
@@ -9796,6 +10586,20 @@
     }
 
     function focusDashboardMapEvidence(sourceId, attempt = 0) {
+      if (state.route === "map" && state.project) {
+        const groups = pretripEvidenceGroups(state.project || {});
+        const sourceGroup = groups.find((group) => asArray(group.items).some((item) => item.sourceId === sourceId));
+        if (sourceGroup) {
+          const tabGroups = groups.filter((group) => group.tabId === sourceGroup.tabId);
+          const sourcePage = evidencePageForSource(tabGroups, sourceId) || 1;
+          if (state.activeMapEvidenceTab !== sourceGroup.tabId || evidencePage("map", sourceGroup.tabId) !== sourcePage) {
+            state.activeMapEvidenceTab = sourceGroup.tabId;
+            setEvidencePage("map", sourceGroup.tabId, sourcePage);
+            renderMapEvidenceRail();
+            bindMapEvidenceControls();
+          }
+        }
+      }
       const status = document.getElementById("dashboardMapEvidenceStatus");
       const frame = document.getElementById("pretripMapFrame");
       const item = state.evidenceItemsBySource[sourceId];
@@ -10167,6 +10971,13 @@
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
     }
+
+    window.scoutDashboardTruthContracts = Object.freeze({
+      assistantReadiness: (status) => deriveAssistantReadiness(status),
+      cwaStatus: (snapshot) => dashboardCwaDerivedStatus(snapshot),
+      weatherStatus: (weather, project) => dashboardWeatherDerivedStatus(weather, project),
+      evidencePage: (groups, requestedPage, pageSize) => paginateEvidenceGroups(groups, requestedPage, pageSize),
+    });
   </script>
 </body>
 </html>

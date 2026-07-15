@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import time
 import zipfile
 from pathlib import Path
@@ -751,7 +752,7 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
         "Defaults are used when this frame stays collapsed.",
         "Import Pipeline",
         "Validate Intake",
-        "Stage Import",
+        "Record stage-import request",
         "Open Workspace",
         "operator-triggered",
         "no live safety",
@@ -1056,6 +1057,10 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert "applyPretripMapOnlyFrame" in html
     assert "scout-dashboard-map-only-style" in html
     assert 'id="dashboardMap"' in html
+    assert html.count('id="dashboardMap"') == 1
+    assert html.count('id="dashboardMapStatus"') == 1
+    assert 'id="dashboardMapPreview"' in html
+    assert 'id="dashboardMapPreviewStatus"' in html
     assert 'id="pretripMapFrame"' in html
     assert 'data-map-mode="pretrip-map-only"' in html
     assert 'data-map-source="/admin/pretrip"' in html
@@ -1331,7 +1336,9 @@ def test_scout_dashboard_pace_fit_removes_low_information_blocks() -> None:
     assert 'force.route === "outdoor-pace-fit" ? force.label' in html
     assert 'data-pace-fit-dashboard="true"' in html
     assert '<div class="pace-fit-card-head"><h3>Challenge Fit</h3></div>' not in html
-    assert "Pace Controls" in html
+    assert "Pace Controls" not in html
+    assert "Pace Parameters" in html
+    assert "Read-only preview" in html
     assert "Pace Evidence" in html
     assert "Risk Budget Calculator" in html
     assert "Current CP Status" in html
@@ -1519,6 +1526,9 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
 
 def test_scout_dashboard_pace_fit_emergency_ui_subtree_contract() -> None:
     html = PAGE.read_text(encoding="utf-8")
+    emergency_subtree = html.split("function renderPaceFitEmergencyPage()", 1)[1].split(
+        "function renderPaceFitMiniMap()", 1
+    )[0]
 
     assert 'data-route="outdoor-pace-fit-emergency"' in html
     assert "function paceFitSubTabs(activeRoute)" in html
@@ -1542,7 +1552,7 @@ def test_scout_dashboard_pace_fit_emergency_ui_subtree_contract() -> None:
     assert "decisionBand(" not in html
     assert ".decision-band" not in html
     assert "Primary output" not in html
-    assert "Next action" not in html
+    assert "Next action" not in emergency_subtree
 
 
 def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
@@ -1891,7 +1901,9 @@ def test_dashboard_p0_p2_review_regressions_are_fail_closed() -> None:
     assert "loadedDataScopes.add(scope);" in html.split(
         "async function loadDataScope", 1
     )[1].split("async function performDataScope", 1)[0].split(".then", 1)[1]
-    assert "window.location.replace(nextUrl.toString())" in html
+    assert 'if (nextHref === window.location.href) {' in html
+    assert "window.location.reload();" in html
+    assert "window.location.replace(nextHref);" in html
     assert "sidebar.inert = !open" in html
     assert 'sidebar.setAttribute("aria-hidden", open ? "false" : "true")' in html
 
@@ -1903,3 +1915,350 @@ def test_dashboard_p0_p2_review_regressions_are_fail_closed() -> None:
 
     assert "/admin/dashboard?projectId=chilai_nanhua_day1#map" in smoke
     assert 'replace(\n      "/projects/chilai_nanhua_day1_scoutAI"' not in smoke
+
+
+def test_dashboard_trip_intake_validation_is_server_verified_and_non_mutating(
+    tmp_path: Path,
+) -> None:
+    client = TestClient(create_admin_app())
+    valid_gpx = tmp_path / "valid.gpx"
+    valid_gpx.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="dashboard-test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>synthetic</name><trkseg>
+    <trkpt lat="23.0" lon="121.0"><ele>100</ele></trkpt>
+    <trkpt lat="23.001" lon="121.001"><ele>110</ele></trkpt>
+  </trkseg></trk>
+</gpx>
+""",
+        encoding="utf-8",
+    )
+
+    valid = client.post(
+        "/admin/dashboard/trip-intake/validate",
+        json={"project_id": "synthetic_trip_scoutAI", "golden_route_gpx": str(valid_gpx)},
+    )
+    assert valid.status_code == 200, valid.text
+    payload = valid.json()
+    assert payload["status"] == "validated"
+    assert payload["validation_stage"] == "gpx_parsed"
+    assert payload["point_count"] == 2
+    assert payload["boundary"] == {
+        "filesystem_mutation_performed": False,
+        "runtime_safety_truth": False,
+        "raw_gpx_embedded": False,
+        "coordinates_embedded": False,
+    }
+    assert str(valid_gpx) not in valid.text
+    assert "23.0" not in valid.text
+    assert "121.0" not in valid.text
+
+    cases = [
+        (tmp_path / "missing.gpx", "File not found"),
+        (tmp_path, "regular file"),
+    ]
+    malformed = tmp_path / "malformed.gpx"
+    malformed.write_text("<gpx><trk>", encoding="utf-8")
+    cases.append((malformed, "valid GPX"))
+    not_gpx = tmp_path / "not-gpx.txt"
+    not_gpx.write_text("plain text", encoding="utf-8")
+    cases.append((not_gpx, ".gpx"))
+    unreadable = tmp_path / "unreadable.gpx"
+    unreadable.write_text(valid_gpx.read_text(encoding="utf-8"), encoding="utf-8")
+    unreadable.chmod(0)
+    cases.append((unreadable, "readable"))
+
+    try:
+        for source, expected_detail in cases:
+            response = client.post(
+                "/admin/dashboard/trip-intake/validate",
+                json={
+                    "project_id": "synthetic_trip_scoutAI",
+                    "golden_route_gpx": str(source),
+                },
+            )
+            assert response.status_code == 422, response.text
+            assert expected_detail.lower() in response.json()["detail"].lower()
+    finally:
+        unreadable.chmod(0o600)
+
+
+def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert 'data-route="agent" data-route-truth="partial"' in html
+    assert "const ROUTE_TRUTH = Object.freeze" in html
+    for route in (
+        "home",
+        "features-workspace",
+        "features-import-new-trip",
+        "features-country-material-pool",
+        "surface-pretrip",
+        "map",
+        "timeline",
+        "features-lbs",
+        "outdoor-route-context",
+        "outdoor-pace-fit",
+        "outdoor-pace-fit-body-index",
+        "emergency",
+        "outdoor-weather",
+        "agent",
+        "surface-admin",
+        "surface-debug",
+        "debug",
+        "settings",
+        "outdoor-pace-fit-emergency",
+        "outdoor-permission",
+        "observer",
+        "outdoor-architecture",
+        "outdoor-navigation",
+    ):
+        assert f'"{route}": Object.freeze' in html
+
+    for field in ("surface", "data", "action", "verification", "provenance"):
+        assert f'data-truth-field="{field}"' in html
+    assert "function resolveRouteTruth(route)" in html
+    assert "function renderTruthStrip(route)" in html
+    assert "function deriveAssistantReadiness" in html
+    assert "window.scoutDashboardTruthContracts" in html
+    assert "assistantReadiness: (status) => deriveAssistantReadiness(status)" in html
+    assert "connection not checked" in html.lower()
+    assert "repository not ready" in html.lower()
+    assert 'id="agentComposerStatus"' in html
+    assert "Enter a question before sending." in html
+    assert "state.agentBusy || !questionAvailable" in html
+
+    pace = html.split("function renderPaceFitPage", 1)[1].split(
+        "function renderPaceFitBodyIndexPage", 1
+    )[0]
+    assert "Pace Parameters" in pace
+    assert "Read-only preview" in pace
+    assert "Pace Controls" not in pace
+    assert 'role="list"' in pace
+    assert 'role="listitem"' in pace
+
+    assert "function debugEventProvenance" in html
+    provenance_function = html.split("function debugEventProvenance", 1)[1].split(
+        "function debugProvenanceSummary", 1
+    )[0]
+    assert "event.event_provenance" in provenance_function
+    assert "Unknown" in provenance_function
+    assert "haystack" not in provenance_function
+    assert "event.summary" not in provenance_function
+    assert "event.payload" not in provenance_function
+    assert "Fixture replay" in html
+    assert "Smoke test" in html
+    assert "Event provenance" in html
+    assert "Transport" in html
+
+    assert "const EVIDENCE_PAGE_SIZE = 100;" in html
+    assert "function paginateEvidenceGroups" in html
+    assert "function evidencePageForSource" in html
+    assert 'data-evidence-page-action="previous"' in html
+    assert 'data-evidence-page-action="next"' in html
+    assert 'aria-label="Evidence pagination"' in html
+
+
+def test_dashboard_joint_review_information_architecture_and_qa_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    for copy in (
+        "Record clone request",
+        "Record transfer request",
+        "Record package request",
+        "Record restore request",
+        "Request deletion review",
+        "Record stage-import request",
+        "Intent recorded. No filesystem mutation was performed.",
+        "32 canonical layers",
+        "completed-track is after-action only",
+        "Permission Class Selector Preview",
+        "No runtime decision",
+        "Product Preview",
+        "Technical Prototype",
+        "Reference",
+        "Static rule set",
+        "Current Decision Brief",
+    ):
+        assert copy in html
+
+    assert 'id="settingsStatus"' in html
+    assert 'role="status"' in html
+    assert "function validateDashboardSettings" in html
+    assert "function saveDashboardSettings" in html
+    assert "Settings were not saved" in html
+    assert "saveState.reloadPending" in html
+    assert "Boolean(changed.length)" in html
+    assert 'if (nextHref === window.location.href) {' in html
+    assert "window.location.reload();" in html
+    assert "window.location.replace(nextHref);" in html
+    assert 'truth.mode = readiness.level === "ready" ? "Operational" : "Not operational";' in html
+    assert "const loadingScopes = requiredScopes.filter" in html
+    assert 'truth.mode = "Loading";' in html
+    assert "function bindRovingTablists" in html
+    assert "pendingTabFocus" in html
+    assert "focus({preventScroll: true})" in html
+    assert 'id="agentAskButton" aria-describedby="agentComposerStatus"' in html
+    assert 'data-import-trip-action="stage" aria-describedby="importTripStatus"' in html
+    assert "Skip embedded surface" in html
+    assert 'id="surfaceFrameExit"' in html
+    assert 'focus({preventScroll: true})' in html
+    assert '["Enter", " ", "Spacebar"].includes(event.key)' in html
+    assert "ArrowRight" in html
+    assert "ArrowLeft" in html
+    assert "grid-template-columns: 1fr;" in html.split(
+        "@media (max-width: 1120px)", 1
+    )[1].split("@media (max-width: 620px)", 1)[0]
+    assert ".force-row.overview-primary-row" in html.split(
+        "@media (max-width: 1120px)", 1
+    )[1].split("@media (max-width: 620px)", 1)[0]
+
+    home = html.split("function renderHomePage()", 1)[1].split(
+        "function renderTimelinePanel()", 1
+    )[0]
+    ordered_overview_markers = (
+        'data-overview-step="workspace-identity"',
+        'data-overview-step="current-decision"',
+        'data-overview-step="blocking-truth"',
+        'data-overview-step="next-action"',
+        'data-overview-secondary="verification"',
+    )
+    marker_positions = [home.index(marker) for marker in ordered_overview_markers]
+    assert marker_positions == sorted(marker_positions)
+    primary_overview = home.split('data-overview-secondary="verification"', 1)[0]
+    assert 'data-route="surface-admin"' not in primary_overview
+    assert 'data-route="surface-debug"' not in primary_overview
+
+
+def test_dashboard_truth_contracts_cover_assistant_matrix_and_settings_failure() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    script = html.split("<script>", 1)[1].split("</script>", 1)[0]
+    node_program = f"""
+const dashboardScript = {json.dumps(script)};
+const elements = {{
+  apiBaseInput: {{value: "http://127.0.0.1:9099"}},
+  projectInput: {{value: "synthetic_settings_project"}},
+  reloadSettings: {{disabled: false}},
+  settingsStatus: {{textContent: "", dataset: {{}}}},
+}};
+const documentStub = {{
+  addEventListener() {{}},
+  getElementById(id) {{ return elements[id] || null; }},
+  querySelector() {{ return null; }},
+  querySelectorAll() {{ return []; }},
+}};
+const windowStub = {{
+  location: {{href: "http://127.0.0.1:9099/admin/dashboard", search: ""}},
+  CSS: {{escape(value) {{ return String(value); }}}},
+  requestAnimationFrame(callback) {{ callback(); }},
+}};
+const storage = {{
+  values: {{}},
+  failWrites: true,
+  getItem(key) {{ return this.values[key] || null; }},
+  setItem(key, value) {{
+    if (this.failWrites) throw new Error("synthetic storage failure");
+    this.values[key] = String(value);
+  }},
+}};
+const contracts = new Function(
+  "document", "window", "localStorage",
+  dashboardScript + "; return {{deriveAssistantReadiness, dashboardWeatherDerivedStatus, validateDashboardSettings, saveDashboardSettings}};"
+)(documentStub, windowStub, storage);
+const assistantCases = {{
+  checking: contracts.deriveAssistantReadiness({{checked: false}}),
+  not_checked: contracts.deriveAssistantReadiness({{checked: true, raw: {{startup_connection_status: "not_checked", assistant_workflow: {{repository_readiness_ok: false}}}}}}),
+  ready: contracts.deriveAssistantReadiness({{checked: true, raw: {{startup_connection_status: "connected:cloud", assistant_workflow: {{repository_readiness_ok: true}}}}}}),
+  degraded: contracts.deriveAssistantReadiness({{checked: true, raw: {{startup_connection_status: "connected:cloud", assistant_workflow: {{repository_readiness_ok: false}}}}}}),
+  failed: contracts.deriveAssistantReadiness({{checked: true, raw: {{startup_connection_status: "failed:TimeoutError"}}}}),
+  unavailable: contracts.deriveAssistantReadiness({{checked: true, provider: "unavailable", error: "synthetic endpoint failure"}}),
+}};
+const invalid = contracts.validateDashboardSettings("ftp://example.test", "bad project id");
+const weatherCases = {{
+  fresh: contracts.dashboardWeatherDerivedStatus({{
+    status: "ready",
+    rainfall: {{status: "fresh", products: [{{gridKind: "qpf_next_1h", availableCellCount: 12, freshness: {{status: "fresh"}}}}]}},
+    imagery: {{status: "ready", childOverlays: {{radar: {{latestFrameId: "radar-1", frames: [{{frameId: "radar-1"}}]}}}}}},
+  }}, {{}}),
+  failed: contracts.dashboardWeatherDerivedStatus({{status: "error"}}, {{}}),
+  stale: contracts.dashboardWeatherDerivedStatus({{
+    status: "ready",
+    rainfall: {{products: [{{gridKind: "qpf_next_1h", availableCellCount: 12, freshness: {{status: "stale_data"}}}}]}},
+    imagery: {{status: "ready", childOverlays: {{radar: {{frames: []}}}}}},
+  }}, {{}}),
+  no_coverage: contracts.dashboardWeatherDerivedStatus({{
+    status: "ready",
+    rainfall: {{products: [{{gridKind: "qpf_next_1h", availableCellCount: 0, freshness: {{status: "fresh"}}}}]}},
+    imagery: {{status: "ready", childOverlays: {{radar: {{frames: []}}}}}},
+  }}, {{}}),
+}};
+const failedSave = contracts.saveDashboardSettings();
+const failedReceipt = {{
+  result: failedSave,
+  text: elements.settingsStatus.textContent,
+  tone: elements.settingsStatus.dataset.tone,
+  reloadDisabled: elements.reloadSettings.disabled,
+}};
+storage.failWrites = false;
+const successfulSave = contracts.saveDashboardSettings();
+const successReceipt = {{
+  result: successfulSave,
+  text: elements.settingsStatus.textContent,
+  tone: elements.settingsStatus.dataset.tone,
+  reloadDisabled: elements.reloadSettings.disabled,
+}};
+process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, failedReceipt, successReceipt}}));
+"""
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert {key: value["level"] for key, value in payload["assistantCases"].items()} == {
+        "checking": "checking",
+        "not_checked": "not_checked",
+        "ready": "ready",
+        "degraded": "degraded",
+        "failed": "unavailable",
+        "unavailable": "unavailable",
+    }
+    assert {key: value["tone"] for key, value in payload["assistantCases"].items()} == {
+        "checking": "warn",
+        "not_checked": "warn",
+        "ready": "ok",
+        "degraded": "warn",
+        "failed": "bad",
+        "unavailable": "bad",
+    }
+    assert payload["invalid"]["ok"] is False
+    assert payload["weatherCases"] == {
+        "fresh": "ready",
+        "failed": "error",
+        "stale": "stale_data",
+        "no_coverage": "no_coverage",
+    }
+    assert payload["failedReceipt"] == {
+        "result": False,
+        "text": "Settings were not saved: browser storage failed (synthetic storage failure).",
+        "tone": "bad",
+        "reloadDisabled": True,
+    }
+    assert payload["successReceipt"]["result"] is True
+    assert payload["successReceipt"]["tone"] == "ok"
+    assert payload["successReceipt"]["reloadDisabled"] is False
+
+
+def test_dashboard_route_context_variants_index_uses_canonical_file_query_links() -> None:
+    source = (ROOT / "tools" / "scout_ai_route_context_briefing_variants.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "def _variant_file_href" in source
+    assert 'f"?ref={quote(ref, safe=\'\')}"' in source
+    assert '_variant_file_href(item["relative_ref"])' in source
+    assert '_variant_file_href("route_context_variant_comparison.md")' in source
+    assert '_variant_file_href("route_context_variant_comparison.json")' in source
