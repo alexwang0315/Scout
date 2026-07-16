@@ -48,6 +48,18 @@ def test_team_status_uses_reviewed_fixture_team_fields_with_remote_review_warnin
     assert result["boundary"]["outbound_send_performed"] is False
 
 
+def test_team_status_answers_workspace_evidence_inventory() -> None:
+    result = assess_scout_team_status(
+        PROJECT_ROOT,
+        query="workspace 是否有 team status、隊員位置或生命徵兆 evidence？",
+    )
+
+    assert "outputs/team_status.json" in result["field_answer"]
+    assert "outputs/remote_contact_summary.json" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/team_status.json"
+
+
 def test_team_status_escalates_for_missing_teammate_and_overdue_checkin() -> None:
     result = assess_scout_team_status(
         PROJECT_ROOT,

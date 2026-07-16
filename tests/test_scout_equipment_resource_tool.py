@@ -46,6 +46,18 @@ def test_equipment_resource_uses_reviewed_fixture_resource_fields_with_warnings(
     assert result["boundary"]["outbound_send_performed"] is False
 
 
+def test_equipment_resource_answers_workspace_inventory_from_artifacts() -> None:
+    result = assess_scout_equipment_resource(
+        PROJECT_ROOT,
+        query="workspace 內有哪些 equipment resource 或裝置清單證據？",
+    )
+
+    assert "outputs/equipment_status.json" in result["field_answer"]
+    assert "outputs/resource_plan.json" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/equipment_status.json"
+
+
 def test_equipment_resource_no_go_for_low_battery_and_missing_offline_map() -> None:
     result = assess_scout_equipment_resource(
         PROJECT_ROOT,

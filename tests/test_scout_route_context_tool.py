@@ -107,6 +107,78 @@ def test_route_context_reads_canonical_route_context_pack_for_briefing_questions
     assert "不是現場停留授權" in stops["field_answer"]
 
 
+def test_route_context_answers_dedicated_layer_without_unrelated_layers() -> None:
+    historical = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="沿途有哪些歷史脈絡？",
+        limit=4,
+    )
+    cultural = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="沿途有哪些文化與地名來源？",
+        limit=4,
+    )
+
+    assert "歷史層:" in historical["field_answer"]
+    assert "文化層:" not in historical["field_answer"]
+    assert "文化層:" in cultural["field_answer"]
+    assert "自然層:" not in cultural["field_answer"]
+    assert historical["field_answer_priority"] == 100
+    assert cultural["field_answer_priority"] == 100
+
+
+def test_route_context_answers_briefing_artifact_and_source_manifest_fields() -> None:
+    artifact = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="route context briefing artifact 是否存在，最後產生時間？",
+        limit=4,
+    )
+    manifest = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="source manifest 有哪些來源網域與抓取時間？",
+        limit=4,
+    )
+
+    assert "artifact 存在" in artifact["field_answer"]
+    assert "outputs/briefings/route_context_briefing.html" in artifact["field_answer"]
+    assert "最後產生時間=" in artifact["field_answer"]
+    assert artifact["field_answer_source_ref"] == "project.json"
+    assert "未保存 URL/domain 或個別 fetched_at" in manifest["field_answer"]
+    assert "live refresh=" in manifest["field_answer"]
+    assert manifest["field_answer_source_ref"].endswith("source_manifest.json")
+
+
+def test_route_context_natural_or_terrain_observation_query_is_not_stop_query() -> None:
+    result = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="route context points 中有哪些自然或地形觀察點？",
+        limit=4,
+    )
+
+    assert "自然層:" in result["field_answer"]
+    assert "地形層:" in result["field_answer"]
+    assert "候選 3 分鐘觀察點" not in result["field_answer"]
+
+
+def test_route_context_reports_media_manifest_and_license_gaps() -> None:
+    result = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="route context media manifest 有多少張可用影像，授權資訊是否完整？",
+        limit=4,
+    )
+
+    media = result["media_manifest"]
+    assert media["available"] is True
+    assert media["available_media_count"] == 6
+    assert media["anchored_media_count"] == 6
+    assert media["license_complete_count"] == 0
+    assert media["license_missing_count"] == 6
+    assert media["license_information_complete"] is False
+    assert "可用影像 6 張" in result["field_answer"]
+    assert "6 張缺少明確授權欄位" in result["field_answer"]
+    assert result["field_answer_source_ref"].endswith("media_manifest.json")
+
+
 def test_route_context_answers_exact_mileage_anchor_location() -> None:
     result = assess_scout_route_context(
         PROJECT_ROOT,
@@ -129,6 +201,36 @@ def test_route_context_answers_exact_mileage_anchor_location() -> None:
     assert "15K 在本次路徑約 15.0 km 處" in result["field_answer"]
     assert "lat 24.034234788, lon 121.280180449" in result["field_answer"]
     assert "runtime_safety_truth=false" in result["field_answer"]
+
+
+def test_route_context_answers_mileage_anchor_nearest_checkpoint() -> None:
+    result = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="本次路徑的 15K 在哪裡，座標與最近 CP 是什麼？",
+        limit=5,
+    )
+
+    assert "lat 24.034234788, lon 121.280180449" in result["field_answer"]
+    assert "最近 CP 是 cp.029/CP 029" in result["field_answer"]
+    assert "約 55 m" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == (
+        "candidates/route_mileage_k_anchors.json"
+    )
+
+
+def test_route_context_answers_route_segment_at_requested_mileage() -> None:
+    result = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="本次路徑的 20K 對應哪個 route segment？",
+        limit=5,
+    )
+
+    assert "20K 對應 seg.041" in result["field_answer"]
+    assert "cp.039→cp.040" in result["field_answer"]
+    assert "19.902-20.381 km" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "candidates/segments.json"
 
 
 def test_route_context_reads_standalone_route_mileage_anchor_artifact(

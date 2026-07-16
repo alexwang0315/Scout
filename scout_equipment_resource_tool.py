@@ -120,6 +120,9 @@ def assess_scout_equipment_resource(
         readiness=readiness,
         missing_fields=missing_fields,
     )
+    inventory_answer = _workspace_equipment_inventory_answer(query, source_report)
+    if inventory_answer:
+        field_answer = inventory_answer
     decision_output = _decision_output(
         decision=decision,
         readiness=readiness,
@@ -140,6 +143,8 @@ def assess_scout_equipment_resource(
         "decision": decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100 if inventory_answer else 0,
+        "field_answer_source_ref": _first_loaded_source_path(source_report),
         "missing_fields": missing_fields,
         "equipment_resource": {
             "role": "Equipment / Resource Intelligence",
@@ -413,6 +418,36 @@ def _field_answer(
         f"下一步：{readiness['next_action']} "
         "此為 Equipment / Resource 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _workspace_equipment_inventory_answer(
+    query: str,
+    source_report: list[dict[str, Any]],
+) -> str | None:
+    lowered = query.casefold()
+    if not (
+        ("workspace" in lowered or "工作區" in lowered)
+        and any(token in lowered for token in ("equipment", "裝備", "裝置清單"))
+    ):
+        return None
+    loaded = [
+        str(item.get("source_path"))
+        for item in source_report
+        if item.get("status") == "loaded" and item.get("source_path")
+    ]
+    if loaded:
+        return "Workspace equipment/resource 證據：" + "、".join(loaded) + "。"
+    return (
+        "Workspace 目前沒有 equipment_status 或 resource_plan artifact；"
+        "GPX/route 檔案不是裝備或裝置清單證據。"
+    )
+
+
+def _first_loaded_source_path(source_report: list[dict[str, Any]]) -> str | None:
+    for item in source_report:
+        if item.get("status") == "loaded" and item.get("source_path"):
+            return str(item["source_path"])
+    return "project.json"
 
 
 def _decision_output(

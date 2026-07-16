@@ -22,6 +22,9 @@ GEE_ENVIRONMENT_OPTIONAL_FIELDS = (
     "gpm_timeseries_path",
     "gpm_corridor_summary_path",
     "antecedent_rain_grid_path",
+    "risk_derivatives_path",
+    "route_revalidation_report_path",
+    "wetness_flash_flood_path",
     "include_grid",
     "include_timeseries",
     "stale_after_hours",
@@ -46,6 +49,9 @@ def assess_scout_gee_environment(
     gpm_timeseries_path: str | None = None,
     gpm_corridor_summary_path: str | None = None,
     antecedent_rain_grid_path: str | None = None,
+    risk_derivatives_path: str | None = None,
+    route_revalidation_report_path: str | None = None,
+    wetness_flash_flood_path: str | None = None,
     include_grid: bool | str | None = None,
     include_timeseries: bool | str | None = None,
     stale_after_hours: float | int | str | None = None,
@@ -160,6 +166,38 @@ def assess_scout_gee_environment(
         source_kind="gee_antecedent_rain_grid",
         source_report=source_report,
     )
+    risk_derivatives = _load_artifact(
+        root,
+        project,
+        explicit_path=risk_derivatives_path,
+        ref_keys=("environment_risk_derivatives_ref",),
+        fallbacks=("outputs/environment/derived/environment_risk_derivatives.json",),
+        source_kind="environment_risk_derivatives",
+        source_report=source_report,
+        required=False,
+    )
+    route_revalidation_report = _load_artifact(
+        root,
+        project,
+        explicit_path=route_revalidation_report_path,
+        ref_keys=("route_revalidation_report_ref",),
+        fallbacks=("outputs/environment/derived/route_revalidation_report.json",),
+        source_kind="route_revalidation_report",
+        source_report=source_report,
+        required=False,
+    )
+    wetness_flash_flood = _load_artifact(
+        root,
+        project,
+        explicit_path=wetness_flash_flood_path,
+        ref_keys=("wetness_flash_flood_susceptibility_ref",),
+        fallbacks=(
+            "outputs/environment/derived/wetness_flash_flood_susceptibility.geojson",
+        ),
+        source_kind="wetness_flash_flood_susceptibility",
+        source_report=source_report,
+        required=False,
+    )
 
     artifacts = {
         "environment_package": environment_package,
@@ -172,17 +210,22 @@ def assess_scout_gee_environment(
         "gpm_timeseries": gpm_timeseries,
         "gpm_corridor_summary": gpm_corridor_summary,
         "antecedent_rain_grid": antecedent_rain_grid,
+        "risk_derivatives": risk_derivatives,
+        "route_revalidation_report": route_revalidation_report,
+        "wetness_flash_flood": wetness_flash_flood,
     }
     missing_fields = _missing_fields(source_report)
     stale_risks = _stale_risks(source_report, stale_after_hours=stale_hours)
     warnings = _warnings(missing_fields=missing_fields, stale_risks=stale_risks)
-    gee_summary = _gee_summary(artifacts)
+    gee_summary = _gee_summary(artifacts, root=root)
     decision_output = _decision_output(
         summary=gee_summary,
         missing_fields=missing_fields,
         warnings=warnings,
     )
-    field_answer = _field_answer(decision_output, gee_summary)
+    field_answer = _field_answer(decision_output, gee_summary, query=query)
+    field_answer_source_refs = _field_answer_source_refs(query)
+    field_answer_source_ref = field_answer_source_refs[0]
     results = _results(
         artifacts,
         include_grid=include_grid_rows,
@@ -208,6 +251,11 @@ def assess_scout_gee_environment(
         "decision": decision_output["decision"],
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100 if _gee_query_kind(query) else 10,
+        "field_answer_source_ref": field_answer_source_ref,
+        "field_answer_source_refs": field_answer_source_refs,
+        "source_ref": field_answer_source_ref,
+        "source_refs": field_answer_source_refs,
         "external_api_calls_made": False,
         "earth_engine_initialized": False,
         "candidate_only": True,
@@ -256,6 +304,7 @@ def _load_artifact(
     fallbacks: tuple[str, ...],
     source_kind: str,
     source_report: list[dict[str, Any]],
+    required: bool = True,
 ) -> dict[str, Any]:
     refs = _candidate_paths(
         root,
@@ -310,7 +359,13 @@ def _load_artifact(
             )
         )
         return {}
-    source_report.append(_source_report(source_kind, refs[0], status="missing"))
+    source_report.append(
+        _source_report(
+            source_kind,
+            refs[0],
+            status="missing" if required else "optional_missing",
+        )
+    )
     return {}
 
 
@@ -403,7 +458,11 @@ def _source_report(
     return {key: value for key, value in report.items() if value not in (None, [], {})}
 
 
-def _gee_summary(artifacts: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _gee_summary(
+    artifacts: dict[str, dict[str, Any]],
+    *,
+    root: Path,
+) -> dict[str, Any]:
     return {
         "available_artifact_count": sum(1 for value in artifacts.values() if value),
         "smap_collection_id": "NASA/SMAP/SPL4SMGP/008",
@@ -433,6 +492,9 @@ def _gee_summary(artifacts: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 "rain_3h_mm",
                 "rain_24h_mm",
                 "rain_72h_mm",
+                "last_3h_mm",
+                "last_24h_mm",
+                "last_72h_mm",
                 "max_hourly_mm",
                 "p95_hourly_mm",
             ),
@@ -444,10 +506,305 @@ def _gee_summary(artifacts: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "gpm_raw_summary_available": bool(artifacts["gpm_raw_summary"]),
         "environment_factor_matrix_keys": sorted(artifacts["factor_matrix"].keys())[:12],
         "go_no_go_review_available": bool(artifacts["go_no_go_review"]),
+        "antecedent_rain_grid_summary": _antecedent_rain_grid_summary(
+            artifacts["antecedent_rain_grid"]
+        ),
+        "environment_factor_matrix_summary": _factor_matrix_summary(
+            artifacts["factor_matrix"]
+        ),
+        "environment_risk_derivatives_summary": _risk_derivatives_summary(
+            artifacts["risk_derivatives"]
+        ),
+        "wetness_compound_summary": _wetness_compound_summary(
+            artifacts["wetness_flash_flood"]
+        ),
+        "route_revalidation_summary": _route_revalidation_summary(
+            artifacts["route_revalidation_report"]
+        ),
+        "go_no_go_evidence_summary": _go_no_go_evidence_summary(
+            artifacts["go_no_go_review"]
+        ),
+        "environment_package_provenance": _environment_package_provenance(
+            artifacts["environment_package"],
+            root=root,
+        ),
         "candidate_only": True,
         "runtime_safety_truth": False,
         "human_review_required": True,
     }
+
+
+def _antecedent_rain_grid_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    features = payload.get("features")
+    if not isinstance(features, list):
+        return {}
+    candidates: list[dict[str, Any]] = []
+    for feature in features:
+        if not isinstance(feature, dict):
+            continue
+        properties = feature.get("properties")
+        geometry = feature.get("geometry")
+        if not isinstance(properties, dict):
+            properties = {}
+        if not isinstance(geometry, dict):
+            geometry = {}
+        windows = {
+            "3h": _first_float(properties, "rain_3h_mm", "last_3h_mm"),
+            "24h": _first_float(properties, "rain_24h_mm", "last_24h_mm"),
+            "72h": _first_float(properties, "rain_72h_mm", "last_72h_mm"),
+        }
+        available_values = [value for value in windows.values() if value is not None]
+        if not available_values:
+            continue
+        coordinates = geometry.get("coordinates")
+        lon = lat = None
+        if (
+            geometry.get("type") == "Point"
+            and isinstance(coordinates, list)
+            and len(coordinates) >= 2
+        ):
+            lon = _float_or_none(coordinates[0])
+            lat = _float_or_none(coordinates[1])
+        candidates.append(
+            {
+                "label": properties.get("name")
+                or properties.get("label")
+                or "antecedent rain grid cell",
+                "lat": lat,
+                "lon": lon,
+                "rain_windows_mm": windows,
+                "rank_value_mm": max(available_values),
+                "timestamp": properties.get("timestamp")
+                or properties.get("time")
+                or payload.get("generated_at"),
+            }
+        )
+    if not candidates:
+        return {}
+    return max(candidates, key=lambda item: item["rank_value_mm"])
+
+
+def _factor_matrix_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    nested = payload.get("factors")
+    factors = nested if isinstance(nested, dict) else payload
+    ignored = {
+        "artifact_kind",
+        "schema_version",
+        "project_id",
+        "generated_at",
+        "candidate_only",
+        "runtime_safety_truth",
+        "human_review_required",
+        "boundary",
+        "missing_evidence",
+        "cwa_time_metadata",
+        "generated_at_hour",
+        "route_name",
+        "time_precision",
+        "timezone",
+    }
+    available: list[str] = []
+    partial_missing: list[str] = []
+    for key, value in factors.items():
+        if key in ignored:
+            continue
+        if _has_substantive_value(value):
+            available.append(str(key))
+        partial_missing.extend(_none_paths(value, prefix=str(key)))
+    explicit_missing = _string_items(payload.get("missing_evidence"))
+    return {
+        "available": sorted(available),
+        "partial_missing": sorted(_dedupe_text(partial_missing)),
+        "missing_evidence": explicit_missing,
+    }
+
+
+def _risk_derivatives_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    counts = payload.get("counts")
+    if not isinstance(counts, dict):
+        counts = {}
+    candidate_counts = {
+        str(key).removesuffix("_count"): value
+        for key, value in counts.items()
+        if str(key).endswith("_candidate_count")
+    }
+    return {
+        "candidate_counts": candidate_counts,
+        "headline": payload.get("headline"),
+        "output_refs": payload.get("output_refs")
+        if isinstance(payload.get("output_refs"), dict)
+        else {},
+    }
+
+
+def _wetness_compound_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    features = payload.get("features")
+    if not isinstance(features, list):
+        return {}
+    rows: list[dict[str, Any]] = []
+    complete_count = 0
+    dimensions_seen = {"qpf": False, "smap": False, "recent_rain": False, "terrain": False}
+    for feature in features:
+        if not isinstance(feature, dict):
+            continue
+        properties = feature.get("properties")
+        if not isinstance(properties, dict):
+            properties = {}
+        supporting = properties.get("supporting_metrics")
+        if not isinstance(supporting, dict):
+            supporting = {}
+        merged = {**properties, **supporting}
+        present = {
+            "qpf": _mapping_has_value(merged, ("qpf",)),
+            "smap": _mapping_has_value(merged, ("smap", "soil_moisture")),
+            "recent_rain": _mapping_has_value(
+                merged,
+                ("gpm_recent_rainfall", "recent_rainfall", "rain_72h"),
+            ),
+            "terrain": _mapping_has_value(merged, ("slope", "terrain", "elevation")),
+        }
+        for key, value in present.items():
+            dimensions_seen[key] = dimensions_seen[key] or value
+        if all(present.values()):
+            complete_count += 1
+        rows.append(
+            {
+                "label": properties.get("label")
+                or properties.get("name")
+                or properties.get("source_segment_id")
+                or "unnamed segment",
+                "severity": str(properties.get("severity") or "unknown"),
+                "score": _float_or_none(properties.get("score")) or 0.0,
+            }
+        )
+    high_rows = [row for row in rows if row["severity"].casefold() == "high"]
+    ranked = sorted(high_rows or rows, key=lambda row: row["score"], reverse=True)
+    missing_dimensions = [key for key, present in dimensions_seen.items() if not present]
+    return {
+        "candidate_count": len(rows),
+        "high_count": len(high_rows),
+        "complete_four_factor_count": complete_count,
+        "top_labels": [str(row["label"]) for row in ranked[:5]],
+        "missing_dimensions": missing_dimensions,
+    }
+
+
+def _route_revalidation_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        return {}
+    stale = _string_items(
+        payload.get("stale_evidence")
+        or payload.get("stale_refs")
+        or payload.get("stale_sources")
+    )
+    missing = _string_items(
+        payload.get("missing_evidence")
+        or payload.get("missing_refs")
+        or payload.get("missing_sources")
+    )
+    return {
+        "status": payload.get("status"),
+        "event_date": payload.get("event_date"),
+        "stale_evidence": stale,
+        "missing_evidence": missing,
+        "notes": _string_items(payload.get("notes")),
+    }
+
+
+def _go_no_go_evidence_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    refs = _string_items(payload.get("evidence_source_refs"))
+    cwa_refs = [ref for ref in refs if "/cwa/" in ref.casefold()]
+    gee_refs = [ref for ref in refs if "/gee/" in ref.casefold()]
+    terrain_tokens = ("/terrain/", "terrain", "geology", "risk_score", "dtm")
+    terrain_refs = [
+        ref
+        for ref in refs
+        if any(token in ref.casefold() for token in terrain_tokens)
+    ]
+    return {
+        "cwa_refs": cwa_refs,
+        "gee_refs": gee_refs,
+        "terrain_refs": terrain_refs,
+        "other_refs": [
+            ref
+            for ref in refs
+            if ref not in cwa_refs and ref not in gee_refs and ref not in terrain_refs
+        ],
+        "missing_evidence": _string_items(payload.get("missing_evidence")),
+    }
+
+
+def _environment_package_provenance(
+    payload: dict[str, Any],
+    *,
+    root: Path,
+) -> dict[str, Any]:
+    refs = _string_items(payload.get("source_refs"))
+    existing: list[str] = []
+    missing: list[str] = []
+    for ref in refs:
+        (existing if _resolve_project_path(root, ref).is_file() else missing).append(ref)
+    return {
+        "listed_count": len(refs),
+        "existing_count": len(existing),
+        "missing_count": len(missing),
+        "missing_refs": missing,
+        "declared_missing_evidence": _string_items(payload.get("missing_evidence")),
+        "complete": bool(refs) and not missing,
+    }
+
+
+def _first_float(payload: dict[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = _float_or_none(payload.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _has_substantive_value(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(_has_substantive_value(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_substantive_value(item) for item in value)
+    return value is not None and value != ""
+
+
+def _none_paths(value: Any, *, prefix: str) -> list[str]:
+    if value is None:
+        return [prefix]
+    if not isinstance(value, dict):
+        return []
+    paths: list[str] = []
+    for key, child in value.items():
+        paths.extend(_none_paths(child, prefix=f"{prefix}.{key}"))
+    return paths
+
+
+def _mapping_has_value(payload: dict[str, Any], tokens: tuple[str, ...]) -> bool:
+    for key, value in payload.items():
+        normalized_key = str(key).casefold()
+        if any(token in normalized_key for token in tokens) and value not in (None, "", []):
+            return True
+    return False
+
+
+def _string_items(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    rows: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            rows.append(item.strip())
+        elif isinstance(item, dict):
+            label = item.get("source_ref") or item.get("ref") or item.get("field")
+            if label:
+                rows.append(str(label))
+    return _dedupe_text(rows)
 
 
 def _compact_dataset(item: dict[str, Any]) -> dict[str, Any]:
@@ -475,6 +832,9 @@ def _compact_metric_summary(
     raw = payload.get("corridor_summary")
     if isinstance(raw, dict):
         payload = {**payload, **raw}
+    values = payload.get("values")
+    if isinstance(values, dict):
+        payload = {**payload, **values}
     metrics = payload.get("metrics")
     if isinstance(metrics, dict):
         payload = {**payload, **metrics}
@@ -718,7 +1078,155 @@ def _metric_latest(summary: Any, key: str) -> float | None:
     return _float_or_none(value)
 
 
-def _field_answer(decision_output: dict[str, Any], summary: dict[str, Any]) -> str:
+def _field_answer(
+    decision_output: dict[str, Any],
+    summary: dict[str, Any],
+    *,
+    query: str,
+) -> str:
+    query_kind = _gee_query_kind(query)
+    smap = summary.get("smap_l4_corridor_summary")
+    gpm = summary.get("gpm_imerg_corridor_summary")
+    if query_kind == "smap_soil_moisture" and isinstance(smap, dict):
+        return (
+            "SMAP L4 corridor soil moisture："
+            f"surface={_display_metric(_metric_stat(smap, 'sm_surface', 'latest'))}，"
+            f"rootzone={_display_metric(_metric_stat(smap, 'sm_rootzone', 'latest'))}，"
+            f"profile={_display_metric(_metric_stat(smap, 'sm_profile', 'latest'))}。"
+        )
+    if query_kind == "smap_surface_wetness" and isinstance(smap, dict):
+        return (
+            "SMAP surface wetness："
+            f"latest={_display_metric(_metric_stat(smap, 'sm_surface_wetness', 'latest'))}，"
+            f"mean={_display_metric(_metric_stat(smap, 'sm_surface_wetness', 'mean'))}，"
+            f"max={_display_metric(_metric_stat(smap, 'sm_surface_wetness', 'max'))}，"
+            f"p95={_display_metric(_metric_stat(smap, 'sm_surface_wetness', 'p95'))}，"
+            f"trend={_display_metric(_metric_stat(smap, 'sm_surface_wetness', 'trend'))}。"
+        )
+    if query_kind == "antecedent_rain_location":
+        item = summary.get("antecedent_rain_grid_summary")
+        if isinstance(item, dict) and item:
+            windows = item.get("rain_windows_mm")
+            if not isinstance(windows, dict):
+                windows = {}
+            values = "，".join(
+                f"{window}={value} mm"
+                for window, value in windows.items()
+                if value is not None
+            ) or "累積量=unavailable"
+            return (
+                "antecedent rain grid 最高累積雨量位於 "
+                f"{item.get('label') or 'unnamed grid cell'}（"
+                f"lat={_display_metric(item.get('lat'))}, "
+                f"lon={_display_metric(item.get('lon'))}），{values}。"
+            )
+        return "antecedent rain grid 沒有可排序的累積雨量 feature。"
+    if query_kind == "gpm_latest" and isinstance(gpm, dict):
+        values = {
+            "1h": _metric_stat(gpm, "rain_1h_mm", "latest"),
+            "3h": _first_metric_stat(gpm, ("rain_3h_mm", "last_3h_mm"), "latest"),
+            "24h": _first_metric_stat(
+                gpm, ("rain_24h_mm", "last_24h_mm"), "latest"
+            ),
+            "72h": _first_metric_stat(
+                gpm, ("rain_72h_mm", "last_72h_mm"), "latest"
+            ),
+        }
+        trends = [
+            _metric_stat(gpm, key, "trend")
+            for key in (
+                "rain_72h_mm",
+                "last_72h_mm",
+                "rain_24h_mm",
+                "last_24h_mm",
+                "rain_3h_mm",
+                "last_3h_mm",
+                "rain_1h_mm",
+            )
+        ]
+        trend = next((value for value in trends if value is not None), None)
+        value_text = "，".join(
+            f"{window}={_display_metric(value)} mm" for window, value in values.items()
+        )
+        return f"GPM IMERG corridor：latest {value_text}；trend={_display_metric(trend)}。"
+    if query_kind == "factor_matrix":
+        matrix = summary.get("environment_factor_matrix_summary")
+        if isinstance(matrix, dict) and matrix:
+            available = ", ".join(matrix.get("available") or []) or "none"
+            partial = ", ".join(matrix.get("partial_missing") or []) or "none"
+            explicit = ", ".join(matrix.get("missing_evidence") or []) or "none"
+            return (
+                f"environment factor matrix 已有資料：{available}；"
+                f"部分缺欄：{partial}；missing evidence：{explicit}。"
+            )
+    if query_kind == "risk_derivatives":
+        derivatives = summary.get("environment_risk_derivatives_summary")
+        if isinstance(derivatives, dict) and derivatives:
+            counts = derivatives.get("candidate_counts")
+            if not isinstance(counts, dict):
+                counts = {}
+            text = ", ".join(f"{key}={value}" for key, value in counts.items())
+            return f"environment risk derivatives compound candidate counts：{text or 'none'}。"
+    if query_kind == "four_factor_compound":
+        compound = summary.get("wetness_compound_summary")
+        if isinstance(compound, dict) and compound:
+            labels = "、".join(compound.get("top_labels") or []) or "none"
+            missing = set(compound.get("missing_dimensions") or [])
+            missing_text = []
+            if "qpf" in missing:
+                missing_text.append("per-segment QPF")
+            if "smap" in missing:
+                missing_text.append("per-segment SMAP")
+            if "recent_rain" in missing:
+                missing_text.append("GPM recent-rain")
+            if "terrain" in missing:
+                missing_text.append("terrain")
+            return (
+                f"完整四因子複合候選 {compound.get('complete_four_factor_count', 0)} 段；"
+                f"濕滑/溪溝暴漲候選 {compound.get('candidate_count', 0)} 段，"
+                f"其中高風險 {compound.get('high_count', 0)} 段；"
+                f"高分位置：{labels}；缺少 {', '.join(missing_text) or 'none'} join，"
+                "不能視為完整四因子複合候選。"
+            )
+    if query_kind == "route_revalidation":
+        report = summary.get("route_revalidation_summary")
+        if isinstance(report, dict) and report:
+            stale = ", ".join(report.get("stale_evidence") or []) or "none"
+            missing = ", ".join(report.get("missing_evidence") or []) or "none"
+            event_date = report.get("event_date") or "missing"
+            notes = " ".join(report.get("notes") or []) or "none"
+            return (
+                f"route revalidation status={report.get('status') or 'unknown'}；"
+                f"event_date={event_date}；named stale evidence={stale}；"
+                f"named missing evidence={missing}；notes={notes}。"
+            )
+    if query_kind == "go_no_go_refs":
+        refs = summary.get("go_no_go_evidence_summary")
+        if isinstance(refs, dict) and refs:
+            cwa = refs.get("cwa_refs") or []
+            gee = refs.get("gee_refs") or []
+            terrain = refs.get("terrain_refs") or []
+            cwa_labels = [_source_ref_label(ref) for ref in cwa]
+            gee_labels = [_source_ref_label(ref) for ref in gee]
+            terrain_labels = [_source_ref_label(ref) for ref in terrain]
+            return (
+                f"go/no-go draft：CWA weather refs={len(cwa)} "
+                f"（{', '.join(cwa_labels) or 'none'}）；GEE weather refs={len(gee)} "
+                f"（{', '.join(gee_labels) or 'none'}）；terrain refs={len(terrain)} "
+                f"（{', '.join(terrain_labels) or 'none'}）。"
+            )
+    if query_kind == "package_provenance":
+        provenance = summary.get("environment_package_provenance")
+        if isinstance(provenance, dict) and provenance:
+            missing = ", ".join(provenance.get("missing_refs") or []) or "none"
+            return (
+                "environment evidence package provenance："
+                f"listed={provenance.get('listed_count', 0)}，"
+                f"existing={provenance.get('existing_count', 0)}，"
+                f"missing={provenance.get('missing_count', 0)}；"
+                f"missing refs={missing}。"
+            )
+
     text = str(decision_output.get("field_answer") or "").strip()
     text += (
         f" Collections: {summary['smap_collection_id']}, "
@@ -730,6 +1238,109 @@ def _field_answer(decision_output: dict[str, Any], summary: dict[str, Any]) -> s
         "safety conclusion."
     )
     return text
+
+
+def _metric_stat(summary: dict[str, Any], key: str, stat: str) -> Any:
+    value = summary.get(key)
+    if isinstance(value, dict):
+        if stat in value:
+            return value[stat]
+        if stat == "latest":
+            return value.get("mean")
+        return None
+    return value if stat == "latest" else None
+
+
+def _first_metric_stat(
+    summary: dict[str, Any],
+    keys: tuple[str, ...],
+    stat: str,
+) -> Any:
+    for key in keys:
+        value = _metric_stat(summary, key, stat)
+        if value is not None:
+            return value
+    return None
+
+
+def _display_metric(value: Any) -> str:
+    return "unavailable" if value is None else str(value)
+
+
+def _source_ref_label(source_ref: str) -> str:
+    return Path(source_ref).stem
+
+
+def _gee_query_kind(query: str) -> str | None:
+    normalized = query.casefold()
+    if "surface wetness" in normalized and "smap" in normalized:
+        return "smap_surface_wetness"
+    if "smap" in normalized and all(
+        token in normalized for token in ("surface", "rootzone", "profile")
+    ):
+        return "smap_soil_moisture"
+    if "antecedent rain" in normalized and any(
+        token in normalized for token in ("最高", "位置", "highest", "location")
+    ):
+        return "antecedent_rain_location"
+    if "gpm" in normalized and any(
+        token in normalized for token in ("最新", "趨勢", "latest", "trend")
+    ):
+        return "gpm_latest"
+    if "environment factor matrix" in normalized:
+        return "factor_matrix"
+    if "environment risk derivatives" in normalized:
+        return "risk_derivatives"
+    if all(token in normalized for token in ("qpf", "smap", "terrain")) and any(
+        token in normalized for token in ("recent rain", "複合候選", "compound")
+    ):
+        return "four_factor_compound"
+    if "route revalidation" in normalized:
+        return "route_revalidation"
+    if "go/no-go" in normalized and any(
+        token in normalized for token in ("evidence", "引用", "refs")
+    ):
+        return "go_no_go_refs"
+    if "environment evidence package" in normalized and "provenance" in normalized:
+        return "package_provenance"
+    return None
+
+
+def _field_answer_source_refs(query: str) -> list[str]:
+    query_kind = _gee_query_kind(query)
+    by_kind = {
+        "smap_soil_moisture": [
+            "outputs/environment/gee/smap_l4_corridor_summary.json"
+        ],
+        "smap_surface_wetness": [
+            "outputs/environment/gee/smap_l4_corridor_summary.json"
+        ],
+        "antecedent_rain_location": [
+            "outputs/environment/gee/antecedent_rain_grid.geojson"
+        ],
+        "gpm_latest": [
+            "outputs/environment/gee/gpm_imerg_corridor_summary.json"
+        ],
+        "factor_matrix": ["outputs/environment/environment_factor_matrix.json"],
+        "risk_derivatives": [
+            "outputs/environment/derived/environment_risk_derivatives.json"
+        ],
+        "four_factor_compound": [
+            "outputs/environment/derived/wetness_flash_flood_susceptibility.geojson",
+            "outputs/environment/environment_factor_matrix.json",
+        ],
+        "route_revalidation": [
+            "outputs/environment/derived/route_revalidation_report.json"
+        ],
+        "go_no_go_refs": ["outputs/environment/go_no_go_review_draft.json"],
+        "package_provenance": [
+            "outputs/environment/environment_evidence_package.json"
+        ],
+    }
+    return by_kind.get(
+        query_kind,
+        ["outputs/environment/environment_evidence_package.json"],
+    )
 
 
 def _results(

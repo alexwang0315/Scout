@@ -55,5 +55,22 @@ def test_review_gap_clear_filter_is_still_candidate_only() -> None:
     assert "不是 departure approval" in result["decision_output"]["firstLayer"]["limit"]
 
 
+def test_review_gap_generic_unanswerable_question_scans_entire_queue() -> None:
+    result = assess_scout_review_gap(
+        PROJECT_ROOT,
+        query="依照目前 workspace evidence，還有哪些資料問題無法可靠回答？",
+    )
+
+    assert result["decision"] == "DELAY"
+    assert result["review_gap"]["matched_review_item_count"] > 0
+    assert result["review_gap"]["counts"]["unresolved_review_count"] > 0
+    assert "unresolved=" in result["field_answer"]
+    assert "warnings=" in result["field_answer"]
+    assert "conflicts=" in result["field_answer"]
+    assert "unanswered_context=" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/review_queue_manifest.json"
+
+
 def test_review_gap_output_kind_constant() -> None:
     assert REVIEW_GAP_OUTPUT_KIND == "scout_ai_review_gap_tool_output"

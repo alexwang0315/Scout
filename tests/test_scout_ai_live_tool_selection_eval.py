@@ -29,6 +29,12 @@ class FakeNoToolRunner:
     last_model_response_metadata = {
         "finish_reason": "stop",
         "model_name": "fake/no-tool",
+        "provider": "hailo_ollama",
+        "streaming": "true",
+        "semantic_stop": "true",
+        "input_pack_estimated_tokens": "1180",
+        "continuation_count": "1",
+        "context_full_recovery_count": "1",
     }
 
     def run_with_workspace_tools(self, prompt, *, timeout_seconds, tool_context):
@@ -187,6 +193,9 @@ def test_live_eval_preserves_full_answer_and_aggregates_model_usage() -> None:
     long_answer = "完整答案" * 200
 
     class FakeUsageRunner(FakeNoToolRunner):
+        last_raw_model_output = "raw model draft"
+        last_raw_model_outputs = ["raw model draft", "raw repaired draft"]
+
         def run_with_workspace_tools(self, prompt, *, timeout_seconds, tool_context):
             return long_answer
 
@@ -198,9 +207,20 @@ def test_live_eval_preserves_full_answer_and_aggregates_model_usage() -> None:
 
     sample = report["samples"][0]
     assert sample["answer"] == long_answer
+    assert sample["raw_model_answer"] == "raw model draft"
+    assert sample["raw_model_attempts"] == [
+        "raw model draft",
+        "raw repaired draft",
+    ]
     assert len(sample["answer_preview"]) < len(sample["answer"])
     assert sample["model_usage"]["input_tokens"] == 120
     assert sample["model_response_metadata"]["finish_reason"] == "stop"
+    assert sample["model_response_metadata"]["provider"] == "hailo_ollama"
+    assert sample["model_response_metadata"]["streaming"] == "true"
+    assert sample["model_response_metadata"]["semantic_stop"] == "true"
+    assert sample["model_response_metadata"]["input_pack_estimated_tokens"] == "1180"
+    assert sample["model_response_metadata"]["continuation_count"] == "1"
+    assert sample["model_response_metadata"]["context_full_recovery_count"] == "1"
     assert sample["answer_completed"] is True
     assert report["answer_completed_count"] == 1
     assert report["answer_completion_rate"] == 1.0

@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from tools import scout_ai_aihat2_fallback_eval as eval_module
 from tools.scout_ai_aihat2_fallback_eval import (
     assess_aihat_answer_quality,
     build_prompt,
     call_hailo_model,
+    require_ai_hat_runtime,
 )
 
 
@@ -127,3 +131,36 @@ def test_aihat2_eval_normalizes_hailo_chat_control_characters(monkeypatch) -> No
     assert len(captured["content"].encode("utf-8")) > 3600
     assert answer == "結論：測試完成"
     assert metadata["model"] == "qwen3:1.7b"
+
+
+def test_aihat2_eval_accepts_pcie_attestation_without_legacy_device_node(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run_command(
+        command: list[str],
+        timeout_seconds: float = 5.0,
+    ) -> dict[str, object]:
+        del timeout_seconds
+        if command == ["hailortcli", "scan"]:
+            return {
+                "returncode": 0,
+                "stdout": "Hailo Devices:\n[-] Device: pci/0001:01:00.0",
+            }
+        return {"returncode": 1, "stdout": ""}
+
+    monkeypatch.setattr(eval_module, "run_command", fake_run_command)
+    monkeypatch.setattr(
+        eval_module,
+        "_hailo_tags",
+        lambda: {
+            "models": [
+                {
+                    "name": "qwen3:1.7b",
+                    "format": "hef",
+                    "parameter_size": "1.7B",
+                }
+            ]
+        },
+    )
+
+    require_ai_hat_runtime("http://127.0.0.1:8000/api/chat")

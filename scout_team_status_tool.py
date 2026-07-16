@@ -110,6 +110,9 @@ def assess_scout_team_status(
         governance=governance,
         missing_fields=missing_fields,
     )
+    inventory_answer = _workspace_team_inventory_answer(query, source_report)
+    if inventory_answer:
+        field_answer = inventory_answer
     decision_output = _decision_output(
         decision=decision,
         governance=governance,
@@ -130,6 +133,8 @@ def assess_scout_team_status(
         "decision": decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100 if inventory_answer else 0,
+        "field_answer_source_ref": _first_loaded_source_path(source_report),
         "missing_fields": missing_fields,
         "team_status_guardian": {
             "role": "Team Status / Remote Contact Governance",
@@ -351,6 +356,36 @@ def _field_answer(
         f"下一步：{governance['next_action']} "
         "此為 Team Status / 留守治理候選判斷，不是 runtime safety truth；不得自動通知留守人、報案、觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _workspace_team_inventory_answer(
+    query: str,
+    source_report: list[dict[str, Any]],
+) -> str | None:
+    lowered = query.casefold()
+    if not (
+        ("workspace" in lowered or "工作區" in lowered)
+        and any(token in lowered for token in ("team status", "隊員位置", "生命徵兆"))
+    ):
+        return None
+    loaded = [
+        str(item.get("source_path"))
+        for item in source_report
+        if item.get("status") == "loaded" and item.get("source_path")
+    ]
+    if loaded:
+        return "Workspace team/position/vitals 證據：" + "、".join(loaded) + "。"
+    return (
+        "Workspace 目前沒有 team_status、team_guardian 或 remote_contact_summary "
+        "artifact；也沒有可驗證的隊員位置或生命徵兆 evidence。"
+    )
+
+
+def _first_loaded_source_path(source_report: list[dict[str, Any]]) -> str:
+    for item in source_report:
+        if item.get("status") == "loaded" and item.get("source_path"):
+            return str(item["source_path"])
+    return "project.json"
 
 
 def _decision_output(

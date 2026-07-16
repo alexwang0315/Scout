@@ -149,6 +149,9 @@ def assess_scout_review_gap(
         selected_items=selected_items,
         queue_ref=queue_ref,
     )
+    issue_summary = _workspace_issue_summary(query, counts)
+    if issue_summary:
+        field_answer = issue_summary
     decision_output = _decision_output(
         decision=decision,
         answerability=answerability,
@@ -172,6 +175,8 @@ def assess_scout_review_gap(
         "action": "review_provenance_gap_assessment",
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100,
+        "field_answer_source_ref": queue_ref,
         "missing_fields": missing_fields,
         "review_gap": review_gap,
         "review_governance": {
@@ -308,6 +313,9 @@ def _query_terms(query: str) -> list[str]:
         "證據",
         "人工",
         "human",
+        "evidence",
+        "資料問題",
+        "無法可靠回答",
     )
     domain_map = (
         (("weather", "天氣", "daylight", "日照"), ("weather", "daylight", "weather_daylight")),
@@ -449,6 +457,26 @@ def _field_answer(
         "Review gap 判斷：CONDITIONAL_GO。"
         f"review_queue={queue_ref}；未找到阻擋升格的 review queue 缺口。"
         "仍只能進入下一層人工門檢，不是 departure approval 或 runtime safety truth。"
+    )
+
+
+def _workspace_issue_summary(
+    query: str,
+    counts: dict[str, Any],
+) -> str | None:
+    normalized = _normalize(query)
+    if not any(
+        token in normalized
+        for token in ("資料問題", "無法可靠回答", "data issue", "unanswerable")
+    ):
+        return None
+    return (
+        "Workspace review gaps："
+        f"unresolved={counts.get('unresolved_review_count')}、"
+        f"warnings={counts.get('warning_count')}、"
+        f"conflicts={counts.get('conflict_count')}、"
+        f"unanswered_context={counts.get('unanswered_context_requirement_count')}；"
+        "人工審核前，相關 candidate evidence 不能升格為可靠答案。"
     )
 
 

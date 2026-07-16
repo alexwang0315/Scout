@@ -558,6 +558,14 @@ def _run_one_case(
         else None
     )
     redacted_output = _redact(str(output))
+    raw_model_answer = _redact(
+        str(getattr(case_runner, "last_raw_model_output", "") or "")
+    )
+    raw_model_attempts = [
+        _redact(str(item))
+        for item in getattr(case_runner, "last_raw_model_outputs", [])
+        if str(item).strip()
+    ]
     finish_reason = str(model_response_metadata.get("finish_reason") or "").lower()
     recorded_verification = getattr(
         case_runner, "last_grounding_verification", {}
@@ -691,6 +699,8 @@ def _run_one_case(
         "failure_class": failure_class,
         "answer_completed": answer_completed,
         "answer": redacted_output,
+        "raw_model_answer": raw_model_answer,
+        "raw_model_attempts": raw_model_attempts,
         "answer_preview": redacted_output.replace("\n", " ")[:700],
     }
 
@@ -934,7 +944,19 @@ def _public_context_handle(handle: dict[str, Any]) -> dict[str, Any]:
 
 
 def _public_model_response_metadata(metadata: dict[str, Any]) -> dict[str, str]:
-    allowed = {"finish_reason", "model_name", "provider_name"}
+    allowed = {
+        "context_full_recovery_count",
+        "continuation_count",
+        "external_limit",
+        "finish_reason",
+        "input_pack_estimated_tokens",
+        "model_name",
+        "provider",
+        "provider_name",
+        "semantic_stop",
+        "semantic_completion",
+        "streaming",
+    }
     return {
         str(key): str(value)
         for key, value in metadata.items()
@@ -1161,6 +1183,16 @@ def _format_markdown(report: dict[str, Any]) -> str:
                 sample["answer"] or "",
             ]
         )
+        raw_model_answer = str(sample.get("raw_model_answer") or "")
+        if raw_model_answer and raw_model_answer != sample["answer"]:
+            lines.extend(
+                [
+                    "",
+                    "Rejected/raw model draft (evaluation only):",
+                    "",
+                    raw_model_answer,
+                ]
+            )
     lines.append("")
     return "\n".join(lines)
 

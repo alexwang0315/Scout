@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import statistics
 from pathlib import Path
 from typing import Any
@@ -51,7 +52,7 @@ def analyze_scout_ins_dr_trace(
     write trajectory reports.
     """
 
-    root = Path(project_root)
+    root = Path(project_root).expanduser().resolve()
     project = _load_json_object(root / "project.json")
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     record_limit = _bounded_int(max_records, default=DEFAULT_MAX_RECORDS, maximum=MAX_MAX_RECORDS)
@@ -90,6 +91,10 @@ def analyze_scout_ins_dr_trace(
             max_records=max(0, record_limit - len(loaded_samples)),
             max_horizontal_accuracy_m=accuracy_limit,
         )
+        try:
+            report["source_ref"] = str(resolved.relative_to(root))
+        except ValueError:
+            report["source_ref"] = str(resolved)
         loaded_samples.extend(samples)
         source_report.append(report)
         if len(loaded_samples) >= record_limit:
@@ -128,9 +133,22 @@ def analyze_scout_ins_dr_trace(
         ),
     )
     field_answer = _field_answer(
+        query=query,
         decision=decision,
         metrics=metrics,
         missing_fields=missing_fields,
+        source_report=source_report,
+        record_count=len(loaded_samples),
+        gps_sample_count=len(gps_samples),
+        ins_dr_sample_count=len(estimate_samples),
+        pdr_only_sample_count=sum(
+            1
+            for sample in loaded_samples
+            if sample.get("estimate") and not sample.get("gps")
+        ),
+        raw_imu_baseline_count=sum(
+            1 for sample in loaded_samples if sample.get("has_raw_imu")
+        ),
     )
     decision_output = _decision_output(
         decision=decision,
@@ -139,6 +157,14 @@ def analyze_scout_ins_dr_trace(
         zigzag=zigzag,
         missing_fields=missing_fields,
         field_answer=field_answer,
+    )
+    field_answer_source_ref = next(
+        (
+            str(item.get("source_ref"))
+            for item in source_report
+            if isinstance(item, dict) and item.get("source_ref")
+        ),
+        None,
     )
 
     return {
@@ -152,6 +178,9 @@ def analyze_scout_ins_dr_trace(
         "decision": decision["decision"],
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100 if loaded_samples else 0,
+        "field_answer_source_ref": field_answer_source_ref,
+        "source_ref": field_answer_source_ref,
         "record_count": len(loaded_samples),
         "result_count": 1,
         "gps_sample_count": len(gps_samples),
@@ -247,6 +276,11 @@ def _candidate_sources(
                 "project_filter_outputs",
             ),
             (
+                root
+                / "outputs/evals/synthetic_context/aihat2_ins_dr_trace.jsonl",
+                "synthetic_aihat2_eval_trace",
+            ),
+            (
                 root / "sensorlogger_mqtt_filter_outputs.jsonl",
                 "project_filter_outputs",
             ),
@@ -274,7 +308,7 @@ def _load_trace_samples(
         )
         if sample is not None:
             samples.append(sample)
-    return samples, {
+    report = {
         "source_kind": source_kind,
         "status": "loaded",
         "source_path": str(path),
@@ -282,6 +316,15 @@ def _load_trace_samples(
         "raw_record_count": len(records),
         "raw_payloads_embedded": False,
     }
+    if source_kind == "synthetic_aihat2_eval_trace":
+        report.update(
+            {
+                "synthetic": True,
+                "live_sensor_snapshot": False,
+                "evidence_role": "synthetic eval fixture",
+            }
+        )
+    return samples, report
 
 
 def _load_records(path: Path, *, max_records: int) -> list[dict[str, Any]]:
@@ -775,9 +818,16 @@ def _ins_dr_decision(
 
 def _field_answer(
     *,
+    query: str,
     decision: dict[str, Any],
     metrics: dict[str, Any],
     missing_fields: list[str],
+    source_report: list[dict[str, Any]],
+    record_count: int,
+    gps_sample_count: int,
+    ins_dr_sample_count: int,
+    pdr_only_sample_count: int,
+    raw_imu_baseline_count: int,
 ) -> str:
     reasons = [str(item) for item in decision.get("main_reasons") or [] if str(item)]
     if missing_fields:
@@ -787,12 +837,52 @@ def _field_answer(
         f"mean_deviation_m={metrics.get('mean_deviation_m')}; "
         f"p95_deviation_m={metrics.get('p95_deviation_m')}"
     )
+    loaded_sources = [
+        item for item in source_report if item.get("status") == "loaded"
+    ]
+    source_refs = [
+        str(item.get("source_ref") or item.get("source_path"))
+        for item in loaded_sources
+    ]
+    synthetic_sources = [item for item in loaded_sources if item.get("synthetic")]
+    saved_evidence = (
+        f"Saved trace evidence: sources={len(loaded_sources)}, records={record_count}, "
+        f"GNSS/GPS samples={gps_sample_count}, INS/DR samples={ins_dr_sample_count}, "
+        f"PDR-only samples={pdr_only_sample_count}, raw-IMU baselines="
+        f"{raw_imu_baseline_count}; source_refs={','.join(source_refs) or 'none'}. "
+    )
+    if synthetic_sources:
+        saved_evidence += (
+            "The loaded source is a synthetic eval fixture, not a live sensor "
+            "snapshot; no live GNSS/IMU/PDR capture is proven. "
+        )
+    if re.search(
+        r"(?:workspace|保存|stored|saved).*(?:gnss|gps|imu|pdr|sensor|snapshot)",
+        query,
+        re.IGNORECASE,
+    ):
+        synthetic_note = (
+            "這是合成評估 fixture，不是 live sensor snapshot；"
+            "尚無真實即時 GNSS/IMU/PDR capture 證據。"
+            if synthetic_sources
+            else ""
+        )
+        source_kind = "synthetic eval trace" if synthetic_sources else "trace"
+        return (
+            f"Workspace 已保存 {len(loaded_sources)} 個 {source_kind} 來源、"
+            f"共 {record_count} 筆；"
+            f"GNSS/GPS 樣本 {gps_sample_count}、INS/DR 樣本 {ins_dr_sample_count}、"
+            f"PDR-only 樣本 {pdr_only_sample_count}、raw-IMU 基線 "
+            f"{raw_imu_baseline_count}。source_ref="
+            f"{','.join(source_refs) or 'none'}。{synthetic_note}"
+        )
     return (
-        f"INS/DR trace decision: {decision['decision']}. "
-        f"{metric_text}. {'; '.join(reasons[:3])}. "
-        f"Next step: {decision['next_action']}. "
-        "This is candidate navigation evidence only, not runtime safety truth; "
-        "it cannot trigger Ln, /safety/*, SOS, outbound send, or hardware control."
+        saved_evidence
+        + f"INS/DR trace decision: {decision['decision']}. "
+        + f"{metric_text}. {'; '.join(reasons[:3])}. "
+        + f"Next step: {decision['next_action']}. "
+        + "This is candidate navigation evidence only, not runtime safety truth; "
+        + "it cannot trigger Ln, /safety/*, SOS, outbound send, or hardware control."
     )
 
 
@@ -1077,6 +1167,9 @@ def _load_json_object(path: Path) -> dict[str, Any]:
 def _resolve_project_path(root: Path, path: Path) -> Path:
     expanded = path.expanduser()
     if expanded.is_absolute():
+        return expanded.resolve()
+    root_expanded = root.expanduser()
+    if expanded == root_expanded or expanded.is_relative_to(root_expanded):
         return expanded.resolve()
     return (root / expanded).resolve()
 

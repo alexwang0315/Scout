@@ -53,6 +53,20 @@ def test_post_trip_review_reports_fixture_learning_gaps_without_writeback() -> N
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_post_trip_review_does_not_infer_delay_without_actual_event_evidence() -> None:
+    result = assess_scout_post_trip_review(
+        POST_ANALYSIS_ROOT,
+        query=(
+            "post-trip review 可以從目前 GPX、CP events 與 risk artifacts "
+            "找出哪些延誤或偏離？"
+        ),
+    )
+
+    assert "不能可靠判定實際延誤或偏離" in result["field_answer"]
+    assert "subjective_difficulty" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+
+
 def test_post_trip_review_escalates_incident_feedback_without_mutation() -> None:
     result = assess_scout_post_trip_review(
         POST_ANALYSIS_ROOT,

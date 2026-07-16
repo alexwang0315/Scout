@@ -70,6 +70,7 @@ def assess_scout_route_context(
         route_briefing_payload,
         route_briefing_source_path,
     )
+    media_manifest = _route_context_media_manifest_summary(root, project)
     items.extend(
         _route_briefing_items(
             route_briefing_payload,
@@ -183,16 +184,44 @@ def assess_scout_route_context(
         )
     )
     results = filtered[:resolved_limit]
+    media_answer = _route_context_media_field_answer(media_manifest, query=query)
     briefing_answer = _route_briefing_field_answer(route_briefing, query=query)
+    project_answer, project_answer_source_ref = _route_context_project_field_answer(
+        root,
+        project,
+        route_briefing=route_briefing,
+        query=query,
+    )
+    mileage_answer, mileage_source_ref, mileage_source_refs = (
+        _route_mileage_query_field_answer(
+            root,
+            project,
+            query=query,
+            requested_mileage_anchors=requested_mileage_anchors,
+        )
+    )
     answerability = (
         "route_context_available"
-        if results or briefing_answer
+        if results or briefing_answer or media_answer or mileage_answer
         else "route_context_missing_evidence"
     )
-    field_answer = briefing_answer or _field_answer(
+    field_answer = project_answer or media_answer or briefing_answer or mileage_answer or _field_answer(
         results,
         answerability=answerability,
         requested_mileage_anchors=requested_mileage_anchors,
+    )
+    field_answer_source_ref = (
+        project_answer_source_ref
+        if project_answer
+        else media_manifest.get("source_ref")
+        if media_answer
+        else route_briefing.get("source_path")
+        if briefing_answer
+        else mileage_source_ref
+        if mileage_answer
+        else results[0].get("source_path")
+        if results
+        else None
     )
     decision_output = _decision_output(
         results=results,
@@ -219,7 +248,15 @@ def assess_scout_route_context(
             "requested_mileage_anchors": sorted(requested_mileage_anchors),
         },
         "field_answer": field_answer,
+        "field_answer_priority": 100
+        if project_answer or media_answer or briefing_answer or mileage_answer
+        else 0,
+        "field_answer_source_ref": field_answer_source_ref,
+        "field_answer_source_refs": mileage_source_refs
+        or ([field_answer_source_ref] if field_answer_source_ref else []),
+        "source_ref": field_answer_source_ref,
         "route_briefing": route_briefing,
+        "media_manifest": media_manifest,
         "route_context": {
             "role": "Experience Guide",
             "candidate_only": True,
@@ -244,6 +281,149 @@ def assess_scout_route_context(
         ],
         "boundary": _closed_boundary(),
     }
+
+
+def _route_context_media_manifest_summary(
+    root: Path,
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    ref = str(
+        project.get("route_context_media_manifest_ref")
+        or "normalized/context/route_context/media_manifest.json"
+    )
+    payload, source_path = _load_project_json(root, ref)
+    raw_images = payload.get("images") if isinstance(payload, dict) else []
+    images = raw_images if isinstance(raw_images, list) else []
+    license_keys = (
+        "license",
+        "license_name",
+        "license_note",
+        "license_url",
+        "rights",
+        "copyright",
+    )
+    license_complete = [
+        item
+        for item in images
+        if isinstance(item, dict)
+        and any(str(item.get(key) or "").strip() for key in license_keys)
+    ]
+    available_count = int(payload.get("available_media_count") or len(images))
+    missing_count = max(0, available_count - len(license_complete))
+    return {
+        "available": bool(payload),
+        "available_media_count": available_count,
+        "anchored_media_count": int(payload.get("anchored_media_count") or 0),
+        "selected_media_count": int(
+            (
+                payload.get("image_curation", {}).get("selected_media_count")
+                if isinstance(payload.get("image_curation"), dict)
+                else 0
+            )
+            or 0
+        ),
+        "license_complete_count": len(license_complete),
+        "license_missing_count": missing_count,
+        "license_information_complete": available_count > 0 and missing_count == 0,
+        "source_ref": source_path,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _route_context_media_field_answer(
+    media_manifest: dict[str, Any],
+    *,
+    query: str,
+) -> str | None:
+    normalized = _normalize(query)
+    if not _has_any(
+        normalized,
+        ("media manifest", "影像", "圖片", "授權", "license"),
+    ):
+        return None
+    if not media_manifest.get("available"):
+        return "Route context media manifest 不存在，無法確認影像與授權資訊。"
+    available = media_manifest.get("available_media_count")
+    missing = media_manifest.get("license_missing_count")
+    anchored = media_manifest.get("anchored_media_count")
+    if not available:
+        return (
+            "Route context media manifest 目前可用影像 0 張、路線錨定影像 0 張；"
+            "沒有影像可供授權完整度審查。"
+        )
+    license_text = (
+        "所有可用影像都有明確授權欄位"
+        if media_manifest.get("license_information_complete")
+        else f"{missing} 張缺少明確授權欄位，授權資訊不完整"
+    )
+    return (
+        f"Route context media manifest 可用影像 {available} 張、"
+        f"路線錨定 {anchored} 張；{license_text}。"
+    )
+
+
+def _route_context_project_field_answer(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    route_briefing: dict[str, Any],
+    query: str,
+) -> tuple[str | None, str | None]:
+    normalized = _normalize(query)
+    if _has_any(
+        normalized,
+        (
+            "briefingartifact",
+            "briefing artifact",
+            "簡報artifact",
+            "簡報檔案",
+            "最後產生時間",
+        ),
+    ):
+        ref = str(
+            project.get("route_context_briefing_ref")
+            or "outputs/briefings/route_context_briefing.html"
+        )
+        exists = _project_path(root, ref).is_file()
+        generated_at = (
+            project.get("route_context_briefing_regenerated_at")
+            or project.get("route_context_collection_updated_at")
+            or route_briefing.get("generated_at")
+        )
+        return (
+            f"Route context briefing artifact {'存在' if exists else '不存在'}："
+            f"{ref}；最後產生時間={generated_at or 'unavailable'}。",
+            "project.json",
+        )
+    if _has_any(
+        normalized,
+        ("source manifest", "來源網域", "抓取時間", "來源domain"),
+    ):
+        ref = str(
+            project.get("route_context_source_manifest_ref")
+            or "normalized/context/route_context/source_manifest.json"
+        )
+        manifest, _ = _load_project_json(root, ref)
+        generated_at = manifest.get("generated_at")
+        refresh = manifest.get("live_source_refresh_evidence")
+        refresh = refresh if isinstance(refresh, dict) else {}
+        tiers = manifest.get("source_tiers")
+        tiers = tiers if isinstance(tiers, list) else []
+        source_ids = [
+            str(item.get("source_id"))
+            for item in tiers
+            if isinstance(item, dict) and item.get("source_id")
+        ]
+        return (
+            f"Source manifest 有 {len(source_ids)} 個 source IDs，但未保存 "
+            "URL/domain 或個別 fetched_at；"
+            f"generated_at={generated_at or 'unavailable'}；"
+            f"live refresh={refresh.get('status') or 'unavailable'}，"
+            f"checked_at={refresh.get('checked_at') or 'unavailable'}。",
+            ref,
+        )
+    return None, None
 
 
 def _route_briefing_payload(
@@ -1501,6 +1681,35 @@ def _route_briefing_field_answer(
         )
     if _has_any(
         text,
+        ("停3分鐘", "停三分鐘", "3分鐘", "三分鐘", "值得停"),
+    ):
+        stops = _observation_stop_lines(route_briefing.get("observation_stops"))
+        return (
+            "候選 3 分鐘觀察點："
+            + ("；".join(stops) if stops else "目前簡報沒有列出觀察點")
+            + "。這些不是現場停留授權。"
+        )
+    requested_layers: list[str] = []
+    if _has_any(text, ("歷史脈絡", "歷史點", "歷史層")):
+        requested_layers.append("歷史層")
+    if _has_any(text, ("文化", "地名", "舊社", "原住民族")):
+        requested_layers.append("文化層")
+    if _has_any(text, ("自然", "林相", "植被", "植物")):
+        requested_layers.append("自然層")
+    if _has_any(text, ("地形", "崩壁", "稜線", "鞍部")):
+        requested_layers.append("地形層")
+    if requested_layers:
+        layers = _selected_context_layer_lines(
+            route_briefing.get("context_layers"),
+            requested_layers,
+        )
+        return (
+            "Route context pack 的 Experience Guide 候選指定脈絡："
+            + ("；".join(layers) if layers else "沒有對應脈絡點")
+            + "。"
+        )
+    if _has_any(
+        text,
         (
             "沿途有哪些",
             "沿途有什麼",
@@ -1524,19 +1733,176 @@ def _route_briefing_field_answer(
             + "；".join(layers)
             + f"。{boundary}"
         )
-    if _has_any(
-        text,
-        ("停3分鐘", "停三分鐘", "3分鐘", "三分鐘", "值得停", "觀察點"),
-    ):
-        stops = _observation_stop_lines(route_briefing.get("observation_stops"))
-        return (
-            "候選路線脈絡（Experience Guide 候選）：候選 3 分鐘觀察點："
-            + ("；".join(stops) if stops else "目前簡報沒有列出觀察點")
-            + "。這些不是現場停留授權；若真的要停留，仍需 contextual permission "
-            "重新計算時間、天氣、日照、隊伍與風險預算。 "
-            + boundary
-        )
     return None
+
+
+def _route_mileage_query_field_answer(
+    root: Path,
+    project: dict[str, Any],
+    *,
+    query: str,
+    requested_mileage_anchors: set[str],
+) -> tuple[str | None, str | None, list[str]]:
+    if not requested_mileage_anchors:
+        return None, None, []
+    parsed_targets = [
+        _float_or_none(value[:-1])
+        for value in requested_mileage_anchors
+        if value.endswith("k")
+    ]
+    target_k = next((value for value in parsed_targets if value is not None), None)
+    if target_k is None:
+        return None, None, []
+    display_label = _format_mileage_anchor_key(target_k).upper()
+
+    if re.search(r"route\s*segment|哪個\s*segment|對應.*segment", query, re.IGNORECASE):
+        segment_ref = str(
+            project.get("segment_candidates_ref") or "candidates/segments.json"
+        )
+        segments = _load_json_list(_project_path(root, segment_ref))
+        target_m = target_k * 1000.0
+        cumulative_m = 0.0
+        for item in segments:
+            if not isinstance(item, dict):
+                continue
+            distance_m = _float_or_none(item.get("distance_m"))
+            if distance_m is None:
+                continue
+            end_m = cumulative_m + distance_m
+            if cumulative_m <= target_m <= end_m:
+                return (
+                    f"{display_label} 對應 {item.get('candidate_id')}，"
+                    f"區間 {item.get('from_candidate_id')}→"
+                    f"{item.get('to_candidate_id')}，primary GPX 累積里程約 "
+                    f"{cumulative_m / 1000.0:.3f}-{end_m / 1000.0:.3f} km。",
+                    segment_ref,
+                    [segment_ref],
+                )
+            cumulative_m = end_m
+        return (
+            f"{display_label} 超出目前 segment 累積距離，沒有可對應的 route segment。",
+            segment_ref,
+            [segment_ref],
+        )
+
+    anchors_ref = str(
+        project.get("route_mileage_k_anchors_ref")
+        or "candidates/route_mileage_k_anchors.json"
+    )
+    anchors_payload = _load_json_object(_project_path(root, anchors_ref))
+    raw_anchors = anchors_payload.get("anchors")
+    anchors = [
+        item for item in raw_anchors if isinstance(item, dict)
+    ] if isinstance(raw_anchors, list) else []
+    anchor = next(
+        (
+            item
+            for item in anchors
+            if _format_mileage_anchor_key(
+                _float_or_none(item.get("mileage_k")) or -1.0
+            )
+            in requested_mileage_anchors
+        ),
+        None,
+    )
+    if anchor is None:
+        return None, None, []
+    lat = _float_or_none(anchor.get("lat"))
+    lon = _float_or_none(anchor.get("lon"))
+    distance_m = _float_or_none(anchor.get("mileage_m"))
+    distance_text = (
+        f"約 {distance_m / 1000.0:.1f} km" if distance_m is not None else "距離未知"
+    )
+    coordinate_text = (
+        f"，候選座標 lat {lat:.9f}, lon {lon:.9f}"
+        if lat is not None and lon is not None
+        else ""
+    )
+    source_refs = [anchors_ref]
+    nearest_text = ""
+    if re.search(r"最近\s*CP|nearest\s*(?:CP|checkpoint)", query, re.IGNORECASE):
+        checkpoint_ref = str(
+            project.get("checkpoint_candidates_ref")
+            or "candidates/checkpoints.json"
+        )
+        checkpoints = _load_json_list(_project_path(root, checkpoint_ref))
+        nearest = _nearest_checkpoint(lat, lon, checkpoints)
+        source_refs.append(checkpoint_ref)
+        if nearest is not None:
+            nearest_text = (
+                f"；最近 CP 是 {nearest.get('candidate_id')}/"
+                f"{nearest.get('label')}，約 {nearest.get('distance_m')} m"
+            )
+        else:
+            nearest_text = "；目前 checkpoint artifact 無法完成最近 CP join"
+    return (
+        f"{display_label} 在本次路徑{distance_text} 處{coordinate_text}"
+        f"{nearest_text}。此里程錨點 review_required="
+        f"{str(bool(anchor.get('review_required', True))).lower()}，"
+        "runtime_safety_truth=false。",
+        anchors_ref,
+        source_refs,
+    )
+
+
+def _nearest_checkpoint(
+    lat: float | None,
+    lon: float | None,
+    checkpoints: list[Any],
+) -> dict[str, Any] | None:
+    if lat is None or lon is None:
+        return None
+    candidates = [
+        item
+        for item in checkpoints
+        if isinstance(item, dict)
+        and _float_or_none(item.get("lat")) is not None
+        and _float_or_none(item.get("lon")) is not None
+    ]
+    if not candidates:
+        return None
+    checkpoint = min(
+        candidates,
+        key=lambda item: _haversine_m(
+            lat,
+            lon,
+            float(item["lat"]),
+            float(item["lon"]),
+        ),
+    )
+    distance_m = _haversine_m(
+        lat,
+        lon,
+        float(checkpoint["lat"]),
+        float(checkpoint["lon"]),
+    )
+    return {
+        "candidate_id": checkpoint.get("candidate_id"),
+        "label": checkpoint.get("label"),
+        "distance_m": round(distance_m),
+    }
+
+
+def _haversine_m(
+    lat_a: float,
+    lon_a: float,
+    lat_b: float,
+    lon_b: float,
+) -> float:
+    lat_a_rad = math.radians(lat_a)
+    lat_b_rad = math.radians(lat_b)
+    delta_lat = math.radians(lat_b - lat_a)
+    delta_lon = math.radians(lon_b - lon_a)
+    haversine = (
+        math.sin(delta_lat / 2.0) ** 2
+        + math.cos(lat_a_rad)
+        * math.cos(lat_b_rad)
+        * math.sin(delta_lon / 2.0) ** 2
+    )
+    return 12_742_000.0 * math.atan2(
+        math.sqrt(haversine),
+        math.sqrt(max(0.0, 1.0 - haversine)),
+    )
 
 
 def _field_answer(
@@ -1782,6 +2148,16 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _load_json_list(path: Path) -> list[Any]:
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return payload if isinstance(payload, list) else []
+
+
 def _project_path(root: Path, value: str) -> Path:
     path = Path(value)
     return path if path.is_absolute() else root / path
@@ -1888,6 +2264,23 @@ def _context_layer_lines(value: Any) -> list[str]:
     lines = []
     for layer_name, raw_lines in value.items():
         text = "、".join(_str_list(raw_lines)[:2])
+        if text:
+            lines.append(f"{layer_name}: {text}")
+    return lines
+
+
+def _selected_context_layer_lines(
+    value: Any,
+    layer_names: list[str],
+) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    requested = set(layer_names)
+    lines = []
+    for layer_name, raw_lines in value.items():
+        if str(layer_name) not in requested:
+            continue
+        text = "、".join(_str_list(raw_lines)[:4])
         if text:
             lines.append(f"{layer_name}: {text}")
     return lines

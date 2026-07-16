@@ -602,6 +602,16 @@ def classify_workspace_query_requirements(
     )
     if mileage_reference and _has_any(
         question,
+        ("最近", "水源", "補水", "取水", "water"),
+    ) and _has_any(question, ("水源", "補水", "取水", "water")):
+        return (
+            QuestionClass.SPATIAL_ROUTE_FACT,
+            [WorkspaceQueryOperation.FILTER],
+            False,
+            False,
+        )
+    if mileage_reference and _has_any(
+        question,
         ("對應", "segment", "路段", "區間", "落在"),
     ):
         return (
@@ -3005,6 +3015,11 @@ def _looks_like_route_structure_question(text: str) -> bool:
 
 
 def _looks_like_route_architecture_question(text: str) -> bool:
+    if _has_any(text, ("mcp", "reconciliation")) and _has_any(
+        text,
+        ("support", "reconciliation", "重疊", "重叠", "缺漏", "衝突", "冲突"),
+    ):
+        return False
     if "cp" in text and _has_any(text, ("設錯", "设错", "漏設", "漏设", "缺漏")):
         return True
     if _looks_like_post_trip_review_question(text):

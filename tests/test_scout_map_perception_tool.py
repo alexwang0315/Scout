@@ -114,6 +114,83 @@ def test_search_project_map_perception_reads_raster_label_evidence_geojson(
     assert raster_label["runtime_safety_truth"] is False
 
 
+def test_map_perception_answers_mileage_anchor_inventory_and_maximum(
+    tmp_path: Path,
+) -> None:
+    workspace = _write_map_perception_workspace(tmp_path)
+
+    inventory = search_project_map_perception(
+        workspace,
+        query="route mileage K anchors 目前辨識出哪些 K 標記？",
+    )
+    maximum = search_project_map_perception(
+        workspace,
+        query="mileage tag alignment 中最大的 K 標記是多少？",
+    )
+
+    assert "1K、3K、15K、92.3K" in inventory["field_answer"]
+    assert "92.3K" in maximum["field_answer"]
+    assert inventory["field_answer_priority"] == 100
+    assert inventory["field_answer_source_ref"] == (
+        "candidates/route_mileage_k_anchors.json"
+    )
+
+
+def test_map_perception_answers_mileage_ocr_alignment_and_source_questions(
+    tmp_path: Path,
+) -> None:
+    workspace = _write_map_perception_workspace(tmp_path)
+
+    unaligned = search_project_map_perception(
+        workspace,
+        query="有哪些 OCR mileage label 尚未成功對齊 GPX？",
+    )
+    delta = search_project_map_perception(
+        workspace,
+        query="mileage alignment 與 GPX 累積里程最大的差值是多少？",
+    )
+    anomaly = search_project_map_perception(
+        workspace,
+        query="哪些 K anchors 之間出現明顯缺號或排序異常？",
+    )
+    ocr = search_project_map_perception(
+        workspace,
+        query="raster label OCR output 總共有多少筆 label，低信心項目有哪些？",
+    )
+    linked = search_project_map_perception(
+        workspace,
+        query="MCP OCR labels 中哪些文字已連結到 named point evidence？",
+    )
+    sources = search_project_map_perception(
+        workspace,
+        query="route mileage alignment 的來源影像、OCR 與 route refs 是什麼？",
+    )
+
+    assert "20K" in unaligned["field_answer"]
+    assert "59300.0 m" in delta["field_answer"]
+    assert "15K" in anomaly["field_answer"]
+    assert "15K→92.3K" in anomaly["field_answer"]
+    assert "3 筆" in ocr["field_answer"]
+    assert "ocr.low/blur/0.4" in ocr["field_answer"]
+    assert "雲海保線所→np.yunhai_station" in linked["field_answer"]
+    assert "alignment artifact=outputs/mileage_tag_alignment.json" in sources[
+        "field_answer"
+    ]
+    assert "來源影像識別符=z15.x1.y1" in sources["field_answer"]
+    assert "來源影像為 outputs/mileage_tag_alignment.json" not in sources[
+        "field_answer"
+    ]
+    assert "outputs/layers/raster_label_ocr_output.json" in sources["field_answer"]
+    assert "candidates/route_mileage_k_anchors.json" in sources["field_answer"]
+    assert sources["field_answer_source_refs"] == [
+        "outputs/mileage_tag_alignment.json",
+        "outputs/layers/raster_label_ocr_output.json",
+        "candidates/route_mileage_k_anchors.json",
+        "candidates/route_context_points.json",
+        "outputs/risk/risk_ribbon.geojson",
+    ]
+
+
 def _write_map_perception_workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "map-perception-workspace"
     (workspace / "candidates").mkdir(parents=True)
@@ -135,6 +212,13 @@ def _write_map_perception_workspace(tmp_path: Path) -> Path:
                 "contour_interpretation_candidates_ref": (
                     "outputs/contour_interpretation_candidates.json"
                 ),
+                "route_mileage_k_anchors_ref": (
+                    "candidates/route_mileage_k_anchors.json"
+                ),
+                "mileage_tag_alignment_ref": "outputs/mileage_tag_alignment.json",
+                "raster_label_ocr_output_ref": (
+                    "outputs/layers/raster_label_ocr_output.json"
+                ),
             },
             ensure_ascii=False,
         ),
@@ -146,6 +230,103 @@ def _write_map_perception_workspace(tmp_path: Path) -> Path:
                 {"candidate_id": "cp.001", "label": "CP 001", "lat": 24.001, "lon": 121.001},
                 {"candidate_id": "cp.003", "label": "CP 003", "lat": 24.003, "lon": 121.003},
             ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "candidates" / "route_mileage_k_anchors.json").write_text(
+        json.dumps(
+            {
+                "normalized_mileage_k_values": ["1K", "3K", "15K", "92.3K"],
+                "anchors": [
+                    {"normalized_mileage_k": "1K", "mileage_k": 1.0},
+                    {"normalized_mileage_k": "3K", "mileage_k": 3.0},
+                    {"normalized_mileage_k": "15K", "mileage_k": 15.0},
+                    {"normalized_mileage_k": "92.3K", "mileage_k": 92.3},
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "outputs" / "mileage_tag_alignment.json").write_text(
+        json.dumps(
+            {
+                "route_mileage_alignment": {
+                    "projected_anchors": [
+                        {
+                            "normalized_mileage_k": "1K",
+                            "mileage_m": 1000.0,
+                            "route_distance_m": 1000.0,
+                            "usable_for_interpolation": True,
+                            "rejected_reasons": [],
+                        },
+                        {
+                            "normalized_mileage_k": "3K",
+                            "mileage_m": 3000.0,
+                            "route_distance_m": 3200.0,
+                            "usable_for_interpolation": True,
+                            "rejected_reasons": [],
+                        },
+                        {
+                            "normalized_mileage_k": "15K",
+                            "mileage_m": 15000.0,
+                            "route_distance_m": 20000.0,
+                            "usable_for_interpolation": False,
+                            "rejected_reasons": [
+                                "non_monotonic_with_main_trail_k_sequence"
+                            ],
+                        },
+                        {
+                            "normalized_mileage_k": "92.3K",
+                            "mileage_m": 92300.0,
+                            "route_distance_m": 33000.0,
+                            "usable_for_interpolation": False,
+                            "rejected_reasons": [
+                                "non_monotonic_with_main_trail_k_sequence"
+                            ],
+                        },
+                    ]
+                },
+                "source_refs": {
+                    "route_mileage_k_anchors": (
+                        "candidates/route_mileage_k_anchors.json"
+                    ),
+                    "route_context_points": "candidates/route_context_points.json",
+                    "route_centerline": "outputs/risk/risk_ribbon.geojson",
+                    "raster_label_ocr_output": (
+                        "outputs/layers/raster_label_ocr_output.json"
+                    ),
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "outputs" / "layers" / "raster_label_ocr_output.json").write_text(
+        json.dumps(
+            {
+                "labels": [
+                    {
+                        "id": "ocr.15k",
+                        "label_text": "15K",
+                        "confidence": 0.9,
+                        "tile_id": "z15.x1.y1",
+                    },
+                    {
+                        "id": "ocr.20k",
+                        "label_text": "20K",
+                        "confidence": 0.8,
+                        "tile_id": "z15.x1.y2",
+                    },
+                    {
+                        "id": "ocr.low",
+                        "label_text": "blur",
+                        "confidence": 0.4,
+                        "tile_id": "z15.x1.y3",
+                    },
+                ]
+            },
             ensure_ascii=False,
         ),
         encoding="utf-8",

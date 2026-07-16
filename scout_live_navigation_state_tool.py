@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -151,6 +152,9 @@ def assess_scout_live_navigation_state(
         decision=navigation_decision,
         missing_fields=missing_fields,
     )
+    freshness_answer = _live_navigation_freshness_answer(query, provided)
+    if freshness_answer:
+        field_answer = freshness_answer
     decision_output = _decision_output(
         decision=navigation_decision,
         missing_fields=missing_fields,
@@ -170,6 +174,8 @@ def assess_scout_live_navigation_state(
         ),
         "decision": navigation_decision["decision"],
         "field_answer": field_answer,
+        "field_answer_priority": 100 if freshness_answer else 0,
+        "field_answer_source_ref": _loaded_snapshot_source_ref(snapshot_report),
         "decision_output": decision_output,
         "missing_fields": missing_fields,
         "provided_fields": provided_fields,
@@ -401,6 +407,50 @@ def _field_answer(
         f"下一步：{decision['next_action']} "
         "此為 Navigation & Terrain 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _live_navigation_freshness_answer(
+    query: str,
+    provided: dict[str, object],
+) -> str | None:
+    lowered = query.casefold()
+    if not any(token in lowered for token in ("最新", "latest", "過期", "stale")):
+        return None
+    observed_at = provided.get("observed_at")
+    if _is_missing(observed_at):
+        return "Workspace 沒有可驗證的 live navigation observed_at，無法判斷 freshness。"
+    parsed = _parse_timestamp(observed_at)
+    if parsed is None:
+        return f"最新 live navigation observed_at={observed_at}，但時間格式無法解析。"
+    signed_age_seconds = (datetime.now(timezone.utc) - parsed).total_seconds()
+    if signed_age_seconds < -300.0:
+        return (
+            f"最新 live navigation observed_at={observed_at}；時間戳在未來，"
+            "存在 clock skew，freshness 不可靠。"
+        )
+    age_seconds = max(0.0, signed_age_seconds)
+    freshness = "已過期" if age_seconds > 300.0 else "未過期"
+    return (
+        f"最新 live navigation observed_at={observed_at}；"
+        f"距現在約 {age_seconds / 3600.0:.1f} 小時，資料{freshness}（5 分鐘門檻）。"
+    )
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _loaded_snapshot_source_ref(report: list[dict[str, Any]]) -> str:
+    for item in report:
+        if item.get("status") == "loaded" and item.get("source_path"):
+            return str(item["source_path"])
+    return "project.json"
 
 
 def _decision_output(
