@@ -16,6 +16,7 @@ AssistantContextResolver = Callable[[ScoutAssistantQuery], list[AssistantSourceR
 
 LIVE_NAVIGATION_SNAPSHOT_SOURCE_ID = "assistant_context.live_navigation_snapshot"
 LIVE_NAVIGATION_SNAPSHOT_ALLOWED_FIELDS = (
+    "scenario_id",
     "observed_at",
     "lat",
     "lon",
@@ -32,10 +33,16 @@ LIVE_NAVIGATION_SNAPSHOT_ALLOWED_FIELDS = (
     "nearest_route_distance_m",
     "route_progress_m",
     "nearest_cp_id",
+    "travel_direction",
+    "distance_to_boss_along_route_m",
+    "boss_point_id",
+    "boss_rank",
     "ins_dr_source",
     "confidence",
     "uncertainty_m",
     "last_anchor_at",
+    "candidate_only",
+    "runtime_safety_truth",
 )
 
 

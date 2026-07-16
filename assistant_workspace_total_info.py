@@ -15,6 +15,7 @@ TOTAL_INFO_EVIDENCE_TYPE = "assistant_workspace_total_info"
 
 _MAX_SOURCE_REPORT_ITEMS = 16
 _LIVE_NAVIGATION_FIELDS = (
+    "scenario_id",
     "observed_at",
     "updated_at",
     "lat",
@@ -30,9 +31,18 @@ _LIVE_NAVIGATION_FIELDS = (
     "nearest_route_distance_m",
     "route_progress_m",
     "nearest_cp_id",
+    "heading_deg",
+    "course_deg",
+    "speed_mps",
+    "travel_direction",
+    "distance_to_boss_along_route_m",
+    "boss_point_id",
+    "boss_rank",
     "confidence",
     "uncertainty_m",
     "last_anchor_at",
+    "candidate_only",
+    "runtime_safety_truth",
 )
 
 

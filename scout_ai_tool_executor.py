@@ -433,6 +433,17 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             confidence=_float_or_none(arguments.get("confidence")),
             uncertainty_m=_float_or_none(arguments.get("uncertainty_m")),
             last_anchor_at=_str_or_none(arguments.get("last_anchor_at")),
+            scenario_id=_str_or_none(arguments.get("scenario_id")),
+            travel_direction=_str_or_none(arguments.get("travel_direction")),
+            distance_to_boss_along_route_m=_float_or_none(
+                arguments.get("distance_to_boss_along_route_m")
+            ),
+            boss_point_id=_str_or_none(arguments.get("boss_point_id")),
+            boss_rank=_int_or_none(arguments.get("boss_rank")),
+            candidate_only=_bool_or_none(arguments.get("candidate_only")),
+            runtime_safety_truth=_bool_or_none(
+                arguments.get("runtime_safety_truth")
+            ),
         )
         if tool_id == NMEA_ROUTE_RISK_PROBE_TOOL_ID:
             payload = {

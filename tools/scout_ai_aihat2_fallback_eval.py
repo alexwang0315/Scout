@@ -205,23 +205,28 @@ def select_questions(
     return rows
 
 
-def build_total_info(project_root: Path, question: str, project_id: str) -> dict[str, Any] | None:
-    query = ScoutAssistantQuery(
-        surface=AssistantSurface.PRETRIP,
-        question=question,
-        project_id=project_id,
+def build_total_info(
+    project_root: Path,
+    query: ScoutAssistantQuery,
+    *,
+    reference_time: str | None = None,
+) -> dict[str, Any] | None:
+    source = build_workspace_total_info_source_ref(
+        query,
+        project_root=project_root,
+        reference_time=reference_time,
     )
-    source = build_workspace_total_info_source_ref(query, project_root=project_root)
     return source.context_summary if source is not None else None
 
 
 def run_tools(
     *,
-    question: str,
+    query: ScoutAssistantQuery,
     project_root: Path,
     tool_ids: list[str],
     max_tools: int,
     synthetic_field_context: bool,
+    live_navigation_snapshot: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     contracts = default_tool_contracts()
     tool_results: list[dict[str, Any]] = []
@@ -236,15 +241,16 @@ def run_tools(
             continue
         arguments: dict[str, Any] = {
             "project_root": str(project_root),
-            "query": question,
+            "query": query.question,
             "limit": 3,
             "surface": "pretrip",
         }
         synthetic_arguments = (
             _synthetic_field_context_arguments(
-                question=question,
+                question=query.question,
                 tool_id=tool_id,
                 project_root=project_root,
+                live_navigation_snapshot=live_navigation_snapshot,
             )
             if synthetic_field_context
             else {}
@@ -258,6 +264,10 @@ def run_tools(
         )
         result_payload = result.model_dump(mode="json")
         compact = _compact_tool_result(result_payload)
+        if live_navigation_snapshot:
+            compact["scenario_context"] = _scenario_context_envelope(
+                live_navigation_snapshot
+            )
         if synthetic_arguments:
             compact["synthetic_arguments"] = synthetic_arguments
         tool_results.append(compact)
@@ -273,6 +283,7 @@ def _synthetic_field_context_arguments(
     question: str,
     tool_id: str,
     project_root: Path,
+    live_navigation_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fixture-like field context for AI HAT eval, explicitly marked in outputs."""
 
@@ -280,7 +291,10 @@ def _synthetic_field_context_arguments(
     if tool_id == "scout.ai.energy_vitals.assess.v0":
         return {
             "subject_id": "synthetic_hiker_1",
-            "observed_at": "2026-07-06T07:30:00+08:00",
+            "observed_at": str(
+                (live_navigation_snapshot or {}).get("observed_at")
+                or "2026-07-06T07:30:00+08:00"
+            ),
             "heart_rate_bpm": 118,
             "hrv_ms": 42,
             "body_battery_or_provider_energy": 58,
@@ -374,31 +388,13 @@ def _synthetic_field_context_arguments(
             "remote_contact_confirmed": True,
         }
     if tool_id == "scout.ai.live_navigation_state.assess.v0":
-        return {
-            "observed_at": "2026-07-06T09:18:00+08:00",
-            "lat": 24.0509,
-            "lon": 121.216,
-            "elevation_m": 2220,
-            "source": "scout_aihat2_eval_synthetic_live_navigation",
-            "hdop": 0.9,
-            "horizontal_accuracy_m": 5,
-            "fix_quality": "3d",
-            "satellite_count": 12,
-            "max_cno_dbhz": 38,
-            "heading_deg": 94,
-            "course_deg": 96,
-            "speed_mps": 0.82,
-            "nearest_route_distance_m": 8,
-            "route_progress_m": 1200,
-            "nearest_cp_id": "cp.004",
-            "ins_dr_source": "pdr_anchor",
-            "confidence": 0.82,
-            "uncertainty_m": 8,
-            "last_anchor_at": "2026-07-06T09:16:00+08:00",
-        }
+        return dict(live_navigation_snapshot or {})
     if tool_id == "scout.ai.weather_window.assess.v0":
         return {
-            "route_weather_package_path": _ensure_synthetic_route_weather_package(project_root),
+            "route_weather_package_path": _ensure_synthetic_route_weather_package(
+                project_root,
+                live_navigation_snapshot=live_navigation_snapshot,
+            ),
             "current_time": "2026-07-06T14:10:00+08:00",
             "include_segments": True,
             "stale_after_hours": 6,
@@ -439,6 +435,66 @@ def _synthetic_team_members() -> list[dict[str, Any]]:
     ]
 
 
+def _default_synthetic_live_navigation_snapshot() -> dict[str, Any]:
+    return {
+        "scenario_id": "aihat2.synthetic.default.v1",
+        "observed_at": "2026-07-06T09:18:00+08:00",
+        "lat": 24.0509,
+        "lon": 121.216,
+        "elevation_m": 2220,
+        "source": "scout_aihat2_eval_synthetic_live_navigation",
+        "snapshot_status": "synthetic_fixture",
+        "hdop": 0.9,
+        "horizontal_accuracy_m": 5,
+        "fix_quality": "3d_synthetic_replay",
+        "satellite_count": 12,
+        "max_cno_dbhz": 38,
+        "heading_deg": 94,
+        "course_deg": 96,
+        "speed_mps": 0.82,
+        "nearest_route_distance_m": 8,
+        "route_progress_m": 1200,
+        "nearest_cp_id": "cp.004",
+        "travel_direction": "increasing_route_progress",
+        "distance_to_boss_along_route_m": 500,
+        "boss_point_id": "synthetic.boss.default",
+        "boss_rank": 1,
+        "ins_dr_source": "pdr_anchor",
+        "confidence": 0.82,
+        "uncertainty_m": 8,
+        "last_anchor_at": "2026-07-06T09:16:00+08:00",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _scenario_context_envelope(snapshot: dict[str, Any]) -> dict[str, Any]:
+    fields = (
+        "scenario_id",
+        "observed_at",
+        "lat",
+        "lon",
+        "elevation_m",
+        "fix_quality",
+        "horizontal_accuracy_m",
+        "route_progress_m",
+        "nearest_route_distance_m",
+        "nearest_cp_id",
+        "heading_deg",
+        "travel_direction",
+        "distance_to_boss_along_route_m",
+        "boss_point_id",
+        "boss_rank",
+        "candidate_only",
+        "runtime_safety_truth",
+    )
+    return {
+        field: snapshot[field]
+        for field in fields
+        if snapshot.get(field) is not None
+    }
+
+
 def _filter_tool_ids_for_eval(qeval: dict[str, Any], tool_ids: list[str]) -> list[str]:
     category = str(qeval.get("category") or "")
     question = str(qeval.get("question") or "")
@@ -461,10 +517,17 @@ def _filter_tool_ids_for_eval(qeval: dict[str, Any], tool_ids: list[str]) -> lis
     return _ordered_unique(tool_ids)
 
 
-def _ensure_synthetic_route_weather_package(project_root: Path) -> str:
+def _ensure_synthetic_route_weather_package(
+    project_root: Path,
+    *,
+    live_navigation_snapshot: dict[str, Any] | None = None,
+) -> str:
     relative = Path("outputs/evals/synthetic_context/aihat2_route_weather_package.json")
     path = project_root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot = live_navigation_snapshot or _default_synthetic_live_navigation_snapshot()
+    route_progress_m = float(snapshot.get("route_progress_m") or 0)
+    scenario_id = str(snapshot.get("scenario_id") or "legacy_aihat2_synthetic")
     payload = {
         "artifact_kind": "route_weather_package",
         "status": "candidate_only",
@@ -476,6 +539,9 @@ def _ensure_synthetic_route_weather_package(project_root: Path) -> str:
         "validUntil": "2026-07-06T20:00:00+08:00",
         "ttl_s": 21600,
         "provider": "scout_aihat2_eval_synthetic_weather",
+        "dataset_id": "fixture.normalized_cwa.aihat2",
+        "request_time": "2026-07-06T14:00:00+08:00",
+        "raw_sha256": "fixture-backed-no-live-network",
         "candidate_only": True,
         "runtime_safety_truth": False,
         "human_review_required": True,
@@ -489,9 +555,9 @@ def _ensure_synthetic_route_weather_package(project_root: Path) -> str:
         },
         "segments": [
             {
-                "segmentId": "synthetic_weather_segment_1",
-                "fromM": 1200,
-                "toM": 2400,
+                "segmentId": scenario_id,
+                "fromM": route_progress_m,
+                "toM": route_progress_m + 500,
                 "etaFrom": "2026-07-06T14:00:00+08:00",
                 "etaTo": "2026-07-06T15:30:00+08:00",
                 "weatherRisk": "elevated",
@@ -702,6 +768,12 @@ def _hailo_tool_evidence_lines(tool_results: list[dict[str, Any]]) -> list[str]:
         records = _hailo_plain_value(result.get("records"), 760)
         if records:
             parts.append(f"紀錄={records}")
+        scenario_context = _hailo_plain_value(result.get("scenario_context"), 560)
+        if scenario_context:
+            parts.append(f"情境={scenario_context}")
+        provided_fields = _hailo_plain_value(result.get("provided_fields"), 720)
+        if provided_fields:
+            parts.append(f"工具輸入={provided_fields}")
         missing_fields = _hailo_plain_value(result.get("missing_fields"), 240)
         if missing_fields:
             parts.append(f"缺欄位={missing_fields}")
@@ -822,6 +894,11 @@ def _compact_total_info(total_info: dict[str, Any] | None) -> dict[str, Any] | N
         if isinstance(total_info.get("location_context"), dict)
         else {}
     )
+    snapshot = (
+        location.get("live_navigation_snapshot")
+        if isinstance(location.get("live_navigation_snapshot"), dict)
+        else {}
+    )
     sensor = (
         total_info.get("sensor_snapshot_context")
         if isinstance(total_info.get("sensor_snapshot_context"), dict)
@@ -846,8 +923,10 @@ def _compact_total_info(total_info: dict[str, Any] | None) -> dict[str, Any] | N
         },
         "location": {
             "status": location.get("status"),
+            "query_snapshot_available": location.get("query_snapshot_available"),
             "route_match_available": location.get("route_match_available"),
             "hardware_snapshot_available": location.get("hardware_snapshot_available"),
+            **_scenario_context_envelope(snapshot),
         },
         "terrain": {
             "status": terrain.get("status"),
@@ -1502,6 +1581,7 @@ def _compact_aihat_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "summary": result.get("summary"),
         "resource_state": result.get("resource_state"),
         "provided_fields": result.get("provided_fields"),
+        "scenario_context": result.get("scenario_context"),
         "records": result.get("records"),
         "source_report": result.get("source_report"),
     }
@@ -1785,13 +1865,29 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
             qeval,
             _ordered_unique([*qeval["current_tool_ids"], *qeval["recommended_tool_ids"]]),
         )
-        total_info = build_total_info(project_root, question, args.project_id)
-        tool_results, missing_tools, missing_evidence = run_tools(
+        live_navigation_snapshot = (
+            _default_synthetic_live_navigation_snapshot()
+            if args.synthetic_field_context
+            else None
+        )
+        query = ScoutAssistantQuery(
+            surface=AssistantSurface.PRETRIP,
             question=question,
+            project_id=args.project_id,
+            live_navigation_snapshot=live_navigation_snapshot,
+        )
+        total_info = build_total_info(
+            project_root,
+            query,
+            reference_time=(live_navigation_snapshot or {}).get("observed_at"),
+        )
+        tool_results, missing_tools, missing_evidence = run_tools(
+            query=query,
             project_root=project_root,
             tool_ids=tool_ids,
             max_tools=args.max_tools,
             synthetic_field_context=args.synthetic_field_context,
+            live_navigation_snapshot=live_navigation_snapshot,
         )
         prompt_context = _compact_aihat_context(
             qeval=qeval,
@@ -1844,6 +1940,9 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
                 "prompt_chars": len(prompt),
                 "used_ai_hat_plus_2": True,
                 "model_metadata": model_metadata,
+                "scenario_context": _scenario_context_envelope(
+                    live_navigation_snapshot or {}
+                ),
             }
         )
         print(

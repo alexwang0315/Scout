@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
+from assistant_models import AssistantSurface, ScoutAssistantQuery
 from tools import scout_ai_aihat2_fallback_eval as eval_module
 from tools.scout_ai_aihat2_fallback_eval import (
+    _compact_aihat_context,
     assess_aihat_answer_quality,
+    build_total_info,
     build_prompt,
     call_hailo_model,
     require_ai_hat_runtime,
+    run_tools,
 )
 
 
@@ -164,3 +169,79 @@ def test_aihat2_eval_accepts_pcie_attestation_without_legacy_device_node(
     )
 
     require_ai_hat_runtime("http://127.0.0.1:8000/api/chat")
+
+
+def test_aihat2_eval_uses_same_scenario_for_total_info_tool_and_compact_evidence(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": "scenario-project"}),
+        encoding="utf-8",
+    )
+    snapshot = {
+        "scenario_id": "six600.PER-095.rank-5",
+        "observed_at": "2026-07-16T08:00:00+08:00",
+        "lat": 24.048743595,
+        "lon": 121.260414740,
+        "elevation_m": 2688.75,
+        "source": "six_forces_scenario:synthetic_replay",
+        "hdop": 0.9,
+        "horizontal_accuracy_m": 5,
+        "fix_quality": "synthetic_route_interpolation",
+        "satellite_count": 12,
+        "max_cno_dbhz": 38,
+        "heading_deg": 71.457861,
+        "course_deg": 71.457861,
+        "speed_mps": 0.8,
+        "nearest_route_distance_m": 0,
+        "route_progress_m": 53250,
+        "nearest_cp_id": "cp.106",
+        "travel_direction": "increasing_route_progress",
+        "distance_to_boss_along_route_m": 500,
+        "boss_point_id": "boss.005",
+        "boss_rank": 5,
+        "ins_dr_source": "scenario_route_interpolation",
+        "confidence": 0.95,
+        "uncertainty_m": 5,
+        "last_anchor_at": "2026-07-16T08:00:00+08:00",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    query = ScoutAssistantQuery(
+        surface=AssistantSurface.PRETRIP,
+        question="這裡適合做臨時避風停留，還是需要繼續移動？",
+        project_id="scenario-project",
+        live_navigation_snapshot=snapshot,
+    )
+
+    total_info = build_total_info(
+        project_root,
+        query,
+        reference_time=snapshot["observed_at"],
+    )
+    tool_results, missing_tools, missing_evidence = run_tools(
+        query=query,
+        project_root=project_root,
+        tool_ids=["scout.ai.live_navigation_state.assess.v0"],
+        max_tools=10,
+        synthetic_field_context=True,
+        live_navigation_snapshot=snapshot,
+    )
+    compact = _compact_aihat_context(
+        qeval={"id": "PER-095", "category": "contextual_permission"},
+        total_info=total_info,
+        tool_results=tool_results,
+        missing_tools=missing_tools,
+        missing_evidence=missing_evidence,
+    )
+
+    total_location = total_info["location_context"]["live_navigation_snapshot"]
+    tool_location = tool_results[0]["provided_fields"]
+    compact_location = compact["total_info"]["location"]
+    for field in ("scenario_id", "lat", "lon", "route_progress_m"):
+        assert total_location[field] == snapshot[field]
+        assert tool_location[field] == snapshot[field]
+        assert compact_location[field] == snapshot[field]
+        assert tool_results[0]["scenario_context"][field] == snapshot[field]
