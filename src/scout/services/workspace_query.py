@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from pydantic import ValidationError
 
@@ -31,6 +32,8 @@ from scout.schemas.workspace_query import (
     WorkspacePredicateOperator,
     WorkspaceQueryEvidence,
     WorkspaceQueryLimits,
+    WorkspaceMileageCandidate,
+    WorkspaceMileageVerification,
     WorkspaceQueryOperation,
     WorkspaceQueryRequest,
     WorkspaceQueryResponse,
@@ -56,6 +59,10 @@ _COLLECTION_KEYS = (
     "warnings",
 )
 _MISSING = object()
+_MILEAGE_K_PATTERN = re.compile(
+    r"(?<![0-9.])(?P<mileage>[+-]?[0-9]+(?:\.[0-9]+)?)\s*[KkＫｋ](?![A-Za-z])"
+)
+_WATER_QUERY_TERMS = ("水源", "取水", "water")
 
 
 class WorkspaceQueryError(Exception):
@@ -128,6 +135,7 @@ class WorkspaceQueryService:
             )
         except (json.JSONDecodeError, UnicodeDecodeError):
             return _failure(operation, "artifact_json_invalid")
+
 
     def _execute(self, request: WorkspaceQueryRequest) -> WorkspaceQueryResponse:
         if isinstance(request, DiffQuery):
@@ -914,6 +922,209 @@ class WorkspaceQueryService:
         )
 
 
+def verify_nearest_mileage_candidates(
+    question: str,
+    responses: Sequence[WorkspaceQueryResponse],
+) -> WorkspaceMileageVerification | None:
+    """Verify nearest water candidates on the source-label mileage axis."""
+
+    target = _question_mileage_k(question)
+    if target is None or not any(
+        term in question.casefold() for term in _WATER_QUERY_TERMS
+    ):
+        return None
+
+    rows: list[tuple[WorkspaceQueryEvidence, float, float, float]] = []
+    source_refs: list[str] = []
+    limitations: list[str] = []
+    for response in responses:
+        if response.operation is not WorkspaceQueryOperation.FILTER:
+            continue
+        source_refs.extend(response.source_refs)
+        limitations.extend(response.limitations)
+        for evidence in response.results:
+            label = str(evidence.data.get("source_label") or "").strip()
+            label_mileage = _label_mileage_k(label)
+            coordinates = evidence.data.get("coordinates")
+            if (
+                "水源" not in label
+                or label_mileage is None
+                or not isinstance(coordinates, Sequence)
+                or isinstance(coordinates, (str, bytes, bytearray))
+                or len(coordinates) < 2
+            ):
+                continue
+            lon = _number(coordinates[0])
+            lat = _number(coordinates[1])
+            if (
+                lon is None
+                or lat is None
+                or not -180 <= lon <= 180
+                or not -90 <= lat <= 90
+            ):
+                continue
+            rows.append((evidence, label_mileage, lat, lon))
+
+    if not rows:
+        return WorkspaceMileageVerification(
+            status="warning",
+            target_mileage_k=target,
+            evidence_record_count=0,
+            distinct_candidate_count=0,
+            tied_candidate_count=0,
+            source_refs=list(dict.fromkeys(source_refs)),
+            freshness={"basis": "static_workspace_artifact", "state": "unknown"},
+            limitations=list(
+                dict.fromkeys(
+                    [*limitations, "no_parseable_water_mileage_candidates"]
+                )
+            ),
+            summary=f"{target:g}K 附近沒有可驗證的里程水源候選。",
+            stop_condition="obtain_parseable_mileage_label_evidence_before_answering",
+        )
+
+    grouped: dict[tuple[float, float, float], list[WorkspaceQueryEvidence]] = {}
+    labels: dict[tuple[float, float, float], set[str]] = {}
+    for evidence, mileage, lat, lon in rows:
+        key = (round(mileage, 6), round(lat, 7), round(lon, 7))
+        grouped.setdefault(key, []).append(evidence)
+        labels.setdefault(key, set()).add(str(evidence.data["source_label"]).strip())
+
+    contradictions = _mileage_candidate_contradictions(grouped, labels)
+    candidates: list[WorkspaceMileageCandidate] = []
+    for (mileage, lat, lon), evidence_group in sorted(grouped.items()):
+        delta = round(abs(mileage - target), 6)
+        direction: Literal["behind", "at", "ahead"] = (
+            "behind" if mileage < target else "ahead" if mileage > target else "at"
+        )
+        route_distances = {
+            value
+            for item in evidence_group
+            if (value := _number(item.data.get("route_distance_m"))) is not None
+        }
+        projection_states = {
+            str(item.data.get("route_projection_status"))
+            for item in evidence_group
+            if item.data.get("route_projection_status")
+        }
+        candidates.append(
+            WorkspaceMileageCandidate(
+                source_label=sorted(labels[(mileage, lat, lon)])[0],
+                label_mileage_k=mileage,
+                delta_k=delta,
+                direction=direction,
+                lat=lat,
+                lon=lon,
+                route_distance_m=(min(route_distances) if route_distances else None),
+                route_projection_status=(
+                    sorted(projection_states)[0] if projection_states else None
+                ),
+                source_ids=list(
+                    dict.fromkeys(
+                        str(item.data["source_id"])
+                        for item in evidence_group
+                        if item.data.get("source_id")
+                    )
+                ),
+                evidence_ids=[item.evidence_id for item in evidence_group],
+                record_ids=[item.record_id for item in evidence_group],
+                source_ref=evidence_group[0].source_ref,
+                source_hashes=list(
+                    dict.fromkeys(item.source_hash for item in evidence_group)
+                ),
+            )
+        )
+
+    nearest_delta = min(item.delta_k for item in candidates)
+    tied = [
+        item
+        for item in candidates
+        if math.isclose(item.delta_k, nearest_delta, abs_tol=1e-9)
+    ]
+    tied.sort(
+        key=lambda item: (
+            item.label_mileage_k,
+            item.source_label,
+            item.lat,
+            item.lon,
+        )
+    )
+    return WorkspaceMileageVerification(
+        status="warning" if contradictions else "success",
+        target_mileage_k=target,
+        evidence_record_count=len(rows),
+        distinct_candidate_count=len(candidates),
+        nearest_delta_k=nearest_delta,
+        tied_candidate_count=len(tied),
+        candidates=tied,
+        source_refs=list(
+            dict.fromkeys([*source_refs, *(item.source_ref for item in tied)])
+        ),
+        freshness={
+            "basis": "static_workspace_artifact",
+            "state": "artifact_timestamp_not_queried",
+        },
+        contradictions=contradictions,
+        limitations=list(
+            dict.fromkeys(
+                [
+                    *limitations,
+                    "label_mileage_axis_only",
+                    "route_distance_m_not_used_for_k_comparison",
+                    "live_water_presence_not_verified",
+                    "potability_not_verified",
+                ]
+            )
+        ),
+        summary=_mileage_verification_summary(target, tied, nearest_delta),
+        stop_condition="all_tied_nearest_candidates_verified",
+    )
+
+
+def _question_mileage_k(question: str) -> float | None:
+    match = _MILEAGE_K_PATTERN.search(question)
+    return float(match.group("mileage")) if match else None
+
+
+def _label_mileage_k(label: str) -> float | None:
+    match = _MILEAGE_K_PATTERN.search(label)
+    return float(match.group("mileage")) if match else None
+
+
+def _mileage_candidate_contradictions(
+    grouped: Mapping[tuple[float, float, float], Sequence[WorkspaceQueryEvidence]],
+    labels: Mapping[tuple[float, float, float], set[str]],
+) -> list[str]:
+    locations_by_label: dict[tuple[float, str], set[tuple[float, float]]] = {}
+    for mileage, lat, lon in grouped:
+        for label in labels[(mileage, lat, lon)]:
+            locations_by_label.setdefault((mileage, label), set()).add((lat, lon))
+    return [
+        f"same_label_multiple_locations:{mileage:g}K:{label}"
+        for (mileage, label), locations in sorted(locations_by_label.items())
+        if len(locations) > 1
+    ]
+
+
+def _mileage_verification_summary(
+    target: float,
+    candidates: Sequence[WorkspaceMileageCandidate],
+    nearest_delta: float,
+) -> str:
+    direction_labels = {"behind": "後方", "at": "正好", "ahead": "前方"}
+    details = "；".join(
+        f"{item.source_label}（{item.label_mileage_k:g}K，"
+        f"{direction_labels[item.direction]} {item.delta_k:g}K，"
+        f"座標 {item.lat:.4f},{item.lon:.4f}）"
+        for item in candidates
+    )
+    tie_note = "兩個候選等距" if len(candidates) == 2 else f"{len(candidates)} 個候選等距"
+    return (
+        f"{target:g}K 最近的水源有{tie_note}，各距里程標 {nearest_delta:g}K："
+        f"{details}。"
+    )
+
+
 def _raw_operation(raw: object) -> WorkspaceQueryOperation:
     value = raw.get("operation") if isinstance(raw, Mapping) else getattr(raw, "operation", "inspect")
     try:
@@ -1323,4 +1534,4 @@ def _record_time(record: Any, field: str) -> datetime | None:
     return _parse_datetime(value)
 
 
-__all__ = ["WorkspaceQueryService"]
+__all__ = ["WorkspaceQueryService", "verify_nearest_mileage_candidates"]

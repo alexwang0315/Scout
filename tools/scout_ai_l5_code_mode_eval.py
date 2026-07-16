@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
-from typing import Any
+from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
-from pydantic_ai.messages import ToolReturnPart
+from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -31,6 +33,7 @@ from pydantic_ai_runtime_compat import (  # noqa: E402
     pydantic_usage_limits_from_budget,
 )
 from scout.schemas.agent_runtime import (  # noqa: E402
+    AgentRecoveryStage,
     AgentRunBudget,
     EvidenceCard,
     QuestionClass,
@@ -39,7 +42,10 @@ from scout.schemas.l5_code_mode import (  # noqa: E402
     L5ActivationRequest,
     L5RuntimeStatus,
 )
-from scout.schemas.workspace_query import WorkspaceQueryResponse  # noqa: E402
+from scout.schemas.workspace_query import (  # noqa: E402
+    WorkspaceMileageVerification,
+    WorkspaceQueryResponse,
+)
 from scout.services.bounded_agent_runtime import BoundedAgentRuntime  # noqa: E402
 from scout.services.agent_budget_policy import AgentBudgetPolicy  # noqa: E402
 from scout.services.l5_code_mode import (  # noqa: E402
@@ -52,6 +58,9 @@ from scout.services.l5_code_mode_execution import (  # noqa: E402
     MAX_L5_NESTED_TOOL_CALLS,
     build_l5_execution_receipt,
     l5_tool_metadata,
+)
+from scout.services.workspace_query import (  # noqa: E402
+    verify_nearest_mileage_candidates,
 )
 from scout_workspace_query_tool import WORKSPACE_QUERY_TOOL_ID  # noqa: E402
 from scout_ai_tool_planner import plan_scout_ai_tools  # noqa: E402
@@ -133,6 +142,9 @@ class L5CodeModeEvalRunner:
         self.last_grounding_verification: dict[str, Any] = {}
         self.last_context_handles: list[dict[str, Any]] = []
         self.last_l5_execution_receipt: dict[str, Any] = {}
+        self.last_raw_model_output = ""
+        self.last_raw_model_outputs: list[str] = []
+        self.last_deterministic_post_verification: dict[str, Any] = {}
 
     def clone_for_isolated_run(self) -> "L5CodeModeEvalRunner":
         return type(self)(
@@ -154,6 +166,7 @@ class L5CodeModeEvalRunner:
         last_error: Exception | None = None
         last_output = ""
         previous_no_progress_signature: str | None = None
+        self.last_raw_model_outputs = []
         for attempt in range(1, self.max_attempts + 1):
             self._attempt_index = attempt
             if attempt > 1:
@@ -161,6 +174,8 @@ class L5CodeModeEvalRunner:
             self.last_evidence_cards = []
             self.last_grounding_verification = {}
             self.last_l5_execution_receipt = {}
+            self.last_raw_model_output = ""
+            self.last_deterministic_post_verification = {}
             try:
                 last_output = self._run_once_with_workspace_tools(
                     prompt,
@@ -250,6 +265,7 @@ class L5CodeModeEvalRunner:
         )
         tool_context.model_arguments_untrusted = True
         nested_call_count = 0
+        attempt_tool_trace: list[dict[str, Any]] = []
         planner_plan = plan_scout_ai_tools(
             tool_context.query,
             project_root=project_root,
@@ -282,10 +298,33 @@ class L5CodeModeEvalRunner:
             nested_call_count += 1
             if nested_call_count > nested_tool_limit:
                 raise RuntimeError("l5_nested_tool_budget_exceeded")
-            return tool_context.query_scout_workspace(request=dict(request))
+            bounded_request = dict(request)
+            response = tool_context.query_scout_workspace(request=bounded_request)
+            attempt_tool_trace.append(
+                {
+                    "sequence": nested_call_count,
+                    "tool_id": WORKSPACE_QUERY_TOOL_ID,
+                    "arguments_sha256": _l5_argument_hash(bounded_request),
+                    "operation": str(bounded_request.get("operation") or ""),
+                    "status": str(response.get("status") or "unknown"),
+                    "source_refs": list(response.get("source_refs") or []),
+                    "evidence_ids": [
+                        str(item.get("evidence_id"))
+                        for item in response.get("results") or []
+                        if isinstance(item, dict) and item.get("evidence_id")
+                    ],
+                    "root_cause": response.get("root_cause"),
+                }
+            )
+            return response
 
         budget = AgentRunBudget(
             question_class=planner_plan.question_class,
+            recovery_stage=(
+                AgentRecoveryStage.INITIAL
+                if self._attempt_index == 1
+                else AgentRecoveryStage.CONTINUATION
+            ),
             attempt_index=self._attempt_index,
             max_requests=L5_MAX_REQUESTS,
             max_tool_calls=L5_MAX_TOOL_CALLS,
@@ -331,7 +370,10 @@ class L5CodeModeEvalRunner:
                 {
                     "question": tool_context.query.question,
                     "attempt": self._attempt_index,
+                    "budget": budget.model_dump(mode="json"),
                     "receipt": self.last_l5_execution_receipt,
+                    "raw_model_output": "",
+                    "attempt_tool_trace": attempt_tool_trace,
                     "workspace_responses": [
                         dict(item)
                         for item in tool_context.invocations
@@ -342,16 +384,33 @@ class L5CodeModeEvalRunner:
             raise
         duration_ms = round((time.perf_counter() - started) * 1_000, 3)
         output = str(pydantic_result_output(result))
+        self.last_raw_model_output = output
+        self.last_raw_model_outputs.append(output)
         runtime = BoundedAgentRuntime(budget=budget)
         cards = [
             runtime.evidence_from_tool_result(WORKSPACE_QUERY_TOOL_ID, invocation)
             for invocation in tool_context.invocations
             if invocation.get("tool_id") == WORKSPACE_QUERY_TOOL_ID
         ]
+        workspace_responses = _workspace_query_responses(tool_context.invocations)
+        mileage_verification = verify_nearest_mileage_candidates(
+            tool_context.query.question,
+            workspace_responses,
+        )
+        if mileage_verification is not None:
+            self.last_deterministic_post_verification = (
+                mileage_verification.model_dump(mode="json")
+            )
+            cards.append(_mileage_verification_evidence_card(mileage_verification))
         self.last_evidence_cards = [card.model_dump(mode="json") for card in cards]
-        verification = runtime.verify_synthesis(output, evidence_cards=cards)
-        final_output = output
-        if not verification.passed and cards:
+        final_output = (
+            _render_mileage_verification_answer(mileage_verification)
+            if mileage_verification is not None
+            and mileage_verification.tied_candidate_count > 0
+            else output
+        )
+        verification = runtime.verify_synthesis(final_output, evidence_cards=cards)
+        if not verification.passed and cards and mileage_verification is None:
             final_output = _deterministic_evidence_answer(cards)
             verification = runtime.verify_synthesis(
                 final_output,
@@ -371,13 +430,21 @@ class L5CodeModeEvalRunner:
             output_text=final_output,
         )
         self.last_l5_execution_receipt = receipt.model_dump(mode="json")
+        self.last_model_usage = _serialize_usage(result)
         self._receipt_sink.append(
             {
                 "question": tool_context.query.question,
                 "attempt": self._attempt_index,
+                "budget": budget.model_dump(mode="json"),
                 "receipt": self.last_l5_execution_receipt,
+                "raw_model_output": output,
+                "model_usage": self.last_model_usage,
+                "attempt_tool_trace": attempt_tool_trace,
                 "evidence_cards": self.last_evidence_cards,
                 "grounding_verification": self.last_grounding_verification,
+                "deterministic_post_verification": (
+                    self.last_deterministic_post_verification
+                ),
                 "workspace_responses": [
                     dict(item)
                     for item in tool_context.invocations
@@ -385,7 +452,6 @@ class L5CodeModeEvalRunner:
                 ],
             }
         )
-        self.last_model_usage = _serialize_usage(result)
         self.last_agent_run_ledger = {
             "budget": budget.model_dump(mode="json"),
             "request_count": self.last_model_usage.get("requests", 0),
@@ -437,6 +503,8 @@ def check_l5_eval_readiness(
         ready=ready,
         summary=(
             "L5 Code Mode is ready for the 100-case sequence."
+            if ready and expected_case_count == 100
+            else "L5 Code Mode is ready for the requested case sequence."
             if ready
             else "L5 Code Mode readiness checks found blockers."
         ),
@@ -484,6 +552,23 @@ def augment_l5_report(
         updated["l5_attempt_grounding_verification"] = (
             attempts[-1].get("grounding_verification", {}) if attempts else {}
         )
+        updated["l5_raw_model_outputs"] = [
+            str(item.get("raw_model_output") or "") for item in attempts
+        ]
+        updated["l5_attempt_budgets"] = [
+            item.get("budget", {}) for item in attempts
+        ]
+        updated["l5_attempt_tool_traces"] = [
+            item.get("attempt_tool_trace", []) for item in attempts
+        ]
+        updated["l5_attempt_model_usage"] = [
+            item.get("model_usage", {}) for item in attempts
+        ]
+        updated["l5_deterministic_post_verification"] = (
+            attempts[-1].get("deterministic_post_verification", {})
+            if attempts
+            else {}
+        )
         updated["l5_execution_receipt"] = receipt
         updated["l5_receipt_valid"] = isinstance(receipt, dict)
         updated["l5_attempt_count"] = len(attempts)
@@ -495,6 +580,14 @@ def augment_l5_report(
                 project_manifest or {},
             )
             if label is not None and attempts
+            else None
+        )
+        updated["l5_post_verification_grade"] = (
+            _grade_l5_post_verification(
+                label.post_verification,
+                updated["l5_deterministic_post_verification"],
+            )
+            if label is not None and label.post_verification is not None
             else None
         )
         samples.append(updated)
@@ -540,6 +633,51 @@ def augment_l5_report(
             for item in samples
             if (item.get("l5_semantic_grade") or {}).get("passed") is True
         ),
+        "deterministic_post_verification_count": sum(
+            1
+            for item in samples
+            if item.get("l5_deterministic_post_verification")
+        ),
+        "deterministic_post_verification_pass_count": sum(
+            1
+            for item in samples
+            if (item.get("l5_deterministic_post_verification") or {}).get("status")
+            == "success"
+        ),
+        "raw_model_empty_attempt_count": sum(
+            1
+            for item in samples
+            for output in item.get("l5_raw_model_outputs", [])
+            if not str(output).strip()
+        ),
+        "attempt_workspace_query_call_count": sum(
+            len(trace)
+            for item in samples
+            for trace in item.get("l5_attempt_tool_traces", [])
+            if isinstance(trace, list)
+        ),
+        "observed_model_request_count": sum(
+            int(usage.get("requests") or 0)
+            for item in samples
+            for usage in item.get("l5_attempt_model_usage", [])
+            if isinstance(usage, dict)
+        ),
+        "model_usage_unavailable_attempt_count": sum(
+            1
+            for item in samples
+            for usage in item.get("l5_attempt_model_usage", [])
+            if not isinstance(usage, dict) or not usage
+        ),
+        "post_verification_evaluable_count": sum(
+            1
+            for item in samples
+            if isinstance(item.get("l5_post_verification_grade"), dict)
+        ),
+        "post_verification_pass_count": sum(
+            1
+            for item in samples
+            if (item.get("l5_post_verification_grade") or {}).get("passed") is True
+        ),
     }
     return {
         **report,
@@ -549,6 +687,165 @@ def augment_l5_report(
         "l5_metrics": l5_metrics,
         "samples": samples,
     }
+
+
+def _workspace_query_responses(
+    invocations: list[dict[str, object]],
+) -> list[WorkspaceQueryResponse]:
+    responses: list[WorkspaceQueryResponse] = []
+    for invocation in invocations:
+        if invocation.get("tool_id") != WORKSPACE_QUERY_TOOL_ID:
+            continue
+        payload = {
+            name: invocation[name]
+            for name in WorkspaceQueryResponse.model_fields
+            if name in invocation
+        }
+        try:
+            responses.append(WorkspaceQueryResponse.model_validate(payload))
+        except (TypeError, ValueError):
+            continue
+    return responses
+
+
+def _grade_l5_post_verification(
+    expected: Mapping[str, Any],
+    actual: Mapping[str, Any],
+) -> dict[str, Any]:
+    expected_candidates = {
+        candidate
+        for item in expected.get("candidates") or []
+        if isinstance(item, Mapping)
+        if (candidate := _post_candidate_key(item)) is not None
+    }
+    actual_candidates = {
+        candidate
+        for item in actual.get("candidates") or []
+        if isinstance(item, Mapping)
+        if (candidate := _post_candidate_key(item)) is not None
+    }
+    checks = {
+        "status": actual.get("status") == expected.get("status"),
+        "target_mileage_k": _optional_float_equal(
+            actual.get("target_mileage_k"), expected.get("target_mileage_k")
+        ),
+        "nearest_delta_k": _optional_float_equal(
+            actual.get("nearest_delta_k"), expected.get("nearest_delta_k")
+        ),
+        "tied_candidate_count": actual.get("tied_candidate_count")
+        == expected.get("tied_candidate_count"),
+        "candidates": actual_candidates == expected_candidates,
+        "source_refs": set(expected.get("source_refs") or [])
+        <= set(actual.get("source_refs") or []),
+        "candidate_boundary": (
+            actual.get("candidate_only") is True
+            and actual.get("runtime_safety_truth") is False
+        ),
+    }
+    return {
+        "passed": all(checks.values()),
+        "checks": checks,
+        "expected_candidate_count": len(expected_candidates),
+        "actual_candidate_count": len(actual_candidates),
+    }
+
+
+def _optional_float_equal(actual: object, expected: object) -> bool:
+    try:
+        return abs(float(actual) - float(expected)) <= 1e-9
+    except (TypeError, ValueError):
+        return actual is expected
+
+
+def _post_candidate_key(
+    item: Mapping[str, Any],
+) -> tuple[str, float, str, float, float] | None:
+    try:
+        return (
+            str(item.get("source_label") or ""),
+            float(item.get("label_mileage_k")),
+            str(item.get("direction") or ""),
+            round(float(item.get("lat")), 7),
+            round(float(item.get("lon")), 7),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _l5_argument_hash(request: dict[str, object]) -> str:
+    payload = json.dumps(
+        request,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return f"sha256:{hashlib.sha256(payload.encode('utf-8')).hexdigest()}"
+
+
+def _mileage_verification_evidence_card(
+    verification: WorkspaceMileageVerification,
+) -> EvidenceCard:
+    return EvidenceCard(
+        tool_id=WORKSPACE_QUERY_TOOL_ID,
+        claim_summary=(
+            f"{verification.summary} {_mileage_candidate_boundary_sentence()}"
+        ),
+        key_values={
+            "target_mileage_k": verification.target_mileage_k,
+            "nearest_delta_k": verification.nearest_delta_k,
+            "tied_candidate_count": verification.tied_candidate_count,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "live_water_presence_verified": False,
+            "potability_verified": False,
+            "candidates": [
+                {
+                    "source_label": item.source_label,
+                    "label_mileage_k": item.label_mileage_k,
+                    "delta_k": item.delta_k,
+                    "direction": item.direction,
+                    "lat": item.lat,
+                    "lon": item.lon,
+                    "route_projection_status": item.route_projection_status,
+                }
+                for item in verification.candidates
+            ],
+        },
+        freshness=str(verification.freshness.get("state") or "unknown"),
+        quality=("verified" if verification.status == "success" else "contradicted"),
+        source_refs=verification.source_refs,
+        result_count=verification.tied_candidate_count,
+    )
+
+
+def _render_mileage_verification_answer(
+    verification: WorkspaceMileageVerification,
+) -> str:
+    citations = " ".join(
+        f"[{source_ref}]" for source_ref in dict.fromkeys(verification.source_refs)
+    )
+    return " ".join(
+        _append_citations_to_sentence(sentence, citations)
+        for sentence in (
+            verification.summary,
+            _mileage_candidate_boundary_sentence(),
+        )
+    )
+
+
+def _mileage_candidate_boundary_sentence() -> str:
+    return (
+        "這是 workspace 中的候選水源標記；僅憑靜態 artifact 無法保證"
+        "現場有水或可飲用，也不是 runtime safety truth。"
+    )
+
+
+def _append_citations_to_sentence(sentence: str, citations: str) -> str:
+    value = sentence.rstrip()
+    if citations and value and value[-1] in ".!?。！？":
+        return f"{value[:-1].rstrip()} {citations}{value[-1]}"
+    return f"{value} {citations}".strip()
 
 
 def _grade_l5_workspace_responses(
@@ -649,6 +946,17 @@ def _l5_system_prompt() -> str:
         "its absolute difference from the user's trail mileage. Keep all tied nearest "
         "candidates and state ahead/behind from their label mileage. Do not compare the "
         "trail-sign K value directly with route_distance_m, which is the full route axis. "
+        "For a named mileage-anchor location such as '15K 在哪裡，座標與最近 CP', "
+        "first filter artifact={'project_ref_key': 'route_mileage_k_anchors_ref'} "
+        "with predicate normalized_mileage_k eq '15K' and fields candidate_id, "
+        "normalized_mileage_k, mileage_m, lat, lon. Then pass the returned lat/lon "
+        "as origin to nearest on artifact={'project_ref_key': "
+        "'checkpoint_candidates_ref'} with fields candidate_id, lat, lon and k=1. "
+        "Do not hard-code the origin; read it from the filter result inside run_code. "
+        "For K-anchor gap or ordering questions, use interval on project_ref_key="
+        "'route_mileage_k_anchors_ref' with value_field='mileage_k', start=0, "
+        "end=100, fields=['candidate_id', 'mileage_k', 'normalized_mileage_k'], "
+        "limit=100, then compute gaps/order in sandboxed Python. "
         "filter adds predicates=[{'field': 'path', 'operator': "
         "'eq|gte|lte|contains', "
         "'value': value}] and optional fields/sort_by. argmax/top_k/group_by/distinct add "
@@ -701,6 +1009,18 @@ def _serialize_usage(result: object) -> dict[str, int]:
         value = getattr(usage, key, None)
         if isinstance(value, int):
             output[key] = value
+    all_messages = getattr(result, "all_messages", None)
+    messages = list(all_messages()) if callable(all_messages) else []
+    if output.get("requests", 0) == 0:
+        output["requests"] = sum(
+            isinstance(message, ModelResponse) for message in messages
+        )
+    if output.get("tool_calls", 0) == 0:
+        output["tool_calls"] = sum(
+            isinstance(part, ToolCallPart)
+            for message in messages
+            for part in getattr(message, "parts", ())
+        )
     return output
 
 
@@ -787,6 +1107,7 @@ def _relevant_manifest_ref_keys(
         "cwa": ("cwa", "氣象署", "警報"),
         "terrain": ("terrain", "地形", "坡度", "高程"),
         "mcp": ("mcp", "里程牌"),
+        "mileage": ("k anchor", "k anchors", "里程", "公里", "里程標"),
         "boss": ("boss", "山頭"),
         "rain": ("rain", "雨", "降水"),
         "review": ("review", "審核", "人工"),
@@ -804,6 +1125,8 @@ def _relevant_manifest_ref_keys(
         if any(variant in normalized for variant in variants)
         for term in (canonical,)
     }
+    if re.search(r"\d+(?:\.\d+)?\s*k\b", normalized):
+        query_terms.add("mileage")
 
     def score(key: str) -> tuple[int, str]:
         normalized_key = key.casefold()
@@ -818,6 +1141,8 @@ def _relevant_manifest_ref_keys(
             relevance += 8
         if "gpx" in query_terms and "historical_gpx_source_index" in normalized_key:
             relevance += 4
+        if "mileage" in query_terms and "route_mileage_k_anchors" in normalized_key:
+            relevance += 8
         return (-relevance, key)
 
     return sorted(keys, key=score)[:limit]
@@ -1015,6 +1340,8 @@ def main(argv: list[str] | None = None) -> int:
         and metrics["grounded_answer_count"] == report["case_count"]
         and metrics["semantic_evaluable_count"] == report["case_count"]
         and metrics["semantic_pass_count"] == report["case_count"]
+        and metrics["post_verification_pass_count"]
+        == metrics["post_verification_evaluable_count"]
     )
     return 0 if passed else 2
 

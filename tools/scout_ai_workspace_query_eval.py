@@ -55,6 +55,7 @@ class WorkspaceQueryGoldLabel:
     candidate_only_allowed: bool = True
     human_review_required: bool = False
     expected_tool_ids: tuple[str, ...] = ()
+    post_verification: Mapping[str, Any] | None = None
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "WorkspaceQueryGoldLabel":
@@ -88,6 +89,9 @@ class WorkspaceQueryGoldLabel:
             human_review_required=bool(raw.get("human_review_required", False)),
             expected_tool_ids=tuple(
                 str(item) for item in raw.get("expected_tool_ids") or ()
+            ),
+            post_verification=(
+                dict(raw.get("post_verification") or {}) or None
             ),
         )
 

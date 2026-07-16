@@ -35,7 +35,7 @@ architecture. The implemented core includes:
 - local notification gateway and runtime tick loop;
 - provider-backed agent facades with a local `FunctionModel` default;
 - model policy, timeout/cost SLA gateway, and external-model fallback handling;
-- Pydantic AI v2.9.0 compatibility helpers;
+- Pydantic AI v2.10.0 compatibility helpers;
 - generated capability sandbox verification;
 - FastAPI routes and focused API/runtime tests;
 - Scout AI read-only workspace tool workflow:
@@ -94,7 +94,7 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
-- Pydantic AI v2.9.0 model execution with explicit model policy, OpenRouter and
+- Pydantic AI v2.10.0 model execution with explicit model policy, OpenRouter and
   OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
@@ -304,8 +304,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai-slim[openai,openrouter] == 2.9.0
-pydantic-evals == 2.9.0
+pydantic-ai-slim[openai,openrouter] == 2.10.0
+pydantic-evals == 2.10.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -328,17 +328,17 @@ dbos
 mcp clients
 ```
 
-Pydantic AI v2.9.0 operating rules:
+Pydantic AI v2.10.0 operating rules:
 
 - Scout's package path uses `pydantic-ai-slim` with `openai` and `openrouter`
   extras for Pi compatibility.
 - `pydantic_ai.Agent` calls must keep `end_strategy="early"` unless a future
   reviewed design proves that continuing same-turn tool execution cannot
   violate Scout's no-side-effect defaults.
-- Pydantic AI v2.9.0 now honors `end_strategy="early"` for native, prompted,
+- Pydantic AI v2.10.0 preserves `end_strategy="early"` for native, prompted,
   and image outputs. Scout keeps regression coverage on the existing early-stop
   contract instead of adding a compatibility workaround.
-- `RunContext.usage_limits` is available to tools and capabilities in v2.9.0.
+- `RunContext.usage_limits` is available to tools and capabilities in v2.10.0.
   It may be used for telemetry and local preflight decisions, but it does not
   replace Scout's deterministic permission, cost, timeout, or execution gates.
 - NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and requires
@@ -774,9 +774,9 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Pydantic AI v2.9.0 Provider Policy
+### 7.6 Pydantic AI v2.10.0 Provider Policy
 
-Scout AI OS uses Pydantic AI v2.9.0 as a typed provider facade, not as an
+Scout AI OS uses Pydantic AI v2.10.0 as a typed provider facade, not as an
 unbounded autonomous runtime.
 
 Provider modes:

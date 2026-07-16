@@ -10,7 +10,10 @@ from scout.schemas.workspace_query import (
     WorkspaceQueryLimits,
     parse_workspace_query_request,
 )
-from scout.services.workspace_query import WorkspaceQueryService
+from scout.services.workspace_query import (
+    WorkspaceQueryService,
+    verify_nearest_mileage_candidates,
+)
 from scout_workspace_query_tool import workspace_query_request_json_schema
 
 
@@ -30,6 +33,7 @@ def workspace(tmp_path: Path) -> Path:
         "water_points_ref": "outputs/water.json",
         "before_ref": "outputs/before.json",
         "after_ref": "outputs/after.json",
+        "mileage_tag_alignment_geojson_ref": "outputs/mileage.geojson",
     }
     (root / "project.json").write_text(json.dumps(project), encoding="utf-8")
     (outputs / "checkpoints.json").write_text(
@@ -197,6 +201,68 @@ def workspace(tmp_path: Path) -> Path:
     )
     (outputs / "after.json").write_text(
         json.dumps({"status": "reviewed", "count": 3}), encoding="utf-8"
+    )
+    (outputs / "mileage.geojson").write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.2743, 24.0451],
+                        },
+                        "properties": {
+                            "source_id": "water.12.a",
+                            "source_label": "006 12K 山壁水源",
+                            "route_distance_m": 55742.8242,
+                            "route_projection_status": "mileage_label_anchor_axis",
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.2796, 24.046],
+                        },
+                        "properties": {
+                            "source_id": "water.13.a",
+                            "source_label": "007 13K水源",
+                            "route_distance_m": 56737.1996,
+                            "route_projection_status": "mileage_label_anchor_axis",
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.2743, 24.0451],
+                        },
+                        "properties": {
+                            "source_id": "water.12.duplicate",
+                            "source_label": "006 12K 山壁水源",
+                            "route_distance_m": 55742.8242,
+                            "route_projection_status": "mileage_label_anchor_axis",
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.271, 24.0107],
+                        },
+                        "properties": {
+                            "source_id": "water.15.a",
+                            "source_label": "009 +15K水源",
+                            "route_distance_m": 70820.9335,
+                            "route_projection_status": "mileage_label_anchor_axis",
+                        },
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
     )
     return root
 
@@ -687,6 +753,55 @@ def test_nearest_interval_and_route_forward(workspace: Path) -> None:
     assert projected_forward.results[0].data["confidence"] == "high"
     assert projected_forward.results[0].data["review_state"] == "candidate"
     assert projected_forward.results[0].data["stale_risk"] == "fresh"
+
+
+def test_mileage_post_verifier_deduplicates_and_preserves_tied_water_candidates(
+    workspace: Path,
+) -> None:
+    response = _execute(
+        workspace,
+        {
+            "operation": "filter",
+            "artifact": {
+                "project_ref_key": "mileage_tag_alignment_geojson_ref",
+                "collection_path": "features",
+            },
+            "predicates": [
+                {
+                    "field": "properties.source_label",
+                    "operator": "contains",
+                    "value": "水源",
+                }
+            ],
+            "fields": [
+                "properties.source_id",
+                "properties.source_label",
+                "properties.route_distance_m",
+                "properties.route_projection_status",
+                "geometry.coordinates",
+            ],
+            "limit": 100,
+        },
+    )
+
+    verification = verify_nearest_mileage_candidates(
+        "12.5K 附近最近的水源在哪裡？",
+        [response],
+    )
+
+    assert verification is not None
+    assert verification.status == "success"
+    assert verification.evidence_record_count == 4
+    assert verification.distinct_candidate_count == 3
+    assert verification.nearest_delta_k == 0.5
+    assert verification.tied_candidate_count == 2
+    assert [item.label_mileage_k for item in verification.candidates] == [12.0, 13.0]
+    assert [item.direction for item in verification.candidates] == ["behind", "ahead"]
+    assert [len(item.evidence_ids) for item in verification.candidates] == [2, 1]
+    assert "55742" not in verification.summary
+    assert "12K" in verification.summary
+    assert "13K" in verification.summary
+    assert verification.runtime_safety_truth is False
 
 
 def test_nearest_reports_missing_coordinate_fields_instead_of_empty_match(
