@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scout Domain Adaptation"
+  short_description: "Build grounded Scout AI capabilities for a new domain"
+  default_prompt: "Use $scout-domain-adaptation to adapt Scout AI to a new domain by building the evidence catalog, typed tools, deterministic evidence DAG, compact context contract, verifier, and grounded eval before optimizing model cost."

@@ -25,6 +25,7 @@ class SkillRegistryTests(unittest.TestCase):
                 "cwa-environment-assess",
                 "decision-options",
                 "device-capability-check",
+                "domain-grounded-agent-adaptation",
                 "field-state-short-answer",
                 "gee-environment-assess",
                 "ins-dr-wearable-route-constrained",
@@ -61,6 +62,23 @@ class SkillRegistryTests(unittest.TestCase):
                 "最後一句" in rule
                 for rule in field_answer.answer_contract.style_rules
             )
+        )
+        domain_adaptation = registry.get("domain-grounded-agent-adaptation")
+        self.assertEqual(domain_adaptation.type, "analysis")
+        self.assertEqual(domain_adaptation.activation_gate.mode, "manual")
+        self.assertFalse(domain_adaptation.activation_gate.requires_human_approval)
+        self.assertEqual(domain_adaptation.allowed_writes, [])
+        self.assertIn(
+            "generated.capability.installation",
+            domain_adaptation.forbidden_writes,
+        )
+        self.assertIn(
+            "deterministic_evidence_dag",
+            domain_adaptation.output_schema.required_fields,
+        )
+        self.assertIn(
+            "scout_ai_domain_grounding_adaptation_plan",
+            domain_adaptation.output_schema.artifact_kinds,
         )
         local_answer = registry.get("local-grounded-short-answer")
         self.assertIsNotNone(local_answer.answer_contract)

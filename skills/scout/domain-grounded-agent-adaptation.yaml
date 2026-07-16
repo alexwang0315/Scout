@@ -1,0 +1,99 @@
+id: domain-grounded-agent-adaptation
+version: 0.1.0
+status: experimental
+type: analysis
+priority: 70
+triggers:
+  - event: assistant.domain_adaptation_requested
+    description: Design the evidence, tool, compact-context, model, verifier, and eval contracts needed to adapt Scout AI to a new domain.
+    required_refs: []
+  - event: assistant.domain_eval_failure_review_requested
+    description: Diagnose repeated domain answer failures and produce a finite repair and evaluation plan without hard-coding answers.
+    required_refs: []
+  - event: assistant.local_model_grounding_tuning_requested
+    description: Improve a local fallback model by repairing evidence access, deterministic preparation, compact context, and verification before considering weight training.
+    required_refs: []
+activation_gate:
+  mode: manual
+  requires_human_approval: false
+  conditions:
+    - An operator explicitly requests a new Scout AI domain or a review of domain answer quality.
+    - The run has a named domain boundary and at least one realistic question or failure artifact.
+    - The skill produces candidate analysis only and does not install generated code or mutate runtime truth.
+noise_control:
+  cooldown_seconds: 0
+  dedupe_window_seconds: 0
+  max_runs_per_mission: null
+  suppression_keys: []
+preflight:
+  required_skill_ids: []
+  required_capabilities:
+    - scout.ai.tool_registry.describe
+    - scout.ai.skill_registry.describe
+    - scout.ai.evidence_trace.read
+  required_artifacts:
+    - domain.question_or_failure_sample
+allowed_reads:
+  - assistant.total_info_entry
+  - assistant.workspace_compact_evidence
+  - assistant.current_sensor_snapshot
+  - scout.ai.tool_registry
+  - scout.ai.skill_registry
+  - scout.ai.context_registry
+  - scout.ai.eval.question_corpus
+  - scout.ai.eval.results
+  - scout.ai.eval.call_trace
+  - scout.ai.eval.model_telemetry
+  - scout.ai.domain.specifications
+  - scout.ai.domain.evidence_catalog
+allowed_writes: []
+forbidden_writes:
+  - phase1.runtime
+  - phase1.safety
+  - phase2.brain.observed_facts
+  - live.safety_api
+  - hardware.controls
+  - outbound.messages
+  - production.databases
+  - generated.capability.installation
+output_schema:
+  format: artifact
+  artifact_kinds:
+    - scout_ai_domain_grounding_adaptation_plan
+    - scout_ai_domain_eval_failure_review
+  required_fields:
+    - domain_id
+    - domain_boundary
+    - question_families
+    - baseline_metrics
+    - evidence_catalog
+    - evidence_freshness_policy
+    - tool_gap_matrix
+    - deterministic_evidence_dag
+    - compact_context_contract
+    - model_roles
+    - local_fallback_contract
+    - verifier_contract
+    - eval_matrix
+    - failure_ladder
+    - promotion_gates
+    - known_issues
+    - source_refs
+    - candidate_only
+    - runtime_safety_truth
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: null
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Domain-grounded agent adaptation
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: mission_lifetime

@@ -453,9 +453,53 @@ An additional diagnostic replay used the non-canonical
 the automatic quality screen. Its artifacts end in `20260716T023024Z`; they are
 comparison evidence, not the configured fallback baseline.
 
+### Why the newer local answers improved
+
+The improvement is primarily an evidence-pipeline result, not a Pydantic AI
+version effect and not proof that the local model learned the Scout domain in
+its weights.
+
+1. Tool coverage reached zero missing-tool cases. The runtime can now obtain
+   route, checkpoint, risk, weather, device, team, and current-context evidence
+   instead of asking the model to infer absent facts.
+2. Deterministic code performs retrieval, filtering, aggregation, spatial
+   matching, joins, ranking, freshness checks, and source-reference handling.
+   The local model receives a small set of answer-ready facts rather than raw
+   workspace files.
+3. The model-facing evidence is packed into a high-density bounded brief. This
+   preserves the most relevant values and source refs while staying within the
+   external 2K Hailo context window.
+4. `qwen3:1.7b` is a better fit than the coder-oriented 1.5B comparison model
+   for short Traditional Chinese synthesis and instruction following.
+5. The answer skill requires a direct conclusion, concrete evidence, explicit
+   unknowns, and a bounded next step. The grounding verifier rejects answers
+   that contradict or discard the selected evidence.
+6. The eval now separates transport success, non-empty output, grounding,
+   completeness, language quality, and human acceptance. Earlier `answered`
+   counts hid weak or copied answers.
+
+The two July results answer different questions and must not be merged into one
+score. The 2026-07-15 workspace-grounded corpus proved that a small local model
+can synthesize well-prepared workspace facts. The 2026-07-16 `user_field_100`
+run includes more live-state and safety questions, exposed 22 evidence gaps,
+and found a timeout-continuation defect. That difference is evidence that
+corpus grounding and runtime evidence availability dominate the score.
+
+The reusable method is specified in
+`docs/specs/scout-ai-domain-grounding-tuning.md`. Codex development uses
+`.agents/skills/scout-domain-adaptation/SKILL.md`; Scout/Pydantic AI planning
+and audit use `skills/scout/domain-grounded-agent-adaptation.yaml`.
+
 ## Boundary
 
 All AI HAT+2 fallback outputs remain advisory and candidate-only:
+
+- they do not mutate Phase 1 runtime or safety truth;
+- a grounded answer is not automatically a correct safety decision;
+- an automatic quality pass still requires human review before becoming a
+  language-quality baseline;
+- missing live evidence remains unknown and must not be converted into a safe
+  or unsafe observation.
 
 - no `/safety/*` writes
 - no Phase 1 runtime safety truth mutation
