@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from pydantic_ai import Agent  # noqa: E402
 
+from assistant_models import AssistantSurface, ScoutAssistantQuery  # noqa: E402
 from assistant_pydantic_provider import _serialize_pydantic_result_usage  # noqa: E402
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
@@ -133,9 +134,14 @@ def run_eval(args: argparse.Namespace) -> dict[str, Any]:
             qeval,
             _ordered_unique([*qeval["current_tool_ids"], *qeval["recommended_tool_ids"]]),
         )
-        total_info = build_total_info(project_root, question, args.project_id)
-        tool_results, missing_tools, missing_evidence = run_tools(
+        query = ScoutAssistantQuery(
+            surface=AssistantSurface.PRETRIP,
             question=question,
+            project_id=args.project_id,
+        )
+        total_info = build_total_info(project_root, query)
+        tool_results, missing_tools, missing_evidence = run_tools(
+            query=query,
             project_root=project_root,
             tool_ids=tool_ids,
             max_tools=args.max_tools,

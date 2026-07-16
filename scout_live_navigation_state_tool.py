@@ -35,6 +35,13 @@ LIVE_NAVIGATION_REQUIRED_FIELDS = (
 LIVE_NAVIGATION_OPTIONAL_FIELDS = (
     "live_navigation_snapshot_path",
     *LIVE_NAVIGATION_REQUIRED_FIELDS,
+    "scenario_id",
+    "travel_direction",
+    "distance_to_boss_along_route_m",
+    "boss_point_id",
+    "boss_rank",
+    "candidate_only",
+    "runtime_safety_truth",
 )
 
 
@@ -63,6 +70,13 @@ def assess_scout_live_navigation_state(
     confidence: float | int | str | None = None,
     uncertainty_m: float | int | str | None = None,
     last_anchor_at: str | None = None,
+    scenario_id: str | None = None,
+    travel_direction: str | None = None,
+    distance_to_boss_along_route_m: float | int | str | None = None,
+    boss_point_id: str | None = None,
+    boss_rank: int | str | None = None,
+    candidate_only: bool | None = None,
+    runtime_safety_truth: bool | None = None,
 ) -> dict[str, Any]:
     """Assess a caller-provided live navigation snapshot without reading runtime state."""
 
@@ -90,6 +104,15 @@ def assess_scout_live_navigation_state(
         "confidence": confidence,
         "uncertainty_m": uncertainty_m,
         "last_anchor_at": last_anchor_at,
+    }
+    scenario_context = {
+        "scenario_id": scenario_id,
+        "travel_direction": travel_direction,
+        "distance_to_boss_along_route_m": distance_to_boss_along_route_m,
+        "boss_point_id": boss_point_id,
+        "boss_rank": boss_rank,
+        "candidate_only": candidate_only,
+        "runtime_safety_truth": runtime_safety_truth,
     }
     caller_field_count = sum(
         1 for value in caller_provided.values() if not _is_missing(value)
@@ -122,6 +145,14 @@ def assess_scout_live_navigation_state(
     )
     provided_fields = {
         field: value for field, value in provided.items() if not _is_missing(value)
+    }
+    provided_fields = {
+        **provided_fields,
+        **{
+            field: value
+            for field, value in scenario_context.items()
+            if not _is_missing(value)
+        },
     }
     quality_flags = _quality_flags(
         hdop=provided.get("hdop"),
@@ -179,6 +210,11 @@ def assess_scout_live_navigation_state(
         "decision_output": decision_output,
         "missing_fields": missing_fields,
         "provided_fields": provided_fields,
+        "scenario_context": {
+            field: value
+            for field, value in scenario_context.items()
+            if not _is_missing(value)
+        },
         "navigation_terrain": navigation_terrain,
         "navigation_decision": navigation_decision,
         "route_query_plan": route_query_plan,

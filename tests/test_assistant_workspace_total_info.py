@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from assistant_api import create_assistant_app
@@ -74,6 +75,47 @@ def test_total_info_marks_expired_weather_as_partial(tmp_path: Path) -> None:
     assert weather["freshness"]["cwa_weather"] == "stale"
     assert "cwa_weather" in weather["stale_sources"]
     assert "weather_environment" in summary["missing_or_partial_context"]
+
+
+def test_total_info_preserves_bounded_scenario_location_and_direction(tmp_path: Path) -> None:
+    project_root = _write_total_info_workspace(
+        tmp_path / "workspace" / "chilai_nanhua_day1"
+    )
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="這裡適合停留嗎？",
+        project_id="chilai_nanhua_day1",
+        live_navigation_snapshot={
+            "scenario_id": "six600.PER-095.rank-5",
+            "observed_at": "2026-07-16T08:00:00+08:00",
+            "lat": 24.048743595,
+            "lon": 121.260414740,
+            "route_progress_m": 53250,
+            "nearest_route_distance_m": 0,
+            "nearest_cp_id": "cp.106",
+            "heading_deg": 71.457861,
+            "travel_direction": "increasing_route_progress",
+            "distance_to_boss_along_route_m": 500,
+            "boss_point_id": "boss.005",
+            "boss_rank": 5,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_nmea": "must-not-survive",
+        },
+    )
+
+    source = build_workspace_total_info_source_ref(query, project_root=project_root)
+
+    assert source is not None
+    location = source.context_summary["location_context"]
+    snapshot = location["live_navigation_snapshot"]
+    assert location["query_snapshot_available"] is True
+    assert location["route_match_available"] is True
+    assert snapshot["scenario_id"] == "six600.PER-095.rank-5"
+    assert snapshot["heading_deg"] == pytest.approx(71.457861)
+    assert snapshot["travel_direction"] == "increasing_route_progress"
+    assert snapshot["route_progress_m"] == 53250
+    assert "raw_nmea" not in snapshot
 
 
 def test_total_info_rejects_artifact_refs_outside_workspace(tmp_path: Path) -> None:
