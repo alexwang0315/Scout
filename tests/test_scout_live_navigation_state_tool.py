@@ -110,6 +110,21 @@ def test_live_navigation_state_loads_reviewed_fixture_snapshot() -> None:
     assert result["boundary"]["live_hardware_read_performed"] is False
 
 
+def test_live_navigation_state_reports_snapshot_freshness() -> None:
+    result = assess_scout_live_navigation_state(
+        PROJECT_ROOT,
+        query="workspace 中最新的 live navigation state 是何時，資料是否過期？",
+    )
+
+    assert "observed_at=2099-10-08T12:20:00+08:00" in result["field_answer"]
+    assert "clock skew" in result["field_answer"]
+    assert "freshness 不可靠" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"].endswith(
+        "live_navigation_snapshot.reviewed.json"
+    )
+
+
 def test_live_navigation_state_output_kind_constant() -> None:
     assert LIVE_NAVIGATION_STATE_OUTPUT_KIND == "scout_ai_live_navigation_state_tool_output"
 

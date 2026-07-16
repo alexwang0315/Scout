@@ -7,10 +7,7 @@
     "backend": "openai_compatible",
     "token_id": "operator-managed-openrouter-token",
     "token_env_var": "OPENROUTER_API_KEY",
-    "tool_calling": "enabled",
-    "model_settings": {
-      "max_tokens": 2048
-    }
+    "tool_calling": "enabled"
   },
   "local_model": {
     "profile": "local",
@@ -19,10 +16,7 @@
     "backend": "hailo_ollama",
     "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h",
     "token_id": "scout-ai-hat-plus-2-local-ollama",
-    "tool_calling": "disabled",
-    "model_settings": {
-      "max_tokens": 384
-    }
+    "tool_calling": "disabled"
   },
   "timeout_seconds": 120,
   "max_context_chars": 24000,

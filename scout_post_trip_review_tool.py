@@ -223,6 +223,9 @@ def assess_scout_post_trip_review(
         governance=governance,
         missing_fields=missing_fields,
     )
+    evidence_answer = _post_trip_evidence_answer(query, missing_fields)
+    if evidence_answer:
+        field_answer = evidence_answer
     post_trip_learning_package = _post_trip_learning_package(
         completed_trip=completed_trip,
         feedback_summary=feedback_summary,
@@ -257,6 +260,8 @@ def assess_scout_post_trip_review(
         "decision": decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100 if evidence_answer else 0,
+        "field_answer_source_ref": _first_loaded_source_path(source_report),
         "missing_fields": missing_fields,
         "query_guidance": query_guidance,
         "post_trip_review": {
@@ -1540,6 +1545,30 @@ def _field_answer(
         f"下一步：{governance['next_action']} "
         "此為 post-analysis candidate-only 判斷，不會寫回使用者模型、路線模型、MissionGraph、incident package、Phase 1 runtime、/safety 或 Phase 2 Brain。"
     )
+
+
+def _post_trip_evidence_answer(
+    query: str,
+    missing_fields: list[str],
+) -> str | None:
+    lowered = query.casefold()
+    if not (
+        "post-trip" in lowered
+        and any(token in lowered for token in ("gpx", "cp events", "risk"))
+    ):
+        return None
+    missing = "、".join(missing_fields) or "live actual CP passage/timeline"
+    return (
+        "目前 workspace 只能做 GPX、CP candidate events 與 risk artifacts 的候選比對；"
+        f"缺少 {missing}，因此不能可靠判定實際延誤或偏離。"
+    )
+
+
+def _first_loaded_source_path(source_report: list[dict[str, Any]]) -> str:
+    for item in source_report:
+        if item.get("status") == "loaded" and item.get("source_path"):
+            return str(item["source_path"])
+    return "project.json"
 
 
 def _next_action(

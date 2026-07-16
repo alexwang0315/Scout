@@ -103,6 +103,13 @@ def test_static_count_wording_does_not_add_live_navigation_tool() -> None:
             True,
         ),
         (
+            "我的 GPS 顯示我在 12.5K 附近，請問最近的水源在哪？",
+            QuestionClass.SPATIAL_ROUTE_FACT,
+            [WorkspaceQueryOperation.FILTER],
+            False,
+            False,
+        ),
+        (
             "哪些高坡度地段在大雨後風險最高？",
             QuestionClass.WEATHER_TERRAIN_COMPOUND,
             [WorkspaceQueryOperation.FILTER, WorkspaceQueryOperation.TOP_K],
@@ -306,6 +313,17 @@ def test_planner_selects_major_points_for_boss_point_count() -> None:
     item = _single_tool(plan, MAJOR_POINT_TOOL_ID)
     assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
     assert ROUTE_STRUCTURE_TOOL_ID not in _tool_ids(plan)
+
+
+def test_planner_keeps_mcp_reconciliation_out_of_route_architecture() -> None:
+    plan = plan_scout_ai_tools(
+        _query("CP 與 MCP reconciliation 報告中有哪些重疊、缺漏或衝突？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert MAJOR_POINT_TOOL_ID in tool_ids
+    assert ROUTE_ARCHITECTURE_TOOL_ID not in tool_ids
 
 
 def test_planner_routes_water_refill_to_major_point_and_resource_tools() -> None:

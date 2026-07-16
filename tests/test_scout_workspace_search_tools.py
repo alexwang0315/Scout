@@ -37,6 +37,51 @@ def test_workspace_catalog_search_lists_local_artifact_families() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_workspace_catalog_does_not_answer_unrelated_query_with_layer_summary() -> None:
+    result = search_project_workspace_catalog(
+        PROJECT_ROOT,
+        query="workspace 是否有 team status、隊員位置或生命徵兆 evidence？",
+        limit=8,
+    )
+
+    assert result["field_answer"] is None or not result["field_answer"].startswith(
+        "Layer preparation summary"
+    )
+
+
+def test_workspace_catalog_summarizes_environment_ref_existence(tmp_path: Path) -> None:
+    workspace = tmp_path / "trip"
+    existing_path = workspace / "outputs" / "environment" / "cwa" / "qpf.json"
+    existing_path.parent.mkdir(parents=True)
+    existing_path.write_text("{}", encoding="utf-8")
+    (workspace / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "trip",
+                "cwa_qpf_grid_ref": "outputs/environment/cwa/qpf.json",
+                "gee_raw_summary_ref": "outputs/environment/gee/missing.json",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_workspace_catalog(
+        workspace,
+        query=(
+            "workspace catalog 中哪些 environment artifact 已存在，"
+            "哪些 ref 指向的檔案缺失？"
+        ),
+        limit=6,
+    )
+
+    assert result["field_answer_priority"] == 100
+    assert "existing=1" in result["field_answer"]
+    assert "missing=1" in result["field_answer"]
+    assert "cwa_qpf_grid_ref" in result["field_answer"]
+    assert "gee_raw_summary_ref" in result["field_answer"]
+    assert result["field_answer_source_ref"] == "project.json"
+
+
 def test_workspace_catalog_exposes_bounded_project_and_gpx_identity() -> None:
     result = search_project_workspace_catalog(
         PROJECT_ROOT,
@@ -60,6 +105,154 @@ def test_workspace_catalog_exposes_bounded_project_and_gpx_identity() -> None:
         "normalized/routes/route_summary.json",
     ]
     assert all("/" not in filename for filename in result["reference_gpx_filenames"])
+
+
+def test_workspace_catalog_answers_import_manifest_source_counts() -> None:
+    result = search_project_workspace_catalog(
+        PROJECT_ROOT,
+        query="請從 workspace catalog 查出 import manifest 記錄的來源類型與檔案數量。",
+        limit=6,
+    )
+
+    assert "GPX source files=24" in result["field_answer"]
+    assert "golden_route_reference=1" in result["field_answer"]
+    assert "reference_track=23" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/import_manifest.json"
+
+
+def test_workspace_catalog_answers_reference_gpx_count_and_filenames() -> None:
+    result = search_project_workspace_catalog(
+        PROJECT_ROOT,
+        query="workspace 目前共有多少條 reference GPX，請列出前五個檔名。",
+        limit=6,
+    )
+
+    assert "reference GPX 共 23 條" in result["field_answer"]
+    assert "20161119_20奇萊連峰.gpx" in result["field_answer"]
+    assert "990418能高安東軍GDB檔.gpx" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/reference_tracks.json"
+
+
+def test_workspace_catalog_answers_candidate_and_reviewed_package_status() -> None:
+    result = search_project_workspace_catalog(
+        PROJECT_ROOT,
+        query="目前 workspace 有哪些 reviewed package 與 candidate package？",
+        limit=6,
+    )
+
+    assert "outputs/pretrip_package.reviewed.json (status=reviewed)" in result[
+        "field_answer"
+    ]
+    assert "outputs/pretrip_package.json (status=candidate)" in result[
+        "field_answer"
+    ]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "project.json"
+
+
+def test_workspace_catalog_answers_route_evidence_bundle_sources(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "trip"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    project_path = workspace / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["route_evidence_bundle_ref"] = (
+        "normalized/routes/route_evidence_bundle.json"
+    )
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    bundle_path = workspace / project["route_evidence_bundle_ref"]
+    bundle_path.parent.mkdir(parents=True, exist_ok=True)
+    bundle_path.write_text(
+        json.dumps(
+            {
+                "golden_route": {
+                    "route_summary_ref": "normalized/routes/route_summary.json",
+                    "geometry_ref": "normalized/map/map_context.geojson",
+                    "filtered_geometry_ref": "normalized/routes/filtered/primary.gpx",
+                },
+                "gpx_filter_refs": {
+                    "speed_filter_report_ref": "outputs/gpx_speed_filter_report.json",
+                    "rest_area_candidates_ref": "outputs/rest_area_candidates.json",
+                },
+                "note_candidate_refs": ["candidates/route_note_candidates.json"],
+                "reference_tracks": [
+                    {"geometry_ref": "outputs/reference_track_display_geometry.json"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_workspace_catalog(
+        workspace,
+        query="route evidence bundle 引用了哪些主要來源 artifact？",
+        limit=6,
+    )
+
+    assert "route summary" in result["field_answer"]
+    assert "speed-filter report" in result["field_answer"]
+    assert "reference-track display geometry" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == project["route_evidence_bundle_ref"]
+
+
+def test_workspace_catalog_answers_source_inbox_import_status(tmp_path: Path) -> None:
+    workspace = tmp_path / "trip"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    project_path = workspace / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["source_inbox_manifest_ref"] = "inbox/source_manifest.json"
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    manifest_path = workspace / project["source_inbox_manifest_ref"]
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "source_file_count": 2,
+                "sources": [
+                    {
+                        "original_path": "/input/imported.gpx",
+                        "imported_as_raw_file": True,
+                    },
+                    {
+                        "original_path": "/input/pending.gpx",
+                        "imported_as_raw_file": False,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_workspace_catalog(
+        workspace,
+        query="source inbox manifest 中哪些原始資料已匯入，哪些尚未處理？",
+        limit=6,
+    )
+
+    assert "已匯入 1/2" in result["field_answer"]
+    assert "imported.gpx" in result["field_answer"]
+    assert "尚未處理 1" in result["field_answer"]
+    assert "pending.gpx" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "inbox/source_manifest.json"
+
+
+def test_workspace_catalog_answers_readiness_findings() -> None:
+    result = search_project_workspace_catalog(
+        PROJECT_ROOT,
+        query="readiness report 目前列出的 blocker 與 warning 各有哪些？",
+        limit=6,
+    )
+
+    assert "status=ready" in result["field_answer"]
+    assert "blockers=none" in result["field_answer"]
+    assert "warnings=none" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/readiness_report.json"
 
 
 def test_workspace_catalog_search_includes_preparation_metadata_files(tmp_path: Path) -> None:
@@ -98,6 +291,101 @@ def test_workspace_catalog_search_includes_preparation_metadata_files(tmp_path: 
     assert any(item["evidence_type"] == "workspace_preparation_metadata" for item in result["results"])
 
 
+def test_workspace_catalog_answers_latest_layer_preparation_status(tmp_path: Path) -> None:
+    workspace = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    summary_path = workspace / "outputs/layers/layer_preparation_summary.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "layer_preparation_summary",
+                "status": "ready",
+                "prepared_at": "2026-07-13T03:29:50Z",
+                "profile": "mac-workstation",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_workspace_catalog(
+        workspace,
+        query=(
+            "請從 workspace catalog 查 layer preparation summary 的最新狀態、"
+            "完成時間與 profile。"
+        ),
+        limit=8,
+    )
+
+    assert "status=ready" in result["field_answer"]
+    assert "completed_at=2026-07-13T03:29:50Z" in result["field_answer"]
+    assert "profile=mac-workstation" in result["field_answer"]
+    assert result["field_answer_source_ref"] == (
+        "outputs/layers/layer_preparation_summary.json"
+    )
+
+
+def test_workspace_catalog_reads_layer_validation_scalar_summary(tmp_path: Path) -> None:
+    workspace = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    project_path = workspace / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["layer_validation_report_ref"] = (
+        "outputs/layers/layer_validation_report.json"
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    report_path = workspace / "outputs" / "layers" / "layer_validation_report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_layer_validation_report",
+                "status": "ready",
+                "completed_at": "2026-07-15T01:00:00Z",
+                "profile": "full",
+                "blocker_count": 0,
+                "warning_count": 0,
+                "blockers": [],
+                "warnings": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_workspace_catalog(
+        workspace,
+        query="layer validation report 有哪些失敗或需要人工複核？",
+        limit=6,
+    )
+
+    validation = next(
+        item
+        for item in result["results"]
+        if item["ref_key"] == "layer_validation_report_ref"
+    )
+    assert "map" in result["filters"]["domains"]
+    assert validation["domain"] == "map"
+    assert validation["summary_fields"] == {
+        "status": "ready",
+        "completed_at": "2026-07-15T01:00:00Z",
+        "profile": "full",
+        "blocker_count": 0,
+        "warning_count": 0,
+    }
+    assert "status=ready" in result["field_answer"]
+    assert "blocker_count=0" in result["field_answer"]
+    assert "warning_count=0" in result["field_answer"]
+    assert "沒有列出失敗或警告項目" in result["field_answer"]
+    assert result["field_answer_source_ref"] == (
+        "outputs/layers/layer_validation_report.json"
+    )
+    assert result["source_ref"] == "outputs/layers/layer_validation_report.json"
+
+
 def test_route_structure_search_answers_cp_count_and_lookup() -> None:
     count_result = search_project_route_structure(
         PROJECT_ROOT,
@@ -122,6 +410,464 @@ def test_route_structure_search_answers_cp_count_and_lookup() -> None:
     assert count_result["route_summary"]["distance_km"] == 55.175
     assert any(item["candidate_id"] == "cp.002" for item in cp_result["results"])
     assert cp_result["boundary"]["phase1_safety_mutation_allowed"] is False
+
+
+def test_route_structure_answers_primary_route_gpx_summary() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="primary route 的 GPX 總里程、點數、最低與最高海拔是多少？",
+    )
+
+    assert "55.175 公里" in result["field_answer"]
+    assert "2612" in result["field_answer"]
+    assert "1216.69" in result["field_answer"]
+    assert "3350.81" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "normalized/routes/route_summary.json"
+
+
+def test_route_structure_answers_route_endpoints_and_bbox() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="路線結構資料中的 route summary 起點、終點與 bbox 座標是多少？",
+    )
+
+    assert "start cp.start=(24.05065393075347,121.21523100882769)" in result[
+        "field_answer"
+    ]
+    assert "finish cp.finish=(23.953395187854767,121.17726685479283)" in result[
+        "field_answer"
+    ]
+    assert (
+        "bbox=[121.17726685479283,23.872665725648403,"
+        "121.28102609887719,24.053969560191035]"
+    ) in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+
+
+def test_route_structure_answers_segment_count_and_names_compactly() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="目前路線被切成多少個 segments，各段名稱是什麼？",
+    )
+
+    assert "segments 共 123 段" in result["field_answer"]
+    assert "Segment 001 至 Segment 123" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "candidates/segments.json"
+
+
+def test_route_structure_answers_segment_display_point_counts() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="segment display geometry 每一段各有多少個座標點？",
+    )
+
+    assert "123 段" in result["field_answer"]
+    assert "總座標點 2731" in result["field_answer"]
+    assert "每段 2-64 點" in result["field_answer"]
+    assert "seg.001=22" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == (
+        "outputs/segment_display_geometry.json"
+    )
+
+
+def test_route_structure_elevation_aggregate_has_exact_answer_priority() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="primary route 的總爬升、總下降與平均坡度資料是否存在？",
+    )
+
+    assert "總爬升" in result["field_answer"]
+    assert "總下降" in result["field_answer"]
+    assert "平均坡度欄位不存在" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+
+
+def test_route_structure_answers_reference_track_name_similarity() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query=(
+            "路線結構資料中的 reference tracks 總共有幾條，"
+            "哪些與 primary route 名稱最接近？"
+        ),
+    )
+
+    assert "reference tracks 共 23 條" in result["field_answer"]
+    assert "2014-10-(09-10)" in result["field_answer"]
+    assert "字串相似度" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/reference_tracks.json"
+
+
+def test_route_structure_answers_geometry_preparation_completeness() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query=(
+            "路線結構資料顯示 primary route 與 reference tracks "
+            "的幾何是否都已準備完成？"
+        ),
+    )
+
+    assert "primary route geometry=prepared" in result["field_answer"]
+    assert "reference track display geometry=prepared" in result["field_answer"]
+    assert "23/23" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+
+
+def test_route_structure_answers_checkpoint_count_and_endpoints() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="checkpoint candidates 共有多少個，第一個與最後一個 CP 是什麼？",
+    )
+
+    assert "checkpoint candidates 共 124 個" in result["field_answer"]
+    assert "第一個 cp.start/Start" in result["field_answer"]
+    assert "最後一個 cp.finish/Finish" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "candidates/checkpoints.json"
+
+
+def test_route_structure_answers_checkpoint_event_time_semantics() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="checkpoint events 中有哪些預計通過時間或實際事件資料？",
+    )
+
+    assert "candidate event projections 共 124 筆" in result["field_answer"]
+    assert "observed_at=124" in result["field_answer"]
+    assert "planned/ETA fields=0" in result["field_answer"]
+    assert "live actual events=0" in result["field_answer"]
+    assert "historical golden GPX" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/checkpoint_events.json"
+
+
+def test_route_structure_joins_route_notes_and_named_points_to_checkpoints() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="哪些 checkpoint 靠近 route note 或地圖標註？",
+    )
+
+    assert "cp.077" in result["field_answer"]
+    assert "083 崩塌區" in result["field_answer"]
+    assert "cp.start" in result["field_answer"]
+    assert "舊林道叉路" in result["field_answer"]
+    assert "cp.003" in result["field_answer"]
+    assert "雲海保線所" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == (
+        "outputs/route_note_ln_proposals.json"
+    )
+    annotation_summary = result["summaries"]["checkpoint_annotations"]
+    assert annotation_summary["route_note_match_count"] > 0
+    assert annotation_summary["named_point_match_count"] > 0
+    assert annotation_summary["source_refs"] == [
+        "outputs/route_note_ln_proposals.json",
+        "outputs/mcp/named_point_evidence.json",
+    ]
+
+
+def test_route_structure_search_exposes_segments_for_cross_tool_risk_join() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="哪些 route segments 含有 extreme 或 very_high risk 點？",
+        limit=5,
+    )
+
+    assert result["filters"]["collection_kind"] == "segments"
+    assert result["result_count"] == 5
+    assert all(item["evidence_type"] == "segment" for item in result["results"])
+    assert result["results"][0]["candidate_id"] == "seg.001"
+    assert all(item["candidate_only"] is True for item in result["results"])
+    assert all(item["runtime_safety_truth"] is False for item in result["results"])
+
+
+def test_route_structure_defers_dtm_coverage_verdict_to_terrain_evidence() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="哪些 route segments 的 DTM coverage 不完整？",
+        limit=5,
+    )
+
+    assert "不含 DTM coverage 完整性欄位" in result["field_answer"]
+    assert "不可從 route list 推論" in result["field_answer"]
+    assert result["field_answer_source_ref"] == "candidates/segments.json"
+    assert result["field_answer_priority"] == 10
+
+
+def test_route_structure_search_reports_longest_segment_aggregate() -> None:
+    segments = json.loads(
+        (PROJECT_ROOT / "candidates" / "segments.json").read_text(encoding="utf-8")
+    )
+    expected = max(segments, key=lambda item: float(item["distance_m"]))
+
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="哪一個 route segment 的距離最長，長度是多少公里？",
+        limit=5,
+    )
+
+    longest = result["summaries"]["longest_segment"]
+    assert longest["candidate_id"] == expected["candidate_id"]
+    assert longest["distance_m"] == expected["distance_m"]
+    assert longest["distance_km"] == round(float(expected["distance_m"]) / 1000, 3)
+    assert expected["candidate_id"] in result["field_answer"]
+    assert str(longest["distance_km"]) in result["field_answer"]
+
+
+def test_route_structure_search_reports_primary_route_elevation_aggregates() -> None:
+    segments = json.loads(
+        (PROJECT_ROOT / "candidates" / "segments.json").read_text(encoding="utf-8")
+    )
+    expected_gain = round(
+        sum(float(item.get("elevation_gain_m") or 0.0) for item in segments),
+        3,
+    )
+    expected_loss = round(
+        sum(float(item.get("elevation_loss_m") or 0.0) for item in segments),
+        3,
+    )
+
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="primary route 的總爬升、總下降與平均坡度資料是否存在？",
+        limit=5,
+    )
+
+    aggregate = result["summaries"]["primary_route_elevation_aggregate"]
+    assert aggregate["segment_count"] == len(segments)
+    assert aggregate["total_ascent_m"] == expected_gain
+    assert aggregate["total_descent_m"] == expected_loss
+    assert aggregate["average_slope_available"] is False
+    assert "平均坡度欄位不存在" in result["field_answer"]
+    assert result["field_answer_source_ref"] == "candidates/segments.json"
+
+
+def test_route_structure_search_reads_resume_segment_report(tmp_path: Path) -> None:
+    workspace = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    project_path = workspace / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["resume_segment_report_ref"] = "outputs/resume_segments.json"
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    report_path = workspace / "outputs" / "resume_segments.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "resume_segment_count": 2,
+                "segments": [
+                    {
+                        "segment_candidate_id": "seg.132",
+                        "from_candidate_id": "cp.129",
+                        "to_candidate_id": "cp.130",
+                        "max_gap_m": 1802.176,
+                    },
+                    {
+                        "segment_candidate_id": "seg.133",
+                        "from_candidate_id": "cp.130",
+                        "to_candidate_id": "cp.131",
+                        "max_gap_m": 1807.29,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_route_structure(
+        workspace,
+        query="resume segment report 找到哪些可續接的路段？",
+        limit=5,
+    )
+
+    assert result["summaries"]["resume_segments"]["count"] == 2
+    assert "seg.132" in result["field_answer"]
+    assert "seg.133" in result["field_answer"]
+    assert result["field_answer_source_ref"] == "outputs/resume_segments.json"
+
+
+def test_route_structure_search_reads_reference_segment_timing(tmp_path: Path) -> None:
+    workspace = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    project_path = workspace / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["reference_segment_timing_ref"] = "outputs/reference_segment_timing.json"
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    report_path = workspace / "outputs" / "reference_segment_timing.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "counts": {"segment_count": 2, "measurement_count": 11},
+                "segments": [
+                    {
+                        "segment_id": "ref.001",
+                        "label": "登山口 -> 山屋",
+                        "sample_count": 6,
+                        "duration_minutes": {"min": 90.0, "p50": 110.0, "p75": 125.0, "max": 150.0},
+                    },
+                    {
+                        "segment_id": "ref.002",
+                        "label": "山屋 -> 稜線",
+                        "sample_count": 5,
+                        "duration_minutes": {"min": 40.0, "p50": 55.0, "p75": 64.0, "max": 80.0},
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_route_structure(
+        workspace,
+        query="reference segment timing 提供了哪些路段時間統計？",
+        limit=5,
+    )
+
+    timing = result["summaries"]["reference_segment_timing"]
+    assert timing["segment_count"] == 2
+    assert timing["measurement_count"] == 11
+    assert timing["segments"][0]["duration_minutes"]["p50"] == 110.0
+    assert "登山口 -> 山屋" in result["field_answer"]
+    assert "p50=110.0 分" in result["field_answer"]
+    assert result["field_answer_source_ref"] == "outputs/reference_segment_timing.json"
+
+
+def test_route_structure_search_joins_rest_areas_to_route_segments(tmp_path: Path) -> None:
+    workspace = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    project_path = workspace / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["rest_area_candidates_ref"] = "outputs/rest_area_candidates.json"
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    report_path = workspace / "outputs" / "rest_area_candidates.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "rest_area_candidate_count": 3,
+                "candidates": [
+                    {
+                        "candidate_id": "rest.001",
+                        "checkpoint_candidate_id": "cp.rest.001",
+                        "route_point_index": 3,
+                        "review_state": "needs_review",
+                    },
+                        {
+                            "candidate_id": "rest.002",
+                            "checkpoint_candidate_id": "cp.rest.002",
+                            "route_point_index": 30,
+                            "review_state": "needs_review",
+                        },
+                    {
+                        "candidate_id": "rest_area.chilai_nanhua_day1_scoutAI.014",
+                        "checkpoint_candidate_id": "cp.rest.014",
+                        "route_point_index": 3,
+                        "review_state": "needs_review",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = search_project_route_structure(
+        workspace,
+        query="rest area candidates 共有幾個，分別靠近哪些 CP 或 segment？",
+        limit=5,
+    )
+
+    rest = result["summaries"]["rest_area_candidates"]
+    assert rest["count"] == 3
+    assert rest["candidates"][0]["segment_candidate_id"] == "seg.001"
+    assert rest["candidates"][0]["nearby_cp_candidate_ids"] == [
+        "cp.start",
+        "cp.001",
+    ]
+    assert rest["candidates"][1]["segment_candidate_id"] == "seg.002"
+    assert "rest.001" in result["field_answer"]
+    assert "rest_area#014" in result["field_answer"]
+    assert "rest_area.chilai_nanhua_day1_scoutAI.014" not in result["field_answer"]
+    assert "seg.001" in result["field_answer"]
+    assert result["field_answer_source_ref"] == "outputs/rest_area_candidates.json"
+    assert result["field_answer_priority"] == 100
+
+
+def test_route_structure_search_joins_historical_gpx_sources_to_overlap_report() -> None:
+    source_index = json.loads(
+        (PROJECT_ROOT / "sources" / "historical_gpx_source_index.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    reference_tracks = json.loads(
+        (PROJECT_ROOT / "outputs" / "reference_tracks.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected_overlap_count = sum(
+        bool(item.get("bbox_comparison", {}).get("overlaps"))
+        for item in reference_tracks["reference_tracks"]
+    )
+
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="historical GPX source index 中哪些來源與目前路線重疊？",
+        limit=5,
+    )
+
+    overlap = result["summaries"]["historical_gpx_overlap"]
+    assert overlap["source_count"] == source_index["source_file_count"]
+    assert overlap["reference_track_count"] == len(
+        reference_tracks["reference_tracks"]
+    )
+    assert overlap["overlap_count"] == expected_overlap_count
+    assert overlap["overlapping_sources"]
+    assert overlap["overlapping_sources"][0]["original_filename"]
+    assert "historical gpx sources" in result["field_answer"].lower()
+    assert str(expected_overlap_count) in result["field_answer"]
+    assert result["field_answer_source_ref"] == "outputs/reference_tracks.json"
+    assert len(result["field_answer"]) < 2400
+
+
+def test_workspace_catalog_counts_route_note_candidate_categories() -> None:
+    result = search_project_workspace_catalog(
+        PROJECT_ROOT,
+        query="route note candidates 有多少筆，分類有哪些？",
+        limit=5,
+    )
+
+    payload = json.loads(
+        (PROJECT_ROOT / "candidates" / "route_note_candidates.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected_count = len(payload["candidates"])
+    assert f"共 {expected_count} 筆" in result["field_answer"]
+    assert "uncategorized_note=" in result["field_answer"]
+    assert "hazard_hint=" in result["field_answer"]
+    assert result["field_answer_source_ref"] == "candidates/route_note_candidates.json"
+    assert result["field_answer_priority"] == 100
+
+
+def test_route_structure_search_exposes_retreat_route_candidates() -> None:
+    result = search_project_route_structure(
+        PROJECT_ROOT,
+        query="哪些 retreat route 最靠近高 terrain risk segment？",
+        limit=5,
+    )
+
+    retreat = result["summaries"]["retreat_routes"]
+    assert retreat["available"] is True
+    assert retreat["count"] >= 1
+    assert retreat["routes"][0]["candidate_id"]
+    assert retreat["routes"][0]["candidate_only"] is True
+    assert retreat["routes"][0]["runtime_safety_truth"] is False
+    assert "retreat route candidates" in result["field_answer"].lower()
+    assert result["field_answer_source_ref"] == "candidates/retreat_routes.json"
+    assert result["field_answer_priority"] == 10
 
 
 def test_major_point_search_finds_heishuitang_near_cp002() -> None:
@@ -193,7 +939,55 @@ def test_major_point_search_reports_workspace_boss_point_count(tmp_path: Path) -
     assert result["result_count"] == 2
     assert result["results"][0]["evidence_type"] == "boss_point"
     assert "2 個" in result["field_answer"]
+    assert "高壓路段 1" in result["field_answer"]
+    assert "高壓路段 2" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/boss_points.json"
     assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_major_point_search_answers_named_mcp_inventory() -> None:
+    result = search_project_major_points(
+        PROJECT_ROOT,
+        query="MCP candidates 共有多少個，哪些 MCP 已有名稱證據？",
+        limit=6,
+    )
+
+    assert "MCP candidates 共 6 個" in result["field_answer"]
+    assert "mcp.heishuitang.002/黑水塘" in result["field_answer"]
+    assert "np.heishuitang" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == "outputs/mcp/mcp_candidates.json"
+
+
+def test_major_point_search_answers_cp_mcp_reconciliation() -> None:
+    result = search_project_major_points(
+        PROJECT_ROOT,
+        query="CP 與 MCP reconciliation 報告中有哪些重疊、缺漏或衝突？",
+        limit=6,
+    )
+
+    assert "supported=5" in result["field_answer"]
+    assert "unsupported=1" in result["field_answer"]
+    assert "mcp.mobile_reception_ridge.006" in result["field_answer"]
+    assert "spacing overlaps=" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+    assert result["field_answer_source_ref"] == (
+        "outputs/mcp/mcp_cp_support_reconciliation.json"
+    )
+
+
+def test_major_point_search_explains_unsupported_mcp_directionality() -> None:
+    result = search_project_major_points(
+        PROJECT_ROOT,
+        query="哪些 CP 目前沒有對應的 MCP support？",
+        limit=6,
+    )
+
+    assert "reconciliation 是 MCP 對 CP 的支援檢查" in result["field_answer"]
+    assert "mcp.mobile_reception_ridge.006" in result["field_answer"]
+    assert "suggested CP" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
 
 
 def test_major_point_search_does_not_treat_missing_boss_artifact_as_zero(

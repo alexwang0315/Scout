@@ -32,6 +32,9 @@ _CITATION_PATTERN = re.compile(
     r"\[([^\[\]]+)\]|【([^【】]+)】"
 )
 _NUMBER_PATTERN = re.compile(r"(?<![A-Za-z])\d+(?:\.\d+)?")
+_DATETIME_LIKE_PATTERN = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}[Tt][0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})?\b"
+)
 _SENSITIVE_KEY_FRAGMENTS = (
     "api_key",
     "authorization",
@@ -626,6 +629,9 @@ class BoundedAgentRuntime:
             "evidence_delta": evidence_delta,
             "answer_contract": (
                 "Rewrite only the unsupported or invalidly cited statements. "
+                "If repair_items contains missing_exact_field_fact, restore every "
+                "listed literal and preserve all clauses of each priority-100 "
+                "field_answer. "
                 "Every factual sentence must cite an exact listed source_ref using "
                 "[exact/source/ref] or a record using [evidence:exact_evidence_id]. "
                 "Never cite continuation_handle, tool_id, or add a "
@@ -658,7 +664,10 @@ class BoundedAgentRuntime:
         cited = _dedupe(_citation_refs(answer))
         invalid = [ref for ref in cited if ref not in valid_refs]
         unsupported: list[str] = []
-        for sentence in _answer_sentences(answer):
+        answer_sentences = _answer_sentences(answer)
+        if not answer_sentences:
+            unsupported.append("answer_contains_no_factual_claim")
+        for sentence in answer_sentences:
             sentence_refs = _citation_refs(sentence)
             if not any(ref in valid_refs for ref in sentence_refs):
                 unsupported.append(sentence.strip())
@@ -678,11 +687,16 @@ class BoundedAgentRuntime:
             if not _claim_has_evidence_overlap(sentence, supporting_cards):
                 unsupported.append(sentence.strip())
                 continue
-            claim_text = _CITATION_PATTERN.sub("", sentence)
+            claim_text = _strip_citations(sentence)
             numbers = _NUMBER_PATTERN.findall(claim_text)
             evidence_numbers = set(
                 _NUMBER_PATTERN.findall(_grounding_evidence_text(supporting_cards))
             )
+            evidence_text = _grounding_evidence_text(supporting_cards)
+            exact_datetimes = _DATETIME_LIKE_PATTERN.findall(claim_text)
+            if any(value not in evidence_text for value in exact_datetimes):
+                unsupported.append(sentence.strip())
+                continue
             if any(
                 not _number_is_grounded(number, evidence_numbers)
                 for number in numbers
@@ -692,13 +706,31 @@ class BoundedAgentRuntime:
         unsupported_safety_claims = [
             claim
             for claim in unsupported
-            if _safety_concepts(_CITATION_PATTERN.sub("", claim))
+            if _safety_concepts(_strip_citations(claim))
         ]
+        missing_exact_facts = _missing_priority_exact_field_facts(
+            answer,
+            evidence_cards,
+        )
+        missing_exact_sources = _missing_priority_exact_field_sources(
+            answer,
+            evidence_cards,
+        )
         repair_items = [
             *(f"invalid_source_ref:{ref}" for ref in invalid),
             *(f"unsupported_claim:{claim}" for claim in unsupported),
+            *(f"missing_exact_field_fact:{fact}" for fact in missing_exact_facts),
+            *(
+                f"missing_exact_field_source_ref:{source_ref}"
+                for source_ref in missing_exact_sources
+            ),
         ]
-        passed = not invalid and not unsupported
+        passed = (
+            not invalid
+            and not unsupported
+            and not missing_exact_facts
+            and not missing_exact_sources
+        )
         if passed:
             output_disposition = "grounded"
         elif unsupported_safety_claims:
@@ -713,6 +745,64 @@ class BoundedAgentRuntime:
             unsupported_claims=unsupported,
             rejected_draft_claims=unsupported_safety_claims,
             repair_items=repair_items,
+        )
+
+    @classmethod
+    def attach_verified_source_refs(
+        cls,
+        answer: str,
+        *,
+        evidence_cards: Sequence[EvidenceCard],
+    ) -> str:
+        """Attach provenance without changing model-authored factual text.
+
+        Small local models often return a supported sentence but omit the
+        requested citation. A source ref is attached only when that exact
+        sentence passes the normal grounding verifier against one evidence
+        card. Unsupported facts and numbers remain unchanged and fail closed.
+        """
+
+        ordered_cards = sorted(
+            enumerate(evidence_cards),
+            key=lambda item: (-_field_answer_priority(item[1]), item[0]),
+        )
+        for _, card in ordered_cards:
+            if _field_answer_priority(card) < 100:
+                continue
+            preferred_refs = _priority_field_answer_source_refs(card)
+            for source_ref in preferred_refs:
+                candidate = answer
+                for sentence in _answer_sentences(answer):
+                    if _citation_refs(sentence):
+                        continue
+                    candidate = candidate.replace(
+                        sentence,
+                        _append_source_ref(sentence, source_ref),
+                        1,
+                    )
+                if cls.verify_synthesis(
+                    candidate,
+                    evidence_cards=evidence_cards,
+                ).passed:
+                    return candidate
+
+        repaired = answer
+        for sentence in _answer_sentences(answer):
+            if _citation_refs(sentence):
+                continue
+            cited_sentence = _first_verified_citation_candidate(
+                sentence,
+                evidence_cards=evidence_cards,
+            )
+            if cited_sentence is None:
+                continue
+            repaired = repaired.replace(sentence, cited_sentence, 1)
+        if repaired == answer:
+            return answer
+        return (
+            repaired
+            if cls.verify_synthesis(repaired, evidence_cards=evidence_cards).passed
+            else answer
         )
 
     @staticmethod
@@ -970,6 +1060,21 @@ def _sanitize_model_value(value: Any, *, depth: int, bounded: bool) -> Any:
 def _extract_source_refs(value: Any) -> list[str]:
     refs: list[str] = []
 
+    if isinstance(value, Mapping):
+        preferred = value.get("field_answer_source_ref")
+        if isinstance(preferred, str) and (safe_ref := _safe_source_ref(preferred)):
+            refs.append(safe_ref)
+        preferred_many = value.get("field_answer_source_refs")
+        if isinstance(preferred_many, Sequence) and not isinstance(
+            preferred_many,
+            (str, bytes, bytearray),
+        ):
+            for preferred_ref in preferred_many:
+                if isinstance(preferred_ref, str) and (
+                    safe_ref := _safe_source_ref(preferred_ref)
+                ):
+                    refs.append(safe_ref)
+
     def visit(item: Any, *, depth: int) -> None:
         if depth > 32:
             return
@@ -1108,7 +1213,7 @@ def _answer_sentences(answer: str) -> list[str]:
     return [
         sentence.strip()
         for sentence in sentences
-        if _TOKEN_PATTERN.search(_CITATION_PATTERN.sub("", sentence))
+        if _TOKEN_PATTERN.search(_strip_citations(sentence))
     ]
 
 
@@ -1117,14 +1222,95 @@ def _citation_refs(value: str) -> list[str]:
         ref
         for match in _CITATION_PATTERN.finditer(value)
         if (ref := (match.group(1) or match.group(2)).strip())
+        and _looks_like_citation_ref(ref)
     ]
+
+
+def _strip_citations(value: str) -> str:
+    return _CITATION_PATTERN.sub(
+        lambda match: (
+            ""
+            if _looks_like_citation_ref(
+                (match.group(1) or match.group(2)).strip()
+            )
+            else match.group(0)
+        ),
+        value,
+    )
+
+
+def _looks_like_citation_ref(value: str) -> bool:
+    """Distinguish provenance refs from numeric arrays such as route bbox."""
+
+    return bool(re.search(r"[A-Za-z_\u3400-\u9fff]", value))
+
+
+def _first_verified_citation_candidate(
+    sentence: str,
+    *,
+    evidence_cards: Sequence[EvidenceCard],
+) -> str | None:
+    ordered_cards = sorted(
+        enumerate(evidence_cards),
+        key=lambda item: (-_field_answer_priority(item[1]), item[0]),
+    )
+    for _, card in ordered_cards:
+        for source_ref in card.source_refs:
+            candidate = _append_source_ref(sentence, source_ref)
+            if BoundedAgentRuntime.verify_synthesis(
+                candidate,
+                evidence_cards=[card],
+            ).passed:
+                return candidate
+        for record in card.evidence_records:
+            candidate = _append_source_ref(
+                sentence,
+                f"evidence:{record.evidence_id}",
+            )
+            if BoundedAgentRuntime.verify_synthesis(
+                candidate,
+                evidence_cards=[card],
+            ).passed:
+                return candidate
+    return None
+
+
+def _field_answer_priority(card: EvidenceCard) -> int:
+    try:
+        return max(0, min(100, int(card.key_values.get("field_answer_priority", 0))))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _priority_field_answer_source_refs(card: EvidenceCard) -> list[str]:
+    key_values = card.key_values
+    refs: list[str] = []
+    preferred_many = key_values.get("field_answer_source_refs")
+    if isinstance(preferred_many, list):
+        refs.extend(
+            str(item).strip()
+            for item in preferred_many
+            if str(item).strip() in card.source_refs
+        )
+    preferred_one = str(key_values.get("field_answer_source_ref") or "").strip()
+    if preferred_one and preferred_one in card.source_refs:
+        refs.insert(0, preferred_one)
+    refs.extend(card.source_refs)
+    return _dedupe(refs)
+
+
+def _append_source_ref(sentence: str, source_ref: str) -> str:
+    citation = f" [{source_ref}]"
+    if sentence and sentence[-1] in ".!?。！？":
+        return f"{sentence[:-1].rstrip()}{citation}{sentence[-1]}"
+    return f"{sentence.rstrip()}{citation}"
 
 
 def _claim_has_evidence_overlap(
     sentence: str,
     evidence_cards: Sequence[EvidenceCard],
 ) -> bool:
-    claim_text = _CITATION_PATTERN.sub("", sentence)
+    claim_text = _strip_citations(sentence)
     claim_tokens = _search_tokens(claim_text)
     informative = {
         token
@@ -1137,6 +1323,8 @@ def _claim_has_evidence_overlap(
     if not _safety_concepts(claim_text).issubset(_safety_concepts(evidence_text)):
         return False
     if _safety_polarity_conflicts(claim_text, evidence_text):
+        return False
+    if _availability_polarity_conflicts(claim_text, evidence_text):
         return False
     claim_concepts = _grounding_concepts(claim_text)
     evidence_concepts = _grounding_concepts(evidence_text)
@@ -1170,6 +1358,24 @@ def _safety_polarity_conflicts(claim: str, evidence: str) -> bool:
             and not evidence_polarity["risk"]
         )
     )
+
+
+def _availability_polarity_conflicts(claim: str, evidence: str) -> bool:
+    normalized_claim = re.sub(r"\s+", " ", claim.casefold())
+    normalized_evidence = re.sub(r"\s+", " ", evidence.casefold())
+    denies_saved_evidence = bool(
+        re.search(r"未保存|沒有保存|無保存|not stored|no saved", normalized_claim)
+    )
+    explicitly_live_only = bool(
+        re.search(r"live|即時|即刻|現場", normalized_claim)
+    )
+    confirms_saved_evidence = bool(
+        re.search(
+            r"saved trace evidence|已保存|有保存|record_count['\" :]?\s*[1-9]",
+            normalized_evidence,
+        )
+    )
+    return denies_saved_evidence and not explicitly_live_only and confirms_saved_evidence
 
 
 def _safety_polarity(value: str) -> dict[str, bool]:
@@ -1233,6 +1439,72 @@ def _grounding_evidence_text(evidence_cards: Sequence[EvidenceCard]) -> str:
         for card in evidence_cards
     ]
     return _json_dumps(claim_payloads)
+
+
+def _missing_priority_exact_field_facts(
+    answer: str,
+    evidence_cards: Sequence[EvidenceCard],
+) -> list[str]:
+    answer_folded = answer.casefold()
+    required: list[str] = []
+    for card in evidence_cards:
+        priority = card.key_values.get("field_answer_priority")
+        try:
+            is_exact = int(priority or 0) >= 100
+        except (TypeError, ValueError):
+            is_exact = False
+        field_answer = str(card.key_values.get("field_answer") or "").strip()
+        if not is_exact or not field_answer:
+            continue
+        required.extend(_priority_exact_field_literals(field_answer))
+    return _dedupe(
+        literal
+        for literal in required
+        if literal.casefold() not in answer_folded
+    )
+
+
+def _missing_priority_exact_field_sources(
+    answer: str,
+    evidence_cards: Sequence[EvidenceCard],
+) -> list[str]:
+    cited = set(_citation_refs(answer))
+    missing: list[str] = []
+    for card in evidence_cards:
+        if _field_answer_priority(card) < 100:
+            continue
+        key_values = card.key_values
+        preferred: list[str] = []
+        preferred_many = key_values.get("field_answer_source_refs")
+        if isinstance(preferred_many, list):
+            preferred.extend(
+                str(item).strip()
+                for item in preferred_many
+                if str(item).strip() in card.source_refs
+            )
+        preferred_one = str(
+            key_values.get("field_answer_source_ref") or ""
+        ).strip()
+        if preferred_one and preferred_one in card.source_refs:
+            preferred.insert(0, preferred_one)
+        preferred = _dedupe(preferred)
+        if preferred and not cited.intersection(preferred):
+            missing.append(preferred[0])
+    return _dedupe(missing)
+
+
+def _priority_exact_field_literals(value: str) -> list[str]:
+    patterns = (
+        r"\b(?:seg|cp|mcp)\.[A-Za-z0-9_.-]+",
+        r"\b[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+){2,}\b",
+        r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b",
+        r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?(?:%|K|km|m)?\b",
+    )
+    return _dedupe(
+        match.group(0)
+        for pattern in patterns
+        for match in re.finditer(pattern, value, flags=re.IGNORECASE)
+    )
 
 
 def _grounding_concepts(value: str) -> set[str]:

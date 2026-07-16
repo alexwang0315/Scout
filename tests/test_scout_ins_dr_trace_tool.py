@@ -118,6 +118,73 @@ def test_analyze_ins_dr_trace_reports_missing_evidence(tmp_path: Path) -> None:
     assert payload["boundary"]["phase1_safety_mutation_allowed"] is False
 
 
+def test_analyze_ins_dr_trace_discovers_saved_synthetic_context_without_claiming_live(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_root = tmp_path / "trip"
+    evidence_path = (
+        project_root
+        / "outputs"
+        / "evals"
+        / "synthetic_context"
+        / "aihat2_ins_dr_trace.jsonl"
+    )
+    evidence_path.parent.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": "saved_trace_fixture"}), encoding="utf-8"
+    )
+    _write_jsonl(
+        evidence_path,
+        [
+            {
+                "timestamp_s": 0,
+                "gps_lat": 24.0,
+                "gps_lon": 121.0,
+                "estimate_lat": 24.0,
+                "estimate_lon": 121.0,
+                "estimate_source": "synthetic_aihat2_route_constrained",
+            },
+            {
+                "timestamp_s": 5,
+                "estimate_lat": 24.0001,
+                "estimate_lon": 121.0001,
+                "estimate_source": "synthetic_aihat2_dead_reckoning",
+                "pdr_delta_m": 12.0,
+            },
+        ],
+    )
+
+    monkeypatch.chdir(tmp_path)
+    payload = analyze_scout_ins_dr_trace(
+        Path("trip"),
+        query="workspace 保存了哪些 GNSS、IMU、PDR sensor snapshot？",
+    )
+
+    assert payload["status"] == "completed"
+    assert payload["record_count"] == 2
+    assert payload["gps_sample_count"] == 1
+    assert payload["ins_dr_sample_count"] == 2
+    assert payload["pdr_only_sample_count"] == 1
+    loaded = [item for item in payload["source_report"] if item["status"] == "loaded"]
+    assert loaded[0]["source_kind"] == "synthetic_aihat2_eval_trace"
+    assert loaded[0]["synthetic"] is True
+    assert loaded[0]["source_ref"] == (
+        "outputs/evals/synthetic_context/aihat2_ins_dr_trace.jsonl"
+    )
+    assert "合成評估 fixture" in payload["field_answer"]
+    assert "synthetic eval trace 來源" in payload["field_answer"]
+    assert "不是 live sensor snapshot" in payload["field_answer"]
+    assert "共 2 筆" in payload["field_answer"]
+    assert "PDR-only 樣本 1" in payload["field_answer"]
+    assert "INS/DR trace decision" not in payload["field_answer"]
+    assert payload["field_answer_priority"] == 100
+    assert payload["field_answer_source_ref"] == (
+        "outputs/evals/synthetic_context/aihat2_ins_dr_trace.jsonl"
+    )
+    assert payload["source_ref"] == payload["field_answer_source_ref"]
+
+
 def _write_jsonl(path: Path, records: list[dict[str, object]]) -> None:
     path.write_text(
         "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records),

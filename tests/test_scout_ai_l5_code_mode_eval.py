@@ -332,6 +332,9 @@ def test_l5_prompt_discloses_compact_project_identity_query_example() -> None:
     assert "collection_path': 'sources'" in prompt
     assert "original_filename" in prompt
     assert "'descending': False" in prompt
+    assert "mileage_tag_alignment_geojson_ref" in prompt
+    assert "properties.source_label" in prompt
+    assert "Do not compare the trail-sign K value directly with route_distance_m" in prompt
 
 
 def test_l5_attempt_requires_both_grounding_and_success_receipt() -> None:

@@ -4,7 +4,10 @@ import json
 import hashlib
 import os
 import re
+import socket
 import threading
+import time
+import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
@@ -111,9 +114,16 @@ from skill_registry_models import SkillAnswerContract
 DEFAULT_TIMEOUT_SECONDS: int | None = None
 DEFAULT_MAX_CONTEXT_CHARS: int | None = None
 DEFAULT_WORKSPACE_TOOL_LIMIT = 10
-# Local Hailo/Ollama needs a finite generation contract; cloud/construction
-# requests remain uncapped unless explicitly configured.
+# Construction requests do not set a Scout completion-token ceiling. Provider
+# context windows remain external hard limits and usage is still recorded.
 DEFAULT_WORKSPACE_MODEL_MAX_TOKENS: int | None = None
+HAILO_CONTEXT_LENGTH_TOKENS = 2_048
+# Leave enough of the Hailo model's external 2K context for an uncapped answer.
+# These are per-request packing targets, not cumulative Scout resource ceilings.
+HAILO_MAX_INPUT_TOKENS = 1_200
+HAILO_CONTINUATION_INPUT_TOKENS = 900
+HAILO_SEMANTIC_STOP = "<SCOUT_DONE>"
+HAILO_STREAM_STALL_TIMEOUT_SECONDS = 45.0
 MIN_GROUNDING_REPAIR_OUTPUT_HEADROOM = 1_024
 HARD_BUDGET_FAIL_CLOSED_OUTPUT = (
     "Scout bounded runtime discarded the model answer because the actual provider "
@@ -237,6 +247,26 @@ class BoundedRequestBudgetStop(RuntimeError):
         super().__init__(reason)
         self.reason = reason
 
+
+class HailoContinuationRequired(RuntimeError):
+    """A Hailo generation must continue in a fresh bounded request."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        partial_output: str = "",
+        response_payload: dict[str, Any] | None = None,
+    ):
+        super().__init__(reason)
+        self.reason = reason
+        self.partial_output = partial_output
+        self.response_payload = dict(response_payload or {})
+
+
+class HailoContextFullError(HailoContinuationRequired):
+    """External Hailo context/cache exhaustion with an optional partial answer."""
+
 PYDANTIC_USAGE_FIELDS = (
     "requests",
     "tool_calls",
@@ -291,7 +321,7 @@ def _serialize_pydantic_response_metadata(result: object) -> dict[str, str]:
 
 
 def _request_timeout(timeout_seconds: int | None) -> float | None:
-    if timeout_seconds is None:
+    if timeout_seconds is None or timeout_seconds <= 0:
         return None
     return float(max(1, timeout_seconds - 1))
 
@@ -7201,6 +7231,15 @@ class PydanticAIEnvRunner:
         self.last_grounding_verification: dict[str, Any] = {}
         self.last_context_handles: list[dict[str, Any]] = []
         self.last_context_reads: list[dict[str, Any]] = []
+        self.last_raw_model_output = ""
+        self.last_raw_model_outputs: list[str] = []
+        self.last_hailo_input_estimated_tokens: int | None = None
+        self.last_hailo_system_chars: int | None = None
+        self.last_hailo_user_chars: int | None = None
+        self.last_hailo_stream_completed = False
+        self.last_hailo_semantic_stop = False
+        self.last_hailo_semantic_completion = False
+        self.last_hailo_context_full_reason: str | None = None
 
     @classmethod
     def from_profile(
@@ -7209,7 +7248,7 @@ class PydanticAIEnvRunner:
         *,
         environ: dict[str, str] | None = None,
     ) -> "PydanticAIEnvRunner":
-        resolved_environ = environ or os.environ
+        resolved_environ = os.environ if environ is None else environ
         return cls(
             model_name=profile.model_name,
             base_url=profile.resolved_base_url(),
@@ -7264,6 +7303,9 @@ class PydanticAIEnvRunner:
         self.last_grounding_verification = {}
         self.last_context_handles = []
         self.last_context_reads = []
+        self.last_raw_model_output = ""
+        self.last_raw_model_outputs = []
+        self._reset_hailo_request_state()
         executor = ThreadPoolExecutor(max_workers=1)
         future = executor.submit(self._run_model, prompt, timeout_seconds)
         try:
@@ -7293,6 +7335,9 @@ class PydanticAIEnvRunner:
         self.last_grounding_verification = {}
         self.last_context_handles = []
         self.last_context_reads = []
+        self.last_raw_model_output = ""
+        self.last_raw_model_outputs = []
+        self._reset_hailo_request_state()
         if (
             not self.workspace_tools_enabled
             and not self.bounded_agent_runtime_enabled
@@ -9118,7 +9163,10 @@ class PydanticAIEnvRunner:
                 dict(raw_arguments) if isinstance(raw_arguments, dict) else {}
             )
             arguments.pop("project_root", None)
-            tool_query = str(arguments.pop("query", question) or question)
+            tool_query = _merge_workspace_tool_query(
+                question,
+                str(arguments.pop("query", question) or question),
+            )
             raw_limit = arguments.pop("limit", tool_context.default_limit)
             limit = (
                 raw_limit
@@ -9236,39 +9284,152 @@ class PydanticAIEnvRunner:
             )
             return HARD_BUDGET_FAIL_CLOSED_OUTPUT
 
-        output = self._run_hailo_ollama_chat(
-            synthesis_prompt,
-            system_prompt=system_prompt,
-            max_tokens=request_max_tokens,
-            timeout_seconds=request_timeout_seconds,
-        )
         evidence_chars = sum(
             len(card.model_dump_json()) for card in evidence_cards
         )
-        prompt_eval_count = getattr(self, "last_hailo_prompt_eval_count", None)
-        output_eval_count = getattr(self, "last_hailo_eval_count", None)
-        request_record = AgentRequestLedger(
-            request_index=1,
-            system_chars=len(system_prompt),
-            user_history_chars=max(0, len(synthesis_prompt) - evidence_chars),
-            tool_result_chars=evidence_chars,
-            input_tokens=(
-                prompt_eval_count
-                if isinstance(prompt_eval_count, int)
-                else estimated_input_tokens
-            ),
-            output_tokens=(
-                output_eval_count
-                if isinstance(output_eval_count, int)
-                else estimate_tokens(output)
-            ),
-            tool_call_count=len(attempted_tool_ids),
-        )
+        request_records: list[dict[str, Any]] = []
+        output: str | None = None
+        partial_output = ""
+        current_prompt = synthesis_prompt
+        current_system_prompt = system_prompt
+        current_semantic_stop_enabled = True
+        continuation_count = 0
+        context_full_recovery_count = 0
+        last_continuation_reason = ""
+        while len(request_records) < bounded_runtime.budget.max_requests:
+            request_index = len(request_records) + 1
+            input_token_budget = (
+                HAILO_MAX_INPUT_TOKENS
+                if request_index == 1
+                else HAILO_CONTINUATION_INPUT_TOKENS
+            )
+            continuation_error: HailoContinuationRequired | None = None
+            try:
+                candidate_output = self._run_hailo_ollama_chat(
+                    current_prompt,
+                    system_prompt=current_system_prompt,
+                    max_tokens=request_max_tokens,
+                    timeout_seconds=request_timeout_seconds,
+                    input_token_budget=input_token_budget,
+                    semantic_stop_enabled=current_semantic_stop_enabled,
+                )
+            except HailoContinuationRequired as exc:
+                continuation_error = exc
+                continuation_count += 1
+                last_continuation_reason = exc.reason
+                if isinstance(exc, HailoContextFullError):
+                    context_full_recovery_count += 1
+                partial_output = exc.partial_output or partial_output
+                candidate_output = exc.partial_output
+
+            prompt_eval_count = getattr(
+                self,
+                "last_hailo_prompt_eval_count",
+                None,
+            )
+            output_eval_count = getattr(self, "last_hailo_eval_count", None)
+            packed_input_tokens = getattr(
+                self,
+                "last_hailo_input_estimated_tokens",
+                None,
+            )
+            actual_system_chars = getattr(self, "last_hailo_system_chars", None)
+            actual_user_chars = getattr(self, "last_hailo_user_chars", None)
+            request_record = AgentRequestLedger(
+                request_index=request_index,
+                system_chars=(
+                    actual_system_chars
+                    if isinstance(actual_system_chars, int)
+                    else len(current_system_prompt)
+                ),
+                user_history_chars=(
+                    max(0, actual_user_chars - evidence_chars)
+                    if isinstance(actual_user_chars, int)
+                    else max(0, len(current_prompt) - evidence_chars)
+                ),
+                tool_result_chars=min(
+                    evidence_chars,
+                    actual_user_chars
+                    if isinstance(actual_user_chars, int)
+                    else len(current_prompt),
+                ),
+                input_tokens=(
+                    prompt_eval_count
+                    if isinstance(prompt_eval_count, int)
+                    else packed_input_tokens
+                    if isinstance(packed_input_tokens, int)
+                    else _estimate_hailo_chat_input_tokens(
+                        current_system_prompt,
+                        current_prompt,
+                    )
+                ),
+                output_tokens=(
+                    output_eval_count
+                    if isinstance(output_eval_count, int)
+                    else estimate_tokens(candidate_output)
+                ),
+                tool_call_count=(
+                    len(attempted_tool_ids) if request_index == 1 else 0
+                ),
+                retry_count=1 if request_index > 1 else 0,
+            )
+            request_records.append(request_record.model_dump(mode="json"))
+            if continuation_error is None:
+                output = candidate_output
+                break
+            if len(request_records) >= bounded_runtime.budget.max_requests:
+                break
+            current_prompt = _build_hailo_bounded_continuation_prompt(
+                question=question,
+                evidence_cards=evidence_cards,
+                missing_evidence=missing_evidence,
+                partial_output=partial_output,
+                continuation_index=request_index,
+            )
+            current_system_prompt = (
+                "Continue the interrupted bounded Scout evidence synthesis."
+            )
+            current_semantic_stop_enabled = (
+                continuation_error.reason != "empty_semantic_stop"
+            )
+
         ledger = _finalize_agent_run_ledger(
             bounded_runtime,
-            [request_record.model_dump(mode="json")],
+            request_records,
             selected_tool_ids=required_tool_ids,
             executed_tool_ids=attempted_tool_ids,
+        )
+        self.last_model_response_metadata = {
+            **self.last_model_response_metadata,
+            "continuation_count": str(continuation_count),
+            "context_full_recovery_count": str(context_full_recovery_count),
+        }
+        if output is None:
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                rejected_draft_claims=(
+                    [partial_output] if partial_output.strip() else []
+                ),
+                repair_items=[
+                    f"hailo_continuation_required:{last_continuation_reason}",
+                    "continuation_requests_exhausted",
+                    "fail_closed_no_grounded_answer",
+                ],
+            )
+            ledger = ledger.model_copy(update={"budget_stop_reason": last_continuation_reason})
+            self._store_bounded_hailo_run(
+                ledger=ledger,
+                evidence_cards=evidence_cards,
+                verification=verification,
+            )
+            return (
+                "AI HAT+2 在 continuation 後仍未產生完整答案；"
+                "Scout 已保存證據與 partial output，未把未完成內容當成答案。"
+            )
+        output = _hailo_model_authored_exact_answer_excerpt(
+            output,
+            evidence_cards=evidence_cards,
         )
         verification = (
             bounded_runtime.verify_synthesis(
@@ -9281,6 +9442,231 @@ class PydanticAIEnvRunner:
                 output_disposition="grounded",
             )
         )
+        if not verification.passed:
+            provenance_repaired_output = bounded_runtime.attach_verified_source_refs(
+                output,
+                evidence_cards=evidence_cards,
+            )
+            if provenance_repaired_output != output:
+                output = provenance_repaired_output
+                verification = bounded_runtime.verify_synthesis(
+                    output,
+                    evidence_cards=evidence_cards,
+                )
+        repairs_used = 0
+        repair_continuation_partial = ""
+        repair_continuation_index = 0
+        repair_semantic_stop_enabled = True
+        while (
+            not verification.passed
+            and bool(output.strip())
+            and repairs_used < bounded_runtime.budget.max_repairs
+            and ledger.budget_stop_reason is None
+            and ledger.request_count < bounded_runtime.budget.max_requests
+        ):
+            repair_evidence_cards = (
+                _priority_exact_evidence_cards(evidence_cards)
+                if any(
+                    item.startswith("missing_exact_field_")
+                    for item in verification.repair_items
+                )
+                else evidence_cards
+            )
+            if repair_continuation_index:
+                repair_prompt = _build_hailo_bounded_continuation_prompt(
+                    question=question,
+                    evidence_cards=repair_evidence_cards,
+                    missing_evidence=missing_evidence,
+                    partial_output=repair_continuation_partial,
+                    continuation_index=repair_continuation_index,
+                )
+                repair_system_prompt = (
+                    "Continue the interrupted grounding repair from verified "
+                    "Scout evidence only."
+                )
+            else:
+                repair_prompt = bounded_runtime.build_grounding_repair_prompt(
+                    question=question,
+                    draft_answer=output,
+                    verification=verification,
+                    evidence_cards=repair_evidence_cards,
+                )
+                repair_system_prompt = (
+                    "Repair the answer from verified Scout evidence only. "
+                    "Do not add facts or call tools."
+                )
+            repair_estimated_input_tokens = estimate_tokens(
+                f"{repair_system_prompt}\n{repair_prompt}"
+            )
+            try:
+                repaired_output = self._run_hailo_ollama_chat(
+                    repair_prompt,
+                    system_prompt=repair_system_prompt,
+                    max_tokens=request_max_tokens,
+                    timeout_seconds=request_timeout_seconds,
+                    input_token_budget=HAILO_CONTINUATION_INPUT_TOKENS,
+                    semantic_stop_enabled=repair_semantic_stop_enabled,
+                )
+            except HailoContinuationRequired as exc:
+                continuation_count += 1
+                last_continuation_reason = exc.reason
+                if isinstance(exc, HailoContextFullError):
+                    context_full_recovery_count += 1
+                repair_continuation_partial = (
+                    exc.partial_output or repair_continuation_partial
+                )
+                repair_continuation_index += 1
+                repair_semantic_stop_enabled = exc.reason != "empty_semantic_stop"
+                repair_prompt_eval_count = getattr(
+                    self,
+                    "last_hailo_prompt_eval_count",
+                    None,
+                )
+                repair_output_eval_count = getattr(
+                    self,
+                    "last_hailo_eval_count",
+                    None,
+                )
+                repair_record = AgentRequestLedger(
+                    request_index=len(request_records) + 1,
+                    system_chars=len(repair_system_prompt),
+                    user_history_chars=len(output),
+                    tool_result_chars=sum(
+                        len(card.model_dump_json())
+                        for card in repair_evidence_cards
+                    ),
+                    input_tokens=(
+                        repair_prompt_eval_count
+                        if isinstance(repair_prompt_eval_count, int)
+                        else self.last_hailo_input_estimated_tokens
+                        if isinstance(self.last_hailo_input_estimated_tokens, int)
+                        else repair_estimated_input_tokens
+                    ),
+                    output_tokens=(
+                        repair_output_eval_count
+                        if isinstance(repair_output_eval_count, int)
+                        else estimate_tokens(exc.partial_output)
+                    ),
+                    retry_count=1,
+                )
+                request_records = [
+                    *request_records,
+                    repair_record.model_dump(mode="json"),
+                ]
+                ledger = _finalize_agent_run_ledger(
+                    bounded_runtime,
+                    request_records,
+                    selected_tool_ids=required_tool_ids,
+                    executed_tool_ids=attempted_tool_ids,
+                )
+                if ledger.request_count < bounded_runtime.budget.max_requests:
+                    continue
+                verification = verification.model_copy(
+                    update={
+                        "repair_items": list(
+                            dict.fromkeys(
+                                [
+                                    *verification.repair_items,
+                                    f"repair_continuation_exhausted:{exc.reason}",
+                                ]
+                            )
+                        )
+                    }
+                )
+                break
+            except Exception as exc:  # noqa: BLE001 - retain the first draft trace.
+                verification = verification.model_copy(
+                    update={
+                        "repair_items": list(
+                            dict.fromkeys(
+                                [
+                                    *verification.repair_items,
+                                    f"repair_transport_error:{type(exc).__name__}",
+                                ]
+                            )
+                        )
+                    }
+                )
+                break
+            else:
+                repairs_used += 1
+                repair_continuation_partial = ""
+                repair_continuation_index = 0
+                repair_semantic_stop_enabled = True
+                repair_prompt_eval_count = getattr(
+                    self,
+                    "last_hailo_prompt_eval_count",
+                    None,
+                )
+                repair_output_eval_count = getattr(
+                    self,
+                    "last_hailo_eval_count",
+                    None,
+                )
+                repair_record = AgentRequestLedger(
+                    request_index=len(request_records) + 1,
+                    system_chars=len(repair_system_prompt),
+                    user_history_chars=len(output),
+                    tool_result_chars=evidence_chars,
+                    input_tokens=(
+                        repair_prompt_eval_count
+                        if isinstance(repair_prompt_eval_count, int)
+                        else self.last_hailo_input_estimated_tokens
+                        if isinstance(self.last_hailo_input_estimated_tokens, int)
+                        else repair_estimated_input_tokens
+                    ),
+                    output_tokens=(
+                        repair_output_eval_count
+                        if isinstance(repair_output_eval_count, int)
+                        else estimate_tokens(repaired_output)
+                    ),
+                    repair_count=1,
+                )
+                request_records = [
+                    *request_records,
+                    repair_record.model_dump(mode="json"),
+                ]
+                ledger = _finalize_agent_run_ledger(
+                    bounded_runtime,
+                    request_records,
+                    selected_tool_ids=required_tool_ids,
+                    executed_tool_ids=attempted_tool_ids,
+                )
+                previous_output = output
+                output = _hailo_model_authored_exact_answer_excerpt(
+                    repaired_output,
+                    evidence_cards=evidence_cards,
+                )
+                verification = bounded_runtime.verify_synthesis(
+                    output,
+                    evidence_cards=evidence_cards,
+                )
+                if not verification.passed:
+                    provenance_repaired_output = (
+                        bounded_runtime.attach_verified_source_refs(
+                            output,
+                            evidence_cards=evidence_cards,
+                        )
+                    )
+                    if provenance_repaired_output != output:
+                        output = provenance_repaired_output
+                        verification = bounded_runtime.verify_synthesis(
+                            output,
+                            evidence_cards=evidence_cards,
+                        )
+                if output.strip() == previous_output.strip():
+                    break
+        if not verification.passed:
+            provenance_repaired_output = bounded_runtime.attach_verified_source_refs(
+                output,
+                evidence_cards=evidence_cards,
+            )
+            if provenance_repaired_output != output:
+                output = provenance_repaired_output
+                verification = bounded_runtime.verify_synthesis(
+                    output,
+                    evidence_cards=evidence_cards,
+                )
         budget_overrun_reason = _actual_budget_overrun_reason(ledger)
         if budget_overrun_reason is not None:
             verification = GroundingVerification(
@@ -9321,6 +9707,11 @@ class PydanticAIEnvRunner:
                 "目前無法從已驗證的 Scout 證據產生可靠答案；"
                 "回答未通過證據引用檢查。"
             )
+        self.last_model_response_metadata = {
+            **self.last_model_response_metadata,
+            "continuation_count": str(continuation_count),
+            "context_full_recovery_count": str(context_full_recovery_count),
+        }
         self._store_bounded_hailo_run(
             ledger=ledger,
             evidence_cards=evidence_cards,
@@ -9349,6 +9740,20 @@ class PydanticAIEnvRunner:
             "output_tokens": ledger.output_tokens,
         }
 
+    def _reset_hailo_request_state(self) -> None:
+        self.last_hailo_response_received = False
+        self.last_hailo_response_model = None
+        self.last_hailo_prompt_eval_count = None
+        self.last_hailo_eval_count = None
+        self.last_hailo_total_duration_ns = None
+        self.last_hailo_input_estimated_tokens = None
+        self.last_hailo_system_chars = None
+        self.last_hailo_user_chars = None
+        self.last_hailo_stream_completed = False
+        self.last_hailo_semantic_stop = False
+        self.last_hailo_semantic_completion = False
+        self.last_hailo_context_full_reason = None
+
     def _run_hailo_ollama_chat(
         self,
         prompt: str,
@@ -9356,17 +9761,47 @@ class PydanticAIEnvRunner:
         system_prompt: str,
         max_tokens: int | None = None,
         timeout_seconds: int | None = None,
+        input_token_budget: int | None = None,
+        semantic_stop_enabled: bool = True,
     ) -> str:
-        self.last_hailo_response_received = False
-        self.last_hailo_response_model = None
-        self.last_hailo_prompt_eval_count = None
-        self.last_hailo_eval_count = None
-        self.last_hailo_total_duration_ns = None
+        self._reset_hailo_request_state()
         base_url = _normalize_hailo_ollama_base_url(self.base_url)
         if not _is_local_assistant_base_url(base_url):
             raise ValueError("hailo_ollama base URL must use an approved loopback host")
         model_name = _normalize_hailo_ollama_model_name(self.model_name)
-        prompt = _compact_hailo_ollama_prompt(prompt)
+        control_prompt = prompt
+        if prompt.startswith(
+            (
+                "SCOUT_BOUNDED_SYNTHESIS_V1\n",
+                "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1\n",
+                "SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1\n",
+            )
+        ):
+            system_prompt = (
+                "你是 Scout AI 的 AI HAT+2 本地證據合成模型。"
+                "只能使用 evidence_cards 回答，不得補充外部常識。"
+                "第一句必須直接回答問題並包含至少一項 key_values 事實，"
+                "不可只輸出括號引用。"
+                "每個句子只引用最直接的一個 source_ref 精確字串；"
+                "禁止把其他 source_refs 另列為沒有內容的引用句；"
+                "只輸出繁體中文最終答案，不輸出推理過程。"
+            )
+        if prompt.startswith("SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1\n"):
+            system_prompt = (
+                "你是 Scout AI 的 AI HAT+2 引用修正模型。"
+                "以 evidence_cards 為準；遇到 priority-100 field_answer 必須完整重寫"
+                "全部子句與數值，draft_answer 只用來定位缺口。"
+                "加入最直接的精確 source_ref，不可新增其他事實；"
+                "只輸出修正後的繁體中文答案。"
+            )
+        if prompt.startswith("SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1\n"):
+            system_prompt = (
+                "你是 Scout AI 的 AI HAT+2 context-full continuation 模型。"
+                "只能使用 evidence_cards 回答；partial_answer 只是未完成草稿，"
+                "請重新輸出一份完整、精簡、可獨立閱讀的繁體中文答案。"
+                "停止前必須先輸出至少一項 evidence_cards 事實，禁止空答案。"
+                "不得新增事實或推理過程，每句只引用最直接的一個 source_ref。"
+            )
         if (
             "AI_HAT_MINIMAL_GROUNDING_V1" in prompt
             or "AI_HAT_GROUNDED_SYNTHESIS_V1" in prompt
@@ -9538,28 +9973,64 @@ class PydanticAIEnvRunner:
             )
         if "AI_HAT_TYPED_DECISION_V1" in prompt:
             system_prompt = "只輸出一個分類 token。"
+        bounded_hailo_prompt = control_prompt.startswith(
+            (
+                "SCOUT_BOUNDED_SYNTHESIS_V1\n",
+                "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1\n",
+                "SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1\n",
+            )
+        )
+        use_semantic_stop = bounded_hailo_prompt and semantic_stop_enabled
+        if use_semantic_stop:
+            system_prompt = (
+                f"{system_prompt} 完成最終答案後輸出 {HAILO_SEMANTIC_STOP}。"
+            )
+        prompt = _compact_hailo_ollama_prompt(
+            control_prompt,
+            system_prompt=system_prompt,
+            max_input_tokens=input_token_budget or HAILO_MAX_INPUT_TOKENS,
+        )
         num_predict = (
             max_tokens
             if max_tokens is not None
             else self.workspace_model_max_tokens
         )
-        messages = [{"role": "system", "content": system_prompt}]
-        if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt:
-            messages.extend(_local_grounded_label_cleanup_few_shot_messages())
-        messages.append(
-            {"role": "user", "content": _strip_hailo_control_markers(prompt)}
+        normalized_system_prompt = _normalize_hailo_chat_content(system_prompt)
+        normalized_user_prompt = _normalize_hailo_chat_content(
+            _strip_hailo_control_markers(prompt)
         )
-        messages = [
-            {
-                **message,
-                "content": _normalize_hailo_chat_content(message["content"]),
-            }
-            for message in messages
-        ]
+        if bounded_hailo_prompt:
+            # Hailo Ollama 5.3 keeps a model-level conversation cache and rejects
+            # a repeated system role after a failed/continued request. Keeping the
+            # bounded instruction and evidence in one user message makes every
+            # continuation valid while preserving the same packed content.
+            messages = [
+                {
+                    "role": "user",
+                    "content": _normalize_hailo_chat_content(
+                        f"{normalized_system_prompt} {normalized_user_prompt}"
+                    ),
+                }
+            ]
+        else:
+            messages = [{"role": "system", "content": normalized_system_prompt}]
+            if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt:
+                messages.extend(_local_grounded_label_cleanup_few_shot_messages())
+            messages.append({"role": "user", "content": normalized_user_prompt})
+        semantic_sentence_target = (
+            _hailo_bounded_semantic_sentence_target(prompt)
+            if bounded_hailo_prompt
+            else 1
+        )
+        semantic_completion_allowed = (
+            _hailo_bounded_semantic_completion_allowed(prompt)
+            if bounded_hailo_prompt
+            else False
+        )
         payload = {
             "model": model_name,
             "messages": messages,
-            "stream": False,
+            "stream": True,
             "options": {
                 **(
                     {"num_predict": num_predict}
@@ -9695,18 +10166,176 @@ class PydanticAIEnvRunner:
                 ),
             },
         }
+        if use_semantic_stop:
+            payload["options"]["stop"] = list(
+                dict.fromkeys(
+                    [*payload["options"].get("stop", []), HAILO_SEMANTIC_STOP]
+                )
+            )
+        self.last_hailo_system_chars = len(normalized_system_prompt)
+        self.last_hailo_user_chars = len(normalized_user_prompt)
+        self.last_hailo_input_estimated_tokens = _estimate_hailo_chat_input_tokens(
+            normalized_system_prompt,
+            normalized_user_prompt,
+        )
         request = urllib.request.Request(
             f"{base_url}/api/chat",
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(
-            request,
-            timeout=_request_timeout(timeout_seconds),
-        ) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
-        self.last_hailo_response_received = True
+        content_parts: list[str] = []
+        response_payload: dict[str, Any] = {}
+        response_count = 0
+        stream_done = False
+        semantic_stop = False
+        semantic_completion = False
+        visible_content_progress_at = time.monotonic()
+        transport_timeout = _request_timeout(timeout_seconds)
+        if bounded_hailo_prompt:
+            transport_timeout = min(
+                transport_timeout or HAILO_STREAM_STALL_TIMEOUT_SECONDS,
+                HAILO_STREAM_STALL_TIMEOUT_SECONDS,
+            )
+        elif transport_timeout is None:
+            transport_timeout = HAILO_STREAM_STALL_TIMEOUT_SECONDS
+        try:
+            with urllib.request.urlopen(
+                request,
+                timeout=transport_timeout,
+            ) as response:
+                for response_payload in _iter_hailo_stream_payloads(response):
+                    response_count += 1
+                    self.last_hailo_response_received = True
+                    error_text = str(response_payload.get("error") or "")
+                    if _is_hailo_context_full_reason(error_text):
+                        partial_output = _clean_hailo_stream_text(content_parts)
+                        self._record_hailo_context_full(
+                            reason="provider_context_full",
+                            partial_output=partial_output,
+                            response_payload=response_payload,
+                            model_name=model_name,
+                        )
+                        raise HailoContextFullError(
+                            "provider_context_full",
+                            partial_output=partial_output,
+                            response_payload=response_payload,
+                        )
+                    chunk = _hailo_stream_content(response_payload)
+                    if chunk:
+                        content_parts.append(chunk)
+                        visible_content_progress_at = time.monotonic()
+                    elif (
+                        bounded_hailo_prompt
+                        and time.monotonic() - visible_content_progress_at
+                        >= HAILO_STREAM_STALL_TIMEOUT_SECONDS
+                    ):
+                        partial_output = _clean_hailo_stream_text(content_parts)
+                        self._record_hailo_context_full(
+                            reason="visible_content_stalled",
+                            partial_output=partial_output,
+                            response_payload=response_payload,
+                            model_name=model_name,
+                        )
+                        raise HailoContextFullError(
+                            "visible_content_stalled",
+                            partial_output=partial_output,
+                            response_payload=response_payload,
+                        )
+                    combined_output = "".join(content_parts)
+                    if use_semantic_stop and HAILO_SEMANTIC_STOP in combined_output:
+                        semantic_stop = True
+                        stream_done = True
+                        break
+                    if (
+                        bounded_hailo_prompt
+                        and _hailo_bounded_exact_answers_covered(
+                            prompt,
+                            combined_output,
+                        )
+                    ):
+                        semantic_completion = True
+                        stream_done = True
+                        break
+                    if (
+                        bounded_hailo_prompt
+                        and semantic_completion_allowed
+                        and _hailo_stream_semantically_complete(
+                            combined_output,
+                            expected_sentence_count=semantic_sentence_target,
+                        )
+                    ):
+                        semantic_completion = True
+                        stream_done = True
+                        break
+                    if response_payload.get("done") is True:
+                        stream_done = True
+                        break
+        except HailoContextFullError:
+            raise
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            if bounded_hailo_prompt and _is_hailo_context_full_reason(error_body):
+                partial_output = _clean_hailo_stream_text(content_parts)
+                self._record_hailo_context_full(
+                    reason="provider_http_context_full",
+                    partial_output=partial_output,
+                    response_payload=response_payload,
+                    model_name=model_name,
+                )
+                raise HailoContextFullError(
+                    "provider_http_context_full",
+                    partial_output=partial_output,
+                    response_payload=response_payload,
+                ) from exc
+            raise
+        except (socket.timeout, TimeoutError) as exc:
+            partial_output = _clean_hailo_stream_text(content_parts)
+            if bounded_hailo_prompt:
+                self._record_hailo_context_full(
+                    reason="stream_stalled",
+                    partial_output=partial_output,
+                    response_payload=response_payload,
+                    model_name=model_name,
+                )
+                raise HailoContextFullError(
+                    "stream_stalled",
+                    partial_output=partial_output,
+                    response_payload=response_payload,
+                ) from exc
+            raise
+
+        output = _clean_hailo_stream_text(content_parts)
+        done_reason = str(response_payload.get("done_reason") or "")
+        if _is_hailo_context_full_reason(done_reason):
+            self._record_hailo_context_full(
+                reason=done_reason or "provider_context_full",
+                partial_output=output,
+                response_payload=response_payload,
+                model_name=model_name,
+            )
+            raise HailoContextFullError(
+                done_reason or "provider_context_full",
+                partial_output=output,
+                response_payload=response_payload,
+            )
+        if response_count and not stream_done and response_payload.get("done") is False:
+            self._record_hailo_context_full(
+                reason="stream_ended_without_done",
+                partial_output=output,
+                response_payload=response_payload,
+                model_name=model_name,
+            )
+            raise HailoContextFullError(
+                "stream_ended_without_done",
+                partial_output=output,
+                response_payload=response_payload,
+            )
+
+        self.last_hailo_stream_completed = stream_done or "done" not in response_payload
+        self.last_hailo_semantic_stop = semantic_stop
+        self.last_hailo_semantic_completion = semantic_completion
+        self.last_hailo_response_received = response_count > 0
         self.last_hailo_response_model = str(response_payload.get("model") or model_name)
         self.last_hailo_prompt_eval_count = _optional_nonnegative_int(
             response_payload.get("prompt_eval_count")
@@ -9717,20 +10346,86 @@ class PydanticAIEnvRunner:
         self.last_hailo_total_duration_ns = _optional_nonnegative_int(
             response_payload.get("total_duration")
         )
-        message = response_payload.get("message")
-        if isinstance(message, dict):
-            content = message.get("content")
-            if isinstance(content, str) and content.strip():
-                return content.strip()
-        response_text = response_payload.get("response")
-        if isinstance(response_text, str) and response_text.strip():
-            return response_text.strip()
+        self.last_model_response_metadata = {
+            "model_name": self.last_hailo_response_model,
+            "finish_reason": (
+                "semantic_stop"
+                if semantic_stop
+                else "semantic_completion"
+                if semantic_completion
+                else done_reason
+            ),
+            "provider": "hailo_ollama",
+            "streaming": "true",
+            "semantic_stop": str(semantic_stop).lower(),
+            "semantic_completion": str(semantic_completion).lower(),
+            "input_pack_estimated_tokens": str(
+                self.last_hailo_input_estimated_tokens or 0
+            ),
+        }
+        if output:
+            self.last_raw_model_output = output
+            self.last_raw_model_outputs.append(output)
+            return output
+        if use_semantic_stop and semantic_stop:
+            self.last_model_response_metadata = {
+                **self.last_model_response_metadata,
+                "finish_reason": "empty_semantic_stop",
+            }
+            raise HailoContinuationRequired(
+                "empty_semantic_stop",
+                response_payload=response_payload,
+            )
+        if bounded_hailo_prompt:
+            self.last_model_response_metadata = {
+                **self.last_model_response_metadata,
+                "finish_reason": "empty_stream_completion",
+            }
+            raise HailoContinuationRequired(
+                "empty_stream_completion",
+                response_payload=response_payload,
+            )
         payload_keys = ",".join(sorted(str(key) for key in response_payload.keys()))
-        done_reason = response_payload.get("done_reason")
         raise RuntimeError(
             "hailo_ollama response did not contain assistant content"
             f"; keys={payload_keys}; done_reason={done_reason}"
         )
+
+    def _record_hailo_context_full(
+        self,
+        *,
+        reason: str,
+        partial_output: str,
+        response_payload: dict[str, Any],
+        model_name: str,
+    ) -> None:
+        self.last_hailo_context_full_reason = reason
+        self.last_hailo_stream_completed = False
+        self.last_hailo_response_received = bool(response_payload or partial_output)
+        self.last_hailo_response_model = str(response_payload.get("model") or model_name)
+        self.last_hailo_prompt_eval_count = _optional_nonnegative_int(
+            response_payload.get("prompt_eval_count")
+        )
+        self.last_hailo_eval_count = _optional_nonnegative_int(
+            response_payload.get("eval_count")
+        )
+        self.last_hailo_total_duration_ns = _optional_nonnegative_int(
+            response_payload.get("total_duration")
+        )
+        self.last_model_response_metadata = {
+            "model_name": self.last_hailo_response_model,
+            "finish_reason": "context_full",
+            "provider": "hailo_ollama",
+            "streaming": "true",
+            "semantic_stop": "false",
+            "input_pack_estimated_tokens": str(
+                self.last_hailo_input_estimated_tokens or 0
+            ),
+            "external_limit": reason,
+        }
+        if partial_output:
+            self.last_raw_model_output = partial_output
+            self.last_raw_model_outputs.append(partial_output)
 
     def _native_capabilities(self) -> list[object]:
         if self.bounded_agent_runtime_enabled and not self.workspace_tools_enabled:
@@ -11574,6 +12269,23 @@ def _hailo_endpoint_response_trace(runner: object) -> dict[str, object]:
         "prompt_eval_count": getattr(runner, "last_hailo_prompt_eval_count", None),
         "eval_count": getattr(runner, "last_hailo_eval_count", None),
         "total_duration_ns": getattr(runner, "last_hailo_total_duration_ns", None),
+        "input_estimated_tokens": getattr(
+            runner,
+            "last_hailo_input_estimated_tokens",
+            None,
+        ),
+        "stream_completed": getattr(runner, "last_hailo_stream_completed", None),
+        "semantic_stop": getattr(runner, "last_hailo_semantic_stop", None),
+        "semantic_completion": getattr(
+            runner,
+            "last_hailo_semantic_completion",
+            None,
+        ),
+        "context_full_reason": getattr(
+            runner,
+            "last_hailo_context_full_reason",
+            None,
+        ),
     }
 
 
@@ -15770,6 +16482,13 @@ def _reset_runner_observability_state(runner: PydanticAIRunner) -> None:
         "last_hailo_prompt_eval_count",
         "last_hailo_eval_count",
         "last_hailo_total_duration_ns",
+        "last_hailo_input_estimated_tokens",
+        "last_hailo_system_chars",
+        "last_hailo_user_chars",
+        "last_hailo_stream_completed",
+        "last_hailo_semantic_stop",
+        "last_hailo_semantic_completion",
+        "last_hailo_context_full_reason",
         "last_model_usage",
         "last_model_response_metadata",
         "last_agent_run_ledger",
@@ -15874,47 +16593,912 @@ def _compact_total_info_for_local_model(total_info: str) -> str:
     return serialized
 
 
-def _compact_hailo_ollama_prompt(prompt: str) -> str:
+def _estimate_hailo_text_tokens(value: str) -> int:
+    """Conservative tokenizer-free estimate for Qwen chat input packing."""
+
+    cjk_count = sum(
+        1
+        for char in value
+        if "\u3400" <= char <= "\u9fff"
+        or "\uf900" <= char <= "\ufaff"
+        or "\u3040" <= char <= "\u30ff"
+    )
+    non_cjk_count = sum(
+        1
+        for char in value
+        if not char.isspace()
+        and not (
+            "\u3400" <= char <= "\u9fff"
+            or "\uf900" <= char <= "\ufaff"
+            or "\u3040" <= char <= "\u30ff"
+        )
+    )
+    return cjk_count + (non_cjk_count + 1) // 2
+
+
+def _estimate_hailo_chat_input_tokens(system_prompt: str, user_prompt: str) -> int:
+    # Reserve chat-template and role-token overhead in addition to text tokens.
+    return (
+        64
+        + _estimate_hailo_text_tokens(system_prompt)
+        + _estimate_hailo_text_tokens(user_prompt)
+    )
+
+
+def _fit_hailo_prompt_to_token_budget(
+    prompt: str,
+    *,
+    system_prompt: str,
+    max_input_tokens: int,
+) -> str:
+    if _estimate_hailo_chat_input_tokens(system_prompt, prompt) <= max_input_tokens:
+        return prompt
+    low = 0
+    high = len(prompt)
+    while low < high:
+        midpoint = (low + high + 1) // 2
+        candidate = prompt[:midpoint].rstrip()
+        if (
+            _estimate_hailo_chat_input_tokens(system_prompt, candidate)
+            <= max_input_tokens
+        ):
+            low = midpoint
+        else:
+            high = midpoint - 1
+    return prompt[:low].rstrip()
+
+
+def _truncate_hailo_text_to_tokens(value: str, max_tokens: int) -> str:
+    if max_tokens <= 0:
+        return ""
+    if _estimate_hailo_text_tokens(value) <= max_tokens:
+        return value
+    low = 0
+    high = len(value)
+    while low < high:
+        midpoint = (low + high + 1) // 2
+        if _estimate_hailo_text_tokens(value[:midpoint]) <= max_tokens:
+            low = midpoint
+        else:
+            high = midpoint - 1
+    return value[:low].rstrip()
+
+
+def _iter_hailo_stream_payloads(response: object):
+    """Yield Ollama NDJSON payloads while tolerating legacy single JSON replies."""
+
+    readline = getattr(response, "readline", None)
+    if callable(readline):
+        while True:
+            raw_line = readline()
+            if not raw_line:
+                break
+            yield _decode_hailo_stream_payload(raw_line)
+        return
+    raw = response.read()
+    lines = raw.splitlines() or [raw]
+    for raw_line in lines:
+        if raw_line.strip():
+            yield _decode_hailo_stream_payload(raw_line)
+
+
+def _decode_hailo_stream_payload(raw_line: bytes | str) -> dict[str, Any]:
+    text = (
+        raw_line.decode("utf-8", errors="replace")
+        if isinstance(raw_line, bytes)
+        else str(raw_line)
+    ).strip()
+    if text.startswith("data:"):
+        text = text.removeprefix("data:").strip()
+    payload = json.loads(text)
+    if not isinstance(payload, dict):
+        raise RuntimeError("hailo_ollama stream item must be a JSON object")
+    return payload
+
+
+def _hailo_stream_content(payload: dict[str, Any]) -> str:
+    message = payload.get("message")
+    if isinstance(message, dict) and isinstance(message.get("content"), str):
+        return str(message["content"])
+    response_text = payload.get("response")
+    return response_text if isinstance(response_text, str) else ""
+
+
+def _clean_hailo_stream_text(parts: list[str]) -> str:
+    return (
+        "".join(parts)
+        .replace(HAILO_SEMANTIC_STOP, "")
+        .replace("\ufffd", "")
+        .strip()
+    )
+
+
+def _hailo_stream_semantically_complete(
+    value: str,
+    *,
+    expected_sentence_count: int = 1,
+) -> bool:
+    """Stop a bounded stream once a complete answer sentence exists."""
+
+    text = value.strip()
+    # A small model often echoes the user's question before answering. A
+    # question mark therefore cannot prove semantic answer completion.
+    if len(text) < 16 or not re.search(r"[。！.!]$", text):
+        return False
+    # A streamed numeric value commonly arrives in two chunks (``92.`` then
+    # ``3K``). Treating the first chunk as a sentence truncates the evidence.
+    if re.search(r"\d+\.$", text):
+        return False
+    # Workspace identifiers also stream across chunks (``seg.`` then ``132``).
+    # These prefixes are evidence IDs, not sentence-ending abbreviations.
+    if re.search(r"\b(?:seg|cp|mcp|ref|id|no)\.$", text, flags=re.IGNORECASE):
+        return False
+    if re.search(
+        r"(?:\b[A-Za-z0-9]+_[A-Za-z0-9_.]*|\b[A-Za-z0-9_]+\.[A-Za-z0-9_.]+)\.$",
+        text,
+    ):
+        return False
+    if re.search(r"(?:^|\n)\s*\d+[.)。]\s*$", text):
+        return False
+    incomplete_endings = (
+        "例如。",
+        "包括。",
+        "如下。",
+        "因此。",
+        "以及。",
+        "而且。",
+        "with.",
+        "including.",
+    )
+    if text.casefold().endswith(tuple(item.casefold() for item in incomplete_endings)):
+        return False
+    return _hailo_completed_sentence_count(text) >= max(1, expected_sentence_count)
+
+
+def _hailo_bounded_semantic_sentence_target(prompt: str) -> int:
+    """Require enough streamed sentences to cover every exact answer card."""
+
+    exact_answers = _hailo_bounded_exact_answers(prompt)
+    if not exact_answers:
+        return 1
+    target = sum(
+        max(1, _hailo_completed_sentence_count(answer))
+        for answer in exact_answers
+    )
+    return max(1, min(3, target))
+
+
+def _hailo_bounded_semantic_completion_allowed(prompt: str) -> bool:
+    """Use sentence completion only for simple, single-clause exact answers."""
+
+    exact_answers = _hailo_bounded_exact_answers(prompt)
+    if not exact_answers:
+        return True
+    return len(exact_answers) == 1 and not re.search(r"[；;\n]", exact_answers[0])
+
+
+def _hailo_bounded_exact_answers_covered(prompt: str, output: str) -> bool:
+    """Stop a looping stream after every priority-100 answer clause is visible."""
+
+    exact_answers = _hailo_bounded_exact_answers(prompt)
+    if not exact_answers:
+        return False
+    normalized_output = _normalize_hailo_exact_answer_text(output)
+    if not normalized_output:
+        return False
+    for answer in exact_answers:
+        clauses = [
+            clause
+            for clause in re.split(r"[；;\n]+", answer)
+            if _normalize_hailo_exact_answer_text(clause)
+        ]
+        if not clauses or not all(
+            _normalize_hailo_exact_answer_text(clause) in normalized_output
+            for clause in clauses
+        ):
+            return False
+    return True
+
+
+def _normalize_hailo_exact_answer_text(value: str) -> str:
+    return re.sub(r"[^\w\u3400-\u9fff]+", "", value, flags=re.UNICODE).casefold()
+
+
+def _hailo_model_authored_exact_answer_excerpt(
+    output: str,
+    *,
+    evidence_cards: list[EvidenceCard],
+) -> str:
+    """Keep only model-authored lines that cover every exact evidence clause."""
+
+    exact_answers: list[str] = []
+    for card in evidence_cards:
+        try:
+            priority = int(card.key_values.get("field_answer_priority") or 0)
+        except (TypeError, ValueError):
+            priority = 0
+        answer = str(card.key_values.get("field_answer") or "").strip()
+        if priority >= 100 and answer:
+            exact_answers.append(answer)
+    if not exact_answers:
+        return output
+
+    output_lines = [
+        cleaned
+        for line in output.splitlines()
+        if (cleaned := _clean_hailo_model_answer_line(line))
+    ]
+    matched_lines: list[str] = []
+    for answer in exact_answers:
+        clauses = [
+            clause.strip()
+            for clause in re.split(r"[；;\n]+", answer)
+            if _normalize_hailo_exact_answer_text(clause)
+        ]
+        for clause in clauses:
+            normalized_clause = _normalize_hailo_exact_answer_text(clause)
+            matching_line = next(
+                (
+                    line
+                    for line in output_lines
+                    if normalized_clause
+                    in _normalize_hailo_exact_answer_text(line)
+                    or (
+                        len(_normalize_hailo_exact_answer_text(line)) >= 8
+                        and _normalize_hailo_exact_answer_text(line)
+                        in normalized_clause
+                    )
+                ),
+                None,
+            )
+            if matching_line is None:
+                return output
+            if matching_line not in matched_lines:
+                matched_lines.append(matching_line)
+
+    if not matched_lines:
+        return output
+    return "；".join(
+        line.rstrip("；;。.!！") for line in matched_lines
+    ).rstrip("；") + "。"
+
+
+def _clean_hailo_model_answer_line(value: str) -> str:
+    cleaned = re.sub(r"^\s*(?:[-*]+|\d+[.)、])\s*", "", value).strip()
+    cleaned = cleaned.replace("**", "").replace("__", "").replace("`", "")
+    cleaned = cleaned.strip("*# ")
+    cleaned = re.sub(
+        r"^(?:verified_field_answer|答案|answer)\s*[:：]\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned.strip("* ")
+
+
+def _hailo_bounded_exact_answers(prompt: str) -> list[str]:
+    _, separator, raw_payload = prompt.partition("\n")
+    if not separator:
+        return []
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, dict):
+        return []
+    raw_cards = payload.get("evidence_delta") or payload.get("evidence_cards")
+    if not isinstance(raw_cards, list):
+        return []
+    answers: list[str] = []
+    for card in raw_cards:
+        if not isinstance(card, dict):
+            continue
+        key_values = card.get("key_values")
+        key_values = key_values if isinstance(key_values, dict) else {}
+        try:
+            priority = int(
+                card.get("verified_field_answer_priority")
+                or key_values.get("field_answer_priority")
+                or 0
+            )
+        except (TypeError, ValueError):
+            priority = 0
+        if priority < 100:
+            continue
+        answer = str(card.get("verified_field_answer") or "").strip()
+        if not answer:
+            answer = str(key_values.get("field_answer") or "").strip()
+        if answer:
+            answers.append(answer)
+    return answers
+
+
+def _priority_exact_evidence_cards(
+    evidence_cards: list[EvidenceCard],
+) -> list[EvidenceCard]:
+    exact_cards: list[EvidenceCard] = []
+    for card in evidence_cards:
+        try:
+            priority = int(card.key_values.get("field_answer_priority") or 0)
+        except (TypeError, ValueError):
+            priority = 0
+        if priority >= 100 and str(
+            card.key_values.get("field_answer") or ""
+        ).strip():
+            exact_cards.append(card)
+    return exact_cards or evidence_cards
+
+
+def _hailo_completed_sentence_count(value: str) -> int:
+    chinese_endings = len(re.findall(r"[。！？]", value))
+    latin_endings = len(re.findall(r"(?<!\d)[.!?](?=\s|$)", value))
+    return chinese_endings + latin_endings
+
+
+def _is_hailo_context_full_reason(value: str) -> bool:
+    normalized = str(value or "").strip().casefold().replace("-", "_")
+    return normalized in {"length", "max_tokens", "context_full", "cache_full"} or any(
+        fragment in normalized
+        for fragment in (
+            "context is full",
+            "context window",
+            "context length",
+            "maximum context",
+            "cache size was reached",
+        )
+    )
+
+
+def _merge_workspace_tool_query(question: str, planned_query: str) -> str:
+    """Retain the user's intent when a planner emits a narrower search hint."""
+
+    original = str(question or "").strip()
+    planned = str(planned_query or "").strip()
+    if not original:
+        return planned
+    if not planned:
+        return original
+    original_folded = original.casefold()
+    planned_folded = planned.casefold()
+    if original_folded in planned_folded:
+        return planned
+    if planned_folded in original_folded:
+        return original
+    return f"{original}\nplanner_hint: {planned}"
+
+
+def _compact_hailo_ollama_prompt(
+    prompt: str,
+    *,
+    system_prompt: str = "",
+    max_input_tokens: int = HAILO_MAX_INPUT_TOKENS,
+) -> str:
+    if prompt.startswith(
+        (
+            "SCOUT_BOUNDED_SYNTHESIS_V1\n",
+            "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1\n",
+            "SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1\n",
+        )
+    ):
+        return _compact_hailo_bounded_synthesis_prompt(
+            prompt,
+            system_prompt=system_prompt,
+            max_input_tokens=max_input_tokens,
+        )
     if "AI_HAT_RAW_SINGLE_PASS_EVAL_V1" in prompt:
-        return _compact_hailo_raw_eval_prompt(prompt)
-    if "Context:" not in prompt:
-        return prompt
-    question = _extract_context_question(prompt)
-    if not question:
-        return prompt
-    if _is_simple_greeting_question(question):
-        return (
+        compact = _compact_hailo_raw_eval_prompt(prompt)
+    elif "Context:" not in prompt:
+        compact = prompt
+    else:
+        question = _extract_context_question(prompt)
+        if not question:
+            compact = prompt
+        elif _is_simple_greeting_question(question):
+            compact = (
             "你是 Scout AI 的 AI HAT+ 2 本地備援模型。"
             "使用者只是問候或確認你是否在線。"
             "請用繁體中文自然短答一句，明確說你正在以本地備援模式服務；"
             "不要摘要 context，不要要求工具摘要，不要列資料缺口。"
             f"\n使用者：{question}\n"
             "回答："
+            )
+        else:
+            total_info = _extract_prompt_section(prompt, "Total Info:", "Context:")
+            context = _extract_prompt_section(prompt, "Context:", "")
+            answer_hint = _hailo_answer_hint(
+                question,
+                total_info=total_info,
+                context=context,
+            )
+            answer_hint_line = (
+                f"\n答案提示（最高優先）：{answer_hint}\n" if answer_hint else ""
+            )
+            compact_total_info = _compact_total_info_for_local_model(total_info)
+            prefix = (
+                "你是 Scout AI 的 AI HAT+ 2 本地備援模型。"
+                "必須使用提供的 Scout context、workspace evidence、sensor snapshot "
+                "與工具摘要回答。若資訊不足，先回答可由現有資料推得的部分，"
+                "再列出缺口與下一步；不要把缺口當成拒答理由，"
+                "明確事實不得再說無法回答。"
+                "不要宣稱已改變 runtime、/safety、outbound 或硬體狀態。"
+                f"\n問題：{question}\n"
+                f"{answer_hint_line}"
+            )
+            suffix = "\n回答要求：先給結論，再給依據與下一步；使用繁體中文。"
+            remaining_tokens = max(
+                0,
+                max_input_tokens
+                - _estimate_hailo_chat_input_tokens(
+                    system_prompt,
+                    prefix + suffix,
+                )
+                - 24,
+            )
+            total_info_quota = remaining_tokens // 2 if context else remaining_tokens
+            context_quota = remaining_tokens - total_info_quota
+            packed_total_info = _truncate_hailo_text_to_tokens(
+                compact_total_info,
+                total_info_quota,
+            )
+            packed_context = _truncate_hailo_text_to_tokens(context, context_quota)
+            total_info_line = (
+                f"\n現況摘要：{packed_total_info}\n" if packed_total_info else "\n"
+            )
+            context_line = (
+                f"\n可用上下文：{packed_context}\n" if packed_context else "\n"
+            )
+            compact = prefix + total_info_line + context_line + suffix
+    return _fit_hailo_prompt_to_token_budget(
+        compact,
+        system_prompt=system_prompt,
+        max_input_tokens=max_input_tokens,
+    )
+
+
+_HAILO_LOW_VALUE_EVIDENCE_KEYS = frozenset(
+    {
+        "filters",
+        "field_answer_priority",
+        "query_terms",
+        "reference_gpx_filenames",
+        "source_report",
+    }
+)
+_HAILO_HIGH_VALUE_EVIDENCE_FIELDS = frozenset(
+    {
+        "answer",
+        "blocker_count",
+        "blockers",
+        "candidate_id",
+        "completed_at",
+        "count",
+        "decision",
+        "display_label",
+        "distance_km",
+        "distance_m",
+        "field_answer",
+        "field_answer_source_ref",
+        "label",
+        "lat",
+        "lon",
+        "mileage_m",
+        "name",
+        "nearest_checkpoint",
+        "nearest_mileage_anchor",
+        "primary_gpx_filename",
+        "profile",
+        "project_id",
+        "readable_location",
+        "result_count",
+        "risk_bucket",
+        "route_name",
+        "score",
+        "segment_candidate_id",
+        "segment_join_method",
+        "segment_join_status",
+        "segment_label",
+        "segment_risk_summary",
+        "source_gpx",
+        "status",
+        "summary_fields",
+        "warning_count",
+        "warnings",
+    }
+)
+
+
+def _compact_hailo_bounded_synthesis_prompt(
+    prompt: str,
+    *,
+    system_prompt: str,
+    max_input_tokens: int,
+) -> str:
+    """Fit verified evidence to the Hailo model's external context window."""
+
+    _, separator, raw_payload = prompt.partition("\n")
+    if not separator:
+        return prompt
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        return prompt
+    if not isinstance(payload, dict):
+        return prompt
+
+    marker = prompt.split("\n", 1)[0]
+    raw_cards = payload.get("evidence_cards")
+    if marker == "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1":
+        raw_cards = payload.get("evidence_delta") or raw_cards
+    cards = raw_cards if isinstance(raw_cards, list) else []
+    fact_limit = max(2, min(8, 24 // max(1, len(cards))))
+    compact_cards = [
+        _compact_hailo_evidence_card(card, fact_limit=fact_limit)
+        for card in cards
+        if isinstance(card, dict)
+    ]
+    compact_cards.sort(
+        key=lambda card: (
+            -int(card.get("verified_field_answer_priority") or 0),
+            0 if card.get("verified_field_answer") else 1,
+            len(card.get("missing_fields") or []),
+            str(card.get("tool_id") or ""),
         )
-    total_info = _extract_prompt_section(prompt, "Total Info:", "Context:")
-    context = _extract_prompt_section(prompt, "Context:", "")
-    answer_hint = _hailo_answer_hint(question, total_info=total_info, context=context)
-    answer_hint_line = f"\n答案提示（最高優先）：{answer_hint}\n" if answer_hint else ""
-    compact_total_info = _compact_total_info_for_local_model(total_info)
-    total_info_line = f"\n現況摘要：{compact_total_info}\n" if total_info else "\n"
-    context_line = f"\n可用上下文：{context}\n" if context else "\n"
-    return (
-        "你是 Scout AI 的 AI HAT+ 2 本地備援模型。"
-        "Scout AI 是使用者面向的全能入口；本地模型是它的備援推理層，"
-        "必須使用已提供的 Scout context、workspace evidence、sensor snapshot "
-        "與工具摘要回答。"
-        "如果問題只是問候、確認連線、或詢問你目前是否可用，"
-        "直接自然回應並說明你正在以本地備援模式服務；不要要求使用者補工具摘要。"
-        "若資訊不足，先說明可由現有資料推得的部分，再列出缺口與下一步；"
-        "不要把缺口當成拒答理由。"
-        "如果答案提示已給出明確數字或結論，必須直接回答該數字或結論，"
-        "不得再說無法回答。"
-        "不要宣稱已改變 Scout runtime、/safety、outbound 或硬體狀態。"
-        f"\n問題：{question}\n"
-        f"{answer_hint_line}"
-        f"{total_info_line}"
-        f"{context_line}"
-        "回答要求：先給結論，再給依據與下一步；使用繁體中文。"
+    )
+    has_priority_exact_card = any(
+        int(card.get("verified_field_answer_priority") or 0) >= 100
+        and bool(card.get("verified_field_answer"))
+        for card in compact_cards
+    )
+    compact_payload: dict[str, Any] = {
+        "question": _truncate_utf8(str(payload.get("question") or ""), 360),
+        "evidence_cards": compact_cards,
+        "missing_evidence": [
+            _truncate_utf8(str(item), 160)
+            for item in (payload.get("missing_evidence") or [])[:8]
+            if str(item).strip()
+        ],
+        "answer_contract": (
+            "只用 evidence_cards 事實，以繁中三句內直接回答。"
+            "verified_field_answer_priority=100 是封閉的精確工具結論；必須保留其全部子句，"
+            "不得加入同卡其他欄位、其他卡片的相似欄位或自行推導關係。"
+            "unavailable/None 就是答案，禁止估值。"
+            "synthetic eval fixture 必須明說不是 live sensor snapshot。"
+            "每句只引用最直接的一個 source_ref；缺失只可引用 missing_evidence。"
+            "禁止把未使用的 source_refs 單獨列成引用句。"
+            "candidate evidence 不是 runtime safety truth。"
+        ),
+    }
+    if marker == "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1":
+        compact_payload = {
+            **compact_payload,
+            "draft_answer": _truncate_utf8(
+                ""
+                if has_priority_exact_card
+                else str(payload.get("draft_answer") or ""),
+                1800,
+            ),
+            "repair_items": [
+                _truncate_utf8(str(item), 320)
+                for item in payload.get("repair_items") or []
+                if str(item).strip()
+            ],
+            "answer_contract": (
+                "重新輸出 priority-100 field_answer 的全部子句與數值，"
+                "修復 repair_items 列出的缺失；不得沿用 draft_answer 的遺漏。"
+                "每句只加入最直接的一個 source_ref；"
+                "不可新增 evidence_cards 以外的事實或數字。"
+            ),
+        }
+    elif marker == "SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1":
+        compact_payload = {
+            **compact_payload,
+            "partial_answer": _truncate_utf8(
+                str(payload.get("partial_answer") or ""),
+                720,
+            ),
+            "continuation_index": payload.get("continuation_index", 1),
+            "answer_contract": (
+                "外部 context 已滿；依 evidence_cards 重新輸出完整繁中短答。"
+                "partial_answer 僅供避免遺漏，不可補造事實；每句只引用一個 source_ref。"
+            ),
+        }
+    compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
+    if (
+        _estimate_hailo_chat_input_tokens(system_prompt, compact)
+        <= max_input_tokens
+    ):
+        return compact
+
+    # Keep every selected tool represented while progressively shedding the
+    # least relevant facts. The original evidence cards remain in the runtime
+    # ledger and verifier; only the external Hailo request is compacted.
+    reduced_cards = compact_cards
+    while (
+        _estimate_hailo_chat_input_tokens(system_prompt, compact)
+        > max_input_tokens
+    ):
+        candidates = [
+            (len(card.get("key_values") or {}), index)
+            for index, card in enumerate(reduced_cards)
+            if isinstance(card.get("key_values"), dict)
+            and len(card.get("key_values") or {}) > 1
+        ]
+        if not candidates:
+            break
+        _, index = max(candidates)
+        card = reduced_cards[index]
+        key_values = dict(card.get("key_values") or {})
+        key_values.pop(next(reversed(key_values)))
+        reduced_cards = [
+            item if item_index != index else {**item, "key_values": key_values}
+            for item_index, item in enumerate(reduced_cards)
+        ]
+        compact_payload = {**compact_payload, "evidence_cards": reduced_cards}
+        compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
+
+    if _estimate_hailo_chat_input_tokens(system_prompt, compact) > max_input_tokens:
+        reduced_cards = [
+            {
+                **card,
+                "claim_summary": "",
+                "missing_fields": [],
+                "source_refs": list(card.get("source_refs") or [])[:1],
+            }
+            for card in reduced_cards
+        ]
+        compact_payload = {
+            **compact_payload,
+            "evidence_cards": reduced_cards,
+            "missing_evidence": list(compact_payload.get("missing_evidence") or [])[:3],
+        }
+        compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
+
+    if _estimate_hailo_chat_input_tokens(system_prompt, compact) > max_input_tokens:
+        reduced_cards = [
+            {
+                "tool_id": card.get("tool_id", "unknown"),
+                "key_values": dict(list((card.get("key_values") or {}).items())[:1]),
+                "source_refs": list(card.get("source_refs") or [])[:1],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+            for card in reduced_cards
+        ]
+        compact_payload = {
+            "question": _truncate_utf8(str(compact_payload.get("question") or ""), 180),
+            "evidence_cards": reduced_cards,
+            "missing_evidence": list(compact_payload.get("missing_evidence") or [])[:2],
+            "answer_contract": "只用證據繁中短答；每句引用一個 source_ref。",
+            **(
+                {
+                    "partial_answer": _truncate_utf8(
+                        str(compact_payload.get("partial_answer") or ""),
+                        240,
+                    )
+                }
+                if marker == "SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1"
+                else {}
+            ),
+        }
+        compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
+
+    if _estimate_hailo_chat_input_tokens(system_prompt, compact) > max_input_tokens:
+        compact_payload = {
+            "question": _truncate_utf8(str(compact_payload.get("question") or ""), 120),
+            "evidence_cards": [
+                {"tool_id": card.get("tool_id", "unknown")}
+                for card in reduced_cards
+            ],
+            "answer_contract": "只用證據直接短答。",
+        }
+        compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
+
+    return compact
+
+
+def _compact_hailo_evidence_card(
+    card: dict[str, Any],
+    *,
+    fact_limit: int,
+) -> dict[str, Any]:
+    key_values = card.get("key_values")
+    key_values = key_values if isinstance(key_values, dict) else {}
+    verified_field_answer = _hailo_verified_field_answer(key_values)
+    verified_field_answer_priority = _hailo_verified_field_answer_priority(key_values)
+    preferred_source_ref = key_values.get("field_answer_source_ref")
+    preferred_source_refs = key_values.get("field_answer_source_refs")
+    source_refs = [
+        _truncate_utf8(str(item), 300)
+        for item in card.get("source_refs") or []
+        if str(item).strip()
+    ]
+    exact_source_refs: list[str] = []
+    if isinstance(preferred_source_ref, str) and preferred_source_ref.strip():
+        exact_source_refs.append(
+            _truncate_utf8(preferred_source_ref.strip(), 300)
+        )
+    if isinstance(preferred_source_refs, list):
+        exact_source_refs.extend(
+            _truncate_utf8(str(item).strip(), 300)
+            for item in preferred_source_refs
+            if str(item).strip()
+        )
+    exact_source_refs = list(dict.fromkeys(exact_source_refs))
+    if exact_source_refs:
+        source_refs = [
+            *exact_source_refs,
+            *(item for item in source_refs if item not in exact_source_refs),
+        ]
+
+    if verified_field_answer and verified_field_answer_priority >= 100:
+        return {
+            "tool_id": str(card.get("tool_id") or "unknown"),
+            "verified_field_answer": verified_field_answer,
+            "verified_field_answer_priority": verified_field_answer_priority,
+            "claim_summary": "",
+            "key_values": {"field_answer": verified_field_answer},
+            "missing_fields": [],
+            "source_refs": exact_source_refs or source_refs[:1],
+            "result_count": card.get("result_count", 0),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    evidence_records = card.get("evidence_records")
+    record_facts: list[tuple[int, str, Any]] = []
+    if isinstance(evidence_records, list):
+        for index, record in enumerate(evidence_records[:3]):
+            if not isinstance(record, dict):
+                continue
+            record_ref = str(record.get("source_ref") or "").strip()
+            if record_ref and record_ref not in source_refs:
+                source_refs.append(_truncate_utf8(record_ref, 300))
+            record_facts.extend(
+                _hailo_evidence_fact_candidates(
+                    record.get("data"),
+                    path=f"record_{index + 1}",
+                )
+            )
+
+    facts = [
+        *_hailo_evidence_fact_candidates(key_values, path=""),
+        *record_facts,
+    ]
+    facts.sort(key=lambda item: (-item[0], item[1]))
+    compact_values: dict[str, Any] = {}
+    if verified_field_answer:
+        compact_values["field_answer"] = verified_field_answer
+    for _, path, value in facts:
+        key = path or "value"
+        if key in compact_values:
+            continue
+        compact_values[key] = value
+        if len(compact_values) >= fact_limit:
+            break
+    return {
+        "tool_id": str(card.get("tool_id") or "unknown"),
+        "verified_field_answer": verified_field_answer,
+        "verified_field_answer_priority": verified_field_answer_priority,
+        "claim_summary": _truncate_utf8(
+            str(card.get("claim_summary") or ""),
+            320,
+        ),
+        "key_values": compact_values,
+        "missing_fields": [
+            _truncate_utf8(str(item), 180)
+            for item in card.get("missing_fields") or []
+            if str(item).strip()
+        ],
+        "source_refs": list(dict.fromkeys(source_refs)),
+        "result_count": card.get("result_count", 0),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _hailo_verified_field_answer(key_values: dict[str, Any]) -> str:
+    value = key_values.get("field_answer")
+    if isinstance(value, str) and value.strip():
+        return _truncate_utf8(value.strip(), 960)
+    decision_output = key_values.get("decision_output")
+    if isinstance(decision_output, dict):
+        nested = decision_output.get("field_answer")
+        if isinstance(nested, str) and nested.strip():
+            return _truncate_utf8(nested.strip(), 960)
+    return ""
+
+
+def _hailo_verified_field_answer_priority(key_values: dict[str, Any]) -> int:
+    value = key_values.get("field_answer_priority")
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _hailo_evidence_fact_candidates(
+    value: Any,
+    *,
+    path: str,
+    depth: int = 0,
+) -> list[tuple[int, str, Any]]:
+    if depth > 4:
+        return []
+    if isinstance(value, dict):
+        candidates: list[tuple[int, str, Any]] = []
+        for key, child in value.items():
+            key_text = str(key)
+            if key_text in _HAILO_LOW_VALUE_EVIDENCE_KEYS:
+                continue
+            child_path = f"{path}.{key_text}" if path else key_text
+            candidates.extend(
+                _hailo_evidence_fact_candidates(
+                    child,
+                    path=child_path,
+                    depth=depth + 1,
+                )
+            )
+        return candidates
+    if isinstance(value, list):
+        candidates = []
+        for index, child in enumerate(value[:3]):
+            child_path = f"{path}[{index}]" if path else f"item[{index}]"
+            candidates.extend(
+                _hailo_evidence_fact_candidates(
+                    child,
+                    path=child_path,
+                    depth=depth + 1,
+                )
+            )
+        return candidates
+    if value is None or isinstance(value, bool):
+        return []
+    leaf = path.rsplit(".", 1)[-1].split("[", 1)[0]
+    priority = 100 if leaf in _HAILO_HIGH_VALUE_EVIDENCE_FIELDS else 10
+    if isinstance(value, str):
+        if priority < 100 and len(value.encode("utf-8")) > 240:
+            return []
+        normalized: Any = _truncate_utf8(value.strip(), 360)
+        if not normalized:
+            return []
+    elif isinstance(value, int | float):
+        normalized = value
+    else:
+        normalized = _truncate_utf8(str(value), 240)
+    return [(priority, path, normalized)]
+
+
+def _hailo_bounded_prompt_json(
+    payload: dict[str, Any],
+    *,
+    marker: str = "SCOUT_BOUNDED_SYNTHESIS_V1",
+) -> str:
+    return marker + "\n" + json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def _build_hailo_bounded_continuation_prompt(
+    *,
+    question: str,
+    evidence_cards: list[EvidenceCard],
+    missing_evidence: list[str],
+    partial_output: str,
+    continuation_index: int,
+) -> str:
+    return _hailo_bounded_prompt_json(
+        {
+            "question": question,
+            "evidence_cards": [
+                card.model_dump(mode="json") for card in evidence_cards
+            ],
+            "missing_evidence": list(missing_evidence),
+            "partial_answer": partial_output,
+            "continuation_index": continuation_index,
+        },
+        marker="SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1",
     )
 
 
@@ -15999,6 +17583,7 @@ def _strip_hailo_control_markers(prompt: str) -> str:
 
 def _normalize_hailo_chat_content(content: str) -> str:
     """Flatten control characters rejected by Hailo Ollama 5.3 chat parsing."""
+    content = content.replace('\\"', "＂")
     return re.sub(r"[\x00-\x1f\x7f-\x9f]+", " ", content).strip()
 
 
@@ -16674,7 +18259,9 @@ def _workspace_model_max_tokens_from_env(
     environ: dict[str, str] | None = None,
     local_model: bool = True,
 ) -> int | None:
-    resolved_environ = environ or os.environ
+    resolved_environ = os.environ if environ is None else environ
+    if not resolve_model_policy(env=resolved_environ).resource_limits_enforced:
+        return None
     scoped_key = (
         "SCOUT_AI_LOCAL_MODEL_MAX_TOKENS"
         if local_model
@@ -16698,6 +18285,9 @@ def _workspace_model_max_tokens_from_settings(
     environ: dict[str, str] | None = None,
     local_model: bool = True,
 ) -> int | None:
+    resolved_environ = os.environ if environ is None else environ
+    if not resolve_model_policy(env=resolved_environ).resource_limits_enforced:
+        return None
     for key in ("max_tokens", "num_predict"):
         value = model_settings.get(key)
         if value is None:
@@ -16708,7 +18298,7 @@ def _workspace_model_max_tokens_from_settings(
             continue
         return parsed if parsed > 0 else None
     return _workspace_model_max_tokens_from_env(
-        environ=environ,
+        environ=resolved_environ,
         local_model=local_model,
     )
 

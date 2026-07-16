@@ -126,7 +126,11 @@ def search_project_map_perception(
     filtered.sort(key=_sort_key(resolved_sort))
     results = filtered[:resolved_limit]
     compact_results = [_compact_result(item) for item in results]
-    summaries = _summaries(items)
+    mileage_evidence = _mileage_evidence_summary(root, project)
+    summaries = {
+        **_summaries(items),
+        "mileage_evidence": mileage_evidence,
+    }
     missing_fields = _missing_fields(
         searched_material_count=len(items),
         matched_material_count=len(filtered),
@@ -142,7 +146,23 @@ def search_project_map_perception(
         summaries=summaries,
         missing_fields=missing_fields,
     )
-    field_answer = _field_answer(
+    mileage_field_answer, mileage_source_refs_value = _mileage_field_answer(
+        query,
+        mileage_evidence,
+    )
+    mileage_source_refs = (
+        [
+            str(item)
+            for item in mileage_source_refs_value
+            if str(item).strip()
+        ]
+        if isinstance(mileage_source_refs_value, list)
+        else [str(mileage_source_refs_value)]
+        if mileage_source_refs_value
+        else []
+    )
+    mileage_source_ref = mileage_source_refs[0] if mileage_source_refs else None
+    field_answer = mileage_field_answer or _field_answer(
         decision=decision,
         results=compact_results,
         missing_fields=missing_fields,
@@ -165,6 +185,10 @@ def search_project_map_perception(
         "decision": decision["decision"],
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100 if mileage_field_answer else 0,
+        "field_answer_source_ref": mileage_source_ref,
+        "field_answer_source_refs": mileage_source_refs,
+        "source_ref": mileage_source_ref,
         "missing_fields": missing_fields,
         "filters": {
             "evidence_types": sorted(resolved_evidence_types) if resolved_evidence_types else None,
@@ -850,6 +874,310 @@ def _field_answer(
         "此為候選地圖感知，不是 runtime safety truth；不得觸發 Ln、"
         "/safety/*、SOS、outbound send 或硬體控制。"
     )
+
+
+def _mileage_evidence_summary(
+    root: Path,
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    anchors_ref = str(
+        project.get("route_mileage_k_anchors_ref")
+        or "candidates/route_mileage_k_anchors.json"
+    )
+    alignment_ref = str(
+        project.get("mileage_tag_alignment_ref")
+        or "outputs/mileage_tag_alignment.json"
+    )
+    raster_ocr_ref = str(
+        project.get("raster_label_ocr_output_ref")
+        or "outputs/layers/raster_label_ocr_output.json"
+    )
+    mcp_ocr_ref = str(
+        project.get("mcp_ocr_labels_ref") or "outputs/mcp/mcp_ocr_labels.json"
+    )
+
+    def load_optional(ref: str) -> dict[str, Any]:
+        path = _project_path(root, ref)
+        return _load_json_object(path) if path.is_file() else {}
+
+    anchors_payload = load_optional(anchors_ref)
+    alignment_payload = load_optional(alignment_ref)
+    raster_ocr_payload = load_optional(raster_ocr_ref)
+    mcp_ocr_payload = load_optional(mcp_ocr_ref)
+    raw_anchor_values = anchors_payload.get("normalized_mileage_k_values")
+    anchor_values = [
+        str(item)
+        for item in raw_anchor_values
+        if str(item).strip()
+    ] if isinstance(raw_anchor_values, list) else []
+    if not anchor_values:
+        raw_anchors = anchors_payload.get("anchors")
+        anchor_values = [
+            str(item.get("normalized_mileage_k"))
+            for item in raw_anchors if isinstance(item, dict)
+            if item.get("normalized_mileage_k")
+        ] if isinstance(raw_anchors, list) else []
+    anchor_values = sorted(
+        dict.fromkeys(anchor_values),
+        key=lambda item: (_mileage_k_value(item) is None, _mileage_k_value(item) or 0.0),
+    )
+
+    route_alignment = alignment_payload.get("route_mileage_alignment")
+    route_alignment = route_alignment if isinstance(route_alignment, dict) else {}
+    raw_projected = route_alignment.get("projected_anchors")
+    projected = [
+        item for item in raw_projected if isinstance(item, dict)
+    ] if isinstance(raw_projected, list) else []
+    delta_rows: list[dict[str, Any]] = []
+    anomaly_rows: list[dict[str, Any]] = []
+    for item in projected:
+        mileage_m = _optional_float(item.get("mileage_m"))
+        route_distance_m = _optional_float(item.get("route_distance_m"))
+        if mileage_m is not None and route_distance_m is not None:
+            delta_rows.append(
+                {
+                    "label": item.get("normalized_mileage_k"),
+                    "difference_m": round(abs(mileage_m - route_distance_m), 4),
+                    "mileage_m": mileage_m,
+                    "route_distance_m": route_distance_m,
+                }
+            )
+        rejected_reasons = item.get("rejected_reasons")
+        rejected_reasons = (
+            [str(reason) for reason in rejected_reasons]
+            if isinstance(rejected_reasons, list)
+            else []
+        )
+        if rejected_reasons or item.get("usable_for_interpolation") is False:
+            anomaly_rows.append(
+                {
+                    "label": item.get("normalized_mileage_k"),
+                    "reasons": rejected_reasons or ["not_usable_for_interpolation"],
+                }
+            )
+    maximum_delta = max(
+        delta_rows,
+        key=lambda item: float(item["difference_m"]),
+        default=None,
+    )
+    numeric_anchors = [
+        (value, parsed)
+        for value in anchor_values
+        if (parsed := _mileage_k_value(value)) is not None
+    ]
+    gap_rows = [
+        {
+            "from": previous[0],
+            "to": current[0],
+            "gap_km": round(current[1] - previous[1], 3),
+        }
+        for previous, current in zip(numeric_anchors, numeric_anchors[1:])
+        if current[1] - previous[1] > 1.0
+    ]
+
+    raw_ocr_labels = raster_ocr_payload.get("labels")
+    ocr_labels = [
+        item for item in raw_ocr_labels if isinstance(item, dict)
+    ] if isinstance(raw_ocr_labels, list) else []
+    low_confidence = [
+        {
+            "id": item.get("id") or item.get("candidate_id"),
+            "text": item.get("label_text"),
+            "confidence": _optional_float(item.get("confidence")),
+        }
+        for item in ocr_labels
+        if (_optional_float(item.get("confidence")) or 0.0) < 0.5
+    ]
+    parsed_ocr_mileage = [
+        {
+            "id": item.get("id") or item.get("candidate_id"),
+            "text": item.get("label_text"),
+            "normalized": normalized,
+        }
+        for item in ocr_labels
+        if (normalized := _normalized_k_label(item.get("label_text"))) is not None
+    ]
+    anchor_set = {value.casefold() for value in anchor_values}
+    unaligned_ocr_mileage = [
+        item
+        for item in parsed_ocr_mileage
+        if str(item["normalized"]).casefold() not in anchor_set
+    ]
+    raw_mcp_labels = mcp_ocr_payload.get("labels")
+    linked_mcp_ocr = [
+        {
+            "text": item.get("label_text"),
+            "named_point_id": item.get("named_point_id"),
+        }
+        for item in raw_mcp_labels
+        if isinstance(item, dict) and item.get("named_point_id")
+    ] if isinstance(raw_mcp_labels, list) else []
+    source_images = list(
+        dict.fromkeys(
+            str(item.get("tile_id") or item.get("source_image_hash") or "")
+            for item in ocr_labels
+            if item.get("tile_id") or item.get("source_image_hash")
+        )
+    )
+    raw_alignment_refs = alignment_payload.get("source_refs")
+    raw_alignment_refs = (
+        raw_alignment_refs if isinstance(raw_alignment_refs, dict) else {}
+    )
+    route_ref_keys = (
+        "route_mileage_k_anchors",
+        "route_context_points",
+        "route_centerline",
+        "risk_ribbon",
+        "map_context",
+    )
+    route_refs = list(
+        dict.fromkeys(
+            str(raw_alignment_refs[key])
+            for key in route_ref_keys
+            if raw_alignment_refs.get(key)
+        )
+    )
+    if anchors_ref not in route_refs:
+        route_refs.insert(0, anchors_ref)
+    return {
+        "available": bool(anchors_payload or alignment_payload or raster_ocr_payload),
+        "recognized_k_values": anchor_values,
+        "maximum_k_label": anchor_values[-1] if anchor_values else None,
+        "projected_anchor_count": len(projected),
+        "maximum_route_distance_difference": maximum_delta,
+        "anchor_anomalies": anomaly_rows,
+        "anchor_gaps": gap_rows,
+        "raster_ocr_label_count": len(ocr_labels),
+        "low_confidence_ocr_labels": low_confidence,
+        "parsed_ocr_mileage_labels": parsed_ocr_mileage,
+        "unaligned_ocr_mileage_labels": unaligned_ocr_mileage,
+        "linked_mcp_ocr_labels": linked_mcp_ocr,
+        "source_images": source_images[:8],
+        "source_refs": [anchors_ref, alignment_ref, raster_ocr_ref, mcp_ocr_ref],
+        "route_refs": route_refs,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _mileage_field_answer(
+    query: str,
+    summary: dict[str, Any],
+) -> tuple[str | None, str | list[str] | None]:
+    source_refs = summary.get("source_refs")
+    source_refs = source_refs if isinstance(source_refs, list) else []
+    anchors_ref = str(source_refs[0]) if source_refs else None
+    alignment_ref = str(source_refs[1]) if len(source_refs) > 1 else anchors_ref
+    raster_ocr_ref = str(source_refs[2]) if len(source_refs) > 2 else alignment_ref
+    mcp_ocr_ref = str(source_refs[3]) if len(source_refs) > 3 else raster_ocr_ref
+    if re.search(r"來源影像|source image|route refs?", query, re.IGNORECASE):
+        images = ", ".join(str(item) for item in summary.get("source_images") or [])
+        route_ref_values = [
+            str(item) for item in summary.get("route_refs") or [] if str(item)
+        ]
+        route_refs = ", ".join(route_ref_values)
+        return (
+            f"Route mileage alignment artifact={alignment_ref}；"
+            f"來源影像識別符={images or 'none'}；"
+            f"OCR artifact={raster_ocr_ref}；route refs={route_refs or 'none'}。",
+            list(
+                dict.fromkeys(
+                    [
+                        str(item)
+                        for item in [alignment_ref, raster_ocr_ref, *route_ref_values]
+                        if item
+                    ]
+                )
+            ),
+        )
+    if re.search(r"MCP\s*OCR", query, re.IGNORECASE):
+        rows = summary.get("linked_mcp_ocr_labels") or []
+        values = "; ".join(
+            f"{item.get('text')}→{item.get('named_point_id')}"
+            for item in rows if isinstance(item, dict)
+        )
+        return (
+            f"已連結 named point 的 MCP OCR labels 共 {len(rows)} 筆："
+            f"{values or 'none'}。",
+            mcp_ocr_ref,
+        )
+    if re.search(r"raster label OCR|低信心", query, re.IGNORECASE):
+        rows = summary.get("low_confidence_ocr_labels") or []
+        values = "; ".join(
+            f"{item.get('id')}/{item.get('text')}/{item.get('confidence')}"
+            for item in rows if isinstance(item, dict)
+        )
+        return (
+            f"Raster label OCR output 共 {summary.get('raster_ocr_label_count')} 筆；"
+            f"低信心（confidence<0.5）{len(rows)} 筆：{values or 'none'}。",
+            raster_ocr_ref,
+        )
+    if re.search(r"OCR.*mileage|mileage.*OCR|尚未成功對齊", query, re.IGNORECASE):
+        parsed = summary.get("parsed_ocr_mileage_labels") or []
+        rows = summary.get("unaligned_ocr_mileage_labels") or []
+        values = "; ".join(
+            f"{item.get('id')}/{item.get('text')}"
+            for item in rows if isinstance(item, dict)
+        )
+        return (
+            f"Raster OCR 可解析為 K mileage label 的項目共 {len(parsed)} 筆；"
+            f"未對齊既有 K anchors 的項目共 {len(rows)} 筆：{values or 'none'}。",
+            raster_ocr_ref,
+        )
+    if re.search(r"最大.*差值|差值.*最大", query, re.IGNORECASE):
+        item = summary.get("maximum_route_distance_difference")
+        item = item if isinstance(item, dict) else {}
+        return (
+            f"Mileage alignment 與 GPX route distance 最大差值為 "
+            f"{item.get('difference_m')} m，出現在 {item.get('label')}："
+            f"mileage={item.get('mileage_m')} m、route_distance="
+            f"{item.get('route_distance_m')} m。",
+            alignment_ref,
+        )
+    if re.search(r"缺號|排序異常|non.?monotonic", query, re.IGNORECASE):
+        anomalies = summary.get("anchor_anomalies") or []
+        gaps = summary.get("anchor_gaps") or []
+        anomaly_text = "; ".join(
+            f"{item.get('label')}({','.join(item.get('reasons') or [])})"
+            for item in anomalies if isinstance(item, dict)
+        )
+        gap_text = "; ".join(
+            f"{item.get('from')}→{item.get('to')}({item.get('gap_km')} km)"
+            for item in gaps if isinstance(item, dict)
+        )
+        return (
+            f"K anchor 排序異常：{anomaly_text or 'none'}；"
+            f"明顯缺號（相鄰差>1 km）：{gap_text or 'none'}。",
+            alignment_ref,
+        )
+    if re.search(r"最大.*K|K.*最大", query, re.IGNORECASE):
+        return (
+            f"Mileage tag alignment 辨識到的最大 K 標記是 "
+            f"{summary.get('maximum_k_label')}。",
+            anchors_ref,
+        )
+    if re.search(r"K\s*anchors?|K\s*標記", query, re.IGNORECASE):
+        values = "、".join(str(item) for item in summary.get("recognized_k_values") or [])
+        return (
+            f"Route mileage K anchors 共 "
+            f"{len(summary.get('recognized_k_values') or [])} 個："
+            f"{values or 'none'}。",
+            anchors_ref,
+        )
+    return None, None
+
+
+def _normalized_k_label(value: Any) -> str | None:
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*[KＫ]\s*", str(value or ""), re.IGNORECASE)
+    if match is None:
+        return None
+    numeric = float(match.group(1))
+    return f"{numeric:g}K"
+
+
+def _mileage_k_value(value: Any) -> float | None:
+    normalized = _normalized_k_label(value)
+    return float(normalized[:-1]) if normalized is not None else None
 
 
 def _decision_output(

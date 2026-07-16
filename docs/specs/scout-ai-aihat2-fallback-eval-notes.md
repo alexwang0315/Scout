@@ -1,6 +1,6 @@
 # Scout AI AI HAT+2 Fallback Eval Notes
 
-Last updated: 2026-07-11
+Last updated: 2026-07-16
 
 ## Scope
 
@@ -322,13 +322,16 @@ token budget and several nominally successful answers ended mid-sentence.
 
 The runtime contract is now:
 
-- local fallback default: bounded by
-  `SCOUT_AI_LOCAL_MODEL_MAX_TOKENS` or the legacy local-only
-  `SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS`;
+- local fallback default: omit `num_predict` / `max_tokens` and let the Hailo
+  model stop at EOS; the dashboard AI HAT+2 profile carries no hidden `384`
+  completion cap;
 - cloud default: omit `max_tokens` and let the selected provider/model apply
-  its native completion capability;
-- optional cloud override: `SCOUT_AI_CLOUD_MODEL_MAX_TOKENS`, used only when an
-  operator deliberately requests a cap;
+  its native completion capability; the dashboard profile carries no hidden
+  `2048` completion cap;
+- Aggressive Construction Mode ignores stale `SCOUT_AI_LOCAL_MODEL_MAX_TOKENS`,
+  `SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS`, profile `max_tokens` / `num_predict`,
+  and `SCOUT_AI_CLOUD_MODEL_MAX_TOKENS`; these limits can only become active
+  after explicitly leaving Construction Mode for Productization;
 - request pacing and per-question timeout are transport controls, not output
   token limits, and must be reported separately in eval artifacts.
 
@@ -336,6 +339,119 @@ Cloud-model comparisons must report `finish_reason`, non-empty completed-answer
 rate, provider errors, model-native tool calls, and any retries. Exact matching
 against the deterministic planner's suggested tool set remains diagnostic and
 is not an answer-correctness score.
+
+## Hailo 2K Context Recovery Contract
+
+The Hailo Model Zoo lists the precompiled `Qwen3-1.7B-Instruct` context length
+as 2048 tokens. This is an external model capacity, not a Scout Construction
+Mode token budget. Scout therefore keeps completion generation uncapped while
+packing each Hailo request as follows:
+
+- initial bounded synthesis: conservative `system + user <= 1200` estimated
+  input tokens;
+- context-full continuation: `system + user <= 900` estimated input tokens;
+- complete evidence remains in the deterministic evidence ledger and verifier;
+  only the model-facing projection is compacted;
+- every selected tool remains represented in the compact projection, with
+  lower-value facts and duplicate refs removed first;
+- `/api/chat` uses Ollama-compatible NDJSON streaming;
+- bounded prompts request the semantic terminator `<SCOUT_DONE>` and also send
+  it as an Ollama stop sequence; independently, the streaming client stops once
+  a complete bounded answer sentence has formed, so a model that omits the
+  marker cannot consume the remaining context after answering;
+- `num_predict` remains omitted in Aggressive Construction Mode. Semantic stop
+  and input packing must not be misreported as a completion-token ceiling.
+
+If a stream reports context/cache exhaustion, ends with `done=false`, or stalls
+without progress, the runtime stores its partial output as trace evidence and
+starts a new request with a compact continuation package. The continuation
+contains the question, bounded evidence cards, missing-evidence state, and the
+partial draft, and asks for one complete independently readable answer. It may
+use the attempt's normal 10-request capacity. An unfinished partial response is
+never shown as the answer. A model that emits `<SCOUT_DONE>` before any answer
+text also enters continuation, but is counted as `empty_semantic_stop` rather
+than external context exhaustion. That fresh continuation disables the repeated
+marker contract and uses client-side semantic completion: once a complete
+bounded sentence is streamed, the client stops reading and sends it through the
+same grounding verifier. This avoids both a deterministic empty-marker loop and
+an unbounded natural completion without reintroducing a token ceiling.
+
+Eval artifacts expose `streaming`, `semantic_stop`, `semantic_completion`,
+`input_pack_estimated_tokens`, `context_full_recovery_count`, and any external
+limit reason. Provider hard limits are checkpoint/continuation events; they are
+not Scout reasoning failures.
+
+### 2026-07-15 AI HAT+2 workspace 100 proof
+
+The repaired `qwen3:1.7b` Hailo replay completed all 100 workspace-grounded
+questions through the real bounded runtime:
+
+- tool selection: 100/100;
+- completed and grounded answers: 100/100;
+- model requests: 123;
+- deterministic tool calls: 142;
+- model input/output usage: 103,324 / 5,000 tokens;
+- continuations: 8, including 3 actual context-full recoveries;
+- Scout temperature: 54.3-62.0 C with `get_throttled=0x0`;
+- UPS: 94% throughout, 16.722-16.728 V battery, no active alerts.
+
+Canonical artifacts on the Scout host:
+
+- `eval-results/final-100-quality-repaired-20260715/canonical-100/scout_ai_aihat2_workspace_100_canonical.json`
+- `eval-results/final-100-quality-repaired-20260715/canonical-100/scout_ai_aihat2_workspace_100_canonical.md`
+
+The score is a runtime/grounding result, not a claim of perfect language
+quality. Five answers remain `KNOWN_MODEL_QUALITY_ISSUE`: cases 050, 070, and
+082-084 repeatedly substitute or insert visually similar Chinese glyphs. Their
+tool evidence and numeric facts are grounded, but the local 1.7B model's
+wording should be reviewed or upgraded before treating those answers as a
+language-quality baseline.
+
+Official references:
+
+- Hailo Model Zoo GenAI model table:
+  `https://github.com/hailo-ai/hailo_model_zoo_genai/blob/main/docs/MODELS.rst`
+- Ollama streaming API contract:
+  `https://github.com/ollama/ollama/blob/main/docs/api.md`
+
+### 2026-07-16 Pydantic AI 2.10 canonical fallback replay
+
+The Scout hardware runtime was upgraded to `pydantic-ai-slim==2.10.0` and
+`pydantic-evals==2.10.0`, then the configured dashboard fallback model
+`qwen3:1.7b` was replayed against all 100 `user_field_100` questions using the
+real Hailo endpoint and the current `chilai_nanhua_day1` workspace.
+
+- endpoint: `http://127.0.0.1:8000/api/chat`;
+- hardware attestation: Hailo PCIe device plus HEF model metadata;
+- all 100 records: `used_ai_hat_plus_2=true`;
+- answer classification: 90 answered, 2 answered with missing-evidence gaps,
+  2 weak/refusal-like, and 6 no-answer;
+- answer quality screen: 39 pass requiring human review, 1 needs review,
+  54 fail, and 6 no-answer;
+- missing tools: 0 cases;
+- cases with missing evidence: 22;
+- mean/median/p95 model latency: 62.3/60.0/180.0 seconds;
+- run duration: 6,438.7 seconds;
+- temperature: 57.6-59.3 C, `get_throttled=0x0`;
+- memory remained stable with no swap use.
+
+Canonical Mac and Scout artifact names:
+
+- `outputs/evals/scout_ai_aihat2_fallback_user_field_100_20260716T041951Z.json`
+- `outputs/evals/scout_ai_aihat2_fallback_user_field_100_20260716T041951Z.md`
+
+The six no-answer cases (`field-005`, `field-046`, `field-055`, `field-059`,
+`field-080`, and `field-089`) ended in the 180-second external transport
+boundary. Their model metadata records `TimeoutError`, but the continuation
+count is zero. This is a known recovery-path defect: context/cache exhaustion
+is continued, while an interrupted streaming transport timeout is not yet
+converted into a continuation attempt. Do not report this replay as 100%
+answerable or quality-passing.
+
+An additional diagnostic replay used the non-canonical
+`qwen2.5-coder:1.5b` HEF model. It completed faster but only 31 answers passed
+the automatic quality screen. Its artifacts end in `20260716T023024Z`; they are
+comparison evidence, not the configured fallback baseline.
 
 ## Boundary
 
@@ -379,7 +495,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:. \
   --max-cases 20 \
   --workspace-root /home/alexwang0315/scout-fusion/workspaces \
   --project-id chilai_nanhua_day1 \
-  --model qwen2.5-instruct:1.5b \
+  --model qwen3:1.7b \
   --timeout-seconds 120 \
   --max-tools 8 \
   --output-dir outputs/evals

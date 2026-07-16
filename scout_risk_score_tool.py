@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bisect import bisect_right
 import json
 import math
 import re
@@ -106,19 +107,40 @@ def search_project_risk_scores(
     ]
     _attach_baseline_calibration_pairs(filtered, loaded_items)
     _attach_nearest_route_context(filtered, root, project)
+    segment_source_ref = _attach_candidate_route_segments(filtered, root, project)
+    segment_risk_summary = _segment_risk_summary(filtered)
     filtered.sort(key=_sort_key(resolved_sort))
     results = filtered[:resolved_limit]
     compact_results = [_compact_result(item) for item in results]
+    source_refs = [
+        str(report["source_path"])
+        for report in load_report
+        if report.get("source_path")
+    ]
+    if segment_source_ref:
+        source_refs.append(segment_source_ref)
     answerability = (
         "risk_score_decision_available"
         if compact_results
         else "risk_score_missing_evidence"
     )
     decision = _risk_decision(compact_results)
-    field_answer = _field_answer(
+    query_field_answer, query_source_refs = _risk_query_field_answer(
+        root=root,
+        project=project,
+        query=query,
+        results=compact_results,
+        all_items=filtered,
+        summaries=summaries,
+        segment_risk_summary=segment_risk_summary,
+        score_source_refs=source_refs,
+    )
+    source_refs = list(dict.fromkeys([*query_source_refs, *source_refs]))
+    field_answer = query_field_answer or _field_answer(
         decision=decision,
         results=compact_results,
         answerability=answerability,
+        segment_risk_summary=segment_risk_summary,
     )
     decision_output = _decision_output(
         decision=decision,
@@ -149,6 +171,10 @@ def search_project_risk_scores(
         "decision": decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100 if query_field_answer else 0,
+        "field_answer_source_ref": source_refs[0] if query_field_answer and source_refs else None,
+        "field_answer_source_refs": query_source_refs,
+        "source_ref": source_refs[0] if query_field_answer and source_refs else None,
         "risk_decision": {
             "role": "Risk Score / Route Hazard Decision",
             "candidate_only": True,
@@ -172,7 +198,9 @@ def search_project_risk_scores(
             "sort": resolved_sort,
         },
         "source_report": load_report,
+        "source_refs": list(dict.fromkeys(source_refs)),
         "summaries": summaries,
+        "segment_risk_summary": segment_risk_summary,
         "searched_score_count": len(loaded_items),
         "matched_score_count": len(filtered),
         "result_count": len(results),
@@ -484,6 +512,13 @@ def _compact_result(item: dict[str, Any]) -> dict[str, Any]:
         "nearest_checkpoint",
         "nearest_mileage_anchor",
         "readable_location",
+        "candidate_route_segment",
+        "segment_candidate_id",
+        "segment_label",
+        "segment_join_distance_m",
+        "segment_join_method",
+        "segment_join_status",
+        "human_review_required",
         "candidate_only",
         "runtime_safety_truth",
     )
@@ -535,6 +570,7 @@ def _field_answer(
     decision: str,
     results: list[dict[str, Any]],
     answerability: str,
+    segment_risk_summary: dict[str, Any],
 ) -> str:
     if not results:
         return (
@@ -543,12 +579,355 @@ def _field_answer(
         )
     top = results[0]
     location = _result_location(top)
+    segment_candidates = segment_risk_summary.get("segments")
+    segment_clause = ""
+    if isinstance(segment_candidates, list) and segment_candidates:
+        labels = [
+            str(item.get("candidate_id") or item.get("label"))
+            for item in segment_candidates
+            if isinstance(item, dict)
+            and (item.get("candidate_id") or item.get("label"))
+        ]
+        total = int(segment_risk_summary.get("matched_segment_count") or len(labels))
+        qualifier = "前" if segment_risk_summary.get("truncated") else ""
+        segment_clause = (
+            f" 匹配到 {total} 個候選路段；{qualifier}{len(labels)} 個為："
+            f"{', '.join(labels)}。"
+        )
+    explicit_location = _explicit_location_fields(top)
     return (
-        f"風險分數判斷：建議 {decision}。最高候選風險位於 {location}，"
+        f"風險分數判斷：建議 {decision}。{explicit_location} "
+        f"最高候選風險位於 {location}，"
         f"score={top.get('score')}、bucket={top.get('risk_bucket') or 'unknown'}。"
+        f"{segment_clause}"
         f"下一步：{_next_action(decision=decision)} "
         f"answerability={answerability}；此為候選風險證據，不是 runtime safety truth。"
     )
+
+
+def _risk_query_field_answer(
+    *,
+    root: Path,
+    project: dict[str, Any],
+    query: str,
+    results: list[dict[str, Any]],
+    all_items: list[dict[str, Any]],
+    summaries: dict[str, Any],
+    segment_risk_summary: dict[str, Any],
+    score_source_refs: list[str],
+) -> tuple[str, list[str]]:
+    lowered = query.casefold()
+
+    if re.search(r"route\s*note|路線註記|路線備註", lowered) and re.search(
+        r"calibrat|校準|高風險|high\s*risk", lowered
+    ):
+        answer, route_note_ref = _route_notes_near_calibrated_high_risk(
+            root,
+            project,
+            all_items,
+        )
+        if answer:
+            refs = [route_note_ref] if route_note_ref else []
+            return answer, [*refs, *score_source_refs]
+
+    if "attribution" in lowered or "歸因" in lowered:
+        ref = str(
+            project.get("risk_attribution_diagnostic_ref")
+            or "outputs/risk/risk_attribution_diagnostic.json"
+        )
+        payload = _load_optional_json_object(root, ref)
+        factor_analysis = payload.get("factor_analysis")
+        formula = (
+            factor_analysis.get("formula_candidate")
+            if isinstance(factor_analysis, dict)
+            else None
+        )
+        dimensions = formula.get("selected_dimensions") if isinstance(formula, dict) else []
+        expression = formula.get("expression") if isinstance(formula, dict) else None
+        if isinstance(dimensions, list) and dimensions:
+            answer = f"最高風險的候選歸因維度是 {'、'.join(map(str, dimensions))}"
+            if expression:
+                answer += f"；候選公式為 {expression}"
+            return answer + "。這是 workspace 診斷，不會覆寫正式 risk score。", [ref]
+
+    if "excluded" in lowered and ("proposal" in lowered or "排除" in lowered):
+        ref = str(
+            project.get("excluded_extreme_warning_cp_proposals_ref")
+            or "outputs/risk/excluded_extreme_warning_cp_proposals.json"
+        )
+        payload = _load_optional_json_object(root, ref)
+        dimensions = payload.get("excluded_dimensions")
+        counts = payload.get("counts")
+        proposals = payload.get("proposals")
+        proposal_count = counts.get("proposal_count") if isinstance(counts, dict) else None
+        first_reason = (
+            proposals[0].get("reason_zh")
+            if isinstance(proposals, list) and proposals and isinstance(proposals[0], dict)
+            else None
+        )
+        if isinstance(dimensions, list) and dimensions:
+            dimension_text = "、".join(map(str, dimensions))
+            reason = str(first_reason or f"{dimension_text} 未納入正式公式")
+            return (
+                f"excluded extreme warning CP proposals 共 {proposal_count} 筆 proposal；"
+                f"排除維度為 {dimension_text}。原因：{reason}",
+                [ref],
+            )
+
+    if "risk ribbon" in lowered and ("heatmap" in lowered or "heat map" in lowered):
+        ribbon_ref = str(
+            project.get("risk_ribbon_metadata_ref")
+            or "outputs/risk/risk_ribbon.metadata.json"
+        )
+        heatmap_ref = str(
+            project.get("calibrated_risk_heatmap_metadata_ref")
+            or "outputs/risk/calibrated_risk_heatmap.metadata.json"
+        )
+        ribbon = _load_optional_json_object(root, ribbon_ref)
+        heatmap = _load_optional_json_object(root, heatmap_ref)
+        ribbon_count = ribbon.get("segment_count", project.get("risk_ribbon_segment_count"))
+        heatmap_count = heatmap.get(
+            "segment_count",
+            project.get("calibrated_risk_heatmap_segment_count"),
+        )
+        if ribbon_count is not None or heatmap_count is not None:
+            equality = "一致" if ribbon_count == heatmap_count else "不一致"
+            return (
+                f"資料點數：risk ribbon={ribbon_count}；calibrated heatmap={heatmap_count}；"
+                f"兩者{equality}。",
+                [ribbon_ref, heatmap_ref],
+            )
+
+    if "bucket" in lowered and any(token in lowered for token in ("各", "分別", "多少", "count")):
+        clauses: list[str] = []
+        for surface in ("baseline", "calibration"):
+            summary = summaries.get(surface)
+            if not isinstance(summary, dict) or not summary.get("available"):
+                continue
+            counts = summary.get("bucket_counts")
+            if not isinstance(counts, dict):
+                continue
+            ordered = [
+                f"{bucket}={counts[bucket]}"
+                for bucket in ("low", "moderate", "high", "very_high", "extreme", "unknown")
+                if bucket in counts
+            ]
+            clauses.append(f"{surface}：{'、'.join(ordered)}")
+        if clauses:
+            return "risk score bucket 點數為：" + "；".join(clauses) + "。", score_source_refs
+
+    if (
+        "baseline" in lowered
+        and ("calibrat" in lowered or "校準" in lowered)
+        and any(token in lowered for token in ("最大", "最高", " max"))
+    ):
+        baseline = summaries.get("baseline")
+        calibration = summaries.get("calibration")
+        if isinstance(baseline, dict) and isinstance(calibration, dict):
+            return (
+                f"baseline max={baseline.get('max_score')}；"
+                f"calibrated max={calibration.get('max_score')}。",
+                score_source_refs,
+            )
+
+    if "delta" in lowered or "差值" in lowered:
+        delta_items = [
+            item for item in all_items if _optional_float(item.get("calibration_delta")) is not None
+        ]
+        if delta_items:
+            top = max(delta_items, key=lambda item: float(item["calibration_delta"]))
+            return (
+                "最大 risk delta 位於 "
+                f"{top.get('distance_km')} km（{top.get('lat')},{top.get('lon')}），"
+                f"baseline={top.get('paired_baseline_score')}、calibrated={top.get('score')}、"
+                f"delta={top.get('calibration_delta')}。",
+                score_source_refs,
+            )
+
+    if (
+        "calibrat" in lowered
+        and "最高" in lowered
+        and re.search(r"(?:五|5)\s*(?:個|筆)?(?:位置|點)", lowered)
+    ):
+        top_five = results[:5]
+        if top_five:
+            locations = [
+                (
+                    f"{index}. {item.get('distance_km')} km / "
+                    f"{item.get('lat')},{item.get('lon')} / score={item.get('score')} / "
+                    f"{item.get('risk_bucket')}"
+                )
+                for index, item in enumerate(top_five, 1)
+            ]
+            return "calibrated risk 最高五個位置：" + "；".join(locations) + "。", score_source_refs
+
+    if (
+        "calibrat" in lowered
+        and "最高" in lowered
+        and "cp" in lowered
+        and "座標" in lowered
+    ):
+        if results:
+            top = results[0]
+            checkpoint = top.get("nearest_checkpoint")
+            mileage = top.get("nearest_mileage_anchor")
+            return (
+                "最高 calibrated risk 點："
+                f"CP={_nested_value(checkpoint, 'label')}（距離 {_nested_value(checkpoint, 'distance_m')} m）；"
+                f"K={_nested_value(mileage, 'label')}（距離 {_nested_value(mileage, 'distance_m')} m）；"
+                f"座標={top.get('lat')},{top.get('lon')}；score={top.get('score')}、"
+                f"bucket={top.get('risk_bucket')}。",
+                score_source_refs,
+            )
+
+    if re.search(r"\b15\s*k\b", lowered) and "risk" in lowered and results:
+        top = results[0]
+        return (
+            f"15K 附近最高匹配 risk score={top.get('score')}、bucket={top.get('risk_bucket')}；"
+            f"GPX 累積={top.get('distance_km')} km，座標={top.get('lat')},{top.get('lon')}。",
+            score_source_refs,
+        )
+
+    if "segment" in lowered and ("extreme" in lowered or "very_high" in lowered):
+        segments = segment_risk_summary.get("segments")
+        if isinstance(segments, list) and segments:
+            labels = [
+                f"{item.get('candidate_id')}({item.get('highest_risk_bucket')}, max={item.get('max_score')})"
+                for item in segments
+                if isinstance(item, dict)
+            ]
+            return (
+                f"含 extreme 或 very_high 點的候選 route segments 共 "
+                f"{segment_risk_summary.get('matched_segment_count')} 個；"
+                f"前 {len(labels)} 個為：{', '.join(labels)}。",
+                score_source_refs,
+            )
+
+    return "", []
+
+
+def _route_notes_near_calibrated_high_risk(
+    root: Path,
+    project: dict[str, Any],
+    risk_items: list[dict[str, Any]],
+    *,
+    radius_m: float = 250.0,
+) -> tuple[str, str | None]:
+    ref = str(
+        project.get("route_note_candidates_ref")
+        or "candidates/route_note_candidates.json"
+    )
+    payload = _load_optional_json_object(root, ref)
+    raw_notes = payload.get("candidates") if isinstance(payload, dict) else []
+    notes = [item for item in raw_notes if isinstance(item, dict)]
+    calibrated = [
+        item
+        for item in risk_items
+        if item.get("surface") == "calibration"
+        and _bucket_rank(str(item.get("risk_bucket") or "")) >= _bucket_rank("high")
+        and _optional_float(item.get("lat")) is not None
+        and _optional_float(item.get("lon")) is not None
+    ]
+    calibrated.sort(key=lambda item: -float(item.get("score") or 0.0))
+    matches: list[dict[str, Any]] = []
+    for note in notes:
+        note_lat = _optional_float(note.get("lat"))
+        note_lon = _optional_float(note.get("lon"))
+        if note_lat is None or note_lon is None:
+            continue
+        nearest: tuple[float, dict[str, Any]] | None = None
+        for risk in calibrated[:120]:
+            distance = _haversine_m(
+                note_lat,
+                note_lon,
+                float(risk["lat"]),
+                float(risk["lon"]),
+            )
+            if nearest is None or distance < nearest[0]:
+                nearest = (distance, risk)
+        if nearest is None or nearest[0] > radius_m:
+            continue
+        matches.append(
+            {
+                "name": note.get("name") or note.get("normalized_note") or note.get("candidate_id"),
+                "category": note.get("note_category") or "uncategorized_note",
+                "distance_m": round(nearest[0]),
+                "score": nearest[1].get("score"),
+                "bucket": nearest[1].get("risk_bucket"),
+            }
+        )
+    matches.sort(
+        key=lambda item: (
+            -float(item.get("score") or 0.0),
+            int(item.get("distance_m") or 0),
+            str(item.get("name") or ""),
+        )
+    )
+    if not matches:
+        return (
+            f"在 {radius_m:.0f} m 空間門檻內，沒有 route note 靠近 "
+            "calibrated high/very_high/extreme risk 候選點。",
+            ref,
+        )
+    bounded = matches[:8]
+    details = "；".join(
+        f"{item['name']}({item['category']}, 距高風險點 {item['distance_m']} m, "
+        f"score={item['score']}, {item['bucket']})"
+        for item in bounded
+    )
+    remainder = len(matches) - len(bounded)
+    suffix = f"；其餘 {remainder} 筆見 artifact" if remainder else ""
+    return (
+        f"{radius_m:.0f} m 內共有 {len(matches)} 筆 route note 靠近 calibrated "
+        f"high/very_high/extreme risk 候選點；前 {len(bounded)} 筆："
+        f"{details}{suffix}。",
+        ref,
+    )
+
+
+def _load_optional_json_object(root: Path, ref: str) -> dict[str, Any]:
+    path = _project_path(root, ref)
+    if not path.exists():
+        return {}
+    try:
+        return _load_json_object(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _nested_value(value: Any, key: str) -> Any:
+    return value.get(key) if isinstance(value, dict) else "unavailable"
+
+
+def _explicit_location_fields(item: dict[str, Any]) -> str:
+    checkpoint = item.get("nearest_checkpoint")
+    mileage = item.get("nearest_mileage_anchor")
+    fields = [
+        (
+            f"nearest_cp_label={checkpoint.get('label')}"
+            if isinstance(checkpoint, dict) and checkpoint.get("label")
+            else "nearest_cp_label=unavailable"
+        ),
+        (
+            f"distance_to_cp_m={checkpoint.get('distance_m')}"
+            if isinstance(checkpoint, dict) and checkpoint.get("distance_m") is not None
+            else "distance_to_cp_m=unavailable"
+        ),
+        (
+            f"nearest_mileage_label={mileage.get('label')}"
+            if isinstance(mileage, dict) and mileage.get("label")
+            else "nearest_mileage_label=unavailable"
+        ),
+        (
+            f"distance_to_mileage_m={mileage.get('distance_m')}"
+            if isinstance(mileage, dict) and mileage.get("distance_m") is not None
+            else "distance_to_mileage_m=unavailable"
+        ),
+        f"gpx_cumulative_km={item.get('distance_km')}",
+        f"lat={item.get('lat')}",
+        f"lon={item.get('lon')}",
+    ]
+    return "最高候選定位欄位：" + "; ".join(fields) + "。"
 
 
 def _decision_output(
@@ -823,6 +1202,145 @@ def _attach_nearest_route_context(
         item["readable_location"] = _readable_route_anchor(item)
 
 
+def _attach_candidate_route_segments(
+    items: list[dict[str, Any]],
+    root: Path,
+    project: dict[str, Any],
+) -> str | None:
+    """Join route-distance risk evidence to adjacent candidate segments."""
+
+    source_ref = str(
+        project.get("segment_candidates_ref") or "candidates/segments.json"
+    )
+    segments = _load_anchor_records(
+        root,
+        source_ref,
+        list_keys=("segments", "items", "candidates"),
+    )
+    ranges: list[tuple[float, float, dict[str, Any]]] = []
+    cursor_m = 0.0
+    for segment in segments:
+        distance_m = _optional_float(segment.get("distance_m"))
+        if distance_m is None or distance_m <= 0:
+            continue
+        start_m = cursor_m
+        cursor_m += distance_m
+        ranges.append((start_m, cursor_m, segment))
+    if not ranges:
+        return None
+    end_distances = [end_m for _, end_m, _ in ranges]
+
+    for item in items:
+        join_distance_m = _optional_float(item.get("distance_m"))
+        if join_distance_m is None:
+            item["segment_join_status"] = "missing_route_distance"
+            continue
+        range_index = bisect_right(end_distances, join_distance_m)
+        if range_index == len(ranges) and math.isclose(
+            join_distance_m,
+            end_distances[-1],
+        ):
+            range_index -= 1
+        if range_index >= len(ranges) or join_distance_m < 0:
+            item["segment_join_status"] = "route_distance_out_of_range"
+            continue
+        matched = ranges[range_index]
+        start_m, end_m, segment = matched
+        candidate_id = str(segment.get("candidate_id") or "").strip()
+        if not candidate_id:
+            item["segment_join_status"] = "segment_candidate_id_missing"
+            continue
+        label = str(segment.get("label") or candidate_id)
+        joined = {
+            "candidate_id": candidate_id,
+            "label": label,
+            "from_candidate_id": segment.get("from_candidate_id"),
+            "to_candidate_id": segment.get("to_candidate_id"),
+            "segment_distance_m": round(end_m - start_m, 2),
+            "cumulative_start_distance_m": round(start_m, 2),
+            "cumulative_end_distance_m": round(end_m, 2),
+            "join_distance_m": round(join_distance_m, 2),
+            "join_method": "cumulative_route_distance_candidate",
+            "source_path": source_ref,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "human_review_required": True,
+        }
+        item.update(
+            {
+                "candidate_route_segment": joined,
+                "segment_candidate_id": candidate_id,
+                "segment_label": label,
+                "segment_join_distance_m": round(join_distance_m, 2),
+                "segment_join_method": "cumulative_route_distance_candidate",
+                "segment_join_status": "matched_candidate",
+                "human_review_required": True,
+            }
+        )
+    return source_ref
+
+
+def _segment_risk_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+    by_segment: dict[str, dict[str, Any]] = {}
+    for item in items:
+        segment = item.get("candidate_route_segment")
+        if not isinstance(segment, dict):
+            continue
+        candidate_id = str(segment.get("candidate_id") or "").strip()
+        if not candidate_id:
+            continue
+        score = _optional_float(item.get("score"))
+        current = by_segment.get(candidate_id)
+        if current is None:
+            current = {
+                "candidate_id": candidate_id,
+                "label": segment.get("label") or candidate_id,
+                "from_candidate_id": segment.get("from_candidate_id"),
+                "to_candidate_id": segment.get("to_candidate_id"),
+                "cumulative_start_distance_m": segment.get(
+                    "cumulative_start_distance_m"
+                ),
+                "cumulative_end_distance_m": segment.get(
+                    "cumulative_end_distance_m"
+                ),
+                "max_score": score,
+                "highest_risk_bucket": item.get("risk_bucket"),
+                "matching_risk_point_count": 0,
+                "surfaces": [],
+                "source_path": segment.get("source_path"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "human_review_required": True,
+            }
+            by_segment[candidate_id] = current
+        current["matching_risk_point_count"] += 1
+        surface = str(item.get("surface") or "").strip()
+        if surface and surface not in current["surfaces"]:
+            current["surfaces"].append(surface)
+        current_score = _optional_float(current.get("max_score"))
+        if score is not None and (current_score is None or score > current_score):
+            current["max_score"] = score
+            current["highest_risk_bucket"] = item.get("risk_bucket")
+    ranked = sorted(
+        by_segment.values(),
+        key=lambda item: (
+            -float(item.get("max_score") or 0.0),
+            str(item.get("candidate_id") or ""),
+        ),
+    )
+    visible = ranked[:MAX_RISK_SCORE_LIMIT]
+    return {
+        "join_method": "cumulative_route_distance_candidate",
+        "matched_segment_count": len(ranked),
+        "returned_segment_count": len(visible),
+        "truncated": len(ranked) > len(visible),
+        "segments": visible,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "human_review_required": True,
+    }
+
+
 def _load_anchor_records(
     root: Path,
     ref: str,
@@ -950,6 +1468,13 @@ def _parse_query_filters(query: str) -> dict[str, Any]:
     if re.search(r"calibrat|heatmap|校準|校正|熱區", lowered):
         parsed["surface"] = "calibration"
     if re.search(r"baseline.*calibrat|calibrat.*baseline|基線.*校|校.*基線|兩種|全部|all", lowered):
+        parsed["surface"] = "all"
+    if (
+        re.search(r"各.*bucket|bucket.*(?:各|分別|多少|count)", lowered)
+        or ("risk ribbon" in lowered and ("heatmap" in lowered or "heat map" in lowered))
+        or "delta" in lowered
+        or "差值" in lowered
+    ):
         parsed["surface"] = "all"
     cp_match = re.search(r"\bcp[\s._-]*0*(\d{1,3})\b", lowered, flags=re.IGNORECASE)
     if cp_match:
@@ -1104,8 +1629,8 @@ def _bucket_rank(bucket: Any) -> int | None:
         "moderate": 2,
         "medium": 2,
         "high": 3,
-        "very_high": 3,
-        "extreme": 4,
+        "very_high": 4,
+        "extreme": 5,
     }.get(normalized, None)
 
 

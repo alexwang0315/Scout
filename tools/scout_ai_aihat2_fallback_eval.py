@@ -33,7 +33,7 @@ DEFAULT_CORPUS = ROOT / "docs" / "specs" / "scout-ai-200-question-corpus.json"
 DEFAULT_WORKSPACE_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects"
 DEFAULT_PROJECT_ID = "chilai_nanhua_day1"
 DEFAULT_HAILO_ENDPOINT = "http://127.0.0.1:8000/api/chat"
-DEFAULT_MODEL = "qwen2.5-coder:1.5b"
+DEFAULT_MODEL = "qwen3:1.7b"
 DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "evals"
 
 
@@ -157,13 +157,30 @@ def require_ai_hat_runtime(endpoint: str) -> None:
     if os.getenv("SCOUT_ALLOW_NON_AIHAT_EVAL") == "1":
         return
     node_check = run_command(["sh", "-lc", "test -e /dev/hailo0"])
-    if node_check["returncode"] != 0:
-        raise SystemExit("AI HAT+2 eval must run on Scout host with /dev/hailo0 present")
+    scan = run_command(["hailortcli", "scan"], timeout_seconds=8)
+    if node_check["returncode"] != 0 and not _hailo_scan_attests_hardware(scan):
+        raise SystemExit(
+            "AI HAT+2 eval requires /dev/hailo0 or a physical Hailo PCIe device "
+            "reported by hailortcli scan"
+        )
     tags = _hailo_tags()
     if tags.get("error"):
         raise SystemExit(f"AI HAT+2 Hailo endpoint unavailable: {tags['error']}")
+    models = tags.get("models")
+    if not isinstance(models, list) or not any(
+        isinstance(item, dict) and str(item.get("format") or "").casefold() == "hef"
+        for item in models
+    ):
+        raise SystemExit("AI HAT+2 eval endpoint has no hardware HEF model")
     if "127.0.0.1:8000" not in endpoint:
         raise SystemExit("AI HAT+2 eval endpoint must be the Scout host local Hailo endpoint")
+
+
+def _hailo_scan_attests_hardware(scan: dict[str, Any]) -> bool:
+    if scan.get("returncode") != 0:
+        return False
+    output = str(scan.get("stdout") or "")
+    return re.search(r"Device:\s*(?:pci|integrated)/\S+", output) is not None
 
 
 def select_questions(

@@ -1,6 +1,8 @@
+import io
 import socket
 import shutil
 import threading
+import urllib.error
 import urllib.request
 import json
 from pathlib import Path
@@ -53,6 +55,8 @@ from assistant_pydantic_provider import (
     build_workspace_tool_prompt,
     create_configured_pydantic_runner,
 )
+
+
 from assistant_skill_router import (
     PRETRIP_CONTEXT_REGISTRY_SOURCE_ID,
     PRETRIP_TOOL_PLANNER_SKILL_ID,
@@ -65,6 +69,15 @@ from scout.schemas.workspace_query import parse_workspace_query_request
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+
+
+@pytest.mark.parametrize("value", [None, 0, -1])
+def test_nonpositive_request_timeout_disables_transport_deadline(value):
+    assert assistant_provider_module._request_timeout(value) is None
+
+
+def test_positive_request_timeout_reserves_one_second_for_cleanup():
+    assert assistant_provider_module._request_timeout(10) == 9.0
 
 
 def test_pre_provider_limit_checkpoints_and_enters_fresh_recovery_stage(
@@ -186,6 +199,7 @@ def test_pydantic_runner_forwards_timeout_to_workspace_model_request(monkeypatch
 
 
 def test_cloud_runner_does_not_apply_local_default_token_limit(monkeypatch):
+    monkeypatch.setenv("SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE", "1")
     monkeypatch.delenv("SCOUT_AI_CLOUD_MODEL_MAX_TOKENS", raising=False)
     monkeypatch.setenv("SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS", "768")
 
@@ -207,7 +221,20 @@ def test_cloud_runner_does_not_apply_local_default_token_limit(monkeypatch):
     assert request_settings["timeout"] == 29.0
 
 
-def test_cloud_runner_accepts_explicit_cloud_token_override(monkeypatch):
+def test_construction_runner_ignores_stale_cloud_token_override(monkeypatch):
+    monkeypatch.setenv("SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE", "1")
+    monkeypatch.setenv("SCOUT_AI_CLOUD_MODEL_MAX_TOKENS", "8192")
+
+    runner = PydanticAIEnvRunner(
+        model_name="openrouter:z-ai/glm-5.2",
+        profile_name="cloud",
+    )
+
+    assert runner.workspace_model_max_tokens is None
+
+
+def test_productization_runner_accepts_explicit_cloud_token_override(monkeypatch):
+    monkeypatch.setenv("SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE", "0")
     monkeypatch.setenv("SCOUT_AI_CLOUD_MODEL_MAX_TOKENS", "8192")
 
     runner = PydanticAIEnvRunner(
@@ -219,8 +246,9 @@ def test_cloud_runner_accepts_explicit_cloud_token_override(monkeypatch):
 
 
 def test_local_runner_has_no_scout_default_token_limit(monkeypatch):
-    monkeypatch.delenv("SCOUT_AI_LOCAL_MODEL_MAX_TOKENS", raising=False)
-    monkeypatch.delenv("SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS", raising=False)
+    monkeypatch.setenv("SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE", "1")
+    monkeypatch.setenv("SCOUT_AI_LOCAL_MODEL_MAX_TOKENS", "128")
+    monkeypatch.setenv("SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS", "192")
 
     runner = PydanticAIEnvRunner(
         model_name="hailo:qwen2.5-instruct:1.5b",
@@ -505,7 +533,7 @@ def test_bounded_runner_without_workspace_tools_fails_closed_without_evidence(
 def test_hailo_workspace_path_uses_bounded_evidence_without_full_tool_prompt(
     monkeypatch,
 ):
-    captured: dict[str, object] = {}
+    captured: dict[str, object] = {"prompts": [], "max_tokens": []}
     runner = PydanticAIEnvRunner(
         model_name="hailo:qwen2.5-instruct:1.5b",
         base_url="http://127.0.0.1:11434/v1",
@@ -521,11 +549,15 @@ def test_hailo_workspace_path_uses_bounded_evidence_without_full_tool_prompt(
         system_prompt,
         max_tokens=None,
         timeout_seconds=None,
+        input_token_budget=None,
+        semantic_stop_enabled=True,
     ):
-        captured["prompt"] = prompt
+        captured["prompts"].append(prompt)
         captured["system_prompt"] = system_prompt
-        captured["max_tokens"] = max_tokens
+        captured["max_tokens"].append(max_tokens)
         captured["timeout_seconds"] = timeout_seconds
+        captured["input_token_budget"] = input_token_budget
+        captured["semantic_stop_enabled"] = semantic_stop_enabled
         runner.last_hailo_prompt_eval_count = 300
         runner.last_hailo_eval_count = 80
         return "CP 3 是目前最危險的位置。"
@@ -550,11 +582,202 @@ def test_hailo_workspace_path_uses_bounded_evidence_without_full_tool_prompt(
     assert assistant_provider_module.WORKSPACE_TOOL_PROMPT not in str(
         captured["system_prompt"]
     )
-    assert "SCOUT_BOUNDED_SYNTHESIS_V1" in str(captured["prompt"])
+    assert len(captured["prompts"]) == 2
+    assert "SCOUT_BOUNDED_SYNTHESIS_V1" in str(captured["prompts"][0])
+    assert "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1" in str(captured["prompts"][1])
+    assert captured["max_tokens"] == [None, None]
     assert context.invocations
     assert runner.last_agent_run_ledger["tool_call_count"] >= 1
     assert runner.last_grounding_verification["passed"] is False
     assert output != "CP 3 是目前最危險的位置。"
+
+
+def test_hailo_bounded_workspace_continues_after_external_context_full(
+    monkeypatch,
+):
+    prompts: list[str] = []
+    input_budgets: list[int | None] = []
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        profile_name="local",
+        workspace_tools_enabled=True,
+    )
+
+    def fake_hailo_chat(
+        prompt,
+        *,
+        system_prompt,
+        max_tokens=None,
+        timeout_seconds=None,
+        input_token_budget=None,
+        semantic_stop_enabled=True,
+    ):
+        del system_prompt, max_tokens, timeout_seconds
+        prompts.append(prompt)
+        input_budgets.append(input_token_budget)
+        runner.last_hailo_input_estimated_tokens = input_token_budget or 1200
+        runner.last_hailo_prompt_eval_count = input_token_budget or 1200
+        runner.last_hailo_eval_count = 8
+        if len(prompts) == 1:
+            raise assistant_provider_module.HailoContextFullError(
+                "stream_ended_without_done",
+                partial_output="目前路線資料顯示",
+            )
+        return "目前路線資料顯示有 CP 點。"
+
+    monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_hailo_chat)
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前這條路線有多少個 CP 點？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    runner.run_with_workspace_tools(
+        "bounded prompt",
+        timeout_seconds=10,
+        tool_context=context,
+    )
+
+    assert prompts[0].startswith("SCOUT_BOUNDED_SYNTHESIS_V1\n")
+    assert prompts[1].startswith("SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1\n")
+    assert input_budgets[:2] == [
+        assistant_provider_module.HAILO_MAX_INPUT_TOKENS,
+        assistant_provider_module.HAILO_CONTINUATION_INPUT_TOKENS,
+    ]
+    assert runner.last_agent_run_ledger["request_count"] >= 2
+    assert runner.last_agent_run_ledger["retry_count"] >= 1
+
+
+def test_hailo_bounded_workspace_escapes_empty_semantic_stop_loop(monkeypatch):
+    semantic_stop_flags: list[bool] = []
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        profile_name="local",
+        workspace_tools_enabled=True,
+    )
+
+    def fake_hailo_chat(
+        prompt,
+        *,
+        system_prompt,
+        max_tokens=None,
+        timeout_seconds=None,
+        input_token_budget=None,
+        semantic_stop_enabled=True,
+    ):
+        del prompt, system_prompt, max_tokens, timeout_seconds
+        semantic_stop_flags.append(semantic_stop_enabled)
+        runner.last_hailo_input_estimated_tokens = input_token_budget or 1200
+        runner.last_hailo_prompt_eval_count = input_token_budget or 1200
+        runner.last_hailo_eval_count = 8
+        if len(semantic_stop_flags) == 1:
+            raise assistant_provider_module.HailoContinuationRequired(
+                "empty_semantic_stop"
+            )
+        return "目前 workspace 有可引用的 preparation 狀態。"
+
+    monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_hailo_chat)
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="目前 preparation 狀態是什麼？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    runner.run_with_workspace_tools(
+        "bounded prompt",
+        timeout_seconds=10,
+        tool_context=context,
+    )
+
+    assert semantic_stop_flags[:2] == [True, False]
+    assert runner.last_agent_run_ledger["request_count"] >= 2
+    assert runner.last_model_response_metadata["continuation_count"] == "1"
+
+
+def test_hailo_grounding_repair_continues_after_context_full(monkeypatch):
+    prompts: list[str] = []
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        profile_name="local",
+        workspace_tools_enabled=True,
+    )
+
+    def fake_hailo_chat(
+        prompt,
+        *,
+        system_prompt,
+        max_tokens=None,
+        timeout_seconds=None,
+        input_token_budget=None,
+        semantic_stop_enabled=True,
+    ):
+        del system_prompt, max_tokens, timeout_seconds, semantic_stop_enabled
+        prompts.append(prompt)
+        runner.last_hailo_input_estimated_tokens = input_token_budget or 1200
+        runner.last_hailo_prompt_eval_count = input_token_budget or 1200
+        runner.last_hailo_eval_count = 8
+        if len(prompts) == 1:
+            return "SMAP surface=0.1。"
+        if len(prompts) == 2:
+            raise assistant_provider_module.HailoContextFullError(
+                "stream_stalled",
+                partial_output="",
+            )
+        payload = json.loads(prompt.partition("\n")[2])
+        exact = next(
+            card
+            for card in payload["evidence_cards"]
+            if int(card.get("key_values", {}).get("field_answer_priority") or 0)
+            >= 100
+        )
+        field_answer = exact["key_values"]["field_answer"]
+        source_ref = exact["key_values"]["field_answer_source_ref"]
+        return f"{field_answer} [{source_ref}]"
+
+    monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_hailo_chat)
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question=(
+                "SMAP L4 corridor summary 的 surface、rootzone 與 profile "
+                "soil moisture 是多少？"
+            ),
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    answer = runner.run_with_workspace_tools(
+        "bounded prompt",
+        timeout_seconds=10,
+        tool_context=context,
+    )
+
+    assert prompts[0].startswith("SCOUT_BOUNDED_SYNTHESIS_V1\n")
+    assert prompts[1].startswith("SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1\n")
+    assert prompts[2].startswith("SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1\n")
+    assert "目前無法從已驗證" not in answer
+    assert runner.last_agent_run_ledger["request_count"] == 3
+    assert runner.last_model_response_metadata["continuation_count"] == "1"
+    assert runner.last_model_response_metadata["context_full_recovery_count"] == "1"
 
 
 def test_construction_runner_does_not_stop_on_scout_input_token_telemetry(monkeypatch):
@@ -9814,7 +10037,7 @@ def test_operator_requested_ai_hat_plus_2_fallback_reports_unavailable_when_not_
     assert any("No cloud model request was made" in item for item in response.limitations)
 
 
-def test_ai_hat_plus_2_prompt_keeps_complete_context_in_construction_mode():
+def test_ai_hat_plus_2_prompt_packs_large_context_for_hailo_external_limit():
     prompt = (
         "Question:\n我現在是否應該下撤？\n"
         "Total Info:\n"
@@ -9826,12 +10049,14 @@ def test_ai_hat_plus_2_prompt_keeps_complete_context_in_construction_mode():
 
     compact = assistant_provider_module._compact_hailo_ollama_prompt(prompt)
 
-    assert len(compact) > 3800
+    assert assistant_provider_module._estimate_hailo_chat_input_tokens(
+        "",
+        compact,
+    ) <= assistant_provider_module.HAILO_MAX_INPUT_TOKENS
     assert "我現在是否應該下撤？" in compact
     assert "AI HAT+ 2 本地備援模型" in compact
-    assert "如果問題只是問候" in compact
     assert "回答要求" in compact
-    assert "TAIL_EVIDENCE_MARKER" in compact
+    assert "TAIL_EVIDENCE_MARKER" not in compact
 
 
 def test_ai_hat_plus_2_prompt_compaction_uses_greeting_fast_path():
@@ -9888,6 +10113,58 @@ def test_ai_hat_plus_2_prompt_compaction_adds_rain_risk_evidence_hint():
     assert "score=99.58" in compact
     assert "bucket=extreme" in compact
     assert "不要改寫成一般雨天常識" in compact
+
+
+def test_ai_hat_plus_2_compacts_bounded_synthesis_for_external_context_limit():
+    payload = {
+        "question": "目前 workspace 的 project_id、route_name 與 primary GPX 檔名分別是什麼？",
+        "evidence_cards": [
+            {
+                "tool_id": "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+                "claim_summary": "workspace catalog query completed",
+                "key_values": {
+                    "project_id": "chilai_nanhua_day1_scoutAI",
+                    "route_name": "12能高安東軍00",
+                    "primary_gpx_filename": "能高安東軍.gpx.gpx",
+                    "results": [
+                        {"noise": "TAIL_NOISE" * 1000},
+                    ],
+                },
+                "missing_fields": [],
+                "source_refs": [
+                    "project.json",
+                    "normalized/routes/route_summary.json",
+                ],
+                "evidence_records": [],
+                "result_count": 10,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
+        "missing_evidence": [],
+        "answer_contract": "cite every concrete claim",
+    }
+    prompt = "SCOUT_BOUNDED_SYNTHESIS_V1\n" + json.dumps(
+        payload,
+        ensure_ascii=False,
+    )
+
+    compact = assistant_provider_module._compact_hailo_ollama_prompt(prompt)
+    compact_payload = json.loads(compact.split("\n", 1)[1])
+
+    assert len(compact) < 6000
+    assert compact_payload["question"] == payload["question"]
+    card = compact_payload["evidence_cards"][0]
+    assert card["key_values"]["project_id"] == "chilai_nanhua_day1_scoutAI"
+    assert card["key_values"]["route_name"] == "12能高安東軍00"
+    assert card["key_values"]["primary_gpx_filename"] == "能高安東軍.gpx.gpx"
+    assert card["source_refs"] == [
+        "project.json",
+        "normalized/routes/route_summary.json",
+    ]
+    assert "每句只引用" in compact_payload["answer_contract"]
+    assert "禁止把未使用的 source_refs 單獨列成引用句" in compact_payload["answer_contract"]
+    assert "TAIL_NOISE" not in compact
 
 
 def test_ai_hat_raw_eval_prompt_keeps_all_facts_without_scout_byte_cap() -> None:
@@ -10136,7 +10413,7 @@ def test_configured_runner_marks_ai_hat_plus_2_local_fallback_metadata():
     assert isinstance(runner.fallback_runner, PydanticAIEnvRunner)
     assert runner.fallback_runner.base_url == AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL
     assert runner.fallback_runner.workspace_tools_enabled is False
-    assert runner.fallback_runner.workspace_model_max_tokens == 96
+    assert runner.fallback_runner.workspace_model_max_tokens is None
 
 
 def test_hailo_ollama_runner_calls_native_api_chat(monkeypatch):
@@ -10181,9 +10458,831 @@ def test_hailo_ollama_runner_calls_native_api_chat(monkeypatch):
     payload = captured["payload"]
     assert isinstance(payload, dict)
     assert payload["model"] == "qwen2.5-instruct:1.5b"
-    assert payload["stream"] is False
+    assert payload["stream"] is True
     assert payload["messages"][0]["role"] == "system"
     assert payload["messages"][1]["content"] == "請回答"
+
+
+def test_hailo_ollama_runner_streams_and_honors_semantic_stop(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeStreamingResponse:
+        def __init__(self):
+            self.lines = iter(
+                [
+                    json.dumps(
+                        {
+                            "model": "qwen3:1.7b",
+                            "message": {"content": "目前共有 5 個 CP。\ufffd"},
+                            "done": False,
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    + b"\n",
+                    json.dumps(
+                        {
+                            "model": "qwen3:1.7b",
+                            "message": {
+                                "content": assistant_provider_module.HAILO_SEMANTIC_STOP
+                            },
+                            "done": False,
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    + b"\n",
+                ]
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def readline(self) -> bytes:
+            return next(self.lines, b"")
+
+    def fake_urlopen(request, timeout):
+        captured["timeout"] = timeout
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return FakeStreamingResponse()
+
+    monkeypatch.setattr(
+        assistant_provider_module.urllib.request,
+        "urlopen",
+        fake_urlopen,
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        workspace_tools_enabled=False,
+    )
+
+    output = runner.run(
+        "SCOUT_BOUNDED_SYNTHESIS_V1\n"
+        + json.dumps(
+            {
+                "question": "有幾個 CP？",
+                "evidence_cards": [],
+                "missing_evidence": [],
+            },
+            ensure_ascii=False,
+        ),
+        timeout_seconds=5,
+    )
+
+    payload = captured["payload"]
+    assert payload["stream"] is True
+    assert len(payload["messages"]) == 1
+    assert payload["messages"][0]["role"] == "user"
+    assert "Scout AI" in payload["messages"][0]["content"]
+    assert assistant_provider_module.HAILO_SEMANTIC_STOP in payload["options"]["stop"]
+    assert output == "目前共有 5 個 CP。"
+    assert "\ufffd" not in output
+    assert assistant_provider_module.HAILO_SEMANTIC_STOP not in output
+    assert runner.last_model_response_metadata["semantic_stop"] == "true"
+
+
+def test_hailo_bounded_stream_uses_stall_timeout_before_outer_case_timeout(
+    monkeypatch,
+):
+    captured: dict[str, float] = {}
+
+    class FakeStreamingResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "model": "qwen3:1.7b",
+                    "message": {"content": "已完成短答。"},
+                    "done": True,
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+    def fake_urlopen(_request, timeout):
+        captured["timeout"] = timeout
+        return FakeStreamingResponse()
+
+    monkeypatch.setattr(
+        assistant_provider_module.urllib.request,
+        "urlopen",
+        fake_urlopen,
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        workspace_tools_enabled=False,
+    )
+
+    runner.run(
+        "SCOUT_BOUNDED_SYNTHESIS_V1\n"
+        '{"question":"test","evidence_cards":[]}',
+        timeout_seconds=180,
+    )
+
+    assert captured["timeout"] == (
+        assistant_provider_module.HAILO_STREAM_STALL_TIMEOUT_SECONDS
+    )
+
+
+def test_hailo_bounded_stream_checkpoints_when_payloads_have_no_visible_progress(
+    monkeypatch,
+):
+    class FakeThinkingOnlyResponse:
+        def __init__(self):
+            self.lines = iter(
+                [
+                    json.dumps(
+                        {
+                            "model": "qwen3:1.7b",
+                            "message": {"thinking": "still reasoning", "content": ""},
+                            "done": False,
+                        }
+                    ).encode("utf-8")
+                    + b"\n",
+                    json.dumps(
+                        {
+                            "model": "qwen3:1.7b",
+                            "message": {"thinking": "still reasoning", "content": ""},
+                            "done": False,
+                        }
+                    ).encode("utf-8")
+                    + b"\n",
+                ]
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def readline(self) -> bytes:
+            return next(self.lines, b"")
+
+    monotonic_values = iter(
+        [0.0, 10.0, assistant_provider_module.HAILO_STREAM_STALL_TIMEOUT_SECONDS]
+    )
+    monkeypatch.setattr(
+        assistant_provider_module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: FakeThinkingOnlyResponse(),
+    )
+    monkeypatch.setattr(
+        assistant_provider_module.time,
+        "monotonic",
+        lambda: next(monotonic_values),
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        workspace_tools_enabled=False,
+    )
+
+    with pytest.raises(
+        assistant_provider_module.HailoContextFullError,
+        match="visible_content_stalled",
+    ) as error:
+        runner.run(
+            "SCOUT_BOUNDED_SYNTHESIS_V1\n"
+            '{"question":"test","evidence_cards":[]}',
+            timeout_seconds=600,
+        )
+
+    assert error.value.partial_output == ""
+    assert runner.last_hailo_context_full_reason == "visible_content_stalled"
+    assert runner.last_model_response_metadata["finish_reason"] == "context_full"
+
+
+def test_hailo_stream_without_done_preserves_partial_and_reports_context_full(
+    monkeypatch,
+):
+    class FakeIncompleteResponse:
+        def __init__(self):
+            self.lines = iter(
+                [
+                    json.dumps(
+                        {
+                            "model": "qwen3:1.7b",
+                            "message": {"content": "尚未完成的回答"},
+                            "done": False,
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    + b"\n"
+                ]
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def readline(self) -> bytes:
+            return next(self.lines, b"")
+
+    monkeypatch.setattr(
+        assistant_provider_module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: FakeIncompleteResponse(),
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        workspace_tools_enabled=False,
+    )
+
+    with pytest.raises(
+        assistant_provider_module.HailoContextFullError,
+        match="stream_ended_without_done",
+    ) as error:
+        runner.run(
+            "SCOUT_BOUNDED_SYNTHESIS_V1\n"
+            '{"question":"test","evidence_cards":[]}',
+            timeout_seconds=5,
+        )
+
+    assert error.value.partial_output == "尚未完成的回答"
+    assert runner.last_raw_model_output == "尚未完成的回答"
+    assert runner.last_hailo_context_full_reason == "stream_ended_without_done"
+    assert runner.last_model_response_metadata["finish_reason"] == "context_full"
+
+
+def test_hailo_http_500_context_full_enters_continuation_path(monkeypatch):
+    def fake_urlopen(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            "http://127.0.0.1:8000/api/chat",
+            500,
+            "Internal Server Error",
+            {},
+            io.BytesIO(b'{"error":"Conversation context is full"}'),
+        )
+
+    monkeypatch.setattr(
+        assistant_provider_module.urllib.request,
+        "urlopen",
+        fake_urlopen,
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        workspace_tools_enabled=False,
+    )
+
+    with pytest.raises(
+        assistant_provider_module.HailoContextFullError,
+        match="provider_http_context_full",
+    ):
+        runner.run(
+            "SCOUT_BOUNDED_SYNTHESIS_V1\n"
+            '{"question":"test","evidence_cards":[]}',
+            timeout_seconds=5,
+        )
+
+    assert runner.last_hailo_context_full_reason == "provider_http_context_full"
+    assert runner.last_model_response_metadata["external_limit"] == (
+        "provider_http_context_full"
+    )
+
+
+def test_hailo_empty_semantic_stop_requests_fresh_continuation(monkeypatch):
+    class FakeEmptyStopResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "model": "qwen3:1.7b",
+                    "message": {
+                        "content": assistant_provider_module.HAILO_SEMANTIC_STOP
+                    },
+                    "done": True,
+                    "done_reason": "stop",
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+    monkeypatch.setattr(
+        assistant_provider_module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: FakeEmptyStopResponse(),
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        workspace_tools_enabled=False,
+    )
+
+    with pytest.raises(
+        assistant_provider_module.HailoContinuationRequired,
+        match="empty_semantic_stop",
+    ):
+        runner.run(
+            "SCOUT_BOUNDED_SYNTHESIS_V1\n"
+            '{"question":"test","evidence_cards":[]}',
+            timeout_seconds=5,
+        )
+
+    assert runner.last_raw_model_output == ""
+    assert runner.last_model_response_metadata["finish_reason"] == (
+        "empty_semantic_stop"
+    )
+
+
+def test_hailo_bounded_stream_stops_after_complete_streamed_sentence(
+    monkeypatch,
+):
+    assert not assistant_provider_module._hailo_stream_semantically_complete(
+        "問題：目前 preparation 狀態是什麼？"
+    )
+    assert not assistant_provider_module._hailo_stream_semantically_complete(
+        "最高 calibrated risk 點近 92."
+    )
+    assert not assistant_provider_module._hailo_stream_semantically_complete(
+        "Segment 001 的距離為 520."
+    )
+    assert not assistant_provider_module._hailo_stream_semantically_complete(
+        "距離最長的 route segment 是 seg."
+    )
+    assert not assistant_provider_module._hailo_stream_semantically_complete(
+        "資料來源是 ref."
+    )
+    assert not assistant_provider_module._hailo_stream_semantically_complete(
+        "候選點為 rest_area.chilai_nanhua_day1_scoutAI."
+    )
+    assert assistant_provider_module._hailo_stream_semantically_complete(
+        "總共有 14 個候選點，已全部載入完成。"
+    )
+    assert not assistant_provider_module._hailo_stream_semantically_complete(
+        "第一項證據已確認。",
+        expected_sentence_count=2,
+    )
+    assert assistant_provider_module._hailo_stream_semantically_complete(
+        "第一項證據已確認。第二項缺口也已說明。",
+        expected_sentence_count=2,
+    )
+    captured_payload: dict[str, object] = {}
+
+    class FakeSemanticCompletionResponse:
+        def __init__(self):
+            self.lines = iter(
+                [
+                    json.dumps(
+                        {
+                            "model": "qwen3:1.7b",
+                            "message": {"content": "目前 preparation "},
+                            "done": False,
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    + b"\n",
+                    json.dumps(
+                        {
+                            "model": "qwen3:1.7b",
+                            "message": {"content": "狀態已完成。"},
+                            "done": False,
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    + b"\n",
+                    json.dumps(
+                        {
+                            "model": "qwen3:1.7b",
+                            "message": {"content": "不應讀取的額外內容"},
+                            "done": True,
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    + b"\n",
+                ]
+            )
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def readline(self) -> bytes:
+            return next(self.lines, b"")
+
+    def fake_urlopen(request, **_kwargs):
+        captured_payload.update(json.loads(request.data.decode("utf-8")))
+        return FakeSemanticCompletionResponse()
+
+    monkeypatch.setattr(
+        assistant_provider_module.urllib.request,
+        "urlopen",
+        fake_urlopen,
+    )
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        workspace_tools_enabled=False,
+    )
+
+    output = runner._run_hailo_ollama_chat(
+        "SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1\n"
+        '{"question":"test","evidence_cards":[]}',
+        system_prompt="bounded",
+        timeout_seconds=5,
+    )
+
+    assert output == "目前 preparation 狀態已完成。"
+    assert "不應讀取" not in output
+    assert runner.last_hailo_semantic_stop is False
+    assert runner.last_hailo_semantic_completion is True
+    assert runner.last_model_response_metadata["finish_reason"] == (
+        "semantic_completion"
+    )
+    assert assistant_provider_module.HAILO_SEMANTIC_STOP in captured_payload[
+        "options"
+    ].get("stop", [])
+
+
+def test_hailo_bounded_prompt_packs_system_and_user_below_1200_tokens():
+    system_prompt = (
+        "你是 Scout AI 的 AI HAT+2 本地證據合成模型。"
+        "只能根據證據回答，完成後輸出語意停止標記。"
+    )
+    cards = [
+        {
+            "tool_id": f"scout.ai.fixture_{index}.v0",
+            "claim_summary": "這是一段很長的中文證據摘要" * 20,
+            "key_values": {
+                f"fact_{fact_index}": "奇萊南華路線證據" * 30
+                for fact_index in range(20)
+            },
+            "missing_fields": ["issued_at", "provider", "valid_to"],
+            "source_refs": [
+                f"outputs/evidence/tool-{index}-source-{source_index}.json"
+                for source_index in range(4)
+            ],
+        }
+        for index in range(6)
+    ]
+    prompt = assistant_provider_module._hailo_bounded_prompt_json(
+        {
+            "question": "哪些地方下雨後會變危險？" * 20,
+            "evidence_cards": cards,
+            "missing_evidence": ["weather:issued_at", "weather:valid_to"],
+        }
+    )
+
+    packed = assistant_provider_module._compact_hailo_ollama_prompt(
+        prompt,
+        system_prompt=system_prompt,
+        max_input_tokens=assistant_provider_module.HAILO_MAX_INPUT_TOKENS,
+    )
+
+    assert assistant_provider_module._estimate_hailo_chat_input_tokens(
+        system_prompt,
+        packed,
+    ) <= assistant_provider_module.HAILO_MAX_INPUT_TOKENS
+    _, _, packed_json = packed.partition("\n")
+    payload = json.loads(packed_json)
+    assert {card["tool_id"] for card in payload["evidence_cards"]} == {
+        card["tool_id"] for card in cards
+    }
+
+
+def test_hailo_evidence_compaction_prioritizes_verified_field_answer_and_source():
+    card = {
+        "tool_id": "scout.ai.cwa_environment.assess.v0",
+        "claim_summary": "generic environment summary",
+        "key_values": {
+            "cwa_summary": {
+                "warning_count": 0,
+                "observation_count": 120,
+                "qpf_grid_feature_count": 2,
+            },
+            "field_answer": (
+                "Direct QPF accumulation unavailable; max_mm=None, mean_mm=None, "
+                "p95_mm=None, peak_window=None. Do not estimate."
+            ),
+            "field_answer_source_ref": (
+                "outputs/environment/cwa/qpf_corridor_summary.json"
+            ),
+            "field_answer_priority": 100,
+        },
+        "missing_fields": ["fresh_cwa_environment_evidence"],
+        "source_refs": [
+            "outputs/environment/environment_evidence_package.json",
+            "outputs/environment/cwa/qpf_corridor_summary.json",
+        ],
+    }
+
+    compact = assistant_provider_module._compact_hailo_evidence_card(
+        card,
+        fact_limit=2,
+    )
+
+    assert compact["verified_field_answer"].startswith(
+        "Direct QPF accumulation unavailable"
+    )
+    assert compact["source_refs"][0] == (
+        "outputs/environment/cwa/qpf_corridor_summary.json"
+    )
+    assert compact["key_values"]["field_answer"].startswith(
+        "Direct QPF accumulation unavailable"
+    )
+    assert compact["verified_field_answer_priority"] == 100
+    assert compact["claim_summary"] == ""
+    assert compact["missing_fields"] == []
+    assert compact["source_refs"] == [
+        "outputs/environment/cwa/qpf_corridor_summary.json"
+    ]
+    assert compact["key_values"] == {
+        "field_answer": (
+            "Direct QPF accumulation unavailable; max_mm=None, mean_mm=None, "
+            "p95_mm=None, peak_window=None. Do not estimate."
+        )
+    }
+
+
+def test_workspace_tool_query_keeps_original_intent_with_planner_hint() -> None:
+    merged = assistant_provider_module._merge_workspace_tool_query(
+        "哪些 retreat route 最靠近高 terrain risk segment？",
+        "terrain risk",
+    )
+
+    assert merged == "哪些 retreat route 最靠近高 terrain risk segment？"
+    assert assistant_provider_module._merge_workspace_tool_query(
+        "哪些 retreat route 最靠近高 terrain risk segment？",
+        "highest TEII segment",
+    ).endswith("planner_hint: highest TEII segment")
+    assert assistant_provider_module._merge_workspace_tool_query(
+        "哪些 route segments 的 DTM coverage 不完整？",
+        "DTM coverage",
+    ) == "哪些 route segments 的 DTM coverage 不完整？"
+
+
+def test_hailo_exact_field_answer_card_excludes_unrelated_record_facts():
+    card = {
+        "tool_id": "pydantic_ai.tool.search_scout_route_structure.v0",
+        "claim_summary": "route structure includes unrelated segment facts",
+        "key_values": {
+            "field_answer": "路線共有 240 個 CP；第一個是 cp.001，最後是 cp.240。",
+            "field_answer_source_ref": "normalized/checkpoints/checkpoints.geojson",
+            "field_answer_priority": 100,
+            "results": [
+                {
+                    "segment_candidate_id": "seg.001",
+                    "label": "unrelated segment",
+                }
+            ],
+        },
+        "source_refs": [
+            "normalized/routes/route_architecture.json",
+            "normalized/checkpoints/checkpoints.geojson",
+        ],
+        "evidence_records": [
+            {
+                "source_ref": "normalized/routes/route_architecture.json",
+                "data": {"segment_candidate_id": "seg.001"},
+            }
+        ],
+    }
+
+    compact = assistant_provider_module._compact_hailo_evidence_card(
+        card,
+        fact_limit=8,
+    )
+
+    assert compact["key_values"] == {
+        "field_answer": "路線共有 240 個 CP；第一個是 cp.001，最後是 cp.240。"
+    }
+    assert compact["source_refs"] == [
+        "normalized/checkpoints/checkpoints.geojson"
+    ]
+    assert "seg.001" not in json.dumps(compact, ensure_ascii=False)
+
+
+def test_hailo_exact_repair_uses_only_priority_100_evidence_cards():
+    exact = assistant_provider_module.EvidenceCard(
+        tool_id="terrain",
+        key_values={
+            "field_answer": "高候選區有 43 個：12.7K、11.2K。",
+            "field_answer_priority": 100,
+        },
+        source_refs=["outputs/wetness.geojson"],
+    )
+    supporting = assistant_provider_module.EvidenceCard(
+        tool_id="gee",
+        key_values={"summary": "hydrologic background"},
+        source_refs=["outputs/gee.json"],
+    )
+
+    selected = assistant_provider_module._priority_exact_evidence_cards(
+        [supporting, exact]
+    )
+
+    assert selected == [exact]
+
+
+def test_hailo_bounded_prompt_orders_exact_field_answer_before_catalog_noise():
+    prompt = assistant_provider_module._hailo_bounded_prompt_json(
+        {
+            "question": "workspace 保存了哪些 sensor snapshot？",
+            "evidence_cards": [
+                {
+                    "tool_id": "catalog",
+                    "key_values": {
+                        "primary_gpx_filename": "route.gpx",
+                        "field_answer_priority": 10,
+                    },
+                    "missing_fields": [],
+                    "source_refs": ["project.json"],
+                },
+                {
+                    "tool_id": "ins_dr",
+                    "key_values": {
+                        "field_answer": (
+                            "Only a synthetic eval fixture is saved; no live sensor "
+                            "snapshot is proven."
+                        ),
+                        "field_answer_priority": 100,
+                    },
+                    "missing_fields": [],
+                    "source_refs": [
+                        "outputs/evals/synthetic_context/aihat2_ins_dr_trace.jsonl"
+                    ],
+                },
+            ],
+            "missing_evidence": [],
+        }
+    )
+
+    packed = assistant_provider_module._compact_hailo_ollama_prompt(
+        prompt,
+        system_prompt="bounded",
+        max_input_tokens=assistant_provider_module.HAILO_MAX_INPUT_TOKENS,
+    )
+    payload = json.loads(packed.partition("\n")[2])
+
+    assert payload["evidence_cards"][0]["tool_id"] == "ins_dr"
+    assert payload["evidence_cards"][0]["verified_field_answer_priority"] == 100
+    assert "verified_field_answer" in payload["answer_contract"]
+    assert "unavailable" in payload["answer_contract"]
+
+
+def test_hailo_semantic_sentence_target_preserves_all_exact_answer_sentences():
+    prompt = assistant_provider_module._hailo_bounded_prompt_json(
+        {
+            "question": "哪些 CP 沒有 MCP support？",
+            "evidence_cards": [
+                {
+                    "tool_id": "major_points",
+                    "verified_field_answer": (
+                        "這是 MCP 對 CP 的支援檢查。"
+                        "缺少鄰近 CP support 的 MCP 是通訊點。"
+                    ),
+                    "verified_field_answer_priority": 100,
+                }
+            ],
+        }
+    )
+
+    assert assistant_provider_module._hailo_bounded_semantic_sentence_target(prompt) == 2
+
+
+def test_hailo_complex_exact_answer_waits_for_marker_or_provider_completion():
+    prompt = assistant_provider_module._hailo_bounded_prompt_json(
+        {
+            "question": "CP 與 MCP reconciliation 有哪些缺漏？",
+            "evidence_cards": [
+                {
+                    "tool_id": "major_points",
+                    "verified_field_answer": (
+                        "supported=5；unsupported=1；spacing overlaps=2；"
+                        "explicit conflicts=0。"
+                    ),
+                    "verified_field_answer_priority": 100,
+                }
+            ],
+        }
+    )
+
+    assert not assistant_provider_module._hailo_bounded_semantic_completion_allowed(
+        prompt
+    )
+    assert not assistant_provider_module._hailo_bounded_exact_answers_covered(
+        prompt,
+        "supported=5；unsupported=1。",
+    )
+    assert assistant_provider_module._hailo_bounded_exact_answers_covered(
+        prompt,
+        "supported=5\nunsupported=1\nspacing overlaps=2\nexplicit conflicts=0。",
+    )
+
+
+def test_hailo_exact_excerpt_keeps_model_facts_and_removes_repeated_preamble():
+    card = assistant_provider_module.EvidenceCard(
+        tool_id="scout.ai.gee_environment.assess.v0",
+        key_values={
+            "field_answer": (
+                "完整四因子複合候選 0 段；"
+                "濕滑/溪溝暴漲候選 327 段，其中高風險 43 段；"
+                "高分位置：12.7K、11.2K；"
+                "缺少 per-segment QPF join，不能視為完整四因子複合候選。"
+            ),
+            "field_answer_priority": 100,
+        },
+        source_refs=["outputs/environment/derived/wetness.geojson"],
+    )
+    model_output = """根據 evidence_cards，以下是答案：
+**QPF、SMAP 與 terrain 在哪裡形成候選？**
+- **完整四因子複合候選 0 段**
+- **濕滑/溪溝暴漲候選 327 段**，其中高風險 43 段
+- **高分位置：12.7K、11.2K**
+- **缺少 per-segment QPF join，不能視為完整四因子複合候選**
+"""
+
+    excerpt = assistant_provider_module._hailo_model_authored_exact_answer_excerpt(
+        model_output,
+        evidence_cards=[card],
+    )
+
+    assert excerpt == (
+        "完整四因子複合候選 0 段；"
+        "濕滑/溪溝暴漲候選 327 段，其中高風險 43 段；"
+        "高分位置：12.7K、11.2K；"
+        "缺少 per-segment QPF join，不能視為完整四因子複合候選。"
+    )
+    assert "evidence_cards" not in excerpt
+    assert "在哪裡" not in excerpt
+    cited = assistant_provider_module.BoundedAgentRuntime.attach_verified_source_refs(
+        excerpt,
+        evidence_cards=[card],
+    )
+    assert "[outputs/environment/derived/wetness.geojson]" in cited
+    assert assistant_provider_module.BoundedAgentRuntime.verify_synthesis(
+        cited,
+        evidence_cards=[card],
+    ).passed
+
+
+def test_hailo_repair_preserves_priority_100_field_answer_contract():
+    prompt = "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1\n" + json.dumps(
+        {
+            "question": "wetness flash flood 高候選區在哪裡？",
+            "draft_answer": "有 43 個高候選區。",
+            "repair_items": ["missing_exact_field_fact:12.7K"],
+            "evidence_delta": [
+                {
+                    "tool_id": "terrain",
+                    "key_values": {
+                        "field_answer": (
+                            "有 43 個高候選區；優先標記 12.7K、11.2K。"
+                        ),
+                        "field_answer_priority": 100,
+                    },
+                    "source_refs": ["outputs/wetness.geojson"],
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    packed = assistant_provider_module._compact_hailo_ollama_prompt(
+        prompt,
+        system_prompt="repair",
+        max_input_tokens=assistant_provider_module.HAILO_CONTINUATION_INPUT_TOKENS,
+    )
+    _, _, raw_payload = packed.partition("\n")
+    payload = json.loads(raw_payload)
+
+    assert not assistant_provider_module._hailo_bounded_semantic_completion_allowed(
+        prompt
+    )
+    assert payload["draft_answer"] == ""
+    assert "priority-100 field_answer" in payload["answer_contract"]
+    assert "全部子句" in payload["answer_contract"]
 
 
 def test_hailo_ollama_runner_rejects_non_loopback_endpoint(monkeypatch):
@@ -10219,11 +11318,15 @@ def test_hailo_workspace_tool_path_uses_native_chat_not_generic_agent(monkeypatc
         system_prompt: str,
         max_tokens: int | None = None,
         timeout_seconds: int | None = None,
+        input_token_budget: int | None = None,
+        semantic_stop_enabled: bool = True,
     ) -> str:
         captured["prompt"] = prompt
         captured["system_prompt"] = system_prompt
         captured["max_tokens"] = max_tokens
         captured["timeout_seconds"] = timeout_seconds
+        captured["input_token_budget"] = input_token_budget
+        captured["semantic_stop_enabled"] = semantic_stop_enabled
         return "本地工具上下文回答"
 
     monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_chat)
@@ -10435,6 +11538,16 @@ def test_hailo_facts_only_eval_uses_deterministic_sampling(monkeypatch):
     assert runner.last_hailo_prompt_eval_count == 321
     assert runner.last_hailo_eval_count == 27
     assert runner.last_hailo_total_duration_ns == 123456789
+    assert runner.last_raw_model_output == "本地模型原始回答"
+    assert runner.last_model_response_metadata == {
+        "model_name": "qwen2.5-instruct:1.5b",
+        "finish_reason": "stop",
+        "provider": "hailo_ollama",
+        "streaming": "true",
+        "semantic_stop": "false",
+        "semantic_completion": "false",
+        "input_pack_estimated_tokens": "128",
+    }
 
 
 def test_hailo_chat_payload_flattens_multiline_control_characters(monkeypatch):
@@ -10470,13 +11583,14 @@ def test_hailo_chat_payload_flattens_multiline_control_characters(monkeypatch):
     )
 
     runner.run(
-        "AI_HAT_RAW_SINGLE_PASS_EVAL_V1\n第一行 facts\n第二行 facts\t第三欄",
+        "AI_HAT_RAW_SINGLE_PASS_EVAL_V1\n第一行 facts\n第二行 \\\"S\t第三欄",
         timeout_seconds=5,
     )
 
     payload = captured["payload"]
     assert "第一行 facts" in payload["messages"][1]["content"]
-    assert "第二行 facts" in payload["messages"][1]["content"]
+    assert "第二行 ＂S" in payload["messages"][1]["content"]
+    assert '\\"' not in payload["messages"][1]["content"]
     assert all(
         not any(ord(char) < 32 or ord(char) == 127 for char in message["content"])
         for message in payload["messages"]

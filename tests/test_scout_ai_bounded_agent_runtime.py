@@ -462,6 +462,207 @@ def test_chinese_checkpoint_claim_is_grounded_by_checkpoint_count_evidence() -> 
     assert verification.passed is True
 
 
+def test_deterministic_provenance_repair_only_cites_supported_model_text() -> None:
+    runtime = BoundedAgentRuntime()
+    evidence = EvidenceCard(
+        tool_id="scout.ai.workspace.query.v1",
+        claim_summary="Checkpoint count query completed.",
+        key_values={"checkpoint_count": 124},
+        source_refs=["candidates/checkpoints.json"],
+        result_count=1,
+    )
+
+    repaired = runtime.attach_verified_source_refs(
+        "這條路線有 124 個檢查點。",
+        evidence_cards=[evidence],
+    )
+    unsupported = runtime.attach_verified_source_refs(
+        "這條路線有 999 個檢查點。",
+        evidence_cards=[evidence],
+    )
+
+    assert repaired == "這條路線有 124 個檢查點 [candidates/checkpoints.json]。"
+    assert runtime.verify_synthesis(repaired, evidence_cards=[evidence]).passed is True
+    assert unsupported == "這條路線有 999 個檢查點。"
+
+
+def test_bbox_brackets_are_not_misread_as_source_citation() -> None:
+    runtime = BoundedAgentRuntime()
+    evidence = EvidenceCard(
+        tool_id="pydantic_ai.tool.search_scout_route_structure.v0",
+        claim_summary=(
+            "Route summary geometry: bbox=[121.119636,23.872635,121.286234,"
+            "24.061244], start=(23.953086,121.175462), "
+            "finish=(23.952948,121.174533)."
+        ),
+        key_values={
+            "field_answer": (
+                "Route summary geometry: bbox=[121.119636,23.872635,121.286234,"
+                "24.061244], start=(23.953086,121.175462), "
+                "finish=(23.952948,121.174533)."
+            ),
+            "field_answer_priority": 100,
+        },
+        source_refs=["normalized/routes/route_summary.json"],
+    )
+    answer = (
+        "路線結構資料中的 route summary 起點為 (23.953086, 121.175462)，"
+        "終點為 (23.952948, 121.174533)，"
+        "bbox 為 [121.119636, 23.872635, 121.286234, 24.061244]。"
+    )
+
+    repaired = runtime.attach_verified_source_refs(answer, evidence_cards=[evidence])
+    verification = runtime.verify_synthesis(repaired, evidence_cards=[evidence])
+
+    assert repaired.endswith("[normalized/routes/route_summary.json]。")
+    assert verification.passed is True
+    assert verification.invalid_source_refs == []
+
+
+def test_provenance_repair_prefers_high_priority_field_answer_source() -> None:
+    runtime = BoundedAgentRuntime()
+    generic = EvidenceCard(
+        tool_id="scout.ai.weather_window.assess.v0",
+        claim_summary="QPF fields are unavailable.",
+        key_values={
+            "field_answer": "QPF max, mean, p95 and peak window are None.",
+            "field_answer_priority": 10,
+        },
+        source_refs=["outputs/route_weather_package.reviewed.json"],
+    )
+    direct = EvidenceCard(
+        tool_id="scout.ai.cwa_environment.assess.v0",
+        claim_summary="Direct QPF corridor fields are unavailable.",
+        key_values={
+            "field_answer": "QPF max, mean, p95 and peak window are None.",
+            "field_answer_priority": 100,
+        },
+        source_refs=["outputs/environment/cwa/qpf_corridor_summary.json"],
+    )
+
+    repaired = runtime.attach_verified_source_refs(
+        "QPF max、mean、p95 與 peak window 都是 None。",
+        evidence_cards=[generic, direct],
+    )
+
+    assert repaired.endswith(
+        "[outputs/environment/cwa/qpf_corridor_summary.json]。"
+    )
+
+
+def test_provenance_repair_cites_all_lines_of_one_priority_exact_answer() -> None:
+    runtime = BoundedAgentRuntime()
+    direct_ref = (
+        "outputs/environment/derived/wetness_flash_flood_susceptibility.geojson"
+    )
+    evidence = EvidenceCard(
+        tool_id="scout.ai.gee_environment.assess.v0",
+        claim_summary="Prepared four-factor compound candidate result.",
+        key_values={
+            "field_answer": (
+                "完整四因子複合候選 0 段；濕滑候選 327 段，其中高風險 43 段；"
+                "最高位置 12.7K；缺少每路段 QPF、SMAP 與 GPM join。"
+            ),
+            "field_answer_priority": 100,
+            "field_answer_source_ref": direct_ref,
+            "field_answer_source_refs": [direct_ref],
+        },
+        source_refs=[direct_ref],
+    )
+    answer = (
+        "完整四因子複合候選 0 段；\n"
+        "濕滑候選 327 段，其中高風險 43 段；\n"
+        "最高位置 12.7K；缺少每路段 QPF、SMAP 與 GPM join。"
+    )
+
+    repaired = runtime.attach_verified_source_refs(answer, evidence_cards=[evidence])
+
+    assert repaired.count(f"[{direct_ref}]") == 3
+    assert runtime.verify_synthesis(repaired, evidence_cards=[evidence]).passed is True
+
+
+def test_synthesis_verifier_requires_priority_100_direct_source_ref() -> None:
+    runtime = BoundedAgentRuntime()
+    generic = EvidenceCard(
+        tool_id="scout.ai.weather_window.assess.v0",
+        claim_summary="Astronomy fields are unavailable.",
+        key_values={"status": "missing"},
+        source_refs=["outputs/route_weather_package.reviewed.json"],
+    )
+    direct_ref = "outputs/environment/cwa/astronomy_timeline.json"
+    direct = EvidenceCard(
+        tool_id="scout.ai.cwa_environment.assess.v0",
+        claim_summary="Prepared CWA astronomy timeline is unavailable.",
+        key_values={
+            "field_answer": "日落、民用暮光與 practical darkness 均 unavailable。",
+            "field_answer_priority": 100,
+            "field_answer_source_ref": direct_ref,
+            "field_answer_source_refs": [direct_ref],
+        },
+        source_refs=[direct_ref],
+    )
+
+    indirect = runtime.verify_synthesis(
+        "日落、民用暮光與 practical darkness 均 unavailable "
+        "[outputs/route_weather_package.reviewed.json]。",
+        evidence_cards=[generic, direct],
+    )
+    verified = runtime.verify_synthesis(
+        f"日落、民用暮光與 practical darkness 均 unavailable [{direct_ref}]。",
+        evidence_cards=[generic, direct],
+    )
+
+    assert indirect.passed is False
+    assert f"missing_exact_field_source_ref:{direct_ref}" in indirect.repair_items
+    assert verified.passed is True
+
+
+def test_synthesis_verifier_rejects_mistyped_iso_datetime() -> None:
+    runtime = BoundedAgentRuntime()
+    evidence = EvidenceCard(
+        tool_id="scout.ai.cwa_environment.assess.v0",
+        claim_summary="QPF validity interval.",
+        key_values={"valid_from": "2026-07-13T12:00:00Z"},
+        source_refs=["outputs/environment/cwa/qpf_corridor_summary.json"],
+    )
+
+    verification = runtime.verify_synthesis(
+        "valid_from=2026-07-13T12:000:00Z "
+        "[outputs/environment/cwa/qpf_corridor_summary.json]。",
+        evidence_cards=[evidence],
+    )
+
+    assert verification.passed is False
+    assert verification.unsupported_claims
+
+
+def test_synthesis_verifier_rejects_saved_trace_availability_contradiction() -> None:
+    runtime = BoundedAgentRuntime()
+    evidence = EvidenceCard(
+        tool_id="scout.ai.ins_dr_trace.analyze.v0",
+        claim_summary=(
+            "Saved trace evidence: records=4, GNSS/GPS samples=3, "
+            "INS/DR samples=4; synthetic fixture, not a live snapshot."
+        ),
+        key_values={
+            "field_answer": (
+                "Saved trace evidence: records=4, GNSS/GPS samples=3, "
+                "INS/DR samples=4; synthetic fixture, not a live snapshot."
+            )
+        },
+        source_refs=["outputs/evals/synthetic_context/aihat2_ins_dr_trace.jsonl"],
+    )
+
+    verification = runtime.verify_synthesis(
+        "workspace 未保存 GNSS、IMU 或 PDR 資料 "
+        "[outputs/evals/synthetic_context/aihat2_ins_dr_trace.jsonl]。",
+        evidence_cards=[evidence],
+    )
+
+    assert verification.passed is False
+    assert verification.unsupported_claims
+
+
 def test_context_find_is_top_k_and_token_bounded_at_ten_x_growth() -> None:
     handles = [
         _context_handle(index, relevance=1.0 if index == 7 else 0.1)
@@ -661,6 +862,29 @@ def test_construction_evidence_card_preserves_complete_list() -> None:
     assert card.key_values["reference_gpx_filenames"] == [
         f"reference-{index}.gpx" for index in range(8)
     ]
+
+
+def test_exact_field_answer_source_is_first_provenance_reference() -> None:
+    runtime = BoundedAgentRuntime()
+
+    card = runtime.evidence_from_tool_result(
+        "pydantic_ai.tool.search_scout_major_points.v0",
+        {
+            "status": "completed",
+            "source_report": [
+                {"source_ref": "normalized/map/named_points.geojson"}
+            ],
+            "field_answer": "目前共有 5 個 boss point。",
+            "field_answer_priority": 100,
+            "field_answer_source_ref": "outputs/pretrip/boss_points.json",
+            "source_ref": "outputs/pretrip/boss_points.json",
+        },
+    )
+
+    assert card.source_refs[0] == "outputs/pretrip/boss_points.json"
+    assert card.key_values["field_answer_source_ref"] == (
+        "outputs/pretrip/boss_points.json"
+    )
 
 
 def test_evidence_card_preserves_selected_field_scalar_values() -> None:
@@ -955,6 +1179,10 @@ def test_no_tool_synthesis_prompt_and_citation_verifier_are_bounded() -> None:
         "The route crosses a steep exposed ridge [outputs/route/summary.json].",
         evidence_cards=[evidence],
     )
+    citation_only = runtime.verify_synthesis(
+        "[outputs/route/summary.json]；[outputs/route/summary.json]",
+        evidence_cards=[evidence],
+    )
 
     assert passed.passed is True
     assert passed.unsupported_claims == []
@@ -964,6 +1192,8 @@ def test_no_tool_synthesis_prompt_and_citation_verifier_are_bounded() -> None:
     assert uncited_text.unsupported_claims
     assert cited_but_unsupported_text.passed is False
     assert cited_but_unsupported_text.unsupported_claims
+    assert citation_only.passed is False
+    assert citation_only.unsupported_claims
 
 
 def test_synthesis_verifier_validates_numbers_only_against_cited_cards() -> None:
@@ -1091,3 +1321,35 @@ def test_synthesis_verifier_accepts_full_width_chinese_citation_brackets() -> No
 
     assert verification.passed is True
     assert verification.cited_source_refs == ["project.json"]
+
+
+def test_synthesis_verifier_requires_priority_100_exact_field_literals() -> None:
+    runtime = BoundedAgentRuntime()
+    evidence = EvidenceCard(
+        tool_id="terrain.search",
+        claim_summary="Exact terrain visualization answer.",
+        key_values={
+            "field_answer": (
+                "terrain visualization 目前有 4 個 raster overlays："
+                "hillshade、elevation_tint、slope_shading、contours。"
+            ),
+            "field_answer_priority": 100,
+        },
+        source_refs=["outputs/terrain_visualization.geojson"],
+    )
+
+    incomplete = runtime.verify_synthesis(
+        "terrain visualization 包含 hillshade、elevation_tint、"
+        "slope_shading、contours [outputs/terrain_visualization.geojson]。",
+        evidence_cards=[evidence],
+    )
+    complete = runtime.verify_synthesis(
+        "terrain visualization 包含 4 個 overlays：hillshade、"
+        "elevation_tint、slope_shading、contours "
+        "[outputs/terrain_visualization.geojson]。",
+        evidence_cards=[evidence],
+    )
+
+    assert incomplete.passed is False
+    assert "missing_exact_field_fact:4" in incomplete.repair_items
+    assert complete.passed is True
