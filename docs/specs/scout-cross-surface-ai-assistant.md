@@ -24,7 +24,7 @@ keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
 2026-07-06 update: Scout AI is the full-capability user entrypoint. Pydantic AI
-provider compatibility targets v2.9.0. The assistant and Mac-local fallback
+provider compatibility targets v2.10.0. The assistant and Mac-local fallback
 paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
 provider for `openrouter:<vendor/model>`. Native WebSearch and WebFetch are
@@ -279,7 +279,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.9.0;
+- supported runtime family: Pydantic AI v2.10.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;

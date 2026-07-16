@@ -7,8 +7,19 @@ from types import SimpleNamespace
 import pytest
 
 from scout.schemas.agent_runtime import EvidenceCard, QuestionClass
-from pydantic_ai.messages import ModelRequest, ToolReturnPart
-from tools.scout_ai_workspace_query_eval import WorkspaceQueryGoldLabel
+from scout.schemas.workspace_query import WorkspaceMileageVerification
+from scout.services.bounded_agent_runtime import BoundedAgentRuntime
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+)
+from tools.scout_ai_workspace_query_eval import (
+    WorkspaceQueryGoldLabel,
+    load_workspace_query_gold_labels,
+)
 from tools.scout_ai_l5_code_mode_eval import (
     DEFAULT_L5_MODEL,
     L5_MAX_REQUESTS,
@@ -22,6 +33,9 @@ from tools.scout_ai_l5_code_mode_eval import (
     _l5_no_progress_signature,
     _relevant_manifest_ref_keys,
     _grade_l5_workspace_responses,
+    _mileage_verification_evidence_card,
+    _render_mileage_verification_answer,
+    _serialize_usage,
     augment_l5_report,
     check_l5_eval_readiness,
 )
@@ -29,6 +43,23 @@ from tools.scout_ai_l5_code_mode_eval import (
 
 class UsageLimitExceeded(Exception):
     pass
+
+
+def test_l5_water_12_5k_fixture_is_formal_and_aligned() -> None:
+    fixture_root = Path(__file__).parent / "fixtures"
+    cases_path = fixture_root / "scout_ai_l5_code_mode_water_12_5k_cases.json"
+    gold_path = fixture_root / "scout_ai_l5_code_mode_water_12_5k_gold.json"
+
+    labels = load_workspace_query_gold_labels(gold_path, cases_path=cases_path)
+
+    assert len(labels) == 1
+    assert labels[0].case_id == "l5-water-12-5k-001"
+    assert labels[0].artifact_keys == ("mileage_tag_alignment_geojson_ref",)
+    assert labels[0].operations == ("filter",)
+    assert labels[0].requests[0]["artifact"]["collection_path"] == "features"
+    assert labels[0].post_verification is not None
+    assert labels[0].post_verification["tied_candidate_count"] == 2
+    assert len(labels[0].post_verification["candidates"]) == 2
 
 
 def test_l5_eval_readiness_accepts_exact_100_cases_and_confined_project(
@@ -127,6 +158,131 @@ def test_l5_eval_defaults_to_free_router_and_reports_pass_at_k_attempts() -> Non
     assert augmented["l5_metrics"]["grounded_answer_count"] == 1
 
 
+def test_l5_report_retains_raw_output_fresh_budget_and_post_verification() -> None:
+    post_verification = {
+        "status": "success",
+        "target_mileage_k": 12.5,
+        "tied_candidate_count": 2,
+    }
+    budget = {
+        "max_requests": 10,
+        "max_tool_calls": 10,
+        "recovery_stage": "continuation",
+    }
+    augmented = augment_l5_report(
+        {
+            "samples": [
+                {
+                    "question": "12.5K 附近最近的水源在哪裡？",
+                    "grounding_verification": {"passed": True},
+                }
+            ]
+        },
+        [
+            {
+                "question": "12.5K 附近最近的水源在哪裡？",
+                "attempt": 1,
+                "budget": budget,
+                "receipt": {
+                    "status": "success",
+                    "code_mode_call_count": 1,
+                    "nested_tool_call_count": 1,
+                    "nested_tool_calls": [{"operation": "filter"}],
+                },
+                "raw_model_output": "",
+                "attempt_tool_trace": [
+                    {
+                        "sequence": 1,
+                        "operation": "filter",
+                        "status": "success",
+                    }
+                ],
+                "deterministic_post_verification": post_verification,
+            }
+        ],
+    )
+
+    sample = augmented["samples"][0]
+    assert sample["l5_raw_model_outputs"] == [""]
+    assert sample["l5_attempt_budgets"] == [budget]
+    assert sample["l5_attempt_tool_traces"][0][0]["operation"] == "filter"
+    assert sample["l5_deterministic_post_verification"] == post_verification
+    assert augmented["l5_metrics"]["raw_model_empty_attempt_count"] == 1
+    assert augmented["l5_metrics"]["attempt_workspace_query_call_count"] == 1
+    assert augmented["l5_metrics"]["observed_model_request_count"] == 0
+    assert augmented["l5_metrics"]["model_usage_unavailable_attempt_count"] == 1
+    assert augmented["l5_metrics"]["deterministic_post_verification_count"] == 1
+    assert augmented["l5_metrics"]["deterministic_post_verification_pass_count"] == 1
+
+
+def test_l5_mileage_post_verification_answer_is_grounded_when_model_output_empty() -> None:
+    verification = WorkspaceMileageVerification.model_validate(
+        {
+            "status": "success",
+            "target_mileage_k": 12.5,
+            "evidence_record_count": 4,
+            "distinct_candidate_count": 3,
+            "nearest_delta_k": 0.5,
+            "tied_candidate_count": 2,
+            "candidates": [
+                {
+                    "source_label": "006 12K 山壁水源",
+                    "label_mileage_k": 12.0,
+                    "delta_k": 0.5,
+                    "direction": "behind",
+                    "lat": 24.0451,
+                    "lon": 121.2743,
+                    "route_distance_m": 55742.8242,
+                    "route_projection_status": "mileage_label_anchor_axis",
+                    "source_ids": ["water.12"],
+                    "evidence_ids": ["ev-12"],
+                    "record_ids": ["features:739"],
+                    "source_ref": "outputs/mileage_tag_alignment.geojson",
+                    "source_hashes": ["sha256:" + "a" * 64],
+                },
+                {
+                    "source_label": "007 13K水源",
+                    "label_mileage_k": 13.0,
+                    "delta_k": 0.5,
+                    "direction": "ahead",
+                    "lat": 24.046,
+                    "lon": 121.2796,
+                    "route_distance_m": 56737.1996,
+                    "route_projection_status": "mileage_label_anchor_axis",
+                    "source_ids": ["water.13"],
+                    "evidence_ids": ["ev-13"],
+                    "record_ids": ["features:743"],
+                    "source_ref": "outputs/mileage_tag_alignment.geojson",
+                    "source_hashes": ["sha256:" + "a" * 64],
+                },
+            ],
+            "source_refs": ["outputs/mileage_tag_alignment.geojson"],
+            "freshness": {
+                "basis": "static_workspace_artifact",
+                "state": "artifact_timestamp_not_queried",
+            },
+            "limitations": ["label_mileage_axis_only"],
+            "summary": (
+                "12.5K 最近的水源有兩個候選等距，各距里程標 0.5K："
+                "006 12K 山壁水源；007 13K水源。"
+            ),
+            "stop_condition": "all_tied_nearest_candidates_verified",
+        }
+    )
+    card = _mileage_verification_evidence_card(verification)
+    answer = _render_mileage_verification_answer(verification)
+
+    assert "006 12K 山壁水源" in answer
+    assert "007 13K水源" in answer
+    assert "[outputs/mileage_tag_alignment.geojson]" in answer
+    assert "無法保證現場有水或可飲用" in answer
+    assert "不是 runtime safety truth" in answer
+    assert BoundedAgentRuntime().verify_synthesis(
+        answer,
+        evidence_cards=[card],
+    ).passed is True
+
+
 def test_l5_eval_runner_accepts_explicit_single_attempt_model_gate() -> None:
     runner = L5CodeModeEvalRunner(
         model_name=DEFAULT_L5_MODEL,
@@ -138,6 +294,33 @@ def test_l5_eval_runner_accepts_explicit_single_attempt_model_gate() -> None:
     assert runner.max_attempts == 1
     assert L5_MAX_REQUESTS == 10
     assert L5_MAX_TOOL_CALLS == 10
+
+
+def test_l5_usage_falls_back_to_message_trace_when_provider_omits_usage() -> None:
+    result = SimpleNamespace(
+        usage=lambda: SimpleNamespace(
+            requests=0,
+            tool_calls=0,
+            input_tokens=0,
+            output_tokens=0,
+        ),
+        all_messages=lambda: [
+            ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name="run_code",
+                        args={"code": "print('bounded')"},
+                    )
+                ]
+            ),
+            ModelResponse(parts=[TextPart("done")]),
+        ],
+    )
+
+    usage = _serialize_usage(result)
+
+    assert usage["requests"] == 2
+    assert usage["tool_calls"] == 1
 
 
 def test_l5_runner_stops_repeated_evidence_free_failure_before_wasting_budget(
@@ -335,6 +518,11 @@ def test_l5_prompt_discloses_compact_project_identity_query_example() -> None:
     assert "mileage_tag_alignment_geojson_ref" in prompt
     assert "properties.source_label" in prompt
     assert "Do not compare the trail-sign K value directly with route_distance_m" in prompt
+    assert "route_mileage_k_anchors_ref" in prompt
+    assert "normalized_mileage_k eq '15K'" in prompt
+    assert "checkpoint_candidates_ref" in prompt
+    assert "read it from the filter result inside run_code" in prompt
+    assert "value_field='mileage_k'" in prompt
 
 
 def test_l5_attempt_requires_both_grounding_and_success_receipt() -> None:
@@ -354,6 +542,8 @@ def test_l5_manifest_ref_ranking_prioritizes_reference_gpx(tmp_path: Path) -> No
                 "brain_seed_nodes_ref": "outputs/brain.json",
                 "reference_tracks_ref": "outputs/reference_tracks.json",
                 "historical_gpx_source_index_ref": "sources/gpx.json",
+                "route_mileage_k_anchors_ref": "outputs/mileage.json",
+                "checkpoint_candidates_ref": "outputs/checkpoints.json",
             }
         ),
         encoding="utf-8",
@@ -366,6 +556,13 @@ def test_l5_manifest_ref_ranking_prioritizes_reference_gpx(tmp_path: Path) -> No
 
     assert refs[0] == "reference_tracks_ref"
     assert "historical_gpx_source_index_ref" in refs[:3]
+
+    mileage_refs = _relevant_manifest_ref_keys(
+        tmp_path,
+        question="本次路徑的 15K 在哪裡，座標與最近 CP 是什麼？",
+    )
+    assert mileage_refs[0] == "route_mileage_k_anchors_ref"
+    assert "checkpoint_candidates_ref" in mileage_refs[:3]
 
 
 def test_l5_semantic_grade_requires_expected_artifact_operation_and_assertions() -> None:

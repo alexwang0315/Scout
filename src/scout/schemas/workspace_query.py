@@ -273,6 +273,47 @@ class WorkspaceQueryResponse(SchemaModel):
     stop_condition: str | None = None
 
 
+class WorkspaceMileageCandidate(SchemaModel):
+    """One deduplicated route-label candidate used by deterministic verification."""
+
+    source_label: NonEmptyStr
+    label_mileage_k: float
+    delta_k: float = Field(ge=0.0)
+    direction: Literal["behind", "at", "ahead"]
+    lat: float = Field(ge=-90.0, le=90.0)
+    lon: float = Field(ge=-180.0, le=180.0)
+    route_distance_m: float | None = Field(default=None, ge=0.0)
+    route_projection_status: str | None = None
+    source_ids: list[NonEmptyStr] = Field(default_factory=list)
+    evidence_ids: list[NonEmptyStr] = Field(default_factory=list)
+    record_ids: list[NonEmptyStr] = Field(default_factory=list)
+    source_ref: NonEmptyStr
+    source_hashes: list[NonEmptyStr] = Field(default_factory=list)
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+
+
+class WorkspaceMileageVerification(SchemaModel):
+    """Post-model proof for nearest candidates expressed on a signed K-label axis."""
+
+    status: WorkspaceQueryStatus
+    target_mileage_k: float
+    candidate_kind: Literal["water_source"] = "water_source"
+    evidence_record_count: int = Field(ge=0)
+    distinct_candidate_count: int = Field(ge=0)
+    nearest_delta_k: float | None = Field(default=None, ge=0.0)
+    tied_candidate_count: int = Field(ge=0)
+    candidates: list[WorkspaceMileageCandidate] = Field(default_factory=list)
+    source_refs: list[NonEmptyStr] = Field(default_factory=list)
+    freshness: dict[str, Any] = Field(default_factory=dict)
+    contradictions: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    summary: NonEmptyStr
+    stop_condition: NonEmptyStr
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+
+
 __all__ = [
     "Coordinate",
     "WorkspaceArtifactSelector",
@@ -281,6 +322,8 @@ __all__ = [
     "WorkspaceQueryEvidence",
     "WorkspaceQueryAnswerability",
     "WorkspaceQueryLimits",
+    "WorkspaceMileageCandidate",
+    "WorkspaceMileageVerification",
     "WorkspaceQueryOperation",
     "WorkspaceQueryRequest",
     "WorkspaceQueryResponse",

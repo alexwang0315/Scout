@@ -7,6 +7,10 @@ Harness runtime, Monty integration smoke, immutable execution receipt, and
 100-case readiness/live runner are implemented. The runtime remains outside
 the production dependency set.
 
+The host agent facade currently runs on Pydantic AI 2.10.0. L5 keeps its own
+optional Harness 0.7.0 and Monty 0.0.18 attestation pins; these are compatible
+surfaces, not a request to downgrade the host facade.
+
 Set this process-level development flag while implementing and evaluating L5:
 
 ```bash
@@ -103,6 +107,10 @@ It must not fall back to host Python, Node.js, or shell execution.
 - Tool admission and receipt: `src/scout/services/l5_code_mode_execution.py`
 - Optional runtime pin: `requirements.l5-codemode.txt`
 - 100-case readiness/live runner: `tools/scout_ai_l5_code_mode_eval.py`
+- Deterministic mileage post-verifier: `src/scout/services/workspace_query.py`
+- Reproducible 12.5K water fixtures:
+  `tests/fixtures/scout_ai_l5_code_mode_water_12_5k_cases.json` and
+  `tests/fixtures/scout_ai_l5_code_mode_water_12_5k_gold.json`
 - Tests: `tests/test_l5_code_mode.py`,
   `tests/test_l5_code_mode_execution.py`, and
   `tests/test_scout_ai_l5_code_mode_eval.py`
@@ -127,6 +135,32 @@ The L5 eval runner defaults to the fixed free model
 free-model router, so model identity remains reproducible across cases. A paid
 or different model is never selected unless an operator explicitly supplies
 `--model`.
+
+## Mileage-Axis Post-Verification
+
+Questions such as "12.5K 附近最近的水源在哪裡" use a typed FILTER over
+`mileage_tag_alignment_geojson_ref`. The sandbox may parse and rank the labels,
+but the host verifier repeats the critical computation before answer release:
+
+1. parse signed K values from `source_label`;
+2. deduplicate the same location observed in multiple reference tracks;
+3. compare on the label-mileage axis, never against full-route
+   `route_distance_m`;
+4. preserve every tied nearest location;
+5. verify directions, coordinates, source refs, freshness/contradiction state,
+   and candidate-only boundaries against formal gold expectations.
+
+The raw model output is retained separately from the released answer. An empty
+or inaccurate synthesis cannot remove a tied candidate: the deterministic
+answer renderer uses the verified result and states that a static workspace
+marker does not guarantee live water presence or potability. No result is
+promoted to runtime safety truth.
+
+Every attempt records its fresh 10/10 budget and a secret-minimized tool trace
+with argument hashes, operations, status, source refs, evidence IDs, and root
+cause. If a provider omits token accounting, the report marks those token
+values unavailable while recovering request and model-tool-call counts from the
+Pydantic message trace.
 
 Ten-operation live smoke uses repeated `--case-id` for cases 002, 004, 011,
 015, 017, 018, 026, 051, 066, and 093. After that passes, omit `--case-id` and

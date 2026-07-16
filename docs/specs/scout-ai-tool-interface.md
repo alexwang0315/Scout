@@ -6,10 +6,10 @@ knowledge.
 
 ## Implementation Update 2026-06-30
 
-Scout AI now runs against Pydantic AI v2.9.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.10.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.9.0 for Pi admin/live
+- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.10.0 for Pi admin/live
   runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful

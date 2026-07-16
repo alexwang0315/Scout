@@ -1,0 +1,121 @@
+{
+  "artifact_kind": "scout_ai_workspace_query_gold_labels",
+  "artifact_version": "scout_ai_workspace_query_gold_labels.v1",
+  "expected_case_count": 1,
+  "evaluation_only": true,
+  "production_runtime_must_not_read_case_ids": true,
+  "labels": [
+    {
+      "case_id": "l5-water-12-5k-001",
+      "artifact_keys": [
+        "mileage_tag_alignment_geojson_ref"
+      ],
+      "operations": [
+        "filter"
+      ],
+      "fields": [
+        "source_id",
+        "source_label",
+        "route_distance_m",
+        "route_projection_status",
+        "coordinates"
+      ],
+      "assertions": [
+        {
+          "kind": "exact_value",
+          "field": "source_label",
+          "value": "006 12K 山壁水源"
+        },
+        {
+          "kind": "exact_value",
+          "field": "source_label",
+          "value": "007 13K水源"
+        },
+        {
+          "kind": "exact_value",
+          "field": "coordinates",
+          "value": [121.2743, 24.0451]
+        },
+        {
+          "kind": "exact_value",
+          "field": "coordinates",
+          "value": [121.2796, 24.046]
+        },
+        {
+          "kind": "exact_value",
+          "field": "route_projection_status",
+          "value": "mileage_label_anchor_axis"
+        },
+        {
+          "kind": "source_ref_presence",
+          "value": [
+            "outputs/mileage_tag_alignment.geojson"
+          ]
+        },
+        {
+          "kind": "candidate_boundary"
+        }
+      ],
+      "expected_tool_ids": [],
+      "collection_paths": {
+        "filter": "features"
+      },
+      "predicates": [
+        {
+          "field": "properties.source_label",
+          "operator": "contains",
+          "value": "水源"
+        }
+      ],
+      "requests": [
+        {
+          "operation": "filter",
+          "artifact": {
+            "project_ref_key": "mileage_tag_alignment_geojson_ref",
+            "collection_path": "features"
+          },
+          "predicates": [
+            {
+              "field": "properties.source_label",
+              "operator": "contains",
+              "value": "水源"
+            }
+          ],
+          "fields": [
+            "properties.source_id",
+            "properties.source_label",
+            "properties.route_distance_m",
+            "properties.route_projection_status",
+            "geometry.coordinates"
+          ],
+          "limit": 100
+        }
+      ],
+      "post_verification": {
+        "status": "success",
+        "target_mileage_k": 12.5,
+        "nearest_delta_k": 0.5,
+        "tied_candidate_count": 2,
+        "candidates": [
+          {
+            "source_label": "006 12K 山壁水源",
+            "label_mileage_k": 12.0,
+            "direction": "behind",
+            "lat": 24.0451,
+            "lon": 121.2743
+          },
+          {
+            "source_label": "007 13K水源",
+            "label_mileage_k": 13.0,
+            "direction": "ahead",
+            "lat": 24.046,
+            "lon": 121.2796
+          }
+        ],
+        "source_refs": [
+          "outputs/mileage_tag_alignment.geojson"
+        ]
+      }
+    }
+  ]
+}
