@@ -10,7 +10,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
@@ -227,6 +227,7 @@ def run_tools(
     max_tools: int,
     synthetic_field_context: bool,
     live_navigation_snapshot: dict[str, Any] | None = None,
+    scenario_overlay: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     contracts = default_tool_contracts()
     tool_results: list[dict[str, Any]] = []
@@ -251,6 +252,7 @@ def run_tools(
                 tool_id=tool_id,
                 project_root=project_root,
                 live_navigation_snapshot=live_navigation_snapshot,
+                scenario_overlay=scenario_overlay,
             )
             if synthetic_field_context
             else {}
@@ -284,6 +286,7 @@ def _synthetic_field_context_arguments(
     tool_id: str,
     project_root: Path,
     live_navigation_snapshot: dict[str, Any] | None = None,
+    scenario_overlay: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fixture-like field context for AI HAT eval, explicitly marked in outputs."""
 
@@ -394,11 +397,24 @@ def _synthetic_field_context_arguments(
             "route_weather_package_path": _ensure_synthetic_route_weather_package(
                 project_root,
                 live_navigation_snapshot=live_navigation_snapshot,
+                scenario_overlay=scenario_overlay,
             ),
-            "current_time": "2026-07-06T14:10:00+08:00",
+            "current_time": str(
+                (scenario_overlay or {}).get("current_time")
+                or (live_navigation_snapshot or {}).get("observed_at")
+                or "2026-07-06T14:10:00+08:00"
+            ),
             "include_segments": True,
             "stale_after_hours": 6,
         }
+    if tool_id == "scout.ai.contextual_permission.assess.v0":
+        return _contextual_permission_arguments(
+            scenario_overlay,
+            observed_at=str(
+                (live_navigation_snapshot or {}).get("observed_at")
+                or "2026-07-06T14:10:00+08:00"
+            ),
+        )
     if tool_id == "scout.ai.ins_dr_trace.analyze.v0":
         return {
             "estimates_path": _ensure_synthetic_ins_dr_trace(project_root),
@@ -517,51 +533,200 @@ def _filter_tool_ids_for_eval(qeval: dict[str, Any], tool_ids: list[str]) -> lis
     return _ordered_unique(tool_ids)
 
 
+def _contextual_permission_arguments(
+    scenario_overlay: dict[str, Any] | None,
+    *,
+    observed_at: str,
+) -> dict[str, Any]:
+    overlay = scenario_overlay or {}
+    variant = str(overlay.get("variant_id") or "baseline")
+    common: dict[str, Any] = {
+        "current_time": str(overlay.get("current_time") or observed_at),
+        "requested_duration_minutes": 8,
+        "current_delay_minutes": 10,
+        "next_segment_uncertainty_minutes": 8,
+        "retreat_reserve_minutes": 8,
+        "slowest_member_reserve_minutes": 5,
+        "communication_status": "synthetic_eval_available",
+        "equipment_status": "synthetic_eval_ready",
+        "confidence": "medium",
+    }
+    if variant == "exposed_strong_wind_shelter_ahead":
+        return {
+            **common,
+            "remaining_safety_buffer_minutes": 35,
+            "weather_reserve_minutes": 20,
+            "daylight_reserve_minutes": 10,
+            "weather_window_impact": "strong_wind_and_exposure",
+            "daylight_impact": "limited_but_positive_buffer",
+            "retreat_impact": "sheltered_candidate_ahead_180m",
+            "fatigue_impact": "moderate",
+            "location_constraint": "exposed_ridge_candidate",
+            "terrain_risk_level": "high",
+        }
+    if variant == "sheltered_flat_time_available":
+        return {
+            **common,
+            "remaining_safety_buffer_minutes": 70,
+            "current_delay_minutes": 0,
+            "next_segment_uncertainty_minutes": 4,
+            "weather_reserve_minutes": 5,
+            "daylight_reserve_minutes": 5,
+            "retreat_reserve_minutes": 4,
+            "slowest_member_reserve_minutes": 4,
+            "weather_window_impact": "moderate_wind_sheltered",
+            "daylight_impact": "ample_time_buffer",
+            "retreat_impact": "retreat_option_preserved",
+            "fatigue_impact": "stable",
+            "location_constraint": "flat_sheltered_candidate",
+            "terrain_risk_level": "low",
+            "confidence": "high",
+        }
+    if variant == "gnss_stale_location_unknown":
+        return {
+            **common,
+            "remaining_safety_buffer_minutes": None,
+            "weather_reserve_minutes": 15,
+            "daylight_reserve_minutes": 20,
+            "retreat_reserve_minutes": 15,
+            "slowest_member_reserve_minutes": 10,
+            "weather_window_impact": "unknown",
+            "daylight_impact": "uncertain",
+            "retreat_impact": "location_unknown",
+            "fatigue_impact": "unknown",
+            "location_constraint": "GNSS stale; current location unknown",
+            "terrain_risk_level": "unknown",
+            "confidence": "low",
+        }
+    return {
+        **common,
+        "remaining_safety_buffer_minutes": 50,
+        "weather_reserve_minutes": 10,
+        "daylight_reserve_minutes": 10,
+        "location_constraint": "candidate route position",
+        "terrain_risk_level": "moderate",
+    }
+
+
+def _synthetic_weather_variant(
+    overlay: dict[str, Any],
+    *,
+    observed_at: str,
+) -> dict[str, Any]:
+    try:
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        observed = datetime.now(timezone.utc)
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=timezone.utc)
+    issued_at = observed.isoformat()
+    valid_to = (observed + timedelta(hours=6)).isoformat()
+    stale_issued_at = (observed - timedelta(hours=30)).isoformat()
+    stale_valid_to = (observed - timedelta(hours=24)).isoformat()
+    variant = str(overlay.get("variant_id") or "baseline")
+    if variant in {"severe_fresh_route_intersecting", "exposed_strong_wind_shelter_ahead"}:
+        return {
+            "issued_at": issued_at,
+            "request_time": issued_at,
+            "valid_from": issued_at,
+            "valid_to": valid_to,
+            "summary": "劇烈降雨、強風與低能見度候選訊號和目前 route corridor 相交。",
+            "hazard_notes": ["heavy_rain", "strong_wind", "fog_visibility_drop", "wet_terrain"],
+            "confidence": "medium",
+            "risk": "high",
+        }
+    if variant in {"benign_fresh_route_intersecting", "sheltered_flat_time_available"}:
+        return {
+            "issued_at": issued_at,
+            "request_time": issued_at,
+            "valid_from": issued_at,
+            "valid_to": valid_to,
+            "summary": "目前 route corridor 為弱風、無顯著降雨且能見度良好的候選預報。",
+            "hazard_notes": ["light_wind", "no_significant_rain", "good_visibility"],
+            "confidence": "medium",
+            "risk": "low",
+        }
+    if variant in {"stale_unknown_weather", "gnss_stale_location_unknown"}:
+        return {
+            "issued_at": stale_issued_at,
+            "request_time": stale_issued_at,
+            "valid_from": stale_issued_at,
+            "valid_to": stale_valid_to,
+            "summary": "天氣證據已過有效期，現況未知，不可把缺失視為良好天氣。",
+            "hazard_notes": ["stale_weather", "current_conditions_unknown"],
+            "confidence": "low",
+            "risk": "unknown",
+        }
+    return {
+        "issued_at": issued_at,
+        "request_time": issued_at,
+        "valid_from": issued_at,
+        "valid_to": valid_to,
+        "summary": "午後山區雲霧與陣雨風險升高，能見度可能下降。",
+        "hazard_notes": ["fog_visibility_drop", "afternoon_rain", "wet_terrain"],
+        "confidence": "medium",
+        "risk": "elevated",
+    }
+
+
 def _ensure_synthetic_route_weather_package(
     project_root: Path,
     *,
     live_navigation_snapshot: dict[str, Any] | None = None,
+    scenario_overlay: dict[str, Any] | None = None,
 ) -> str:
-    relative = Path("outputs/evals/synthetic_context/aihat2_route_weather_package.json")
+    overlay = scenario_overlay or {}
+    variant_id = re.sub(
+        r"[^a-zA-Z0-9_.-]+",
+        "-",
+        str(overlay.get("variant_id") or "baseline"),
+    )
+    relative = Path(
+        f"outputs/evals/synthetic_context/aihat2_route_weather_package.{variant_id}.json"
+    )
     path = project_root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     snapshot = live_navigation_snapshot or _default_synthetic_live_navigation_snapshot()
     route_progress_m = float(snapshot.get("route_progress_m") or 0)
     scenario_id = str(snapshot.get("scenario_id") or "legacy_aihat2_synthetic")
+    weather = _synthetic_weather_variant(
+        overlay,
+        observed_at=str(snapshot.get("observed_at") or "2026-07-06T14:00:00+08:00"),
+    )
     payload = {
         "artifact_kind": "route_weather_package",
         "status": "candidate_only",
         "routeId": "chilai_nanhua_day1",
-        "generatedAt": "2026-07-06T14:00:00+08:00",
-        "issued_at": "2026-07-06T14:00:00+08:00",
-        "valid_from": "2026-07-06T14:00:00+08:00",
-        "valid_to": "2026-07-06T20:00:00+08:00",
-        "validUntil": "2026-07-06T20:00:00+08:00",
+        "generatedAt": weather["issued_at"],
+        "issued_at": weather["issued_at"],
+        "valid_from": weather["valid_from"],
+        "valid_to": weather["valid_to"],
+        "validUntil": weather["valid_to"],
         "ttl_s": 21600,
         "provider": "scout_aihat2_eval_synthetic_weather",
         "dataset_id": "fixture.normalized_cwa.aihat2",
-        "request_time": "2026-07-06T14:00:00+08:00",
-        "raw_sha256": "fixture-backed-no-live-network",
+        "request_time": weather["request_time"],
+        "raw_sha256": f"fixture-backed-no-live-network-{variant_id}",
         "candidate_only": True,
         "runtime_safety_truth": False,
         "human_review_required": True,
         "weather_window": {
-            "summary": "午後山區雲霧與陣雨風險升高，能見度可能下降。",
-            "valid_from": "2026-07-06T14:00:00+08:00",
-            "valid_to": "2026-07-06T20:00:00+08:00",
+            "summary": weather["summary"],
+            "valid_from": weather["valid_from"],
+            "valid_to": weather["valid_to"],
             "source_status": "synthetic_eval_context",
-            "hazard_notes": ["fog_visibility_drop", "afternoon_rain", "wet_terrain"],
-            "confidence": "medium",
+            "hazard_notes": weather["hazard_notes"],
+            "confidence": weather["confidence"],
         },
         "segments": [
             {
                 "segmentId": scenario_id,
                 "fromM": route_progress_m,
                 "toM": route_progress_m + 500,
-                "etaFrom": "2026-07-06T14:00:00+08:00",
-                "etaTo": "2026-07-06T15:30:00+08:00",
-                "weatherRisk": "elevated",
-                "hazardNotes": ["visibility_drop", "wet_surface"],
+                "etaFrom": weather["valid_from"],
+                "etaTo": weather["valid_to"],
+                "weatherRisk": weather["risk"],
+                "hazardNotes": weather["hazard_notes"],
             }
         ],
     }
@@ -636,6 +801,11 @@ def _compact_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "warnings": result.get("warnings") or [],
         "errors": result.get("errors") or [],
         "summary": summary,
+        "answerability": payload.get("answerability"),
+        "field_answer": payload.get("field_answer"),
+        "field_answer_priority": payload.get("field_answer_priority"),
+        "field_answer_source_ref": payload.get("field_answer_source_ref"),
+        "field_answer_source_refs": payload.get("field_answer_source_refs") or [],
         "resource_state": payload.get("resource_state"),
         "provided_fields": payload.get("provided_fields"),
         "source_report": source_report,
@@ -1615,6 +1785,7 @@ def call_hailo_model(
     model: str,
     prompt: str,
     timeout_seconds: int,
+    structured_json: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     chat_content = _normalize_hailo_chat_content(prompt)
     payload = {
@@ -1625,6 +1796,8 @@ def call_hailo_model(
         },
         "stream": False,
     }
+    if structured_json:
+        payload["format"] = "json"
     request = urllib.request.Request(
         endpoint,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),

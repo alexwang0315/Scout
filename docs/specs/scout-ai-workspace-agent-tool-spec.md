@@ -1309,6 +1309,107 @@ first two contexts, Total Info reports both query snapshot and route match
 available; for stale/unknown GNSS, query snapshot presence remains traceable but
 route match is correctly unavailable.
 
+The AI HAT+2 Six-Forces evaluation expands this rule beyond the PER-095 anchor
+case. Every `PER` (Contextual Permissioning) question runs against all three
+permission contexts, and every `WTH` (Weather-to-Decision Intelligence)
+question runs against severe/fresh route-intersecting weather, benign/fresh
+route-intersecting weather, and stale/unknown weather. The fixed run matrix is:
+
+| Force | Unique questions | Model runs |
+|---|---:|---:|
+| `EXP` | 100 | 100 |
+| `RPF` | 100 | 100 |
+| `PER` | 100 | 300 |
+| `RTE` | 100 | 100 |
+| `WTH` | 100 | 300 |
+| `NAV` | 100 | 100 |
+| **Total** | **600** | **1,000** |
+
+Each expanded run retains a unique `run_case_id` while preserving the original
+question ID. Expected decisions remain verifier-only data and must not enter
+the model prompt. Query snapshot, Total Info, tool context, compact evidence,
+model scenario ID, and verifier scenario ID must all identify the same expanded
+scenario.
+
+`tools/scout_ai_six_forces_aihat2_eval.py` executes this matrix on the Scout AI
+HAT+2 Hailo Ollama endpoint. Each per-case JSONL record preserves the sanitized
+query snapshot, compact Total Info stage, tool evidence stage, packed model
+evidence, raw model output, verifier result, source refs/hashes, and model call
+metadata. The tool adapter retains top-level `field_answer`, priority, and
+source refs even when a tool also returns result records. This prevents compact
+packing from discarding the most useful question-specific answer.
+
+The runner configures 10 tool calls and 10 model requests as available capacity.
+The model-quality eval is single-pass by default so it measures the local
+model's actual first answer; verifier-guided retry is explicit opt-in and may
+only continue while it has a useful correction step. A semantic stop must not
+replace a better parseable attempt with an empty provider continuation. Missing
+question-specific evidence is a structured answer mode: the model must say the
+workspace cannot confirm the requested fact and must retain the exact gap in
+`evidence_gaps`, rather than inventing geology, history, cultural sites, or
+facilities.
+
+Hardware samples record CPU temperature, current/historical throttling flags,
+core voltage, Hailo device/model visibility, and any observable UPS interface.
+Current power/throttle flags or CPU temperature at/above 80 C abort the eval.
+Historical flags are warnings. If no Linux power-supply or NUT `upsc` source is
+available, UPS state is explicitly `unobservable`; it must not be fabricated.
+
+#### 2026-07-16 AI HAT+2 stratified run
+
+Run `stratified-five-anchors-30q-50runs-20260716` used the real
+`chilai_nanhua_day1_scoutAI` workspace and the Scout Hailo Ollama
+`qwen3:1.7b` model. It selected five questions from every force, including all
+five Boss approach ranks. Every selected `PER` and `WTH` question ran all three
+contexts, producing 30 unique questions and 50 model runs:
+
+- `EXP=5`, `RPF=5`, `PER=15`, `RTE=5`, `WTH=15`, `NAV=5`;
+- 50/50 Query/Total Info/tool/model scenario identity checks passed;
+- 47/50 model outputs parsed; the structured verifier passed 20/50;
+- the independent answer-quality screen classified 38 `quality_fail`, seven
+  `quality_no_answer`, four `quality_needs_review`, and one
+  `auto_screen_pass_requires_human_review`;
+- no case passed both the verifier and the answer-quality acceptance screen, so
+  the strict grounded-answer result is 0/50. Verifier pass rate alone MUST NOT
+  be reported as answer quality;
+- all five exposed PER variants selected `NO_GO` rather than the expected
+  `CHANGE_PLAN`; all five sheltered variants selected `CONDITIONAL_GO` but did
+  not preserve enough supporting/opposing evidence; all five stale-location
+  variants selected `NO_GO` rather than `DELAY` and did not explain that the
+  current location was unknown;
+- all five severe WTH variants incorrectly selected `GO`; benign variants
+  selected `GO` four times and `DELAY` once; stale-weather variants selected
+  `DELAY` four times and produced one unparsed answer, but generally did not
+  explain freshness/provenance gaps sufficiently;
+- PER-095 specifically produced `NO_GO`, `CONDITIONAL_GO`, and `NO_GO`; all
+  three verifier checks failed against the expected `CHANGE_PLAN`,
+  `CONDITIONAL_GO`, and `DELAY` evidence boundaries.
+
+The five dynamically generated anchors were 59,250 m at
+24.058167201531/121.282862139783, 49,250 m at
+24.053578033172/121.241105036979, 43,250 m at
+24.050482206818/121.215180629792, 48,250 m at
+24.047716532769/121.237805374932, and 53,250 m at
+24.048743594927/121.260414739621. The scenario artifact hash was
+`a00b564471bb0085a4b06f5e6fd301d93568b82b129e6098502da5df4b879438`.
+
+Artifacts are under
+`outputs/evals/six_forces_600_total_info_stratified-five-anchors-30q-50runs-20260716/`.
+The deterministic weather replay recorded `external_api_calls_made=false`.
+Twelve persisted hardware samples observed 56.5-59.3 C, 0.7500-0.8792 V core
+voltage, and no current throttle/undervoltage flags; interactive monitoring
+observed a 62.6 C peak between persisted samples. Historical
+`throttled=0x50000` remained a warning. UPS status was not observable through a
+Linux power-supply device or NUT `upsc` and was not inferred.
+
+The 50-run slice took 42 minutes 21 seconds, projecting about 14.1 hours for the
+full 1,000-run matrix on this model and endpoint. The full matrix was therefore
+not represented as completed; this run is the required stratified executable
+smoke and its artifacts support a later resumable full-device run. Current
+status is `PARTIAL PROTOTYPE`: dataflow and scenario identity work, while local
+model evidence use and decision semantics require further training or model
+replacement.
+
 This update does not call `/safety/*`, change Phase 1 runtime safety behavior,
 control hardware, perform outbound sends, or treat synthetic observations as
 real-user/runtime safety truth.
