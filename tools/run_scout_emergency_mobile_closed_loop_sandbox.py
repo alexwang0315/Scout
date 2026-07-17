@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--complete-loop",
         action="store_true",
-        help="Record agree_send approval and a simulated verified receipt.",
+        help="Record agree_send approval and a correlated simulator receipt.",
     )
     parser.add_argument("--output")
     args = parser.parse_args(argv)
@@ -71,19 +71,23 @@ def main(argv: list[str] | None = None) -> int:
                 },
             )
             steps.append(_step_summary("approval", projection))
-            approval = projection.get("approval") or {}
+            attempt = projection.get("transport_attempt") or {}
+            packet = projection.get("alert_packet") or {}
             projection = _post_json(
                 base_url,
-                f"{living_path}/transport/receipts",
+                f"{living_path}/transport/simulations",
                 {
                     "scenario_id": args.scenario_id,
-                    "approval_id": approval.get("approval_id"),
-                    "outcome": "simulated_verified",
-                    "idempotency_key": f"cli-receipt-{run_id}",
+                    "attempt_id": attempt.get("attempt_id"),
+                    "attempt_sha256": attempt.get("sha256"),
+                    "packet_id": packet.get("packet_id"),
+                    "packet_sha256": packet.get("sha256"),
+                    "outcome": "simulated_receipt_recorded",
+                    "idempotency_key": f"cli-simulation-{run_id}",
                     "confirm_simulated_transport": True,
                 },
             )
-            steps.append(_step_summary("receipt", projection))
+            steps.append(_step_summary("simulation", projection))
 
         final_projection = _get_json(base_url, living_path)
     except (HTTPError, URLError, ValueError) as exc:

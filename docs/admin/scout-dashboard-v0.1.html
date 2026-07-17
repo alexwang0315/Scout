@@ -6653,7 +6653,7 @@
 
     function livingTone(value) {
       const text = String(value || "").toLowerCase();
-      if (["verified", "normal", "ready", "accepted"].some(token => text.includes(token))) return "ok";
+      if (["recorded", "normal", "ready", "accepted"].some(token => text.includes(token))) return "ok";
       if (["alert", "retreat", "distress", "failed", "cancelled"].some(token => text.includes(token))) return "bad";
       return "warn";
     }
@@ -6663,18 +6663,20 @@
       const unavailable = !projection.status || projection.status === "unavailable";
       const scenario = projection.scenario || {};
       const ingress = projection.ingress || {};
+      const evaluation = projection.evaluation_snapshot || {};
       const route = projection.route || {};
       const safety = projection.safety || {};
       const packet = projection.alert_packet || null;
       const approval = projection.approval || null;
       const attempt = projection.transport_attempt || null;
+      const simulation = projection.transport_simulation || null;
       const receipt = projection.transport_receipt || null;
       const gates = asArray(safety.gates);
       const timeline = asArray(projection.timeline).slice(-14).reverse();
       const boundary = projection.boundary || {};
       const disabled = state.livingActionBusy ? "disabled" : "";
       const approveDisabled = state.livingActionBusy || !packet || approval?.decision === "agree_send" ? "disabled" : "";
-      const receiptDisabled = state.livingActionBusy || approval?.decision !== "agree_send" || Boolean(receipt) ? "disabled" : "";
+      const simulationDisabled = state.livingActionBusy || approval?.decision !== "agree_send" || !attempt || Boolean(simulation) ? "disabled" : "";
 
       return `
         <section class="panel" data-living-surface="true">
@@ -6689,7 +6691,7 @@
             <div class="living-actions" aria-label="Living sandbox controls">
               <button type="button" data-living-action="run" ${disabled}>Run ridge distress replay</button>
               <button type="button" data-living-action="approve" ${approveDisabled}>Approve sandbox transport</button>
-              <button type="button" data-living-action="receipt" ${receiptDisabled}>Record simulated delivery</button>
+              <button type="button" data-living-action="simulation" ${simulationDisabled}>Record simulator receipt</button>
               <button type="button" data-living-action="refresh" ${disabled}>Refresh now</button>
               <a href="/emergency/mobile-approval-v0?living=1" target="_blank" rel="noreferrer">Open Emergency Mobile UI</a>
             </div>
@@ -6717,6 +6719,8 @@
                   <div class="metric-row"><span>Ingress mode</span><span>${escapeHtml(ingress.mode || "--")}</span></div>
                   <div class="metric-row"><span>Messages / devices</span><span>${escapeHtml(formatInteger(ingress.accepted_message_count || 0))} / ${escapeHtml(formatInteger(ingress.device_count || 0))}</span></div>
                   <div class="metric-row"><span>Sensors</span><span>${escapeHtml(asArray(ingress.sensor_names).join(", ") || "none")}</span></div>
+                  <div class="metric-row"><span>Evaluation snapshot</span><span class="mono">${escapeHtml(evaluation.evaluation_snapshot_id || "--")}</span></div>
+                  <div class="metric-row"><span>Input-set hash</span><span class="mono">${escapeHtml(String(evaluation.input_set_hash || "--").slice(0, 16))}</span></div>
                   <div class="metric-row"><span>Broker truth</span><span>not connected · synthetic direct feed</span></div>
                 </div>
               </div>
@@ -6774,13 +6778,14 @@
               </div>
             </section>
             <section class="panel">
-              <div class="panel-header"><h3>Sandbox Transport</h3><span class="chip ${receipt ? livingTone(receipt.outcome) : "warn"}">${escapeHtml(receipt?.outcome || "not attempted")}</span></div>
+              <div class="panel-header"><h3>Sandbox Simulator</h3><span class="chip ${simulation ? livingTone(simulation.outcome) : "warn"}">${escapeHtml(simulation?.outcome || "not selected")}</span></div>
               <div class="panel-body living-status-stack">
                 <span class="mono">${escapeHtml(attempt?.attempt_id || "no sandbox attempt")}</span>
+                <span class="mono">${escapeHtml(simulation?.simulation_id || "no simulator outcome")}</span>
                 <span class="mono">${escapeHtml(receipt?.receipt_id || "no receipt")}</span>
                 <span class="mono">receipt attempt=${escapeHtml(receipt?.source_attempt_id || "--")}</span>
-                <span>simulated delivery=${escapeHtml(String(receipt?.sandbox_delivery_verified ?? false))}</span>
-                <strong>network=false · production delivery=false · sent=false</strong>
+                <span>receipt correlated=${escapeHtml(String(receipt?.simulated_receipt_correlated ?? false))}</span>
+                <strong>no real transport or delivery occurred · sent=false</strong>
               </div>
             </section>
           </div>
@@ -6845,15 +6850,19 @@
             idempotency_key: `dashboard-approve-${current.scenario?.run_id}-${current.revision}`,
             confirm_sandbox_action: true,
           });
-        } else if (action === "receipt") {
+        } else if (action === "simulation") {
           const current = state.livingProjection || {};
-          const approval = current.approval;
-          if (!approval) throw new Error("No current sandbox approval artifact");
-          projection = await postJson(`${DASHBOARD_LIVING_PATH}/transport/receipts`, {
+          const attempt = current.transport_attempt;
+          const packet = current.alert_packet;
+          if (!attempt || !packet) throw new Error("No authorized sandbox attempt");
+          projection = await postJson(`${DASHBOARD_LIVING_PATH}/transport/simulations`, {
             scenario_id: current.scenario?.scenario_id,
-            approval_id: approval.approval_id,
-            outcome: "simulated_verified",
-            idempotency_key: `dashboard-receipt-${current.scenario?.run_id}-${current.revision}`,
+            attempt_id: attempt.attempt_id,
+            attempt_sha256: attempt.sha256,
+            packet_id: packet.packet_id,
+            packet_sha256: packet.sha256,
+            outcome: "simulated_receipt_recorded",
+            idempotency_key: `dashboard-simulation-${current.scenario?.run_id}-${current.revision}`,
             confirm_simulated_transport: true,
           });
         } else {

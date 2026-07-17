@@ -2018,8 +2018,8 @@
       bindText("deliveryState", living?.transport_receipt
         ? `sandbox:${living.transport_receipt.outcome} · production=false`
         : "not_reported");
-      bindText("decisionSummary", living?.transport_receipt?.sandbox_delivery_verified
-        ? "Sandbox delivery verified; production sent=false."
+      bindText("decisionSummary", living?.transport_receipt?.simulated_receipt_correlated
+        ? "Simulator receipt recorded. No real transport or delivery occurred."
         : decisionSummary(policy));
       bindText("livingStatus", living ? `Living r${living.revision || 0}` : "not connected");
       applyLivingGateStates(payload.living_gates || []);

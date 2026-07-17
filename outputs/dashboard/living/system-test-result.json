@@ -17,18 +17,22 @@
       "artifact_kind": "scout_emergency_mobile_sandbox_alert_candidate",
       "artifact_version": "emergency_mobile_sandbox_alert_candidate.v0",
       "candidate_only": true,
+      "content_sha256": "ed0177b15d04cc8a40b6caaa413e59f381b362047ef864db8558dc29ec12efc4",
       "location_ref": "segment:seg.001",
-      "packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1050",
+      "packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1225",
       "requested_action": "stop, review retreat or emergency camp, and request operator approval",
       "runtime_safety_truth": false,
       "safety_level_candidate": "L3_RETREAT",
       "scenario_id": "sandbox-ridge-distress-v0",
       "selected_gate_id": "physiologic_gate",
       "sent": false,
-      "sha256": "178fcfe4c3dd745dcf8fca0eb0231dadb1c9b2db07bb74a3424b5958403d555a",
+      "sha256": "725e81767e10c88d71209688e4dbf4e80b6535dae203fae7cda5f1486eb82230",
+      "source_evaluation_snapshot_id": "snapshot:sandbox-ridge-distress-v0:f9f4da6b3b4045638c2d",
+      "source_evaluation_snapshot_sha256": "4dfec85b02fba5df75e78d3dd4207b470e9f22cbf944e9fc9b371ca2f487b593",
+      "source_input_set_hash": "f9f4da6b3b4045638c2d42cce8264b3bac717bb49202fca502553f8732f7568c",
       "source_reducer_ref": "runtime_safety_reducer_dry_run.json",
-      "source_reducer_sha256": "574f430db1ccedf685312f260506bc4234c24d6fa5fc86806766c83d5b2371d8",
-      "status": "simulated_delivery_verified",
+      "source_reducer_sha256": "68978f2f2f386514f9203800cd39cd16d571c3a0379d26758661368abc6e7ed2",
+      "status": "simulated_receipt_recorded",
       "summary": "physiologic_gate produced L3_RETREAT; review retreat or emergency camp",
       "transport_drafts": [
         {
@@ -50,33 +54,34 @@
           "sent": false,
           "status": "draft_ready",
           "summary": "sandbox MQTT draft ready; publish not performed",
-          "topic_ref": "scout/sandbox/sandbox-ridge-distress-v0/alerts/system-run-20260717T1050"
+          "topic_ref": "scout/sandbox/sandbox-ridge-distress-v0/alerts/system-run-20260717T1225"
         }
       ]
     },
     "approval": {
-      "approval_id": "approval:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1050",
+      "approval_id": "approval:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1225",
       "artifact_kind": "scout_emergency_mobile_sandbox_approval_action",
       "artifact_version": "emergency_mobile_sandbox_approval_action.v0",
       "decision": "agree_send",
       "external_send_performed": false,
       "external_send_requested": true,
-      "idempotency_key": "cli-approve-system-run-20260717T1050",
+      "idempotency_key": "cli-approve-system-run-20260717T1225",
       "phase1_mutation_requested": false,
-      "request_sha256": "8d1e558e6b82e68d60955d45e2f6e981ea0c7ae4fa1805a0c12150548837f604",
+      "request_sha256": "f61be4b65002439ce4b15e3e61625c1a35d198a7c40b39ecca7854108ab4c14d",
       "requested_transport": "sandbox_transport_executor_v0",
       "scenario_id": "sandbox-ridge-distress-v0",
       "sent": false,
-      "sha256": "d087256dae021bf055aed496f5d29f4e8f98b3a434da24d496a34ea8e5a5fa49",
-      "source_packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1050",
-      "source_packet_sha256": "178fcfe4c3dd745dcf8fca0eb0231dadb1c9b2db07bb74a3424b5958403d555a"
+      "sha256": "c0de509dabec11cc58506c8e5dd6a631b8cf1dddae1343829f8aba787e322f6b",
+      "source_packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1225",
+      "source_packet_sha256": "725e81767e10c88d71209688e4dbf4e80b6535dae203fae7cda5f1486eb82230"
     },
     "artifact_kind": "scout_emergency_mobile_closed_loop_living_projection",
     "artifact_refs": {
       "alert_packet": "alert_packet_candidate.json",
+      "evaluation_snapshot": "evaluation_snapshot.json",
       "living_projection": "living_projection.json",
       "observer_status": "ingress/sensorlogger_mqtt_status.json",
-      "run_dir": "runs/system-run-20260717T1050",
+      "run_dir": "runs/system-run-20260717T1225",
       "scenario": "scenario_fixture.json",
       "shadow_replay": "shadow_replay/runtime_shadow_replay_result.json"
     },
@@ -95,13 +100,50 @@
       "safety_api_called": false,
       "synthetic_scenario": true
     },
+    "evaluation_snapshot": {
+      "artifact_kind": "scout_emergency_mobile_sandbox_evaluation_snapshot",
+      "artifact_version": "emergency_mobile_sandbox_evaluation_snapshot.v0",
+      "candidate_only": true,
+      "evaluation_snapshot_id": "snapshot:sandbox-ridge-distress-v0:f9f4da6b3b4045638c2d",
+      "gate_snapshot_ref": "shadow_replay/runtime_safety_gate_event_batch.json",
+      "input_records": [
+        {
+          "device_id": "sandbox-phone-v0",
+          "record_hash": "047c52ce9eda2691e4eebaa99d2f66f4c1e9b6de96ebd4cb6c32a4db5de6f305",
+          "record_id": "4e452e2ebb9fe3054fe4b42f",
+          "sensor_names": [
+            "accelerometer",
+            "battery",
+            "location"
+          ]
+        },
+        {
+          "device_id": "sandbox-wearable-v0",
+          "record_hash": "5cadc13a114f53af45879bd994533ba26c1cb3e7fa6afdc2959f9bc2e556cf1c",
+          "record_id": "b97193cc9c82ee7c1a6ef572",
+          "sensor_names": [
+            "battery",
+            "heartRate",
+            "oxygenSaturation"
+          ]
+        }
+      ],
+      "input_set_hash": "f9f4da6b3b4045638c2d42cce8264b3bac717bb49202fca502553f8732f7568c",
+      "reducer_ref": "shadow_replay/runtime_safety_reducer_dry_run.json",
+      "runtime_safety_truth": false,
+      "scenario_id": "sandbox-ridge-distress-v0",
+      "scenario_revision": 1,
+      "seal_reason": "expected_synthetic_inputs_accepted",
+      "sha256": "4dfec85b02fba5df75e78d3dd4207b470e9f22cbf944e9fc9b371ca2f487b593",
+      "simulated_time": "2026-07-17T04:47:42.550700+00:00"
+    },
     "ingress": {
       "accepted_message_count": 2,
       "adapter": "SensorLoggerMqttObserver.handle_message",
       "broker_connection_verified": false,
       "device_count": 2,
       "invalid_message_count": 0,
-      "latest_ingress_id": "1d0152309dea1235e6778ab5",
+      "latest_ingress_id": "b97193cc9c82ee7c1a6ef572",
       "mode": "synthetic_direct_feed",
       "network_mqtt_publish_performed": false,
       "observer_status_ref": "ingress/sensorlogger_mqtt_status.json",
@@ -131,6 +173,9 @@
     },
     "safety": {
       "candidate_only": true,
+      "evaluation_snapshot_id": "snapshot:sandbox-ridge-distress-v0:f9f4da6b3b4045638c2d",
+      "evaluation_snapshot_ref": "evaluation_snapshot.json",
+      "evaluation_snapshot_sha256": "4dfec85b02fba5df75e78d3dd4207b470e9f22cbf944e9fc9b371ca2f487b593",
       "gates": [
         {
           "confidence": "high",
@@ -140,9 +185,11 @@
             "slow pace with movement-efficiency pressure"
           ],
           "evidence_refs": [
-            "scenario_fixture.json#route_progress",
+            "evaluation_snapshot.json#f9f4da6b3b4045638c2d42cce8264b3bac717bb49202fca502553f8732f7568c",
             "scenario_fixture.json#segment_timing",
-            "ingress/sensorlogger_mqtt_status.json"
+            "ingress/sensorlogger_mqtt_status.json",
+            "evaluation_snapshot.json",
+            "scenario_fixture.json#route_progress"
           ],
           "gate_id": "pace_gate",
           "ln_level_candidate": "L2_CONCERN",
@@ -156,10 +203,12 @@
             "planned_buffer_minutes:30.0"
           ],
           "evidence_refs": [
-            "scenario_fixture.json#route_progress",
+            "evaluation_snapshot.json#f9f4da6b3b4045638c2d42cce8264b3bac717bb49202fca502553f8732f7568c",
             "scenario_fixture.json#planned_timeline",
             "scenario_fixture.json#segment_timing",
-            "ingress/sensorlogger_mqtt_status.json"
+            "ingress/sensorlogger_mqtt_status.json",
+            "evaluation_snapshot.json",
+            "scenario_fixture.json#route_progress"
           ],
           "gate_id": "delay_gate",
           "ln_level_candidate": "L0_NORMAL",
@@ -175,6 +224,7 @@
           ],
           "evidence_refs": [
             "ingress/sensorlogger_mqtt_status.json",
+            "evaluation_snapshot.json",
             "scenario_fixture.json#condition_overlays"
           ],
           "gate_id": "physiologic_gate",
@@ -189,6 +239,7 @@
           ],
           "evidence_refs": [
             "ingress/sensorlogger_mqtt_status.json",
+            "evaluation_snapshot.json",
             "scenario_fixture.json#condition_overlays"
           ],
           "gate_id": "weather_gate",
@@ -205,9 +256,11 @@
             "daylight margin is narrow"
           ],
           "evidence_refs": [
-            "scenario_fixture.json#route_progress",
+            "evaluation_snapshot.json#f9f4da6b3b4045638c2d42cce8264b3bac717bb49202fca502553f8732f7568c",
             "scenario_fixture.json#segment_timing",
-            "ingress/sensorlogger_mqtt_status.json"
+            "ingress/sensorlogger_mqtt_status.json",
+            "evaluation_snapshot.json",
+            "scenario_fixture.json#route_progress"
           ],
           "gate_id": "darkness_gate",
           "ln_level_candidate": "L2_CONCERN",
@@ -221,6 +274,7 @@
           ],
           "evidence_refs": [
             "ingress/sensorlogger_mqtt_status.json",
+            "evaluation_snapshot.json",
             "scenario_fixture.json#condition_overlays"
           ],
           "gate_id": "environment_threat_gate",
@@ -229,21 +283,22 @@
           "state_candidate": "no_confirmed_environment_threat"
         }
       ],
+      "input_set_hash": "f9f4da6b3b4045638c2d42cce8264b3bac717bb49202fca502553f8732f7568c",
       "ln_level_candidate": "L3_RETREAT",
       "phase1_adapter_status": "blocked_feature_flag_disabled",
       "phase1_l0_l4_state_mutated": false,
       "recommendation": "retreat_review",
-      "reducer_sha256": "574f430db1ccedf685312f260506bc4234c24d6fa5fc86806766c83d5b2371d8",
+      "reducer_sha256": "68978f2f2f386514f9203800cd39cd16d571c3a0379d26758661368abc6e7ed2",
       "reducer_source_ref": "runtime_safety_reducer_dry_run.json",
       "reducer_state": "retreat_review",
       "runtime_safety_truth": false,
       "selected_gate_id": "physiologic_gate"
     },
     "scenario": {
-      "observed_at": "2026-07-17T03:03:55.201024+00:00",
+      "observed_at": "2026-07-17T04:47:42.550700+00:00",
       "profile": "ridge_distress",
       "project_id": "chilai_nanhua_day1_scoutAI",
-      "run_id": "system-run-20260717T1050",
+      "run_id": "system-run-20260717T1225",
       "scenario_id": "sandbox-ridge-distress-v0",
       "source_mode": "synthetic_replay"
     },
@@ -251,16 +306,18 @@
     "source_refs": [
       "scenario_fixture.json",
       "ingress/sensorlogger_mqtt_status.json",
+      "evaluation_snapshot.json",
       "shadow_replay/runtime_shadow_replay_result.json",
       "alert_packet_candidate.json",
-      "approvals/cli-approve-system-run-20260717T1050.json",
-      "transport_attempts/cli-receipt-system-run-20260717T1050.json",
-      "receipts/cli-receipt-system-run-20260717T1050.json"
+      "approvals/cli-approve-system-run-20260717T1225.json",
+      "transport_attempts/cli-approve-system-run-20260717T1225.json",
+      "simulations/cli-simulation-system-run-20260717T1225.json",
+      "receipts/cli-simulation-system-run-20260717T1225.json"
     ],
-    "status": "simulated_delivery_verified",
+    "status": "simulated_receipt_recorded",
     "timeline": [
       {
-        "event_id": "system-run-20260717T1050:scenario_started",
+        "event_id": "system-run-20260717T1225:scenario_started",
         "kind": "sandbox_scenario_started",
         "observed_at_offset_s": 0,
         "scenario_id": "sandbox-ridge-distress-v0",
@@ -271,31 +328,31 @@
         "summary": "Synthetic phone/wearable closed-loop scenario started"
       },
       {
-        "event_id": "system-run-20260717T1050:ingress:1",
+        "event_id": "system-run-20260717T1225:ingress:1",
         "kind": "sensorlogger_ingress_accepted",
         "observed_at_offset_s": 0,
         "scenario_id": "sandbox-ridge-distress-v0",
         "sequence": 2,
         "source_refs": [
           "ingress/sensorlogger_mqtt_status.json",
-          "afb05801b6dabdda79614532"
+          "4e452e2ebb9fe3054fe4b42f"
         ],
         "summary": "Accepted synthetic sandbox-phone-v0 message via SensorLogger observer handler"
       },
       {
-        "event_id": "system-run-20260717T1050:ingress:2",
+        "event_id": "system-run-20260717T1225:ingress:2",
         "kind": "sensorlogger_ingress_accepted",
         "observed_at_offset_s": 1,
         "scenario_id": "sandbox-ridge-distress-v0",
         "sequence": 3,
         "source_refs": [
           "ingress/sensorlogger_mqtt_status.json",
-          "1d0152309dea1235e6778ab5"
+          "b97193cc9c82ee7c1a6ef572"
         ],
         "summary": "Accepted synthetic sandbox-wearable-v0 message via SensorLogger observer handler"
       },
       {
-        "event_id": "system-run-20260717T1050:reducer",
+        "event_id": "system-run-20260717T1225:reducer",
         "kind": "runtime_safety_reducer_candidate",
         "observed_at_offset_s": 7201,
         "scenario_id": "sandbox-ridge-distress-v0",
@@ -306,7 +363,7 @@
         "summary": "Reducer selected physiologic_gate at L3_RETREAT; candidate-only"
       },
       {
-        "event_id": "system-run-20260717T1050:alert_packet",
+        "event_id": "system-run-20260717T1225:alert_packet",
         "kind": "sandbox_alert_packet_prepared",
         "observed_at_offset_s": 7202,
         "scenario_id": "sandbox-ridge-distress-v0",
@@ -317,87 +374,107 @@
         "summary": "Prepared alert candidate; production sent=false"
       },
       {
-        "event_id": "system-run-20260717T1050:approval_action_recorded:6",
+        "event_id": "system-run-20260717T1225:approval_action_recorded:6",
         "kind": "approval_action_recorded",
         "observed_at_offset_s": 7206,
         "scenario_id": "sandbox-ridge-distress-v0",
         "sequence": 6,
         "source_refs": [
           "alert_packet_candidate.json",
-          "approvals/cli-approve-system-run-20260717T1050.json"
+          "approvals/cli-approve-system-run-20260717T1225.json"
         ],
         "summary": "Operator sandbox action recorded: agree_send"
       },
       {
-        "event_id": "system-run-20260717T1050:sandbox_transport_attempt_recorded:7",
+        "event_id": "system-run-20260717T1225:sandbox_transport_attempt_recorded:7",
         "kind": "sandbox_transport_attempt_recorded",
         "observed_at_offset_s": 7207,
         "scenario_id": "sandbox-ridge-distress-v0",
         "sequence": 7,
         "source_refs": [
-          "approvals/cli-approve-system-run-20260717T1050.json",
-          "transport_attempts/cli-receipt-system-run-20260717T1050.json"
+          "approvals/cli-approve-system-run-20260717T1225.json",
+          "transport_attempts/cli-approve-system-run-20260717T1225.json"
         ],
-        "summary": "Sandbox-only transport attempt recorded; network=false, production sent=false"
+        "summary": "Sandbox-only attempt recorded from accepted approval; network=false, production sent=false"
       },
       {
-        "event_id": "system-run-20260717T1050:sandbox_transport_receipt_recorded:8",
+        "event_id": "system-run-20260717T1225:sandbox_transport_receipt_recorded:8",
         "kind": "sandbox_transport_receipt_recorded",
         "observed_at_offset_s": 7208,
         "scenario_id": "sandbox-ridge-distress-v0",
         "sequence": 8,
         "source_refs": [
-          "approvals/cli-approve-system-run-20260717T1050.json",
-          "transport_attempts/cli-receipt-system-run-20260717T1050.json",
-          "receipts/cli-receipt-system-run-20260717T1050.json"
+          "transport_attempts/cli-approve-system-run-20260717T1225.json",
+          "simulations/cli-simulation-system-run-20260717T1225.json",
+          "receipts/cli-simulation-system-run-20260717T1225.json"
         ],
-        "summary": "Sandbox transport verified simulated delivery; production sent=false"
+        "summary": "Simulator receipt recorded and correlated; no real transport or delivery occurred"
       }
     ],
     "transport_attempt": {
       "artifact_kind": "scout_emergency_mobile_sandbox_transport_attempt",
       "artifact_version": "emergency_mobile_sandbox_transport_attempt.v0",
-      "attempt_id": "attempt:sandbox-ridge-distress-v0:cli-receipt-system-run-20260717T1050",
+      "attempt_id": "attempt:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1225",
       "attempted": true,
       "destination_alias": "synthetic_rescue_desk",
       "executor": "sandbox_transport_executor_v0",
-      "idempotency_key": "cli-receipt-system-run-20260717T1050",
+      "idempotency_key": "cli-approve-system-run-20260717T1225",
       "network_connection_attempted": false,
       "production_transport_invoked": false,
-      "request_sha256": "b8d6c7af9f32bfb2d7cade50161c6006c8ab17bd851b87a7ebc7148ca50c35fd",
+      "request_sha256": "e3c945ffe936fefa996b56936da444cc1c6a75223252cddb7a9534e37ac7398a",
       "scenario_id": "sandbox-ridge-distress-v0",
       "sent": false,
-      "sha256": "1d010e7ba7dce3268957614684a57b7c5a5c688536f6128e7532de9086449fd1",
+      "sha256": "561ee2b42447ceee07d2b1278081d159a9061a06cff98d5bce8283b6800f2067",
       "simulated_transport": true,
-      "source_approval_id": "approval:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1050",
-      "source_approval_sha256": "d087256dae021bf055aed496f5d29f4e8f98b3a434da24d496a34ea8e5a5fa49",
-      "source_packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1050",
-      "source_packet_sha256": "178fcfe4c3dd745dcf8fca0eb0231dadb1c9b2db07bb74a3424b5958403d555a"
+      "source_approval_id": "approval:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1225",
+      "source_approval_sha256": "c0de509dabec11cc58506c8e5dd6a631b8cf1dddae1343829f8aba787e322f6b",
+      "source_packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1225",
+      "source_packet_sha256": "725e81767e10c88d71209688e4dbf4e80b6535dae203fae7cda5f1486eb82230"
     },
     "transport_receipt": {
       "artifact_kind": "scout_emergency_mobile_sandbox_transport_receipt",
       "artifact_version": "emergency_mobile_sandbox_transport_receipt.v0",
       "attempted": true,
       "executor": "sandbox_transport_executor_v0",
-      "idempotency_key": "cli-receipt-system-run-20260717T1050",
-      "outcome": "simulated_verified",
+      "idempotency_key": "cli-simulation-system-run-20260717T1225",
+      "outcome": "simulated_receipt_recorded",
       "production_delivery_verified": false,
       "production_send_performed": false,
-      "receipt_id": "receipt:sandbox-ridge-distress-v0:cli-receipt-system-run-20260717T1050",
-      "request_sha256": "b8d6c7af9f32bfb2d7cade50161c6006c8ab17bd851b87a7ebc7148ca50c35fd",
-      "sandbox_delivery_verified": true,
+      "receipt_id": "receipt:sandbox-ridge-distress-v0:cli-simulation-system-run-20260717T1225",
+      "request_sha256": "c207887478be86eef268b49eb228597fd5fb4bc3a9d67c6c03bd20e9eb792899",
       "scenario_id": "sandbox-ridge-distress-v0",
       "sent": false,
-      "sha256": "df8eb3228525721f6d529aac15b2cea2fbabc0dad9b54aa59d2cc9c2f4d19905",
+      "sha256": "5c8d78a1c0ac407a5c22d80cc9ae07d81bf5f064d8d5af103be7ce877a4abe23",
+      "simulated_receipt_correlated": true,
       "simulated_transport": true,
-      "source_approval_id": "approval:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1050",
-      "source_attempt_id": "attempt:sandbox-ridge-distress-v0:cli-receipt-system-run-20260717T1050",
-      "source_attempt_sha256": "1d010e7ba7dce3268957614684a57b7c5a5c688536f6128e7532de9086449fd1",
-      "source_packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1050",
-      "source_packet_sha256": "178fcfe4c3dd745dcf8fca0eb0231dadb1c9b2db07bb74a3424b5958403d555a"
+      "source_approval_id": "approval:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1225",
+      "source_attempt_id": "attempt:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1225",
+      "source_attempt_sha256": "561ee2b42447ceee07d2b1278081d159a9061a06cff98d5bce8283b6800f2067",
+      "source_packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1225",
+      "source_packet_sha256": "725e81767e10c88d71209688e4dbf4e80b6535dae203fae7cda5f1486eb82230"
+    },
+    "transport_simulation": {
+      "artifact_kind": "scout_emergency_mobile_sandbox_transport_simulation",
+      "artifact_version": "emergency_mobile_sandbox_transport_simulation.v0",
+      "executor": "sandbox_transport_executor_v0",
+      "idempotency_key": "cli-simulation-system-run-20260717T1225",
+      "manually_selected_outcome": true,
+      "network_connection_attempted": false,
+      "outcome": "simulated_receipt_recorded",
+      "production_transport_invoked": false,
+      "receipt_recorded": true,
+      "request_sha256": "c207887478be86eef268b49eb228597fd5fb4bc3a9d67c6c03bd20e9eb792899",
+      "scenario_id": "sandbox-ridge-distress-v0",
+      "sent": false,
+      "sha256": "0492cbd8573d11d619b8c141d80479bab176aa8d1df320729603d7668e567f52",
+      "simulation_id": "simulation:sandbox-ridge-distress-v0:cli-simulation-system-run-20260717T1225",
+      "source_attempt_id": "attempt:sandbox-ridge-distress-v0:cli-approve-system-run-20260717T1225",
+      "source_attempt_sha256": "561ee2b42447ceee07d2b1278081d159a9061a06cff98d5bce8283b6800f2067",
+      "source_packet_id": "sandbox.packet:sandbox-ridge-distress-v0:system-run-20260717T1225",
+      "source_packet_sha256": "725e81767e10c88d71209688e4dbf4e80b6535dae203fae7cda5f1486eb82230"
     }
   },
-  "run_id": "system-run-20260717T1050",
+  "run_id": "system-run-20260717T1225",
   "scenario_id": "sandbox-ridge-distress-v0",
   "status": "completed",
   "steps": [
@@ -411,15 +488,15 @@
     {
       "production_send_performed": false,
       "revision": 2,
-      "status": "approved_pending_sandbox_transport",
+      "status": "approved_sandbox_attempt_recorded",
       "step": "approval",
-      "timeline_event_count": 6
+      "timeline_event_count": 7
     },
     {
       "production_send_performed": false,
       "revision": 3,
-      "status": "simulated_delivery_verified",
-      "step": "receipt",
+      "status": "simulated_receipt_recorded",
+      "step": "simulation",
       "timeline_event_count": 8
     }
   ]

@@ -29,7 +29,11 @@ SandboxDecision = Literal[
     "message_draft",
     "voice_call_script",
 ]
-SandboxReceiptOutcome = Literal["simulated_verified", "simulated_failed"]
+SandboxSimulationOutcome = Literal[
+    "simulated_receipt_recorded",
+    "simulated_rejected",
+    "simulated_timeout",
+]
 
 _SAFE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
 _GATE_IDS = (
@@ -130,12 +134,15 @@ class SandboxApprovalRequest(BaseModel):
     confirm_sandbox_action: bool = False
 
 
-class SandboxTransportReceiptRequest(BaseModel):
+class SandboxTransportSimulationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scenario_id: str = Field(pattern=_SAFE_ID_PATTERN)
-    approval_id: str = Field(pattern=_SAFE_ID_PATTERN)
-    outcome: SandboxReceiptOutcome
+    attempt_id: str = Field(pattern=_SAFE_ID_PATTERN)
+    attempt_sha256: str = Field(min_length=1, max_length=128)
+    packet_id: str = Field(pattern=_SAFE_ID_PATTERN)
+    packet_sha256: str = Field(min_length=1, max_length=128)
+    outcome: SandboxSimulationOutcome
     idempotency_key: str = Field(pattern=_SAFE_ID_PATTERN)
     confirm_simulated_transport: bool = False
 
@@ -166,6 +173,44 @@ class SandboxIngressProjection(BaseModel):
     observer_status_ref: str
     network_mqtt_publish_performed: bool = False
     broker_connection_verified: bool = False
+
+
+class SandboxEvaluationInputRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_id: str
+    record_hash: str
+    device_id: str
+    sensor_names: list[str] = Field(default_factory=list)
+
+
+class SandboxEvaluationSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_emergency_mobile_sandbox_evaluation_snapshot"
+    artifact_version: str = "emergency_mobile_sandbox_evaluation_snapshot.v0"
+    evaluation_snapshot_id: str
+    sha256: str
+    scenario_id: str
+    scenario_revision: int = 1
+    simulated_time: str
+    input_records: list[SandboxEvaluationInputRecord]
+    input_set_hash: str
+    seal_reason: Literal["expected_synthetic_inputs_accepted"] = (
+        "expected_synthetic_inputs_accepted"
+    )
+    gate_snapshot_ref: str
+    reducer_ref: str
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+
+    @model_validator(mode="after")
+    def enforce_snapshot(self) -> "SandboxEvaluationSnapshot":
+        if len(self.input_records) != 2:
+            raise ValueError("sandbox evaluation snapshot requires phone and wearable")
+        if not self.candidate_only or self.runtime_safety_truth:
+            raise ValueError("sandbox evaluation snapshot cannot claim runtime truth")
+        return self
 
 
 class SandboxRouteProjection(BaseModel):
@@ -205,6 +250,10 @@ class SandboxSafetyProjection(BaseModel):
     recommendation: str
     reducer_sha256: str
     reducer_source_ref: str
+    evaluation_snapshot_id: str
+    evaluation_snapshot_sha256: str
+    input_set_hash: str
+    evaluation_snapshot_ref: str
     phase1_adapter_status: str
     gates: list[SandboxGateProjection]
     candidate_only: bool = True
@@ -235,9 +284,13 @@ class SandboxAlertPacket(BaseModel):
     artifact_version: str = "emergency_mobile_sandbox_alert_candidate.v0"
     packet_id: str
     sha256: str
+    content_sha256: str
     scenario_id: str
     source_reducer_sha256: str
     source_reducer_ref: str
+    source_evaluation_snapshot_id: str
+    source_evaluation_snapshot_sha256: str
+    source_input_set_hash: str
     safety_level_candidate: str
     selected_gate_id: str | None = None
     status: str = "pending_approval"
@@ -316,6 +369,42 @@ class SandboxTransportAttempt(BaseModel):
         return self
 
 
+class SandboxTransportSimulation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_emergency_mobile_sandbox_transport_simulation"
+    artifact_version: str = "emergency_mobile_sandbox_transport_simulation.v0"
+    simulation_id: str
+    sha256: str
+    request_sha256: str
+    scenario_id: str
+    source_attempt_id: str
+    source_attempt_sha256: str
+    source_packet_id: str
+    source_packet_sha256: str
+    outcome: SandboxSimulationOutcome
+    idempotency_key: str
+    executor: str = "sandbox_transport_executor_v0"
+    manually_selected_outcome: bool = True
+    network_connection_attempted: bool = False
+    production_transport_invoked: bool = False
+    receipt_recorded: bool = False
+    sent: bool = False
+
+    @model_validator(mode="after")
+    def reject_simulation_effect_claims(self) -> "SandboxTransportSimulation":
+        if (
+            self.network_connection_attempted
+            or self.production_transport_invoked
+            or self.sent
+        ):
+            raise ValueError("sandbox simulation cannot claim a production effect")
+        expected_receipt = self.outcome == "simulated_receipt_recorded"
+        if self.receipt_recorded != expected_receipt:
+            raise ValueError("sandbox simulation receipt state does not match outcome")
+        return self
+
+
 class SandboxTransportReceipt(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -330,12 +419,12 @@ class SandboxTransportReceipt(BaseModel):
     source_attempt_sha256: str
     source_packet_id: str
     source_packet_sha256: str
-    outcome: SandboxReceiptOutcome
+    outcome: Literal["simulated_receipt_recorded"] = "simulated_receipt_recorded"
     idempotency_key: str
     executor: str = "sandbox_transport_executor_v0"
     attempted: bool = True
     simulated_transport: bool = True
-    sandbox_delivery_verified: bool
+    simulated_receipt_correlated: bool = True
     production_delivery_verified: bool = False
     production_send_performed: bool = False
     sent: bool = False
@@ -344,6 +433,7 @@ class SandboxTransportReceipt(BaseModel):
     def reject_production_delivery_claims(self) -> "SandboxTransportReceipt":
         if (
             not self.simulated_transport
+            or not self.simulated_receipt_correlated
             or self.production_delivery_verified
             or self.production_send_performed
             or self.sent
@@ -373,11 +463,13 @@ class SandboxLivingProjection(BaseModel):
     revision: int = Field(ge=1)
     scenario: SandboxScenario
     ingress: SandboxIngressProjection
+    evaluation_snapshot: SandboxEvaluationSnapshot
     route: SandboxRouteProjection
     safety: SandboxSafetyProjection
     alert_packet: SandboxAlertPacket | None = None
     approval: SandboxApprovalArtifact | None = None
     transport_attempt: SandboxTransportAttempt | None = None
+    transport_simulation: SandboxTransportSimulation | None = None
     transport_receipt: SandboxTransportReceipt | None = None
     timeline: list[SandboxTimelineEvent] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)
@@ -388,6 +480,11 @@ class SandboxLivingProjection(BaseModel):
     def enforce_projection(self) -> "SandboxLivingProjection":
         if self.safety.runtime_safety_truth or self.safety.phase1_l0_l4_state_mutated:
             raise ValueError("Living projection cannot promote replay to runtime truth")
+        if (
+            self.safety.evaluation_snapshot_sha256 != self.evaluation_snapshot.sha256
+            or self.safety.input_set_hash != self.evaluation_snapshot.input_set_hash
+        ):
+            raise ValueError("Living safety candidate must bind the evaluation snapshot")
         sequences = [event.sequence for event in self.timeline]
         if sequences != list(range(1, len(sequences) + 1)):
             raise ValueError("Living timeline sequences must be contiguous")
@@ -435,12 +532,20 @@ class ClosedLoopSandboxStore:
             observer, ingress_records = _run_sensorlogger_ingress(item, ingress_dir)
             observer_status = observer.status()
             observer_status_ref = "ingress/sensorlogger_mqtt_status.json"
+            evaluation_snapshot_ref = "evaluation_snapshot.json"
+            evaluation_snapshot = _build_evaluation_snapshot(item, ingress_records)
+            _write_json(
+                run_dir / evaluation_snapshot_ref,
+                evaluation_snapshot.model_dump(mode="json"),
+            )
             shadow = run_runtime_shadow_replay(
                 {
                     "source_provider": "scout_emergency_mobile_closed_loop_sandbox",
-                    "source_path": scenario_ref,
-                    "route_gate_feed": _route_gate_feed(item),
-                    "additional_gate_events": _additional_gate_events(item),
+                    "source_path": evaluation_snapshot_ref,
+                    "route_gate_feed": _route_gate_feed(item, evaluation_snapshot),
+                    "additional_gate_events": _additional_gate_events(
+                        item, evaluation_snapshot
+                    ),
                     "phase1_adapter_enabled": False,
                     "human_review_approved": False,
                     "phase1_mutation_enabled": False,
@@ -458,8 +563,17 @@ class ClosedLoopSandboxStore:
                 horizontal_accuracy_m=6.0,
                 source_ref=scenario_ref,
             )
-            safety = _safety_projection(shadow)
-            packet = _build_alert_candidate(item, route, safety)
+            safety = _safety_projection(
+                shadow,
+                evaluation_snapshot=evaluation_snapshot,
+                evaluation_snapshot_ref=evaluation_snapshot_ref,
+            )
+            packet = _build_alert_candidate(
+                item,
+                route,
+                safety,
+                evaluation_snapshot=evaluation_snapshot,
+            )
             packet_ref = "alert_packet_candidate.json"
             _write_json(run_dir / packet_ref, packet.model_dump(mode="json"))
             timeline = _initial_timeline(
@@ -497,6 +611,7 @@ class ClosedLoopSandboxStore:
                     latest_ingress_id=latest_ingress_id,
                     observer_status_ref=observer_status_ref,
                 ),
+                evaluation_snapshot=evaluation_snapshot,
                 route=route,
                 safety=safety,
                 alert_packet=packet,
@@ -504,6 +619,7 @@ class ClosedLoopSandboxStore:
                 source_refs=[
                     scenario_ref,
                     observer_status_ref,
+                    evaluation_snapshot_ref,
                     "shadow_replay/runtime_shadow_replay_result.json",
                     packet_ref,
                 ],
@@ -511,6 +627,7 @@ class ClosedLoopSandboxStore:
                     "run_dir": f"runs/{item.run_id}",
                     "scenario": scenario_ref,
                     "observer_status": observer_status_ref,
+                    "evaluation_snapshot": evaluation_snapshot_ref,
                     "shadow_replay": "shadow_replay/runtime_shadow_replay_result.json",
                     "alert_packet": packet_ref,
                     "living_projection": "living_projection.json",
@@ -563,6 +680,10 @@ class ClosedLoopSandboxStore:
                         "approval idempotency key was used for another request"
                     )
                 return projection
+            if projection.approval is not None:
+                raise ClosedLoopSandboxConflict(
+                    "an approval action is already recorded for the current packet"
+                )
 
             approval_id = f"approval:{item.scenario_id}:{item.idempotency_key}"
             approval = SandboxApprovalArtifact(
@@ -588,6 +709,45 @@ class ClosedLoopSandboxStore:
                 external_send_requested=item.decision == "agree_send",
             )
             _write_json(approval_path, approval.model_dump(mode="json"))
+            attempt: SandboxTransportAttempt | None = None
+            attempt_ref: str | None = None
+            if approval.decision == "agree_send":
+                attempt_ref = (
+                    f"transport_attempts/{approval.idempotency_key}.json"
+                )
+                attempt_id = f"attempt:{item.scenario_id}:{approval.idempotency_key}"
+                attempt_request_sha = _digest(
+                    {
+                        "approval_id": approval.approval_id,
+                        "approval_sha256": approval.sha256,
+                        "packet_id": packet.packet_id,
+                        "packet_sha256": packet.sha256,
+                        "executor": "sandbox_transport_executor_v0",
+                    }
+                )
+                attempt = SandboxTransportAttempt(
+                    attempt_id=attempt_id,
+                    sha256=_digest(
+                        {
+                            "attempt_id": attempt_id,
+                            "request_sha256": attempt_request_sha,
+                            "approval_sha256": approval.sha256,
+                            "packet_sha256": packet.sha256,
+                            "destination_alias": "synthetic_rescue_desk",
+                        }
+                    ),
+                    request_sha256=attempt_request_sha,
+                    scenario_id=item.scenario_id,
+                    source_approval_id=approval.approval_id,
+                    source_approval_sha256=approval.sha256,
+                    source_packet_id=packet.packet_id,
+                    source_packet_sha256=packet.sha256,
+                    idempotency_key=approval.idempotency_key,
+                )
+                _write_json(
+                    self._run_dir(projection) / attempt_ref,
+                    attempt.model_dump(mode="json"),
+                )
             status = _status_for_decision(item.decision)
             packet_update = packet.model_copy(update={"status": status})
             timeline = [
@@ -602,6 +762,25 @@ class ClosedLoopSandboxStore:
                     ],
                 ),
             ]
+            if attempt is not None and attempt_ref is not None:
+                timeline.append(
+                    _timeline_event(
+                        projection,
+                        kind="sandbox_transport_attempt_recorded",
+                        summary=(
+                            "Sandbox-only attempt recorded from accepted approval; "
+                            "network=false, production sent=false"
+                        ),
+                        source_refs=[
+                            f"approvals/{item.idempotency_key}.json",
+                            attempt_ref,
+                        ],
+                        sequence_offset=1,
+                    )
+                )
+            added_refs = [f"approvals/{item.idempotency_key}.json"]
+            if attempt_ref is not None:
+                added_refs.append(attempt_ref)
             updated = SandboxLivingProjection.model_validate(
                 {
                     **projection.model_dump(mode="json"),
@@ -609,26 +788,29 @@ class ClosedLoopSandboxStore:
                     "revision": projection.revision + 1,
                     "alert_packet": packet_update.model_dump(mode="json"),
                     "approval": approval.model_dump(mode="json"),
-                    "transport_attempt": None,
+                    "transport_attempt": (
+                        attempt.model_dump(mode="json") if attempt is not None else None
+                    ),
+                    "transport_simulation": None,
                     "transport_receipt": None,
                     "timeline": [event.model_dump(mode="json") for event in timeline],
                     "source_refs": [
                         *projection.source_refs,
-                        f"approvals/{item.idempotency_key}.json",
+                        *added_refs,
                     ],
                 }
             )
             self._persist_projection(updated)
             return updated
 
-    def record_transport_receipt(
+    def record_transport_simulation(
         self,
-        request: SandboxTransportReceiptRequest | dict[str, Any],
+        request: SandboxTransportSimulationRequest | dict[str, Any],
     ) -> SandboxLivingProjection:
         item = (
             request
-            if isinstance(request, SandboxTransportReceiptRequest)
-            else SandboxTransportReceiptRequest.model_validate(request)
+            if isinstance(request, SandboxTransportSimulationRequest)
+            else SandboxTransportSimulationRequest.model_validate(request)
         )
         if not item.confirm_simulated_transport:
             raise ClosedLoopSandboxBoundaryError(
@@ -637,118 +819,132 @@ class ClosedLoopSandboxStore:
         with self._lock:
             projection = self._require_current()
             approval = projection.approval
+            attempt = projection.transport_attempt
+            packet = projection.alert_packet
             if projection.scenario.scenario_id != item.scenario_id:
                 raise ClosedLoopSandboxConflict("scenario_id does not match current run")
-            if approval is None or approval.approval_id != item.approval_id:
-                raise ClosedLoopSandboxConflict("approval_id does not match current approval")
-            if approval.decision != "agree_send":
+            if approval is None or approval.decision != "agree_send":
                 raise ClosedLoopSandboxConflict(
-                    "simulated receipt requires an agree_send approval"
+                    "simulation requires an accepted agree_send approval"
                 )
-            packet = projection.alert_packet
+            if attempt is None:
+                raise ClosedLoopSandboxConflict(
+                    "simulation requires an existing server-side sandbox attempt"
+                )
+            if attempt.attempt_id != item.attempt_id:
+                raise ClosedLoopSandboxConflict("attempt_id does not match current attempt")
+            if attempt.sha256 != item.attempt_sha256:
+                raise ClosedLoopSandboxConflict("attempt hash does not match current attempt")
+            if packet is None or packet.packet_id != item.packet_id:
+                raise ClosedLoopSandboxConflict("packet_id does not match current packet")
+            if packet.sha256 != item.packet_sha256:
+                raise ClosedLoopSandboxConflict("packet hash does not match current packet")
             if (
-                packet is None
-                or approval.source_packet_id != packet.packet_id
-                or approval.source_packet_sha256 != packet.sha256
+                attempt.source_approval_id != approval.approval_id
+                or attempt.source_approval_sha256 != approval.sha256
+                or attempt.source_packet_id != packet.packet_id
+                or attempt.source_packet_sha256 != packet.sha256
             ):
                 raise ClosedLoopSandboxConflict(
-                    "approval does not match the current immutable packet"
+                    "attempt does not match the accepted approval and immutable packet"
                 )
 
-            attempt_path = self._run_dir(projection) / "transport_attempts" / (
-                f"{item.idempotency_key}.json"
-            )
-            receipt_path = self._run_dir(projection) / "receipts" / (
-                f"{item.idempotency_key}.json"
-            )
+            simulation_ref = f"simulations/{item.idempotency_key}.json"
+            simulation_path = self._run_dir(projection) / simulation_ref
             request_sha = _digest(item.model_dump(mode="json"))
-            if receipt_path.exists():
-                existing = SandboxTransportReceipt.model_validate_json(
-                    receipt_path.read_text(encoding="utf-8")
+            if simulation_path.exists():
+                existing = SandboxTransportSimulation.model_validate_json(
+                    simulation_path.read_text(encoding="utf-8")
                 )
                 if existing.request_sha256 != request_sha:
                     raise ClosedLoopSandboxConflict(
-                        "receipt idempotency key was used for another request"
+                        "simulation idempotency key was used for another request"
                     )
                 return projection
+            if projection.transport_simulation is not None:
+                raise ClosedLoopSandboxConflict(
+                    "a simulator outcome is already recorded for this attempt"
+                )
 
-            attempt_id = f"attempt:{item.scenario_id}:{item.idempotency_key}"
-            attempt = SandboxTransportAttempt(
-                attempt_id=attempt_id,
+            simulation_id = f"simulation:{item.scenario_id}:{item.idempotency_key}"
+            simulation = SandboxTransportSimulation(
+                simulation_id=simulation_id,
                 sha256=_digest(
                     {
-                        "attempt_id": attempt_id,
+                        "simulation_id": simulation_id,
                         "request_sha256": request_sha,
-                        "approval_sha256": approval.sha256,
+                        "attempt_sha256": attempt.sha256,
                         "packet_sha256": packet.sha256,
-                        "destination_alias": "synthetic_rescue_desk",
+                        "outcome": item.outcome,
                     }
                 ),
                 request_sha256=request_sha,
                 scenario_id=item.scenario_id,
-                source_approval_id=approval.approval_id,
-                source_approval_sha256=approval.sha256,
-                source_packet_id=packet.packet_id,
-                source_packet_sha256=packet.sha256,
-                idempotency_key=item.idempotency_key,
-            )
-            receipt_id = f"receipt:{item.scenario_id}:{item.idempotency_key}"
-            receipt = SandboxTransportReceipt(
-                receipt_id=receipt_id,
-                sha256=_digest(
-                    {
-                        "receipt_id": receipt_id,
-                        "request_sha256": request_sha,
-                        "approval_sha256": approval.sha256,
-                    }
-                ),
-                request_sha256=request_sha,
-                scenario_id=item.scenario_id,
-                source_approval_id=approval.approval_id,
                 source_attempt_id=attempt.attempt_id,
                 source_attempt_sha256=attempt.sha256,
                 source_packet_id=packet.packet_id,
                 source_packet_sha256=packet.sha256,
                 outcome=item.outcome,
                 idempotency_key=item.idempotency_key,
-                sandbox_delivery_verified=item.outcome == "simulated_verified",
+                receipt_recorded=item.outcome == "simulated_receipt_recorded",
             )
-            _write_json(attempt_path, attempt.model_dump(mode="json"))
-            _write_json(receipt_path, receipt.model_dump(mode="json"))
-            status = (
-                "simulated_delivery_verified"
-                if receipt.sandbox_delivery_verified
-                else "simulated_delivery_failed"
-            )
+            _write_json(simulation_path, simulation.model_dump(mode="json"))
+
+            receipt: SandboxTransportReceipt | None = None
+            added_refs = [simulation_ref]
+            if simulation.receipt_recorded:
+                receipt_ref = f"receipts/{item.idempotency_key}.json"
+                receipt_id = f"receipt:{item.scenario_id}:{item.idempotency_key}"
+                receipt = SandboxTransportReceipt(
+                    receipt_id=receipt_id,
+                    sha256=_digest(
+                        {
+                            "receipt_id": receipt_id,
+                            "request_sha256": request_sha,
+                            "simulation_sha256": simulation.sha256,
+                            "attempt_sha256": attempt.sha256,
+                            "packet_sha256": packet.sha256,
+                        }
+                    ),
+                    request_sha256=request_sha,
+                    scenario_id=item.scenario_id,
+                    source_approval_id=approval.approval_id,
+                    source_attempt_id=attempt.attempt_id,
+                    source_attempt_sha256=attempt.sha256,
+                    source_packet_id=packet.packet_id,
+                    source_packet_sha256=packet.sha256,
+                    idempotency_key=item.idempotency_key,
+                )
+                _write_json(
+                    self._run_dir(projection) / receipt_ref,
+                    receipt.model_dump(mode="json"),
+                )
+                added_refs.append(receipt_ref)
+
+            status = item.outcome
             packet_update = packet.model_copy(update={"status": status})
+            if receipt is not None:
+                event_kind = "sandbox_transport_receipt_recorded"
+                event_summary = (
+                    "Simulator receipt recorded and correlated; "
+                    "no real transport or delivery occurred"
+                )
+            else:
+                event_kind = "sandbox_transport_simulation_incomplete"
+                event_summary = (
+                    f"Simulator outcome {item.outcome}; no receipt, "
+                    "network=false, production sent=false"
+                )
             timeline = [
                 *projection.timeline,
                 _timeline_event(
                     projection,
-                    kind="sandbox_transport_attempt_recorded",
-                    summary=(
-                        "Sandbox-only transport attempt recorded; "
-                        "network=false, production sent=false"
-                    ),
+                    kind=event_kind,
+                    summary=event_summary,
                     source_refs=[
-                        f"approvals/{approval.idempotency_key}.json",
-                        f"transport_attempts/{item.idempotency_key}.json",
+                        f"transport_attempts/{attempt.idempotency_key}.json",
+                        *added_refs,
                     ],
-                ),
-                _timeline_event(
-                    projection,
-                    kind="sandbox_transport_receipt_recorded",
-                    summary=(
-                        "Sandbox transport verified simulated delivery; production sent=false"
-                        if receipt.sandbox_delivery_verified
-                        else "Sandbox transport simulated failure; production sent=false"
-                    ),
-                    source_refs=[
-                        f"approvals/{approval.idempotency_key}.json",
-                        f"transport_attempts/{item.idempotency_key}.json",
-                        f"receipts/{item.idempotency_key}.json",
-                    ],
-                    sequence_offset=1,
                 ),
             ]
             updated = SandboxLivingProjection.model_validate(
@@ -757,14 +953,12 @@ class ClosedLoopSandboxStore:
                     "status": status,
                     "revision": projection.revision + 1,
                     "alert_packet": packet_update.model_dump(mode="json"),
-                    "transport_attempt": attempt.model_dump(mode="json"),
-                    "transport_receipt": receipt.model_dump(mode="json"),
+                    "transport_simulation": simulation.model_dump(mode="json"),
+                    "transport_receipt": (
+                        receipt.model_dump(mode="json") if receipt is not None else None
+                    ),
                     "timeline": [event.model_dump(mode="json") for event in timeline],
-                    "source_refs": [
-                        *projection.source_refs,
-                        f"transport_attempts/{item.idempotency_key}.json",
-                        f"receipts/{item.idempotency_key}.json",
-                    ],
+                    "source_refs": [*projection.source_refs, *added_refs],
                 }
             )
             self._persist_projection(updated)
@@ -821,9 +1015,12 @@ def _run_sensorlogger_ingress(
         observer.handle_message(
             topic=topic,
             payload=json.dumps(message, ensure_ascii=False),
-            received_at=base_time + index,
+            received_at=(
+                base_time
+                + (1 if message.get("deviceId") == "sandbox-wearable-v0" else 0)
+            ),
         )
-        for index, message in enumerate(messages)
+        for message in messages
     ]
     if not all(record.get("accepted") for record in records):
         raise ClosedLoopSandboxError("synthetic SensorLogger ingress was rejected")
@@ -889,11 +1086,80 @@ def _sensorlogger_messages(
     ]
 
 
-def _route_gate_feed(request: SandboxRunRequest) -> dict[str, Any]:
+def _build_evaluation_snapshot(
+    request: SandboxRunRequest,
+    ingress_records: list[dict[str, Any]],
+) -> SandboxEvaluationSnapshot:
+    input_records = sorted(
+        (
+            SandboxEvaluationInputRecord(
+                record_id=str(record.get("ingress_id") or ""),
+                record_hash=str(record.get("payload_sha256") or ""),
+                device_id=str(
+                    record.get("device_id")
+                    or (record.get("normalized_summary") or {}).get("device_id")
+                    or ""
+                ),
+                sensor_names=sorted(
+                    list(
+                        record.get("sensor_names")
+                        or (record.get("normalized_summary") or {}).get("sensor_names")
+                        or []
+                    )
+                ),
+            )
+            for record in ingress_records
+            if record.get("accepted") or record.get("parse_status") == "accepted"
+        ),
+        key=lambda item: (item.device_id, item.record_id),
+    )
+    if {item.device_id for item in input_records} != {
+        "sandbox-phone-v0",
+        "sandbox-wearable-v0",
+    }:
+        raise ClosedLoopSandboxError(
+            "evaluation snapshot requires accepted synthetic phone and wearable records"
+        )
+    input_set_payload = [
+        {
+            "record_id": item.record_id,
+            "record_hash": item.record_hash,
+            "device_id": item.device_id,
+            "sensor_names": item.sensor_names,
+        }
+        for item in input_records
+    ]
+    input_set_hash = _digest(input_set_payload)
+    evaluation_snapshot_id = (
+        f"snapshot:{request.scenario_id}:{input_set_hash[:20]}"
+    )
+    snapshot_payload = {
+        "evaluation_snapshot_id": evaluation_snapshot_id,
+        "scenario_id": request.scenario_id,
+        "scenario_revision": 1,
+        "simulated_time": request.observed_at,
+        "input_records": input_set_payload,
+        "input_set_hash": input_set_hash,
+        "seal_reason": "expected_synthetic_inputs_accepted",
+        "gate_snapshot_ref": "shadow_replay/runtime_safety_gate_event_batch.json",
+        "reducer_ref": "shadow_replay/runtime_safety_reducer_dry_run.json",
+    }
+    return SandboxEvaluationSnapshot(
+        **snapshot_payload,
+        sha256=_digest(snapshot_payload),
+    )
+
+
+def _route_gate_feed(
+    request: SandboxRunRequest,
+    evaluation_snapshot: SandboxEvaluationSnapshot,
+) -> dict[str, Any]:
     route_id = f"{request.project_id}.sandbox.route"
     return {
         "source_provider": "scout_emergency_mobile_closed_loop_sandbox",
-        "source_path": "scenario_fixture.json#route_progress",
+        "source_path": (
+            f"evaluation_snapshot.json#{evaluation_snapshot.input_set_hash}"
+        ),
         "route_id": route_id,
         "segment_timings": [
             {
@@ -937,6 +1203,7 @@ def _route_gate_feed(request: SandboxRunRequest) -> dict[str, Any]:
                 "confidence": "high",
                 "evidence_refs": [
                     "ingress/sensorlogger_mqtt_status.json",
+                    "evaluation_snapshot.json",
                     "scenario_fixture.json#route_progress",
                 ],
             }
@@ -950,7 +1217,10 @@ def _route_gate_feed(request: SandboxRunRequest) -> dict[str, Any]:
     }
 
 
-def _additional_gate_events(request: SandboxRunRequest) -> list[Any]:
+def _additional_gate_events(
+    request: SandboxRunRequest,
+    evaluation_snapshot: SandboxEvaluationSnapshot,
+) -> list[Any]:
     route_id = f"{request.project_id}.sandbox.route"
     route_context = {
         "route_id": route_id,
@@ -961,13 +1231,18 @@ def _additional_gate_events(request: SandboxRunRequest) -> list[Any]:
         "estimated_minutes_to_next_checkpoint": 30,
         "daylight_buffer_minutes": 90,
     }
+    snapshot_payload = {
+        "evaluation_snapshot_id": evaluation_snapshot.evaluation_snapshot_id,
+        "input_set_hash": evaluation_snapshot.input_set_hash,
+    }
     common = {
         "source_provider": "scout_emergency_mobile_closed_loop_sandbox",
-        "source_path": "scenario_fixture.json#condition_overlays",
+        "source_path": "evaluation_snapshot.json",
         "observed_at_offset_s": 7201,
         "route_context": route_context,
         "evidence_refs": [
             "ingress/sensorlogger_mqtt_status.json",
+            "evaluation_snapshot.json",
             "scenario_fixture.json#condition_overlays",
         ],
     }
@@ -988,6 +1263,7 @@ def _additional_gate_events(request: SandboxRunRequest) -> list[Any]:
                 "not a medical diagnosis",
             ],
             gate_payload={
+                **snapshot_payload,
                 "aggregate_fixture": True,
                 "medical_diagnosis": False,
             },
@@ -1002,7 +1278,10 @@ def _additional_gate_events(request: SandboxRunRequest) -> list[Any]:
             required_action="watch_wind_and_recheck",
             confidence="medium",
             dominant_reasons=["synthetic ridge wind overlay"],
-            gate_payload={"condition_overlay": "synthetic_strong_wind_watch"},
+            gate_payload={
+                **snapshot_payload,
+                "condition_overlay": "synthetic_strong_wind_watch",
+            },
         ),
         build_runtime_safety_gate_event(
             **common,
@@ -1014,12 +1293,20 @@ def _additional_gate_events(request: SandboxRunRequest) -> list[Any]:
             required_action="continue_monitoring",
             confidence="medium",
             dominant_reasons=["no confirmed threat in synthetic overlay"],
-            gate_payload={"condition_overlay": "synthetic_clear"},
+            gate_payload={
+                **snapshot_payload,
+                "condition_overlay": "synthetic_clear",
+            },
         ),
     ]
 
 
-def _safety_projection(shadow: Any) -> SandboxSafetyProjection:
+def _safety_projection(
+    shadow: Any,
+    *,
+    evaluation_snapshot: SandboxEvaluationSnapshot,
+    evaluation_snapshot_ref: str,
+) -> SandboxSafetyProjection:
     summaries = {
         summary["gate_id"]: summary
         for summary in shadow.reducer_decision.gate_summaries
@@ -1053,6 +1340,10 @@ def _safety_projection(shadow: Any) -> SandboxSafetyProjection:
         recommendation=shadow.recommendation,
         reducer_sha256=shadow.reducer_decision.sha256,
         reducer_source_ref=shadow.artifact_refs.reducer_decision_path,
+        evaluation_snapshot_id=evaluation_snapshot.evaluation_snapshot_id,
+        evaluation_snapshot_sha256=evaluation_snapshot.sha256,
+        input_set_hash=evaluation_snapshot.input_set_hash,
+        evaluation_snapshot_ref=evaluation_snapshot_ref,
         phase1_adapter_status=shadow.phase1_adapter_result.status,
         gates=gates,
     )
@@ -1062,6 +1353,8 @@ def _build_alert_candidate(
     request: SandboxRunRequest,
     route: SandboxRouteProjection,
     safety: SandboxSafetyProjection,
+    *,
+    evaluation_snapshot: SandboxEvaluationSnapshot,
 ) -> SandboxAlertPacket:
     packet_id = f"sandbox.packet:{request.scenario_id}:{request.run_id}"
     summary = (
@@ -1069,21 +1362,33 @@ def _build_alert_candidate(
         f"{safety.ln_level_candidate}; review retreat or emergency camp"
     )
     mqtt_topic = f"scout/sandbox/{request.scenario_id}/alerts/{request.run_id}"
+    packet_content_sha = _digest(
+        {
+            "scenario_id": request.scenario_id,
+            "reducer_sha256": safety.reducer_sha256,
+            "evaluation_snapshot_sha256": evaluation_snapshot.sha256,
+            "input_set_hash": evaluation_snapshot.input_set_hash,
+            "level": safety.ln_level_candidate,
+            "location_ref": route.location_ref,
+            "summary": summary,
+        }
+    )
     packet_sha = _digest(
         {
             "packet_id": packet_id,
-            "scenario_id": request.scenario_id,
-            "reducer_sha256": safety.reducer_sha256,
-            "level": safety.ln_level_candidate,
-            "location_ref": route.location_ref,
+            "content_sha256": packet_content_sha,
         }
     )
     return SandboxAlertPacket(
         packet_id=packet_id,
         sha256=packet_sha,
+        content_sha256=packet_content_sha,
         scenario_id=request.scenario_id,
         source_reducer_sha256=safety.reducer_sha256,
         source_reducer_ref=safety.reducer_source_ref,
+        source_evaluation_snapshot_id=evaluation_snapshot.evaluation_snapshot_id,
+        source_evaluation_snapshot_sha256=evaluation_snapshot.sha256,
+        source_input_set_hash=evaluation_snapshot.input_set_hash,
         safety_level_candidate=safety.ln_level_candidate,
         selected_gate_id=safety.selected_gate_id,
         location_ref=route.location_ref,
@@ -1194,7 +1499,7 @@ def _timeline_event(
 
 def _status_for_decision(decision: SandboxDecision) -> str:
     return {
-        "agree_send": "approved_pending_sandbox_transport",
+        "agree_send": "approved_sandbox_attempt_recorded",
         "do_not_send": "cancelled",
         "review_again_5_minutes": "review_scheduled_5_minutes",
         "review_again_10_minutes": "review_scheduled_10_minutes",

@@ -2418,8 +2418,9 @@ GPT Pro closure corrections:
 
 - Added the `Living` route to observe one server-side Emergency Mobile sandbox
   run from synthetic SensorLogger phone/wearable ingress through all six shadow
-  gates, reducer candidate, immutable alert packet, mobile approval, sandbox
-  transport attempt/receipt, and a contiguous causal timeline.
+  gates, an immutable evaluation snapshot, reducer candidate, immutable alert
+  packet, mobile approval, server-created sandbox attempt, manually selected
+  simulator outcome/receipt, and a contiguous causal timeline.
 - `Living` polls `GET /admin/dashboard/living` and its controls use only the
   isolated `/admin/dashboard/living/*` sandbox namespace. The page exposes the
   packet/approval/attempt/receipt lineage instead of inferring progress from UI
@@ -2431,3 +2432,6 @@ GPT Pro closure corrections:
   reducer candidates, attempts, and receipts remain separate from Phase 1
   truth, hardware control, broker publish, production transport, and verified
   delivery.
+- `simulated_receipt_recorded` means the simulator receipt correlated to the
+  authorized attempt. The UI states that no real transport or delivery
+  occurred; it never renders this as verified delivery.

@@ -12,7 +12,7 @@ from scout_emergency_mobile_closed_loop_sandbox import (
     ClosedLoopSandboxStore,
     SandboxApprovalRequest,
     SandboxRunRequest,
-    SandboxTransportReceiptRequest,
+    SandboxTransportSimulationRequest,
 )
 
 DEFAULT_EMERGENCY_MOBILE_PAGE = (
@@ -103,12 +103,12 @@ def create_emergency_mobile_closed_loop_router(
         except ClosedLoopSandboxConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @router.post("/transport/receipts")
-    def record_transport_receipt(
-        request: SandboxTransportReceiptRequest,
+    @router.post("/transport/simulations")
+    def record_transport_simulation(
+        request: SandboxTransportSimulationRequest,
     ) -> dict[str, Any]:
         try:
-            return store.record_transport_receipt(request).model_dump(mode="json")
+            return store.record_transport_simulation(request).model_dump(mode="json")
         except ClosedLoopSandboxBoundaryError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ClosedLoopSandboxConflict as exc:

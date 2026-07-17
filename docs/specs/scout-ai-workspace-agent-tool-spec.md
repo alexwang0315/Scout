@@ -1427,10 +1427,12 @@ Its artifact flow is:
 ```text
 generated scenario fixture
   -> isolated SensorLogger observer evidence
+  -> immutable evaluation snapshot (two exact record hashes + input-set hash)
   -> runtime shadow replay evidence
   -> candidate alert packet
   -> packet-bound approval artifact
-  -> sandbox transport attempt + simulated receipt
+  -> server-created sandbox attempt
+  -> manually selected simulator outcome + optional correlated receipt
   -> Dashboard Living projection and event timeline
 ```
 
@@ -1442,6 +1444,10 @@ fed through its real handler with a generated fixture, but the recorded ingress
 mode is `synthetic_direct_feed`; broker connection and network publish are both
 false. These records are therefore development replay evidence only and must
 not be returned as real-user or field-session facts by workspace tools.
+`simulated_receipt_recorded` means only that the local simulator produced a
+receipt correlated to the authorized sandbox attempt. No real transport or
+delivery occurred, and the workspace must never shorten that status to
+"delivery verified".
 
 ### Remaining Backlog
 

@@ -81,7 +81,8 @@ def test_emergency_mobile_approval_ui_v0_contract() -> None:
     assert "syncLivingDecision" in html
     assert '`${LIVING_ENDPOINT}/approvals`' in html
     assert "confirm_sandbox_action: true" in html
-    assert "Sandbox delivery verified; production sent=false." in html
+    assert "Simulator receipt recorded. No real transport or delivery occurred." in html
+    assert "simulated_delivery_verified" not in html
     assert 'data-bind="pathStateTitle"' in html
     assert '"Shadow Reducer Candidate"' in html
     assert "Transport outcome" in html
