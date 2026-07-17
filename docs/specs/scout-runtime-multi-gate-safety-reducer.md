@@ -770,7 +770,7 @@ GET  /admin/dashboard/living
 GET  /admin/dashboard/living/events
 POST /admin/dashboard/living/scenarios/run
 POST /admin/dashboard/living/approvals
-POST /admin/dashboard/living/transport/receipts
+POST /admin/dashboard/living/transport/simulations
 ```
 
 The first scenario is allow-listed in code as `ridge_distress`. It invokes
@@ -782,6 +782,13 @@ broker, publish MQTT, or prove live transport. The route/condition fixture then
 executes `run_runtime_shadow_replay()` with the Phase 1 adapter and mutation
 disabled.
 
+After both expected records are accepted, the sandbox seals an immutable
+`evaluation_snapshot.json` containing the exact ingress ids/payload hashes,
+their order-independent input-set hash, simulated time, seal reason, gate-batch
+ref, and reducer ref. The gate/reducer projection and alert packet bind this
+snapshot id/hash. A semantic packet content hash excludes the run id so the
+same fixture can be compared across runs.
+
 The state domains must never be collapsed:
 
 1. `safety` is a reducer **candidate** with `runtime_safety_truth=false` and
@@ -790,13 +797,19 @@ The state domains must never be collapsed:
    production `sent` field remains false.
 3. `approval` is a server-accepted operator action bound to the packet id and
    hash. An `agree_send` decision authorizes only the sandbox executor.
-4. `transport_attempt` binds scenario, approval id/hash, and packet id/hash.
+4. An accepted `agree_send` approval creates exactly one server-side
+   `transport_attempt` bound to scenario, approval id/hash, and packet id/hash.
    It records `network_connection_attempted=false`,
    `production_transport_invoked=false`, and `sent=false`.
-5. `transport_receipt` binds the attempt and packet hashes. A
-   `simulated_verified` outcome sets only `sandbox_delivery_verified=true`;
-   production delivery and `sent` remain false.
-6. `Living` is a read projection plus contiguous server-side timeline. It is
+5. `transport_simulation` is an explicitly manual local simulator input. It
+   must bind the existing attempt and immutable packet. A
+   `simulated_receipt_recorded` outcome may create a correlated synthetic
+   receipt; `simulated_rejected` and `simulated_timeout` create no receipt.
+   None of these states claim transport or delivery.
+6. `transport_receipt` proves simulator correlation only. Its required UI
+   wording is: `Simulator receipt recorded. No real transport or delivery
+   occurred.` Production delivery and `sent` remain false.
+7. `Living` is a read projection plus contiguous server-side timeline. It is
    never an authority that writes safety state.
 
 The mobile prototype may connect to the same `Living` projection and submit its
@@ -804,8 +817,9 @@ one-tap decision to the approval endpoint. The Dashboard `Living` page polls the
 projection and displays scenario identity, ingress mode, sensor/device counts,
 privacy-safe route reference, all six gate candidates, reducer selection,
 packet hash, approval lineage, simulator attempt/receipt lineage, timeline, and
-hard-boundary flags. Client animation or a timer alone is not accepted as
-closed-loop evidence.
+hard-boundary flags. Living also displays the evaluation snapshot and input-set
+hash. Client animation or a timer alone is not accepted as closed-loop
+evidence.
 
 Artifacts are written under `outputs/dashboard/living/runs/{run_id}/` when the
 default Admin API is used. They are synthetic, candidate-only development
@@ -815,8 +829,11 @@ delivery.
 
 Required deterministic checks include successful replay, stale packet/hash
 rejection, approval idempotency, refusal to create a receipt without
-`agree_send`, exact receipt-to-attempt/approval/packet correlation, and
-production/network/hardware boundary flags remaining false.
+`agree_send`, rejection of a second approval and forged attempt/packet hashes,
+timeout/rejection without a receipt, input-order invariant replay semantics,
+exact receipt-to-attempt/approval/packet correlation, and structural sentinels
+that fail if the Phase 1 writer or network observer path is resolved.
+Production/network/hardware boundary flags remain false in every path.
 
 ## Non-Goals
 

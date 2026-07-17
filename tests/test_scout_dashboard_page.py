@@ -46,12 +46,14 @@ def test_scout_dashboard_living_closed_loop_contract() -> None:
         'function scheduleLivingRefresh()',
         'data-living-action="run"',
         'data-living-action="approve"',
-        'data-living-action="receipt"',
+        'data-living-action="simulation"',
         'data-living-timeline="true"',
         '/emergency/mobile-approval-v0?living=1',
         'candidate-only / runtime truth=false',
         'production sent=false',
-        'simulated delivery',
+        'Record simulator receipt',
+        'evaluation.evaluation_snapshot_id',
+        'no real transport or delivery occurred',
         'projection.transport_attempt',
         'receipt?.source_attempt_id',
     ):
@@ -61,7 +63,9 @@ def test_scout_dashboard_living_closed_loop_contract() -> None:
     assert 'fetchJson(DASHBOARD_LIVING_PATH' in html
     assert 'postJson(`${DASHBOARD_LIVING_PATH}/scenarios/run`' in html
     assert 'postJson(`${DASHBOARD_LIVING_PATH}/approvals`' in html
-    assert 'postJson(`${DASHBOARD_LIVING_PATH}/transport/receipts`' in html
+    assert 'postJson(`${DASHBOARD_LIVING_PATH}/transport/simulations`' in html
+    assert 'outcome: "simulated_receipt_recorded"' in html
+    assert "simulated_delivery_verified" not in html
 
 
 def test_scout_dashboard_ai_hat_trace_displays_actual_postprocess_mode() -> None:
