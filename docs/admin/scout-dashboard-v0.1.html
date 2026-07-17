@@ -345,6 +345,10 @@
       overflow: hidden;
     }
 
+    .content-grid.is-evidence-collapsed {
+      grid-template-columns: minmax(0, 1fr) 48px;
+    }
+
     .content-grid.is-frame-full {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -823,6 +827,68 @@
       border-left: 1px solid var(--line);
       background: #12181d;
       overscroll-behavior: contain;
+    }
+
+    .evidence-drawer.is-collapsed {
+      overflow: hidden;
+    }
+
+    .contextual-evidence-toggle {
+      width: 100%;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      border-radius: 0;
+      color: var(--text);
+      background: rgba(98, 181, 196, .055);
+      text-align: left;
+    }
+
+    .contextual-evidence-toggle:hover {
+      background: rgba(98, 181, 196, .11);
+    }
+
+    .contextual-evidence-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -3px;
+    }
+
+    .contextual-evidence-toggle span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+
+    .contextual-evidence-toggle strong {
+      display: inline-grid;
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      font-size: 15px;
+    }
+
+    .evidence-drawer.is-collapsed .contextual-evidence-toggle {
+      height: 100%;
+      min-height: 0;
+      justify-content: flex-start;
+      padding: 14px 12px;
+      border-bottom: 0;
+      writing-mode: vertical-rl;
+    }
+
+    .contextual-evidence-body[hidden] {
+      display: none;
     }
 
     .drawer-section {
@@ -1584,6 +1650,299 @@
     .route-tabs button.is-active {
       border-color: var(--accent);
       background: rgba(98, 181, 196, .14);
+    }
+
+    .weather-decision-band {
+      display: grid;
+      grid-template-columns: minmax(260px, 1.25fr) repeat(3, minmax(145px, .65fr));
+      overflow: hidden;
+    }
+
+    .weather-decision-primary,
+    .weather-decision-metric {
+      min-height: 132px;
+      padding: 16px;
+      border-right: 1px solid var(--line);
+    }
+
+    .weather-decision-metric:last-child {
+      border-right: 0;
+    }
+
+    .weather-decision-primary {
+      background: linear-gradient(145deg, rgba(213, 166, 66, .14), rgba(98, 181, 196, .035));
+    }
+
+    .weather-decision-primary small,
+    .weather-decision-metric small,
+    .weather-timeline-label {
+      display: block;
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .weather-decision-primary strong {
+      display: block;
+      margin: 11px 0 7px;
+      color: #f5d27d;
+      font-family: var(--mono);
+      font-size: clamp(24px, 3vw, 36px);
+      line-height: 1;
+    }
+
+    .weather-decision-primary p,
+    .weather-decision-metric span {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .weather-decision-metric strong {
+      display: block;
+      margin: 14px 0 6px;
+      font-size: 16px;
+      overflow-wrap: anywhere;
+    }
+
+    .weather-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(290px, .7fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .weather-primary-stack,
+    .weather-side-stack {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .weather-map-panel .map-toolbar {
+      max-height: 112px;
+      overflow: auto;
+    }
+
+    .weather-map-panel .panel-header {
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
+
+    .weather-map-panel .panel-header h3 {
+      margin-right: auto;
+    }
+
+    .weather-intersection-panel {
+      overflow: hidden;
+      border-radius: 0;
+    }
+
+    .weather-intersection-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 72px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .weather-intersection-header h3 {
+      margin: 0;
+      font: 500 clamp(22px, 2.8vw, 34px)/1 Georgia, "Times New Roman", serif;
+      letter-spacing: -.035em;
+    }
+
+    .weather-intersection-map {
+      position: relative;
+      min-height: 520px;
+      overflow: hidden;
+      background: #071512;
+    }
+
+    .weather-intersection-map svg {
+      display: block;
+      width: 100%;
+      height: 520px;
+    }
+
+    .weather-map-layer-stack {
+      position: absolute;
+      z-index: 3;
+      top: 20px;
+      left: 20px;
+      display: grid;
+      gap: 8px;
+      width: 152px;
+    }
+
+    .weather-map-layer-stack button {
+      min-height: 42px;
+      padding: 9px 12px;
+      border: 1px solid rgba(98, 184, 198, .56);
+      color: #bceaf0;
+      background: rgba(8, 16, 14, .9);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-align: center;
+    }
+
+    .weather-map-layer-stack button[aria-pressed="false"] {
+      color: var(--subtle);
+      border-color: var(--line);
+      opacity: .68;
+    }
+
+    .weather-map-route-callout {
+      position: absolute;
+      z-index: 3;
+      right: 18px;
+      bottom: 18px;
+      width: min(390px, calc(100% - 36px));
+      padding: 15px 17px;
+      border-left: 4px solid var(--bad);
+      color: var(--text);
+      background: rgba(6, 13, 11, .92);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, .28);
+    }
+
+    .weather-map-route-callout strong,
+    .weather-map-route-callout span {
+      display: block;
+    }
+
+    .weather-map-route-callout strong {
+      margin-bottom: 5px;
+      color: #ff8267;
+      font-size: 16px;
+    }
+
+    .weather-map-route-callout span {
+      color: var(--muted);
+    }
+
+    .weather-map-timeline {
+      padding: 18px 22px 20px;
+      border-top: 1px solid var(--line);
+      background: rgba(8, 16, 14, .54);
+    }
+
+    .weather-map-timeline input[type="range"] {
+      width: 100%;
+      margin: 12px 0 9px;
+      accent-color: var(--candidate);
+    }
+
+    .weather-map-time-labels {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .weather-map-time-labels span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .weather-timeline-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+    }
+
+    .weather-timeline-step {
+      min-height: 82px;
+      padding: 12px;
+      border-right: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .weather-timeline-step:last-child {
+      border-right: 0;
+    }
+
+    .weather-timeline-step.is-current {
+      background: rgba(98, 181, 196, .1);
+      box-shadow: inset 0 -3px var(--accent);
+    }
+
+    .weather-timeline-step.is-expiry {
+      background: rgba(213, 166, 66, .08);
+      box-shadow: inset 0 -3px var(--warn);
+    }
+
+    .weather-timeline-step strong,
+    .weather-timeline-step span {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .weather-timeline-step strong {
+      margin: 8px 0 4px;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .weather-timeline-step span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .weather-action-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .weather-action-item {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .weather-action-item b {
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border: 1px solid rgba(213, 166, 66, .66);
+      border-radius: 50%;
+      color: #f5d27d;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .weather-action-item strong,
+    .weather-action-item span {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .weather-action-item span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .weather-boundary-note {
+      margin: 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(213, 166, 66, .34);
+      border-radius: 8px;
+      color: #e8c77b;
+      background: rgba(213, 166, 66, .06);
+      font-size: 12px;
     }
 
     .pace-subtabs {
@@ -3538,6 +3897,20 @@
         grid-template-columns: 1fr;
         overflow: visible;
       }
+      .content-grid.is-evidence-collapsed {
+        grid-template-columns: 1fr;
+      }
+      .weather-decision-band {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .weather-decision-primary {
+        grid-column: 1 / -1;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .weather-workspace {
+        grid-template-columns: 1fr;
+      }
       .workspace,
       .evidence-drawer {
         overflow: visible;
@@ -3545,6 +3918,16 @@
       .evidence-drawer {
         border-left: 0;
         border-top: 1px solid var(--line);
+      }
+      .evidence-drawer.is-collapsed {
+        min-height: 44px;
+      }
+      .evidence-drawer.is-collapsed .contextual-evidence-toggle {
+        height: 44px;
+        min-height: 44px;
+        justify-content: space-between;
+        padding: 10px 14px;
+        writing-mode: horizontal-tb;
       }
       .grid-2,
       .grid-3,
@@ -3646,6 +4029,47 @@
       }
       .timeline-item {
         grid-template-columns: 1fr;
+      }
+      .weather-decision-band,
+      .weather-timeline-grid {
+        grid-template-columns: 1fr;
+      }
+      .weather-intersection-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .weather-intersection-map,
+      .weather-intersection-map svg {
+        min-height: 430px;
+        height: 430px;
+      }
+      .weather-map-layer-stack {
+        top: 12px;
+        left: 12px;
+        width: 126px;
+      }
+      .weather-map-layer-stack button {
+        min-height: 36px;
+        font-size: 10px;
+      }
+      .weather-map-route-callout {
+        right: 12px;
+        bottom: 12px;
+        width: calc(100% - 24px);
+      }
+      .weather-map-timeline {
+        padding: 15px 12px;
+      }
+      .weather-decision-primary,
+      .weather-decision-metric,
+      .weather-timeline-step {
+        min-height: 0;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .weather-decision-metric:last-child,
+      .weather-timeline-step:last-child {
+        border-bottom: 0;
       }
       .pretrip-evidence-item {
         grid-template-columns: 1fr;
@@ -3768,9 +4192,438 @@
         grid-template-columns: 1fr;
       }
     }
+    /* Field Decision Instrument design system.
+       Derived from scout-six-axis-weather-design.html and shared by every route. */
+    body.field-instrument-theme {
+      --bg: #08100e;
+      --surface: #101a17;
+      --surface-2: #15221d;
+      --surface-3: #1b2c26;
+      --line: #34443a;
+      --line-strong: #566c5e;
+      --text: #e9eadc;
+      --muted: #9ca996;
+      --subtle: #738276;
+      --accent: #b7cf63;
+      --accent-2: #f0ae3b;
+      --ok: #79c58c;
+      --warn: #f0ae3b;
+      --bad: #ff6b4a;
+      --candidate: #62b8c6;
+      --reviewed: #79c58c;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: "Avenir Next", Avenir, "Gill Sans", sans-serif;
+      background:
+        radial-gradient(circle at 78% 7%, rgba(98, 184, 198, .11), transparent 32rem),
+        linear-gradient(rgba(255, 255, 255, .016) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .016) 1px, transparent 1px),
+        var(--bg);
+      background-size: auto, 28px 28px, 28px 28px, auto;
+    }
+
+    .field-instrument-theme .dashboard-shell {
+      grid-template-columns: 236px minmax(0, 1fr);
+      background: transparent;
+    }
+
+    .field-instrument-theme .dashboard-sidebar {
+      border-right-color: var(--line);
+      background: rgba(6, 13, 11, .93);
+      backdrop-filter: blur(18px);
+      box-shadow: 18px 0 56px rgba(0, 0, 0, .18);
+    }
+
+    .field-instrument-theme .brand {
+      padding: 24px 18px 20px;
+      border-bottom-color: var(--line);
+      background: linear-gradient(145deg, rgba(183, 207, 99, .08), transparent 62%);
+    }
+
+    .field-instrument-theme .brand h1,
+    .field-instrument-theme .topbar h2,
+    .field-instrument-theme .panel-header h3,
+    .field-instrument-theme .drawer-section h3,
+    .field-instrument-theme .agent-app-header h3,
+    .field-instrument-theme .surface-frame-header h3 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 500;
+      letter-spacing: -.025em;
+    }
+
+    .field-instrument-theme .brand h1 {
+      font-size: 22px;
+      letter-spacing: -.035em;
+    }
+
+    .field-instrument-theme .brand h1::after {
+      content: "/OS";
+      margin-left: 4px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+
+    .field-instrument-theme .brand .route,
+    .field-instrument-theme .sidebar-footer,
+    .field-instrument-theme .small-note,
+    .field-instrument-theme .chip,
+    .field-instrument-theme .truth-item > span {
+      font-family: var(--mono);
+    }
+
+    .field-instrument-theme .nav {
+      padding: 15px 12px;
+      gap: 5px;
+    }
+
+    .field-instrument-theme .nav-item,
+    .field-instrument-theme .nav-section summary {
+      border: 0;
+      border-radius: 3px;
+      color: var(--muted);
+      background: transparent;
+      transition: color .16s ease, background .16s ease, box-shadow .16s ease;
+    }
+
+    .field-instrument-theme .nav-item:hover,
+    .field-instrument-theme .nav-section summary:hover {
+      color: var(--text);
+      background: rgba(183, 207, 99, .06);
+    }
+
+    .field-instrument-theme .nav-item.is-active {
+      color: var(--text);
+      border-color: transparent;
+      background: linear-gradient(90deg, rgba(183, 207, 99, .17), rgba(183, 207, 99, .025));
+      box-shadow: inset 3px 0 var(--accent);
+    }
+
+    .field-instrument-theme .nav-item.is-active .mark {
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(183, 207, 99, .09);
+    }
+
+    .field-instrument-theme .topbar {
+      min-height: 76px;
+      padding: 16px 18px;
+      border-bottom-color: var(--line);
+      background: rgba(8, 16, 14, .88);
+      backdrop-filter: blur(16px);
+    }
+
+    .field-instrument-theme .topbar h2 {
+      font-size: clamp(21px, 2.2vw, 31px);
+      line-height: 1;
+    }
+
+    .field-instrument-theme .truth-item {
+      border-color: var(--line);
+      border-radius: 2px;
+      background: rgba(16, 26, 23, .82);
+    }
+
+    .field-instrument-theme .truth-item > span {
+      color: var(--subtle);
+      font-size: 8px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .field-instrument-theme .workspace {
+      padding: 18px;
+    }
+
+    .field-instrument-theme .workspace > * {
+      animation: field-instrument-arrive .36s cubic-bezier(.2, .8, .2, 1) both;
+    }
+
+    .field-instrument-theme .workspace > *:nth-child(2) { animation-delay: .035s; }
+    .field-instrument-theme .workspace > *:nth-child(3) { animation-delay: .07s; }
+
+    .field-instrument-theme .panel,
+    .field-instrument-theme .agent-app-shell,
+    .field-instrument-theme .surface-frame-panel,
+    .field-instrument-theme .debug-console,
+    .field-instrument-theme .body-index-card,
+    .field-instrument-theme .route-context-card {
+      border-color: var(--line);
+      border-radius: 3px;
+      background: rgba(16, 26, 23, .91);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, .17);
+    }
+
+    .field-instrument-theme .panel-header,
+    .field-instrument-theme .surface-frame-header,
+    .field-instrument-theme .agent-app-header {
+      min-height: 52px;
+      border-bottom-color: var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .field-instrument-theme .panel-header h3,
+    .field-instrument-theme .drawer-section h3 {
+      font-size: 18px;
+    }
+
+    .field-instrument-theme button {
+      border-color: var(--line);
+      border-radius: 3px;
+      background: var(--surface-2);
+    }
+
+    .field-instrument-theme button:hover,
+    .field-instrument-theme button:focus-visible {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(183, 207, 99, .08);
+    }
+
+    .field-instrument-theme button:focus-visible,
+    .field-instrument-theme input:focus-visible,
+    .field-instrument-theme textarea:focus-visible,
+    .field-instrument-theme select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .field-instrument-theme input,
+    .field-instrument-theme textarea,
+    .field-instrument-theme select {
+      border-color: var(--line);
+      border-radius: 2px;
+      color: var(--text);
+      background: #0c1714;
+    }
+
+    .field-instrument-theme .chip {
+      border-radius: 999px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .field-instrument-theme .chip.info {
+      color: #bceaf0;
+      border-color: rgba(98, 184, 198, .52);
+      background: rgba(98, 184, 198, .1);
+    }
+
+    .field-instrument-theme .chip.ok {
+      color: #b9e6c3;
+      border-color: rgba(121, 197, 140, .5);
+      background: rgba(121, 197, 140, .1);
+    }
+
+    .field-instrument-theme .chip.warn {
+      color: #f4ca7c;
+      border-color: rgba(240, 174, 59, .52);
+      background: rgba(240, 174, 59, .09);
+    }
+
+    .field-instrument-theme .chip.bad,
+    .field-instrument-theme .chip.error {
+      color: #ff9a83;
+      border-color: rgba(255, 107, 74, .58);
+      background: rgba(255, 107, 74, .09);
+    }
+
+    .field-instrument-theme .route-tabs,
+    .field-instrument-theme .pace-subtabs {
+      gap: 6px;
+      padding-bottom: 3px;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+    }
+
+    .field-instrument-theme .route-tabs button,
+    .field-instrument-theme .pace-subtabs button {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(16, 26, 23, .82);
+    }
+
+    .field-instrument-theme .route-tabs button.is-active,
+    .field-instrument-theme .pace-subtabs button.is-active {
+      color: #dfeeac;
+      border-color: var(--accent);
+      background: rgba(183, 207, 99, .13);
+    }
+
+    .field-instrument-theme .table th {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      background: rgba(183, 207, 99, .045);
+    }
+
+    .field-instrument-theme .table td,
+    .field-instrument-theme .table th,
+    .field-instrument-theme .metric-row,
+    .field-instrument-theme .timeline-item {
+      border-color: rgba(156, 169, 150, .14);
+    }
+
+    .field-instrument-theme .scout-map {
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px),
+        linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px),
+        #0b1615;
+      background-size: 28px 28px;
+    }
+
+    .field-instrument-theme .map-toolbar {
+      border-color: var(--line);
+      background: rgba(8, 16, 14, .82);
+    }
+
+    .field-instrument-theme .layer-control {
+      border-radius: 999px;
+      background: rgba(16, 26, 23, .88);
+    }
+
+    .field-instrument-theme .evidence-drawer {
+      border-color: var(--line);
+      background: rgba(8, 16, 14, .94);
+    }
+
+    .field-instrument-theme .contextual-evidence-toggle {
+      color: var(--accent);
+      background: rgba(183, 207, 99, .055);
+    }
+
+    .field-instrument-theme .drawer-section {
+      border-color: var(--line);
+    }
+
+    .field-instrument-theme .status.error,
+    .field-instrument-theme .error {
+      color: #ff9a83;
+    }
+
+    .field-instrument-theme .weather-field-hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr);
+      gap: 28px;
+      align-items: end;
+      min-height: 210px;
+      margin-bottom: 14px;
+      padding: clamp(24px, 4vw, 46px);
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 85% 25%, rgba(98, 184, 198, .19), transparent 18rem),
+        linear-gradient(120deg, rgba(18, 60, 52, .96), rgba(8, 16, 14, .98));
+      box-shadow: 0 22px 70px rgba(0, 0, 0, .27);
+    }
+
+    .field-instrument-theme .weather-field-hero::after {
+      content: "W";
+      position: absolute;
+      right: -22px;
+      bottom: -90px;
+      color: rgba(255, 255, 255, .025);
+      font: 500 260px/1 Georgia, serif;
+      transform: rotate(-8deg);
+    }
+
+    .field-instrument-theme .weather-field-hero > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .field-instrument-theme .weather-field-eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    .field-instrument-theme .weather-field-hero h2 {
+      max-width: 780px;
+      margin: 0;
+      font: 500 clamp(34px, 5vw, 66px)/.93 Georgia, "Times New Roman", serif;
+      letter-spacing: -.055em;
+    }
+
+    .field-instrument-theme .weather-field-hero h2 em {
+      display: block;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .field-instrument-theme .weather-field-boundary {
+      padding: 15px;
+      border-left: 3px solid var(--accent-2);
+      color: var(--muted);
+      background: rgba(8, 16, 14, .48);
+    }
+
+    .field-instrument-theme .weather-field-boundary strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #f4ca7c;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .field-instrument-theme .weather-decision-band {
+      border-radius: 0;
+      box-shadow: 0 22px 70px rgba(0, 0, 0, .26);
+    }
+
+    .field-instrument-theme .weather-decision-primary {
+      min-height: 174px;
+      background: linear-gradient(145deg, rgba(255, 107, 74, .17), transparent 72%);
+    }
+
+    .field-instrument-theme .weather-decision-primary[data-tone="ok"] {
+      background: linear-gradient(145deg, rgba(183, 207, 99, .16), transparent 72%);
+    }
+
+    .field-instrument-theme .weather-decision-primary[data-tone="warn"] {
+      background: linear-gradient(145deg, rgba(240, 174, 59, .17), transparent 72%);
+    }
+
+    .field-instrument-theme .weather-decision-primary[data-tone="bad"] {
+      background: linear-gradient(145deg, rgba(255, 107, 74, .19), transparent 72%);
+    }
+
+    .field-instrument-theme .weather-decision-primary[data-tone="ok"] strong { color: var(--accent); }
+    .field-instrument-theme .weather-decision-primary[data-tone="warn"] strong { color: var(--accent-2); }
+    .field-instrument-theme .weather-decision-primary[data-tone="bad"] strong { color: var(--bad); }
+
+    @keyframes field-instrument-arrive {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @media (max-width: 1120px) {
+      .field-instrument-theme .dashboard-shell { grid-template-columns: 1fr; }
+      .field-instrument-theme .weather-field-hero { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 620px) {
+      .field-instrument-theme .workspace { padding: 12px; }
+      .field-instrument-theme .weather-field-hero { min-height: 0; padding: 24px 18px; }
+      .field-instrument-theme .weather-field-hero h2 { font-size: 38px; }
+      .field-instrument-theme .topbar { padding: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .field-instrument-theme .workspace > * { animation: none; }
+    }
   </style>
 </head>
-<body>
+<body class="field-instrument-theme">
   <div class="dashboard-shell" id="dashboardShell">
     <aside class="dashboard-sidebar" id="dashboardSidebar" aria-label="Scout dashboard sections">
       <header class="brand">
@@ -3779,7 +4632,7 @@
       </header>
       <nav class="nav" aria-label="Scout dashboard navigation">
         <button class="nav-item" type="button" data-nav-primary data-route="home" data-route-truth="live"><span class="mark"></span><span>Overview</span></button>
-        <details class="nav-section" data-nav-primary open>
+        <details class="nav-section" data-nav-primary>
           <summary><span class="mark"></span><span>Plan Trip</span></summary>
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="features-workspace" data-route-truth="partial"><span class="mark"></span><span>Workspace</span></button>
@@ -3788,7 +4641,7 @@
             <button class="nav-item" type="button" data-route="features-country-material-pool" data-route-truth="preview"><span class="mark"></span><span>Country Material Pool</span></button>
           </div>
         </details>
-        <details class="nav-section" data-nav-primary open>
+        <details class="nav-section" data-nav-primary>
           <summary><span class="mark"></span><span>Map & Evidence</span></summary>
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="map" data-route-truth="live"><span class="mark"></span><span>Map</span></button>
@@ -3796,23 +4649,25 @@
             <button class="nav-item" type="button" data-route="features-lbs" data-route-truth="preview"><span class="mark"></span><span>LBS</span></button>
           </div>
         </details>
-        <details class="nav-section" data-nav-primary open>
-          <summary><span class="mark"></span><span>Team & Pace</span></summary>
+        <details class="nav-section" data-nav-primary data-nav-group="outdoor-six-forces" open>
+          <summary><span class="mark"></span><span>Exploring for Six Axis</span></summary>
           <div class="nav-subtree">
-            <button class="nav-item" type="button" data-route="outdoor-route-context" data-route-truth="partial"><span class="mark"></span><span>Route Context</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-pace-fit" data-route-truth="partial"><span class="mark"></span><span>Pace Dashboard</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-pace-fit-body-index" data-route-truth="partial"><span class="mark"></span><span>Body Index</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-pace-fit-emergency" data-route-truth="preview"><span class="mark"></span><span>Emergency UI</span></button>
+            <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-route-context" data-route-truth="partial"><span class="mark"></span><span>Route Context</span></button>
+            <details class="nav-section" data-six-force-capability="pace-fit" open>
+              <summary><span class="mark"></span><span>Pace Fit</span></summary>
+              <div class="nav-subtree">
+                <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-pace-fit" data-route-truth="partial"><span class="mark"></span><span>Pace Dashboard</span></button>
+                <button class="nav-item" type="button" data-route="outdoor-pace-fit-body-index" data-route-truth="partial"><span class="mark"></span><span>Body Index</span></button>
+                <button class="nav-item" type="button" data-route="outdoor-pace-fit-emergency" data-route-truth="preview"><span class="mark"></span><span>Emergency UI</span></button>
+              </div>
+            </details>
+            <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-permission" data-route-truth="preview"><span class="mark"></span><span>Permission</span></button>
+            <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-architecture" data-route-truth="preview"><span class="mark"></span><span>Architecture</span></button>
+            <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-weather" data-route-truth="partial"><span class="mark"></span><span>Weather</span></button>
+            <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-navigation" data-route-truth="preview"><span class="mark"></span><span>Navigation</span></button>
           </div>
         </details>
-        <details class="nav-section" data-nav-primary open>
-          <summary><span class="mark"></span><span>Safety Decisions</span></summary>
-          <div class="nav-subtree">
-            <button class="nav-item" type="button" data-route="emergency" data-route-truth="partial"><span class="mark"></span><span>Safety / Emergency</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-weather" data-route-truth="partial"><span class="mark"></span><span>Weather</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-permission" data-route-truth="preview"><span class="mark"></span><span>Permission</span></button>
-          </div>
-        </details>
+        <button class="nav-item" type="button" data-nav-primary data-route="emergency" data-route-truth="partial"><span class="mark"></span><span>Safety / Emergency</span></button>
         <button class="nav-item" type="button" data-nav-primary data-route="agent" data-route-truth="partial"><span class="mark"></span><span>Assistant</span></button>
         <details class="nav-section" data-nav-primary>
           <summary><span class="mark"></span><span>System</span></summary>
@@ -3823,13 +4678,6 @@
             <button class="nav-item" type="button" data-route="debug" data-route-truth="partial"><span class="mark"></span><span>Debug Message</span></button>
             <button class="nav-item" type="button" data-route="observer" data-route-truth="preview"><span class="mark"></span><span>MQTT / Observer</span></button>
             <button class="nav-item" type="button" data-route="settings" data-route-truth="live"><span class="mark"></span><span>Settings</span></button>
-          </div>
-        </details>
-        <details class="nav-section" data-nav-primary>
-          <summary><span class="mark"></span><span>Labs / Preview</span></summary>
-          <div class="nav-subtree">
-            <button class="nav-item" type="button" data-route="outdoor-architecture" data-route-truth="preview"><span class="mark"></span><span>Architecture</span></button>
-            <button class="nav-item" type="button" data-route="outdoor-navigation" data-route-truth="preview"><span class="mark"></span><span>Navigation</span></button>
           </div>
         </details>
       </nav>
@@ -4135,6 +4983,22 @@
       "weather-api",
     ];
 
+    const WEATHER_MAP_LAYER_IDS = Object.freeze([
+      "imagery",
+      "relief",
+      "osm",
+      "route",
+      "segments",
+      "retreat",
+      "soil-moisture",
+      "antecedent-rain",
+      "cwa-qpf",
+      "checkpoints",
+      "hazards",
+      "cwa-weather",
+      "weather-api",
+    ]);
+
     const COUNTRY_MATERIAL_POOLS = [
       {
         code: "TW",
@@ -4334,6 +5198,13 @@
       },
     ];
 
+    const COLLAPSIBLE_EVIDENCE_ROUTES = Object.freeze(new Set([
+      "outdoor-permission",
+      "outdoor-architecture",
+      "outdoor-weather",
+      "outdoor-navigation",
+    ]));
+
     const state = {
       route: "home",
       project: null,
@@ -4370,6 +5241,7 @@
         imagery: null,
         errors: [],
       },
+      weatherTimelineIndex: 0,
       selectedAction: "film",
       activeDebugDetail: "state",
       activeEvidenceTab: "default",
@@ -4380,6 +5252,7 @@
       },
       activeCountryMaterialPool: "TW",
       mapEvidenceCollapsed: false,
+      evidenceDrawerExpandedRoutes: {},
       selectedMapEvidenceSourceId: "",
       pendingMapEvidenceFocusId: "",
       mapEvidenceRetryTimer: null,
@@ -4900,6 +5773,11 @@
       return route === "map";
     }
 
+    function evidenceDrawerCollapsed(route) {
+      return COLLAPSIBLE_EVIDENCE_ROUTES.has(route)
+        && !Boolean(state.evidenceDrawerExpandedRoutes?.[route]);
+    }
+
     function bindNavigation() {
       document.querySelectorAll("[data-route]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -4907,6 +5785,14 @@
           setDashboardNavigationOpen(false);
         });
       });
+    }
+
+    function openNavigationAncestors(button) {
+      let section = button.closest("details.nav-section");
+      while (section) {
+        section.open = true;
+        section = section.parentElement?.closest("details.nav-section") || null;
+      }
     }
 
     function setDashboardNavigationOpen(open, {returnFocus = false} = {}) {
@@ -5125,7 +6011,9 @@
     function setRoute(route, {loadRouteData = false} = {}) {
       state.route = route;
       document.querySelectorAll("[data-route]").forEach((button) => {
-        button.classList.toggle("is-active", button.dataset.route === route);
+        const active = button.dataset.route === route;
+        button.classList.toggle("is-active", active);
+        if (active) openNavigationAncestors(button);
       });
       const force = SIX_FORCES.find((item) => item.route === route);
       const meta = force
@@ -5149,8 +6037,12 @@
       renderTruthStrip(route);
       const frameFull = routeUsesFullFrame(route);
       const frameWide = routeUsesWideFrame(route);
+      const evidenceCollapsed = evidenceDrawerCollapsed(route);
       contentGrid?.classList.toggle("is-frame-full", frameFull);
       contentGrid?.classList.toggle("is-frame-wide", frameWide);
+      contentGrid?.classList.toggle("is-evidence-collapsed", evidenceCollapsed);
+      evidence.classList.toggle("is-collapsed", evidenceCollapsed);
+      evidence.dataset.evidenceDrawerState = evidenceCollapsed ? "collapsed" : "expanded";
       dashboardShell?.classList.toggle("is-frame-full", frameFull);
       document.body.classList.toggle("is-frame-full", frameFull);
       if (route === "map") {
@@ -7665,11 +8557,8 @@
       `;
     }
 
-    function renderWeatherLiveSummary() {
+    function weatherCandidateSnapshot() {
       const weather = state.weatherData || {};
-      if (weather.status === "idle" || weather.status === "loading") {
-        return `<section class="panel" data-weather-status="loading"><div class="panel-header"><h3>CWA Live Cache</h3><span class="chip info">loading</span></div><div class="panel-body">Loading cache-only rainfall and imagery evidence for this project.</div></section>`;
-      }
       const compactRainfallProducts = asArray(state.project?.cwa_qpf?.rainfall_products);
       const rainfallProducts = asArray(weather.rainfall?.products).length
         ? asArray(weather.rainfall.products).map(product => ({
@@ -7683,7 +8572,6 @@
         const frames = asArray(overlay.frames);
         return {family, current: frames.find(frame => frame.frameId === overlay.latestFrameId) || frames[frames.length - 1] || null};
       });
-      const currentImagery = imageryFamilies.find(item => item.current)?.current || null;
       const freshness = preferredRainfall?.freshness?.status || weather.rainfall?.status || "unknown_freshness";
       const availableCells = Number(preferredRainfall?.availableCellCount || 0);
       const coverageStatus = preferredRainfall
@@ -7691,6 +8579,63 @@
         : "unavailable";
       const derived = dashboardWeatherDerivedStatus(weather);
       const statusMeta = CWA_UI_STATUSES[derived] || CWA_UI_STATUSES.unavailable;
+      return {
+        availableCells,
+        coverageStatus,
+        derived,
+        freshness,
+        imageryFamilies,
+        loading: weather.status === "idle" || weather.status === "loading",
+        preferredRainfall,
+        statusMeta,
+        weather,
+      };
+    }
+
+    function weatherDecisionReadiness(snapshot) {
+      if (snapshot.loading) return {
+        label: "LOADING",
+        tone: "info",
+        summary: "Loading cache-only CWA evidence before route impact can be reviewed.",
+      };
+      const hasImagery = snapshot.imageryFamilies.some(item => Boolean(item.current));
+      if (!snapshot.preferredRainfall && !hasImagery) return {
+        label: "DELAY",
+        tone: "warn",
+        summary: "No cached rainfall or imagery evidence is available. Resolve the data gap before route review.",
+      };
+      if (["error", "unavailable"].includes(snapshot.derived)) return {
+        label: "DELAY",
+        tone: "bad",
+        summary: "Weather evidence is unavailable. Do not infer a route-specific decision from missing data.",
+      };
+      if (snapshot.coverageStatus === "unavailable") return {
+        label: "DELAY",
+        tone: "warn",
+        summary: "Rainfall coverage is unavailable. Inspect the source failure before selecting a route action.",
+      };
+      if (snapshot.derived === "no_coverage") return {
+        label: "DELAY",
+        tone: "warn",
+        summary: "The selected rainfall product does not cover the route bbox. Resolve coverage before departure review.",
+      };
+      if (snapshot.derived === "stale_data") return {
+        label: "DELAY",
+        tone: "warn",
+        summary: "Weather evidence is stale. Recheck CWA rainfall and imagery before selecting a route action.",
+      };
+      return {
+        label: "REVIEW READY",
+        tone: "ok",
+        summary: "Fresh candidate evidence is available. Inspect the route-weather intersection before choosing GO, DELAY, CHANGE PLAN or NO-GO.",
+      };
+    }
+
+    function renderWeatherLiveSummary(snapshot = weatherCandidateSnapshot()) {
+      if (snapshot.loading) {
+        return `<section class="panel" data-weather-status="loading"><div class="panel-header"><h3>CWA Live Cache</h3><span class="chip info">loading</span></div><div class="panel-body">Loading cache-only rainfall and imagery evidence for this project.</div></section>`;
+      }
+      const {availableCells, coverageStatus, derived, freshness, imageryFamilies, preferredRainfall, statusMeta, weather} = snapshot;
       return `
         <section class="panel" data-weather-status="${escapeHtml(derived)}">
           <div class="panel-header"><h3>CWA Live Cache</h3><span class="chip ${statusMeta.tone}">${escapeHtml(statusMeta.label)}</span></div>
@@ -7705,34 +8650,238 @@
               ${imageryFamilies.map(({family, current}) => `<div class="metric-row"><span>${escapeHtml(family)} 影像時間</span><strong>${escapeHtml(formatCwaTimestamp(current?.sourceTimestamp, ""))}</strong></div>`).join("")}
             </div>
             ${weather.errors?.length ? `<p class="status error">${escapeHtml(weather.errors.join(" · "))}</p>` : ""}
-            <div style="height:10px"></div>
-            <button type="button" data-weather-open-map>Open current project in Map</button>
           </div>
         </section>
       `;
     }
 
+    function weatherTimelineFrames(snapshot) {
+      return asArray(snapshot.weather?.imagery?.childOverlays?.radar?.frames)
+        .filter(frame => frame && frame.sourceTimestamp)
+        .slice()
+        .sort((left, right) => String(left.sourceTimestamp).localeCompare(String(right.sourceTimestamp)));
+    }
+
+    function renderWeatherTimeline(snapshot) {
+      const radar = snapshot.imageryFamilies.find(item => item.family === "radar")?.current || null;
+      const satellite = snapshot.imageryFamilies.find(item => item.family === "satellite")?.current || null;
+      const frames = weatherTimelineFrames(snapshot);
+      const maxIndex = Math.max(0, frames.length - 1);
+      const selectedIndex = Math.min(Math.max(0, Number(state.weatherTimelineIndex || 0)), maxIndex);
+      const selectedFrame = frames[selectedIndex] || radar;
+      const steps = [
+        ["Rainfall basis", formatCwaTimestamp(snapshot.preferredRainfall?.sourceTimestamp, "not available"), snapshot.preferredRainfall?.gridKind || "no product", ""],
+        ["Radar frame", formatCwaTimestamp(selectedFrame?.sourceTimestamp, "not available"), selectedFrame ? `${selectedIndex + 1} / ${frames.length || 1} cached frame` : "no cached frame", "is-current"],
+        ["Satellite frame", formatCwaTimestamp(satellite?.sourceTimestamp, "not available"), satellite ? "latest cached frame" : "no cached frame", ""],
+        ["Evidence valid until", formatCwaTimestamp(snapshot.preferredRainfall?.validUntil, "unresolved"), "recheck after this boundary", "is-expiry"],
+      ];
+      return `
+        <div class="weather-map-timeline" data-weather-timeline="true">
+          <div class="weather-map-time-labels">
+            <strong>Evidence timeline · ${escapeHtml(formatCwaTimestamp(selectedFrame?.sourceTimestamp, "no cached radar frames"))}</strong>
+            <span>${frames.length > 1 ? `${frames.length} cache frames` : "timeline unavailable"}</span>
+          </div>
+          <input type="range" min="0" max="${maxIndex}" value="${selectedIndex}" step="1" data-weather-evidence-timeline="true" aria-label="Select cached radar evidence frame" ${frames.length < 2 ? "disabled" : ""}>
+          <div class="weather-timeline-grid">
+            ${steps.map(([label, value, detail, className]) => `
+              <div class="weather-timeline-step ${className}">
+                <span class="weather-timeline-label">${escapeHtml(label)}</span>
+                <strong>${escapeHtml(value)}</strong>
+                <span>${escapeHtml(detail)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function weatherIntersectionCallout(snapshot, mapData) {
+      const routeDetail = mapData.connected
+        ? "Route geometry is projected from the current admin route source."
+        : "Route geometry is a labeled visual fallback; load the project route before segment review.";
+      if (snapshot.loading) return {
+        title: "Route-weather intersection is loading.",
+        detail: `Waiting for cache-only CWA evidence. ${routeDetail}`,
+      };
+      if (snapshot.coverageStatus === "covered") return {
+        title: `${snapshot.availableCells} rainfall cells are inside the route review bbox.`,
+        detail: `Inspect the candidate grid against exposed route segments; bbox coverage is not a safety decision. ${routeDetail}`,
+      };
+      if (snapshot.coverageStatus === "no_coverage") return {
+        title: "No rainfall cells cover the route review bbox.",
+        detail: `Missing coverage is unknown, never zero rainfall. Recheck the CWA cache before route review. ${routeDetail}`,
+      };
+      return {
+        title: "Route-weather intersection is unresolved.",
+        detail: `Cached route-bbox rainfall evidence is unavailable. ${routeDetail}`,
+      };
+    }
+
+    function weatherRouteMarkers(mapData) {
+      if (!mapData.connected) return [
+        {x: 96, y: 500, label: "START"},
+        {x: 328, y: 304, label: "MID ROUTE"},
+        {x: 646, y: 130, label: "RIDGE"},
+        {x: 920, y: 76, label: "ROUTE END"},
+      ];
+      const sampled = sampleCoordinates(mapData.coordinates, 5);
+      return sampled.map((point, index) => {
+        const projected = projectCoordinate(point, mapData.bounds);
+        const fallbackLabel = index === 0
+          ? "START"
+          : (index === sampled.length - 1 ? "ROUTE END" : `ROUTE ${index + 1}`);
+        return {...projected, label: point.label || fallbackLabel};
+      });
+    }
+
+    function renderWeatherIntersectionMap(snapshot) {
+      const mapData = buildMapData();
+      const radarEnabled = Boolean(state.layerEnabled["cwa-weather"]);
+      const rainfallEnabled = Boolean(state.layerEnabled["cwa-qpf"] || state.layerEnabled["antecedent-rain"]);
+      const routeEnabled = Boolean(state.layerEnabled.route || state.layerEnabled.segments || state.layerEnabled.checkpoints);
+      const radarAvailable = snapshot.imageryFamilies.some(item => item.family === "radar" && item.current);
+      const rainfallAvailable = snapshot.coverageStatus === "covered";
+      const routePath = mapData.connected
+        ? mapData.routePath
+        : "M96 500 C188 418 222 344 328 304 C424 267 516 214 646 130 C750 61 839 43 920 76";
+      const routeMarkers = weatherRouteMarkers(mapData);
+      const callout = weatherIntersectionCallout(snapshot, mapData);
+      const layerControls = [
+        ["radar", "RADAR", radarEnabled],
+        ["rainfall", "RAINFALL GRID", rainfallEnabled],
+        ["route", "ROUTE", routeEnabled],
+      ];
+      const rainfallOpacity = rainfallAvailable ? ".34" : ".12";
+      return `
+        <section class="panel weather-intersection-panel" data-weather-intersection-map="true">
+          <div class="weather-intersection-header">
+            <h3>Route-weather intersection</h3>
+            <span class="chip ${mapData.connected ? "info" : "warn"}">${mapData.connected ? "route bbox · candidate only" : "visual fallback · not live runtime"}</span>
+          </div>
+          <div class="weather-intersection-map">
+            <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="Route-weather intersection candidate evidence map">
+              <defs>
+                <pattern id="weatherContourPattern" width="126" height="96" patternUnits="userSpaceOnUse">
+                  <path d="M-18 74 Q42 24 108 72 T234 72" fill="none" stroke="#264139" stroke-width="2" opacity=".76"></path>
+                  <path d="M-18 88 Q42 38 108 86 T234 86" fill="none" stroke="#1c332d" stroke-width="1.5" opacity=".9"></path>
+                </pattern>
+              </defs>
+              <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="#071512"></rect>
+              <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="url(#weatherContourPattern)"></rect>
+              <g data-weather-map-visual="rainfall" data-layer-hidden="${rainfallEnabled ? "false" : "true"}" data-weather-rainfall-state="${escapeHtml(snapshot.coverageStatus)}">
+                <rect x="594" y="86" width="138" height="136" fill="#36a7c0" opacity="${rainfallOpacity}"></rect>
+                <rect x="732" y="86" width="138" height="136" fill="#c2ad46" opacity="${rainfallOpacity}"></rect>
+                <rect x="870" y="86" width="138" height="136" fill="#d55d3f" opacity="${rainfallOpacity}"></rect>
+                <rect x="594" y="222" width="138" height="136" fill="#5f9e91" opacity="${rainfallOpacity}"></rect>
+                <rect x="732" y="222" width="138" height="136" fill="#c38b34" opacity="${rainfallOpacity}"></rect>
+                <rect x="870" y="222" width="138" height="136" fill="#c8563d" opacity="${rainfallOpacity}"></rect>
+                ${rainfallAvailable ? "" : `<rect x="594" y="86" width="406" height="272" fill="none" stroke="#7e9189" stroke-width="2" stroke-dasharray="10 9"></rect><text x="797" y="207" text-anchor="middle" fill="#a9b5ad" font-family="ui-monospace, monospace" font-size="14">NO CACHED ROUTE-BBOX CELLS</text>`}
+              </g>
+              <g data-weather-map-visual="radar" data-layer-hidden="${radarEnabled ? "false" : "true"}" data-weather-radar-state="${radarAvailable ? "available" : "unavailable"}">
+                <ellipse cx="790" cy="177" rx="172" ry="118" fill="${radarAvailable ? "#47a8bd" : "none"}" opacity="${radarAvailable ? ".16" : "1"}" stroke="#58b6c9" stroke-width="3" stroke-dasharray="12 10"></ellipse>
+                ${radarAvailable ? "" : `<text x="790" y="181" text-anchor="middle" fill="#8bb9bd" font-family="ui-monospace, monospace" font-size="13">NO CACHED RADAR FRAME</text>`}
+              </g>
+              <g data-weather-map-visual="route" data-layer-hidden="${routeEnabled ? "false" : "true"}" data-route-source="${escapeHtml(mapData.sourcePath)}">
+                <path d="${routePath}" fill="none" stroke="#f3dc92" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 14"></path>
+                ${rainfallAvailable ? `<path d="${routePath}" fill="none" stroke="#ff684a" stroke-width="18" stroke-linecap="round" opacity=".5" stroke-dasharray="0 590 145 999"></path>` : ""}
+                ${routeMarkers.map(({x, y, label}) => `<g><circle cx="${Number(x).toFixed(1)}" cy="${Number(y).toFixed(1)}" r="9" fill="#071512" stroke="#d8ddd2" stroke-width="3"></circle><text x="${Number(x).toFixed(1)}" y="${(Number(y) + 31).toFixed(1)}" text-anchor="middle" fill="#d8ddd2" font-family="ui-monospace, monospace" font-size="13">${escapeHtml(label)}</text></g>`).join("")}
+              </g>
+            </svg>
+            <div class="weather-map-layer-stack" aria-label="Weather map layers">
+              ${layerControls.map(([id, label, enabled]) => `<button type="button" data-weather-map-layer="${id}" aria-pressed="${enabled ? "true" : "false"}">${label}</button>`).join("")}
+            </div>
+            <div class="weather-map-route-callout" data-weather-intersection-callout="true">
+              <strong>${escapeHtml(callout.title)}</strong>
+              <span>${escapeHtml(callout.detail)}</span>
+            </div>
+          </div>
+          ${renderWeatherTimeline(snapshot)}
+        </section>
+      `;
+    }
+
+    function renderWeatherActions(snapshot) {
+      const coverage = snapshot.coverageStatus === "covered"
+        ? `${snapshot.availableCells} route-bbox cells available`
+        : snapshot.coverageStatus;
+      return `
+        <section class="panel" data-weather-actions="true">
+          <div class="panel-header"><h3>Do next</h3><span class="chip warn">operator review</span></div>
+          <div class="panel-body">
+            <div class="weather-action-list">
+              <div class="weather-action-item"><b>1</b><div><strong>Inspect route-weather overlap</strong><span>Use the shared Scout Map to locate exposed ridge, creek and retreat intersections.</span></div></div>
+              <div class="weather-action-item"><b>2</b><div><strong>Verify evidence integrity</strong><span>Freshness: ${escapeHtml(snapshot.freshness)} · Coverage: ${escapeHtml(coverage)}.</span></div></div>
+              <div class="weather-action-item"><b>3</b><div><strong>Recheck before committing</strong><span>A new cache read may change the candidate posture; it never mutates runtime safety truth.</span></div></div>
+            </div>
+            <div style="height:10px"></div>
+            <button type="button" data-weather-recheck="true">Recheck candidate evidence</button>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderWeatherExampleRules() {
+      return `
+        <details class="panel optional-parameters-frame">
+          <summary><span>Weather decision reference</span><small>示例規則 · example rules</small></summary>
+          <div class="panel-body">
+            <p class="status">Reference rules are not a decision for the current trip.</p>
+            <table class="table">
+              <thead><tr><th>Condition</th><th>Route impact</th><th>Required action</th></tr></thead>
+              <tbody>
+                <tr><td>前 24 小時降雨</td><td>溪谷與濕滑下坡風險上升</td><td>保留撤退 buffer</td></tr>
+                <tr><td>午後雷雨</td><td>稜線、山頂、裸露地需避開</td><td>在 weather window 前離開</td></tr>
+                <tr><td>強風低溫</td><td>停留與失溫成本升高</td><td>縮短暴露停留</td></tr>
+                <tr><td>能見度差</td><td>Navigation demand rises</td><td>保持 CP discipline</td></tr>
+                <tr><td>預報來源不一致</td><td>uncertainty 上升</td><td>使用較保守窗口</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      `;
+    }
+
     function renderWeatherPage(force) {
+      const snapshot = weatherCandidateSnapshot();
+      const posture = weatherDecisionReadiness(snapshot);
+      const routeCoverage = snapshot.coverageStatus === "covered"
+        ? `${snapshot.availableCells} route-bbox cells`
+        : snapshot.coverageStatus;
+      const criticalWindow = formatCwaTimestamp(snapshot.preferredRainfall?.validUntil, "unresolved");
+      const radarTime = formatCwaTimestamp(snapshot.imageryFamilies.find(item => item.family === "radar")?.current?.sourceTimestamp, "awaiting frame");
       return `
         ${outdoorTabs(force.route)}
-        <div class="grid-2">
-          ${renderWeatherLiveSummary()}
-          <section class="panel">
-            <div class="panel-header"><h3>示例規則</h3><span class="chip info">Preview</span></div>
-            <div class="panel-body">
-              <p class="status">These example rules are not a decision for the current trip. Use the live cache summary and Map evidence above.</p>
-              <table class="table">
-                <thead><tr><th>Condition</th><th>Route impact</th><th>Required action</th></tr></thead>
-                <tbody>
-                  <tr><td>前 24 小時降雨</td><td>溪谷與濕滑下坡風險上升</td><td>保留撤退 buffer</td></tr>
-                  <tr><td>午後雷雨</td><td>稜線、山頂、裸露地需避開</td><td>13:00 前離開 exposed ridge</td></tr>
-                  <tr><td>強風低溫</td><td>停留與架設腳架成本升高</td><td>縮短拍攝停留</td></tr>
-                  <tr><td>能見度差</td><td>Navigation demand rises</td><td>保持 CP discipline</td></tr>
-                  <tr><td>預報來源不一致</td><td>uncertainty 上升</td><td>保守改判</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+        <section class="weather-field-hero" data-weather-field-hero="true">
+          <div>
+            <p class="weather-field-eyebrow">Weather → route decision</p>
+            <h2>Weather is not a forecast.<em>It is a route constraint.</em></h2>
+          </div>
+          <div class="weather-field-boundary">
+            <strong>Candidate evidence only</strong>
+            Cache-only rainfall, radar and satellite layers support operator review. They never represent or mutate runtime safety truth.
+          </div>
+        </section>
+        <section class="panel weather-decision-band" data-weather-decision-band="true">
+          <div class="weather-decision-primary" data-tone="${escapeHtml(posture.tone)}">
+            <small>Weather decision readiness · candidate posture</small>
+            <strong>${escapeHtml(posture.label)}</strong>
+            <p>${escapeHtml(posture.summary)}</p>
+          </div>
+          <div class="weather-decision-metric"><small>Affected route</small><strong>${escapeHtml(routeCoverage)}</strong><span>Segment impact requires Map intersection review.</span></div>
+          <div class="weather-decision-metric"><small>Critical window</small><strong>${escapeHtml(criticalWindow)}</strong><span>Selected rainfall evidence validity boundary.</span></div>
+          <div class="weather-decision-metric"><small>Latest radar</small><strong>${escapeHtml(radarTime)}</strong><span>Recheck when a newer cached frame arrives.</span></div>
+        </section>
+        <div style="height:12px"></div>
+        <div class="weather-workspace">
+          <div class="weather-primary-stack">
+            ${renderWeatherIntersectionMap(snapshot)}
+          </div>
+          <aside class="weather-side-stack">
+            <p class="weather-boundary-note"><strong>Candidate evidence only.</strong> Cache-only weather layers support review; they do not represent or mutate runtime safety truth.</p>
+            ${renderWeatherActions(snapshot)}
+            ${renderWeatherLiveSummary(snapshot)}
+            ${renderWeatherExampleRules()}
+          </aside>
         </div>
       `;
     }
@@ -8733,16 +9882,17 @@
       const compact = mode !== "default" && mode !== "weather" && mode !== "navigation";
       const mapData = buildMapData();
       const sourceLabel = mapData.connected ? "projection connected" : "fallback geometry";
+      const toolbarLayerIds = mode === "weather" ? WEATHER_MAP_LAYER_IDS : SCOUT_LAYER_IDS;
       return `
-        <section class="panel map-panel">
+        <section class="panel map-panel ${mode === "weather" ? "weather-map-panel" : ""}">
           <div class="panel-header">
-            <h3>Scout Map</h3>
+            <h3>${mode === "weather" ? "Route-weather intersection" : "Scout Map"}</h3>
             <span class="chip ${mapData.connected ? "ok" : "warn"}" id="dashboardMapPreviewStatus" data-map-connected="${mapData.connected ? "true" : "false"}">${sourceLabel}</span>
-            <span class="chip info">32 canonical layers</span>
+            <span class="chip info">${mode === "weather" ? `${WEATHER_MAP_LAYER_IDS.length} weather layers` : "32 canonical layers"}</span>
           </div>
-          <p class="small-note" style="padding:0 12px 10px">Pre-trip and Debug expose 31; completed-track is after-action only.</p>
+          <p class="small-note" style="padding:0 12px 10px">${mode === "weather" ? "Route-bbox overlays are cache-only candidate evidence; inspect freshness before using them in a route decision." : "Pre-trip and Debug expose 31; completed-track is after-action only."}</p>
           <div class="map-toolbar" id="layerToolbar">
-            ${SCOUT_LAYER_IDS.map((layerId) => `
+            ${toolbarLayerIds.map((layerId) => `
               <label class="layer-control">
                 <input type="checkbox" data-layer="${escapeHtml(layerId)}" ${state.layerEnabled[layerId] ? "checked" : ""}>
                 <span>${escapeHtml(layerId)}</span>
@@ -8902,6 +10052,7 @@
     }
 
     function mapLayerSvg(layerId, index, mode, compact, mapData) {
+      if (mode === "weather" && !WEATHER_MAP_LAYER_IDS.includes(layerId)) return "";
       const hidden = state.layerEnabled[layerId] ? "false" : "true";
       const opacity = Math.max(.12, Math.min(.82, .16 + (index % 8) * .055)).toFixed(2);
       if (["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm"].includes(layerId)) {
@@ -10048,9 +11199,12 @@
       if (route === "living") return renderLivingEvidenceDrawer();
       const force = SIX_FORCES.find((item) => item.route === route);
       const title = force ? `${force.label} Evidence` : "Evidence";
-      return `
+      const collapsible = COLLAPSIBLE_EVIDENCE_ROUTES.has(route);
+      const collapsed = evidenceDrawerCollapsed(route);
+      const bodyTitle = collapsible ? "Context" : title;
+      const body = `
         <section class="drawer-section" id="dashboardEvidenceHeader">
-          <h3>${escapeHtml(title)}</h3>
+          <h3>${escapeHtml(bodyTitle)}</h3>
           <div class="drawer-list">
             <div class="item"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
             <div class="item"><strong>Workspace root</strong><span class="mono">${escapeHtml(WORKSPACE_ROOT)}</span></div>
@@ -10074,6 +11228,25 @@
           </div>
         </section>
       `;
+      if (!collapsible) return body;
+      const toggleLabel = collapsed ? `Expand ${title}` : `Collapse ${title}`;
+      return `
+        <button
+          class="contextual-evidence-toggle"
+          type="button"
+          data-context-evidence-toggle="true"
+          data-context-evidence-route="${escapeHtml(route)}"
+          aria-label="${escapeHtml(toggleLabel)}"
+          aria-controls="dashboardContextEvidenceBody"
+          aria-expanded="${collapsed ? "false" : "true"}"
+        >
+          <span>${escapeHtml(title)}</span>
+          <strong aria-hidden="true">${collapsed ? "+" : "−"}</strong>
+        </button>
+        <div class="contextual-evidence-body" id="dashboardContextEvidenceBody" ${collapsed ? "hidden" : ""}>
+          ${body}
+        </div>
+      `;
     }
 
     function bindRenderedControls() {
@@ -10082,6 +11255,21 @@
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
       const surfaceFrame = document.getElementById("surfaceFrame");
       if (surfaceFrame) bindSurfaceFrameHealth(surfaceFrame);
+      const contextualEvidenceToggle = document.querySelector("[data-context-evidence-toggle]");
+      if (contextualEvidenceToggle) {
+        contextualEvidenceToggle.addEventListener("click", () => {
+          const route = contextualEvidenceToggle.dataset.contextEvidenceRoute || state.route;
+          const expanded = contextualEvidenceToggle.getAttribute("aria-expanded") === "true";
+          state.evidenceDrawerExpandedRoutes = {
+            ...(state.evidenceDrawerExpandedRoutes || {}),
+            [route]: !expanded,
+          };
+          render();
+          window.requestAnimationFrame(() => {
+            document.querySelector("[data-context-evidence-toggle]")?.focus({preventScroll: true});
+          });
+        });
+      }
       const surfaceFrameSkip = document.querySelector("[data-surface-frame-skip]");
       if (surfaceFrameSkip) {
         const skipEmbeddedSurface = () => {
@@ -10122,6 +11310,35 @@
       bindRovingTablists();
       document.querySelector("[data-weather-open-map]")?.addEventListener("click", () => {
         window.location.hash = "map";
+      });
+      document.querySelectorAll("[data-weather-map-layer]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const layerGroups = {
+            radar: ["cwa-weather"],
+            rainfall: ["cwa-qpf", "antecedent-rain"],
+            route: ["route", "segments", "checkpoints"],
+          };
+          const layerIds = layerGroups[button.dataset.weatherMapLayer] || [];
+          const enabled = button.getAttribute("aria-pressed") !== "true";
+          state.layerEnabled = {
+            ...state.layerEnabled,
+            ...Object.fromEntries(layerIds.map(layerId => [layerId, enabled])),
+          };
+          render();
+        });
+      });
+      document.querySelector("[data-weather-evidence-timeline]")?.addEventListener("input", (event) => {
+        state.weatherTimelineIndex = Number(event.currentTarget.value || 0);
+        render();
+      });
+      document.querySelector("[data-weather-recheck]")?.addEventListener("click", async (button) => {
+        button.disabled = true;
+        button.textContent = "Rechecking…";
+        try {
+          await loadDataForRoute("outdoor-weather", {force: true});
+        } finally {
+          if (state.route === "outdoor-weather") render();
+        }
       });
       document.querySelector("[data-debug-retry]")?.addEventListener("click", () => {
         void loadDataForRoute("debug", {force: true});

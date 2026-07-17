@@ -1861,20 +1861,106 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
 
     for marker in (
         "function loadWeatherData",
+        "function weatherCandidateSnapshot",
+        "function weatherDecisionReadiness",
+        "!snapshot.preferredRainfall && !hasImagery",
+        'snapshot.coverageStatus === "unavailable"',
         "function renderWeatherLiveSummary",
+        "function weatherTimelineFrames",
+        "function renderWeatherTimeline",
+        "function renderWeatherIntersectionMap",
+        "function renderWeatherActions",
         "/rainfall-grids",
         "/weather-imagery",
         'data-weather-status',
-        'data-weather-open-map',
+        'data-weather-decision-band="true"',
+        'data-weather-field-hero="true"',
+        "Weather is not a forecast.",
+        "It is a route constraint.",
+        'data-weather-timeline="true"',
+        'data-weather-evidence-timeline="true"',
+        'data-weather-intersection-map="true"',
+        'data-weather-map-layer=',
+        'data-weather-intersection-callout="true"',
+        "NO CACHED ROUTE-BBOX CELLS",
+        "NO CACHED RADAR FRAME",
+        'data-weather-actions="true"',
+        'data-weather-recheck="true"',
+        "renderWeatherIntersectionMap(snapshot)",
+        "WEATHER_MAP_LAYER_IDS",
+        'mode === "weather" && !WEATHER_MAP_LAYER_IDS.includes(layerId)',
         "cache-only",
-        "示例規則",
-        "Preview",
+        "Candidate evidence only.",
+        "Weather decision reference",
+        "example rules",
+        'loadDataForRoute("outdoor-weather", {force: true})',
     ):
         assert marker in html
 
-    assert "CHANGE_PLAN" not in html.split("function renderWeatherPage", 1)[1].split(
+    weather_page = html.split("function renderWeatherPage", 1)[1].split(
         "function renderNavigationPage", 1
     )[0]
+    assert "CHANGE_PLAN" not in weather_page
+    assert "13:00" not in weather_page
+    assert "CP087" not in weather_page
+    assert 'renderMapPanel("weather")' not in weather_page
+
+
+def test_dashboard_uses_weather_field_instrument_design_system_across_routes() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert '<body class="field-instrument-theme">' in html
+    for marker in (
+        "Field Decision Instrument design system.",
+        ".field-instrument-theme .dashboard-shell",
+        ".field-instrument-theme .dashboard-sidebar",
+        ".field-instrument-theme .topbar",
+        ".field-instrument-theme .workspace > *",
+        ".field-instrument-theme .panel",
+        ".field-instrument-theme .agent-app-shell",
+        ".field-instrument-theme .surface-frame-panel",
+        ".field-instrument-theme .route-tabs",
+        ".field-instrument-theme .table th",
+        ".field-instrument-theme .scout-map",
+        ".field-instrument-theme .evidence-drawer",
+        ".field-instrument-theme input",
+        ".field-instrument-theme textarea",
+        "@keyframes field-instrument-arrive",
+    ):
+        assert marker in html
+
+    for color in ("#08100e", "#101a17", "#b7cf63", "#f0ae3b", "#ff6b4a"):
+        assert color in html
+
+
+def test_dashboard_collapses_secondary_evidence_for_four_six_force_routes() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    compact_routes = html.split("const COLLAPSIBLE_EVIDENCE_ROUTES", 1)[1].split(
+        ");", 1
+    )[0]
+    for route in (
+        "outdoor-permission",
+        "outdoor-architecture",
+        "outdoor-weather",
+        "outdoor-navigation",
+    ):
+        assert f'"{route}"' in compact_routes
+
+    assert '"outdoor-route-context"' not in compact_routes
+    assert '"outdoor-pace-fit"' not in compact_routes
+    for marker in (
+        "function evidenceDrawerCollapsed(route)",
+        'classList.toggle("is-evidence-collapsed", evidenceCollapsed)',
+        'data-context-evidence-toggle="true"',
+        'aria-controls="dashboardContextEvidenceBody"',
+        'aria-expanded="${collapsed ? "false" : "true"}"',
+        'id="dashboardContextEvidenceBody"',
+        '${collapsed ? "hidden" : ""}',
+        "Expand ${title}",
+        "Collapse ${title}",
+    ):
+        assert marker in html
 
 
 def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_state() -> None:
@@ -1901,18 +1987,47 @@ def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_s
 def test_dashboard_primary_information_architecture_and_mobile_shell_contract() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
-    assert html.count("data-nav-primary") == 8
+    assert html.count("data-nav-primary") == 7
     for label in (
         "Overview",
         "Plan Trip",
         "Map & Evidence",
-        "Team & Pace",
-        "Safety Decisions",
+        "Exploring for Six Axis",
+        "Safety / Emergency",
         "Assistant",
         "System",
-        "Labs / Preview",
     ):
         assert label in html
+
+    nav_html = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
+    assert "Team & Pace" not in nav_html
+    assert "Safety Decisions" not in nav_html
+    assert "Labs / Preview" not in nav_html
+
+    six_force_nav = nav_html.split(
+        'data-nav-group="outdoor-six-forces"', 1
+    )[1].split('data-nav-primary data-route="emergency"', 1)[0]
+    expected_six_force_routes = (
+        "outdoor-route-context",
+        "outdoor-pace-fit",
+        "outdoor-permission",
+        "outdoor-architecture",
+        "outdoor-weather",
+        "outdoor-navigation",
+    )
+    assert six_force_nav.count('data-six-force-route="true"') == 6
+    route_positions = [
+        six_force_nav.index(
+            f'data-six-force-route="true" data-route="{route}"'
+        )
+        for route in expected_six_force_routes
+    ]
+    assert route_positions == sorted(route_positions)
+    assert "Pace Dashboard" in six_force_nav
+    assert "Body Index" in six_force_nav
+    assert "Emergency UI" in six_force_nav
+    assert "function openNavigationAncestors(button)" in html
+    assert "if (active) openNavigationAncestors(button);" in html
 
     assert 'data-route-truth="live"' in html
     assert 'data-route-truth="partial"' in html
