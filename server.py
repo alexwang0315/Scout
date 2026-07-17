@@ -23,6 +23,7 @@ from assistant_context import (
     create_assistant_context_resolver,
 )
 from scout_env import load_scout_env_files
+from scout_emergency_mobile_closed_loop_api import create_emergency_mobile_ui_router
 from assistant_models import AssistantSurface, ScoutAssistantQuery
 from assistant_skill_router import augment_pretrip_sources_with_local_evidence_search
 from debug_api import create_debug_page_router, create_debug_router
@@ -530,6 +531,7 @@ async def ai_decision_worker() -> None:
 
 
 app.include_router(imu_router)
+app.include_router(create_emergency_mobile_ui_router())
 app.include_router(
     create_admin_router(
         incident_store_path=SCOUT_SAFETY_INCIDENT_STORE,

@@ -21,6 +21,8 @@ def test_emergency_mobile_approval_ui_v0_contract() -> None:
     assert 'data-file-input' in html
     assert 'data-project-input' in html
     assert 'data-load-workspace' in html
+    assert 'data-load-living' in html
+    assert 'data-bind="livingStatus"' in html
     assert 'data-artifact-preview="mobile"' in html
     assert 'data-artifact-preview="desktop"' in html
     assert 'data-evidence-frame="mobile"' in html
@@ -73,6 +75,21 @@ def test_emergency_mobile_approval_ui_v0_contract() -> None:
     assert "voice_call_script" in html
     assert "activeLayers" in html
     assert "layerAliases" in html
+    assert 'LIVING_ENDPOINT = "/admin/dashboard/living"' in html
+    assert "payloadFromLivingProjection" in html
+    assert "loadLivingProjection" in html
+    assert "syncLivingDecision" in html
+    assert '`${LIVING_ENDPOINT}/approvals`' in html
+    assert "confirm_sandbox_action: true" in html
+    assert "Sandbox delivery verified; production sent=false." in html
+    assert 'data-bind="pathStateTitle"' in html
+    assert '"Shadow Reducer Candidate"' in html
+    assert "Transport outcome" in html
+    assert "production=false" in html
+    assert "Verified delivery" not in html
+    assert "max-width: 100vw" in html
+    assert ".desktop-console {" in html
+    assert "display: none;" in html
 
     for decision in (
         "approve_send",
@@ -114,8 +131,6 @@ def test_emergency_mobile_approval_ui_v0_contract() -> None:
         "XMLHttpRequest",
         "WebSocket",
         "sendBeacon",
-        "method:",
-        "POST",
         "Date.now",
         "new Date",
     )

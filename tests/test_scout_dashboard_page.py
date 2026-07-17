@@ -35,6 +35,35 @@ def test_scout_dashboard_page_serves_static_shell() -> None:
     assert 'id="dashboardEvidence"' in response.text
 
 
+def test_scout_dashboard_living_closed_loop_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    for marker in (
+        'data-route="living"',
+        '>Living<',
+        'DASHBOARD_LIVING_PATH = "/admin/dashboard/living"',
+        'function renderLivingPage()',
+        'function scheduleLivingRefresh()',
+        'data-living-action="run"',
+        'data-living-action="approve"',
+        'data-living-action="receipt"',
+        'data-living-timeline="true"',
+        '/emergency/mobile-approval-v0?living=1',
+        'candidate-only / runtime truth=false',
+        'production sent=false',
+        'simulated delivery',
+        'projection.transport_attempt',
+        'receipt?.source_attempt_id',
+    ):
+        assert marker in html
+
+    assert 'scope === "living"' in html
+    assert 'fetchJson(DASHBOARD_LIVING_PATH' in html
+    assert 'postJson(`${DASHBOARD_LIVING_PATH}/scenarios/run`' in html
+    assert 'postJson(`${DASHBOARD_LIVING_PATH}/approvals`' in html
+    assert 'postJson(`${DASHBOARD_LIVING_PATH}/transport/receipts`' in html
+
+
 def test_scout_dashboard_ai_hat_trace_displays_actual_postprocess_mode() -> None:
     html = PAGE.read_text(encoding="utf-8")
 

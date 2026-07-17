@@ -152,6 +152,10 @@ from scout_runtime_physiologic_integration import (
 )
 from scout_runtime_physiologic_pipeline import build_health_auto_export_physio_analysis
 from scout_env import load_scout_env_files
+from scout_emergency_mobile_closed_loop_api import (
+    create_emergency_mobile_closed_loop_router,
+    create_emergency_mobile_ui_router,
+)
 from scout_wearable_daily_home import build_daily_home_preview
 from scout_wearable_provider_transport import (
     write_provider_live_connector_reference,
@@ -211,6 +215,9 @@ ROUTE_CONTEXT_INTELLIGENCE_SPEC_REF = (
 DEFAULT_OSM_CARTO_PALETTE = ROOT / "config" / "osm_carto_palette.yaml"
 DEFAULT_BODY_INDEX_SOURCE_DIR = Path.home() / "downloads" / "HealthExport"
 DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT = ROOT / "outputs" / "dashboard" / "body_index"
+DEFAULT_EMERGENCY_MOBILE_SANDBOX_STORE_ROOT = (
+    ROOT / "outputs" / "dashboard" / "living"
+)
 DASHBOARD_BODY_INDEX_SCHEMA_VERSION = "scout_dashboard_body_index.v1"
 
 
@@ -2078,6 +2085,7 @@ def create_admin_app(
     *,
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
+    living_sandbox_store_root: Path | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
@@ -2090,6 +2098,7 @@ def create_admin_app(
         create_admin_router(
             incident_store_path=incident_store_path,
             pretrip_workspace_root=pretrip_workspace_root,
+            living_sandbox_store_root=living_sandbox_store_root,
             route_context_briefing_ai_runner=route_context_briefing_ai_runner,
             route_context_briefing_variants_runner_factory=(
                 route_context_briefing_variants_runner_factory
@@ -2097,6 +2106,7 @@ def create_admin_app(
             now_factory=now_factory,
         )
     )
+    app.include_router(create_emergency_mobile_ui_router())
     return app
 
 
@@ -2104,6 +2114,7 @@ def create_admin_router(
     *,
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
+    living_sandbox_store_root: Path | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
@@ -2112,6 +2123,15 @@ def create_admin_router(
 ) -> APIRouter:
     load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
+    router.include_router(
+        create_emergency_mobile_closed_loop_router(
+            store_root=(
+                living_sandbox_store_root
+                or DEFAULT_EMERGENCY_MOBILE_SANDBOX_STORE_ROOT
+            ),
+            prefix="/dashboard/living",
+        )
+    )
     resolved_incident_store_path = incident_store_path or _incident_store_from_env()
     resolved_wearable_inventory_root = wearable_inventory_root(_data_root_from_env())
     resolved_now_factory = now_factory or (lambda: datetime.now(timezone.utc))
