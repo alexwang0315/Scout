@@ -45,6 +45,185 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-17 - Promote the Weather prototype into the Dashboard design system
+
+User request:
+
+- Restore the stronger, livelier visual direction from
+  `docs/admin/scout-six-axis-weather-design.html` and apply that design language
+  across every Dashboard page and all six-force capabilities instead of making
+  Weather conform to the legacy visual shell.
+
+Implementation steps:
+
+- Added the shared `field-instrument-theme` to the real Dashboard shell with the
+  prototype's forest-night canvas, lichen accent, amber warning, coral risk,
+  cyan weather evidence, editorial headings, monospace evidence labels, sharp
+  panels, textured map field, and restrained entrance motion.
+- Applied the theme through common selectors for the sidebar, topbar, truth
+  strip, workspace, panels, tabs, buttons, inputs, tables, maps, Evidence drawer,
+  embedded admin surfaces, Agent, Debug, Living, Body Index, and Route Context;
+  existing route markup and functionality remain intact.
+- Restored the Weather prototype's hero statement and high-contrast decision
+  instrument composition while keeping the integrated live CWA cache, canonical
+  map layers, source timeline, recheck control, and compact Evidence drawer.
+- Retained the corrected data-integrity behavior: unavailable rainfall and
+  imagery produce `DELAY`, and the integrated page does not reuse the standalone
+  prototype's fictional CP IDs, forecast times, or route decisions.
+- Added responsive and reduced-motion rules so the design system applies to the
+  desktop shell, mobile navigation drawer, narrow page grids, and accessible
+  motion preferences.
+
+Boundary notes:
+
+- This is a visual-system promotion and Weather composition change. It does not
+  modify API routes, persistence, safety policy, hardware control, or outbound
+  behavior.
+- Candidate weather layers remain cache-only and cannot represent or mutate
+  runtime safety truth.
+
+Verification:
+
+- `python3 -m pytest -q tests/test_scout_dashboard_page.py`: passed.
+- `pnpm typecheck`, `npm run lint`, and scoped `git diff --check`: passed.
+- Desktop Playwright route sweep covered 24 Dashboard routes: Overview, trip
+  planning, map/evidence, all six forces and Pace extensions, Emergency,
+  Assistant, Living, embedded admin/debug surfaces, Observer, and Settings.
+  Every route retained the shared theme, active navigation, non-empty title,
+  and expected lichen design token without page-level JavaScript errors.
+- Mobile Playwright sweep covered Overview plus all six forces at 390x844 with
+  no horizontal page overflow. Six-force tabs remain horizontally scrollable.
+- Visual evidence was captured for Overview, Route Context, Weather, Settings,
+  and mobile Weather. Weather retained `DELAY` under the current missing-cache
+  replay and did not fabricate a route decision.
+
+### 2026-07-17 - Align Weather with the shared six-force UI
+
+User request:
+
+- Keep the Weather prototype's route-decision functionality while aligning its
+  visual language with the other five `Exploring for Six Axis` pages.
+
+Implementation steps:
+
+- Rebuilt the Weather page on the existing Dashboard tabs, panels, chips,
+  spacing, typography, map controls, responsive breakpoints, and compact
+  Evidence drawer instead of importing the standalone prototype's separate
+  application shell.
+- Added a shared-style decision-readiness band, a 65/35 route-weather workspace,
+  the canonical Scout Map filtered to weather-relevant layers, a source-time
+  evidence timeline, operator next actions, and a read-only CWA integrity card.
+- Added a working `Recheck candidate evidence` action that force-refreshes the
+  existing rainfall-grid and weather-imagery data scopes without adding a new
+  network or mutation path.
+- Moved generic weather rules into a collapsed reference panel so live project
+  evidence and the route intersection remain the primary reading path.
+- Removed fictional CP and clock values from the integrated page. A route
+  segment is not named until the available cache evidence is actually joined
+  to route geometry.
+
+Boundary notes:
+
+- The page labels cache-only CWA products as candidate evidence and does not
+  represent them as runtime safety truth.
+- Freshness and bbox coverage make the evidence ready for operator review; they
+  do not independently prove `GO`. Missing, stale, failed, or uncovered data
+  produces a conservative `DELAY` posture.
+- No `/safety/*`, outbound transport, hardware action, or Phase 1 mutation was
+  added.
+
+Verification:
+
+- `python3 -m pytest -q tests/test_scout_dashboard_page.py`: passed.
+- `pnpm typecheck`, `npm run lint`, and scoped `git diff --check`: passed.
+- Desktop Playwright smoke at 1440x1000: six Six Axis tabs, 13
+  weather-relevant map layers, working cache recheck, no horizontal overflow,
+  and no page-level JavaScript errors.
+- Mobile Playwright smoke at 390x844: shared Weather layout rendered without
+  horizontal overflow; decision band and source timeline collapsed to one
+  column.
+- Degraded-data replay correctly rendered `DELAY` instead of `REVIEW READY`
+  when neither rainfall nor imagery evidence was available.
+
+### 2026-07-17 - Restore six-force navigation grouping
+
+User request:
+
+- Restore the six mountain capabilities from
+  `docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md` sections 6-11 as one coherent
+  left-navigation group instead of scattering them across Team & Pace, Safety
+  Decisions, and Labs / Preview.
+
+Implementation steps:
+
+- Restored `Exploring for Six Axis` as the single navigation parent for Route
+  Context, Pace Fit, Permission, Architecture, Weather, and Navigation in the
+  standard's defined order.
+- Kept Body Index and Emergency UI as nested Pace Fit extensions without
+  presenting either extension as a seventh force.
+- Promoted Safety / Emergency to a separate operator entry and removed the
+  obsolete Team & Pace and Labs / Preview buckets.
+- Collapsed non-active Plan Trip and Map & Evidence groups by default, while
+  automatically opening every navigation ancestor of the active route so the
+  current capability remains discoverable.
+- Added an explicit six-force navigation contract and regression coverage for
+  membership, order, extension placement, and the seven-item primary shell.
+
+Boundary notes:
+
+- This is a navigation and information-architecture correction only. Route
+  maturity, data provenance, runtime behavior, and safety-effect boundaries are
+  unchanged.
+
+Verification:
+
+- `python3 -m pytest -q tests/test_scout_dashboard_page.py`: 39 passed.
+- `pnpm lint` and `pnpm typecheck`: passed.
+- Desktop 1280x720 browser smoke: all six routes visible inside the sidebar,
+  obsolete groups absent, and no horizontal overflow.
+- Mobile 390x844 drawer smoke: the six-force group and all six routes visible,
+  with `scrollWidth=clientWidth=390`.
+- Repository `pnpm test`: 15 passed, 2 pre-existing AI OS documentation
+  assertions failed; no Dashboard test failed.
+
+### 2026-07-17 - Compact secondary six-force evidence drawers
+
+User request:
+
+- Collapse Permission Evidence, Architecture Evidence, Weather Evidence, and
+  Navigation Evidence because the always-open secondary drawer consumed too
+  much of the working surface.
+
+Implementation steps:
+
+- Added a route-scoped compact Evidence contract for the four requested pages;
+  Route Context and Pace Fit behavior remains unchanged.
+- The four Evidence drawers now default to a 48px desktop rail and expose an
+  accessible Expand / Collapse control with `aria-expanded`, `aria-controls`,
+  hidden-body semantics, and focus restoration after rerender.
+- Expanded Evidence retains the existing 320-380px detail drawer and all
+  Project, Workspace, Boundary, reference, and issue-tag content.
+- At the mobile breakpoint, the compact drawer becomes a 44px horizontal row
+  rather than reserving a second column.
+
+Boundary notes:
+
+- Evidence content and provenance are unchanged; this only changes default
+  presentation and available workspace width.
+- Drawer expansion is session-local UI state and does not persist or mutate
+  project artifacts.
+
+Verification:
+
+- `python3 -m pytest -q tests/test_scout_dashboard_page.py`: 40 passed.
+- `pnpm lint`, `pnpm typecheck`, and scoped `git diff --check`: passed.
+- Desktop 1280x720: all four requested routes defaulted to a 48px collapsed
+  Evidence rail without horizontal overflow.
+- Permission Evidence expanded to 380px, collapsed back to 48px, preserved the
+  correct accessible label, and returned focus to the toggle.
+- Mobile 390x844: collapsed Navigation Evidence rendered as a 44px row with
+  `scrollWidth=clientWidth=390`.
+
 ### 2026-07-13 - Dashboard and CWA P0-P2 completion
 
 User request:
@@ -2435,3 +2614,54 @@ GPT Pro closure corrections:
 - `simulated_receipt_recorded` means the simulator receipt correlated to the
   authorized attempt. The UI states that no real transport or delivery
   occurred; it never renders this as verified delivery.
+
+## 2026-07-17 - Preserve the route-weather intersection map composition
+
+User request:
+
+- Keep the Weather map's large contour field, vertical layer controls,
+  route-weather callout, and integrated evidence timeline shown in the approved
+  Weather design reference.
+
+Implementation steps:
+
+- Replaced the generic 13-layer Weather preview with a dedicated
+  `Route-weather intersection` instrument using the approved forest contour
+  composition and the existing shared Weather design tokens.
+- Connected the Radar, Rainfall Grid, and Route buttons to the Dashboard's
+  canonical `state.layerEnabled` values. Each control changes the rendered map
+  instead of acting as a visual-only button.
+- Projected the current admin route geometry and checkpoint labels when route
+  data is available. When it is unavailable, the panel explicitly labels the
+  route as a visual fallback rather than implying live geometry.
+- Connected the integrated range control to cached CWA radar frame timestamps.
+  Fewer than two cached frames disables the control and reports that the
+  timeline is unavailable.
+- Kept missing data honest: absent rainfall cells and radar frames render as
+  labeled outlines, and the route callout treats missing coverage as unknown
+  rather than zero rainfall.
+
+Boundary notes:
+
+- The map is route-bbox, cache-only candidate evidence. It does not calculate
+  a runtime safety decision, mutate Phase 1 truth, or claim that rainfall cells
+  intersect a specific route segment.
+- The standalone reference's fictional checkpoint IDs, fixed forecast time,
+  and fixed arrival-delay statement were not copied into the real Dashboard.
+
+Verification:
+
+- `./venv/bin/python -m pytest -q tests/test_scout_dashboard_page.py`: 42
+  passed.
+- `pnpm typecheck` completed its configured scaffold import check: 1 passed;
+  `pnpm run lint` passed both configured Node syntax checks; scoped
+  `git diff --check` passed.
+- Chrome smoke at 1440x1000 confirmed the dedicated map, all three layer
+  buttons, disabled no-frame timeline, and no horizontal overflow. Toggling
+  Radar changed both `aria-pressed` and the corresponding SVG layer's hidden
+  state.
+- Mobile emulation at 390x844 retained the composition with a 366px-wide map
+  panel and `scrollWidth === clientWidth === 390`.
+- The current project returned expected 404s for missing project projection and
+  rainfall-grid cache endpoints. The Dashboard remained degraded/read-only and
+  rendered explicit unavailable/fallback states; weather imagery returned 200.
