@@ -3687,6 +3687,87 @@
         background: rgba(11, 28, 34, .96);
       }
     }
+    .living-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(250px, .6fr);
+      gap: 12px;
+    }
+
+    .living-status-stack {
+      display: grid;
+      gap: 8px;
+    }
+
+    .living-gate-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .living-gate {
+      min-height: 118px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(98, 181, 196, .045);
+    }
+
+    .living-gate[data-tone="ok"] { border-color: rgba(120, 191, 117, .44); }
+    .living-gate[data-tone="warn"] { border-color: rgba(213, 166, 66, .54); }
+    .living-gate[data-tone="bad"] { border-color: rgba(208, 99, 99, .6); }
+
+    .living-gate strong,
+    .living-gate span {
+      display: block;
+    }
+
+    .living-gate span {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .living-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .living-actions button {
+      min-height: 42px;
+    }
+
+    .living-timeline {
+      display: grid;
+      gap: 8px;
+    }
+
+    .living-event {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .living-event-index {
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    .living-event small {
+      color: var(--muted);
+    }
+
+    @media (max-width: 920px) {
+      .living-hero,
+      .living-gate-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -3736,6 +3817,7 @@
         <details class="nav-section" data-nav-primary>
           <summary><span class="mark"></span><span>System</span></summary>
           <div class="nav-subtree">
+            <button class="nav-item" type="button" data-route="living" data-route-truth="sandbox"><span class="mark"></span><span>Living</span></button>
             <button class="nav-item" type="button" data-route="surface-admin" data-route-truth="live"><span class="mark"></span><span>Admin Surface</span></button>
             <button class="nav-item" type="button" data-route="surface-debug" data-route-truth="live"><span class="mark"></span><span>Debug Surface</span></button>
             <button class="nav-item" type="button" data-route="debug" data-route-truth="partial"><span class="mark"></span><span>Debug Message</span></button>
@@ -3840,6 +3922,8 @@
     const BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status";
     const BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start";
     const BODY_INDEX_WATCH_STOP_PATH = "/admin/dashboard/body-index/watch/stop";
+    const DASHBOARD_LIVING_PATH = "/admin/dashboard/living";
+    const LIVING_REFRESH_INTERVAL_MS = 3000;
     const TRIP_INTAKE_VALIDATE_PATH = "/admin/dashboard/trip-intake/validate";
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 640;
@@ -3860,6 +3944,7 @@
     const EVIDENCE_PAGE_SIZE = 100;
     const ROUTE_TRUTH = Object.freeze({
       "home": Object.freeze({maturity: "live", surface: "Operational", data: "Mixed project evidence", action: "Read-only navigation", verification: "Route shell verified", provenance: "Workspace + runtime projections", mode: "Operational"}),
+      "living": Object.freeze({maturity: "partial", surface: "Sandbox observer", data: "Synthetic replay not loaded", action: "Local sandbox controls only", verification: "Awaiting closed-loop projection", provenance: "Synthetic replay · candidate-only", mode: "Technical Prototype"}),
       "features-workspace": Object.freeze({maturity: "partial", surface: "Operational", data: "Workspace projection", action: "Intent-only · no mutation", verification: "Intent capture verified", provenance: "Local workspace metadata", mode: "Operational"}),
       "features-import-new-trip": Object.freeze({maturity: "partial", surface: "Operational", data: "GPX validation required", action: "Intent-only · no mutation", verification: "Awaiting server validation", provenance: "Operator-selected local GPX", mode: "Operational"}),
       "features-country-material-pool": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Projected provider defaults", action: "Read-only selector", verification: "UI verified", provenance: "Country material registry", mode: "Product Preview"}),
@@ -3890,6 +3975,7 @@
       weather: ["home", "outdoor-weather"],
       debug: ["debug"],
       hardware: ["debug"],
+      living: ["living"],
     });
     const loadedDataScopes = new Set();
     const dataScopePromises = new Map();
@@ -4260,6 +4346,10 @@
       debugMessages: [],
       debugMessagesPayload: null,
       mobileWearableIngress: null,
+      livingProjection: null,
+      livingRefreshTimer: null,
+      livingActionBusy: false,
+      livingActionStatus: "Sandbox idle",
       monitoringCenter: null,
       hardwareReadiness: null,
       debugEndpointStates: {
@@ -4408,6 +4498,7 @@
 
     const routeMeta = {
       home: ["Home", "Scout Dashboard v0.1 alpha overview"],
+      living: ["Living", "Scout Emergency Mobile Closed-Loop Sandbox v0 live projection"],
       "features-lbs": ["Features / LBS", "location-based route projection and map evidence"],
       "features-workspace": ["Features / Workspace", "pretrip project, importer, edits, export and load tooling"],
       "features-import-new-trip": ["Features / Import New Trip", "operator-triggered GPX intake for a new pretrip workspace"],
@@ -4636,6 +4727,36 @@
       if (scope === "weather") return loadWeatherData();
       if (scope === "debug") return loadDebugData();
       if (scope === "hardware") return loadHardwareData();
+      if (scope === "living") return loadLivingData();
+    }
+
+    async function loadLivingData() {
+      state.livingProjection = await fetchJson(DASHBOARD_LIVING_PATH, {
+        timeoutMs: FETCH_TIMEOUT_MS,
+      });
+    }
+
+    function stopLivingRefresh() {
+      if (!state.livingRefreshTimer) return;
+      window.clearTimeout(state.livingRefreshTimer);
+      state.livingRefreshTimer = null;
+    }
+
+    function scheduleLivingRefresh() {
+      stopLivingRefresh();
+      if (state.route !== "living") return;
+      state.livingRefreshTimer = window.setTimeout(async () => {
+        state.livingRefreshTimer = null;
+        try {
+          await loadDataScope("living", {force: true});
+          if (state.route === "living") render();
+        } catch (error) {
+          state.livingActionStatus = `Living refresh failed: ${String(error?.message || error)}`;
+          if (state.route === "living") render();
+        } finally {
+          if (state.route === "living") scheduleLivingRefresh();
+        }
+      }, LIVING_REFRESH_INTERVAL_MS);
     }
 
     async function loadProjectData() {
@@ -4954,6 +5075,19 @@
         if (saveState.status === "failed") truth.surface = "Degraded";
         if (saveState.status === "failed") truth.mode = "Degraded";
       }
+      if (route === "living") {
+        const projection = state.livingProjection || {};
+        const available = projection.status && projection.status !== "unavailable";
+        truth.surface = available ? "Operational sandbox observer" : "Sandbox idle";
+        truth.data = available
+          ? `${projection.status} · revision ${projection.revision || 0}`
+          : "No sandbox run loaded";
+        truth.verification = available
+          ? "Polling Scout Living projection"
+          : "Run the local closed-loop fixture";
+        truth.provenance = "Synthetic replay · candidate-only · production sent=false";
+        truth.mode = "Technical Prototype";
+      }
       const requiredScopes = dataScopesForRoute(route);
       const loadingScopes = requiredScopes.filter((scope) => !loadedDataScopes.has(scope) && !state.dataScopeErrors?.[scope]);
       if (loadingScopes.length) {
@@ -4999,6 +5133,8 @@
         : (routeMeta[route] || routeMeta.home);
       document.getElementById("pageTitle").textContent = meta[0];
       render();
+      if (route === "living") scheduleLivingRefresh();
+      else stopLivingRefresh();
       if (loadRouteData) void loadDataForRoute(route);
     }
 
@@ -5104,6 +5240,7 @@
         });
       }
       if (route === "agent") return renderAgentPage();
+      if (route === "living") return renderLivingPage();
       if (route === "emergency") return renderEmergencyPage();
       if (route === "debug") return renderDebugPage();
       if (route === "observer") return renderObserverPage();
@@ -6512,6 +6649,234 @@
           ${renderMetricPanel("Experience Guide", [["Focus", "route context and observation points"], ["Output", "where to stop and why"]])}
         </div>
       `;
+    }
+
+    function livingTone(value) {
+      const text = String(value || "").toLowerCase();
+      if (["verified", "normal", "ready", "accepted"].some(token => text.includes(token))) return "ok";
+      if (["alert", "retreat", "distress", "failed", "cancelled"].some(token => text.includes(token))) return "bad";
+      return "warn";
+    }
+
+    function renderLivingPage() {
+      const projection = state.livingProjection || {};
+      const unavailable = !projection.status || projection.status === "unavailable";
+      const scenario = projection.scenario || {};
+      const ingress = projection.ingress || {};
+      const route = projection.route || {};
+      const safety = projection.safety || {};
+      const packet = projection.alert_packet || null;
+      const approval = projection.approval || null;
+      const attempt = projection.transport_attempt || null;
+      const receipt = projection.transport_receipt || null;
+      const gates = asArray(safety.gates);
+      const timeline = asArray(projection.timeline).slice(-14).reverse();
+      const boundary = projection.boundary || {};
+      const disabled = state.livingActionBusy ? "disabled" : "";
+      const approveDisabled = state.livingActionBusy || !packet || approval?.decision === "agree_send" ? "disabled" : "";
+      const receiptDisabled = state.livingActionBusy || approval?.decision !== "agree_send" || Boolean(receipt) ? "disabled" : "";
+
+      return `
+        <section class="panel" data-living-surface="true">
+          <div class="panel-header">
+            <div>
+              <h3>Scout Emergency Mobile Closed-Loop Sandbox v0</h3>
+              <p>Living observes the real SensorLogger handler, route gates, reducer candidate, mobile approval, and sandbox receipt.</p>
+            </div>
+            <span class="chip ${unavailable ? "warn" : livingTone(projection.status)}">${escapeHtml(projection.status || "unavailable")}</span>
+          </div>
+          <div class="panel-body">
+            <div class="living-actions" aria-label="Living sandbox controls">
+              <button type="button" data-living-action="run" ${disabled}>Run ridge distress replay</button>
+              <button type="button" data-living-action="approve" ${approveDisabled}>Approve sandbox transport</button>
+              <button type="button" data-living-action="receipt" ${receiptDisabled}>Record simulated delivery</button>
+              <button type="button" data-living-action="refresh" ${disabled}>Refresh now</button>
+              <a href="/emergency/mobile-approval-v0?living=1" target="_blank" rel="noreferrer">Open Emergency Mobile UI</a>
+            </div>
+            <p class="mono" role="status" aria-live="polite">${escapeHtml(state.livingActionStatus)} · auto refresh=${LIVING_REFRESH_INTERVAL_MS}ms</p>
+          </div>
+        </section>
+        <div style="height:12px"></div>
+        ${unavailable ? `
+          <section class="panel">
+            <div class="panel-header"><h3>No active sandbox run</h3><span class="chip warn">candidate-only</span></div>
+            <div class="panel-body">
+              <p>Run the local fixture to create a phone + wearable ingress trace and reducer candidate. Nothing here calls the runtime safety API or sends outbound.</p>
+              <p class="mono">candidate-only / runtime truth=false · production sent=false</p>
+            </div>
+          </section>
+        ` : `
+          <div class="living-hero">
+            <section class="panel">
+              <div class="panel-header"><h3>Scenario / Ingress</h3><span class="chip info">revision ${escapeHtml(formatInteger(projection.revision || 0))}</span></div>
+              <div class="panel-body">
+                <div class="metric-line">
+                  <div class="metric-row"><span>Scenario</span><span class="mono">${escapeHtml(scenario.scenario_id || "--")}</span></div>
+                  <div class="metric-row"><span>Source mode</span><span>${escapeHtml(scenario.source_mode || "--")}</span></div>
+                  <div class="metric-row"><span>Ingress adapter</span><span>${escapeHtml(ingress.adapter || "--")}</span></div>
+                  <div class="metric-row"><span>Ingress mode</span><span>${escapeHtml(ingress.mode || "--")}</span></div>
+                  <div class="metric-row"><span>Messages / devices</span><span>${escapeHtml(formatInteger(ingress.accepted_message_count || 0))} / ${escapeHtml(formatInteger(ingress.device_count || 0))}</span></div>
+                  <div class="metric-row"><span>Sensors</span><span>${escapeHtml(asArray(ingress.sensor_names).join(", ") || "none")}</span></div>
+                  <div class="metric-row"><span>Broker truth</span><span>not connected · synthetic direct feed</span></div>
+                </div>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-header"><h3>Route Match</h3><span class="chip ok">${escapeHtml(route.fix_quality || "unknown")}</span></div>
+              <div class="panel-body">
+                <div class="metric-line">
+                  <div class="metric-row"><span>Location ref</span><span class="mono">${escapeHtml(route.location_ref || "--")}</span></div>
+                  <div class="metric-row"><span>Progress</span><span>${escapeHtml(numberText(route.route_progress_m, 0))} m</span></div>
+                  <div class="metric-row"><span>Next CP</span><span>${escapeHtml(route.checkpoint_id || "--")} · ${escapeHtml(numberText(route.distance_to_checkpoint_m, 0))} m</span></div>
+                  <div class="metric-row"><span>Heading</span><span>${escapeHtml(numberText(route.heading_deg, 1))}° · ${escapeHtml(route.travel_direction || "--")}</span></div>
+                  <div class="metric-row"><span>Accuracy</span><span>${escapeHtml(numberText(route.horizontal_accuracy_m, 1))} m · synthetic</span></div>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div style="height:12px"></div>
+          <section class="panel">
+            <div class="panel-header">
+              <h3>Six Safety Gates / Reducer Candidate</h3>
+              <span class="chip ${livingTone(safety.ln_level_candidate)}">${escapeHtml(safety.ln_level_candidate || "unknown")}</span>
+            </div>
+            <div class="panel-body">
+              <p class="mono">selected=${escapeHtml(safety.selected_gate_id || "none")} · adapter=${escapeHtml(safety.phase1_adapter_status || "unknown")} · candidate-only / runtime truth=false</p>
+              <div class="living-gate-grid">
+                ${gates.map(gate => `
+                  <article class="living-gate" data-tone="${livingTone(gate.severity)}">
+                    <strong>${escapeHtml(gate.gate_id || "unknown gate")}</strong>
+                    <span>${escapeHtml(gate.state_candidate || "unknown")} · ${escapeHtml(gate.severity || "none")}</span>
+                    <span>${escapeHtml(gate.ln_level_candidate || "L0_NORMAL")} · confidence=${escapeHtml(gate.confidence || "low")}</span>
+                  </article>
+                `).join("")}
+              </div>
+            </div>
+          </section>
+          <div style="height:12px"></div>
+          <div class="grid-3">
+            <section class="panel">
+              <div class="panel-header"><h3>Alert Packet</h3><span class="chip ${livingTone(packet?.status)}">${escapeHtml(packet?.status || "none")}</span></div>
+              <div class="panel-body living-status-stack">
+                <span class="mono">${escapeHtml(packet?.packet_id || "--")}</span>
+                <span class="mono">hash=${escapeHtml(String(packet?.sha256 || "--").slice(0, 16))}</span>
+                <span>${escapeHtml(packet?.summary || "No packet")}</span>
+                <strong>production sent=false</strong>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-header"><h3>Mobile Approval</h3><span class="chip ${approval ? "info" : "warn"}">${escapeHtml(approval?.decision || "pending")}</span></div>
+              <div class="panel-body living-status-stack">
+                <span class="mono">${escapeHtml(approval?.approval_id || "no approval artifact")}</span>
+                <span class="mono">packet=${escapeHtml(approval?.source_packet_id || "--")}</span>
+                <span>requested=${escapeHtml(String(approval?.external_send_requested ?? false))}</span>
+                <strong>performed=false · Phase 1 mutation=false</strong>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-header"><h3>Sandbox Transport</h3><span class="chip ${receipt ? livingTone(receipt.outcome) : "warn"}">${escapeHtml(receipt?.outcome || "not attempted")}</span></div>
+              <div class="panel-body living-status-stack">
+                <span class="mono">${escapeHtml(attempt?.attempt_id || "no sandbox attempt")}</span>
+                <span class="mono">${escapeHtml(receipt?.receipt_id || "no receipt")}</span>
+                <span class="mono">receipt attempt=${escapeHtml(receipt?.source_attempt_id || "--")}</span>
+                <span>simulated delivery=${escapeHtml(String(receipt?.sandbox_delivery_verified ?? false))}</span>
+                <strong>network=false · production delivery=false · sent=false</strong>
+              </div>
+            </section>
+          </div>
+          <div style="height:12px"></div>
+          <section class="panel" data-living-timeline="true">
+            <div class="panel-header"><h3>Closed-Loop Timeline</h3><span class="chip info">${escapeHtml(formatInteger(timeline.length))} visible</span></div>
+            <div class="panel-body living-timeline">
+              ${timeline.map(event => `
+                <article class="living-event">
+                  <span class="living-event-index">#${escapeHtml(formatInteger(event.sequence || 0))}</span>
+                  <div><strong>${escapeHtml(event.kind || "event")}</strong><small>${escapeHtml(event.summary || "")}</small></div>
+                  <small>offset ${escapeHtml(formatInteger(event.observed_at_offset_s || 0))}s</small>
+                </article>
+              `).join("") || "<p>No events.</p>"}
+            </div>
+          </section>
+          <div style="height:12px"></div>
+          <section class="panel">
+            <div class="panel-header"><h3>Hard Boundaries</h3><span class="chip ok">fail closed</span></div>
+            <div class="panel-body">
+              <div class="metric-line">
+                <div class="metric-row"><span>Runtime safety truth</span><span>${escapeHtml(String(boundary.runtime_safety_truth ?? false))}</span></div>
+                <div class="metric-row"><span>Phase 1 L0-L4 mutated</span><span>${escapeHtml(String(boundary.phase1_l0_l4_state_mutated ?? false))}</span></div>
+                        <div class="metric-row"><span>Runtime safety API called</span><span>${escapeHtml(String(boundary.safety_api_called ?? false))}</span></div>
+                <div class="metric-row"><span>Real outbound send</span><span>${escapeHtml(String(boundary.real_outbound_send_performed ?? false))}</span></div>
+                <div class="metric-row"><span>Hardware control</span><span>${escapeHtml(String(boundary.hardware_control_invoked ?? false))}</span></div>
+                <div class="metric-row"><span>MQTT network publish</span><span>${escapeHtml(String(boundary.network_mqtt_publish_performed ?? false))}</span></div>
+              </div>
+            </div>
+          </section>
+        `}
+      `;
+    }
+
+    async function performLivingAction(action) {
+      if (state.livingActionBusy) return;
+      state.livingActionBusy = true;
+      state.livingActionStatus = `Running Living action: ${action}`;
+      render();
+      try {
+        let projection;
+        if (action === "run") {
+          const now = new Date();
+          projection = await postJson(`${DASHBOARD_LIVING_PATH}/scenarios/run`, {
+            scenario_id: "sandbox-ridge-distress-v0",
+            run_id: `dashboard-run-${now.getTime()}`,
+            project_id: projectId(),
+            source_mode: "synthetic_replay",
+            profile: "ridge_distress",
+            observed_at: now.toISOString(),
+            confirm_sandbox_run: true,
+          });
+        } else if (action === "approve") {
+          const current = state.livingProjection || {};
+          const packet = current.alert_packet;
+          if (!packet) throw new Error("No current sandbox alert packet");
+          projection = await postJson(`${DASHBOARD_LIVING_PATH}/approvals`, {
+            scenario_id: current.scenario?.scenario_id,
+            packet_id: packet.packet_id,
+            packet_sha256: packet.sha256,
+            decision: "agree_send",
+            idempotency_key: `dashboard-approve-${current.scenario?.run_id}-${current.revision}`,
+            confirm_sandbox_action: true,
+          });
+        } else if (action === "receipt") {
+          const current = state.livingProjection || {};
+          const approval = current.approval;
+          if (!approval) throw new Error("No current sandbox approval artifact");
+          projection = await postJson(`${DASHBOARD_LIVING_PATH}/transport/receipts`, {
+            scenario_id: current.scenario?.scenario_id,
+            approval_id: approval.approval_id,
+            outcome: "simulated_verified",
+            idempotency_key: `dashboard-receipt-${current.scenario?.run_id}-${current.revision}`,
+            confirm_simulated_transport: true,
+          });
+        } else {
+          projection = await fetchJson(DASHBOARD_LIVING_PATH);
+        }
+        state.livingProjection = projection;
+        loadedDataScopes.add("living");
+        state.livingActionStatus = `Living action complete: ${action} · ${projection.status || "unknown"}`;
+      } catch (error) {
+        state.livingActionStatus = `Living action failed: ${String(error?.message || error)}`;
+      } finally {
+        state.livingActionBusy = false;
+        render();
+        scheduleLivingRefresh();
+      }
+    }
+
+    function bindLivingControls() {
+      document.querySelectorAll("[data-living-action]").forEach(button => {
+        button.addEventListener("click", () => {
+          void performLivingAction(button.dataset.livingAction || "refresh");
+        });
+      });
     }
 
     function renderEmergencyPage() {
@@ -9648,7 +10013,30 @@
       return base.map(([time, title, summary]) => ({ time, title, summary }));
     }
 
+    function renderLivingEvidenceDrawer() {
+      const projection = state.livingProjection || {};
+      const refs = asArray(projection.source_refs);
+      return `
+        <section class="drawer-section" id="dashboardEvidenceHeader">
+          <h3>Living Evidence</h3>
+          <div class="drawer-list">
+            <div class="item"><strong>Endpoint</strong><span class="mono">${DASHBOARD_LIVING_PATH}</span></div>
+            <div class="item"><strong>Scenario</strong><span class="mono">${escapeHtml(projection.scenario?.scenario_id || "not loaded")}</span></div>
+            <div class="item"><strong>Boundary</strong><span class="mono">candidate-only / runtime truth=false</span></div>
+            <div class="item"><strong>Delivery</strong><span class="mono">production sent=false</span></div>
+          </div>
+        </section>
+        <section class="drawer-section">
+          <h3>Artifact Refs</h3>
+          <div class="drawer-list">
+            ${refs.map(ref => `<div class="item"><strong>ref</strong><span class="mono">${escapeHtml(ref)}</span></div>`).join("") || '<div class="item"><strong>ref</strong><span>Run the sandbox to populate evidence.</span></div>'}
+          </div>
+        </section>
+      `;
+    }
+
     function renderEvidenceDrawer(route) {
+      if (route === "living") return renderLivingEvidenceDrawer();
       const force = SIX_FORCES.find((item) => item.route === route);
       const title = force ? `${force.label} Evidence` : "Evidence";
       return `
@@ -9680,6 +10068,7 @@
     }
 
     function bindRenderedControls() {
+      bindLivingControls();
       const pretripMapFrame = document.getElementById("pretripMapFrame");
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
       const surfaceFrame = document.getElementById("surfaceFrame");

@@ -964,20 +964,50 @@
     }
 
     @media (max-width: 760px) {
+      html,
+      body {
+        width: 100%;
+        max-width: 100vw;
+        overflow-x: hidden;
+      }
+
       .workspace {
         min-width: 0;
+        width: 100%;
+        max-width: 100vw;
         grid-template-columns: 1fr;
         gap: 12px;
         padding: 10px;
+        overflow: hidden;
       }
 
       .mobile-device {
         width: 100%;
+        min-width: 0;
+        max-width: 100%;
         min-height: 0;
         padding: 0;
         border-radius: 0;
         border: 0;
         background: transparent;
+        overflow: hidden;
+      }
+
+      .surface,
+      .screen-body,
+      .section,
+      .status-bar,
+      .app-header,
+      .bottom-bar,
+      .gate-dashboard,
+      .gate-card,
+      .decision-grid,
+      .decision-btn,
+      .metric-grid,
+      .metric,
+      .evidence-frame {
+        min-width: 0;
+        max-width: 100%;
       }
 
       .surface {
@@ -986,7 +1016,22 @@
       }
 
       .desktop-console {
+        display: none;
         min-width: 0;
+      }
+
+      .status-bar span,
+      .bottom-bar > *,
+      .gate-card span,
+      .decision-btn strong,
+      .decision-btn span,
+      .metric strong {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .bottom-bar {
+        flex-wrap: wrap;
       }
 
       .desktop-header,
@@ -1024,7 +1069,7 @@
 
         <div class="screen-body">
           <section class="section" aria-labelledby="mobile-state-title">
-            <h2 id="mobile-state-title">Production Path State</h2>
+            <h2 id="mobile-state-title" data-bind="pathStateTitle">Production Path State</h2>
             <div class="gate-dashboard" data-gate-dashboard="mobile">
               <div class="gate-card" data-gate="physiologic_gate" data-state="danger">
                 <span class="physio-icon" aria-hidden="true"></span>
@@ -1192,6 +1237,8 @@
             Load dry-run JSON
             <input type="file" accept="application/json,.json" data-file-input>
           </label>
+          <button class="workspace-load" type="button" data-load-living>Connect Living</button>
+          <span class="state-chip" data-bind="livingStatus">not connected</span>
           <span class="state-chip" data-bind="transportState">dry-run</span>
         </div>
       </div>
@@ -1209,7 +1256,7 @@
       <div class="desktop-body">
         <div class="stack">
           <section class="section" aria-labelledby="desktop-state-title">
-            <h2 id="desktop-state-title">Production Path State</h2>
+            <h2 id="desktop-state-title" data-bind="pathStateTitle">Production Path State</h2>
             <div class="gate-dashboard" data-gate-dashboard="desktop">
               <div class="gate-card" data-gate="physiologic_gate" data-state="danger">
                 <span class="physio-icon" aria-hidden="true"></span>
@@ -1254,7 +1301,7 @@
             <div class="transport-row"><span>SMS bridge</span><span class="state-chip ok" data-bind="smsState">draft_ready</span></div>
             <div class="transport-row"><span>LoRa payload</span><span class="state-chip" data-bind="loraState">draft_ready</span></div>
             <div class="transport-row"><span>MQTT payload</span><span class="state-chip" data-bind="mqttState">draft_ready</span></div>
-            <div class="transport-row"><span>Verified delivery</span><span class="state-chip off" data-bind="deliveryState">not_reported</span></div>
+            <div class="transport-row"><span>Transport outcome</span><span class="state-chip off" data-bind="deliveryState">not_reported</span></div>
           </section>
 
           <section class="section" aria-labelledby="desktop-callout-title">
@@ -1384,6 +1431,8 @@
   <script>
     const DEFAULT_WORKSPACE_PROJECT_ID = "chilai_nanhua_day1";
     const WORKSPACE_LAYOUT_VERSION = "scout.workspace.v1";
+    const LIVING_ENDPOINT = "/admin/dashboard/living";
+    const LIVING_REFRESH_INTERVAL_MS = 3000;
     const WORKSPACE_ENDPOINT_NAMES = {
       project: "compact pretrip project view",
       admin_projection: "admin surface projection",
@@ -1501,6 +1550,8 @@
 
     let activePayload = sampleDryRun;
     let approvalArtifact = buildDecisionArtifact("pending_review");
+    let livingProjection = null;
+    let livingRefreshTimer = null;
 
     function initialWorkspaceProjectId() {
       const params = new URLSearchParams(location.search);
@@ -1534,6 +1585,134 @@
       return path.startsWith("http://") || path.startsWith("https://")
         ? path
         : `${apiBase()}${path}`;
+    }
+
+    async function fetchLivingProjection() {
+      const response = await fetch(workspaceUrl(LIVING_ENDPOINT), { cache: "no-store" });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
+      return response.json();
+    }
+
+    async function postLivingAction(path, payload) {
+      const response = await fetch(workspaceUrl(path), {
+        method: "POST",
+        headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || `${response.status} ${path}`);
+      return data;
+    }
+
+    function payloadFromLivingProjection(projection) {
+      const packet = projection.alert_packet || {};
+      const route = projection.route || {};
+      const safety = projection.safety || {};
+      const scenario = projection.scenario || {};
+      const drafts = Array.isArray(packet.transport_drafts) ? packet.transport_drafts : [];
+      const draft = (profile) => drafts.find((item) => item.profile === profile) || {};
+      const sms = draft("sms_text");
+      const lora = draft("lora_compact");
+      const mqtt = draft("mqtt_json");
+      return {
+        artifact_kind: "scout_alert_application_dry_run_result",
+        source_provider: "scout_emergency_mobile_closed_loop_sandbox",
+        workspace_layout: WORKSPACE_LAYOUT_VERSION,
+        workspace_project_id: scenario.project_id,
+        source_refs: projection.source_refs || [],
+        living_projection: projection,
+        living_gates: safety.gates || [],
+        packet: {
+          packet_id: packet.packet_id || `sandbox.packet:${scenario.scenario_id || "unknown"}`,
+          safety_level: packet.safety_level_candidate || safety.ln_level_candidate || "L0_NORMAL",
+          event_type: "sandbox_reducer_candidate",
+          selected_gate_id: packet.selected_gate_id || safety.selected_gate_id || "unknown_gate",
+          summary: packet.summary || "Sandbox projection loaded",
+          source_path: packet.source_reducer_ref || "living_projection",
+          sha256: packet.sha256 || "living-projection",
+          emergency_packet: {
+            route_id: route.route_id,
+            route_name: scenario.project_id,
+            segment_id: route.segment_id,
+            checkpoint_id: route.checkpoint_id,
+            map_target_ids: [route.segment_id, route.checkpoint_id].filter(Boolean),
+            location_ref: route.location_ref || "synthetic-location-ref",
+            party_count: 1,
+            condition_summary: packet.summary || safety.recommendation || "Sandbox review",
+            requested_action: packet.requested_action || "operator sandbox review",
+            emergency_contacts: ["119", "112"]
+          },
+          privacy: {
+            local_only: true,
+            raw_health_payload_shared: false,
+            raw_gpx_shared: false,
+            precise_coordinates_shared: false,
+            precise_timestamps_shared: false
+          },
+          boundary: {
+            application_layer_only: true,
+            outbound_send_performed: false,
+            hardware_transport_invoked: false,
+            safety_api_called: false,
+            medical_diagnosis: false,
+            workspace_write_performed: false,
+            runtime_safety_truth: false,
+            synthetic_scenario: true
+          }
+        },
+        rendered_messages: [
+          {
+            transport_profile: "sms_text",
+            body_text: sms.summary || "SCOUT SANDBOX ALERT DRAFT - NOT SENT",
+            sent: false
+          },
+          {
+            transport_profile: "lora_compact",
+            payload_json: { sandbox: true, packet_id: packet.packet_id, sent: false },
+            sent: false
+          },
+          {
+            transport_profile: "mqtt_json",
+            mqtt_topic: mqtt.topic_ref || `scout/sandbox/${scenario.scenario_id || "unknown"}/alerts`,
+            payload_json: { sandbox: true, packet_id: packet.packet_id, sent: false },
+            sent: false
+          }
+        ],
+        policy_decision: {
+          status: projection.status || "pending_approval",
+          external_send_allowed: false,
+          manual_copy_allowed: false,
+          operator_approval_present: Boolean(projection.approval)
+        }
+      };
+    }
+
+    async function loadLivingProjection({ schedule = true } = {}) {
+      const projection = await fetchLivingProjection();
+      livingProjection = projection.status === "unavailable" ? null : projection;
+      if (livingProjection) {
+        activePayload = payloadFromLivingProjection(livingProjection);
+        approvalArtifact = livingProjection.approval || buildDecisionArtifact("pending_review");
+        render(activePayload);
+      } else {
+        bindText("livingStatus", "no sandbox run");
+      }
+      if (schedule) scheduleLivingRefresh();
+      return livingProjection;
+    }
+
+    function scheduleLivingRefresh() {
+      if (livingRefreshTimer) window.clearTimeout(livingRefreshTimer);
+      livingRefreshTimer = window.setTimeout(async () => {
+        livingRefreshTimer = null;
+        try {
+          await loadLivingProjection({ schedule: false });
+        } catch (_error) {
+          bindText("livingStatus", "Living unavailable");
+        } finally {
+          if (livingProjection) scheduleLivingRefresh();
+        }
+      }, LIVING_REFRESH_INTERVAL_MS);
     }
 
     function packetFrom(payload) {
@@ -1823,7 +2002,9 @@
       updateGateState("physiologic_gate", physioState.state);
       bindText("packetStatus", policy.status || "pending_approval");
       bindText("selectedGate", packet.selected_gate_id || "unknown_gate");
-      bindText("sourceFreshness", "fresh / partial");
+      const living = payload.living_projection || null;
+      bindText("pathStateTitle", living ? "Shadow Reducer Candidate" : "Production Path State");
+      bindText("sourceFreshness", living?.route?.fix_quality || "fresh / partial");
       bindText("packetId", packet.packet_id || "scout_alert_packet");
       bindText("transportSummary", transportSummary(sms, lora, mqtt));
       bindText("transportState", policy.status || "dry-run");
@@ -1834,8 +2015,14 @@
       bindText("smsState", sms.body_text ? "draft_ready" : "missing");
       bindText("loraState", lora.payload_json ? "draft_ready" : "missing");
       bindText("mqttState", mqtt.payload_json ? "draft_ready" : "missing");
-      bindText("deliveryState", "not_reported");
-      bindText("decisionSummary", decisionSummary(policy));
+      bindText("deliveryState", living?.transport_receipt
+        ? `sandbox:${living.transport_receipt.outcome} · production=false`
+        : "not_reported");
+      bindText("decisionSummary", living?.transport_receipt?.sandbox_delivery_verified
+        ? "Sandbox delivery verified; production sent=false."
+        : decisionSummary(policy));
+      bindText("livingStatus", living ? `Living r${living.revision || 0}` : "not connected");
+      applyLivingGateStates(payload.living_gates || []);
 
       const packetPreview = {
         packet_id: packet.packet_id,
@@ -1875,6 +2062,20 @@
       });
     }
 
+    function applyLivingGateStates(gates) {
+      gates.forEach((gate) => {
+        const severity = String(gate.severity || "none");
+        const state = ["alert_review", "retreat_review"].includes(severity)
+          ? "danger"
+          : ["watch", "rest"].includes(severity) ? "watch" : "normal";
+        updateGateState(gate.gate_id, state);
+        document.querySelectorAll(`[data-gate="${gate.gate_id}"]`).forEach((node) => {
+          const label = node.querySelector("span:last-child");
+          if (label) label.textContent = `${gate.state_candidate || state} / ${severity}`;
+        });
+      });
+    }
+
     function transportSummary(sms, lora, mqtt) {
       const ready = [
         sms.body_text ? "SMS" : null,
@@ -1906,6 +2107,7 @@
         workspace_resource_status: workspaceState.status,
         workspace_source_refs: workspaceState.sourceRefs,
         workspace_endpoint_refs: workspaceState.endpointRefs,
+        scenario_id: activePayload.living_projection?.scenario?.scenario_id || null,
         selected_gate_id: packet.selected_gate_id || "unknown_gate",
         safety_level: packet.safety_level || "unknown_level",
         route_id: emergency.route_id || null,
@@ -1962,7 +2164,28 @@
       });
     }
 
-    function handleDecision(decision) {
+    async function syncLivingDecision(decision) {
+      if (!livingProjection) return false;
+      const packet = livingProjection.alert_packet || {};
+      const scenario = livingProjection.scenario || {};
+      const serverDecision = decisionLabels[decision] || decision;
+      const projection = await postLivingAction(`${LIVING_ENDPOINT}/approvals`, {
+        scenario_id: scenario.scenario_id,
+        packet_id: packet.packet_id,
+        packet_sha256: packet.sha256,
+        decision: serverDecision,
+        idempotency_key: `mobile-${scenario.run_id}-${livingProjection.revision}-${serverDecision}`,
+        confirm_sandbox_action: true
+      });
+      livingProjection = projection;
+      activePayload = payloadFromLivingProjection(projection);
+      approvalArtifact = projection.approval || approvalArtifact;
+      render(activePayload);
+      scheduleLivingRefresh();
+      return true;
+    }
+
+    async function handleDecision(decision) {
       approvalArtifact = buildDecisionArtifact(decision);
       renderArtifact();
       if (decision === "copy_packet") {
@@ -1971,11 +2194,33 @@
           navigator.clipboard.writeText(sms.body_text).catch(() => {});
         }
       }
+      try {
+        await syncLivingDecision(decision);
+      } catch (error) {
+        approvalArtifact = {
+          ...approvalArtifact,
+          living_sync_status: "failed",
+          living_sync_error: String(error.message || error),
+          sent: false
+        };
+        renderArtifact();
+      }
     }
 
-    function handleCallout(channel) {
+    async function handleCallout(channel) {
       approvalArtifact = buildCalloutArtifact(channel);
       renderArtifact();
+      try {
+        await syncLivingDecision(channel === "voice" ? "voice_callout" : "message_callout");
+      } catch (error) {
+        approvalArtifact = {
+          ...approvalArtifact,
+          living_sync_status: "failed",
+          living_sync_error: String(error.message || error),
+          sent: false
+        };
+        renderArtifact();
+      }
     }
 
     function affectedLayerIds(layerId) {
@@ -2034,11 +2279,20 @@
     }
 
     document.querySelectorAll("[data-decision]").forEach((button) => {
-      button.addEventListener("click", () => handleDecision(button.dataset.decision));
+      button.addEventListener("click", () => { void handleDecision(button.dataset.decision); });
     });
 
     document.querySelectorAll("[data-callout]").forEach((button) => {
-      button.addEventListener("click", () => handleCallout(button.dataset.callout));
+      button.addEventListener("click", () => { void handleCallout(button.dataset.callout); });
+    });
+
+    document.querySelectorAll("[data-load-living]").forEach((button) => {
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        loadLivingProjection()
+          .catch((error) => bindText("livingStatus", `Living failed: ${error.message || error}`))
+          .finally(() => { button.disabled = false; });
+      });
     });
 
     document.querySelectorAll("[data-layer-toggle]").forEach((button) => {
@@ -2092,6 +2346,11 @@
     });
 
     render(activePayload);
+    if (new URLSearchParams(location.search).get("living") === "1") {
+      loadLivingProjection().catch((error) => {
+        bindText("livingStatus", `Living failed: ${error.message || error}`);
+      });
+    }
   </script>
 </body>
 </html>

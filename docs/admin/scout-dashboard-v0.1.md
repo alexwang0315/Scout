@@ -2413,3 +2413,21 @@ GPT Pro closure corrections:
   (`SCOUT-OBS-001` and `SCOUT-IA-001`), found no remaining false claim or
   evidence gap blocking the original 16 issues, and explicitly concluded:
   `我同意原 report 的 P0-P2 remediation 已完成（approval-dependent real effects 保持 fail-closed）。`
+
+## 2026-07-17 Living closed-loop sandbox slice
+
+- Added the `Living` route to observe one server-side Emergency Mobile sandbox
+  run from synthetic SensorLogger phone/wearable ingress through all six shadow
+  gates, reducer candidate, immutable alert packet, mobile approval, sandbox
+  transport attempt/receipt, and a contiguous causal timeline.
+- `Living` polls `GET /admin/dashboard/living` and its controls use only the
+  isolated `/admin/dashboard/living/*` sandbox namespace. The page exposes the
+  packet/approval/attempt/receipt lineage instead of inferring progress from UI
+  timers.
+- The Emergency Mobile v0 HTML can load the same projection and submit a
+  packet-bound decision. It continues to preserve local callout alternatives
+  and does not claim a production send.
+- All displayed locations are privacy-safe route references. Synthetic replay,
+  reducer candidates, attempts, and receipts remain separate from Phase 1
+  truth, hardware control, broker publish, production transport, and verified
+  delivery.

@@ -1414,6 +1414,35 @@ This update does not call `/safety/*`, change Phase 1 runtime safety behavior,
 control hardware, perform outbound sends, or treat synthetic observations as
 real-user/runtime safety truth.
 
+### 2026-07-17 Emergency Mobile Closed-Loop Sandbox workspace record
+
+The Emergency Mobile Closed-Loop Sandbox v0 adds a repo-local development
+projection at `outputs/dashboard/living/`; it does **not** update the active
+pre-trip workspace or any runtime safety store. The synthetic scenario carries
+the traceable `project_id=chilai_nanhua_day1_scoutAI`, but its coordinate input
+is reduced in the Living projection to a privacy-safe route/segment reference.
+
+Its artifact flow is:
+
+```text
+generated scenario fixture
+  -> isolated SensorLogger observer evidence
+  -> runtime shadow replay evidence
+  -> candidate alert packet
+  -> packet-bound approval artifact
+  -> sandbox transport attempt + simulated receipt
+  -> Dashboard Living projection and event timeline
+```
+
+Every projection and nested effect artifact preserves
+`candidate_only=true`, `runtime_safety_truth=false`, production `sent=false`,
+and source refs/hashes. No artifact is added to workspace retrieval catalogs,
+Total Info, Phase 1 state, live GNSS history, or weather truth. The observer is
+fed through its real handler with a generated fixture, but the recorded ingress
+mode is `synthetic_direct_feed`; broker connection and network publish are both
+false. These records are therefore development replay evidence only and must
+not be returned as real-user or field-session facts by workspace tools.
+
 ### Remaining Backlog
 
 The next useful slices are:

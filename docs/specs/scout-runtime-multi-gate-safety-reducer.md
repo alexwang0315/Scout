@@ -64,6 +64,7 @@ must not directly own Phase 1 safety truth.
 | 31. macOS dry-run evidence writer | `[x]` | `run_alert_application_dry_run()` writes local packet, SMS, LoRa, MQTT, policy, evidence, and result artifacts. |
 | 32. Admin/debug timeline projection event | `[x]` | `alert_application_projection_events()` emits read-only timeline evidence with map refs and `sent=false`. |
 | 33. Emergency Mobile Approval UI v0 | `[x]` | `docs/emergency/scout-emergency-mobile-approval-v0.html` provides side-by-side mobile and desktop approval surfaces, icon-first production path status, local approval/callout artifact preview, and offline-map layer toggles; no production send. |
+| 34. Emergency Mobile Closed-Loop Sandbox v0 | `[x]` | A synthetic phone/wearable scenario exercises the SensorLogger handler and real shadow reducer, then binds an immutable candidate packet to mobile approval, a sandbox-only transport attempt/receipt, and the Dashboard `Living` projection. Phase 1 truth, network transport, hardware, and production delivery remain untouched. |
 
 ```mermaid
 flowchart LR
@@ -752,6 +753,70 @@ Safety and privacy rules:
 - It must not ask the user to read long evidence tables during an emergency.
 - It must preserve source refs, sha256, data quality, privacy, and boundary
   fields for every approval or rejection action.
+
+## Emergency Mobile Closed-Loop Sandbox v0
+
+The v0 closed-loop sandbox is an executable **alert acknowledgement loop**, not
+a production safety-control loop. It proves that the server can observe a
+synthetic phone/wearable scenario, execute the existing shadow reducer, prepare
+an immutable alert candidate, accept a packet-bound operator decision, record a
+sandbox-only transport attempt and outcome, and expose the causal chain in the
+Dashboard `Living` route.
+
+The shared local API boundary is:
+
+```text
+GET  /admin/dashboard/living
+GET  /admin/dashboard/living/events
+POST /admin/dashboard/living/scenarios/run
+POST /admin/dashboard/living/approvals
+POST /admin/dashboard/living/transport/receipts
+```
+
+The first scenario is allow-listed in code as `ridge_distress`. It invokes
+`SensorLoggerMqttObserver.handle_message()` directly with generated phone and
+wearable messages and stores the observer's normal evidence artifacts in a
+sandbox run directory. This is a faithful parser/observer-handler exercise, but
+it is deliberately labeled `synthetic_direct_feed`: it does not connect to a
+broker, publish MQTT, or prove live transport. The route/condition fixture then
+executes `run_runtime_shadow_replay()` with the Phase 1 adapter and mutation
+disabled.
+
+The state domains must never be collapsed:
+
+1. `safety` is a reducer **candidate** with `runtime_safety_truth=false` and
+   `phase1_l0_l4_state_mutated=false`.
+2. `alert_packet` is an immutable candidate bound to the reducer hash. Its
+   production `sent` field remains false.
+3. `approval` is a server-accepted operator action bound to the packet id and
+   hash. An `agree_send` decision authorizes only the sandbox executor.
+4. `transport_attempt` binds scenario, approval id/hash, and packet id/hash.
+   It records `network_connection_attempted=false`,
+   `production_transport_invoked=false`, and `sent=false`.
+5. `transport_receipt` binds the attempt and packet hashes. A
+   `simulated_verified` outcome sets only `sandbox_delivery_verified=true`;
+   production delivery and `sent` remain false.
+6. `Living` is a read projection plus contiguous server-side timeline. It is
+   never an authority that writes safety state.
+
+The mobile prototype may connect to the same `Living` projection and submit its
+one-tap decision to the approval endpoint. The Dashboard `Living` page polls the
+projection and displays scenario identity, ingress mode, sensor/device counts,
+privacy-safe route reference, all six gate candidates, reducer selection,
+packet hash, approval lineage, simulator attempt/receipt lineage, timeline, and
+hard-boundary flags. Client animation or a timer alone is not accepted as
+closed-loop evidence.
+
+Artifacts are written under `outputs/dashboard/living/runs/{run_id}/` when the
+default Admin API is used. They are synthetic, candidate-only development
+evidence. They are not a Scout workspace source of truth, a Phase 1 state store,
+or proof of a broker connection, production transport, real location, or real
+delivery.
+
+Required deterministic checks include successful replay, stale packet/hash
+rejection, approval idempotency, refusal to create a receipt without
+`agree_send`, exact receipt-to-attempt/approval/packet correlation, and
+production/network/hardware boundary flags remaining false.
 
 ## Non-Goals
 
