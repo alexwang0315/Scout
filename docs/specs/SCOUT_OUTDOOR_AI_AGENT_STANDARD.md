@@ -371,6 +371,28 @@ Boss Point 的中心線，也不得直接把粗略 GPX 幾何當成地形壓力�
 午餐點、營地等 rest-stop context 只能作為解釋脈絡，不應單獨把平坦休息
 區升級成 Boss Point。
 
+Reference GPX 的配速/耗能研究必須使用每一對 trackpoint 的實際 `delta_t`，
+不得假設固定取樣間隔，也不得直接把「每點距離」稱為速度或功率。Scout 可將
+reference traversal 投影到 Overpass/risk-ribbon 中心線，產生 P25/P50/P75
+配速、grade-adjusted geographic viscosity、正爬升位能功率 `W/kg` 與 evidence
+quality。坡度關係必須至少以 `0-10%`、`10-30%`、`30-60%`、`60%+`
+分層並拆分上坡/下坡；空樣本層不可隱藏，也不可用單一 pooled correlation
+宣稱坡度影響很弱。歷史移動難度探索預設使用嚴格 `1-10 km/h`，以保留
+`1-3 km/h` 的持續技術慢行；`3-10 km/h` 保留為敏感度對照。無論速度窗為何，必須
+同時揭露原始 interval 的 logger-frequency bias、等權 traversal 結果，以及
+篩選掉低速耗竭表現所造成的 range restriction；不得用篩選後的近零相關宣稱
+持續時間不影響體能。但 GPX 單獨無法辨識自由意志下的舒適度、背包重量、絕對 watts/kJ、
+代謝耗能或公開上傳者的體能分位。詳細 V0 契約與真實 workspace 反例見
+`docs/specs/pretrip-reference-pace-energy-analysis.md`。這些輸出仍是 pretrip
+candidate evidence，不是 personal safe pace 或 runtime safety truth。
+
+在沒有 IMU/PDR/生理感測器時，Scout 可產生 candidate-only 的
+`historical_mobility_demand_vector`，獨立保留 terrain demand、持續慢行黏滯、
+risk passage pressure、stop-go burden、pace variability、endurance exposure
+與 evidence quality。高 risk 區速度較快只能解釋為縮短暴露時間的行為候選，
+不得解釋為路線較容易或建議加速。未經個人 completed-trip 或獨立難度標籤校準，
+不得把此向量壓成個人成功率或假精確的通用難度分數。
+
 `User Pace Coefficient / Energy Reserve` 是使用者或隊伍最脆弱成員的
 能力與當下儲備，不得用隊伍平均值替代。沒有穿戴式生命徵象時，仍可用
 completed trip GPX、capability timeline、地形-時間模型、休息頻率、後段
