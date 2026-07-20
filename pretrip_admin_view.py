@@ -25,6 +25,9 @@ from scout_companion_match_models import (
 from post_analysis_energy_feedback import POST_ANALYSIS_ENERGY_FEEDBACK_REF
 from pretrip_layer_preparation import build_layer_preparation_not_prepared_view
 from pretrip_energy_projection import DEFAULT_PRETRIP_ENERGY_PROJECTION_REF
+from pretrip_route_architecture_intelligence import (
+    build_route_architecture_intelligence,
+)
 from scout_energy_reserve_monitor import build_energy_reserve_monitor_from_view
 from scout_runtime_physiologic_timeline import (
     PhysiologicTimelineProjection,
@@ -698,6 +701,18 @@ def build_pretrip_admin_view(
         route_summary=route_summary,
     )
     reference_tracks = _load_optional_json(artifacts.get("reference_tracks"))
+    reference_pace_energy_analysis = _load_optional_json(
+        artifacts.get("reference_pace_energy_analysis")
+    )
+    route_pressure_profile = _load_optional_json(
+        artifacts.get("route_pressure_profile")
+    )
+    normalized_route_architecture = _load_optional_json(
+        artifacts.get("route_architecture")
+    )
+    compiled_mission_graph = _load_optional_json(
+        artifacts.get("compiled_mission_graph")
+    )
     reference_segment_timing = _load_optional_json(
         artifacts.get("reference_segment_timing")
     )
@@ -1107,6 +1122,23 @@ def build_pretrip_admin_view(
             remote_summary, source_refs["remote_summary"]
         ),
     }
+    planning_tab["route_architecture_intelligence"] = (
+        build_route_architecture_intelligence(
+            project_id=project_id,
+            route=planning_tab["route"],
+            checkpoints=mission_checkpoints,
+            segments=mission_segments,
+            retreat_routes=mission_retreat_routes,
+            reference_pace_energy_analysis=reference_pace_energy_analysis,
+            route_pressure_profile=route_pressure_profile,
+            boss_points=boss_points,
+            normalized_route_architecture=normalized_route_architecture,
+            compiled_mission_graph=compiled_mission_graph,
+            eta=eta,
+            weather_daylight=weather_daylight,
+            source_refs=source_refs,
+        )
+    )
     planning_tab["environment_values"] = _environment_values_summary(
         project_id,
         source_refs=source_refs,
@@ -1419,6 +1451,9 @@ def build_pretrip_admin_view(
         "major_critical_points": planning_tab.get("major_critical_points"),
         "boss_points": planning_tab.get("boss_points"),
         "mileage_tag_alignment": planning_tab.get("mileage_tag_alignment"),
+        "route_architecture_intelligence": planning_tab[
+            "route_architecture_intelligence"
+        ],
         "mcp_review_actions": planning_tab.get("mcp_review_actions"),
         "spatial_imprints": planning_tab.get("spatial_imprints"),
         "departure_bundle": planning_tab["departure_bundle"],
@@ -1622,6 +1657,9 @@ def resolve_pretrip_project_artifacts(
         "mileage_tag_alignment_geojson": "mileage_tag_alignment_geojson_ref",
         "route_pressure_profile": "route_pressure_profile_ref",
         "route_pressure_profile_geojson": "route_pressure_profile_geojson_ref",
+        "reference_pace_energy_analysis": "reference_pace_energy_analysis_ref",
+        "route_architecture": "route_architecture_ref",
+        "compiled_mission_graph": "compiled_mission_graph_ref",
         "spatial_imprint_candidates": "spatial_imprint_candidates_ref",
         "spatial_imprint_reviews": "spatial_imprint_reviews_ref",
         "spatial_imprint_set": "spatial_imprint_set_ref",
@@ -1645,6 +1683,14 @@ def resolve_pretrip_project_artifacts(
         "companion_match_review": COMPANION_MATCH_REVIEW_REF,
         "post_analysis_energy_feedback": POST_ANALYSIS_ENERGY_FEEDBACK_REF,
         "reference_segment_timing": REFERENCE_SEGMENT_TIMING_REF,
+        "reference_pace_energy_analysis": (
+            "outputs/reference_pace_energy_analysis.json"
+        ),
+        "route_pressure_profile": "outputs/route_pressure_profile.json",
+        "route_architecture": (
+            "normalized/architecture/route_architecture.json"
+        ),
+        "compiled_mission_graph": "outputs/compiled_mission_graph.json",
     }.items():
         artifacts.setdefault(artifact_key, resolved_project_root / default_ref)
     resolved_root = resolved_project_root.resolve()

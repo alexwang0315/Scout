@@ -586,6 +586,109 @@ Scout 的路線力是：
 
 > 這條路線的主要風險不是總長，而是難點位於回程疲勞後段，且過中段後撤退選項少。若隊伍速度低於預估，建議在 11:30 前折返。
 
+### 9.4 Architecture / Route Architecture Intelligence 功能頁
+
+此頁的核心問題不是「這條路難不難」，而是：
+
+> 壓力在哪裡累積，路線選擇又從哪裡開始消失？
+
+UI 應以一張可左右平移、維持原始尺度的 `Route Fingerprint` 作為主體，
+而不是把距離、爬升、risk score 拆成彼此無關的卡片。相同里程軸至少要對齊：
+
+| Lane | 顯示內容 | 解讀邊界 |
+|---|---|---|
+| Distance | route distance 與 CP/MCP/Boss anchors | 只作結構定位。 |
+| CP Graph | checkpoint、segment、已知分支與依賴 | graph 未編譯時不得補造分支。 |
+| Terrain Demand | 坡度與上升／下降機械功率 proxy | 不是人體代謝功率。 |
+| Mobility Demand | 歷史速度 envelope、黏滯與持續移動時間 | 是 ref-GPX 相對通過需求，不是個人成功率。 |
+| Risk Passage | route risk source value 與 passage pattern | provider/candidate value，不是 runtime safety truth。 |
+| Reversibility | 撤退依賴、回頭成本與替代路線 | 缺 reviewed topology 時顯示 unknown。 |
+| Time Window | ETA、日照、交通與固定截止條件 | 與 Weather/Darkness gate 分工，不在此頁自行下 safety state。 |
+| Confidence | track count、traversal count、data quality、缺失來源 | 缺資料必須可見，不得以平滑圖形掩蓋。 |
+
+頁面提供四個閱讀模式：`Structure`、`Demand`、`Reversibility`、
+`Evidence`；地圖提供 page-local Architecture lens，使用既有 `segments`
+資料群組重著色，不新增第 33 個 Scout layer。至少包含 `Terrain Demand`、
+`Slow Passage`、`Risk Passage`、`Reversibility`、`Evidence Quality`。
+
+選取 fingerprint、mobile route spine 或地圖路段時，三者必須同步到同一個
+`Segment Microscope`，顯示 P25/P50/P75 速度 envelope、坡度、risk source
+value、黏滯、持續移動時間、track/traversal counts、資料品質與 source ref。
+
+### 9.5 Historical Mobility Demand 的定位
+
+ref GPX 可在沒有 IMU/PDR/生理感測器時，提供啟登前的 sensorless route-demand
+estimate，但只能稱為 `historical_mobility_demand_vector`。第一版可包含：
+
+- terrain demand；
+- slow-passage impedance；
+- risk-passage pressure；
+- pace variability；
+- endurance exposure；
+- evidence quality；
+- stop-go burden（僅在停走事件可可靠辨識時產生，否則為 null）。
+
+公開 GPX 可能偏向成功、願意分享或表現較好的案例，因此 Scout 不得把它稱為
+「最適人體功率」、真實耗能、個人能力上限或完成機率。上升位能換算只能作為
+每公斤機械輸出 proxy；裝備重量、高海拔、技術地形、天候與生理壓力仍由其他
+證據與 capability/gate 負責。
+
+### 9.6 Projection Contract
+
+Dashboard 使用 provider-neutral `route_architecture_intelligence`：
+
+```text
+route_architecture_intelligence
+├── architecture_summary
+├── route_spine
+├── segment_demand_vectors[]
+├── checkpoint_graph
+├── retreat_dependencies[]
+├── alternatives[]
+├── time_dependencies
+├── evidence_quality
+├── privacy
+└── boundary
+```
+
+每個 projection 必須提供 `source_provider`、`source_path`、`sha256`、
+`data_quality`、`privacy` 與 boundary。最少 boundary 為：
+
+```text
+candidate_only=true
+medical_diagnosis=false
+runtime_safety_truth=false
+phase1_runtime_mutation_allowed=false
+safety_api_called=false
+outbound_send_allowed=false
+privacy.raw_gpx_embedded=false
+privacy.raw_health_payload_embedded=false
+privacy.precise_activity_timestamps_embedded=false
+```
+
+Projection 只包含聚合路段指標，不嵌入 raw GPX、raw health payload、精確活動
+timestamps 或 home/work traces。
+
+### 9.7 Readiness / Partial Semantics
+
+- `ready`：historical mobility bins、project-selected reviewed normalized route
+  architecture 與 project-selected compiled mission graph 都存在；僅靠目錄中
+  名稱含 `candidate`/`reviewed` 的未引用檔案不得升格為 ready。
+- `partial`：仍可顯示有來源的 mobility/segment/retreat evidence，但缺失 topology
+  必須明示；不得產生 reversibility score、隱藏支線或替代方案。
+- `unavailable`：沒有足以構成 route spine 或 demand vector 的證據。
+
+手機版不可把完整橫向 fingerprint 壓縮到螢幕寬度；應改用垂直 route spine，
+提供 sticky `Spine / Map / Segment` 切換，並以 bottom-sheet 型態顯示 segment
+inspector。Desktop fingerprint 則維持原尺度並允許水平平移。
+
+### 9.8 與 Safety Gates 的關係
+
+Route Architecture Intelligence 是 pretrip/planning evidence producer，不是 gate
+reducer。它可供 Pace、Delay、Weather、Darkness、Physiologic 與 Environment
+Threat gates 使用結構化路段與退路資料，但這個頁面本身不改 L0-L4、不呼叫
+live safety API、不送出通報，也不把歷史 GPX 直接升格成 runtime safety truth。
+
 ---
 
 ## 10. Weather-to-Decision Intelligence：天氣力的 Scout 化

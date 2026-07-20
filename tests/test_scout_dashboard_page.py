@@ -2410,3 +2410,47 @@ def test_dashboard_route_context_variants_index_uses_canonical_file_query_links(
     assert '_variant_file_href(item["relative_ref"])' in source
     assert '_variant_file_href("route_context_variant_comparison.md")' in source
     assert '_variant_file_href("route_context_variant_comparison.json")' in source
+
+
+def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    for marker in (
+        'data-route-architecture-intelligence="true"',
+        "Route Fingerprint",
+        "Segment Microscope",
+        "Retreat dependency",
+        "Evidence ledger",
+        "function architectureSnapshot()",
+        "function renderRouteFingerprint",
+        "function renderArchitectureMap",
+        "function renderSegmentMicroscope",
+        "function bindArchitectureControls",
+        'data-architecture-mode="${id}"',
+        'data-architecture-lens="${id}"',
+        'data-architecture-mobile-view="${id}"',
+        '["structure", "Structure"]',
+        '["demand", "Demand"]',
+        '["reversibility", "Reversibility"]',
+        '["evidence", "Evidence"]',
+        '["terrain_demand", "Terrain"]',
+        '["slow_passage", "Slow passage"]',
+        '["risk_passage", "Risk passage"]',
+        '["evidence_quality", "Evidence"]',
+        '["spine", "Spine"]',
+        '["map", "Map"]',
+        '["segment", "Segment"]',
+        'data-layer-group="segments"',
+        "candidate-only · runtime safety truth=false",
+        "normalized route architecture missing",
+        "compiled mission graph missing",
+    ):
+        assert marker in html
+
+    assert 'if (route === "outdoor-architecture") return true;' in html.split(
+        "function routeUsesWideFrame", 1
+    )[1].split("function routeUsesFullFrame", 1)[0]
+    assert '"outdoor-architecture": Object.freeze({maturity: "partial"' in html
+    assert "fetch(" not in html.split("function architectureSnapshot", 1)[1].split(
+        "function renderPaceFitPage", 1
+    )[0]
