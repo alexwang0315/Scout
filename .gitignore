@@ -83,3 +83,6 @@ trajectory_map.png
 
 # Local operator setup helpers
 install_skills.sh
+
+# Alpha phone/wearable sandbox runtime artifacts
+/outputs/dashboard/living/alpha/

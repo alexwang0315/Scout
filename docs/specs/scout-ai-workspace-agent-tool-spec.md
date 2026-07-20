@@ -1449,6 +1449,88 @@ receipt correlated to the authorized sandbox attempt. No real transport or
 delivery occurred, and the workspace must never shorten that status to
 "delivery verified".
 
+### 2026-07-20 Alpha mobile/wearable simulation workspace record
+
+The Alpha Mobile/Wearable GPX Simulation Sandbox v0.1 generated a development
+artifact set inside the specified `chilai_nanhua_day1_scoutAI` workspace at:
+
+```text
+outputs/sandbox/alpha/last_cli_result.json
+outputs/sandbox/alpha/runs/alpha-final-audit-20260720T1900Z-{profile}/
+```
+
+The successful matrix used the canonical relative source
+`normalized/routes/filtered/primary.能高安東軍_gpx.speed_filtered.gpx`. The
+source was dynamically loaded from the workspace, contained 11,191 points, and
+had replay hash
+`4877c9535dec152679e96aa9d992a88ceec5663ae5eedc96e4c40bcbd295fd75`.
+It is a historical reference route because `actual_user_track_available=false`;
+it is not a current user track or precise real-user location.
+
+Ten profiles completed with 16 deterministic virtual-clock frames each:
+`nominal_gpx`, `pace_pressure`, `delay_pressure`, `ridge_distress`,
+`weather_exposure`, `darkness_pressure`, `environment_threat`,
+`gnss_degraded`, `network_recovery`, and `device_dropout`. Every run completed a
+real MQTT 3.1.1 broker/client exchange restricted to `127.0.0.1` and an
+ephemeral port. Nominal runs accepted 32 phone/wearable messages. The network
+recovery profile accepted 28 and intentionally dropped 4; device dropout
+accepted 30 and intentionally dropped 2. GNSS, packet, network, battery,
+device, and sensor fault evidence is stored per revision.
+`last_cli_result.json` includes a machine-readable `verification` object; all
+completion, broker, candidate-only, runtime-truth, Phase 1, and production
+delivery checks are true for the required bounded interpretation. A separate
+post-run recomputation confirmed all ten scenario-request and manifest file
+hashes, all six candidate-to-reducer artifact hashes, and prepared/completed
+replay timeline events.
+
+The six pressure profiles selected the intended shadow gates: `pace_gate`,
+`delay_gate`, `physiologic_gate`, `weather_gate`, `darkness_gate`, and
+`environment_threat_gate`. They produced six immutable candidate alerts, six
+packet-bound local approvals, six sandbox-only transport attempts, and six
+correlated simulated receipts. All receipts record
+`production_delivery_verified=false`, `production_send_performed=false`, and
+`sent=false`. Nominal, GNSS-degraded, network-recovery, and device-dropout
+profiles remained `L0_NORMAL` and did not invent alert packets.
+
+The first real-workspace burst exposed a two-second polling timeout while the
+subscriber callback persisted observer evidence. The loopback subscription now
+uses a condition-based delivery barrier with bounded, delivery-count-scaled
+waiting, and a 64-message burst regression test. The unchanged real-workspace
+matrix then completed successfully.
+
+The Admin HTTP boundary is disabled by default and is mounted only when the
+operator explicitly sets `SCOUT_ALPHA_SANDBOX_ENABLED=true` (or passes the
+equivalent application constructor flag). When enabled, it is pinned to both
+the server-configured pretrip workspace and the server-selected canonical GPX.
+It returns `503` when the workspace is absent or invalid, `400` when a client
+tries to substitute another path/project/GPX, and `409` if persisted current
+state belongs to a different configured workspace source.
+`actual_user_track_available` must be the literal JSON boolean `false`;
+missing, string, or true values fail closed. This feature flag is not an
+authentication mechanism: the prototype remains a controlled local,
+single-operator surface and must not be exposed to a LAN or Internet client
+until operator authentication, authorization, request limits, and rate
+limiting exist.
+
+Replay execution now re-hashes the scenario request, replay manifest, and
+historical GPX before use. Approval also re-hashes the exact reducer artifact
+and recomputes candidate content/packet lineage; the transport simulator checks
+persisted approval and attempt lineage. Tampering fails closed. The total
+schedule is capped at 128 faults and 64 persisted interaction events per run.
+Free-form synthetic text and voice are used only for the current request in
+memory; artifacts and the Living projection keep a redaction marker and digest
+instead of raw content. Exact allow-listed `fault.*` UI controls may be retained
+because they contain no user payload. Crash recovery remains prototype debt:
+orphaned effect artifacts fail closed for operator recovery rather than being
+silently reconstructed.
+
+This workspace update is simulation evidence only. It is intentionally absent
+from Total Info, workspace retrieval catalogs, live navigation history,
+weather truth, and Phase 1 state. No `/safety/*` route, external network,
+production MQTT transport, outbound message, microphone, hardware controller,
+or Phase 1 writer was invoked. The static weather-exposure scenario is a
+deterministic synthetic overlay; it is not live CWA evidence.
+
 ### Remaining Backlog
 
 The next useful slices are:
