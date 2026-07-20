@@ -4601,6 +4601,621 @@
     .field-instrument-theme .weather-decision-primary[data-tone="warn"] strong { color: var(--accent-2); }
     .field-instrument-theme .weather-decision-primary[data-tone="bad"] strong { color: var(--bad); }
 
+    /* Route Architecture Intelligence / expedition drafting table. */
+    .route-architecture-shell {
+      --architecture-ivory: #e9eadc;
+      --architecture-basalt: #09120f;
+      --architecture-slate: #17251f;
+      --architecture-lichen: #b7cf63;
+      --architecture-amber: #f0ae3b;
+      --architecture-rust: #ff6b4a;
+      --architecture-cyan: #62b8c6;
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .architecture-hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(300px, .7fr);
+      gap: 24px;
+      min-height: 220px;
+      padding: clamp(24px, 4vw, 48px);
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(90deg, rgba(98, 184, 198, .06) 1px, transparent 1px),
+        linear-gradient(rgba(98, 184, 198, .06) 1px, transparent 1px),
+        radial-gradient(circle at 84% 10%, rgba(183, 207, 99, .15), transparent 19rem),
+        linear-gradient(128deg, #14271f, var(--architecture-basalt) 72%);
+      background-size: 24px 24px, 24px 24px, auto, auto;
+      box-shadow: 0 24px 72px rgba(0, 0, 0, .3);
+    }
+
+    .architecture-hero::after {
+      content: "A/09";
+      position: absolute;
+      right: -12px;
+      bottom: -36px;
+      color: rgba(233, 234, 220, .035);
+      font: 700 118px/1 var(--mono);
+      letter-spacing: -.08em;
+      transform: rotate(-5deg);
+    }
+
+    .architecture-hero > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .architecture-eyebrow,
+    .architecture-kicker,
+    .architecture-lane-label,
+    .architecture-stat span,
+    .architecture-micro-label {
+      color: var(--architecture-lichen);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .architecture-hero h2 {
+      max-width: 850px;
+      margin: 8px 0 16px;
+      font: 500 clamp(36px, 5vw, 68px)/.94 Georgia, "Times New Roman", serif;
+      letter-spacing: -.055em;
+    }
+
+    .architecture-hero h2 em {
+      display: block;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .architecture-hero-copy {
+      max-width: 820px;
+      margin: 0;
+      color: #b9c5b7;
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    .architecture-summary-board {
+      align-self: stretch;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      border-top: 1px solid var(--line-strong);
+      border-left: 1px solid var(--line-strong);
+      background: rgba(5, 12, 10, .58);
+    }
+
+    .architecture-stat {
+      min-width: 0;
+      padding: 15px;
+      border-right: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .architecture-stat span {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--subtle);
+    }
+
+    .architecture-stat strong {
+      display: block;
+      overflow-wrap: anywhere;
+      color: var(--architecture-ivory);
+      font-size: 15px;
+      line-height: 1.25;
+    }
+
+    .architecture-boundary {
+      grid-column: 1 / -1;
+      padding: 12px 15px;
+      border-right: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-strong);
+      color: #c7d1c3;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .architecture-boundary strong { color: var(--architecture-amber); }
+
+    .architecture-modebar,
+    .architecture-lensbar,
+    .architecture-mobile-switch {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+
+    .architecture-modebar {
+      padding: 8px;
+      border: 1px solid var(--line);
+      background: rgba(9, 18, 15, .88);
+    }
+
+    .architecture-modebar button,
+    .architecture-lensbar button,
+    .architecture-mobile-switch button {
+      flex: 0 0 auto;
+      min-height: 36px;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .04em;
+      background: transparent;
+    }
+
+    .architecture-modebar button.is-active,
+    .architecture-lensbar button.is-active,
+    .architecture-mobile-switch button.is-active {
+      color: #0b140f;
+      border-color: var(--architecture-lichen);
+      background: var(--architecture-lichen);
+      box-shadow: none;
+    }
+
+    .architecture-fingerprint-frame {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: rgba(8, 16, 14, .95);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .22);
+    }
+
+    .architecture-frame-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 15px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .architecture-frame-heading h3 {
+      margin: 0;
+      font: 500 21px/1 Georgia, "Times New Roman", serif;
+    }
+
+    .architecture-frame-heading p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .architecture-fingerprint-scroll {
+      position: relative;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-inline: contain;
+      scrollbar-color: var(--architecture-cyan) #0b1512;
+    }
+
+    .architecture-fingerprint {
+      display: block;
+      width: 1780px;
+      min-width: 1780px;
+      height: 430px;
+      background: #0b1512;
+    }
+
+    .architecture-fingerprint .architecture-grid-line {
+      stroke: rgba(233, 234, 220, .09);
+      stroke-width: 1;
+    }
+
+    .architecture-fingerprint .architecture-lane-rule {
+      stroke: rgba(98, 184, 198, .22);
+      stroke-width: 1;
+    }
+
+    .architecture-fingerprint .architecture-lane-text {
+      fill: #839185;
+      font: 700 10px var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .architecture-fingerprint .architecture-axis-text {
+      fill: #9ca996;
+      font: 10px var(--mono);
+    }
+
+    .architecture-fingerprint [data-architecture-bin-id] {
+      cursor: pointer;
+      transition: opacity .12s ease, filter .12s ease;
+    }
+
+    .architecture-fingerprint [data-architecture-bin-id]:hover,
+    .architecture-fingerprint [data-architecture-bin-id]:focus-visible {
+      filter: brightness(1.35);
+      outline: none;
+    }
+
+    .architecture-fingerprint [data-architecture-selected="true"] {
+      filter: drop-shadow(0 0 5px rgba(240, 174, 59, .9));
+    }
+
+    .architecture-scroll-cue {
+      position: sticky;
+      left: 0;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      background: rgba(8, 16, 14, .92);
+      border-top: 1px solid var(--line);
+    }
+
+    .architecture-workbench {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(320px, .65fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .architecture-map-frame,
+    .architecture-segment-inspector,
+    .architecture-dependency-frame,
+    .architecture-evidence-frame,
+    .architecture-mobile-spine {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: rgba(16, 26, 23, .92);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, .18);
+    }
+
+    .architecture-map-heading,
+    .architecture-inspector-heading,
+    .architecture-lower-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .architecture-map-heading h3,
+    .architecture-inspector-heading h3,
+    .architecture-lower-heading h3 {
+      margin: 0;
+      font: 500 19px/1.1 Georgia, "Times New Roman", serif;
+    }
+
+    .architecture-map-heading p,
+    .architecture-inspector-heading p,
+    .architecture-lower-heading p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .architecture-lensbar {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8, 16, 14, .72);
+    }
+
+    .architecture-map-canvas {
+      position: relative;
+      min-height: 490px;
+      background:
+        linear-gradient(90deg, rgba(98, 184, 198, .035) 1px, transparent 1px),
+        linear-gradient(rgba(98, 184, 198, .035) 1px, transparent 1px),
+        #0a1512;
+      background-size: 28px 28px;
+    }
+
+    .architecture-map-canvas svg {
+      display: block;
+      width: 100%;
+      min-height: 490px;
+    }
+
+    .architecture-map-canvas [data-architecture-bin-id] {
+      cursor: pointer;
+      transition: stroke-width .13s ease, opacity .13s ease, filter .13s ease;
+    }
+
+    .architecture-map-canvas [data-architecture-bin-id]:hover,
+    .architecture-map-canvas [data-architecture-selected="true"] {
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(240, 174, 59, .85));
+    }
+
+    .architecture-map-legend {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      max-width: min(380px, calc(100% - 24px));
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      color: #c1cbc0;
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1.5;
+      background: rgba(6, 13, 11, .88);
+      backdrop-filter: blur(8px);
+    }
+
+    .architecture-inspector-body {
+      display: grid;
+      gap: 15px;
+      padding: 16px;
+    }
+
+    .architecture-segment-callout {
+      padding: 17px;
+      border-left: 4px solid var(--architecture-amber);
+      background: linear-gradient(110deg, rgba(240, 174, 59, .13), transparent 72%);
+    }
+
+    .architecture-segment-callout strong {
+      display: block;
+      margin-top: 5px;
+      color: var(--architecture-ivory);
+      font: 500 25px/1 Georgia, "Times New Roman", serif;
+    }
+
+    .architecture-reason-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .architecture-reason-tags span {
+      padding: 6px 8px;
+      border: 1px solid rgba(240, 174, 59, .35);
+      color: #f3c87a;
+      font-family: var(--mono);
+      font-size: 9px;
+      background: rgba(240, 174, 59, .07);
+    }
+
+    .architecture-envelope {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+    }
+
+    .architecture-envelope > div {
+      padding: 11px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .architecture-envelope small,
+    .architecture-metric-grid small {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .architecture-envelope strong { font-size: 14px; }
+
+    .architecture-metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .architecture-metric-grid > div {
+      padding: 10px;
+      border: 1px solid var(--line);
+      background: rgba(8, 16, 14, .5);
+    }
+
+    .architecture-metric-grid strong {
+      color: var(--architecture-ivory);
+      font-size: 13px;
+    }
+
+    .architecture-source-line {
+      overflow-wrap: anywhere;
+      padding-top: 11px;
+      border-top: 1px dashed var(--line-strong);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    .architecture-lower-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+      gap: 14px;
+    }
+
+    .architecture-dependency-body,
+    .architecture-evidence-body {
+      padding: 16px;
+    }
+
+    .architecture-graph {
+      position: relative;
+      display: grid;
+      grid-template-columns: auto minmax(90px, 1fr) auto minmax(90px, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 120px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background:
+        repeating-linear-gradient(-45deg, transparent 0 10px, rgba(255,255,255,.018) 10px 11px),
+        rgba(8, 16, 14, .62);
+    }
+
+    .architecture-graph-node {
+      display: grid;
+      place-items: center;
+      min-width: 66px;
+      min-height: 66px;
+      padding: 8px;
+      border: 1px solid var(--architecture-cyan);
+      border-radius: 50%;
+      color: var(--architecture-ivory);
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 9px;
+      background: #10221d;
+    }
+
+    .architecture-graph-edge {
+      height: 2px;
+      background: linear-gradient(90deg, var(--architecture-cyan), var(--architecture-amber));
+    }
+
+    .architecture-graph-edge.is-unverified {
+      height: 0;
+      border-top: 2px dashed var(--architecture-amber);
+      background: none;
+    }
+
+    .architecture-missing-graph {
+      margin: 12px 0 0;
+      padding: 11px 13px;
+      border-left: 3px solid var(--architecture-amber);
+      color: #d7c49a;
+      font-size: 12px;
+      background: rgba(240, 174, 59, .07);
+    }
+
+    .architecture-retreat-list,
+    .architecture-evidence-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .architecture-retreat-item,
+    .architecture-evidence-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      background: rgba(8, 16, 14, .48);
+    }
+
+    .architecture-retreat-item strong,
+    .architecture-evidence-item strong {
+      display: block;
+      font-size: 12px;
+    }
+
+    .architecture-retreat-item span,
+    .architecture-evidence-item span {
+      display: block;
+      margin-top: 3px;
+      overflow-wrap: anywhere;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+      line-height: 1.45;
+    }
+
+    .architecture-source-status {
+      min-width: 70px;
+      color: var(--architecture-lichen);
+      text-align: right;
+      font-family: var(--mono);
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+
+    .architecture-source-status.is-missing { color: var(--architecture-amber); }
+
+    .architecture-mobile-switch,
+    .architecture-mobile-spine {
+      display: none;
+    }
+
+    .architecture-spine-list {
+      display: grid;
+      padding: 10px 14px 18px 38px;
+    }
+
+    .architecture-spine-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      min-height: 68px;
+      padding: 12px;
+      border: 0;
+      border-left: 2px solid var(--line-strong);
+      color: var(--text);
+      text-align: left;
+      background: transparent;
+    }
+
+    .architecture-spine-item::before {
+      content: "";
+      position: absolute;
+      left: -7px;
+      top: 22px;
+      width: 11px;
+      height: 11px;
+      border: 2px solid var(--architecture-cyan);
+      border-radius: 50%;
+      background: var(--architecture-basalt);
+    }
+
+    .architecture-spine-item.is-selected {
+      border-left-color: var(--architecture-amber);
+      background: linear-gradient(90deg, rgba(240, 174, 59, .11), transparent);
+    }
+
+    .architecture-spine-item.is-selected::before {
+      border-color: var(--architecture-amber);
+      background: var(--architecture-amber);
+      box-shadow: 0 0 0 5px rgba(240, 174, 59, .1);
+    }
+
+    .architecture-spine-item strong { display: block; font-size: 13px; }
+    .architecture-spine-item small { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .architecture-spine-score { color: var(--architecture-amber); font-family: var(--mono); font-size: 13px; }
+
+    .architecture-empty {
+      display: grid;
+      place-items: center;
+      min-height: 280px;
+      padding: 24px;
+      color: var(--muted);
+      text-align: center;
+      border: 1px dashed var(--line-strong);
+      background: repeating-linear-gradient(-45deg, transparent 0 12px, rgba(255,255,255,.018) 12px 13px);
+    }
+
+    .architecture-empty strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--architecture-ivory);
+      font: 500 22px Georgia, serif;
+    }
+
     @keyframes field-instrument-arrive {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: none; }
@@ -4609,6 +5224,59 @@
     @media (max-width: 1120px) {
       .field-instrument-theme .dashboard-shell { grid-template-columns: 1fr; }
       .field-instrument-theme .weather-field-hero { grid-template-columns: 1fr; }
+      .architecture-hero { grid-template-columns: 1fr; }
+      .architecture-workbench,
+      .architecture-lower-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      .architecture-hero { min-height: 0; padding: 24px 18px; }
+      .architecture-hero h2 { font-size: 40px; }
+      .architecture-summary-board { grid-template-columns: 1fr 1fr; }
+      .architecture-mobile-switch {
+        position: sticky;
+        top: 0;
+        z-index: 15;
+        display: flex;
+        padding: 7px;
+        border: 1px solid var(--line);
+        background: rgba(8, 16, 14, .96);
+        backdrop-filter: blur(12px);
+      }
+      .architecture-mobile-switch button { flex: 1 0 auto; }
+      .architecture-desktop-fingerprint { display: none; }
+      .architecture-mobile-spine { display: block; }
+      .route-architecture-shell [data-architecture-mobile-panel] { display: none; }
+      .route-architecture-shell[data-mobile-view="spine"] [data-architecture-mobile-panel="spine"],
+      .route-architecture-shell[data-mobile-view="map"] [data-architecture-mobile-panel="map"],
+      .route-architecture-shell[data-mobile-view="segment"] [data-architecture-mobile-panel="segment"] { display: block; }
+      .architecture-map-canvas,
+      .architecture-map-canvas svg { min-height: 390px; }
+      .route-architecture-shell[data-mobile-view="segment"] .architecture-segment-inspector {
+        position: sticky;
+        bottom: 0;
+        z-index: 12;
+        max-height: calc(100dvh - 152px);
+        overflow-y: auto;
+        border-top: 3px solid var(--architecture-amber);
+        box-shadow: 0 -24px 70px rgba(0, 0, 0, .45);
+      }
+      .architecture-lower-grid { display: grid; }
+      .architecture-graph {
+        grid-template-columns: 1fr;
+        justify-items: center;
+      }
+      .architecture-graph-edge {
+        width: 2px;
+        height: 34px;
+        background: linear-gradient(var(--architecture-cyan), var(--architecture-amber));
+      }
+      .architecture-graph-edge.is-unverified {
+        width: 0;
+        height: 34px;
+        border-top: 0;
+        border-left: 2px dashed var(--architecture-amber);
+      }
     }
 
     @media (max-width: 620px) {
@@ -4662,7 +5330,7 @@
               </div>
             </details>
             <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-permission" data-route-truth="preview"><span class="mark"></span><span>Permission</span></button>
-            <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-architecture" data-route-truth="preview"><span class="mark"></span><span>Architecture</span></button>
+            <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-architecture" data-route-truth="partial"><span class="mark"></span><span>Architecture</span></button>
             <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-weather" data-route-truth="partial"><span class="mark"></span><span>Weather</span></button>
             <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-navigation" data-route-truth="preview"><span class="mark"></span><span>Navigation</span></button>
           </div>
@@ -4813,7 +5481,7 @@
       "outdoor-pace-fit-emergency": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Sample packet", action: "No outbound · approval required", verification: "Sandbox UI verified", provenance: "Fixture sample", mode: "Product Preview"}),
       "outdoor-permission": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Static class descriptions", action: "Read-only selector", verification: "No runtime decision", provenance: "Static rule set", mode: "Static rule set"}),
       "observer": Object.freeze({maturity: "preview", surface: "Technical prototype", data: "Projected ingress · broker unverified", action: "Read-only · no publish", verification: "Connection/data lifecycle unverified", provenance: "Debug ingress references", mode: "Technical Prototype"}),
-      "outdoor-architecture": Object.freeze({maturity: "preview", surface: "Reference only", data: "Architecture reference", action: "Read-only", verification: "Reference rendered", provenance: "Build documentation", mode: "Reference"}),
+      "outdoor-architecture": Object.freeze({maturity: "partial", surface: "Operational analysis", data: "Loading route architecture evidence", action: "Read-only candidate analysis", verification: "Awaiting route topology projection", provenance: "Pretrip workspace + historical GPX aggregates", mode: "Candidate analysis"}),
       "outdoor-navigation": Object.freeze({maturity: "preview", surface: "Reference only", data: "Navigation reference", action: "Read-only", verification: "Reference rendered", provenance: "Static rule set", mode: "Reference"}),
     });
     const ROUTE_DATA_SCOPES = Object.freeze({
@@ -5251,6 +5919,11 @@
         map: {},
       },
       activeCountryMaterialPool: "TW",
+      architectureMode: "structure",
+      architectureLens: "slow_passage",
+      architectureSelectedBinId: "",
+      architectureMobileView: "spine",
+      architectureFingerprintScrollLeft: 0,
       mapEvidenceCollapsed: false,
       evidenceDrawerExpandedRoutes: {},
       selectedMapEvidenceSourceId: "",
@@ -5766,6 +6439,7 @@
     }
 
     function routeUsesWideFrame(route) {
+      if (route === "outdoor-architecture") return true;
       return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";
     }
 
@@ -5973,6 +6647,23 @@
           : "Run the local closed-loop fixture";
         truth.provenance = "Synthetic replay · candidate-only · production sent=false";
         truth.mode = "Technical Prototype";
+      }
+      if (route === "outdoor-architecture") {
+        const architecture = architectureSnapshot();
+        const quality = architecture.evidence_quality || {};
+        const counts = quality.counts || {};
+        const missing = asArray(quality.missing_artifacts);
+        truth.maturity = "partial";
+        truth.surface = architecture.status === "unavailable" ? "Degraded" : "Operational analysis";
+        truth.data = `${architecture.status || "loading"} · ${formatInteger(counts.observed_bin_count)} mobility bins · ${formatInteger(counts.segment_count)} segment candidates`;
+        truth.action = "Read-only candidate analysis";
+        truth.verification = missing.length
+          ? `Partial topology · ${missing.join(", ")}`
+          : architecture.status === "ready"
+            ? "Mobility vectors + reviewed topology loaded"
+            : "Awaiting route architecture evidence";
+        truth.provenance = "Pretrip workspace · aggregate historical GPX · runtime truth=false";
+        truth.mode = "Candidate analysis";
       }
       const requiredScopes = dataScopesForRoute(route);
       const loadingScopes = requiredScopes.filter((scope) => !loadedDataScopes.has(scope) && !state.dataScopeErrors?.[scope]);
@@ -8902,18 +9593,473 @@
       `;
     }
 
+    function architectureSnapshot() {
+      const projection = state.project?.route_architecture_intelligence;
+      if (projection && typeof projection === "object") return projection;
+      const loading = !loadedDataScopes.has("project") && !state.dataScopeErrors?.project;
+      return {
+        status: loading ? "loading" : "unavailable",
+        architecture_summary: {
+          question: "Where does route pressure accumulate, and where do choices begin to disappear?",
+          route_name: projectId(),
+          route_type: "unclassified",
+          demand_shape: "unknown",
+          reversibility: "unverified",
+          evidence_state: loading ? "loading" : "unavailable",
+          route_distance_m: Number(state.project?.route?.distance_m || 0),
+          headline: loading
+            ? "Loading aggregate route evidence from the pretrip workspace."
+            : "Route architecture projection is unavailable for this project.",
+        },
+        route_spine: {distance_m: 0, nodes: [], pressure_anchors: []},
+        segment_demand_vectors: [],
+        checkpoint_graph: {
+          status: "candidate_projection",
+          checkpoint_count: projectCounts().checkpoints,
+          segment_count: projectCounts().segments,
+          compiled_mission_graph_available: false,
+          normalized_architecture_available: false,
+        },
+        retreat_dependencies: [],
+        alternatives: [],
+        time_dependencies: {daylight_evidence_status: "unavailable"},
+        evidence_quality: {
+          band: loading ? "loading" : "unavailable",
+          counts: {observed_bin_count: 0, guidance_eligible_bin_count: 0},
+          missing_artifacts: ["normalized_route_architecture", "compiled_mission_graph"],
+          source_refs: [
+            {source_key: "reference_pace_energy_analysis", source_path: "outputs/reference_pace_energy_analysis.json", status: loading ? "loading" : "missing", role: "historical mobility demand"},
+            {source_key: "route_architecture", source_path: "normalized/architecture/route_architecture.json", status: "missing", role: "reviewed route topology"},
+            {source_key: "compiled_mission_graph", source_path: "outputs/compiled_mission_graph.json", status: "missing", role: "dependency graph"},
+          ],
+        },
+        boundary: {candidate_only: true, runtime_safety_truth: false},
+      };
+    }
+
+    function architectureBins(snapshot = architectureSnapshot()) {
+      return asArray(snapshot.segment_demand_vectors).filter(item => item && typeof item === "object");
+    }
+
+    function architectureSelectedBin(snapshot = architectureSnapshot()) {
+      const bins = architectureBins(snapshot);
+      if (!bins.length) return null;
+      const selected = bins.find(item => item.route_bin_id === state.architectureSelectedBinId);
+      if (selected) return selected;
+      const anchorId = snapshot.route_spine?.pressure_anchors?.[0]?.route_bin_id;
+      const fallback = bins.find(item => item.route_bin_id === anchorId)
+        || bins.find(item => item.guidance_eligible)
+        || bins[0];
+      state.architectureSelectedBinId = fallback.route_bin_id;
+      return fallback;
+    }
+
+    function architectureVectorValue(bin, key) {
+      return Math.max(0, Math.min(100, Number(bin?.historical_mobility_demand_vector?.[key] || 0)));
+    }
+
+    function architecturePressureColor(value) {
+      const score = Number(value || 0);
+      if (score >= 78) return "#ff6b4a";
+      if (score >= 55) return "#f0ae3b";
+      if (score >= 32) return "#b7cf63";
+      return "#62b8c6";
+    }
+
+    function architectureEvidenceColor(bin) {
+      const quality = String(bin?.data_quality || "unknown");
+      if (quality === "high") return "#79c58c";
+      if (quality === "medium") return "#b7cf63";
+      if (quality === "low") return "#f0ae3b";
+      return "#596960";
+    }
+
+    function architectureModeOpacity(lane) {
+      const mode = state.architectureMode || "structure";
+      const focus = {
+        structure: ["structure"],
+        demand: ["terrain", "mobility", "risk"],
+        reversibility: ["reversibility", "time"],
+        evidence: ["evidence"],
+      }[mode] || ["structure"];
+      return focus.includes(lane) ? 1 : .38;
+    }
+
+    function renderRouteFingerprint(snapshot) {
+      const bins = architectureBins(snapshot);
+      if (!bins.length) {
+        return `
+          <section class="architecture-fingerprint-frame architecture-desktop-fingerprint" data-route-fingerprint="unavailable">
+            <div class="architecture-frame-heading"><div><h3>Route Fingerprint</h3><p>Distance-indexed route pressure lanes.</p></div><span class="chip warn">${escapeHtml(snapshot.status || "unavailable")}</span></div>
+            <div class="architecture-empty"><div><strong>Mobility bins are not available.</strong>Run the deterministic reference pace/energy analysis, then reload this project.</div></div>
+          </section>
+        `;
+      }
+      const selected = architectureSelectedBin(snapshot);
+      const routeDistance = Math.max(1, Number(snapshot.route_spine?.distance_m || snapshot.architecture_summary?.route_distance_m || bins.at(-1)?.end_distance_m || 1));
+      const width = 1780;
+      const plotX = 154;
+      const plotWidth = 1588;
+      const laneHeight = 40;
+      const laneY = {structure: 46, terrain: 100, mobility: 154, risk: 208, reversibility: 262, time: 316, evidence: 374};
+      const xForDistance = value => plotX + Math.max(0, Math.min(1, Number(value || 0) / routeDistance)) * plotWidth;
+      const ticks = Array.from({length: 9}, (_, index) => {
+        const ratio = index / 8;
+        const x = plotX + ratio * plotWidth;
+        return `<line class="architecture-grid-line" x1="${x.toFixed(1)}" y1="30" x2="${x.toFixed(1)}" y2="410"></line><text class="architecture-axis-text" x="${x.toFixed(1)}" y="22" text-anchor="${index === 0 ? "start" : index === 8 ? "end" : "middle"}">${(routeDistance * ratio / 1000).toFixed(1)}K</text>`;
+      }).join("");
+      const laneLabels = [
+        ["structure", "CP GRAPH"],
+        ["terrain", "TERRAIN"],
+        ["mobility", "MOBILITY"],
+        ["risk", "RISK PASSAGE"],
+        ["reversibility", "REVERSIBILITY"],
+        ["time", "TIME WINDOW"],
+        ["evidence", "CONFIDENCE"],
+      ].map(([lane, label]) => `<text class="architecture-lane-text" x="16" y="${laneY[lane] + laneHeight / 2 + 4}">${label}</text><line class="architecture-lane-rule" x1="${plotX}" y1="${laneY[lane] + laneHeight}" x2="${plotX + plotWidth}" y2="${laneY[lane] + laneHeight}"></line>`).join("");
+      const binMarks = bins.map((bin, index) => {
+        const x1 = xForDistance(bin.start_distance_m);
+        const x2 = Math.max(x1 + 2, xForDistance(bin.end_distance_m));
+        const binWidth = Math.max(2, x2 - x1 - .6);
+        const terrain = architectureVectorValue(bin, "terrain_demand");
+        const slow = architectureVectorValue(bin, "slow_passage_impedance");
+        const risk = architectureVectorValue(bin, "risk_passage_pressure");
+        const evidence = architectureVectorValue(bin, "evidence_quality");
+        const isSelected = bin.route_bin_id === selected?.route_bin_id;
+        const tabindex = isSelected ? "0" : "-1";
+        const structureFill = index % 2 ? "#183029" : "#203a31";
+        return `
+          <g role="button" tabindex="${tabindex}" aria-label="${escapeHtml(bin.distance_label || bin.route_bin_id)} pressure ${Math.round(architectureVectorValue(bin, "composite_pressure_index"))}" data-architecture-bin-id="${escapeHtml(bin.route_bin_id)}" data-architecture-selected="${isSelected ? "true" : "false"}">
+            <rect x="${x1.toFixed(1)}" y="${laneY.structure}" width="${binWidth.toFixed(1)}" height="${laneHeight}" fill="${structureFill}" opacity="${architectureModeOpacity("structure")}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${(laneY.terrain + laneHeight - terrain * .38).toFixed(1)}" width="${binWidth.toFixed(1)}" height="${Math.max(2, terrain * .38).toFixed(1)}" fill="${architecturePressureColor(terrain)}" opacity="${architectureModeOpacity("terrain")}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${laneY.mobility}" width="${binWidth.toFixed(1)}" height="${laneHeight}" fill="${architecturePressureColor(slow)}" opacity="${(.22 + slow / 135).toFixed(2)}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${laneY.risk}" width="${binWidth.toFixed(1)}" height="${laneHeight}" fill="${architecturePressureColor(risk)}" opacity="${(.18 + risk / 125 * architectureModeOpacity("risk")).toFixed(2)}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${laneY.evidence}" width="${binWidth.toFixed(1)}" height="24" fill="${architectureEvidenceColor(bin)}" opacity="${(.25 + evidence / 140 * architectureModeOpacity("evidence")).toFixed(2)}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${laneY.structure}" width="${binWidth.toFixed(1)}" height="352" fill="transparent"></rect>
+          </g>
+        `;
+      }).join("");
+      const cpNodes = asArray(snapshot.route_spine?.nodes).map(node => {
+        const x = xForDistance(node.route_distance_m);
+        return `<circle cx="${x.toFixed(1)}" cy="${laneY.structure + laneHeight / 2}" r="${["start", "finish"].includes(node.node_type) ? 6 : 3.2}" fill="#e9eadc" stroke="#62b8c6" stroke-width="2"><title>${escapeHtml(node.label || node.node_id)}</title></circle>`;
+      }).join("");
+      const graphAvailable = Boolean(snapshot.checkpoint_graph?.compiled_mission_graph_available);
+      const timeAvailable = Boolean(snapshot.time_dependencies?.eta_estimate_count);
+      const selectedX = selected ? xForDistance((Number(selected.start_distance_m) + Number(selected.end_distance_m)) / 2) : plotX;
+      return `
+        <section class="architecture-fingerprint-frame architecture-desktop-fingerprint" data-route-fingerprint="ready">
+          <div class="architecture-frame-heading">
+            <div><h3>Route Fingerprint</h3><p>One route, seven aligned lanes. Scroll at full scale; select any 250 m bin.</p></div>
+            <span class="chip ${snapshot.status === "ready" ? "ok" : "warn"}">${escapeHtml(snapshot.status)}</span>
+          </div>
+          <div class="architecture-fingerprint-scroll" data-architecture-fingerprint-scroll>
+            <svg class="architecture-fingerprint" viewBox="0 0 ${width} 430" role="img" aria-label="Distance-indexed route architecture fingerprint">
+              <defs><pattern id="architectureMissingHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#f0ae3b" stroke-opacity=".22" stroke-width="2"></line></pattern></defs>
+              ${ticks}${laneLabels}${binMarks}${cpNodes}
+              <rect x="${plotX}" y="${laneY.reversibility}" width="${plotWidth}" height="${laneHeight}" fill="${graphAvailable ? "#183d36" : "url(#architectureMissingHatch)"}" opacity="${architectureModeOpacity("reversibility")}"></rect>
+              <text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.reversibility + 25}">${graphAvailable ? "compiled mission graph available — inspect dependencies" : "compiled mission graph missing — no reversibility score inferred"}</text>
+              <rect x="${plotX}" y="${laneY.time}" width="${plotWidth}" height="${laneHeight}" fill="${timeAvailable ? "#203a31" : "url(#architectureMissingHatch)"}" opacity="${architectureModeOpacity("time")}"></rect>
+              <text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.time + 25}">${timeAvailable ? `${snapshot.time_dependencies.eta_estimate_count} planned ETA estimates` : "time dependency evidence unavailable"}</text>
+              <line x1="${selectedX.toFixed(1)}" y1="29" x2="${selectedX.toFixed(1)}" y2="410" stroke="#f0ae3b" stroke-width="2" stroke-dasharray="4 4"></line>
+            </svg>
+            <span class="architecture-scroll-cue">↔ Full-scale route fingerprint · horizontal pan preserved</span>
+          </div>
+        </section>
+      `;
+    }
+
+    function architectureLensLabel(lens = state.architectureLens) {
+      return {
+        structure: "Structure",
+        terrain_demand: "Terrain Demand",
+        slow_passage: "Slow Passage",
+        risk_passage: "Risk Passage",
+        reversibility: "Reversibility",
+        evidence_quality: "Evidence Quality",
+      }[lens] || "Structure";
+    }
+
+    function architectureLensColor(bin, lens = state.architectureLens) {
+      if (lens === "structure") return "#62b8c6";
+      if (lens === "terrain_demand") return architecturePressureColor(architectureVectorValue(bin, "terrain_demand"));
+      if (lens === "slow_passage") return architecturePressureColor(architectureVectorValue(bin, "slow_passage_impedance"));
+      if (lens === "risk_passage") return architecturePressureColor(architectureVectorValue(bin, "risk_passage_pressure"));
+      if (lens === "evidence_quality") return architectureEvidenceColor(bin);
+      return "#6d796f";
+    }
+
+    function architectureMapSlices(mapData, bins, selectedBin, routeDistance) {
+      if (!mapData.connected || !bins.length) return "";
+      const sourcePointCount = Math.max(1, mapData.coordinateSegments.reduce((sum, segment) => sum + segment.length, 0));
+      const sampledSegments = mapData.coordinateSegments.map(segment => {
+        const pointBudget = Math.max(2, Math.round(1000 * segment.length / sourcePointCount));
+        return sampleCoordinates(segment, pointBudget);
+      }).filter(segment => segment.length >= 2);
+      const totalPairs = Math.max(1, sampledSegments.reduce((sum, segment) => sum + Math.max(0, segment.length - 1), 0));
+      let pairIndex = 0;
+      const groups = [];
+      sampledSegments.forEach(segment => {
+        let current = null;
+        segment.slice(1).forEach((point, index) => {
+          const progress = (pairIndex + .5) / totalPairs;
+          pairIndex += 1;
+          const routeDistanceAtPoint = progress * routeDistance;
+          const bin = bins.find(item => routeDistanceAtPoint >= Number(item.start_distance_m) && routeDistanceAtPoint <= Number(item.end_distance_m));
+          const selected = Boolean(bin && bin.route_bin_id === selectedBin?.route_bin_id);
+          const key = `${bin?.route_bin_id || "missing"}:${selected ? "selected" : "normal"}`;
+          const start = projectCoordinate(segment[index], mapData.bounds);
+          const end = projectCoordinate(point, mapData.bounds);
+          if (!current || current.key !== key) {
+            if (current) groups.push(current);
+            current = {key, bin, selected, points: [start, end]};
+          } else {
+            current.points.push(end);
+          }
+        });
+        if (current) groups.push(current);
+      });
+      return groups.map(group => {
+        const bin = group.bin;
+        const color = bin ? architectureLensColor(bin) : state.architectureLens === "structure" ? "#62b8c6" : "#46554d";
+        const binData = bin ? ` data-architecture-bin-id="${escapeHtml(bin.route_bin_id)}"` : "";
+        const title = bin ? `${bin.distance_label || bin.route_bin_id} · ${architectureLensLabel()}` : "No observed mobility bin at this route distance";
+        const path = group.points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+        return `<path d="${path}"${binData} data-architecture-selected="${group.selected ? "true" : "false"}" fill="none" stroke="${color}" stroke-width="${group.selected ? 12 : 7}" stroke-linecap="round" stroke-linejoin="round" opacity="${group.selected ? 1 : bin ? .78 : .34}"><title>${escapeHtml(title)}</title></path>`;
+      }).join("");
+    }
+
+    function architectureMapCheckpointPoints(mapData) {
+      if (!mapData.connected) return "";
+      const points = asArray(state.project?.checkpoints)
+        .map(item => ({lat: Number(item?.lat), lon: Number(item?.lon), label: item?.label || item?.candidate_id || "CP"}))
+        .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon));
+      const sampled = sampleCoordinates(points, 24);
+      return sampled.map((point, index) => {
+        const projected = projectCoordinate(point, mapData.bounds);
+        return `<circle cx="${projected.x.toFixed(1)}" cy="${projected.y.toFixed(1)}" r="${index === 0 || index === sampled.length - 1 ? 5.5 : 3.2}" fill="#e9eadc" stroke="#0a1512" stroke-width="2"><title>${escapeHtml(point.label)}</title></circle>`;
+      }).join("");
+    }
+
+    function renderArchitectureMap(snapshot) {
+      const mapData = buildMapData();
+      const bins = architectureBins(snapshot);
+      const selected = architectureSelectedBin(snapshot);
+      const routeDistance = Math.max(1, Number(snapshot.route_spine?.distance_m || snapshot.architecture_summary?.route_distance_m || bins.at(-1)?.end_distance_m || 1));
+      const lensButtons = [
+        ["structure", "Structure"],
+        ["terrain_demand", "Terrain"],
+        ["slow_passage", "Slow passage"],
+        ["risk_passage", "Risk passage"],
+        ["reversibility", "Reversibility"],
+        ["evidence_quality", "Evidence"],
+      ];
+      const mapContent = mapData.connected && bins.length ? `
+        <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="Route architecture lens map">
+          <defs>
+            <pattern id="architectureTopoGrid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M0 24 Q12 5 24 24 T48 24 M0 40 Q12 21 24 40 T48 40" fill="none" stroke="#6e8b78" stroke-opacity=".11" stroke-width="1"></path></pattern>
+          </defs>
+          <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="#0b1713"></rect>
+          <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="url(#architectureTopoGrid)"></rect>
+          <g data-layer-group="terrain"><path d="${mapData.routePath}" fill="none" stroke="#b7cf63" stroke-width="30" opacity=".055" stroke-linecap="round"></path></g>
+          <g data-layer-group="segments" data-architecture-lens="${escapeHtml(state.architectureLens)}">${architectureMapSlices(mapData, bins, selected, routeDistance)}</g>
+          <g data-layer-group="checkpoints">${architectureMapCheckpointPoints(mapData)}</g>
+        </svg>
+        <div class="architecture-map-legend"><strong>${escapeHtml(architectureLensLabel())}</strong> · page-local analysis styling over the existing <span class="mono">segments</span> data group. This does not add a 33rd Scout layer.</div>
+      ` : `<div class="architecture-empty"><div><strong>Route map projection unavailable.</strong>${bins.length ? "The demand vectors are loaded, but display geometry is missing." : "Load both route geometry and mobility bins."}</div></div>`;
+      return `
+        <section class="architecture-map-frame" data-architecture-mobile-panel="map">
+          <div class="architecture-map-heading">
+            <div><h3>Architecture lens</h3><p>Same route centerline, recolored by the selected candidate metric.</p></div>
+            <span class="chip ${mapData.connected ? "ok" : "warn"}">${mapData.connected ? "geometry connected" : "geometry missing"}</span>
+          </div>
+          <div class="architecture-lensbar" role="tablist" aria-label="Architecture map lenses">
+            ${lensButtons.map(([id, label]) => `<button type="button" role="tab" aria-selected="${state.architectureLens === id ? "true" : "false"}" class="${state.architectureLens === id ? "is-active" : ""}" data-architecture-lens="${id}">${label}</button>`).join("")}
+          </div>
+          <div class="architecture-map-canvas">${mapContent}</div>
+        </section>
+      `;
+    }
+
+    function architectureReasonLabel(reason) {
+      return {
+        sustained_uphill_grade: "sustained uphill",
+        steep_descent_dissipation: "descent dissipation",
+        elevated_route_risk_source_value: "risk source elevated",
+        historical_slow_passage_impedance: "historical impedance",
+        late_continuous_movement_exposure: "continuous exposure",
+        low_evidence_quality: "low evidence quality",
+        no_single_dominant_factor: "distributed demand",
+      }[reason] || String(reason || "unknown factor").replaceAll("_", " ");
+    }
+
+    function architectureMetric(value, suffix = "", digits = 1) {
+      const number = Number(value);
+      return Number.isFinite(number) ? `${number.toFixed(digits)}${suffix}` : "—";
+    }
+
+    function renderSegmentMicroscope(snapshot) {
+      const bin = architectureSelectedBin(snapshot);
+      if (!bin) {
+        return `<section class="architecture-segment-inspector" data-architecture-mobile-panel="segment"><div class="architecture-inspector-heading"><div><h3>Segment Microscope</h3><p>Select a route bin to inspect its evidence envelope.</p></div></div><div class="architecture-empty"><div><strong>No segment selected.</strong>Mobility evidence is not available.</div></div></section>`;
+      }
+      const vector = bin.historical_mobility_demand_vector || {};
+      const speeds = bin.reference_speed_kmh || {};
+      const pace = bin.reference_pace_seconds_per_100m || {};
+      return `
+        <section class="architecture-segment-inspector" data-architecture-mobile-panel="segment" data-selected-architecture-bin="${escapeHtml(bin.route_bin_id)}">
+          <div class="architecture-inspector-heading">
+            <div><h3>Segment Microscope</h3><p>Observed route demand, not a physiological or success prediction.</p></div>
+            <span class="chip ${bin.guidance_eligible ? "ok" : "warn"}">${bin.guidance_eligible ? "guidance eligible" : "context only"}</span>
+          </div>
+          <div class="architecture-inspector-body">
+            <div class="architecture-segment-callout">
+              <span class="architecture-micro-label">Selected route bin</span>
+              <strong>${escapeHtml(bin.distance_label || bin.route_bin_id)}</strong>
+              <span class="small-note">Composite pressure ${architectureMetric(vector.composite_pressure_index, "/100", 0)} · ${escapeHtml(bin.grade_band || "grade unknown")}</span>
+            </div>
+            <div>
+              <span class="architecture-micro-label">Why this segment slows or constrains passage</span>
+              <div class="architecture-reason-tags">${asArray(bin.why_demanding).map(reason => `<span>${escapeHtml(architectureReasonLabel(reason))}</span>`).join("")}</div>
+            </div>
+            <div>
+              <span class="architecture-micro-label">Historical speed envelope</span>
+              <div class="architecture-envelope">
+                <div><small>P25 conservative</small><strong>${architectureMetric(speeds.p25_conservative, " km/h", 2)}</strong></div>
+                <div><small>P50 observed</small><strong>${architectureMetric(speeds.p50, " km/h", 2)}</strong></div>
+                <div><small>P75 fast envelope</small><strong>${architectureMetric(speeds.p75_fast_envelope, " km/h", 2)}</strong></div>
+              </div>
+              <p class="small-note">P50 ${architectureMetric(pace.p50, " sec / 100 m", 0)} · conservative ${architectureMetric(pace.p75_conservative, " sec / 100 m", 0)}</p>
+            </div>
+            <div class="architecture-metric-grid">
+              <div><small>Grade P50</small><strong>${architectureMetric(Number(bin.signed_grade_ratio_p50) * 100, "%", 1)}</strong></div>
+              <div><small>Risk source value</small><strong>${architectureMetric(bin.risk_score_p50, "/100", 1)}</strong></div>
+              <div><small>Viscosity</small><strong>${architectureMetric(bin.grade_adjusted_viscosity_index, "", 1)}</strong></div>
+              <div><small>Continuous moving</small><strong>${architectureMetric(bin.continuous_moving_minutes_p50, " min", 1)}</strong></div>
+              <div><small>Tracks / traversals</small><strong>${formatInteger(bin.distinct_track_count)} / ${formatInteger(bin.traversal_count)}</strong></div>
+              <div><small>Evidence</small><strong>${escapeHtml(bin.data_quality || "unknown")}</strong></div>
+            </div>
+            <div class="architecture-source-line"><strong>Source</strong> ${escapeHtml(bin.source_provider || "historical_gpx_reference_corpus")} · ${escapeHtml(bin.source_path || "outputs/reference_pace_energy_analysis.json")}<br><strong>Boundary</strong> candidate-only · runtime safety truth=false · no raw GPX in projection</div>
+          </div>
+        </section>
+      `;
+    }
+
+    function architectureSpineBins(snapshot) {
+      const bins = architectureBins(snapshot);
+      if (bins.length <= 42) return bins;
+      const anchorIds = new Set(asArray(snapshot.route_spine?.pressure_anchors).map(item => item.route_bin_id));
+      const step = Math.ceil(bins.length / 34);
+      return bins.filter((bin, index) => index === 0 || index === bins.length - 1 || index % step === 0 || anchorIds.has(bin.route_bin_id));
+    }
+
+    function renderArchitectureMobileSpine(snapshot) {
+      const bins = architectureSpineBins(snapshot);
+      const selected = architectureSelectedBin(snapshot);
+      return `
+        <section class="architecture-mobile-spine" data-architecture-mobile-panel="spine">
+          <div class="architecture-lower-heading"><div><h3>Route spine</h3><p>Vertical mobile projection; high-pressure anchors and regular distance samples.</p></div><span class="chip info">${bins.length} shown</span></div>
+          ${bins.length ? `<div class="architecture-spine-list">${bins.map(bin => {
+            const score = architectureVectorValue(bin, "composite_pressure_index");
+            const selectedClass = bin.route_bin_id === selected?.route_bin_id ? "is-selected" : "";
+            return `<button type="button" class="architecture-spine-item ${selectedClass}" data-architecture-bin-id="${escapeHtml(bin.route_bin_id)}"><span><strong>${escapeHtml(bin.distance_label || bin.route_bin_id)}</strong><small>${escapeHtml(bin.why_demanding?.map(architectureReasonLabel).join(" · ") || "distributed demand")}</small></span><span class="architecture-spine-score">${Math.round(score)}</span></button>`;
+          }).join("")}</div>` : `<div class="architecture-empty"><div><strong>No route spine yet.</strong>Historical mobility bins are unavailable.</div></div>`}
+        </section>
+      `;
+    }
+
+    function renderRetreatDependency(snapshot) {
+      const retreats = asArray(snapshot.retreat_dependencies);
+      const first = retreats[0];
+      const graphReady = Boolean(snapshot.checkpoint_graph?.compiled_mission_graph_available);
+      const architectureReady = Boolean(snapshot.checkpoint_graph?.normalized_architecture_available);
+      return `
+        <section class="architecture-dependency-frame">
+          <div class="architecture-lower-heading"><div><h3>Retreat dependency</h3><p>Only recorded candidate dependencies are shown; no branch is fabricated.</p></div><span class="chip ${graphReady ? "ok" : "warn"}">${graphReady ? "graph available" : "partial"}</span></div>
+          <div class="architecture-dependency-body">
+            <div class="architecture-graph" aria-label="Retreat dependency graph">
+              <div class="architecture-graph-node">ENTRY<br>CP</div>
+              <div class="architecture-graph-edge"></div>
+              <div class="architecture-graph-node">PRIMARY<br>ROUTE</div>
+              <div class="architecture-graph-edge ${graphReady ? "" : "is-unverified"}"></div>
+              <div class="architecture-graph-node">${escapeHtml(first?.trigger_checkpoint_candidate_id || (graphReady ? "GRAPH" : "UNCOMPILED"))}</div>
+            </div>
+            ${architectureReady ? "" : '<p class="architecture-missing-graph">normalized route architecture missing — route type and reviewed alternatives remain unclassified.</p>'}
+            ${graphReady ? "" : '<p class="architecture-missing-graph">compiled mission graph missing — no reversibility score or hidden branch is inferred.</p>'}
+            <div class="architecture-retreat-list">
+              ${retreats.length ? retreats.map(item => `<div class="architecture-retreat-item"><div><strong>${escapeHtml(item.label || item.candidate_id)}</strong><span>${escapeHtml(item.retreat_type || "unknown")} · ${formatDistanceKm(item.distance_m)} · ${escapeHtml(item.dependency || "candidate route assumption")}</span></div><span class="architecture-source-status ${item.field_verified ? "" : "is-missing"}">${item.field_verified ? "verified" : escapeHtml(item.review_state || "needs review")}</span></div>`).join("") : '<div class="architecture-retreat-item"><div><strong>No retreat route candidate</strong><span>The interface does not invent a return path.</span></div><span class="architecture-source-status is-missing">missing</span></div>'}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderArchitectureEvidenceLedger(snapshot) {
+      const quality = snapshot.evidence_quality || {};
+      const counts = quality.counts || {};
+      const sources = asArray(quality.source_refs);
+      return `
+        <section class="architecture-evidence-frame">
+          <div class="architecture-lower-heading"><div><h3>Evidence ledger</h3><p>Availability, selection bias and artifact lineage.</p></div><span class="chip ${quality.band === "high" ? "ok" : "warn"}">${escapeHtml(quality.band || "unknown")}</span></div>
+          <div class="architecture-evidence-body">
+            <div class="architecture-metric-grid">
+              <div><small>Observed bins</small><strong>${formatInteger(counts.observed_bin_count)}</strong></div>
+              <div><small>Guidance eligible</small><strong>${formatInteger(counts.guidance_eligible_bin_count)}</strong></div>
+              <div><small>Reference tracks</small><strong>${formatInteger(counts.reference_track_count)}</strong></div>
+              <div><small>Retreat candidates</small><strong>${formatInteger(counts.retreat_candidate_count)}</strong></div>
+            </div>
+            <div class="architecture-evidence-list">
+              ${sources.map(source => `<div class="architecture-evidence-item"><div><strong>${escapeHtml(source.source_key || "source")}</strong><span>${escapeHtml(source.source_path || "path unavailable")} · ${escapeHtml(source.role || "evidence")}</span></div><span class="architecture-source-status ${source.status === "available" ? "" : "is-missing"}">${escapeHtml(source.status || "unknown")}</span></div>`).join("") || '<div class="architecture-evidence-item"><div><strong>No evidence registry</strong><span>Projection source refs are unavailable.</span></div><span class="architecture-source-status is-missing">missing</span></div>'}
+            </div>
+            <p class="architecture-missing-graph">${escapeHtml(quality.selection_bias_warning || "Public reference GPX may overrepresent successful or above-average trips.")}</p>
+          </div>
+        </section>
+      `;
+    }
+
     function renderArchitecturePage(force) {
+      const snapshot = architectureSnapshot();
+      const summary = snapshot.architecture_summary || {};
+      const counts = snapshot.evidence_quality?.counts || {};
+      const modeButtons = [
+        ["structure", "Structure"],
+        ["demand", "Demand"],
+        ["reversibility", "Reversibility"],
+        ["evidence", "Evidence"],
+      ];
       return `
         ${outdoorTabs(force.route)}
-        <div class="grid-2">
-          ${renderMetricPanel("Architecture Reference · CP Graph", [
-            ["Nodes", `${projectCounts().checkpoints} checkpoints`],
-            ["Segments", `${projectCounts().segments} segment frames`],
-            ["Retreat", "branch A + emergency camp candidates"],
-            ["Boss points", "route pressure peaks, not only named MCPs"],
-          ])}
-          ${renderMapPanel("architecture")}
-        </div>
+        <section class="route-architecture-shell" data-route-architecture-intelligence="true" data-architecture-status="${escapeHtml(snapshot.status || "unavailable")}" data-mobile-view="${escapeHtml(state.architectureMobileView || "spine")}">
+          <section class="architecture-hero">
+            <div>
+              <p class="architecture-eyebrow">Architecture / Route Architecture Intelligence</p>
+              <h2>Read the route as a system.<em>Find where choices disappear.</em></h2>
+              <p class="architecture-hero-copy">${escapeHtml(summary.headline || "Route architecture evidence is loading.")}</p>
+            </div>
+            <div class="architecture-summary-board">
+              <div class="architecture-stat"><span>Route type</span><strong>${escapeHtml(summary.route_type || "unclassified")}</strong></div>
+              <div class="architecture-stat"><span>Demand shape</span><strong>${escapeHtml(summary.demand_shape || "unknown")}</strong></div>
+              <div class="architecture-stat"><span>Reversibility</span><strong>${escapeHtml(summary.reversibility || "unverified")}</strong></div>
+              <div class="architecture-stat"><span>Evidence</span><strong>${formatInteger(counts.guidance_eligible_bin_count)} / ${formatInteger(counts.observed_bin_count)} bins eligible</strong></div>
+              <div class="architecture-boundary"><strong>Planning boundary</strong><br>candidate-only · runtime safety truth=false · no safety API calls · no outbound · aggregate route metrics only</div>
+            </div>
+          </section>
+          <div class="architecture-modebar" role="tablist" aria-label="Route architecture analysis modes">
+            ${modeButtons.map(([id, label]) => `<button type="button" role="tab" aria-selected="${state.architectureMode === id ? "true" : "false"}" class="${state.architectureMode === id ? "is-active" : ""}" data-architecture-mode="${id}">${label}</button>`).join("")}
+          </div>
+          <div class="architecture-mobile-switch" role="tablist" aria-label="Mobile architecture view">
+            ${[["spine", "Spine"], ["map", "Map"], ["segment", "Segment"]].map(([id, label]) => `<button type="button" role="tab" aria-selected="${state.architectureMobileView === id ? "true" : "false"}" class="${state.architectureMobileView === id ? "is-active" : ""}" data-architecture-mobile-view="${id}">${label}</button>`).join("")}
+          </div>
+          ${renderRouteFingerprint(snapshot)}
+          ${renderArchitectureMobileSpine(snapshot)}
+          <div class="architecture-workbench">
+            ${renderArchitectureMap(snapshot)}
+            ${renderSegmentMicroscope(snapshot)}
+          </div>
+          <div class="architecture-lower-grid">
+            ${renderRetreatDependency(snapshot)}
+            ${renderArchitectureEvidenceLedger(snapshot)}
+          </div>
+        </section>
       `;
     }
 
@@ -9909,7 +11055,7 @@
     }
 
     function buildMapData() {
-      const route = state.adminProjection?.route || {};
+      const route = state.adminProjection?.route || state.project?.route || {};
       const display = route.display_geometry || {};
       const coordinates = normalizeCoordinates(display.coordinates);
       const coordinateSegments = normalizeCoordinateSegments(display.coordinate_segments, coordinates);
@@ -11249,8 +12395,77 @@
       `;
     }
 
+    function bindArchitectureControls() {
+      const shell = document.querySelector('[data-route-architecture-intelligence="true"]');
+      if (!shell) return;
+      const fingerprint = shell.querySelector("[data-architecture-fingerprint-scroll]");
+      if (fingerprint) {
+        fingerprint.scrollLeft = Number(state.architectureFingerprintScrollLeft || 0);
+        fingerprint.addEventListener("scroll", () => {
+          state.architectureFingerprintScrollLeft = fingerprint.scrollLeft;
+        }, {passive: true});
+      }
+      const rerenderArchitecture = (focusSelector = "") => {
+        const currentScroll = shell.querySelector("[data-architecture-fingerprint-scroll]");
+        if (currentScroll) state.architectureFingerprintScrollLeft = currentScroll.scrollLeft;
+        render();
+        window.requestAnimationFrame(() => {
+          const nextScroll = document.querySelector("[data-architecture-fingerprint-scroll]");
+          if (nextScroll) nextScroll.scrollLeft = Number(state.architectureFingerprintScrollLeft || 0);
+          if (focusSelector) document.querySelector(focusSelector)?.focus({preventScroll: true});
+        });
+      };
+      shell.querySelectorAll("button[data-architecture-mode]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.architectureMode = button.dataset.architectureMode || "structure";
+          rerenderArchitecture(`[data-architecture-mode="${cssEscape(state.architectureMode)}"]`);
+        });
+      });
+      shell.querySelectorAll("button[data-architecture-lens]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.architectureLens = button.dataset.architectureLens || "structure";
+          rerenderArchitecture(`[data-architecture-lens="${cssEscape(state.architectureLens)}"]`);
+        });
+      });
+      shell.querySelectorAll("button[data-architecture-mobile-view]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.architectureMobileView = button.dataset.architectureMobileView || "spine";
+          rerenderArchitecture(`[data-architecture-mobile-view="${cssEscape(state.architectureMobileView)}"]`);
+        });
+      });
+      const selectBin = (binId, {openSegment = false} = {}) => {
+        if (!binId) return;
+        state.architectureSelectedBinId = binId;
+        if (openSegment) state.architectureMobileView = "segment";
+        rerenderArchitecture(`[data-architecture-bin-id="${cssEscape(binId)}"]`);
+      };
+      shell.querySelectorAll("[data-architecture-bin-id]").forEach(target => {
+        target.addEventListener("click", () => {
+          const openSegment = target.classList.contains("architecture-spine-item")
+            || window.matchMedia("(max-width: 760px)").matches;
+          selectBin(target.dataset.architectureBinId || "", {openSegment});
+        });
+        if (target.getAttribute("role") !== "button") return;
+        target.addEventListener("keydown", event => {
+          if (["Enter", " ", "Spacebar"].includes(event.key)) {
+            event.preventDefault();
+            selectBin(target.dataset.architectureBinId || "");
+            return;
+          }
+          if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+          const bins = architectureBins();
+          const currentIndex = bins.findIndex(item => item.route_bin_id === target.dataset.architectureBinId);
+          if (currentIndex < 0) return;
+          event.preventDefault();
+          const nextIndex = Math.max(0, Math.min(bins.length - 1, currentIndex + (event.key === "ArrowRight" ? 1 : -1)));
+          selectBin(bins[nextIndex].route_bin_id);
+        });
+      });
+    }
+
     function bindRenderedControls() {
       bindLivingControls();
+      bindArchitectureControls();
       const pretripMapFrame = document.getElementById("pretripMapFrame");
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
       const surfaceFrame = document.getElementById("surfaceFrame");

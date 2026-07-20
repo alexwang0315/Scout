@@ -45,6 +45,78 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-20 - Build Route Architecture Intelligence workbench
+
+User request:
+
+- Turn the historical ref-GPX mobility-demand research into the real
+  `Architecture / Route Architecture Intelligence` page for Section 9 of the
+  Outdoor AI Agent Standard.
+
+Implementation steps:
+
+- Added a deterministic `route_architecture_intelligence` projection to the
+  compact pretrip project response. It joins aggregate historical mobility
+  bins, CP/segment candidates, retreat candidates, route-pressure evidence,
+  optional normalized route architecture, optional compiled mission graph,
+  ETA/daylight summaries, source refs, privacy, and hard planning boundaries.
+- Added the full-width expedition drafting-table UI with a horizontally
+  scrollable seven-lane `Route Fingerprint`: CP graph, terrain demand,
+  historical mobility demand, risk passage, reversibility, time window, and
+  evidence confidence all share one route-distance axis.
+- Added Structure, Demand, Reversibility, and Evidence reading modes; a
+  page-local Architecture map lens recolors the existing `segments` data group
+  for terrain, slow passage, risk passage, reversibility, and evidence quality
+  without adding a 33rd map layer.
+- Synchronized fingerprint and map selections with a `Segment Microscope`
+  showing the P25/P50/P75 historical speed envelope, grade, provider risk
+  value, viscosity, continuous movement, track/traversal counts, data quality,
+  and artifact lineage.
+- Added a retreat-dependency view that shows only recorded candidate edges.
+  Missing normalized architecture and compiled mission graph remain visible as
+  `partial`; the UI does not invent branches, alternatives, or reversibility
+  scores.
+- Added a mobile-specific vertical route spine, sticky `Spine / Map / Segment`
+  switch, and sticky segment inspector. The desktop fingerprint keeps its
+  1780px working width and pans horizontally instead of shrinking to fit.
+
+Current workspace evidence:
+
+- `status=partial`;
+- 260 observed mobility bins, 245 guidance-eligible;
+- 239 segment candidates and one retreat candidate;
+- `demand_shape=late_route_pressure`;
+- normalized route architecture and compiled mission graph are both missing,
+  so route type remains `unclassified` and reversibility remains `unverified`.
+
+Boundary notes:
+
+- Historical GPX is a selection-biased, sensorless route-demand estimate. It
+  is not personal capacity, measured metabolic power, a completion probability,
+  or runtime safety truth.
+- The projection contains aggregate route metrics only: no raw GPX, raw health
+  payload, precise activity timestamps, or home/work traces.
+- The page is read-only and candidate-only. It makes no safety API call, Phase
+  1 mutation, outbound send, or hardware action.
+
+Verification:
+
+- `PYTHONDONTWRITEBYTECODE=1 rtk ./venv/bin/python -m pytest tests/test_pretrip_route_architecture_intelligence.py -q`: 4 passed.
+- `PYTHONDONTWRITEBYTECODE=1 rtk ./venv/bin/python -m pytest tests/test_scout_dashboard_page.py -q`: 43 passed.
+- Combined Architecture + Dashboard focused run: 47 passed.
+- `PYTHONDONTWRITEBYTECODE=1 rtk ./venv/bin/python -m pytest tests/test_pretrip_admin_view.py -q`: 29 passed.
+- `rtk ruff check` on the changed Python/test surface: passed.
+- Live 9199 compact endpoint: `partial`, 260 bins, privacy boundary true and
+  runtime-safety-truth false.
+- Desktop Playwright at 1440x1000: 260 fingerprint bins, synchronized segment
+  selection, risk lens switch, 453 bounded map paths after rendering
+  compaction, horizontal fingerprint pan, no body overflow, and no page errors.
+- Mobile Playwright at 390x844: vertical spine, Segment and Map transitions,
+  sticky mobile switch, `scrollWidth=clientWidth=390`, and no page errors.
+- The adjacent Outdoor Standard coverage run passed 66 checks and retained two
+  unrelated dirty-worktree failures: its registry count still expects 26 tools
+  while the concurrent AI/tool workstream currently exposes 29.
+
 ### 2026-07-17 - Promote the Weather prototype into the Dashboard design system
 
 User request:
