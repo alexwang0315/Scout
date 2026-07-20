@@ -156,6 +156,10 @@ from scout_emergency_mobile_closed_loop_api import (
     create_emergency_mobile_closed_loop_router,
     create_emergency_mobile_ui_router,
 )
+from scout_alpha_simulation_api import (
+    create_alpha_simulation_router,
+    create_alpha_simulation_ui_router,
+)
 from scout_wearable_daily_home import build_daily_home_preview
 from scout_wearable_provider_transport import (
     write_provider_live_connector_reference,
@@ -2086,12 +2090,19 @@ def create_admin_app(
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
     living_sandbox_store_root: Path | None = None,
+    alpha_sandbox_enabled: bool | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
 ) -> FastAPI:
+    resolved_alpha_sandbox_enabled = (
+        alpha_sandbox_enabled
+        if alpha_sandbox_enabled is not None
+        else os.getenv("SCOUT_ALPHA_SANDBOX_ENABLED", "").strip().casefold()
+        in {"1", "true", "yes", "on"}
+    )
     app = FastAPI(title="Scout Fusion Admin API")
     app.add_middleware(GZipMiddleware, minimum_size=1_024, compresslevel=5)
     app.include_router(
@@ -2099,6 +2110,7 @@ def create_admin_app(
             incident_store_path=incident_store_path,
             pretrip_workspace_root=pretrip_workspace_root,
             living_sandbox_store_root=living_sandbox_store_root,
+            alpha_sandbox_enabled=resolved_alpha_sandbox_enabled,
             route_context_briefing_ai_runner=route_context_briefing_ai_runner,
             route_context_briefing_variants_runner_factory=(
                 route_context_briefing_variants_runner_factory
@@ -2107,6 +2119,8 @@ def create_admin_app(
         )
     )
     app.include_router(create_emergency_mobile_ui_router())
+    if resolved_alpha_sandbox_enabled:
+        app.include_router(create_alpha_simulation_ui_router())
     return app
 
 
@@ -2115,6 +2129,7 @@ def create_admin_router(
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
     living_sandbox_store_root: Path | None = None,
+    alpha_sandbox_enabled: bool | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
@@ -2132,6 +2147,24 @@ def create_admin_router(
             prefix="/dashboard/living",
         )
     )
+    resolved_alpha_sandbox_enabled = (
+        alpha_sandbox_enabled
+        if alpha_sandbox_enabled is not None
+        else os.getenv("SCOUT_ALPHA_SANDBOX_ENABLED", "").strip().casefold()
+        in {"1", "true", "yes", "on"}
+    )
+    if resolved_alpha_sandbox_enabled:
+        router.include_router(
+            create_alpha_simulation_router(
+                store_root=(
+                    living_sandbox_store_root
+                    or DEFAULT_EMERGENCY_MOBILE_SANDBOX_STORE_ROOT
+                )
+                / "alpha",
+                prefix="/dashboard/living/alpha",
+                default_workspace_root=pretrip_workspace_root,
+            )
+        )
     resolved_incident_store_path = incident_store_path or _incident_store_from_env()
     resolved_wearable_inventory_root = wearable_inventory_root(_data_root_from_env())
     resolved_now_factory = now_factory or (lambda: datetime.now(timezone.utc))

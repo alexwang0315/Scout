@@ -1,6 +1,6 @@
 # Scout Runtime Multi-Gate Safety Reducer
 
-Status: slices 7-32 implement the deterministic local safety template from
+Status: slices 7-35 implement the deterministic local safety template from
 runtime gate evidence through Phase 1 mutation and alert application packet
 dry-run. This is not the full production safety system yet: hardware transport,
 resident production paths for every gate, real outbound send, authenticated
@@ -65,6 +65,7 @@ must not directly own Phase 1 safety truth.
 | 32. Admin/debug timeline projection event | `[x]` | `alert_application_projection_events()` emits read-only timeline evidence with map refs and `sent=false`. |
 | 33. Emergency Mobile Approval UI v0 | `[x]` | `docs/emergency/scout-emergency-mobile-approval-v0.html` provides side-by-side mobile and desktop approval surfaces, icon-first production path status, local approval/callout artifact preview, and offline-map layer toggles; no production send. |
 | 34. Emergency Mobile Closed-Loop Sandbox v0 | `[x]` | A synthetic phone/wearable scenario exercises the SensorLogger handler and real shadow reducer, then binds an immutable candidate packet to mobile approval, a sandbox-only transport attempt/receipt, and the Dashboard `Living` projection. Phase 1 truth, network transport, hardware, and production delivery remain untouched. |
+| 35. Alpha Mobile/Wearable GPX Simulation Sandbox v0.1 | `[x]` | Replays a canonical historical GPX on a deterministic virtual clock through a real `127.0.0.1` MQTT 3.1.1 broker, phone/wearable SensorLogger messages, scheduled and interactive faults, all six shadow gates, candidate approval, and a correlated simulator receipt. The Admin mobile console exposes the local-only flow without `/safety/*`, Phase 1 mutation, hardware control, external network, or delivery claims. |
 
 ```mermaid
 flowchart LR
@@ -834,6 +835,109 @@ timeout/rejection without a receipt, input-order invariant replay semantics,
 exact receipt-to-attempt/approval/packet correlation, and structural sentinels
 that fail if the Phase 1 writer or network observer path is resolved.
 Production/network/hardware boundary flags remain false in every path.
+
+## Alpha Mobile/Wearable GPX Simulation Sandbox v0.1
+
+The Alpha sandbox expands the single fixed `ridge_distress` proof into a
+general server-side simulation surface for Scout's Alpha deployment shape:
+a remote user carries one phone and one wearable, while Scout remains in the
+server room and receives device events through an MQTT-shaped boundary.
+
+The executable flow is:
+
+```text
+historical workspace GPX
+  -> deterministic virtual clock and sampled route frames
+  -> synthetic phone + wearable SensorLogger payloads
+  -> real MQTT 3.1.1 roundtrip on 127.0.0.1 and an ephemeral port
+  -> SensorLoggerMqttObserver.handle_message()
+  -> fault/network/device/route projections
+  -> run_runtime_shadow_replay() with all six gates
+  -> immutable candidate alert when the result is above L0
+  -> packet-bound local approval and sandbox-only attempt
+  -> manually selected simulator outcome and optional correlated receipt
+  -> Alpha Dashboard Living projection
+```
+
+The shared Admin boundary is:
+
+```text
+GET  /emergency/sandbox-alpha-v0
+GET  /admin/dashboard/living/alpha
+GET  /admin/dashboard/living/alpha/scenarios
+POST /admin/dashboard/living/alpha/runs
+POST /admin/dashboard/living/alpha/advance
+POST /admin/dashboard/living/alpha/interactions
+POST /admin/dashboard/living/alpha/approvals
+POST /admin/dashboard/living/alpha/transport/simulations
+```
+
+The scenario catalog covers nominal GPX replay, pace pressure, delay pressure,
+ridge distress, weather exposure, darkness pressure, environment threat, GNSS
+degradation, network recovery, and device dropout. Faults may be scheduled in
+the run request or injected from the UI for subsequent frames. Supported
+families include offline/weak network, packet drop/delay/duplicate/out-of-order,
+GNSS dropout/staleness/degraded accuracy/jump, device offline, low battery, and
+stale sensors. Text and voice are represented as synthetic input or transcript
+events plus deterministic Scout acknowledgements; the page does not access a
+microphone, speaker, hardware controller, or external message transport.
+Free-form text/voice payloads are not retained: persistence contains only a
+redaction marker and digest. Exact allow-listed `fault.*` controls may be
+stored. The combined default/request/dynamic schedule is limited to 128 faults,
+and a run is limited to 64 persisted interaction events.
+
+`loopback_mqtt_broker` is a real local protocol exchange, not a direct handler
+shortcut. The harness binds exactly `127.0.0.1:0`, supports MQTT 3.1.1
+CONNECT/SUBSCRIBE/PUBLISH/PUBACK/PING/DISCONNECT for QoS 0/1, and rejects every
+other bind host or fixed port. `broker_connection_verified=true` proves only
+that local loopback exchange. It must never be rendered as production MQTT,
+remote-device connectivity, or field delivery. Living records this distinction
+as `local_loopback_mqtt_publish_performed=true` while the production-facing
+`network_mqtt_publish_performed` remains false.
+
+Only workspaces with `actual_user_track_available=false` are accepted. GPX
+paths must remain contained in the configured workspace. The replay source is
+labeled `historical_reference_gpx`; route coordinates in the run artifacts are
+therefore reference evidence, not a current user location. The scenario catalog
+returns a workspace basename and relative GPX ref but not an absolute server
+path. The HTTP run endpoint fails closed with no server-configured workspace and
+rejects any client request that tries to substitute a different workspace,
+project id, or canonical GPX. Every current-state mutation also rejects state
+prepared against a different configured workspace source. Explicit arbitrary
+contained paths are available only to the operator-run CLI.
+
+Before replay execution, deterministic code re-hashes the scenario request,
+replay manifest, and GPX. Before approval it re-hashes the reducer artifact and
+recomputes the candidate content and packet lineage. Before a simulated receipt
+it checks the persisted approval and attempt lineage. Hash or identity mismatch
+fails closed; hashes remain local integrity evidence rather than signatures
+against a hostile filesystem.
+
+Every Alpha projection preserves `candidate_only=true`,
+`runtime_safety_truth=false`, `phase1_l0_l4_state_mutated=false`,
+`safety_api_called=false`, `external_network_calls_made=false`,
+`real_outbound_send_performed=false`, and `hardware_control_invoked=false`.
+The candidate approval and receipt reuse the closed-loop sandbox effect
+contract: an `agree_send` action creates only a local attempt with
+`network_connection_attempted=false`; a correlated simulator receipt keeps
+`production_delivery_verified=false`, `production_send_performed=false`, and
+`sent=false`.
+
+The CLI entrypoint is `tools/run_scout_alpha_simulation_sandbox.py`. It requires
+`--confirm-sandbox-run`, can execute one profile or the complete scenario
+matrix, and may explicitly add local approval/receipt artifacts with
+`--simulate-approval-receipt`. It defaults to
+`<workspace>/outputs/sandbox/alpha/`; none of those artifacts are admitted to
+Phase 1, Total Info, workspace retrieval catalogs, or runtime safety truth.
+
+The Admin Alpha API/UI is not mounted by default. Local prototype use requires
+the explicit `SCOUT_ALPHA_SANDBOX_ENABLED=true` flag (or the equivalent
+constructor argument). This opt-in is not authentication. Until authenticated
+operator identity, authorization, body/rate limits, crash-safe journaling, and
+deployment network policy are implemented, this surface is a controlled
+single-operator local prototype and is not approved for LAN or Internet
+exposure. Orphaned approval/simulation artifacts fail closed for operator
+recovery; the v0.1 store does not claim transactional crash recovery.
 
 ## Non-Goals
 
