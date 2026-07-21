@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from pretrip_reference_pace_energy_analysis import (
+    _crowd_supported_axis,
     build_reference_pace_energy_analysis,
     write_reference_pace_energy_analysis,
 )
@@ -36,6 +37,53 @@ def test_reference_pace_energy_analysis_rejects_fixed_interval_assumption_and_bu
     assert report["counts"]["timed_reference_track_count"] == 3
     assert report["counts"]["missing_time_reference_track_count"] == 1
     assert report["counts"]["route_traversal_count"] > 0
+    assert report["crowd_axis"]["analysis_distance_m"] == 600.0
+    assert max(item["end_distance_m"] for item in report["route_bins"]) == 600.0
+
+    passage_timing = report["checkpoint_passage_timing"]
+    assert passage_timing["artifact_kind"] == "pretrip_checkpoint_passage_timing"
+    assert passage_timing["schema_version"] == "checkpoint_passage_timing.v0"
+    assert passage_timing["source_provider"] == "historical_gpx_reference_corpus"
+    assert passage_timing["source_path"].endswith("#checkpoint_passage_timing")
+    assert len(passage_timing["sha256"]) == 64
+    assert passage_timing["policy"] == {
+        "passage_window_distance_m": 500.0,
+        "window_alignment": "centered_on_cp_or_mcp_clipped_to_route_extent",
+        "minimum_window_coverage_ratio": 0.6,
+        "mode_bucket_minutes": 5,
+        "mode_bucket_rounding": "nearest_5_minutes_half_up_minimum_5",
+        "sample_unit": "one_contiguous_track_bout_direction_window_passage",
+    }
+    assert passage_timing["data_quality"]["node_count"] == 4
+    assert passage_timing["data_quality"]["timed_node_count"] == 4
+    assert {item["node_kind"] for item in passage_timing["nodes"]} == {"cp", "mcp"}
+    named_mcp = next(
+        item
+        for item in passage_timing["nodes"]
+        if item["node_id"] == "mcp.yunhai"
+    )
+    assert named_mcp["label"] == "雲海保線所"
+    assert named_mcp["named_places"] == ["雲海保線所"]
+    assert named_mcp["route_distance_m"] == 300.0
+    assert named_mcp["passage_window"]["distance_m"] == 500.0
+    assert named_mcp["sample_count"] >= 3
+    assert named_mcp["distinct_track_count"] >= 3
+    assert set(named_mcp["duration_minutes"]) == {
+        "min",
+        "max",
+        "average",
+        "mode_5min",
+        "mode_5min_tied_buckets",
+    }
+    assert named_mcp["duration_minutes"]["min"] <= named_mcp["duration_minutes"][
+        "average"
+    ] <= named_mcp["duration_minutes"]["max"]
+    assert named_mcp["duration_minutes"]["mode_5min"] % 5 == 0
+    assert named_mcp["candidate_only"] is True
+    assert named_mcp["runtime_safety_truth"] is False
+    assert passage_timing["privacy"]["raw_gpx_embedded"] is False
+    assert passage_timing["privacy"]["precise_timestamps_embedded"] is False
+    assert passage_timing["boundary"]["phase1_runtime_safety_truth"] is False
 
     absolute_grade = report["relationships"]["by_absolute_grade_strata"]
     assert [item["band"] for item in absolute_grade] == [
@@ -185,6 +233,309 @@ def test_reference_pace_energy_writer_emits_dashboard_ready_artifacts(tmp_path: 
     assert pace_map["metadata"]["privacy"]["precise_timestamps_embedded"] is False
 
 
+def test_reference_analysis_treats_golden_route_as_equal_crowd_evidence(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_workspace(tmp_path)
+    source_index_path = project_root / "sources/historical_gpx_source_index.json"
+    source_index = json.loads(source_index_path.read_text(encoding="utf-8"))
+    primary_path = (
+        project_root
+        / "normalized/routes/filtered/primary.demo.speed_filtered.gpx"
+    )
+    raw_primary_path = project_root / "inbox/gpx/primary-demo.gpx"
+    raw_primary_path.parent.mkdir(parents=True)
+    route_points = [(23.95, 121.0 + index * 0.00049) for index in range(13)]
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    fast_timestamps = [base_time + timedelta(seconds=index) for index in range(13)]
+    walking_timestamps = [
+        base_time + timedelta(hours=1, seconds=index * 50)
+        for index in range(13)
+    ]
+    _write_multisegment_gpx(
+        raw_primary_path,
+        [route_points, route_points],
+        [fast_timestamps, walking_timestamps],
+    )
+    _write_gpx(primary_path, route_points, walking_timestamps)
+    source_index["sources"].insert(
+        0,
+        {
+            "source_id": "gpx.source.demo",
+            "provider": "operator_supplied_local_file",
+            "role": "golden_route_reference",
+            "route_role": "golden_route",
+            "original_filename": "primary-demo.gpx",
+            "original_path": "/private/source/primary-demo.gpx",
+            "workspace_ref": "inbox/gpx/primary-demo.gpx",
+            "sha256": _sha256(raw_primary_path),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+    )
+    source_index["source_file_count"] = len(source_index["sources"])
+    _write_json(source_index_path, source_index)
+
+    report, _ = build_reference_pace_energy_analysis(
+        project_root,
+        generated_at="2026-07-21T00:00:00+00:00",
+        route_bin_m=250.0,
+        min_tracks_for_guidance=3,
+    )
+
+    assert report["counts"]["reference_track_count"] == 4
+    assert report["counts"]["scope_reference_track_count"] == 1
+    assert report["counts"]["crowd_track_count"] == 5
+    golden = next(
+        item for item in report["tracks"] if item["source_id"] == "gpx.source.demo"
+    )
+    assert golden["source_role"] == "scope_reference"
+    assert golden["statistical_weight"] == "equal_track_route_bin_traversal"
+    assert golden["analysis_source"]["kind"] == "workspace_raw_gpx"
+    assert golden["trackpoint_count"] == 26
+    assert golden["adjacent_pair_speed_filter"]["accepted_pair_count"] == 12
+    assert golden["excluded_segment_counts"][
+        "above_or_equal_maximum_speed"
+    ] == 12
+    assert golden["route_traversal_count"] > 0
+    assert golden["segment_diagnostics"][0]["interpretability"] == (
+        "low_interpretability"
+    )
+    assert golden["segment_diagnostics"][0]["locomotion_class"] == "unknown"
+    assert golden["segment_diagnostics"][1]["interpretability"] == "usable"
+    assert report["policy"]["source_role_policy"] == (
+        "golden_route_is_scope_reference_and_equal_weight_crowd_observation"
+    )
+
+
+def test_primary_statistics_filter_each_adjacent_pair_without_dropping_track(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_workspace(tmp_path)
+    reference_path = (
+        project_root
+        / "normalized/routes/filtered/reference_001.demo.speed_filtered.gpx"
+    )
+    route_points = [(23.95, 121.0 + index * 0.00049) for index in range(5)]
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    timestamps = [base_time]
+    for delta_seconds in (36, 200, 15, 36):
+        timestamps.append(timestamps[-1] + timedelta(seconds=delta_seconds))
+    _write_gpx(reference_path, route_points, timestamps)
+
+    report, _ = build_reference_pace_energy_analysis(
+        project_root,
+        generated_at="2026-07-21T00:00:00+00:00",
+        route_bin_m=250.0,
+        min_tracks_for_guidance=1,
+    )
+
+    track = next(
+        item
+        for item in report["tracks"]
+        if item["source_id"] == "gpx.source.demo.reference.001"
+    )
+    pair_filter = track["adjacent_pair_speed_filter"]
+    assert pair_filter == {
+        "unit_of_analysis": "adjacent_trackpoint_pair",
+        "minimum_speed_kmh_exclusive": 1.0,
+        "maximum_speed_kmh_exclusive": 10.0,
+        "strict_bounds": True,
+        "whole_track_or_segment_average_used_for_filtering": False,
+        "positive_timed_pair_count": 4,
+        "accepted_pair_count": 2,
+    }
+    assert track["excluded_segment_counts"]["at_or_below_minimum_speed"] == 1
+    assert track["excluded_segment_counts"]["above_or_equal_maximum_speed"] == 1
+    assert track["route_traversal_count"] == 2
+    assert track["segment_diagnostics"][0]["accepted_pair_count"] == 2
+    assert track["segment_diagnostics"][0][
+        "whole_segment_average_used_for_filtering"
+    ] is False
+    assert report["counts"]["route_traversal_count"] > track[
+        "route_traversal_count"
+    ]
+    assert all(
+        1.0 < item["reference_speed_mps"]["p50"] * 3.6 < 10.0
+        for item in report["route_bins"]
+    )
+
+
+def test_golden_route_axis_is_not_rebased_by_sparse_crowd_support() -> None:
+    route_bins = [
+        {
+            "route_bin_index": 0,
+            "start_distance_m": 0.0,
+            "end_distance_m": 250.0,
+            "distinct_track_count": 1,
+            "guidance_eligible": False,
+        },
+        {
+            "route_bin_index": 160,
+            "start_distance_m": 40_000.0,
+            "end_distance_m": 40_250.0,
+            "distinct_track_count": 1,
+            "guidance_eligible": False,
+        },
+        *[
+            {
+                "route_bin_index": index,
+                "start_distance_m": index * 250.0,
+                "end_distance_m": (index + 1) * 250.0,
+                "distinct_track_count": 4,
+                "guidance_eligible": True,
+            }
+            for index in range(172, 180)
+        ],
+    ]
+
+    axis = _crowd_supported_axis(
+        route_bins,
+        source_route_distance_m=112_250.0,
+        route_bin_m=250.0,
+        min_tracks_for_guidance=3,
+    )
+
+    assert axis["status"] == "golden_route_axis_retained"
+    assert axis["route_axis_basis"] == "golden_route_scope"
+    assert axis["analysis_origin_m"] == 0.0
+    assert axis["analysis_distance_m"] == 112_250.0
+    assert axis["axis_rebased"] is False
+    assert axis["first_sustained_crowd_support_m"] == 43_000.0
+    assert axis["leading_span_interpretability"] == "not_applicable"
+    assert axis["requires_human_review"] is False
+    assert axis["locomotion_inference"] == "unknown"
+
+    ordinary_axis = _crowd_supported_axis(
+        route_bins[2:],
+        source_route_distance_m=45_000.0,
+        route_bin_m=250.0,
+        min_tracks_for_guidance=3,
+    )
+    assert ordinary_axis["status"] == "golden_route_axis_retained"
+    assert ordinary_axis["analysis_origin_m"] == 0.0
+    assert ordinary_axis["requires_human_review"] is False
+
+
+def test_sequence_map_matching_preserves_out_and_back_route_progress(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "out-and-back"
+    raw_root = project_root / "inbox/gpx"
+    source_root = project_root / "sources"
+    risk_root = project_root / "outputs/risk"
+    raw_root.mkdir(parents=True)
+    source_root.mkdir()
+    risk_root.mkdir(parents=True)
+
+    route_points = [
+        (23.95, 121.00000),
+        (23.95, 121.00245),
+        (23.95, 121.00490),
+        (23.95, 121.00245),
+        (23.95, 121.00000),
+    ]
+    route_distances_m = [0.0, 250.0, 500.0, 750.0, 1_000.0]
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    timestamps = [
+        base_time + timedelta(seconds=index * 180)
+        for index in range(len(route_points))
+    ]
+    raw_path = raw_root / "golden.gpx"
+    _write_gpx(raw_path, route_points, timestamps)
+    _write_json(
+        project_root / "project.json",
+        {
+            "project_id": "out-and-back",
+            "historical_gpx_source_index_ref": (
+                "sources/historical_gpx_source_index.json"
+            ),
+            "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
+            "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+        },
+    )
+    _write_json(
+        source_root / "historical_gpx_source_index.json",
+        {
+            "artifact_kind": "pretrip_historical_gpx_source_index",
+            "project_id": "out-and-back",
+            "source_file_count": 1,
+            "sources": [
+                {
+                    "source_id": "gpx.source.out-and-back.primary",
+                    "provider": "operator_supplied_local_file",
+                    "role": "golden_route_reference",
+                    "route_role": "golden_route",
+                    "original_filename": "golden.gpx",
+                    "original_path": "/private/source/golden.gpx",
+                    "workspace_ref": "inbox/gpx/golden.gpx",
+                    "sha256": _sha256(raw_path),
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            ],
+        },
+    )
+    _write_json(
+        risk_root / "risk_score_points.geojson",
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [lon, lat],
+                    },
+                    "properties": {
+                        "distance_m": distance_m,
+                        "rs": 40.0,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                }
+                for (lat, lon), distance_m in zip(
+                    route_points,
+                    route_distances_m,
+                    strict=True,
+                )
+            ],
+        },
+    )
+    _write_json(
+        project_root / "outputs/route_pressure_profile.json",
+        {
+            "artifact_kind": "pretrip_route_pressure_profile",
+            "schema_version": "route_pressure_profile.v1",
+            "project_id": "out-and-back",
+            "samples": [
+                {
+                    "sample_id": f"sample.{index}",
+                    "start_distance_m": index * 250.0,
+                    "end_distance_m": (index + 1) * 250.0,
+                    "terrain": {
+                        "distance_m": 250.0,
+                        "elevation_gain_m": 0.0,
+                        "elevation_loss_m": 0.0,
+                    },
+                }
+                for index in range(4)
+            ],
+        },
+    )
+
+    report, _ = build_reference_pace_energy_analysis(
+        project_root,
+        generated_at="2026-07-21T00:00:00+00:00",
+        route_bin_m=250.0,
+        min_tracks_for_guidance=1,
+    )
+
+    assert [item["route_bin_index"] for item in report["route_bins"]] == [0, 1, 2, 3]
+    assert report["crowd_axis"]["analysis_distance_m"] == 1_000.0
+    assert report["tracks"][0]["excluded_segment_counts"] == {}
+
+
 def _write_workspace(tmp_path: Path) -> Path:
     project_root = tmp_path / "demo"
     filtered_root = project_root / "normalized/routes/filtered"
@@ -199,6 +550,9 @@ def _write_workspace(tmp_path: Path) -> Path:
         "historical_gpx_source_index_ref": "sources/historical_gpx_source_index.json",
         "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
         "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+        "checkpoint_candidates_ref": "candidates/checkpoints.json",
+        "mcp_candidates_ref": "outputs/mcp/mcp_candidates.json",
+        "mcp_named_point_evidence_ref": "outputs/mcp/named_point_evidence.json",
     }
     _write_json(project_root / "project.json", project)
 
@@ -207,6 +561,67 @@ def _write_workspace(tmp_path: Path) -> Path:
         for index in range(13)
     ]
     base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    _write_gpx(
+        filtered_root / "primary.demo.speed_filtered.gpx",
+        route_points,
+        [base_time + timedelta(seconds=index * 50) for index in range(13)],
+    )
+    _write_json(
+        project_root / "candidates/checkpoints.json",
+        [
+            {
+                "candidate_id": "cp.start",
+                "label": "Start",
+                "checkpoint_type": "start",
+                "route_point_index": 0,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+            {
+                "candidate_id": "cp.001",
+                "label": "CP 001",
+                "checkpoint_type": "route_progress",
+                "route_point_index": 6,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+            {
+                "candidate_id": "cp.finish",
+                "label": "Finish",
+                "checkpoint_type": "finish",
+                "route_point_index": 12,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        ],
+    )
+    _write_json(
+        project_root / "outputs/mcp/mcp_candidates.json",
+        {
+            "mcp_candidates": [
+                {
+                    "mcp_id": "mcp.yunhai",
+                    "label": "雲海保線所",
+                    "distance_m": 300.0,
+                    "linked_named_points": ["np.yunhai"],
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            ]
+        },
+    )
+    _write_json(
+        project_root / "outputs/mcp/named_point_evidence.json",
+        {
+            "named_points": [
+                {
+                    "named_point_id": "np.yunhai",
+                    "canonical_name": "雲海保線所",
+                    "route_position": {"distance_m": 300.0},
+                }
+            ]
+        },
+    )
     sources = []
     interval_sets = [
         [45, 50, 55, 45, 50, 55, 45, 50, 55, 45, 50, 55],
@@ -331,6 +746,26 @@ def _write_gpx(
             )
         rows.append("</trkpt>")
     rows.extend(["</trkseg></trk>", "</gpx>"])
+    path.write_text("\n".join(rows), encoding="utf-8")
+
+
+def _write_multisegment_gpx(
+    path: Path,
+    segments: list[list[tuple[float, float]]],
+    timestamps: list[list[datetime]],
+) -> None:
+    rows = ["<?xml version='1.0' encoding='utf-8'?>", '<gpx version="1.1">', "<trk>"]
+    for points, segment_timestamps in zip(segments, timestamps, strict=True):
+        rows.append("<trkseg>")
+        for index, (lat, lon) in enumerate(points):
+            rows.append(f'<trkpt lat="{lat}" lon="{lon}">')
+            rows.append(f"<ele>{1000 + index * 4}</ele>")
+            rows.append(
+                f"<time>{segment_timestamps[index].isoformat().replace('+00:00', 'Z')}</time>"
+            )
+            rows.append("</trkpt>")
+        rows.append("</trkseg>")
+    rows.extend(["</trk>", "</gpx>"])
     path.write_text("\n".join(rows), encoding="utf-8")
 
 

@@ -2438,12 +2438,29 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
     for marker in (
         'data-route-architecture-intelligence="true"',
         "Route Fingerprint",
+        "Golden-route start-to-finish axis",
+        "crowd gaps lower confidence but never rebase or truncate the route",
+        "full golden-route scope retained",
+        "Crowd sources / usable",
+        "Reference / scope",
         "Segment Microscope",
         "Retreat dependency",
         "Evidence ledger",
         "function architectureSnapshot()",
         "function renderRouteFingerprint",
+        "function architecturePassageTimingNodes",
+        "function architecturePassageDurationLabel",
+        "CP/MCP PASSAGE · 500M WINDOW",
+        "MIN / AVG / MODE / MAX",
+        'data-architecture-passage-node-id="${escapeHtml(node.node_id)}"',
+        "state.architectureSelectedPassageNodeId",
+        "mode_5min",
+        "named_places",
+        "const sourceRouteDistance = Math.max(",
         "function renderArchitectureMap",
+        "function architectureLensLegendItems",
+        "function architectureLensLegendSubtitle",
+        "function renderArchitectureLensLegend",
         "function renderSegmentMicroscope",
         "function bindArchitectureControls",
         'data-architecture-mode="${id}"',
@@ -2461,16 +2478,43 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
         '["map", "Map"]',
         '["segment", "Segment"]',
         'data-layer-group="segments"',
+        'aria-label="Architecture lens color legend"',
+        'data-architecture-legend="${escapeHtml(state.architectureLens)}"',
+        "Very high · 78–100",
+        "No observed bin",
+        "Unverified segment reversibility",
+        "green means stronger evidence support; this is confidence, not pressure",
+        "gray means unverified candidate topology; it is not a safe-return claim",
         "candidate-only · runtime safety truth=false",
         "normalized route architecture missing",
         "compiled mission graph missing",
+        "const flattenedCoordinates = coordinates.length ? coordinates : coordinateSegments.flat();",
+        "route.bbox_wgs84 || route.bounds || route.display_bounds || display.bounds",
+        "coordinateSegments.length && flattenedCoordinates.length >= 2",
+        "rawBounds.north",
+        "rawBounds.south",
+        "rawBounds.east",
+        "rawBounds.west",
     ):
         assert marker in html
+
+    for removed_marker in (
+        'class="architecture-hero"',
+        'class="architecture-summary-board"',
+        ".architecture-hero {",
+        ".architecture-summary-board {",
+        "Read the route as a system.",
+    ):
+        assert removed_marker not in html
 
     assert 'if (route === "outdoor-architecture") return true;' in html.split(
         "function routeUsesWideFrame", 1
     )[1].split("function routeUsesFullFrame", 1)[0]
     assert '"outdoor-architecture": Object.freeze({maturity: "partial"' in html
+    legend_rule = html.split(".architecture-map-legend {", 1)[1].split("}", 1)[0]
+    assert "position: static;" in legend_rule
+    assert "position: absolute;" not in legend_rule
+    assert "border-top: 1px solid var(--line);" in legend_rule
     assert "fetch(" not in html.split("function architectureSnapshot", 1)[1].split(
         "function renderPaceFitPage", 1
     )[0]

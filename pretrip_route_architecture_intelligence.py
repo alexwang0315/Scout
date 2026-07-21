@@ -32,6 +32,7 @@ def build_route_architecture_intelligence(
     boss_points: Mapping[str, Any] | None = None,
     normalized_route_architecture: Mapping[str, Any] | None = None,
     compiled_mission_graph: Mapping[str, Any] | None = None,
+    candidate_mission_graph: Mapping[str, Any] | None = None,
     eta: Mapping[str, Any] | None = None,
     weather_daylight: Mapping[str, Any] | None = None,
     source_refs: Mapping[str, str] | None = None,
@@ -43,9 +44,21 @@ def build_route_architecture_intelligence(
     segment_values = [dict(item) for item in segments or []]
     retreat_values = [dict(item) for item in retreat_routes or []]
     reference_value = dict(reference_pace_energy_analysis or {})
+    passage_timing_value = (
+        dict(reference_value.get("checkpoint_passage_timing"))
+        if isinstance(reference_value.get("checkpoint_passage_timing"), Mapping)
+        else {}
+    )
     normalized_value = dict(normalized_route_architecture or {})
     mission_graph_value = dict(compiled_mission_graph or {})
+    candidate_graph_value = dict(candidate_mission_graph or {})
+    topology_graph_value = mission_graph_value or candidate_graph_value
     source_ref_values = {str(key): str(value) for key, value in (source_refs or {}).items()}
+    crowd_axis = (
+        dict(reference_value.get("crowd_axis"))
+        if isinstance(reference_value.get("crowd_axis"), Mapping)
+        else {}
+    )
 
     raw_bins = [
         dict(item)
@@ -64,18 +77,28 @@ def build_route_architecture_intelligence(
             or "outputs/reference_pace_energy_analysis.json"
         ),
         source_sha256=str(reference_value.get("sha256") or ""),
+        crowd_axis=crowd_axis,
     )
-    route_distance_m = _route_distance(route_value, vectors)
+    route_distance_m = _route_distance(route_value, vectors, crowd_axis=crowd_axis)
+    source_route_distance_m = (
+        _number(crowd_axis.get("source_route_distance_m"))
+        or _number(route_value.get("distance_m"))
+        or route_distance_m
+    )
+    crowd_analysis_origin_m = 0.0
+    route_axis_basis = "golden_route_scope"
     architecture_available = bool(normalized_value)
     mission_graph_available = bool(mission_graph_value)
-    missing_artifacts = [
-        name
-        for name, available in (
-            ("normalized_route_architecture", architecture_available),
-            ("compiled_mission_graph", mission_graph_available),
+    candidate_graph_available = bool(candidate_graph_value)
+    missing_artifacts = []
+    if not architecture_available:
+        missing_artifacts.append("normalized_route_architecture")
+    if not mission_graph_available:
+        missing_artifacts.append(
+            "reviewed_compiled_mission_graph"
+            if candidate_graph_available
+            else "compiled_mission_graph"
         )
-        if not available
-    ]
     status = (
         "ready"
         if vectors and architecture_available and mission_graph_available
@@ -83,9 +106,21 @@ def build_route_architecture_intelligence(
         if vectors or checkpoint_values or segment_values
         else "unavailable"
     )
-    route_type = _route_type(normalized_value)
+    route_type_analysis = _route_type_analysis(
+        normalized_value,
+        topology_graph_value,
+        checkpoint_values,
+        route_distance_m,
+    )
+    route_type = route_type_analysis["route_type"]
     demand_shape = _demand_shape(vectors, route_distance_m)
-    reversibility = "graph_available" if mission_graph_available else "unverified"
+    reversibility = (
+        "graph_available"
+        if mission_graph_available
+        else "candidate_graph_unverified"
+        if candidate_graph_available
+        else "unverified"
+    )
     reference_source_ref = (
         source_ref_values.get("reference_pace_energy_analysis")
         or "outputs/reference_pace_energy_analysis.json"
@@ -101,8 +136,10 @@ def build_route_architecture_intelligence(
         source_refs=source_ref_values,
         architecture_available=architecture_available,
         mission_graph_available=mission_graph_available,
-        route_pressure_available=bool(route_pressure_profile),
-        boss_points_available=bool(boss_points),
+        candidate_graph_available=candidate_graph_available,
+        route_pressure=dict(route_pressure_profile or {}),
+        boss_points=dict(boss_points or {}),
+        topology_graph=topology_graph_value,
         checkpoint_count=len(checkpoint_values),
         segment_count=len(segment_values),
         retreat_count=len(retreat_values),
@@ -132,10 +169,21 @@ def build_route_architecture_intelligence(
             "question": "Where does route pressure accumulate, and where do choices begin to disappear?",
             "route_name": str(route_value.get("route_name") or project_id),
             "route_type": route_type,
+            "route_type_basis": route_type_analysis["route_type_basis"],
+            "start_finish_gap_m": route_type_analysis["start_finish_gap_m"],
             "demand_shape": demand_shape,
             "reversibility": reversibility,
             "evidence_state": status,
             "route_distance_m": route_distance_m,
+            "source_route_distance_m": round(source_route_distance_m, 3),
+            "crowd_analysis_origin_m": round(crowd_analysis_origin_m, 3),
+            "route_axis_basis": route_axis_basis,
+            "route_axis_requires_human_review": bool(
+                False
+            ),
+            "leading_span_interpretability": str(
+                "not_applicable"
+            ),
             "headline": _headline(
                 demand_shape=demand_shape,
                 reversibility=reversibility,
@@ -144,9 +192,16 @@ def build_route_architecture_intelligence(
         },
         "route_spine": {
             "distance_m": route_distance_m,
+            "source_distance_m": round(source_route_distance_m, 3),
+            "analysis_origin_m": round(crowd_analysis_origin_m, 3),
+            "axis_basis": route_axis_basis,
+            "axis_requires_human_review": bool(
+                False
+            ),
             "nodes": _route_spine_nodes(
                 checkpoint_values,
                 route_distance_m,
+                distance_origin_m=crowd_analysis_origin_m,
                 source_ref=(
                     source_ref_values.get("checkpoints")
                     or "candidates/checkpoints.json"
@@ -157,12 +212,33 @@ def build_route_architecture_intelligence(
             "candidate_only": True,
             "runtime_safety_truth": False,
         },
+        "crowd_axis": {
+            **crowd_axis,
+            "status": "golden_route_axis_retained",
+            "route_axis_basis": "golden_route_scope",
+            "analysis_origin_m": 0.0,
+            "analysis_distance_m": round(route_distance_m, 3),
+            "axis_rebased": False,
+            "leading_span_m": 0.0,
+            "leading_span_interpretability": "not_applicable",
+            "requires_human_review": False,
+            "crowd_support_role": "coverage_and_confidence_diagnostic_only",
+            "source_path": reference_source_ref,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
         "segment_demand_vectors": vectors,
+        "checkpoint_passage_timing": _checkpoint_passage_timing_projection(
+            passage_timing_value,
+            route_distance_m=route_distance_m,
+            default_source_ref=reference_source_ref,
+        ),
         "checkpoint_graph": _checkpoint_graph(
             checkpoint_values,
             segment_values,
             normalized_value,
             mission_graph_value,
+            candidate_graph_value,
             source_ref=(
                 source_ref_values.get("segments") or "candidates/segments.json"
             ),
@@ -176,14 +252,26 @@ def build_route_architecture_intelligence(
         ),
         "alternatives": _alternatives(
             normalized_value,
-            mission_graph_value,
+            topology_graph_value,
             source_ref=(
                 source_ref_values.get("route_architecture")
                 or source_ref_values.get("compiled_mission_graph")
+                or source_ref_values.get("compiled_mission_graph_candidate")
                 or "normalized/architecture/route_architecture.json"
             ),
         ),
-        "time_dependencies": _time_dependencies(eta, weather_daylight),
+        "time_dependencies": _time_dependencies(
+            eta,
+            weather_daylight,
+            mission_graph=topology_graph_value,
+            mission_graph_role=(
+                "reviewed"
+                if mission_graph_available
+                else "candidate"
+                if candidate_graph_available
+                else "missing"
+            ),
+        ),
         "evidence_quality": evidence_quality,
         "metric_definitions": {
             "terrain_demand": "Relative grade and gravitational/dissipation proxy; not metabolic power.",
@@ -192,12 +280,16 @@ def build_route_architecture_intelligence(
             "endurance_exposure": "Relative continuous-moving duration and route progress.",
             "pace_variability": "Relative spread between historical conservative and fast envelopes.",
             "composite_pressure_index": "Candidate visualization index, not a difficulty grade or success probability.",
+            "route_axis": "Golden-route start-to-finish scope; crowd coverage changes confidence, never the axis origin or extent.",
+            "checkpoint_passage_duration": "Historical aggregate duration for a fixed 500 m route window centered on each CP/MCP; mode is rounded to 5-minute buckets.",
         },
         "limitations": [
             "Reference GPX reflects uploader behavior and selection bias, not the current user's capacity.",
             "Positive gravitational power is a per-kilogram mechanical proxy, not measured human energy expenditure.",
-            "Missing normalized architecture or mission graph leaves reversibility and alternatives unverified.",
+            "Candidate topology can describe route structure, but reversibility and alternatives remain unverified without reviewed architecture and mission graph evidence.",
             "Weather, physiologic state, darkness, and environment threats remain separate decision dimensions.",
+            "Sparse crowd coverage lowers evidence quality for affected bins; it never rebases or truncates the golden-route scope.",
+            "CP/MCP passage timing describes historical route demand and does not predict personal completion or runtime safety.",
         ],
         "privacy": {
             "raw_gpx_embedded": False,
@@ -226,20 +318,36 @@ def _demand_vectors(
     source_provider: str,
     source_path: str,
     source_sha256: str,
+    crowd_axis: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     viscosity_values = [_number(item.get("grade_adjusted_viscosity_index")) for item in raw_bins]
     duration_values = [_number(item.get("continuous_moving_minutes_p50")) for item in raw_bins]
     viscosity_population = [value for value in viscosity_values if value is not None]
     duration_population = [value for value in duration_values if value is not None]
     max_end_distance = max(
-        (_number(item.get("end_distance_m")) or 0.0 for item in raw_bins),
-        default=0.0,
-    )
+        (
+            _number(item.get("source_end_distance_m"))
+            if item.get("source_end_distance_m") is not None
+            else _number(item.get("end_distance_m"))
+        )
+        or 0.0
+        for item in raw_bins
+    ) if raw_bins else 0.0
 
     vectors: list[dict[str, Any]] = []
     for index, item in enumerate(raw_bins):
-        start_m = _number(item.get("start_distance_m")) or 0.0
-        end_m = _number(item.get("end_distance_m")) or start_m
+        source_start_m = (
+            _number(item.get("source_start_distance_m"))
+            if item.get("source_start_distance_m") is not None
+            else _number(item.get("start_distance_m"))
+        ) or 0.0
+        source_end_m = (
+            _number(item.get("source_end_distance_m"))
+            if item.get("source_end_distance_m") is not None
+            else _number(item.get("end_distance_m"))
+        ) or source_start_m
+        start_m = source_start_m
+        end_m = source_end_m
         grade = _number(item.get("signed_grade_ratio_p50")) or 0.0
         risk = _clamp(_number(item.get("risk_score_p50")) or 0.0, 0.0, 100.0)
         viscosity = _number(item.get("grade_adjusted_viscosity_index"))
@@ -279,6 +387,8 @@ def _demand_vectors(
             "route_bin_index": int(item.get("route_bin_index", index)),
             "start_distance_m": round(start_m, 3),
             "end_distance_m": round(end_m, 3),
+            "source_start_distance_m": round(source_start_m, 3),
+            "source_end_distance_m": round(source_end_m, 3),
             "distance_label": _distance_range_label(start_m, end_m),
             "grade_band": str(item.get("grade_band") or "unknown"),
             "signed_grade_ratio_p50": round(grade, 4),
@@ -345,6 +455,7 @@ def _route_spine_nodes(
     checkpoints: Sequence[Mapping[str, Any]],
     route_distance_m: float,
     *,
+    distance_origin_m: float = 0.0,
     source_ref: str,
 ) -> list[dict[str, Any]]:
     nodes = []
@@ -354,12 +465,17 @@ def _route_spine_nodes(
             continue
         node_id = str(item.get("candidate_id") or item.get("checkpoint_id") or f"cp.{index + 1}")
         checkpoint_type = str(item.get("checkpoint_type") or "checkpoint")
+        source_distance_m = distance_m
+        analysis_distance_m = source_distance_m - distance_origin_m
+        if analysis_distance_m < 0:
+            continue
         node = {
                 "node_id": node_id,
                 "label": str(item.get("label") or node_id),
                 "node_type": checkpoint_type,
-                "route_distance_m": round(distance_m, 3),
-                "route_progress": round(distance_m / route_distance_m, 5) if route_distance_m else 0.0,
+                "route_distance_m": round(analysis_distance_m, 3),
+                "source_route_distance_m": round(source_distance_m, 3),
+                "route_progress": round(analysis_distance_m / route_distance_m, 5) if route_distance_m else 0.0,
                 "review_state": str(item.get("review_state") or "proposed"),
                 "candidate_only": True,
                 "runtime_safety_truth": False,
@@ -382,11 +498,163 @@ def _route_spine_nodes(
     return _sample_evenly(nodes, MAX_SPINE_NODES)
 
 
+def _checkpoint_passage_timing_projection(
+    value: Mapping[str, Any],
+    *,
+    route_distance_m: float,
+    default_source_ref: str,
+) -> dict[str, Any]:
+    nodes = []
+    for raw in value.get("nodes", []):
+        if not isinstance(raw, Mapping):
+            continue
+        distance_m = _number(raw.get("route_distance_m"))
+        if distance_m is None:
+            continue
+        duration = (
+            dict(raw.get("duration_minutes"))
+            if isinstance(raw.get("duration_minutes"), Mapping)
+            else {}
+        )
+        window = (
+            dict(raw.get("passage_window"))
+            if isinstance(raw.get("passage_window"), Mapping)
+            else {}
+        )
+        tied_modes = [
+            int(item)
+            for item in duration.get("mode_5min_tied_buckets", [])
+            if isinstance(item, (int, float)) and not isinstance(item, bool)
+        ]
+        nodes.append(
+            {
+                "node_id": str(raw.get("node_id") or f"passage.{len(nodes) + 1}"),
+                "node_kind": (
+                    "mcp" if str(raw.get("node_kind")) == "mcp" else "cp"
+                ),
+                "label": str(raw.get("label") or raw.get("node_id") or "CP"),
+                "named_places": [
+                    str(item)
+                    for item in raw.get("named_places", [])
+                    if isinstance(item, str) and item
+                ],
+                "checkpoint_type": str(
+                    raw.get("checkpoint_type") or "route_progress"
+                ),
+                "route_distance_m": round(
+                    _clamp(distance_m, 0.0, route_distance_m),
+                    3,
+                ),
+                "route_progress": round(
+                    _clamp(distance_m / route_distance_m, 0.0, 1.0)
+                    if route_distance_m
+                    else 0.0,
+                    5,
+                ),
+                "passage_window": {
+                    "start_distance_m": _rounded(
+                        _number(window.get("start_distance_m"))
+                    ),
+                    "end_distance_m": _rounded(
+                        _number(window.get("end_distance_m"))
+                    ),
+                    "distance_m": _rounded(_number(window.get("distance_m"))),
+                    "semantics": str(
+                        window.get("semantics")
+                        or "fixed_500m_route_window_centered_on_cp_or_mcp"
+                    ),
+                },
+                "duration_minutes": {
+                    "min": _rounded(_number(duration.get("min"))),
+                    "max": _rounded(_number(duration.get("max"))),
+                    "average": _rounded(_number(duration.get("average"))),
+                    "mode_5min": (
+                        int(duration["mode_5min"])
+                        if isinstance(duration.get("mode_5min"), (int, float))
+                        and not isinstance(duration.get("mode_5min"), bool)
+                        else None
+                    ),
+                    "mode_5min_tied_buckets": tied_modes,
+                },
+                "sample_count": int(raw.get("sample_count") or 0),
+                "distinct_track_count": int(raw.get("distinct_track_count") or 0),
+                "direction_counts": (
+                    dict(raw.get("direction_counts"))
+                    if isinstance(raw.get("direction_counts"), Mapping)
+                    else {}
+                ),
+                "coverage_ratio": (
+                    dict(raw.get("coverage_ratio"))
+                    if isinstance(raw.get("coverage_ratio"), Mapping)
+                    else {}
+                ),
+                "data_quality": str(raw.get("data_quality") or "unavailable"),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    nodes.sort(
+        key=lambda item: (
+            item["route_distance_m"],
+            0 if item["node_kind"] == "cp" else 1,
+            item["node_id"],
+        )
+    )
+    timed_node_count = sum(item["sample_count"] > 0 for item in nodes)
+    data_quality = (
+        dict(value.get("data_quality"))
+        if isinstance(value.get("data_quality"), Mapping)
+        else {}
+    )
+    privacy = (
+        dict(value.get("privacy"))
+        if isinstance(value.get("privacy"), Mapping)
+        else {}
+    )
+    boundary = (
+        dict(value.get("boundary"))
+        if isinstance(value.get("boundary"), Mapping)
+        else {}
+    )
+    return {
+        "status": "available" if nodes else "unavailable",
+        "source_provider": str(
+            value.get("source_provider") or "historical_gpx_reference_corpus"
+        ),
+        "source_path": str(value.get("source_path") or default_source_ref),
+        "sha256": str(value.get("sha256") or ""),
+        "policy": (
+            dict(value.get("policy"))
+            if isinstance(value.get("policy"), Mapping)
+            else {}
+        ),
+        "data_quality": {
+            **data_quality,
+            "node_count": len(nodes),
+            "timed_node_count": timed_node_count,
+        },
+        "node_count": len(nodes),
+        "timed_node_count": timed_node_count,
+        "nodes": nodes,
+        "privacy": {
+            **privacy,
+            "raw_gpx_embedded": False,
+            "precise_timestamps_embedded": False,
+        },
+        "boundary": {
+            **boundary,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+    }
+
+
 def _checkpoint_graph(
     checkpoints: Sequence[Mapping[str, Any]],
     segments: Sequence[Mapping[str, Any]],
     normalized_architecture: Mapping[str, Any],
     mission_graph: Mapping[str, Any],
+    candidate_mission_graph: Mapping[str, Any],
     *,
     source_ref: str,
 ) -> dict[str, Any]:
@@ -416,18 +684,36 @@ def _checkpoint_graph(
                 ),
             )
         )
-    graph_nodes = mission_graph.get("nodes") if isinstance(mission_graph.get("nodes"), list) else []
-    graph_edges = mission_graph.get("edges") if isinstance(mission_graph.get("edges"), list) else []
+    selected_graph = mission_graph or candidate_mission_graph
+    graph_nodes = _graph_collection(selected_graph, "nodes", "checkpoints")
+    graph_edges = _graph_collection(selected_graph, "edges", "segments")
+    graph_role = (
+        "reviewed"
+        if mission_graph
+        else "candidate"
+        if candidate_mission_graph
+        else "projected_segments"
+    )
     return {
-        "status": "compiled" if mission_graph else "candidate_projection",
+        "status": (
+            "compiled_reviewed"
+            if mission_graph
+            else "compiled_candidate"
+            if candidate_mission_graph
+            else "candidate_projection"
+        ),
         "checkpoint_count": len(checkpoints),
         "segment_count": len(segments),
         "projected_edges": edges,
         "projected_edges_truncated": len(segments) > len(edges),
-        "compiled_node_count": len(graph_nodes),
-        "compiled_edge_count": len(graph_edges),
+        "mission_graph_node_count": len(graph_nodes),
+        "mission_graph_edge_count": len(graph_edges),
+        "compiled_node_count": len(graph_nodes) if mission_graph else 0,
+        "compiled_edge_count": len(graph_edges) if mission_graph else 0,
+        "graph_source_role": graph_role,
         "normalized_architecture_available": bool(normalized_architecture),
         "compiled_mission_graph_available": bool(mission_graph),
+        "candidate_mission_graph_available": bool(candidate_mission_graph),
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
@@ -515,17 +801,48 @@ def _alternatives(
 
 
 def _time_dependencies(
-    eta: Mapping[str, Any] | None, weather_daylight: Mapping[str, Any] | None
+    eta: Mapping[str, Any] | None,
+    weather_daylight: Mapping[str, Any] | None,
+    *,
+    mission_graph: Mapping[str, Any],
+    mission_graph_role: str,
 ) -> dict[str, Any]:
     eta_value = dict(eta or {})
     assumption = eta_value.get("assumption") if isinstance(eta_value.get("assumption"), Mapping) else {}
     daylight_value = dict(weather_daylight or {})
+    graph_segments = _graph_collection(mission_graph, "edges", "segments")
+    graph_durations = []
+    for segment in graph_segments:
+        requirement = segment.get("requirement")
+        if not isinstance(requirement, Mapping):
+            continue
+        duration = _number(requirement.get("expected_duration_seconds"))
+        if duration is not None and duration >= 0:
+            graph_durations.append(duration)
+    graph_duration_seconds = round(sum(graph_durations), 3)
+    graph_duration_hours = round(graph_duration_seconds / 3_600.0, 3)
     return {
         "planned_start_clock": _clock_label(assumption.get("planned_start_time")),
         "target_arrival_clock": _clock_label(assumption.get("target_eta")),
         "turn_back_clock": _clock_label(assumption.get("turn_back_checkpoint_eta")),
         "eta_estimate_count": len(eta_value.get("estimates", [])) if isinstance(eta_value.get("estimates"), list) else 0,
         "daylight_evidence_status": str(daylight_value.get("status") or "unavailable"),
+        "mission_graph_role": mission_graph_role,
+        "mission_graph_segment_count": len(graph_segments),
+        "mission_graph_duration_seconds": graph_duration_seconds,
+        "mission_graph_duration_hours": graph_duration_hours,
+        "candidate_graph_segment_count": (
+            len(graph_segments) if mission_graph_role == "candidate" else 0
+        ),
+        "candidate_graph_duration_seconds": (
+            graph_duration_seconds if mission_graph_role == "candidate" else 0.0
+        ),
+        "candidate_graph_duration_hours": (
+            graph_duration_hours if mission_graph_role == "candidate" else 0.0
+        ),
+        "time_evidence_available": bool(
+            eta_value.get("estimates") or graph_durations
+        ),
         "precision": "minute_clock_only",
         "precise_timestamps_embedded": False,
         "candidate_only": True,
@@ -541,8 +858,10 @@ def _evidence_quality(
     source_refs: Mapping[str, str],
     architecture_available: bool,
     mission_graph_available: bool,
-    route_pressure_available: bool,
-    boss_points_available: bool,
+    candidate_graph_available: bool,
+    route_pressure: Mapping[str, Any],
+    boss_points: Mapping[str, Any],
+    topology_graph: Mapping[str, Any],
     checkpoint_count: int,
     segment_count: int,
     retreat_count: int,
@@ -551,12 +870,25 @@ def _evidence_quality(
     reference_counts = reference.get("counts") if isinstance(reference.get("counts"), Mapping) else {}
     distinct_tracks = max((int(item.get("distinct_track_count") or 0) for item in vectors), default=0)
     guidance_count = sum(bool(item.get("guidance_eligible")) for item in vectors)
+    route_pressure_counts = (
+        route_pressure.get("counts")
+        if isinstance(route_pressure.get("counts"), Mapping)
+        else {}
+    )
+    boss_point_items = _graph_collection(boss_points, "boss_points", "candidates")
+    topology_nodes = _graph_collection(topology_graph, "nodes", "checkpoints")
+    topology_edges = _graph_collection(topology_graph, "edges", "segments")
     sources = [
         ("reference_pace_energy_analysis", bool(reference), "historical mobility demand"),
-        ("route_pressure_profile", route_pressure_available, "route pressure peaks"),
-        ("boss_points", boss_points_available, "named pressure anchors"),
+        ("route_pressure_profile", bool(route_pressure), "route pressure peaks"),
+        ("boss_points", bool(boss_points), "named pressure anchors"),
         ("route_architecture", architecture_available, "reviewed route topology"),
-        ("compiled_mission_graph", mission_graph_available, "dependency graph"),
+        (
+            "compiled_mission_graph_candidate",
+            candidate_graph_available,
+            "candidate dependency graph",
+        ),
+        ("compiled_mission_graph", mission_graph_available, "reviewed dependency graph"),
         ("retreat_routes", retreat_count > 0, "candidate retreat routes"),
     ]
     source_items = [
@@ -580,13 +912,35 @@ def _evidence_quality(
         "band": band,
         "counts": {
             "reference_track_count": int(reference_counts.get("reference_track_count") or 0),
+            "scope_reference_track_count": int(
+                reference_counts.get("scope_reference_track_count") or 0
+            ),
+            "crowd_track_count": int(
+                reference_counts.get("crowd_track_count")
+                or reference_counts.get("reference_track_count")
+                or 0
+            ),
             "usable_reference_track_count": int(reference_counts.get("usable_candidate_track_count") or 0),
+            "usable_crowd_track_count": int(
+                reference_counts.get("usable_crowd_track_count")
+                or reference_counts.get("usable_candidate_track_count")
+                or 0
+            ),
             "distinct_reference_track_count": distinct_tracks,
             "observed_bin_count": len(vectors),
             "guidance_eligible_bin_count": guidance_count,
             "checkpoint_count": checkpoint_count,
             "segment_count": segment_count,
             "retreat_candidate_count": retreat_count,
+            "route_pressure_sample_count": int(
+                route_pressure_counts.get("sample_count") or 0
+            ),
+            "route_pressure_peak_count": int(
+                route_pressure_counts.get("peak_count") or 0
+            ),
+            "boss_point_count": len(boss_point_items),
+            "mission_graph_node_count": len(topology_nodes),
+            "mission_graph_edge_count": len(topology_edges),
         },
         "missing_artifacts": list(missing_artifacts),
         "source_refs": source_items,
@@ -644,12 +998,75 @@ def _pressure_anchors(
     return anchors
 
 
-def _route_type(normalized_architecture: Mapping[str, Any]) -> str:
+def _route_type_analysis(
+    normalized_architecture: Mapping[str, Any],
+    mission_graph: Mapping[str, Any],
+    checkpoints: Sequence[Mapping[str, Any]],
+    route_distance_m: float,
+) -> dict[str, Any]:
     summary = normalized_architecture.get("architecture_summary")
     if isinstance(summary, Mapping) and summary.get("route_type"):
-        return str(summary["route_type"])
+        return {
+            "route_type": str(summary["route_type"]),
+            "route_type_basis": "normalized_route_architecture",
+            "start_finish_gap_m": None,
+        }
     value = normalized_architecture.get("route_type")
-    return str(value) if value else "unclassified"
+    if value:
+        return {
+            "route_type": str(value),
+            "route_type_basis": "normalized_route_architecture",
+            "start_finish_gap_m": None,
+        }
+
+    graph_checkpoints = _graph_collection(mission_graph, "nodes", "checkpoints")
+    route_checkpoints = graph_checkpoints or [dict(item) for item in checkpoints]
+    if route_checkpoints:
+        start = next(
+            (
+                item
+                for item in route_checkpoints
+                if str(item.get("checkpoint_type") or item.get("node_type"))
+                == "start"
+            ),
+            route_checkpoints[0],
+        )
+        finish = next(
+            (
+                item
+                for item in reversed(route_checkpoints)
+                if str(item.get("checkpoint_type") or item.get("node_type"))
+                == "finish"
+            ),
+            route_checkpoints[-1],
+        )
+        gap_m = _coordinate_gap_m(start, finish)
+        if gap_m is not None:
+            closure_threshold_m = max(
+                100.0,
+                min(250.0, route_distance_m * 0.01),
+            )
+            return {
+                "route_type": (
+                    "closed_route_candidate"
+                    if route_distance_m >= 1_000.0 and gap_m <= closure_threshold_m
+                    else "point_to_point_candidate"
+                ),
+                "route_type_basis": "candidate_graph_start_finish_proximity",
+                "start_finish_gap_m": round(gap_m, 3),
+            }
+
+    if _graph_collection(mission_graph, "edges", "segments"):
+        return {
+            "route_type": "linear_sequence_candidate",
+            "route_type_basis": "candidate_graph_segment_sequence",
+            "start_finish_gap_m": None,
+        }
+    return {
+        "route_type": "unclassified",
+        "route_type_basis": "insufficient_topology_evidence",
+        "start_finish_gap_m": None,
+    }
 
 
 def _demand_shape(vectors: Sequence[Mapping[str, Any]], route_distance_m: float) -> str:
@@ -696,23 +1113,55 @@ def _headline(
     pressure = shape_labels.get(demand_shape, "Historical mobility pressure is partially observed")
     if pressure_anchors:
         pressure = f"{pressure}; strongest observed bin {pressure_anchors[0]['distance_label']}"
-    topology = (
-        "mission graph available for reversibility review"
-        if reversibility == "graph_available"
-        else "reversibility remains unverified until the mission graph is compiled"
+    topology = {
+        "graph_available": "reviewed mission graph available for reversibility review",
+        "candidate_graph_unverified": (
+            "candidate mission graph is connected, but reversibility remains unverified pending review"
+        ),
+    }.get(
+        reversibility,
+        "reversibility remains unverified until the mission graph is compiled",
     )
     return f"{pressure}; {topology}."
 
 
+def _coordinate_gap_m(
+    start: Mapping[str, Any], finish: Mapping[str, Any]
+) -> float | None:
+    start_lat = _number(start.get("lat"))
+    start_lon = _number(start.get("lon"))
+    finish_lat = _number(finish.get("lat"))
+    finish_lon = _number(finish.get("lon"))
+    if None in {start_lat, start_lon, finish_lat, finish_lon}:
+        return None
+    lat1 = math.radians(start_lat)
+    lat2 = math.radians(finish_lat)
+    delta_lat = math.radians(finish_lat - start_lat)
+    delta_lon = math.radians(finish_lon - start_lon)
+    haversine = (
+        math.sin(delta_lat / 2.0) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2.0) ** 2
+    )
+    return 6_371_000.0 * 2.0 * math.atan2(
+        math.sqrt(haversine), math.sqrt(max(0.0, 1.0 - haversine))
+    )
+
+
 def _route_distance(
-    route: Mapping[str, Any], vectors: Sequence[Mapping[str, Any]]
+    route: Mapping[str, Any],
+    vectors: Sequence[Mapping[str, Any]],
+    *,
+    crowd_axis: Mapping[str, Any] | None = None,
 ) -> float:
+    del crowd_axis
     route_distance = _number(route.get("distance_m")) or 0.0
+    if route_distance > 0.0:
+        return round(route_distance, 3)
     observed_distance = max(
         (_number(item.get("end_distance_m")) or 0.0 for item in vectors),
         default=0.0,
     )
-    return round(max(route_distance, observed_distance), 3)
+    return round(observed_distance, 3)
 
 
 def _checkpoint_distance(item: Mapping[str, Any]) -> float | None:
@@ -830,6 +1279,17 @@ def _numeric_mapping(value: Any, keys: Iterable[str]) -> dict[str, float | None]
     return {key: _rounded(_number(mapping.get(key))) for key in keys}
 
 
+def _graph_collection(
+    payload: Mapping[str, Any], primary_key: str, fallback_key: str
+) -> list[dict[str, Any]]:
+    items = payload.get(primary_key)
+    if not isinstance(items, list):
+        items = payload.get(fallback_key)
+    if not isinstance(items, list):
+        return []
+    return [dict(item) for item in items if isinstance(item, Mapping)]
+
+
 def _clock_label(value: Any) -> str | None:
     if value in (None, ""):
         return None
@@ -843,6 +1303,9 @@ def _default_source_path(key: str) -> str:
         "route_pressure_profile": "outputs/route_pressure_profile.json",
         "boss_points": "outputs/boss_points.json",
         "route_architecture": "normalized/architecture/route_architecture.json",
+        "compiled_mission_graph_candidate": (
+            "outputs/compiled_mission_graph.candidate.json"
+        ),
         "compiled_mission_graph": "outputs/compiled_mission_graph.json",
         "retreat_routes": "candidates/retreat_routes.json",
     }.get(key, "project.json")
