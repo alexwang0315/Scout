@@ -1,3 +1,9 @@
+"""Operator-surface contract for the Alpha sandbox.
+
+Canonical specification:
+docs/specs/scout-alpha-mobile-wearable-simulation-sandbox.md
+"""
+
 from __future__ import annotations
 
 import re

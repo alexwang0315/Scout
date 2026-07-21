@@ -1,3 +1,9 @@
+"""Executable Alpha sandbox/API contract.
+
+Canonical specification:
+docs/specs/scout-alpha-mobile-wearable-simulation-sandbox.md
+"""
+
 from __future__ import annotations
 
 import json

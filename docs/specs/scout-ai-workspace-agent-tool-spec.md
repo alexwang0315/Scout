@@ -1580,6 +1580,11 @@ promotion occurred.
 
 ### 2026-07-20 Alpha mobile/wearable simulation workspace record
 
+> Canonical master specification:
+> [Scout Alpha Mobile/Wearable Simulation Sandbox](scout-alpha-mobile-wearable-simulation-sandbox.md).
+> This section remains the real-workspace evidence record and does not replace
+> the master architecture or executable schema contract.
+
 The Alpha Mobile/Wearable GPX Simulation Sandbox v0.1 generated a development
 artifact set inside the specified `chilai_nanhua_day1_scoutAI` workspace at:
 
