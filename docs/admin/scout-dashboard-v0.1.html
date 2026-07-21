@@ -6039,7 +6039,7 @@
         projectId: "",
         goldenRouteGpx: "",
       },
-      layerEnabled: Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, true])),
+      layerEnabled: Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, layerId !== "osm"])),
     };
 
     const routeMeta = {

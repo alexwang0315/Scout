@@ -2737,3 +2737,34 @@ Verification:
 - The current project returned expected 404s for missing project projection and
   rainfall-grid cache endpoints. The Dashboard remained degraded/read-only and
   rendered explicit unavailable/fallback states; weather imagery returned 200.
+
+## 2026-07-21 - Default Dashboard Map OSM layer to off
+
+User request:
+
+- Make the OSM layer in Dashboard Map initially disabled.
+
+Implementation steps:
+
+- Changed the Dashboard map state so every canonical layer except `osm` starts
+  enabled.
+- Removed the initial checked state from the OSM control in the embedded
+  pre-trip Map surface.
+- Kept the OSM checkbox and render path intact, so operators can turn the layer
+  on manually.
+
+Boundary notes:
+
+- This changes browser-local initial presentation only. It does not delete OSM
+  data, change preparation/import defaults, mutate project artifacts, or alter
+  runtime safety truth.
+
+Verification:
+
+- `./venv/bin/python -m pytest tests/test_scout_dashboard_page.py -q`: 43
+  passed.
+- Chrome smoke on the served `#map` route confirmed `checked=false` on first
+  load and `checked=true` after clicking the OSM control.
+- The only observed console error was the existing `/favicon.ico` 404; all
+  Dashboard, pre-trip projection, OSM vector, and imagery requests used by the
+  map returned 200.
