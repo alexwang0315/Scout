@@ -159,6 +159,22 @@
       font-size: 12px;
     }
 
+    .master-spec-link {
+      display: inline-block;
+      margin-top: 5px;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .master-spec-link:focus-visible {
+      border-radius: 4px;
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
     .boundary-strip {
       display: flex;
       flex-wrap: wrap;
@@ -812,6 +828,7 @@
       <div class="brand-copy">
         <h1>Alpha Sandbox Operator</h1>
         <p>手機＋穿戴裝置 synthetic replay console</p>
+        <a class="master-spec-link" href="../specs/scout-alpha-mobile-wearable-simulation-sandbox.md" target="_blank" rel="noopener">主規格與安全邊界</a>
       </div>
     </div>
     <div class="boundary-strip" aria-label="Sandbox safety boundaries">

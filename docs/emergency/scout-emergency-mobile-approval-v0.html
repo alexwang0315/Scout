@@ -123,6 +123,21 @@
       background: var(--surface);
     }
 
+    .master-spec-link {
+      width: fit-content;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .master-spec-link:focus-visible {
+      border-radius: 4px;
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
     .desktop-header {
       grid-template-columns: minmax(280px, 1fr) auto;
       align-items: center;
@@ -1064,6 +1079,7 @@
               <span class="packet-state" data-bind="packetStatus">pending_approval</span>
               <span data-bind="selectedGate">physiologic_gate</span>
             </div>
+            <a class="master-spec-link" href="../specs/scout-alpha-mobile-wearable-simulation-sandbox.md" target="_blank" rel="noopener">Alpha Sandbox 主規格與安全邊界</a>
           </header>
         </div>
 

@@ -838,6 +838,12 @@ Production/network/hardware boundary flags remain false in every path.
 
 ## Alpha Mobile/Wearable GPX Simulation Sandbox v0.1
 
+> Canonical master specification:
+> [Scout Alpha Mobile/Wearable Simulation Sandbox](scout-alpha-mobile-wearable-simulation-sandbox.md).
+> This section retains the reducer/Phase 1 integration details; use the master
+> specification for the consolidated architecture, schemas, API, operations,
+> acceptance criteria, and productization backlog.
+
 The Alpha sandbox expands the single fixed `ridge_distress` proof into a
 general server-side simulation surface for Scout's Alpha deployment shape:
 a remote user carries one phone and one wearable, while Scout remains in the
