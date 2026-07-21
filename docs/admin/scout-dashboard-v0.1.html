@@ -1962,47 +1962,62 @@
       color: #f5d27d;
     }
 
-    .pace-emergency-shell {
+    .safety-emergency-shell {
       display: grid;
-      grid-template-rows: auto minmax(720px, 1fr);
-      min-height: calc(100vh - 190px);
-    }
-
-    .pace-emergency-header {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
       gap: 12px;
-      align-items: center;
-      padding: 12px 13px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, .018);
     }
 
-    .pace-emergency-header p {
-      margin-top: 4px;
-      color: var(--muted);
-      overflow-wrap: anywhere;
+    .safety-emergency-frame-shell {
+      overflow: hidden;
+      border: 1px solid rgba(208, 99, 99, .34);
+      border-radius: 10px;
+      background: #111315;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, .22);
     }
 
-    .pace-emergency-boundary {
+    .safety-emergency-frame-toolbar {
       display: flex;
-      flex-wrap: wrap;
-      gap: 7px;
-      justify-content: flex-end;
-    }
-
-    .pace-emergency-toolbar {
-      padding: 8px 13px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 13px;
       border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, .018);
+      background: rgba(255, 255, 255, .025);
     }
 
-    .pace-emergency-frame {
+    .safety-emergency-frame-toolbar strong,
+    .safety-emergency-frame-toolbar span {
+      display: block;
+    }
+
+    .safety-emergency-frame-toolbar strong {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .safety-emergency-frame-toolbar span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .safety-emergency-frame {
+      display: block;
       width: 100%;
-      height: 100%;
-      min-height: 720px;
+      height: clamp(760px, calc(100vh - 210px), 1120px);
       border: 0;
       background: #111315;
+    }
+
+    .safety-emergency-footnote {
+      margin: 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(213, 166, 66, .3);
+      border-radius: 8px;
+      color: #d9bd79;
+      background: rgba(213, 166, 66, .055);
+      font-size: 11px;
+      line-height: 1.45;
     }
 
     .pace-fit-dashboard {
@@ -3954,13 +3969,13 @@
       .body-index-health-grid,
       .body-index-pressure-timeline,
       .body-index-provider-grid,
-      .pace-emergency-header,
       .workspace-action-grid,
       .workspace-switch-row {
         grid-template-columns: 1fr;
       }
-      .pace-emergency-boundary {
-        justify-content: flex-start;
+      .safety-emergency-frame-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
       }
       .route-briefing-meta-grid {
         grid-template-columns: 1fr;
@@ -5326,7 +5341,6 @@
               <div class="nav-subtree">
                 <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-pace-fit" data-route-truth="partial"><span class="mark"></span><span>Pace Dashboard</span></button>
                 <button class="nav-item" type="button" data-route="outdoor-pace-fit-body-index" data-route-truth="partial"><span class="mark"></span><span>Body Index</span></button>
-                <button class="nav-item" type="button" data-route="outdoor-pace-fit-emergency" data-route-truth="preview"><span class="mark"></span><span>Emergency UI</span></button>
               </div>
             </details>
             <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-permission" data-route-truth="preview"><span class="mark"></span><span>Permission</span></button>
@@ -5478,7 +5492,6 @@
       "surface-debug": Object.freeze({maturity: "live", surface: "Operational", data: "Runtime + replay evidence", action: "Diagnostics · projected clear is explicit", verification: "Full page verified", provenance: "Per-event provenance", mode: "Operational"}),
       "debug": Object.freeze({maturity: "partial", surface: "Operational", data: "Runtime + replay evidence", action: "Read-only · retry", verification: "Endpoints + tabs verified", provenance: "Per-event provenance", mode: "Technical Prototype"}),
       "settings": Object.freeze({maturity: "live", surface: "Operational", data: "Browser-local settings", action: "Local browser mutation only", verification: "Validation + save path", provenance: "Browser settings", mode: "Operational"}),
-      "outdoor-pace-fit-emergency": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Sample packet", action: "No outbound · approval required", verification: "Sandbox UI verified", provenance: "Fixture sample", mode: "Product Preview"}),
       "outdoor-permission": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Static class descriptions", action: "Read-only selector", verification: "No runtime decision", provenance: "Static rule set", mode: "Static rule set"}),
       "observer": Object.freeze({maturity: "preview", surface: "Technical prototype", data: "Projected ingress · broker unverified", action: "Read-only · no publish", verification: "Connection/data lifecycle unverified", provenance: "Debug ingress references", mode: "Technical Prototype"}),
       "outdoor-architecture": Object.freeze({maturity: "partial", surface: "Operational analysis", data: "Loading route architecture evidence", action: "Read-only candidate analysis", verification: "Awaiting route topology projection", provenance: "Pretrip workspace + historical GPX aggregates", mode: "Candidate analysis"}),
@@ -5487,7 +5500,7 @@
     const ROUTE_DATA_SCOPES = Object.freeze({
       project: ["home", "map", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-pretrip", "surface-admin", "surface-debug", "emergency", "outdoor-route-context", "outdoor-architecture", "outdoor-navigation", "outdoor-weather"],
       briefing: ["outdoor-route-context"],
-      body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index", "outdoor-pace-fit-emergency"],
+      body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index"],
       weather: ["home", "outdoor-weather"],
       debug: ["debug"],
       hardware: ["debug"],
@@ -6055,9 +6068,8 @@
       agent: ["Agent", "same-origin Scout AI conversation"],
       map: ["Map", "32-layer Scout map contract preview"],
       timeline: ["Timeline Evidence", "pretrip, debug, emergency and workspace evidence stream"],
-      emergency: ["Safety / Emergency", "desktop emergency context preview; mobile remains independent"],
+      emergency: ["Safety / Emergency", "desktop Emergency approval console; mobile surface excluded"],
       "outdoor-pace-fit-body-index": ["Pace Fit / Body Index", "Scout Pace Coefficient dashboard"],
-      "outdoor-pace-fit-emergency": ["Pace Fit / Emergency UI", "multi-gate approval surface embedded for local review only"],
       debug: ["Debug Message", "read-only runtime and projection messages"],
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
@@ -6440,7 +6452,7 @@
 
     function routeUsesWideFrame(route) {
       if (route === "outdoor-architecture") return true;
-      return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";
+      return route === "agent" || route === "debug" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";
     }
 
     function routeUsesFullFrame(route) {
@@ -8473,22 +8485,23 @@
 
     function renderEmergencyPage() {
       return `
-        <div class="grid-2">
-          ${renderMetricPanel("Production Path State", [
-            ["SafetyLevel", "L3_DISTRESS sample / not runtime truth"],
-            ["Packet", "pending_approval"],
-            ["Transport", "draft_ready; verified delivery not reported"],
-            ["Boundary", "sent=false, external_send_performed=false"],
-          ])}
-          ${renderMetricPanel("Emergency UI Boundary", [
-            ["Desktop dashboard", "read-only context and dry-run artifact preview"],
-            ["Mobile version", "independent surface"],
-            ["Callout", "message and voice scripts stay local"],
-            ["Link", '<a href="/admin/dashboard/emergency-approval-desktop-v0">Emergency approval console</a>'],
-          ])}
-        </div>
-        <div style="height:12px"></div>
-        ${renderMapPanel("emergency")}
+        <section class="safety-emergency-shell" data-safety-emergency-console="desktop">
+          <section class="safety-emergency-frame-shell" aria-label="Integrated emergency approval console">
+            <div class="safety-emergency-frame-toolbar">
+              <div><strong>Emergency approval console</strong><span>Same-origin desktop-only projection of the existing Emergency prototype.</span></div>
+              <a class="chip info" href="/admin/dashboard/emergency-approval-desktop-v0" target="_blank" rel="noreferrer">Open full desktop console</a>
+            </div>
+            <iframe
+              class="safety-emergency-frame"
+              title="Safety and emergency desktop approval console"
+              src="/admin/dashboard/emergency-approval-desktop-v0"
+              loading="eager"
+              data-emergency-approval-frame="desktop"
+            ></iframe>
+          </section>
+
+          <p class="safety-emergency-footnote">This integration renders the non-mobile approval surface only. sent=false · external_send_performed=false. It does not call safety endpoints, perform hardware control, publish MQTT, send a message, or promote synthetic evidence to runtime safety truth.</p>
+        </section>
       `;
     }
 
@@ -9181,7 +9194,6 @@
     function renderOutdoorPage(route) {
       const force = SIX_FORCES.find((item) => item.route === route) || SIX_FORCES[0];
       if (route === "outdoor-pace-fit-body-index") return renderPaceFitBodyIndexPage();
-      if (route === "outdoor-pace-fit-emergency") return renderPaceFitEmergencyPage();
       if (route === "outdoor-permission") return renderPermissionPage(force);
       if (route === "outdoor-weather") return renderWeatherPage(force);
       if (route === "outdoor-navigation") return renderNavigationPage(force);
@@ -9204,7 +9216,6 @@
           ${[
             ["outdoor-pace-fit", "Pace Dashboard"],
             ["outdoor-pace-fit-body-index", "Body Index"],
-            ["outdoor-pace-fit-emergency", "Emergency UI"],
           ].map(([route, label]) => `<button type="button" role="tab" aria-selected="${route === activeRoute ? "true" : "false"}" class="${route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(route)}">${escapeHtml(label)}</button>`).join("")}
         </div>
       `;
@@ -10799,30 +10810,6 @@
             </section>
           </div>
           ${renderBodyIndexProviderDrawer()}
-        </section>
-      `;
-    }
-
-    function renderPaceFitEmergencyPage() {
-      return `
-        ${outdoorTabs("outdoor-pace-fit")}
-        ${paceFitSubTabs("outdoor-pace-fit-emergency")}
-        <section class="panel pace-emergency-shell" data-pace-fit-emergency-ui="true">
-          <div class="pace-emergency-boundary pace-emergency-toolbar" aria-label="Emergency UI boundary">
-            <span class="chip info">desktop only</span>
-            <span class="chip warn">pending approval</span>
-            <span class="chip bad">sent=false</span>
-            <span class="chip bad">no safety endpoint</span>
-            <span class="chip bad">no outbound transport</span>
-            <a class="chip info" href="/admin/dashboard/emergency-approval-desktop-v0" target="_blank" rel="noreferrer">Open desktop</a>
-          </div>
-          <iframe
-            class="pace-emergency-frame"
-            title="Emergency approval desktop frame"
-            src="/admin/dashboard/emergency-approval-desktop-v0"
-            loading="eager"
-            data-emergency-approval-frame="desktop"
-          ></iframe>
         </section>
       `;
     }
