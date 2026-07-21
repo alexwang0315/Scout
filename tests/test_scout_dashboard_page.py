@@ -1082,6 +1082,7 @@ def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> Non
 
 def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
 
     assert 'if (route === "map") {' in html
     assert "ensurePretripMapFrame()" in html
@@ -1142,6 +1143,12 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
 
     assert "const MAX_RENDERED_SEGMENT_POINTS = 80;" in html
     assert "SCOUT_LAYER_IDS.map((layerId, index)" in html
+    assert (
+        'layerEnabled: Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => '
+        '[layerId, layerId !== "osm"]))'
+    ) in html
+    assert 'data-layer="osm" checked' not in pretrip_html
+    assert '<input type="checkbox" data-layer="osm"> OSM' in pretrip_html
     assert "function buildDashboardSegmentPaths(rawSegments, bounds)" in html
     assert "segment.display_geometry || {}" in html
     assert "display.coordinate_segments" in html
