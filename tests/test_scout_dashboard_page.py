@@ -479,7 +479,6 @@ def test_scout_dashboard_contains_requested_navigation_contract() -> None:
         "Exploring for Six Axis",
         "Pace Dashboard",
         "Body Index",
-        "Emergency UI",
         "Debug Message",
         "MQTT / Observer Message",
         "Settings / Configure",
@@ -494,7 +493,8 @@ def test_scout_dashboard_contains_requested_navigation_contract() -> None:
     assert 'data-route="surface-admin"' in html
     assert 'data-route="surface-debug"' in html
     assert 'data-route="outdoor-pace-fit-body-index"' in html
-    assert 'data-route="outdoor-pace-fit-emergency"' in html
+    assert 'data-route="emergency"' in html
+    assert 'data-route="outdoor-pace-fit-emergency"' not in html
 
 
 def test_scout_dashboard_points_to_current_chilai_workspace() -> None:
@@ -542,7 +542,7 @@ def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
     assert "routeUsesEmbeddedFrame(state.route)" in html
     assert 'return route === "map" || route === "agent" || route.startsWith("surface-");' in html
     assert "routeUsesWideFrame(route)" in html
-    assert 'return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";' in html
+    assert 'return route === "agent" || route === "debug" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
     assert "routeUsesFullFrame(route)" in html
     assert 'return route === "map";' in html
     assert "/debug-projection`" not in html
@@ -1564,35 +1564,49 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         assert label in html
 
 
-def test_scout_dashboard_pace_fit_emergency_ui_subtree_contract() -> None:
+def test_scout_dashboard_moves_pace_fit_emergency_ui_to_safety_emergency() -> None:
     html = PAGE.read_text(encoding="utf-8")
-    emergency_subtree = html.split("function renderPaceFitEmergencyPage()", 1)[1].split(
-        "function renderPaceFitMiniMap()", 1
+    pace_fit_tabs = html.split("function paceFitSubTabs(activeRoute)", 1)[1].split(
+        "function renderPermissionPage", 1
     )[0]
 
-    assert 'data-route="outdoor-pace-fit-emergency"' in html
     assert "function paceFitSubTabs(activeRoute)" in html
-    assert "function renderPaceFitEmergencyPage()" in html
-    assert 'if (route === "outdoor-pace-fit-emergency") return renderPaceFitEmergencyPage();' in html
-    assert 'paceFitSubTabs("outdoor-pace-fit-emergency")' in html
-    assert 'data-pace-fit-emergency-ui="true"' in html
-    assert 'data-emergency-approval-frame="desktop"' in html
-    assert 'src="/admin/dashboard/emergency-approval-desktop-v0"' in html
-    assert 'href="/admin/dashboard/emergency-approval-desktop-v0"' in html
-    assert "Emergency Approval Desktop UI v0" not in html
-    assert "Scout Emergency Approval Console" not in html
-    assert "Emergency approval desktop frame" in html
-    assert "desktop only" in html
-    assert "pace-emergency-toolbar" in html
-    assert "sent=false" in html
-    assert "no safety endpoint" in html
-    assert "no outbound transport" in html
-    assert "pending approval" in html
-    assert 'return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";' in html
-    assert "decisionBand(" not in html
-    assert ".decision-band" not in html
-    assert "Primary output" not in html
-    assert "Next action" not in emergency_subtree
+    assert "Pace Dashboard" in pace_fit_tabs
+    assert "Body Index" in pace_fit_tabs
+    assert "Emergency UI" not in pace_fit_tabs
+    assert 'data-route="outdoor-pace-fit-emergency"' not in html
+    assert "function renderPaceFitEmergencyPage()" not in html
+    assert 'data-pace-fit-emergency-ui="true"' not in html
+    assert ".pace-emergency-shell" not in html
+    assert ".pace-emergency-frame" not in html
+    assert 'data-route="emergency"' in html
+    assert 'data-safety-emergency-console="desktop"' in html
+
+
+def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    emergency_page = html.split("function renderEmergencyPage()", 1)[1].split(
+        "function renderDebugPage()", 1
+    )[0]
+
+    assert 'data-route="emergency"' in html
+    assert 'data-safety-emergency-console="desktop"' in emergency_page
+    assert 'data-emergency-approval-frame="desktop"' in emergency_page
+    assert 'src="/admin/dashboard/emergency-approval-desktop-v0"' in emergency_page
+    assert 'href="/admin/dashboard/emergency-approval-desktop-v0"' in emergency_page
+    assert 'title="Safety and emergency desktop approval console"' in emergency_page
+    assert "Open full desktop console" in emergency_page
+    assert "emergency-mobile-approval-v0" not in emergency_page
+    assert 'renderMapPanel("emergency")' not in emergency_page
+    assert ".safety-emergency-shell" in html
+    assert ".safety-emergency-frame" in html
+    assert '<header class="safety-emergency-commandbar">' not in emergency_page
+    assert 'class="safety-emergency-status-grid"' not in emergency_page
+    assert "safety-emergency-status-card" not in emergency_page
+    assert "safety-emergency-eyebrow" not in emergency_page
+    assert ".safety-emergency-commandbar" not in html
+    assert ".safety-emergency-status-grid" not in html
+    assert ".safety-emergency-status-card" not in html
 
 
 def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
@@ -1602,7 +1616,7 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "function routeContextBriefingSrc()" in html
     assert "function renderRouteBriefingMetaBlock" in html
     assert "return candidate || PRETRIP_DATA_PROJECT_ID;" in html
-    assert 'return route === "agent" || route === "debug" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index" || route === "outdoor-pace-fit-emergency";' in html
+    assert 'return route === "agent" || route === "debug" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
     assert 'decisionBand(force.decision, "Scout AI route-context trip briefing loaded"' not in html
     assert "/admin/pretrip/projects/${project}/briefings/route-context" in html
     assert "data-route-context-briefing=\"true\"" in html
@@ -2032,7 +2046,7 @@ def test_dashboard_primary_information_architecture_and_mobile_shell_contract() 
     assert route_positions == sorted(route_positions)
     assert "Pace Dashboard" in six_force_nav
     assert "Body Index" in six_force_nav
-    assert "Emergency UI" in six_force_nav
+    assert "Emergency UI" not in six_force_nav
     assert "function openNavigationAncestors(button)" in html
     assert "if (active) openNavigationAncestors(button);" in html
 
@@ -2162,7 +2176,6 @@ def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> Non
         "surface-debug",
         "debug",
         "settings",
-        "outdoor-pace-fit-emergency",
         "outdoor-permission",
         "observer",
         "outdoor-architecture",

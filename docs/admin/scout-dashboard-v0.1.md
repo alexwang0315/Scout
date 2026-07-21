@@ -45,6 +45,91 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-21 - Remove duplicate Safety / Emergency outer headers
+
+User request:
+
+- Remove the two large headers shown above the integrated desktop Emergency
+  console: the Emergency UI description/status-chip header and the four-column
+  Surface/Path/Transport/Operator status header.
+
+Implementation steps:
+
+- Removed `safety-emergency-commandbar` and its eyebrow, title, explanatory
+  copy, and boundary chips from `renderEmergencyPage()`.
+- Removed `safety-emergency-status-grid` and all four status cards.
+- Removed the now-unused command-bar, boundary, status-grid, and status-card CSS.
+- Kept the compact iframe toolbar, full desktop-only Emergency console, full-page
+  link, and post-frame safety boundary note.
+- Preserved `sent=false · external_send_performed=false` in that bottom boundary
+  note instead of restoring either removed header.
+
+Boundary:
+
+- This is presentation-only. The desktop endpoint, Emergency decision controls,
+  candidate/sandbox semantics, `sent=false` evidence, no-outbound boundary, and
+  Phase 1 runtime safety behavior are unchanged.
+
+Verification:
+
+- Focused header-removal source contract: `1 passed`; the adjacent six-contract
+  run exposed only the displaced `external_send_performed=false` audit marker
+  (`5 passed, 1 failed`). After moving that marker to the bottom boundary note,
+  the header-removal and Emergency-boundary contracts both passed (`2 passed`).
+- Ruff and the scoped whitespace/diff check passed.
+- Live 9099 read-only browser verification at 1440 x 1000 found zero command
+  headers, zero status grids/cards, one visible compact toolbar, one 1166 x 790
+  desktop iframe, zero mobile surfaces/devices, zero horizontal overflow, and no
+  HTTP or JavaScript errors. No Emergency control was clicked.
+
+### 2026-07-21 - Move desktop Emergency UI from Pace Fit to Safety / Emergency
+
+User request:
+
+- Move the existing Pace Fit `Emergency UI` into the Dashboard
+  `Safety / Emergency` entry, using the non-mobile interface rather than
+  embedding the phone presentation or creating a second copy.
+
+Implementation steps:
+
+- Removed the `outdoor-pace-fit-emergency` navigation child, route truth entry,
+  data-scope entry, renderer, iframe, and Pace-specific Emergency CSS. Pace Fit
+  now contains only Pace Dashboard and Body Index.
+- Reused the existing same-origin
+  `/admin/dashboard/emergency-approval-desktop-v0` projection, which removes the
+  mobile device surface and retains only the desktop Emergency approval console.
+- Replaced the Safety / Emergency summary-and-map placeholder with the complete
+  desktop approval console iframe, a compact frame toolbar, and a post-frame
+  boundary note. This is now the single Dashboard Emergency UI location.
+- Kept the console available as a full-window desktop link for detailed review.
+- Added focused Dashboard source contracts proving that the Pace Fit Emergency
+  route no longer exists and that Safety / Emergency points only to the desktop
+  endpoint, never to the legacy mobile URL.
+
+Boundary:
+
+- This is a same-origin UI integration only. It does not call `/safety/*`, drive
+  hardware, publish MQTT, send outbound messages, or promote candidate/sandbox
+  evidence to Phase 1 runtime safety truth. The visible `sent=false` state
+  remains explicit.
+
+Verification:
+
+- Focused Dashboard navigation, route, desktop endpoint, documentation, truth,
+  and Safety / Emergency contracts: `11 passed`.
+- Dashboard plus Emergency UI adjacent suites completed twice. The first run was
+  `45 passed, 1 failed`; its unrelated Body Index watch-counter timing assertion
+  passed immediately when rerun alone (`1 passed`). The second run was also
+  `45 passed, 1 failed`; this time the unrelated, concurrently edited
+  Architecture contract expected `architecturePassageTimingNodes`, which is not
+  present in the current Dashboard HTML. No Architecture code was changed here.
+- Live `127.0.0.1:9099` checks returned `200` for both `/admin/dashboard` and the
+  desktop Emergency endpoint.
+- A read-only 1440 x 1000 browser replay confirmed one 1166 x 790 desktop iframe,
+  zero mobile surfaces/devices, no Pace Fit Emergency route or label, no
+  horizontal overflow, and no HTTP or JavaScript errors on a clean reload. No
+  Emergency decision control was clicked.
+
 ### 2026-07-20 - Build Route Architecture Intelligence workbench
 
 User request:
