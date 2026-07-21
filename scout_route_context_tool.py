@@ -228,6 +228,13 @@ def assess_scout_route_context(
         answerability=answerability,
         field_answer=field_answer,
     )
+    field_answer_priority = (
+        100
+        if project_answer or media_answer or briefing_answer or mileage_answer
+        else 10
+        if results and generic_route_context_query
+        else 0
+    )
     return {
         "tool_id": ROUTE_CONTEXT_TOOL_ID,
         "status": "completed",
@@ -248,9 +255,7 @@ def assess_scout_route_context(
             "requested_mileage_anchors": sorted(requested_mileage_anchors),
         },
         "field_answer": field_answer,
-        "field_answer_priority": 100
-        if project_answer or media_answer or briefing_answer or mileage_answer
-        else 0,
+        "field_answer_priority": field_answer_priority,
         "field_answer_source_ref": field_answer_source_ref,
         "field_answer_source_refs": mileage_source_refs
         or ([field_answer_source_ref] if field_answer_source_ref else []),
@@ -1618,6 +1623,8 @@ def _looks_like_generic_route_context_query(query: str) -> bool:
         text,
         (
             "值得看",
+            "值得理解",
+            "除了登頂",
             "看什麼",
             "觀察點",
             "適合拍",

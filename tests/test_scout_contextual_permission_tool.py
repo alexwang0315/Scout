@@ -202,6 +202,88 @@ def test_contextual_permission_allows_teammate_wait_with_hard_cutoff() -> None:
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_changes_plan_to_known_sheltered_candidate() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="這裡適合做臨時避風停留，還是需要繼續移動？",
+        remaining_safety_buffer_minutes=35,
+        requested_duration_minutes=8,
+        current_delay_minutes=10,
+        next_segment_uncertainty_minutes=8,
+        weather_reserve_minutes=20,
+        daylight_reserve_minutes=10,
+        retreat_reserve_minutes=8,
+        slowest_member_reserve_minutes=5,
+        weather_window_impact="strong_wind_and_exposure",
+        retreat_impact="sheltered_candidate_ahead_180m",
+        location_constraint="exposed_ridge_candidate",
+        terrain_risk_level="high",
+    )
+
+    assert result["action"] == "stop"
+    assert result["decision"] == "CHANGE_PLAN"
+    assert result["allowed"] is False
+    assert "原地停留不適合" in result["field_answer"]
+    assert "前方背風候選點" in result["field_answer"]
+    assert "180" in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_contextual_permission_delays_when_current_location_is_stale() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="這裡適合做臨時避風停留，還是需要繼續移動？",
+        remaining_safety_buffer_minutes=None,
+        requested_duration_minutes=8,
+        weather_window_impact="unknown",
+        retreat_impact="location_unknown",
+        location_constraint="GNSS stale; current location unknown",
+        terrain_risk_level="unknown",
+        confidence="low",
+    )
+
+    assert result["action"] == "stop"
+    assert result["decision"] == "DELAY"
+    assert result["allowed"] is False
+    assert "定位" in result["field_answer"]
+    assert "重新取得" in result["field_answer"]
+    assert "前往下一個安全 CP" not in result["field_answer"]
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_contextual_permission_applies_environment_overlay_to_continue() -> None:
+    common = {
+        "query": "目前條件允許我們繼續摸黑走到下一個 CP 嗎？",
+        "requested_duration_minutes": 8,
+        "confidence": "low",
+    }
+    exposed = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        **common,
+        remaining_safety_buffer_minutes=35,
+        weather_window_impact="strong_wind_and_exposure",
+        retreat_impact="sheltered_candidate_ahead_180m",
+        location_constraint="exposed_ridge_candidate",
+        terrain_risk_level="high",
+    )
+    stale = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        **common,
+        remaining_safety_buffer_minutes=None,
+        weather_window_impact="unknown",
+        retreat_impact="location_unknown",
+        location_constraint="GNSS stale; current location unknown",
+        terrain_risk_level="unknown",
+    )
+
+    assert exposed["action"] == "continue"
+    assert exposed["decision"] == "CHANGE_PLAN"
+    assert "180" in exposed["field_answer"]
+    assert stale["action"] == "continue"
+    assert stale["decision"] == "DELAY"
+    assert "重新取得 GNSS/GPS 定位" in stale["field_answer"]
+
+
 def test_contextual_permission_allows_tripod_only_with_bounded_cutoff() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,

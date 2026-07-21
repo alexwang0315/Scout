@@ -616,9 +616,34 @@ def _project_ref(project: dict[str, Any], key: str, fallback: str) -> str:
 
 
 def _contained_path(root: Path, ref: str) -> Path:
-    path = (root / ref).resolve()
+    root = root.resolve()
+    referenced = Path(ref)
+    candidate = referenced if referenced.is_absolute() else root / referenced
+    try:
+        candidate.resolve().relative_to(root)
+    except ValueError:
+        workspace_roots = {
+            "candidates",
+            "inbox",
+            "normalized",
+            "outputs",
+            "reviews",
+            "sources",
+        }
+        try:
+            start = next(
+                index
+                for index, part in enumerate(referenced.parts)
+                if part in workspace_roots
+            )
+        except StopIteration as exc:
+            raise ValueError(f"workspace artifact escapes root: {ref}") from exc
+        candidate = root.joinpath(*referenced.parts[start:])
+    if candidate.is_symlink():
+        raise ValueError(f"missing or invalid workspace artifact: {ref}")
+    path = candidate.resolve()
     path.relative_to(root)
-    if not path.is_file() or path.is_symlink():
+    if not path.is_file():
         raise ValueError(f"missing or invalid workspace artifact: {ref}")
     return path
 
@@ -730,8 +755,7 @@ def _checkpoint_progress(root: Path, checkpoints: list[dict[str, Any]]) -> list[
     )
     if not isinstance(gpx_ref, str):
         raise ValueError("checkpoint provenance does not identify filtered GPX")
-    gpx_path = Path(gpx_ref).resolve()
-    gpx_path.relative_to(root)
+    gpx_path = _contained_path(root, gpx_ref)
     points = _gpx_points(gpx_path)
     cumulative = [0.0]
     for previous, current in zip(points, points[1:]):

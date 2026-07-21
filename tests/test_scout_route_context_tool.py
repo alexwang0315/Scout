@@ -47,6 +47,19 @@ def test_route_context_finds_candidate_viewpoint_and_experience_guidance() -> No
     assert "停留風險預算" in viewpoint["stop_guidance"]
 
 
+def test_route_context_treats_beyond_summit_question_as_grounded_broad_context() -> None:
+    result = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="這條路線除了登頂，最值得理解的是什麼？",
+        limit=4,
+    )
+
+    assert result["answerability"] == "route_context_available"
+    assert result["result_count"] >= 1
+    assert result["field_answer_priority"] == 10
+    assert "候選路線脈絡" in result["field_answer"]
+
+
 def test_route_context_covers_standard_natural_and_cultural_layers() -> None:
     natural = assess_scout_route_context(
         PROJECT_ROOT,
