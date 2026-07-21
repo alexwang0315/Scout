@@ -271,6 +271,8 @@ _BUDGET_ACTIONS = {
     OutdoorAction.ENTER_EXPOSED_SECTION,
 }
 
+_LOCATION_SENSITIVE_ACTIONS = _BUDGET_ACTIONS | {OutdoorAction.CONTINUE}
+
 _EXPOSED_MEDIA_PRESSURE_ACTIONS = {
     OutdoorAction.STOP,
     OutdoorAction.FILM,
@@ -602,6 +604,56 @@ def _permission(
                 equipment_status=equipment_status,
             ),
             alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
+    if action in _LOCATION_SENSITIVE_ACTIONS and _location_is_stale_or_unknown(
+        location_constraint=location_constraint,
+        retreat_impact=retreat_impact,
+    ):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.DELAY,
+            reason=(
+                "GNSS/GPS 定位已過期或目前位置未知，無法判斷此處停留或移動的相對風險。"
+            ),
+            next_action=(
+                "先停止依賴特定 CP 的移動指示，重新取得 GNSS/GPS 定位並人工確認周邊；"
+                "定位恢復後再判斷停留或移動。"
+            ),
+            confidence=ConfidenceLevel.LOW,
+            uncertainty_notes=[
+                "current location must be refreshed before route-relative permission can be issued.",
+                "位置未知時不得把 workspace 的候選 CP 當成目前可前往的指示。",
+            ],
+            alternative_actions=["重新取得定位", "人工確認周邊地形與原路線位置"],
+        )
+
+    sheltered_distance_m = _sheltered_candidate_distance_m(retreat_impact)
+    if (
+        action in _LOCATION_SENSITIVE_ACTIONS
+        and sheltered_distance_m is not None
+        and _looks_like_exposed_stop_context(
+            terrain_risk_level=terrain_risk_level,
+            location_constraint=location_constraint,
+            weather_window_impact=weather_window_impact,
+        )
+    ):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.CHANGE_PLAN,
+            reason=(
+                "目前位置為強風或曝露停留候選，原地停留不適合；"
+                "但證據指出前方仍有背風候選點。"
+            ),
+            next_action=(
+                f"不要在此停留；維持在已知路線走廊內，前往約 {sheltered_distance_m:g} 公尺外的"
+                "前方背風候選點，抵達後重新評估。"
+            ),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=[
+                "背風位置仍是候選證據，抵達前不得視為已確認安全停留點。"
+            ],
+            alternative_actions=["縮短停留需求", "撤回最近已確認安全位置"],
         )
 
     if action == OutdoorAction.LUNCH and _looks_like_exposed_lunch_context(
@@ -947,6 +999,58 @@ def _no_go_permission(
         uncertainty_notes=uncertainty_notes or [],
         residual_risk=["若忽略此建議，可能壓縮撤退、日照、天氣或隊伍最慢者 buffer。"],
         alternative_actions=alternative_actions or _alternative_actions(action, None),
+    )
+
+
+def _location_is_stale_or_unknown(
+    *,
+    location_constraint: str | None,
+    retreat_impact: str | None,
+) -> bool:
+    text = f"{location_constraint or ''} {retreat_impact or ''}".lower()
+    return any(
+        marker in text
+        for marker in (
+            "gnss stale",
+            "gps stale",
+            "current location unknown",
+            "location_unknown",
+            "位置未知",
+            "定位過期",
+        )
+    )
+
+
+def _sheltered_candidate_distance_m(retreat_impact: str | None) -> float | None:
+    match = re.search(
+        r"sheltered_candidate_ahead[_\s-]*(\d+(?:\.\d+)?)m",
+        str(retreat_impact or ""),
+        flags=re.IGNORECASE,
+    )
+    return float(match.group(1)) if match else None
+
+
+def _looks_like_exposed_stop_context(
+    *,
+    terrain_risk_level: str | None,
+    location_constraint: str | None,
+    weather_window_impact: str | None,
+) -> bool:
+    text = (
+        f"{terrain_risk_level or ''} {location_constraint or ''} "
+        f"{weather_window_impact or ''}"
+    ).lower()
+    return any(
+        marker in text
+        for marker in (
+            "high",
+            "critical",
+            "exposed",
+            "strong_wind",
+            "強風",
+            "曝露",
+            "風口",
+        )
     )
 
 

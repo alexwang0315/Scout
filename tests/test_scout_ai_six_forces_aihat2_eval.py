@@ -2,16 +2,28 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+
+from assistant_models import AssistantSurface, ScoutAssistantQuery
+from tools import scout_ai_six_forces_aihat2_eval as eval_module
 
 from tools.scout_ai_six_forces_aihat2_eval import (
+    _plain_excerpt,
     _write_summaries,
+    apply_answer_quality_gate,
+    assess_six_forces_answer_quality,
+    canonicalize_output_source_refs,
+    runtime_package_versions,
     build_recovery_prompt,
     build_structured_prompt,
     compact_evidence_for_model,
     expand_case_runs,
     health_guard,
     parse_model_output,
+    quality_tool_results_for_gaps,
+    selected_tool_ids,
     snapshot_for_run,
+    split_missing_evidence,
     verify_model_output,
 )
 from tools.scout_ai_aihat2_fallback_eval import _compact_tool_result
@@ -140,6 +152,7 @@ def test_structured_prompt_excludes_reference_and_allowed_decisions() -> None:
     assert "allowed_decisions" not in prompt
     assert run["question_text"] in prompt
     assert "candidate_only" in prompt
+    assert "a 必須至少保留" in prompt
 
 
 def test_structured_prompt_uses_missing_evidence_response_mode_without_reference() -> None:
@@ -210,6 +223,89 @@ def test_permission_verifier_rejects_claim_that_shelter_path_does_not_exist() ->
     assert "contradicts_sheltered_candidate_ahead" in verified["errors"]
 
 
+def test_permission_verifier_accepts_bounded_eight_minute_stop_answer() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CONDITIONAL_GO",
+        "answer": "目前可以，最多 8 分鐘，時間到就離開。",
+        "decisive_evidence": ["背風平坦且有時間 buffer"],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["風勢增強"],
+        "source_refs": ["tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"tool"},
+    )
+
+    assert verified["status"] == "pass"
+
+
+def test_verifier_rejects_answer_text_that_contradicts_decision_enum() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "benign_fresh_route_intersecting"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CHANGE_PLAN",
+        "answer": "NO_GO",
+        "decisive_evidence": ["弱風"],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": [],
+        "source_refs": ["tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"tool"},
+    )
+
+    assert "answer_decision_contradiction" in verified["errors"]
+
+
+def test_verifier_requires_route_shape_answer_for_rte001() -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "RTE")
+    run["question_id"] = "RTE-001"
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CHANGE_PLAN",
+        "answer": "路線有需要以 CP 為單位監控的難點。",
+        "decisive_evidence": ["CP Graph"],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": [],
+        "source_refs": ["tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"tool"},
+    )
+
+    assert "route_shape_not_answered" in verified["errors"]
+
+
 def test_parser_expands_compact_local_model_schema() -> None:
     parsed, error = parse_model_output(
         '{"s":"scenario.1","d":"DELAY","a":"先等候","e":"定位過期",'
@@ -239,6 +335,54 @@ def test_parser_normalizes_hailo_fullwidth_quotes_and_source_prefix() -> None:
 
     assert error is None
     assert parsed["source_refs"] == ["scout.ai.route_context.assess.v0"]
+
+
+def test_parser_strips_hailo_whitespace_from_compact_json_keys() -> None:
+    parsed, error = parse_model_output(
+        '{"s":"scenario.1","d":null,"a":"稜線啞口觀景點值得理解",'
+        '" e":"候選路線脈絡","o":"","g":"","c":"天候轉差",'
+        '"r":"scout.ai.route_context.assess.v0"," cl":"candidate_only"}'
+    )
+
+    assert error is None
+    assert parsed["decisive_evidence"] == ["候選路線脈絡"]
+    assert parsed["claims"] == ["candidate_only"]
+
+
+def test_parser_defaults_omitted_optional_evidence_lists() -> None:
+    parsed, error = parse_model_output(
+        '{"s":"scenario.1","d":null,"a":"稜線啞口觀景點值得理解",'
+        '"e":"候選路線脈絡"}'
+    )
+
+    assert error is None
+    assert parsed["opposing_evidence"] == []
+    assert parsed["evidence_gaps"] == []
+    assert parsed["decision_change_conditions"] == []
+    assert parsed["source_refs"] == []
+    assert parsed["claims"] == []
+
+
+def test_parser_repairs_hailo_backslash_escaped_array_quotes() -> None:
+    parsed, error = parse_model_output(
+        '{"s":"scenario.1","d":null,"a":"短答",'
+        '"g":[\\"candidate_only\\",\\"location\\"]"}'
+    )
+
+    assert error is None
+    assert parsed["evidence_gaps"] == ["candidate_only", "location"]
+
+
+def test_parser_repairs_hailo_missing_quote_for_empty_evidence_value() -> None:
+    parsed, error = parse_model_output(
+        '{＂s＂:＂scenario.1＂,＂d＂:＂CONDITIONAL_GO＂,＂a＂:＂O 型候選＂,'
+        '＂e＂:＂端點相距 95.6 m＂,＂o＂:＂,＂g＂:＂＂,＂c＂:＂重疊分析＂,'
+        '＂r＂:＂scout.ai.route_architecture.assess.v0＂,＂cl＂:＂candidate_only＂}'
+    )
+
+    assert error is None
+    assert parsed["opposing_evidence"] == []
+    assert parsed["answer"] == "O 型候選"
 
 
 def test_full_artifact_expands_to_one_thousand_when_available() -> None:
@@ -375,6 +519,41 @@ def test_recovery_prompt_carries_verifier_feedback_without_reference_answer() ->
     assert "工作區未提供" in prompt
     assert "deterministic_reference" not in prompt
     assert "allowed_decisions" not in prompt
+    assert prompt.rstrip().endswith('"cl":"candidate_only"}')
+    assert f'"s":"{run["scenario_id"]}"' in prompt
+    assert "山體由花崗岩構成" in prompt
+    assert '"scenario_id"' not in prompt
+    repair_candidate = prompt.rsplit("correction candidate", maxsplit=1)[-1]
+    assert "工作區未提供足夠的題目專屬證據" in repair_candidate
+    assert "question_specific_route_context_evidence_missing" in repair_candidate
+    assert "山體由花崗岩構成" not in repair_candidate
+
+
+def test_recovery_prompt_replaces_unsupported_answer_with_primary_field_answer() -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP")
+    field_answer = "候選路線脈絡包含稜線啞口觀景點、雲海保線所與黑水塘。"
+    evidence = {
+        "scenario_id": run["scenario_id"],
+        "missing_evidence": [],
+        "tools": [
+            {
+                "tool_id": "scout.ai.route_context.assess.v0",
+                "decision": "CONDITIONAL_GO",
+                "field_answer": field_answer,
+            }
+        ],
+    }
+
+    prompt = build_recovery_prompt(
+        run=run,
+        compact_evidence=evidence,
+        previous_output={"answer": "路線僅有登頂，沒有其他內容。"},
+        verifier_errors=["answer_quality:did_not_preserve_expected_tool_tokens"],
+    )
+
+    repair_candidate = prompt.rsplit("correction candidate", maxsplit=1)[-1]
+    assert field_answer in repair_candidate
+    assert "路線僅有登頂" not in repair_candidate
 
 
 def test_summary_requires_verifier_and_quality_acceptance(tmp_path: Path) -> None:
@@ -422,3 +601,196 @@ def test_summary_requires_verifier_and_quality_acceptance(tmp_path: Path) -> Non
     assert "strict verifier + quality acceptance: `1/3`" in (
         tmp_path / "summary.md"
     ).read_text()
+
+
+def test_quality_gate_rejects_ungrounded_answer_when_evidence_is_sufficient() -> None:
+    verifier = apply_answer_quality_gate(
+        {"status": "pass", "errors": []},
+        {
+            "classification": "quality_fail",
+            "failure_reasons": ["did_not_preserve_expected_tool_tokens"],
+        },
+        evidence_sufficient=True,
+    )
+
+    assert verifier["status"] == "fail"
+    assert verifier["errors"] == [
+        "answer_quality:did_not_preserve_expected_tool_tokens"
+    ]
+
+
+def test_six_forces_quality_accepts_concise_primary_field_grounding() -> None:
+    quality = assess_six_forces_answer_quality(
+        "前往約 180 公尺外的前方背風候選點，抵達後重新評估。",
+        missing_tools=[],
+        blocking_missing_evidence=[],
+        tool_results=[
+            {
+                "tool_id": "scout.ai.contextual_permission.assess.v0",
+                "field_answer": (
+                    "不要在此停留；維持在已知路線走廊內，前往約 180 公尺外的"
+                    "前方背風候選點，抵達後重新評估。"
+                ),
+            }
+        ],
+    )
+
+    assert quality["classification"] == "auto_screen_pass_requires_human_review"
+    assert quality["failure_reasons"] == []
+    assert quality["grounded_context_use"] is True
+    assert quality["grounding_match_method"] == "primary_field_answer_overlap"
+
+
+def test_six_forces_quality_rejects_generic_answer_without_primary_grounding() -> None:
+    quality = assess_six_forces_answer_quality(
+        "前往下一個安全 CP。",
+        missing_tools=[],
+        blocking_missing_evidence=[],
+        tool_results=[
+            {
+                "tool_id": "scout.ai.contextual_permission.assess.v0",
+                "field_answer": "目前可有條件停留，最多 8 分鐘，之後必須離開。",
+            }
+        ],
+    )
+
+    assert quality["classification"] == "quality_fail"
+    assert "did_not_preserve_expected_tool_tokens" in quality["failure_reasons"]
+
+
+def test_plain_excerpt_keeps_string_newlines_natural_and_finishes_nearby_sentence() -> None:
+    value = (
+        "[決策] 可以，最多 8 分鐘。\n"
+        "[限制] 必須在時限前離開。\n"
+        "[原因] 背風且地形平坦，仍需保留安全 buffer。\n"
+        "[下一步] 到時限後立即離開，前往下一個安全 CP。"
+    )
+
+    excerpt = _plain_excerpt(value, 72)
+
+    assert " n " not in excerpt
+    assert "\n" not in excerpt
+    assert excerpt.endswith("安全 CP。")
+
+
+def test_runtime_package_versions_attest_pydantic_ai_stack() -> None:
+    versions = runtime_package_versions()
+
+    assert versions["pydantic_ai_slim"] == "2.13.0"
+    assert versions["pydantic_evals"] == "2.13.0"
+    assert versions["pydantic_graph"] == "2.13.0"
+
+
+def test_selected_tools_put_force_primary_before_planner_and_defaults(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        eval_module,
+        "plan_scout_ai_tools",
+        lambda *args, **kwargs: SimpleNamespace(
+            selected_tools=[
+                SimpleNamespace(tool_id="scout.ai.energy_vitals.assess.v0"),
+                SimpleNamespace(tool_id="scout.ai.pace_guardian.assess.v0"),
+            ]
+        ),
+    )
+    query = ScoutAssistantQuery(
+        surface=AssistantSurface.PRETRIP,
+        question="以我過去的紀錄，這條路線符合我的腳程嗎？",
+        project_id="demo",
+    )
+
+    tools = selected_tool_ids(query=query, project_root=tmp_path, force_code="RPF")
+
+    assert tools[0] == "scout.ai.pace_guardian.assess.v0"
+    assert tools.count("scout.ai.pace_guardian.assess.v0") == 1
+    assert "scout.ai.energy_vitals.assess.v0" in tools
+
+
+def test_missing_evidence_distinguishes_primary_from_supplemental_gaps() -> None:
+    blocking, supplemental = split_missing_evidence(
+        force_code="WTH",
+        missing_evidence=[
+            "scout.ai.cwa_environment.assess.v0:missing:fresh_cwa_environment_evidence",
+            "scout.ai.route_readiness.assess.v0:missing:team_members",
+        ],
+    )
+
+    assert blocking == []
+    assert len(supplemental) == 2
+
+    blocking, supplemental = split_missing_evidence(
+        force_code="WTH",
+        missing_evidence=[
+            "scout.ai.weather_window.assess.v0:missing:fresh_route_weather_evidence",
+        ],
+    )
+
+    assert blocking == [
+        "scout.ai.weather_window.assess.v0:missing:fresh_route_weather_evidence"
+    ]
+    assert supplemental == []
+
+
+def test_question_specific_gap_does_not_require_generic_tool_tokens() -> None:
+    generic_tool = {
+        "tool_id": "scout.ai.route_context.assess.v0",
+        "field_answer": "泛用景點摘要",
+    }
+
+    selected = quality_tool_results_for_gaps(
+        tool_results=[generic_tool],
+        blocking_missing_evidence=[
+            "question_specific_route_context_evidence_missing"
+        ],
+    )
+
+    assert selected == []
+
+
+def test_route_shape_uses_typed_verifier_instead_of_exact_field_copy() -> None:
+    selected = quality_tool_results_for_gaps(
+        tool_results=[
+            {
+                "tool_id": "scout.ai.route_architecture.assess.v0",
+                "field_answer": "起終端點相距約 95.6 m，較符合 O 型或回到入口。",
+            }
+        ],
+        blocking_missing_evidence=[],
+        question_id="RTE-001",
+    )
+
+    assert selected == []
+
+
+def test_source_ref_alias_is_resolved_only_by_unique_filename() -> None:
+    output = {
+        "source_refs": ["scout.ai.route_context_points.json"],
+        "answer": "候選路線脈絡",
+    }
+
+    resolved = canonicalize_output_source_refs(
+        output,
+        {
+            "candidates/route_context_points.json",
+            "scout.ai.route_context.assess.v0",
+        },
+    )
+
+    assert resolved["source_refs"] == ["candidates/route_context_points.json"]
+
+
+def test_source_ref_missing_suffix_is_canonicalized_to_verified_tool() -> None:
+    resolved = canonicalize_output_source_refs(
+        {
+            "source_refs": [
+                "scout.ai.contextual_permission.assess.v0:missing:course_deg"
+            ]
+        },
+        {"scout.ai.contextual_permission.assess.v0"},
+    )
+
+    assert resolved["source_refs"] == [
+        "scout.ai.contextual_permission.assess.v0"
+    ]

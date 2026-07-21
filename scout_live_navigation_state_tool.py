@@ -184,8 +184,14 @@ def assess_scout_live_navigation_state(
         missing_fields=missing_fields,
     )
     freshness_answer = _live_navigation_freshness_answer(query, provided)
-    if freshness_answer:
-        field_answer = freshness_answer
+    position_answer = _live_navigation_position_answer(
+        query,
+        provided,
+        missing_fields=missing_fields,
+    )
+    direct_answer = freshness_answer or position_answer
+    if direct_answer:
+        field_answer = direct_answer
     decision_output = _decision_output(
         decision=navigation_decision,
         missing_fields=missing_fields,
@@ -205,7 +211,7 @@ def assess_scout_live_navigation_state(
         ),
         "decision": navigation_decision["decision"],
         "field_answer": field_answer,
-        "field_answer_priority": 100 if freshness_answer else 0,
+        "field_answer_priority": 100 if direct_answer else 0,
         "field_answer_source_ref": _loaded_snapshot_source_ref(snapshot_report),
         "decision_output": decision_output,
         "missing_fields": missing_fields,
@@ -470,6 +476,41 @@ def _live_navigation_freshness_answer(
         f"最新 live navigation observed_at={observed_at}；"
         f"距現在約 {age_seconds / 3600.0:.1f} 小時，資料{freshness}（5 分鐘門檻）。"
     )
+
+
+def _live_navigation_position_answer(
+    query: str,
+    provided: dict[str, object],
+    *,
+    missing_fields: list[str],
+) -> str | None:
+    lowered = query.casefold()
+    if not any(
+        token in lowered
+        for token in ("哪一個位置", "現在在哪", "目前位置", "current position")
+    ):
+        return None
+    required = ("lat", "lon", "route_progress_m")
+    if any(_is_missing(provided.get(field)) for field in required):
+        missing = "、".join(field for field in required if _is_missing(provided.get(field)))
+        return f"目前無法確認路線位置；缺少 {missing or '定位欄位'}，請先重新取得 GNSS 定位。"
+    route_km = float(provided["route_progress_m"]) / 1000.0
+    parts = [
+        f"目前候選位置為 {provided['lat']},{provided['lon']}",
+        f"路線累積約 {route_km:g} km",
+    ]
+    nearest_cp = provided.get("nearest_cp_id")
+    if not _is_missing(nearest_cp):
+        parts.append(f"最近 CP {nearest_cp}")
+    heading = provided.get("heading_deg")
+    if not _is_missing(heading):
+        parts.append(f"航向 {float(heading):g} 度")
+    travel_direction = provided.get("travel_direction")
+    if not _is_missing(travel_direction):
+        parts.append(f"行進方向 {travel_direction}")
+    if missing_fields:
+        parts.append("仍缺少 " + "、".join(missing_fields[:3]))
+    return "；".join(parts) + "。此為定位候選證據，不是 runtime safety truth。"
 
 
 def _parse_timestamp(value: object) -> datetime | None:

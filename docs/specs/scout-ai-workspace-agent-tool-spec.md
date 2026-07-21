@@ -1449,6 +1449,135 @@ receipt correlated to the authorized sandbox attempt. No real transport or
 delivery occurred, and the workspace must never shorten that status to
 "delivery verified".
 
+### 2026-07-20 Pydantic AI 2.13 AI HAT+2 continuation record
+
+Run `v213-aihat2-hardware-blocked-20260720T024500Z` regenerated the real
+`chilai_nanhua_day1_scoutAI` scenario artifact for
+`deterministic_weather_replay`. Deterministic schema validation passed with
+five scenarios, 600 unique question IDs, 600 unique case IDs, 100 questions per
+force, and 20 cases in every `(boss rank, force)` pair. The five dynamically
+derived anchor progresses remained 59,250 m, 49,250 m, 43,250 m, 48,250 m, and
+53,250 m, each 500 m before its Boss Point along canonical route progress.
+
+Scout hardware preflight initially detected the HAILO10H at
+`pci/0001:01:00.0`, the `qwen3:1.7b` HEF model, CPU temperature 43.9 C, and no
+current throttle flags. UPS state was not observable through Linux
+power-supply or NUT sources and was not inferred. During transfer of the real
+workspace to an isolated evaluation directory, Scout left the local IPv4
+network and rsync ended with `Broken pipe`. The isolated Pydantic AI 2.13
+environment was therefore not installed and no model request was started.
+
+Continuation artifacts are under
+`outputs/evals/six_forces_600_total_info_v213-aihat2-hardware-blocked-20260720T024500Z/`.
+They record `model_runs_completed=0`, the exact connectivity blocker, the
+partial remote root
+`/home/alexwang0315/scout-v213-six-forces-20260720T024500Z`, and the condition
+required to resume. PER-095, full Total Info/tool identity, answer quality, and
+decision statistics remain `NOT RUN`; the deterministic generator result is
+not presented as a model result. Weather network access was not used.
+
+This blocked continuation remains `candidate_only=true` and
+`runtime_safety_truth=false`. It did not call `/safety/*`, modify Phase 1,
+control hardware, send outbound messages, expose secrets, or promote synthetic
+evidence to field truth.
+
+#### 2026-07-20 Pydantic AI 2.13 AI HAT+2 resumed evaluation
+
+After Scout returned to the network, the blocked run resumed from the isolated
+root `/home/alexwang0315/scout-v213-six-forces-20260720T024500Z`. The runtime
+attested `pydantic-ai-slim`, `pydantic-evals`, and `pydantic-graph` at `2.13.0`
+and used the Hailo AI HAT+2 endpoint with `qwen3:1.7b`. The regenerated scenario
+artifact hash was
+`0b48d0ae7cd31769809d2e2347d1dc05dbc3ac421b4bcaf5a6073e28720f4ab5`.
+The exact Scout-side input is retained as
+`scenario_artifact.snapshot.json` inside the recovery-composed run directory;
+the existing Mac canonical artifact was not overwritten when its hash differed.
+It contains five scenarios and 600 unique cases/questions, with 100 questions
+per force and 20 cases per `(boss rank, force)` pair. PER and WTH expansion
+still defines a 1,000-run full matrix.
+
+The five workspace-derived Boss approach anchors remained:
+
+| Rank | Canonical progress | Interpolated location |
+|---:|---:|---|
+| 1 | 59,250 m | 24.058167201531, 121.282862139783 |
+| 2 | 49,250 m | 24.053578033172, 121.241105036979 |
+| 3 | 43,250 m | 24.050482206818, 121.215180629792 |
+| 4 | 48,250 m | 24.047716532769, 121.237805374932 |
+| 5 | 53,250 m | 24.048743594927, 121.260414739621 |
+
+The primary stratified run was
+`v213-aihat2-pydantic-qwen3-stratified30-expanded50-20260720T1700Z`. It covered
+30 unique questions and 50 expanded model runs: five EXP, five RPF, 15 PER,
+five RTE, 15 WTH, and five NAV. It made 109 Pydantic AI model requests, passed
+all 50 scenario identity checks, and achieved strict verifier-plus-quality
+acceptance of `37/50`. The strict result, rather than verifier status alone, is
+the baseline score.
+
+Failures were repaired through the required tool-first sequence: force-primary
+tool ordering, blocking versus supplemental evidence separation, contextual
+permission handling for exposed shelter candidates and stale location,
+route-shape/current-position field answers, tolerant Hailo compact-JSON
+parsing, source-ref canonicalization, and a primary-field grounding check that
+accepts a concise answer containing a verified measurement or phrase without
+requiring verbatim reproduction of the entire tool answer. Generic answers
+without such grounding still fail.
+
+The recovery-composed artifact is under:
+
+```text
+outputs/evals/six_forces_600_total_info_v213-aihat2-pydantic-qwen3-stratified30-expanded50-recovery-composed-20260720T081415Z/
+```
+
+It preserves all 37 baseline accepts and substitutes a successful post-repair
+rerun only for each of the 13 rejected `run_case_id` values. The composed
+coverage is therefore strict `50/50`, with `50/50` scenario identity. This is
+explicitly a recovery-composed result, not a claim that one single pass scored
+50/50. `recovery_lineage.json` records every selected source run and source
+hash. A final sentence-safe PER-095 quality rerun replaced three otherwise
+accepted rows whose packed answer contained a literal newline `n` or ended
+mid-sentence. The qwen3 baseline, repair, and quality-refinement runs used 170
+model requests in total.
+
+PER-095 passed all three required contexts after the repair:
+
+- exposed strong wind with a sheltered candidate ahead: `CHANGE_PLAN`;
+- sheltered flat candidate with time available: `CONDITIONAL_GO`;
+- stale GNSS with unknown current location: `DELAY`.
+
+The final three answers contain natural spacing and complete next steps; the
+sheltered answer now ends with `前往下一個安全 CP。` instead of a truncated
+phrase.
+
+An alternate-model step used `qwen2.5-coder:1.5b` for PER-093 and scored strict
+`0/3` in that recorded run. Codex review found that it preserved the 180 m
+sheltered-candidate fact in one answer but missed the benign time buffer and
+stale-location constraint in the other two. A final qwen3 post-repair PER-093
+run then passed `3/3` with `CHANGE_PLAN`, `GO`, and `DELAY`, showing that the
+remaining failure was alternate-model weakness rather than a missing tool or
+workspace evidence path.
+
+Weather remained fixture-backed `deterministic_weather_replay`; no external
+weather API call was made. Across 87 persisted samples from the baseline,
+repair, and model-switch runs, CPU temperature was 49.4-56.5 C, core voltage
+was 0.7500-0.8772 V, and every throttle sample was `throttled=0x0`. UPS state
+remained unobservable through Linux power-supply and NUT sources and was not
+inferred.
+
+The full 1,000-run matrix remains
+`KNOWN_ISSUE=SCOUT-SIX600-AIHAT2-FULL-MATRIX-001`. The measured 50-run slice
+took about 93.6 minutes, projecting about 31.2 hours, while the local endpoint
+also produced intermittent HTTP 500 or empty continuations and no UPS telemetry
+was available. Its explicit unblock condition is an approximately 32-hour
+uninterrupted maintenance window plus observable UPS or supervised power
+monitoring. The 600-case deterministic schema validation and required
+30-question/50-run real-model stratified smoke are complete.
+
+All artifacts remain `candidate_only=true` and
+`runtime_safety_truth=false`. No `/safety/*` call, Phase 1 mutation, hardware
+control, outbound send, live weather network request, or real-user location
+promotion occurred.
+
 ### 2026-07-20 Alpha mobile/wearable simulation workspace record
 
 The Alpha Mobile/Wearable GPX Simulation Sandbox v0.1 generated a development

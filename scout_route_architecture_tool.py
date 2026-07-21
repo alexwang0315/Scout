@@ -157,6 +157,7 @@ def assess_scout_route_architecture(
     else:
         answerability = "route_architecture_available"
     field_answer = _field_answer(
+        query=query,
         answerability=answerability,
         decision=route_decision,
         route_architecture=route_architecture,
@@ -183,6 +184,7 @@ def assess_scout_route_architecture(
         "decision": route_decision["decision"],
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 100 if _is_route_shape_query(query) else 0,
         "missing_fields": missing_fields,
         "route_architecture": route_architecture,
         "cp_graph": {
@@ -665,9 +667,11 @@ def _route_architecture(
         retreat_routes=retreat_routes,
         cp_nodes=cp_nodes,
     )
+    endpoint_separation_m = _endpoint_separation_m(cp_nodes)
     return {
         "role": "Route Architecture Intelligence",
         "route_type": route_type,
+        "endpoint_separation_m": endpoint_separation_m,
         "candidate_only": True,
         "runtime_safety_truth": False,
         "route_summary": {
@@ -993,11 +997,15 @@ def _route_decision(
 
 def _field_answer(
     *,
+    query: str,
     answerability: str,
     decision: dict[str, Any],
     route_architecture: dict[str, Any],
     missing_fields: list[str],
 ) -> str:
+    shape_answer = _route_shape_field_answer(query, route_architecture)
+    if shape_answer:
+        return shape_answer
     route_context = _route_architecture_brief(route_architecture)
     if missing_fields and answerability == "route_architecture_missing_current_context":
         first_layer_decision = str(decision.get("first_layer_decision") or "")
@@ -1034,6 +1042,56 @@ def _field_answer(
         + f"下一步：{decision['next_action']} "
         + "此為 Route Architecture / CP Graph 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
     )
+
+
+def _is_route_shape_query(query: str) -> bool:
+    lowered = query.casefold()
+    return any(
+        token in lowered
+        for token in (
+            "原路往返",
+            "o 型",
+            "o型",
+            "a 進 b 出",
+            "a進b出",
+            "路線類型",
+            "route type",
+        )
+    )
+
+
+def _route_shape_field_answer(
+    query: str,
+    route_architecture: dict[str, Any],
+) -> str:
+    if not _is_route_shape_query(query):
+        return ""
+    route_type = str(route_architecture.get("route_type") or "unknown")
+    endpoint_separation_m = _float_or_none(
+        route_architecture.get("endpoint_separation_m")
+    )
+    endpoint_text = (
+        f"起終端點相距約 {endpoint_separation_m:g} m"
+        if endpoint_separation_m is not None
+        else "起終端點距離未知"
+    )
+    if route_type == "loop_or_return_route_candidate":
+        return (
+            f"路線形態候選：{endpoint_text}，較符合 O 型或回到入口，並不支持 A 進 B 出；"
+            "目前只有端點與 CP Graph，無法區分 O 型與原路往返，需再做路段重疊分析。"
+            "此為 candidate-only 路線結構，不是 runtime safety truth。"
+        )
+    if route_type == "primary_route_with_return_to_entry_retreat_candidate":
+        return (
+            f"路線形態候選：{endpoint_text}，主線較像線型或 A 進 B 出，另有返回入口撤退候選；"
+            "仍需人工確認主線與撤退線。此為 candidate-only 路線結構，不是 runtime safety truth。"
+        )
+    if route_type == "linear_or_traverse_candidate":
+        return (
+            f"路線形態候選：{endpoint_text}，較像線型或 A 進 B 出；尚無足夠證據判定為 O 型或原路往返。"
+            "此為 candidate-only 路線結構，不是 runtime safety truth。"
+        )
+    return "Workspace 的起終端點與 CP Graph 不足，無法判定原路往返、O 型或 A 進 B 出。"
 
 
 def _decision_output(
@@ -1204,6 +1262,14 @@ def _decision_limit_phrase(
 
 def _route_architecture_brief(route_architecture: dict[str, Any]) -> str:
     highlights: list[str] = []
+    route_type = str(route_architecture.get("route_type") or "unknown")
+    endpoint_separation_m = _float_or_none(
+        route_architecture.get("endpoint_separation_m")
+    )
+    route_type_text = f"路線類型：{route_type}"
+    if endpoint_separation_m is not None:
+        route_type_text += f"（起終端點距離約 {endpoint_separation_m:g} m）"
+    highlights.append(route_type_text)
     graph_completeness = route_architecture.get("graph_completeness")
     graph_completeness = (
         graph_completeness if isinstance(graph_completeness, dict) else {}
@@ -1554,13 +1620,43 @@ def _route_type(
     retreat_routes: list[dict[str, Any]],
     cp_nodes: list[dict[str, Any]],
 ) -> str:
+    endpoint_separation_m = _endpoint_separation_m(cp_nodes)
+    if (
+        endpoint_separation_m is not None
+        and endpoint_separation_m <= 500.0
+    ) or (cp_nodes and cp_nodes[0].get("name") == cp_nodes[-1].get("name")):
+        return "loop_or_return_route_candidate"
     if any(route.get("reversed_from_primary_route") for route in retreat_routes):
         return "primary_route_with_return_to_entry_retreat_candidate"
-    if cp_nodes and cp_nodes[0].get("name") == cp_nodes[-1].get("name"):
-        return "loop_or_return_route_candidate"
     if route_summary:
         return "linear_or_traverse_candidate"
     return "unknown"
+
+
+def _endpoint_separation_m(cp_nodes: list[dict[str, Any]]) -> float | None:
+    if len(cp_nodes) < 2:
+        return None
+    start = cp_nodes[0].get("coordinates") or {}
+    finish = cp_nodes[-1].get("coordinates") or {}
+    lat1 = _float_or_none(start.get("lat"))
+    lon1 = _float_or_none(start.get("lon"))
+    lat2 = _float_or_none(finish.get("lat"))
+    lon2 = _float_or_none(finish.get("lon"))
+    if None in (lat1, lon1, lat2, lon2):
+        return None
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    haversine = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    distance = 6371000.0 * 2.0 * math.atan2(
+        math.sqrt(haversine),
+        math.sqrt(max(0.0, 1.0 - haversine)),
+    )
+    return round(distance, 1)
 
 
 def _alternative_plan_options(

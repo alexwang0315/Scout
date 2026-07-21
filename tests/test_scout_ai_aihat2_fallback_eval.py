@@ -9,13 +9,16 @@ from assistant_models import AssistantSurface, ScoutAssistantQuery
 from tools import scout_ai_aihat2_fallback_eval as eval_module
 from tools.scout_ai_aihat2_fallback_eval import (
     _compact_aihat_context,
+    _ensure_synthetic_route_weather_package,
     assess_aihat_answer_quality,
     build_total_info,
     build_prompt,
     call_hailo_model,
+    call_hailo_model_via_pydantic_ai,
     require_ai_hat_runtime,
     run_tools,
 )
+from scout_weather_window_tool import assess_scout_weather_window
 
 
 def test_aihat2_eval_prompt_does_not_instruct_template_copy() -> None:
@@ -94,7 +97,7 @@ def test_aihat2_eval_quality_fails_template_copy_of_deterministic_hint() -> None
 
 
 def test_aihat2_eval_normalizes_hailo_chat_control_characters(monkeypatch) -> None:
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
     class FakeResponse:
         def __enter__(self):
@@ -117,6 +120,7 @@ def test_aihat2_eval_normalizes_hailo_chat_control_characters(monkeypatch) -> No
         del timeout
         payload = json.loads(request.data.decode("utf-8"))
         captured["content"] = payload["messages"][0]["content"]
+        captured["think"] = payload.get("think")
         return FakeResponse()
 
     monkeypatch.setattr(
@@ -133,9 +137,73 @@ def test_aihat2_eval_normalizes_hailo_chat_control_characters(monkeypatch) -> No
 
     assert captured["content"].startswith("第一行 第二行 第三行")
     assert captured["content"].count("甲") == 5000
+    assert captured["think"] is False
     assert len(captured["content"].encode("utf-8")) > 3600
     assert answer == "結論：測試完成"
     assert metadata["model"] == "qwen3:1.7b"
+
+
+def test_aihat2_eval_can_route_hailo_through_pydantic_ai_v2() -> None:
+    def fake_hailo_call(**kwargs):
+        assert kwargs["model"] == "qwen3:1.7b"
+        assert kwargs["structured_json"] is True
+        return '{"a":"grounded"}', {"model": "qwen3:1.7b", "eval_count": 4}
+
+    answer, metadata = call_hailo_model_via_pydantic_ai(
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        prompt="answer from evidence",
+        timeout_seconds=10,
+        structured_json=True,
+        hailo_call=fake_hailo_call,
+    )
+
+    assert answer == '{"a":"grounded"}'
+    assert metadata["pydantic_ai"]["used"] is True
+    assert metadata["pydantic_ai"]["runtime_version"] == "2.13.0"
+    assert metadata["pydantic_ai"]["requests"] == 1
+
+
+@pytest.mark.parametrize(
+    ("variant_id", "expected_decision", "expected_risk"),
+    [
+        ("severe_fresh_route_intersecting", "CHANGE_PLAN", 0.82),
+        ("benign_fresh_route_intersecting", "GO", 0.15),
+        ("stale_unknown_weather", "DELAY", None),
+    ],
+)
+def test_aihat2_synthetic_weather_drives_expected_weather_decision(
+    tmp_path: Path,
+    variant_id: str,
+    expected_decision: str,
+    expected_risk: float | None,
+) -> None:
+    (tmp_path / "project.json").write_text(
+        json.dumps({"project_id": "synthetic-weather"}),
+        encoding="utf-8",
+    )
+    snapshot = {
+        "scenario_id": f"scenario.{variant_id}",
+        "observed_at": "2026-07-20T08:00:00+08:00",
+        "route_progress_m": 1000,
+    }
+    weather_ref = _ensure_synthetic_route_weather_package(
+        tmp_path,
+        live_navigation_snapshot=snapshot,
+        scenario_overlay={"variant_id": variant_id},
+    )
+
+    result = assess_scout_weather_window(
+        tmp_path,
+        query="依目前天氣，今天適合照原計畫出發嗎？",
+        route_weather_package_path=weather_ref,
+        reference_time=snapshot["observed_at"],
+    )
+
+    assert result["decision"] == expected_decision
+    segment = result["results"][0]
+    assert segment.get("weather_risk") == expected_risk
+    assert result["external_api_calls_made"] is False
 
 
 def test_aihat2_eval_accepts_pcie_attestation_without_legacy_device_node(

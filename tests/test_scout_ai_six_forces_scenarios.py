@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from scout_ai_six_forces_scenarios import (
+    _contained_path,
     ScenarioDecisionOutput,
     artifact_statistics,
     build_per095_replay_contexts,
@@ -30,6 +31,21 @@ WEATHER_FIXTURE = (
 SCENARIO_ARTIFACT = (
     REAL_WORKSPACE / "outputs/evals/scout_ai_six_forces_600_scenarios.json"
 )
+
+
+def test_contained_path_relocates_foreign_workspace_absolute_ref(
+    tmp_path: Path,
+) -> None:
+    expected = tmp_path / "normalized/routes/primary.gpx"
+    expected.parent.mkdir(parents=True)
+    expected.write_text("<gpx />", encoding="utf-8")
+
+    resolved = _contained_path(
+        tmp_path,
+        "/Users/example/workspace/old-project/normalized/routes/primary.gpx",
+    )
+
+    assert resolved == expected.resolve()
 
 
 def _real_scenarios():

@@ -125,6 +125,20 @@ def test_live_navigation_state_reports_snapshot_freshness() -> None:
     )
 
 
+def test_live_navigation_state_directly_answers_current_route_position() -> None:
+    result = assess_scout_live_navigation_state(
+        PROJECT_ROOT,
+        query="我現在在路線的哪一個位置？",
+        **_complete_snapshot(),
+    )
+
+    assert "路線累積約 1.2 km" in result["field_answer"]
+    assert "cp.004" in result["field_answer"]
+    assert "24.0509,121.216" in result["field_answer"]
+    assert "航向 94" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+
+
 def test_live_navigation_state_output_kind_constant() -> None:
     assert LIVE_NAVIGATION_STATE_OUTPUT_KIND == "scout_ai_live_navigation_state_tool_output"
 

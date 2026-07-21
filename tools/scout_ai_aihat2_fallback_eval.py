@@ -12,8 +12,9 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -633,7 +634,8 @@ def _synthetic_weather_variant(
             "summary": "劇烈降雨、強風與低能見度候選訊號和目前 route corridor 相交。",
             "hazard_notes": ["heavy_rain", "strong_wind", "fog_visibility_drop", "wet_terrain"],
             "confidence": "medium",
-            "risk": "high",
+            "weather_risk": 0.82,
+            "risk_level": "high",
         }
     if variant in {"benign_fresh_route_intersecting", "sheltered_flat_time_available"}:
         return {
@@ -644,7 +646,8 @@ def _synthetic_weather_variant(
             "summary": "目前 route corridor 為弱風、無顯著降雨且能見度良好的候選預報。",
             "hazard_notes": ["light_wind", "no_significant_rain", "good_visibility"],
             "confidence": "medium",
-            "risk": "low",
+            "weather_risk": 0.15,
+            "risk_level": "low",
         }
     if variant in {"stale_unknown_weather", "gnss_stale_location_unknown"}:
         return {
@@ -655,7 +658,8 @@ def _synthetic_weather_variant(
             "summary": "天氣證據已過有效期，現況未知，不可把缺失視為良好天氣。",
             "hazard_notes": ["stale_weather", "current_conditions_unknown"],
             "confidence": "low",
-            "risk": "unknown",
+            "weather_risk": None,
+            "risk_level": "unknown",
         }
     return {
         "issued_at": issued_at,
@@ -665,7 +669,8 @@ def _synthetic_weather_variant(
         "summary": "午後山區雲霧與陣雨風險升高，能見度可能下降。",
         "hazard_notes": ["fog_visibility_drop", "afternoon_rain", "wet_terrain"],
         "confidence": "medium",
-        "risk": "elevated",
+        "weather_risk": 0.48,
+        "risk_level": "moderate",
     }
 
 
@@ -725,7 +730,10 @@ def _ensure_synthetic_route_weather_package(
                 "toM": route_progress_m + 500,
                 "etaFrom": weather["valid_from"],
                 "etaTo": weather["valid_to"],
-                "weatherRisk": weather["risk"],
+                "weatherRisk": weather["weather_risk"],
+                "riskLevel": weather["risk_level"],
+                "factors": weather["hazard_notes"],
+                "message": weather["summary"],
                 "hazardNotes": weather["hazard_notes"],
             }
         ],
@@ -802,6 +810,8 @@ def _compact_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "errors": result.get("errors") or [],
         "summary": summary,
         "answerability": payload.get("answerability"),
+        "decision": payload.get("decision"),
+        "allowed": payload.get("allowed"),
         "field_answer": payload.get("field_answer"),
         "field_answer_priority": payload.get("field_answer_priority"),
         "field_answer_source_ref": payload.get("field_answer_source_ref"),
@@ -1798,6 +1808,8 @@ def call_hailo_model(
     }
     if structured_json:
         payload["format"] = "json"
+    if model.casefold().startswith("qwen3"):
+        payload["think"] = False
     request = urllib.request.Request(
         endpoint,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -1828,6 +1840,80 @@ def call_hailo_model(
         "latency_ms": latency_ms,
     }
     return answer, metadata
+
+
+def call_hailo_model_via_pydantic_ai(
+    *,
+    endpoint: str,
+    model: str,
+    prompt: str,
+    timeout_seconds: int,
+    structured_json: bool = False,
+    hailo_call: Callable[..., tuple[str, dict[str, Any]]] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Run a Hailo Ollama request inside the Pydantic AI agent graph.
+
+    Hailo Ollama 5.3 currently emits a nanosecond ``created`` value from its
+    OpenAI-compatible endpoint, which Pydantic AI correctly rejects as an
+    invalid Unix timestamp. This adapter keeps the proven Ollama transport but
+    makes Pydantic AI own the model request lifecycle and output extraction.
+    """
+
+    from pydantic_ai import Agent
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+    invoke_hailo = hailo_call or call_hailo_model
+    captured: dict[str, Any] = {}
+
+    def hailo_adapter(_messages: list[Any], _agent_info: AgentInfo) -> ModelResponse:
+        answer, metadata = invoke_hailo(
+            endpoint=endpoint,
+            model=model,
+            prompt=prompt,
+            timeout_seconds=timeout_seconds,
+            structured_json=structured_json,
+        )
+        captured["answer"] = answer
+        captured["metadata"] = metadata
+        return ModelResponse(
+            parts=[TextPart(answer)],
+            model_name=f"hailo-ollama:{model}",
+        )
+
+    runtime_version = "not-installed"
+    for distribution in ("pydantic-ai", "pydantic-ai-slim"):
+        try:
+            runtime_version = version(distribution)
+            break
+        except PackageNotFoundError:
+            continue
+    try:
+        result = Agent(
+            FunctionModel(hailo_adapter, model_name=f"hailo-ollama:{model}")
+        ).run_sync(prompt)
+        output = str(getattr(result, "output", getattr(result, "data", "")))
+        usage_value = getattr(result, "usage", None)
+        usage = usage_value() if callable(usage_value) else usage_value
+        requests = int(getattr(usage, "requests", 1) or 1)
+        metadata = dict(captured.get("metadata") or {})
+        metadata["pydantic_ai"] = {
+            "used": True,
+            "runtime_version": runtime_version,
+            "adapter": "function_model_hailo_ollama",
+            "requests": requests,
+        }
+        return output, metadata
+    except Exception as exc:  # noqa: BLE001 - preserve the failed eval attempt.
+        metadata = dict(captured.get("metadata") or {})
+        metadata["pydantic_ai"] = {
+            "used": True,
+            "runtime_version": runtime_version,
+            "adapter": "function_model_hailo_ollama",
+            "requests": 1,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        return str(captured.get("answer") or ""), metadata
 
 
 REFUSAL_TERMS = (

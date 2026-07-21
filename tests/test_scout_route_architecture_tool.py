@@ -137,6 +137,35 @@ def test_route_architecture_standard_cp_node_fields_use_policy_and_eta(
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_route_architecture_reports_loop_or_return_shape_before_retreat_overlay(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_standard_cp_node_project(tmp_path)
+    checkpoints_path = project_root / "candidates" / "checkpoints.json"
+    checkpoints = json.loads(checkpoints_path.read_text(encoding="utf-8"))
+    checkpoints[-1]["lat"] = 24.1005
+    checkpoints[-1]["lon"] = 121.1005
+    checkpoints_path.write_text(
+        json.dumps(checkpoints, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = assess_scout_route_architecture(
+        project_root,
+        query="這條路線是原路往返、O 型，還是 A 進 B 出？",
+        limit=3,
+    )
+
+    assert result["route_architecture"]["route_type"] == (
+        "loop_or_return_route_candidate"
+    )
+    assert result["route_architecture"]["endpoint_separation_m"] < 100
+    assert "O 型或回到入口" in result["field_answer"]
+    assert "無法區分 O 型與原路往返" in result["field_answer"]
+    assert "A 進 B 出" in result["field_answer"]
+    assert result["field_answer_priority"] == 100
+
+
 def _write_standard_cp_node_project(tmp_path: Path) -> Path:
     project_root = tmp_path / "standard_cp_node_project"
     (project_root / "normalized" / "routes").mkdir(parents=True)
