@@ -4,12 +4,12 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-06-30
+## Implementation Update 2026-07-20
 
-Scout AI now runs against Pydantic AI v2.10.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.13.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.10.0 for Pi admin/live
+- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.13.0 for Pi admin/live
   runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -37,6 +37,14 @@ tracks. Tool execution remains deterministic and read-only by default:
   research domain env vars.
 - Provider-native MCP remains disabled until the matching Pydantic AI optional
   dependency and a Scout-owned connector boundary are added.
+- Capability adapters may use v2.13 `get_model`, `resolve_model_id`, and
+  `for_agent` hooks. Model resolution still passes through Scout model policy.
+- Deferred tool streams expose `DeferredToolRequestsEvent` and
+  `DeferredToolResultsEvent`; tool adapters must preserve source references and
+  deterministic verification across those events.
+- `cache_hit_ratio` may be retained as usage telemetry. Model request parameter
+  instrumentation remains opt-in so prompts, tool arguments, and secrets are
+  not copied into traces by default.
 - Environment secrets remain server-side. Tool artifacts, admin/debug payloads,
   and logs may report missing credential env names such as `NVIDIA_API_KEY`,
   `OPENROUTER_API_KEY`, or `OPENAI_API_KEY`, but never their values.
