@@ -225,6 +225,158 @@ def test_route_architecture_projection_builds_candidate_only_mobility_vectors() 
     }
 
 
+def test_route_architecture_retains_golden_scope_axis_when_crowd_support_is_sparse() -> None:
+    reference = _reference_pace_payload()
+    reference["crowd_axis"] = {
+        "status": "golden_route_axis_retained",
+        "route_axis_basis": "golden_route_scope",
+        "source_route_distance_m": 112_250.0,
+        "analysis_origin_m": 0.0,
+        "analysis_distance_m": 112_250.0,
+        "axis_rebased": False,
+        "first_sustained_crowd_support_m": 43_000.0,
+        "leading_span_interpretability": "not_applicable",
+        "locomotion_inference": "unknown",
+        "requires_human_review": False,
+    }
+
+    projection = build_route_architecture_intelligence(
+        project_id="golden_scope_demo",
+        route={"route_name": "Golden scope route", "distance_m": 112_250.0},
+        checkpoints=[
+            {
+                "candidate_id": "cp.scope.start",
+                "label": "Crowd-supported start",
+                "route_distance_m": 43_000.0,
+            },
+            {
+                "candidate_id": "cp.scope.finish",
+                "label": "Finish",
+                "route_distance_m": 112_250.0,
+            },
+        ],
+        segments=[],
+        retreat_routes=[],
+        reference_pace_energy_analysis=reference,
+    )
+
+    summary = projection["architecture_summary"]
+    assert summary["route_distance_m"] == 112_250.0
+    assert summary["source_route_distance_m"] == 112_250.0
+    assert summary["crowd_analysis_origin_m"] == 0.0
+    assert summary["route_axis_basis"] == "golden_route_scope"
+    assert summary["route_axis_requires_human_review"] is False
+    assert projection["route_spine"]["distance_m"] == 112_250.0
+    assert projection["route_spine"]["source_distance_m"] == 112_250.0
+    assert [item["route_distance_m"] for item in projection["route_spine"]["nodes"]] == [
+        43_000.0,
+        112_250.0,
+    ]
+    first = projection["segment_demand_vectors"][0]
+    assert first["start_distance_m"] == 0.0
+    assert first["source_start_distance_m"] == 0.0
+    assert first["distance_label"] == "0.00–0.25K"
+
+
+def test_route_architecture_projects_every_cp_mcp_passage_timing_node() -> None:
+    reference = _reference_pace_payload()
+    reference["checkpoint_passage_timing"] = {
+        "artifact_kind": "pretrip_checkpoint_passage_timing",
+        "schema_version": "checkpoint_passage_timing.v0",
+        "source_provider": "historical_gpx_reference_corpus",
+        "source_path": (
+            "outputs/reference_pace_energy_analysis.json#checkpoint_passage_timing"
+        ),
+        "sha256": "b" * 64,
+        "policy": {
+            "passage_window_distance_m": 500.0,
+            "mode_bucket_minutes": 5,
+        },
+        "data_quality": {"status": "medium", "node_count": 2, "timed_node_count": 2},
+        "nodes": [
+            {
+                "node_id": "cp.001",
+                "node_kind": "cp",
+                "label": "CP 001",
+                "named_places": [],
+                "route_distance_m": 250.0,
+                "passage_window": {
+                    "start_distance_m": 0.0,
+                    "end_distance_m": 500.0,
+                    "distance_m": 500.0,
+                },
+                "duration_minutes": {
+                    "min": 7.5,
+                    "max": 11.0,
+                    "average": 9.2,
+                    "mode_5min": 10,
+                    "mode_5min_tied_buckets": [10],
+                },
+                "sample_count": 6,
+                "distinct_track_count": 5,
+                "data_quality": "high",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+            {
+                "node_id": "mcp.yunhai",
+                "node_kind": "mcp",
+                "label": "雲海保線所",
+                "named_places": ["雲海保線所"],
+                "route_distance_m": 500.0,
+                "passage_window": {
+                    "start_distance_m": 250.0,
+                    "end_distance_m": 750.0,
+                    "distance_m": 500.0,
+                },
+                "duration_minutes": {
+                    "min": 9.0,
+                    "max": 15.5,
+                    "average": 11.8,
+                    "mode_5min": 10,
+                    "mode_5min_tied_buckets": [10],
+                },
+                "sample_count": 5,
+                "distinct_track_count": 4,
+                "data_quality": "medium",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        ],
+        "privacy": {"raw_gpx_embedded": False, "precise_timestamps_embedded": False},
+        "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+    }
+
+    projection = build_route_architecture_intelligence(
+        project_id="timed_route",
+        route={"route_name": "Timed route", "distance_m": 750.0},
+        checkpoints=[],
+        segments=[],
+        retreat_routes=[],
+        reference_pace_energy_analysis=reference,
+    )
+
+    timing = projection["checkpoint_passage_timing"]
+    assert timing["node_count"] == 2
+    assert timing["timed_node_count"] == 2
+    assert [item["node_id"] for item in timing["nodes"]] == [
+        "cp.001",
+        "mcp.yunhai",
+    ]
+    named = timing["nodes"][1]
+    assert named["label"] == "雲海保線所"
+    assert named["named_places"] == ["雲海保線所"]
+    assert named["duration_minutes"] == {
+        "min": 9.0,
+        "max": 15.5,
+        "average": 11.8,
+        "mode_5min": 10,
+        "mode_5min_tied_buckets": [10],
+    }
+    assert timing["privacy"]["raw_gpx_embedded"] is False
+    assert timing["boundary"]["runtime_safety_truth"] is False
+
+
 def test_route_architecture_projection_uses_reviewed_structure_without_inventing_branches() -> None:
     projection = build_route_architecture_intelligence(
         project_id="reviewed_route",
@@ -278,6 +430,110 @@ def test_route_architecture_projection_uses_reviewed_structure_without_inventing
     assert projection["retreat_dependencies"] == []
 
 
+def test_route_architecture_projection_derives_candidate_topology_and_time_demand() -> None:
+    projection = build_route_architecture_intelligence(
+        project_id="workspace_route",
+        route={"route_name": "Workspace route", "distance_m": 12_000.0},
+        checkpoints=[
+            {
+                "candidate_id": "cp.start",
+                "label": "Start",
+                "checkpoint_type": "start",
+                "route_distance_m": 0.0,
+            },
+            {
+                "candidate_id": "cp.finish",
+                "label": "Finish",
+                "checkpoint_type": "finish",
+                "route_distance_m": 12_000.0,
+            },
+        ],
+        segments=[
+            {
+                "candidate_id": "seg.001",
+                "from_candidate_id": "cp.start",
+                "to_candidate_id": "cp.mid",
+                "distance_m": 6_000.0,
+            },
+            {
+                "candidate_id": "seg.002",
+                "from_candidate_id": "cp.mid",
+                "to_candidate_id": "cp.finish",
+                "distance_m": 6_000.0,
+            },
+        ],
+        retreat_routes=[],
+        reference_pace_energy_analysis=_reference_pace_payload(),
+        candidate_mission_graph={
+            "name": "Workspace candidate graph",
+            "checkpoints": [
+                {
+                    "checkpoint_id": "cp.start",
+                    "checkpoint_type": "start",
+                    "lat": 23.95000,
+                    "lon": 121.17000,
+                },
+                {
+                    "checkpoint_id": "cp.finish",
+                    "checkpoint_type": "finish",
+                    "lat": 23.95035,
+                    "lon": 121.17045,
+                },
+            ],
+            "segments": [
+                {
+                    "segment_id": "seg.001",
+                    "from_checkpoint_id": "cp.start",
+                    "to_checkpoint_id": "cp.mid",
+                    "requirement": {"expected_duration_seconds": 900},
+                },
+                {
+                    "segment_id": "seg.002",
+                    "from_checkpoint_id": "cp.mid",
+                    "to_checkpoint_id": "cp.finish",
+                    "requirement": {"expected_duration_seconds": 1_200},
+                },
+            ],
+            "diversion_points": [],
+        },
+        source_refs={
+            "compiled_mission_graph_candidate": (
+                "outputs/compiled_mission_graph.candidate.json"
+            )
+        },
+    )
+
+    summary = projection["architecture_summary"]
+    assert summary["route_type"] == "closed_route_candidate"
+    assert summary["route_type_basis"] == "candidate_graph_start_finish_proximity"
+    assert summary["start_finish_gap_m"] < 100
+    assert summary["reversibility"] == "candidate_graph_unverified"
+
+    graph = projection["checkpoint_graph"]
+    assert graph["status"] == "compiled_candidate"
+    assert graph["candidate_mission_graph_available"] is True
+    assert graph["compiled_mission_graph_available"] is False
+    assert graph["mission_graph_node_count"] == 2
+    assert graph["mission_graph_edge_count"] == 2
+
+    time_dependencies = projection["time_dependencies"]
+    assert time_dependencies["candidate_graph_duration_seconds"] == 2_100
+    assert time_dependencies["candidate_graph_duration_hours"] == 0.583
+    assert time_dependencies["candidate_graph_segment_count"] == 2
+
+    assert projection["evidence_quality"]["missing_artifacts"] == [
+        "normalized_route_architecture",
+        "reviewed_compiled_mission_graph",
+    ]
+    source_status = {
+        item["source_key"]: item["status"]
+        for item in projection["evidence_quality"]["source_refs"]
+    }
+    assert source_status["compiled_mission_graph_candidate"] == "available"
+    assert source_status["compiled_mission_graph"] == "missing"
+    assert projection["boundary"]["runtime_safety_truth"] is False
+
+
 def test_pretrip_admin_view_exposes_route_architecture_projection() -> None:
     view = build_pretrip_admin_view("chilai_nanhua_day1")
 
@@ -301,6 +557,9 @@ def test_outdoor_standard_documents_route_architecture_page_contract() -> None:
         "Architecture / Route Architecture Intelligence 功能頁",
         "Route Fingerprint",
         "historical_mobility_demand_vector",
+        "crowd_axis",
+        "scope_reference",
+        "low_interpretability",
         "segment_demand_vectors[]",
         "project-selected compiled mission graph",
         "privacy.raw_gpx_embedded=false",

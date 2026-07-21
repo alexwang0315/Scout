@@ -592,13 +592,20 @@ Scout 的路線力是：
 
 > 壓力在哪裡累積，路線選擇又從哪裡開始消失？
 
+這個判斷必須先由群眾 GPX 形成 route-demand evidence，再投影到本次
+golden route。Golden route 是本次攀登完整的 `0K -> finish` 幾何、順序與
+起訖 scope；群眾資料稀疏只能降低對應路段的 confidence，不得移動 0K、裁掉
+前段或另建 crowd 軸。Golden route 同時可作為一筆相同權重的歷史樣本，但
+不得因其 scope 角色獲得特殊統計權重。
+
 UI 應以一張可左右平移、維持原始尺度的 `Route Fingerprint` 作為主體，
 而不是把距離、爬升、risk score 拆成彼此無關的卡片。相同里程軸至少要對齊：
 
 | Lane | 顯示內容 | 解讀邊界 |
 |---|---|---|
-| Distance | route distance 與 CP/MCP/Boss anchors | 只作結構定位。 |
+| Distance | golden-route `0K -> finish`、source mileage 與 CP/MCP/Boss anchors | 只作結構定位；crowd coverage 不得 rebase 或 truncate 路線。 |
 | CP Graph | checkpoint、segment、已知分支與依賴 | graph 未編譯時不得補造分支。 |
+| CP/MCP Passage | 每個 CP/MCP 的固定 500m 通過窗口：Min / Avg / 5-minute Mode / Max、sample/track count、named place | 是 ref-GPX crowd passage aggregate；缺 60% window coverage 時顯示 unavailable，不得補造 guide time。 |
 | Terrain Demand | 坡度與上升／下降機械功率 proxy | 不是人體代謝功率。 |
 | Mobility Demand | 歷史速度 envelope、黏滯與持續移動時間 | 是 ref-GPX 相對通過需求，不是個人成功率。 |
 | Risk Passage | route risk source value 與 passage pattern | provider/candidate value，不是 runtime safety truth。 |
@@ -611,9 +618,16 @@ UI 應以一張可左右平移、維持原始尺度的 `Route Fingerprint` 作�
 資料群組重著色，不新增第 33 個 Scout layer。至少包含 `Terrain Demand`、
 `Slow Passage`、`Risk Passage`、`Reversibility`、`Evidence Quality`。
 
-選取 fingerprint、mobile route spine 或地圖路段時，三者必須同步到同一個
+選取 fingerprint、CP/MCP passage card、mobile route spine 或地圖路段時，
+四者必須同步到同一個
 `Segment Microscope`，顯示 P25/P50/P75 速度 envelope、坡度、risk source
 value、黏滯、持續移動時間、track/traversal counts、資料品質與 source ref。
+
+CP/MCP passage 的統計單位固定為以 node 為中心、route 端點平移的 500 m
+窗口；每筆樣本是通過既有 adjacent-pair eligibility filter 的單一 contiguous
+`track x segment x bout x direction`。至少 60% 窗口有觀測才可正規化為 500 m。
+眾數以 5 分鐘為 bucket，half-up 四捨五入且最小為 5 分鐘。named point 只有在
+距離 node 300 m 內才可掛名；evidence linkage 本身不得取代空間相符性。
 
 ### 9.5 Historical Mobility Demand 的定位
 
@@ -628,6 +642,26 @@ estimate，但只能稱為 `historical_mobility_demand_vector`。第一版可包
 - evidence quality；
 - stop-go burden（僅在停走事件可可靠辨識時產生，否則為 null）。
 
+來源角色必須遵守 crowd-first contract：
+
+- 所有 reference GPX 都先讀取完整 staged source，再進入同一份來源清單與
+  品質診斷；derived speed-filtered GPX 只能作來源缺失時的相容 fallback；
+- golden route 作為一筆 `scope_reference` 參與相同的時間、速度與異常過濾，
+  並以相同 traversal 權重參與統計；它定義幾何 scope，但不得支配群眾統計；
+- 統計速度窗固定作用於每一對相鄰 trackpoint 的實際距離與 `delta_t`，V0
+  預設為嚴格 `1 < speed_kmh < 10`；不得用整條 track 或 `<trkseg>` 平均速度
+  決定去留；
+- 缺時間、非正時間、長 gap 或速度窗外的 pair 只能排除該 pair，不得連帶
+  丟棄同來源其餘有效 pair；
+- 往返路線的重疊幾何必須使用相鄰點 route-distance continuity 做 map
+  matching，不得把回程每點獨立吸附到去程的相同座標而丟失後半里程；
+- 不能提供時間、沒有路網重疊或低可解釋的 track/segment 必須留下 zero-
+  contribution 原因，不能無聲消失；
+- 高速或不連續 segment 只能標成 `unknown / low_interpretability`，不得僅靠
+  GPX 推論為乘車、跑步或裝置故障；
+- golden-route mileage 是唯一的 Architecture 顯示軸。crowd-supported
+  mileage 只能作 coverage/confidence 診斷，不得成為自動 rebase 依據。
+
 公開 GPX 可能偏向成功、願意分享或表現較好的案例，因此 Scout 不得把它稱為
 「最適人體功率」、真實耗能、個人能力上限或完成機率。上升位能換算只能作為
 每公斤機械輸出 proxy；裝備重量、高海拔、技術地形、天候與生理壓力仍由其他
@@ -641,7 +675,10 @@ Dashboard 使用 provider-neutral `route_architecture_intelligence`：
 route_architecture_intelligence
 ├── architecture_summary
 ├── route_spine
+├── crowd_axis  # compatibility field; status must retain golden_route_scope
 ├── segment_demand_vectors[]
+├── checkpoint_passage_timing
+│   └── nodes[]  # every CP/MCP; min/max/average/mode_5min + named_places
 ├── checkpoint_graph
 ├── retreat_dependencies[]
 ├── alternatives[]

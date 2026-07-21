@@ -27,6 +27,12 @@ DEFAULT_RISK_SCORE_POINTS_REF = "outputs/risk/risk_score_points.geojson"
 DEFAULT_ROUTE_PRESSURE_PROFILE_REF = "outputs/route_pressure_profile.json"
 DEFAULT_REPORT_REF = "outputs/reference_pace_energy_analysis.json"
 DEFAULT_GEOJSON_REF = "outputs/reference_pace_energy_map.geojson"
+DEFAULT_CHECKPOINTS_REF = "candidates/checkpoints.json"
+DEFAULT_MCP_CANDIDATES_REF = "outputs/mcp/mcp_candidates.json"
+DEFAULT_MCP_NAMED_POINTS_REF = "outputs/mcp/named_point_evidence.json"
+PASSAGE_WINDOW_DISTANCE_M = 500.0
+PASSAGE_MINIMUM_COVERAGE_RATIO = 0.6
+PASSAGE_MODE_BUCKET_MINUTES = 5
 
 GRAVITY_M_PER_S2 = 9.80665
 DEFAULT_NORMAL_WALKING_MIN_KMH = 1.0
@@ -122,25 +128,38 @@ class _RouteSpatialIndex:
         *,
         max_distance_m: float,
     ) -> tuple[_RouteSample, float] | None:
+        candidates = self.candidates(
+            lat,
+            lon,
+            max_distance_m=max_distance_m,
+        )
+        return candidates[0] if candidates else None
+
+    def candidates(
+        self,
+        lat: float,
+        lon: float,
+        *,
+        max_distance_m: float,
+    ) -> list[tuple[_RouteSample, float]]:
         if not self.samples:
-            return None
+            return []
         x_m = lon * self._lon_scale
         y_m = lat * self._lat_scale
         center_x, center_y = self._cell(x_m, y_m)
         radius_cells = max(1, int(math.ceil(max_distance_m / self.cell_size_m)))
-        nearest_sample: _RouteSample | None = None
-        nearest_distance = float("inf")
+        candidates: list[tuple[_RouteSample, float]] = []
         for grid_x in range(center_x - radius_cells, center_x + radius_cells + 1):
             for grid_y in range(center_y - radius_cells, center_y + radius_cells + 1):
                 for sample_index in self._grid.get((grid_x, grid_y), []):
                     sample = self.samples[sample_index]
                     distance = math.hypot(x_m - sample.x_m, y_m - sample.y_m)
-                    if distance <= max_distance_m and distance < nearest_distance:
-                        nearest_sample = sample
-                        nearest_distance = distance
-        if nearest_sample is None:
-            return None
-        return nearest_sample, nearest_distance
+                    if distance <= max_distance_m:
+                        candidates.append((sample, distance))
+        return sorted(
+            candidates,
+            key=lambda item: (item[1], item[0].route_distance_m),
+        )
 
     def _cell(self, x_m: float, y_m: float) -> tuple[int, int]:
         return (
@@ -223,21 +242,33 @@ def build_reference_pace_energy_analysis(
         cell_size_m=match_radius_m,
     )
     pressure_index = _PressureProfileIndex.from_payload(pressure_payload)
-    source_records = [
+    indexed_sources = _list_value(source_index.get("sources"))
+    reference_records = [
         source
-        for source in _list_value(source_index.get("sources"))
+        for source in indexed_sources
         if str(source.get("route_role") or source.get("role")) == "reference_track"
     ]
+    scope_reference_records = [
+        source
+        for source in indexed_sources
+        if str(source.get("route_role") or source.get("role"))
+        in {"golden_route", "golden_route_reference"}
+    ]
+    source_records = [*reference_records, *scope_reference_records]
 
     track_reports: list[dict[str, Any]] = []
     traversals: list[dict[str, Any]] = []
     normal_walking_intervals: list[dict[str, Any]] = []
     all_intervals: list[float] = []
     for source in source_records:
-        filtered_path = _filtered_reference_path(root, source)
+        analysis_path, analysis_source_kind, analysis_source_ref = (
+            _analysis_gpx_path(root, source)
+        )
         track_report, track_traversals, intervals, track_normal_intervals = _analyze_track(
             source=source,
-            filtered_path=filtered_path,
+            filtered_path=analysis_path,
+            analysis_source_kind=analysis_source_kind,
+            analysis_source_ref=analysis_source_ref,
             spatial_index=spatial_index,
             pressure_index=pressure_index,
             route_bin_m=route_bin_m,
@@ -245,7 +276,6 @@ def build_reference_pace_energy_analysis(
             pause_reset_seconds=pause_reset_seconds,
             max_interval_seconds=max_interval_seconds,
             stationary_speed_mps=stationary_speed_mps,
-            max_walking_speed_mps=max_walking_speed_mps,
             normal_walking_min_kmh=normal_walking_min_kmh,
             normal_walking_max_kmh=normal_walking_max_kmh,
             min_traversal_distance_m=min_traversal_distance_m,
@@ -268,18 +298,48 @@ def build_reference_pace_energy_analysis(
         baseline_speed_mps=baseline_speed_mps,
         min_tracks_for_guidance=min_tracks_for_guidance,
     )
+    source_route_distance_m = max(
+        (sample.route_distance_m for sample in spatial_index.samples),
+        default=0.0,
+    )
+    source_sha256 = _sha256_file(source_index_path)
+    checkpoint_passage_timing = _build_checkpoint_passage_timing(
+        root=root,
+        project=project,
+        traversals=traversals,
+        route_bin_m=route_bin_m,
+        route_distance_m=source_route_distance_m,
+        source_sha256=source_sha256,
+    )
+    crowd_axis = _crowd_supported_axis(
+        bin_summaries,
+        source_route_distance_m=source_route_distance_m,
+        route_bin_m=route_bin_m,
+        min_tracks_for_guidance=min_tracks_for_guidance,
+    )
+    bin_summaries = [
+        _route_bin_with_crowd_axis(item, crowd_axis=crowd_axis)
+        for item in bin_summaries
+    ]
+    reference_track_reports = [
+        report
+        for report in track_reports
+        if report.get("source_role") == "reference_track"
+    ]
     timestamped_tracks = sum(
-        report.get("trackpoint_time_count", 0) > 0 for report in track_reports
+        report.get("trackpoint_time_count", 0) > 0
+        for report in reference_track_reports
     )
     missing_time_tracks = sum(
-        report.get("status") == "missing_trackpoint_time" for report in track_reports
+        report.get("status") == "missing_trackpoint_time"
+        for report in reference_track_reports
     )
     usable_tracks = sum(
-        report.get("status") == "usable_candidate" for report in track_reports
+        report.get("status") == "usable_candidate"
+        for report in reference_track_reports
     )
     interval_summary = _distribution(all_intervals)
     fixed_interval_assumption = _fixed_interval_assessment(all_intervals)
-    source_sha256 = _sha256_file(source_index_path)
     collected_at = generated_at or datetime.now(timezone.utc).isoformat()
 
     privacy = {
@@ -352,28 +412,59 @@ def build_reference_pace_energy_analysis(
             ),
         },
         "counts": {
-            "reference_track_count": len(source_records),
+            "reference_track_count": len(reference_records),
+            "scope_reference_track_count": len(scope_reference_records),
+            "crowd_track_count": len(source_records),
             "timed_reference_track_count": timestamped_tracks,
             "missing_time_reference_track_count": missing_time_tracks,
             "usable_candidate_track_count": usable_tracks,
+            "timed_crowd_track_count": sum(
+                report.get("trackpoint_time_count", 0) > 0
+                for report in track_reports
+            ),
+            "usable_crowd_track_count": sum(
+                report.get("status") == "usable_candidate"
+                for report in track_reports
+            ),
             "positive_interval_count": len(all_intervals),
             "route_traversal_count": len(traversals),
             "normal_walking_interval_sample_count": len(normal_walking_intervals),
+            "accepted_adjacent_pair_count": sum(
+                int(
+                    _dict_value(report.get("adjacent_pair_speed_filter")).get(
+                        "accepted_pair_count"
+                    )
+                    or 0
+                )
+                for report in track_reports
+            ),
             "observed_route_bin_count": len(bin_summaries),
             "guidance_eligible_route_bin_count": sum(
                 bool(item.get("guidance_eligible")) for item in bin_summaries
             ),
             "canonical_route_sample_count": len(spatial_index.samples),
+            "checkpoint_passage_timing_node_count": checkpoint_passage_timing[
+                "data_quality"
+            ]["node_count"],
+            "timed_checkpoint_passage_node_count": checkpoint_passage_timing[
+                "data_quality"
+            ]["timed_node_count"],
         },
+        "crowd_axis": crowd_axis,
         "policy": {
             "route_bin_m": _round(route_bin_m),
             "route_centerline": "overpass_risk_score_points",
-            "gpx_projection": "nearest_centerline_with_transition_jump_rejection",
+            "gpx_projection": (
+                "sequence_continuity_centerline_match_with_transition_jump_rejection"
+            ),
             "match_radius_m": _round(match_radius_m),
             "pause_reset_seconds": _round(pause_reset_seconds),
             "max_interval_seconds": _round(max_interval_seconds),
             "stationary_speed_mps": _round(stationary_speed_mps),
-            "max_walking_speed_mps": _round(max_walking_speed_mps),
+            "max_walking_speed_mps": _round(normal_walking_max_kmh / 3.6),
+            "legacy_requested_max_walking_speed_mps": _round(
+                max_walking_speed_mps
+            ),
             "normal_walking_speed_filter": {
                 "minimum_speed_kmh_exclusive": _round(normal_walking_min_kmh),
                 "maximum_speed_kmh_exclusive": _round(normal_walking_max_kmh),
@@ -383,6 +474,18 @@ def build_reference_pace_energy_analysis(
             "min_tracks_for_guidance": min_tracks_for_guidance,
             "sampling_bias_control": "one_record_per_contiguous_track_route_bin_traversal",
             "slope_source": "route_pressure_profile_terrain_not_raw_gpx_elevation",
+            "source_role_policy": (
+                "golden_route_is_scope_reference_and_equal_weight_crowd_observation"
+            ),
+            "crowd_axis_policy": (
+                "golden_route_defines_the_full_start_to_finish_axis; crowd_coverage_"
+                "is_diagnostic_and_never_rebases_or_truncates_the_axis"
+            ),
+            "statistical_interval_policy": (
+                "read_each_complete_source_gpx_then_filter_each_adjacent_trackpoint_"
+                "pair_with_strict_speed_bounds; never_reject_a_whole_track_or_segment_"
+                "from_its_average_speed"
+            ),
         },
         "metric_definitions": {
             "reference_pace": "historical traversal speed quantiles after pause, gap, non-walking, corridor, and transition filtering",
@@ -391,14 +494,20 @@ def build_reference_pace_energy_analysis(
             "raw_viscosity_index": "100 * low-pressure reference baseline speed / observed bin median speed",
             "grade_adjusted_viscosity_index": "100 * same-grade cohort median speed / observed bin median speed",
             "normal_walking_speed_subset": (
-                "sensitivity analysis restricted to strict "
+                "primary mobility-statistics eligibility window restricted to strict "
                 f"{normal_walking_min_kmh:g}-{normal_walking_max_kmh:g} km/h "
                 "movement; not a causal risk or fatigue model"
+            ),
+            "checkpoint_passage_duration": (
+                "Per-passage duration normalized to a fixed 500 m route window "
+                "centered on each CP/MCP. Each sample is one contiguous track "
+                "bout and direction with at least 60% observed window coverage."
             ),
         },
         "tracks": track_reports,
         "relationships": relationship_summary,
         "route_bins": bin_summaries,
+        "checkpoint_passage_timing": checkpoint_passage_timing,
         "suggested_observation_dimensions": [
             "signed walking grade and direction",
             "terrain hill slope independent of walking grade",
@@ -420,7 +529,14 @@ def build_reference_pace_energy_analysis(
             "locomotion_mode_fully_identifiable": False,
             "cohort_selection_bias_known": False,
             "normal_walking_range_restriction_applies": True,
+            "speed_filter_unit": "adjacent_trackpoint_pair",
+            "whole_track_or_segment_average_filtering": False,
+            "sequence_continuity_map_matching": True,
             "minimum_distinct_tracks_for_guidance": min_tracks_for_guidance,
+            "golden_route_has_special_statistical_weight": False,
+            "crowd_axis_requires_human_review": bool(
+                crowd_axis.get("requires_human_review")
+            ),
         },
         "privacy": privacy,
         "boundary": boundary,
@@ -437,6 +553,9 @@ def build_reference_pace_energy_analysis(
                 "removes movement outside the sensitivity window and mathematically "
                 "narrows speed variance."
             ),
+            "Out-of-window adjacent pairs are excluded individually; they do not cause the whole source track or track segment to be discarded.",
+            "A source segment with no eligible adjacent pair is marked unknown/low-interpretability; GPX alone cannot distinguish recording error, synthetic timing, transport, or another locomotion mode.",
+            "Sequence-continuity map matching preserves ordinary out-and-back progress, but a track segment that begins mid-route on exactly overlapping geometry can remain direction-ambiguous.",
         ],
     }
     pace_map = _build_pace_map(
@@ -493,6 +612,8 @@ def _analyze_track(
     *,
     source: dict[str, Any],
     filtered_path: Path | None,
+    analysis_source_kind: str,
+    analysis_source_ref: str | None,
     spatial_index: _RouteSpatialIndex,
     pressure_index: _PressureProfileIndex,
     route_bin_m: float,
@@ -500,7 +621,6 @@ def _analyze_track(
     pause_reset_seconds: float,
     max_interval_seconds: float,
     stationary_speed_mps: float,
-    max_walking_speed_mps: float,
     normal_walking_min_kmh: float,
     normal_walking_max_kmh: float,
     min_traversal_distance_m: float,
@@ -519,6 +639,8 @@ def _analyze_track(
                 source=source,
                 source_path=source_path,
                 filtered_path=filtered_path,
+                analysis_source_kind=analysis_source_kind,
+                analysis_source_ref=analysis_source_ref,
                 status="missing_filtered_gpx",
             ),
             [],
@@ -547,6 +669,8 @@ def _analyze_track(
                 source=source,
                 source_path=source_path,
                 filtered_path=filtered_path,
+                analysis_source_kind=analysis_source_kind,
+                analysis_source_ref=analysis_source_ref,
                 status="missing_trackpoint_time",
                 point_count=point_count,
                 time_count=0,
@@ -557,12 +681,24 @@ def _analyze_track(
             [],
         )
 
+    segment_diagnostics = [
+        _track_segment_diagnostic(
+            segment,
+            track_segment_index=index,
+            max_interval_seconds=max_interval_seconds,
+            stationary_speed_mps=stationary_speed_mps,
+            normal_walking_min_kmh=normal_walking_min_kmh,
+            normal_walking_max_kmh=normal_walking_max_kmh,
+        )
+        for index, segment in enumerate(track_segments)
+    ]
     traversals: list[dict[str, Any]] = []
     normal_walking_intervals: list[dict[str, Any]] = []
     excluded: Counter[str] = Counter()
     matched_moving_segment_count = 0
     timed_segment_count = 0
     pause_reset_count = 0
+    speed_window_eligible_count = 0
     valid_segment_speeds: list[float] = []
     for track_segment_index, segment in enumerate(track_segments):
         bout_age_seconds = 0.0
@@ -571,14 +707,11 @@ def _analyze_track(
         pause_active = False
         last_direction = 1
         accumulator: dict[str, Any] | None = None
-        matches = [
-            spatial_index.nearest(
-                point.lat,
-                point.lon,
-                max_distance_m=match_radius_m,
-            )
-            for point in segment
-        ]
+        matches = _sequence_route_matches(
+            segment,
+            spatial_index=spatial_index,
+            match_radius_m=match_radius_m,
+        )
         for point_index, (previous, current) in enumerate(zip(segment, segment[1:])):
             if previous.observed_at is None or current.observed_at is None:
                 excluded["missing_time"] += 1
@@ -586,7 +719,7 @@ def _analyze_track(
                     accumulator,
                     traversals,
                     min_traversal_distance_m=min_traversal_distance_m,
-                    max_walking_speed_mps=max_walking_speed_mps,
+                    max_walking_speed_mps=normal_walking_max_kmh / 3.6,
                 )
                 continue
             delta_seconds = (current.observed_at - previous.observed_at).total_seconds()
@@ -596,7 +729,7 @@ def _analyze_track(
                     accumulator,
                     traversals,
                     min_traversal_distance_m=min_traversal_distance_m,
-                    max_walking_speed_mps=max_walking_speed_mps,
+                    max_walking_speed_mps=normal_walking_max_kmh / 3.6,
                 )
                 continue
             timed_segment_count += 1
@@ -619,7 +752,7 @@ def _analyze_track(
                     accumulator,
                     traversals,
                     min_traversal_distance_m=min_traversal_distance_m,
-                    max_walking_speed_mps=max_walking_speed_mps,
+                    max_walking_speed_mps=normal_walking_max_kmh / 3.6,
                 )
                 continue
             if physical_speed_mps <= stationary_speed_mps:
@@ -634,21 +767,33 @@ def _analyze_track(
                         accumulator,
                         traversals,
                         min_traversal_distance_m=min_traversal_distance_m,
-                        max_walking_speed_mps=max_walking_speed_mps,
+                        max_walking_speed_mps=normal_walking_max_kmh / 3.6,
                     )
                 continue
             stationary_seconds = 0.0
             pause_active = False
-            if physical_speed_mps > max_walking_speed_mps:
-                excluded["non_walking_speed"] += 1
+            physical_speed_kmh = physical_speed_mps * 3.6
+            if physical_speed_kmh <= normal_walking_min_kmh:
+                excluded["at_or_below_minimum_speed"] += 1
                 bout_age_seconds += delta_seconds
                 accumulator = _flush_accumulator(
                     accumulator,
                     traversals,
                     min_traversal_distance_m=min_traversal_distance_m,
-                    max_walking_speed_mps=max_walking_speed_mps,
+                    max_walking_speed_mps=normal_walking_max_kmh / 3.6,
                 )
                 continue
+            if physical_speed_kmh >= normal_walking_max_kmh:
+                excluded["above_or_equal_maximum_speed"] += 1
+                bout_age_seconds += delta_seconds
+                accumulator = _flush_accumulator(
+                    accumulator,
+                    traversals,
+                    min_traversal_distance_m=min_traversal_distance_m,
+                    max_walking_speed_mps=normal_walking_max_kmh / 3.6,
+                )
+                continue
+            speed_window_eligible_count += 1
             previous_match = matches[point_index]
             current_match = matches[point_index + 1]
             if previous_match is None or current_match is None:
@@ -658,7 +803,7 @@ def _analyze_track(
                     accumulator,
                     traversals,
                     min_traversal_distance_m=min_traversal_distance_m,
-                    max_walking_speed_mps=max_walking_speed_mps,
+                    max_walking_speed_mps=normal_walking_max_kmh / 3.6,
                 )
                 continue
             previous_route = previous_match[0]
@@ -672,7 +817,7 @@ def _analyze_track(
                     accumulator,
                     traversals,
                     min_traversal_distance_m=min_traversal_distance_m,
-                    max_walking_speed_mps=max_walking_speed_mps,
+                    max_walking_speed_mps=normal_walking_max_kmh / 3.6,
                 )
                 continue
 
@@ -693,36 +838,33 @@ def _analyze_track(
                 if value is not None
             ]
             risk_score = statistics.fmean(risk_values) if risk_values else None
-            physical_speed_kmh = physical_speed_mps * 3.6
-            if (
-                normal_walking_min_kmh < physical_speed_kmh
-                < normal_walking_max_kmh
-            ):
-                normal_walking_intervals.append(
-                    {
-                        "source_id": source_id,
-                        "speed_mps": physical_speed_mps,
-                        "risk_score": risk_score,
-                        "continuous_moving_minutes": (
-                            bout_age_seconds + delta_seconds / 2.0
-                        )
-                        / 60.0,
-                        "signed_grade_ratio": signed_grade,
-                        "terrain_relief_ratio": terrain_relief_ratio,
-                    }
-                )
+            normal_walking_intervals.append(
+                {
+                    "source_id": source_id,
+                    "speed_mps": physical_speed_mps,
+                    "risk_score": risk_score,
+                    "continuous_moving_minutes": (
+                        bout_age_seconds + delta_seconds / 2.0
+                    )
+                    / 60.0,
+                    "signed_grade_ratio": signed_grade,
+                    "terrain_relief_ratio": terrain_relief_ratio,
+                }
+            )
             key = (track_segment_index, bout_id, route_bin_index, last_direction)
             if accumulator is None or accumulator["key"] != key:
                 accumulator = _flush_accumulator(
                     accumulator,
                     traversals,
                     min_traversal_distance_m=min_traversal_distance_m,
-                    max_walking_speed_mps=max_walking_speed_mps,
+                    max_walking_speed_mps=normal_walking_max_kmh / 3.6,
                 )
                 accumulator = {
                     "key": key,
                     "source_id": source_id,
                     "source_sha256": source_sha256,
+                    "track_segment_index": track_segment_index,
+                    "bout_id": bout_id,
                     "route_bin_index": route_bin_index,
                     "direction": "forward" if last_direction > 0 else "reverse",
                     "duration_seconds": 0.0,
@@ -754,7 +896,7 @@ def _analyze_track(
             accumulator,
             traversals,
             min_traversal_distance_m=min_traversal_distance_m,
-            max_walking_speed_mps=max_walking_speed_mps,
+            max_walking_speed_mps=normal_walking_max_kmh / 3.6,
         )
 
     source_traversals = [
@@ -765,6 +907,8 @@ def _analyze_track(
         source=source,
         source_path=source_path,
         filtered_path=filtered_path,
+        analysis_source_kind=analysis_source_kind,
+        analysis_source_ref=analysis_source_ref,
         status=status,
         point_count=point_count,
         time_count=time_count,
@@ -775,8 +919,65 @@ def _analyze_track(
         traversal_count=len(source_traversals),
         excluded=excluded,
         speed_values=valid_segment_speeds,
+        segment_diagnostics=segment_diagnostics,
+        speed_window_eligible_count=speed_window_eligible_count,
+        normal_walking_min_kmh=normal_walking_min_kmh,
+        normal_walking_max_kmh=normal_walking_max_kmh,
     )
     return report, source_traversals, intervals, normal_walking_intervals
+
+
+def _sequence_route_matches(
+    segment: list[_TrackPoint],
+    *,
+    spatial_index: _RouteSpatialIndex,
+    match_radius_m: float,
+) -> list[tuple[_RouteSample, float] | None]:
+    matches: list[tuple[_RouteSample, float] | None] = []
+    previous_match: tuple[_RouteSample, float] | None = None
+    previous_point: _TrackPoint | None = None
+    preferred_direction = 1
+    for point in segment:
+        candidates = spatial_index.candidates(
+            point.lat,
+            point.lon,
+            max_distance_m=match_radius_m,
+        )
+        if not candidates:
+            matches.append(None)
+            previous_match = None
+            previous_point = point
+            continue
+        if previous_match is None or previous_point is None:
+            chosen = candidates[0]
+        else:
+            physical_step_m = haversine_m(
+                previous_point.lat,
+                previous_point.lon,
+                point.lat,
+                point.lon,
+            )
+            expected_route_distance_m = (
+                previous_match[0].route_distance_m
+                + preferred_direction * physical_step_m
+            )
+            chosen = min(
+                candidates,
+                key=lambda item: (
+                    abs(item[0].route_distance_m - expected_route_distance_m),
+                    item[1],
+                ),
+            )
+            route_delta_m = (
+                chosen[0].route_distance_m
+                - previous_match[0].route_distance_m
+            )
+            if abs(route_delta_m) >= 20.0:
+                preferred_direction = 1 if route_delta_m > 0 else -1
+        matches.append(chosen)
+        previous_match = chosen
+        previous_point = point
+    return matches
 
 
 def _flush_accumulator(
@@ -793,7 +994,7 @@ def _flush_accumulator(
     if duration_seconds <= 0 or route_distance_m < min_traversal_distance_m:
         return None
     speed_mps = route_distance_m / duration_seconds
-    if speed_mps <= 0 or speed_mps > max_walking_speed_mps:
+    if speed_mps <= 0 or speed_mps >= max_walking_speed_mps:
         return None
     signed_grade = accumulator["grade_weighted"] / duration_seconds
     relief_ratio = accumulator["terrain_relief_weighted"] / duration_seconds
@@ -807,6 +1008,8 @@ def _flush_accumulator(
         {
             "source_id": accumulator["source_id"],
             "source_sha256": accumulator["source_sha256"],
+            "track_segment_index": accumulator["track_segment_index"],
+            "bout_id": accumulator["bout_id"],
             "route_bin_index": accumulator["route_bin_index"],
             "direction": accumulator["direction"],
             "duration_seconds": duration_seconds,
@@ -827,12 +1030,732 @@ def _flush_accumulator(
     return None
 
 
+def _build_checkpoint_passage_timing(
+    *,
+    root: Path,
+    project: dict[str, Any],
+    traversals: list[dict[str, Any]],
+    route_bin_m: float,
+    route_distance_m: float,
+    source_sha256: str,
+) -> dict[str, Any]:
+    checkpoint_ref = str(
+        project.get("overpass_aligned_checkpoint_candidates_ref")
+        or project.get("checkpoint_candidates_ref")
+        or DEFAULT_CHECKPOINTS_REF
+    )
+    mcp_ref = str(project.get("mcp_candidates_ref") or DEFAULT_MCP_CANDIDATES_REF)
+    named_points_ref = str(
+        project.get("mcp_named_point_evidence_ref")
+        or DEFAULT_MCP_NAMED_POINTS_REF
+    )
+    checkpoint_payload = _load_optional_json_value(root, checkpoint_ref)
+    mcp_payload = _load_optional_json_value(root, mcp_ref)
+    named_points_payload = _load_optional_json_value(root, named_points_ref)
+    checkpoint_items = _collection_value(
+        checkpoint_payload,
+        "checkpoint_candidates",
+        "checkpoints",
+        "candidates",
+    )
+    mcp_items = _collection_value(mcp_payload, "mcp_candidates", "candidates")
+    named_point_items = _collection_value(
+        named_points_payload,
+        "named_points",
+        "evidence",
+        "items",
+    )
+    route_progress = _primary_route_progress(root)
+    effective_route_distance_m = max(
+        float(route_distance_m),
+        route_progress[-1] if route_progress else 0.0,
+    )
+    nodes = _passage_nodes(
+        checkpoint_items=checkpoint_items,
+        mcp_items=mcp_items,
+        named_point_items=named_point_items,
+        route_progress=route_progress,
+        route_distance_m=effective_route_distance_m,
+    )
+    timed_nodes = [
+        _passage_node_with_stats(
+            node,
+            traversals=traversals,
+            route_bin_m=route_bin_m,
+            route_distance_m=effective_route_distance_m,
+        )
+        for node in nodes
+    ]
+    timed_count = sum(item["sample_count"] > 0 for item in timed_nodes)
+    usable_count = sum(
+        item["data_quality"] in {"medium", "high"} for item in timed_nodes
+    )
+    if timed_nodes and usable_count >= max(1, math.ceil(len(timed_nodes) * 0.8)):
+        quality = "high"
+    elif timed_count >= max(1, math.ceil(len(timed_nodes) * 0.5)):
+        quality = "medium"
+    elif timed_count:
+        quality = "low"
+    else:
+        quality = "unavailable"
+    source_refs = {
+        "checkpoint_candidates": _artifact_source_ref(root, checkpoint_ref),
+        "mcp_candidates": _artifact_source_ref(root, mcp_ref),
+        "mcp_named_point_evidence": _artifact_source_ref(root, named_points_ref),
+    }
+    return {
+        "artifact_kind": "pretrip_checkpoint_passage_timing",
+        "schema_version": "checkpoint_passage_timing.v0",
+        "source_provider": "historical_gpx_reference_corpus",
+        "source_path": (
+            f"{DEFAULT_REPORT_REF}#checkpoint_passage_timing"
+        ),
+        "sha256": source_sha256,
+        "source_refs": source_refs,
+        "policy": {
+            "passage_window_distance_m": PASSAGE_WINDOW_DISTANCE_M,
+            "window_alignment": (
+                "centered_on_cp_or_mcp_clipped_to_route_extent"
+            ),
+            "minimum_window_coverage_ratio": PASSAGE_MINIMUM_COVERAGE_RATIO,
+            "mode_bucket_minutes": PASSAGE_MODE_BUCKET_MINUTES,
+            "mode_bucket_rounding": (
+                "nearest_5_minutes_half_up_minimum_5"
+            ),
+            "sample_unit": (
+                "one_contiguous_track_bout_direction_window_passage"
+            ),
+        },
+        "route_distance_m": _round(effective_route_distance_m, 3),
+        "data_quality": {
+            "status": quality,
+            "node_count": len(timed_nodes),
+            "timed_node_count": timed_count,
+            "medium_or_high_node_count": usable_count,
+            "minimum_distinct_tracks_for_medium": 3,
+        },
+        "nodes": timed_nodes,
+        "privacy": {
+            "aggregate_only": True,
+            "coordinates_embedded": False,
+            "precise_timestamps_embedded": False,
+            "raw_gpx_embedded": False,
+            "source_original_paths_embedded": False,
+        },
+        "boundary": {
+            "candidate_only": True,
+            "medical_diagnosis": False,
+            "phase1_runtime_safety_truth": False,
+            "runtime_safety_truth": False,
+            "safety_api_called": False,
+            "outbound_send_allowed": False,
+        },
+    }
+
+
+def _passage_nodes(
+    *,
+    checkpoint_items: list[dict[str, Any]],
+    mcp_items: list[dict[str, Any]],
+    named_point_items: list[dict[str, Any]],
+    route_progress: list[float],
+    route_distance_m: float,
+) -> list[dict[str, Any]]:
+    nodes: list[dict[str, Any]] = []
+    for index, item in enumerate(checkpoint_items):
+        distance_m = _checkpoint_route_distance(item, route_progress)
+        if distance_m is None:
+            continue
+        node_id = str(
+            item.get("candidate_id")
+            or item.get("checkpoint_id")
+            or f"cp.{index + 1:03d}"
+        )
+        nodes.append(
+            {
+                "node_id": node_id,
+                "node_kind": "cp",
+                "label": str(item.get("label") or node_id),
+                "named_places": [],
+                "route_distance_m": _clamp(distance_m, 0.0, route_distance_m),
+                "checkpoint_type": str(
+                    item.get("checkpoint_type") or "route_progress"
+                ),
+            }
+        )
+
+    named_points_by_id = {
+        str(item.get("named_point_id")): item
+        for item in named_point_items
+        if item.get("named_point_id")
+    }
+    assigned_named_point_ids: set[str] = set()
+    for index, item in enumerate(mcp_items):
+        distance_m = _float_or_none(
+            item.get("route_distance_m") or item.get("distance_m")
+        )
+        if distance_m is None:
+            continue
+        node_id = str(item.get("mcp_id") or item.get("candidate_id") or f"mcp.{index + 1:03d}")
+        linked_ids = [
+            str(value)
+            for value in item.get("linked_named_points", [])
+            if isinstance(value, str)
+        ]
+        attached_named_point_ids = []
+        named_places = []
+        for value in linked_ids:
+            named_point = named_points_by_id.get(value)
+            if not named_point or not named_point.get("canonical_name"):
+                continue
+            position = _dict_value(named_point.get("route_position"))
+            named_distance_m = _float_or_none(position.get("distance_m"))
+            if (
+                named_distance_m is not None
+                and abs(named_distance_m - distance_m) > 300.0
+            ):
+                continue
+            named_places.append(str(named_point["canonical_name"]))
+            attached_named_point_ids.append(value)
+        assigned_named_point_ids.update(attached_named_point_ids)
+        label = str(item.get("label") or node_id)
+        if label and label not in named_places:
+            named_places.append(label)
+        nodes.append(
+            {
+                "node_id": node_id,
+                "node_kind": "mcp",
+                "label": label,
+                "named_places": _unique_strings(named_places),
+                "route_distance_m": _clamp(distance_m, 0.0, route_distance_m),
+                "checkpoint_type": "mission_critical_point",
+            }
+        )
+
+    for named_point in named_point_items:
+        named_point_id = str(named_point.get("named_point_id") or "")
+        name = str(named_point.get("canonical_name") or "")
+        position = _dict_value(named_point.get("route_position"))
+        distance_m = _float_or_none(position.get("distance_m"))
+        if (
+            not named_point_id
+            or named_point_id in assigned_named_point_ids
+            or not name
+            or distance_m is None
+            or not nodes
+        ):
+            continue
+        nearest = min(
+            nodes,
+            key=lambda node: abs(float(node["route_distance_m"]) - distance_m),
+        )
+        if abs(float(nearest["route_distance_m"]) - distance_m) <= 300.0:
+            nearest["named_places"] = _unique_strings(
+                [*nearest["named_places"], name]
+            )
+
+    return sorted(
+        nodes,
+        key=lambda item: (
+            float(item["route_distance_m"]),
+            0 if item["node_kind"] == "cp" else 1,
+            item["node_id"],
+        ),
+    )
+
+
+def _passage_node_with_stats(
+    node: dict[str, Any],
+    *,
+    traversals: list[dict[str, Any]],
+    route_bin_m: float,
+    route_distance_m: float,
+) -> dict[str, Any]:
+    window_start_m, window_end_m = _passage_window(
+        float(node["route_distance_m"]),
+        route_distance_m=route_distance_m,
+    )
+    window_distance_m = max(0.0, window_end_m - window_start_m)
+    samples = _window_passage_samples(
+        traversals,
+        route_bin_m=route_bin_m,
+        window_start_m=window_start_m,
+        window_end_m=window_end_m,
+    )
+    durations = [float(item["duration_minutes"]) for item in samples]
+    source_ids = {str(item["source_id"]) for item in samples}
+    mode_value, tied_modes = _five_minute_mode(durations)
+    coverage_values = [float(item["coverage_ratio"]) for item in samples]
+    if len(source_ids) >= 5 and statistics.fmean(coverage_values or [0.0]) >= 0.8:
+        quality = "high"
+    elif len(source_ids) >= 3:
+        quality = "medium"
+    elif durations:
+        quality = "low"
+    else:
+        quality = "unavailable"
+    direction_counts = Counter(str(item["direction"]) for item in samples)
+    return {
+        **node,
+        "route_distance_m": _round(float(node["route_distance_m"]), 3),
+        "passage_window": {
+            "start_distance_m": _round(window_start_m, 3),
+            "end_distance_m": _round(window_end_m, 3),
+            "distance_m": _round(window_distance_m, 3),
+            "semantics": "fixed_500m_route_window_centered_on_cp_or_mcp",
+        },
+        "duration_minutes": {
+            "min": _round(min(durations) if durations else None, 2),
+            "max": _round(max(durations) if durations else None, 2),
+            "average": _round(
+                statistics.fmean(durations) if durations else None,
+                2,
+            ),
+            "mode_5min": mode_value,
+            "mode_5min_tied_buckets": tied_modes,
+        },
+        "sample_count": len(samples),
+        "distinct_track_count": len(source_ids),
+        "direction_counts": dict(sorted(direction_counts.items())),
+        "coverage_ratio": {
+            "minimum": _round(min(coverage_values) if coverage_values else None, 3),
+            "average": _round(
+                statistics.fmean(coverage_values) if coverage_values else None,
+                3,
+            ),
+        },
+        "data_quality": quality,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _window_passage_samples(
+    traversals: list[dict[str, Any]],
+    *,
+    route_bin_m: float,
+    window_start_m: float,
+    window_end_m: float,
+) -> list[dict[str, Any]]:
+    window_distance_m = window_end_m - window_start_m
+    if window_distance_m <= 0.0:
+        return []
+    grouped: dict[tuple[str, int, int, str], dict[int, list[dict[str, Any]]]] = (
+        defaultdict(lambda: defaultdict(list))
+    )
+    for traversal in traversals:
+        route_bin_index = int(traversal.get("route_bin_index") or 0)
+        bin_start_m = route_bin_index * route_bin_m
+        bin_end_m = bin_start_m + route_bin_m
+        if min(window_end_m, bin_end_m) <= max(window_start_m, bin_start_m):
+            continue
+        key = (
+            str(traversal.get("source_id") or "unknown_reference"),
+            int(traversal.get("track_segment_index") or 0),
+            int(traversal.get("bout_id") or 0),
+            str(traversal.get("direction") or "unknown"),
+        )
+        grouped[key][route_bin_index].append(traversal)
+
+    samples = []
+    for key, by_bin in grouped.items():
+        supported_distance_m = 0.0
+        supported_duration_seconds = 0.0
+        for route_bin_index, bin_traversals in by_bin.items():
+            bin_start_m = route_bin_index * route_bin_m
+            bin_end_m = bin_start_m + route_bin_m
+            overlap_m = max(
+                0.0,
+                min(window_end_m, bin_end_m) - max(window_start_m, bin_start_m),
+            )
+            observed_progress_m = sum(
+                max(0.0, float(item.get("route_progress_distance_m") or 0.0))
+                for item in bin_traversals
+            )
+            observed_duration_seconds = sum(
+                max(0.0, float(item.get("duration_seconds") or 0.0))
+                for item in bin_traversals
+            )
+            if observed_progress_m <= 0.0 or observed_duration_seconds <= 0.0:
+                continue
+            supported_m = min(overlap_m, observed_progress_m)
+            supported_distance_m += supported_m
+            supported_duration_seconds += (
+                supported_m * observed_duration_seconds / observed_progress_m
+            )
+        coverage_ratio = min(1.0, supported_distance_m / window_distance_m)
+        if (
+            coverage_ratio < PASSAGE_MINIMUM_COVERAGE_RATIO
+            or supported_duration_seconds <= 0.0
+        ):
+            continue
+        normalized_duration_minutes = (
+            supported_duration_seconds
+            * window_distance_m
+            / supported_distance_m
+            / 60.0
+        )
+        samples.append(
+            {
+                "source_id": key[0],
+                "direction": key[3],
+                "duration_minutes": normalized_duration_minutes,
+                "coverage_ratio": coverage_ratio,
+            }
+        )
+    return samples
+
+
+def _passage_window(
+    route_distance_at_node_m: float,
+    *,
+    route_distance_m: float,
+) -> tuple[float, float]:
+    window_distance_m = min(PASSAGE_WINDOW_DISTANCE_M, route_distance_m)
+    if window_distance_m <= 0.0:
+        return 0.0, 0.0
+    start_m = _clamp(
+        route_distance_at_node_m - window_distance_m / 2.0,
+        0.0,
+        route_distance_m - window_distance_m,
+    )
+    return start_m, start_m + window_distance_m
+
+
+def _five_minute_mode(values: list[float]) -> tuple[int | None, list[int]]:
+    if not values:
+        return None, []
+    buckets = [
+        max(
+            PASSAGE_MODE_BUCKET_MINUTES,
+            int(
+                math.floor(
+                    value / PASSAGE_MODE_BUCKET_MINUTES + 0.5
+                )
+                * PASSAGE_MODE_BUCKET_MINUTES
+            ),
+        )
+        for value in values
+    ]
+    counts = Counter(buckets)
+    highest_count = max(counts.values())
+    tied = sorted(bucket for bucket, count in counts.items() if count == highest_count)
+    return tied[0], tied
+
+
+def _checkpoint_route_distance(
+    item: dict[str, Any],
+    route_progress: list[float],
+) -> float | None:
+    direct = _float_or_none(
+        item.get("route_distance_m")
+        or item.get("progress_m")
+        or item.get("distance_m")
+    )
+    if direct is not None:
+        return direct
+    route_point_index = item.get("route_point_index")
+    if isinstance(route_point_index, int) and 0 <= route_point_index < len(route_progress):
+        return route_progress[route_point_index]
+    return None
+
+
+def _primary_route_progress(root: Path) -> list[float]:
+    matches = sorted(
+        (root / "normalized/routes/filtered").glob(
+            "primary.*.speed_filtered.gpx"
+        )
+    )
+    if not matches:
+        return []
+    points = [
+        point
+        for segment in _parse_gpx_track_segments(matches[0])
+        for point in segment
+    ]
+    progress: list[float] = []
+    total_m = 0.0
+    previous: _TrackPoint | None = None
+    for point in points:
+        if previous is not None:
+            total_m += haversine_m(
+                previous.lat,
+                previous.lon,
+                point.lat,
+                point.lon,
+            )
+        progress.append(total_m)
+        previous = point
+    return progress
+
+
+def _load_optional_json_value(root: Path, ref: str) -> Any:
+    path = _resolve_project_ref(root, ref)
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _collection_value(value: Any, *keys: str) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, dict):
+        for key in keys:
+            items = value.get(key)
+            if isinstance(items, list):
+                return [item for item in items if isinstance(item, dict)]
+    return []
+
+
+def _artifact_source_ref(root: Path, ref: str) -> dict[str, Any]:
+    path = _resolve_project_ref(root, ref)
+    return {
+        "source_path": ref,
+        "sha256": _sha256_file(path) if path.is_file() else None,
+        "status": "available" if path.is_file() else "missing",
+    }
+
+
+def _unique_strings(values: Iterable[str]) -> list[str]:
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def _track_segment_diagnostic(
+    segment: list[_TrackPoint],
+    *,
+    track_segment_index: int,
+    max_interval_seconds: float,
+    stationary_speed_mps: float,
+    normal_walking_min_kmh: float,
+    normal_walking_max_kmh: float,
+) -> dict[str, Any]:
+    positive_intervals: list[tuple[float, float, float]] = []
+    for previous, current in zip(segment, segment[1:]):
+        if previous.observed_at is None or current.observed_at is None:
+            continue
+        delta_seconds = (current.observed_at - previous.observed_at).total_seconds()
+        if delta_seconds <= 0:
+            continue
+        distance_m = haversine_m(previous.lat, previous.lon, current.lat, current.lon)
+        positive_intervals.append(
+            (delta_seconds, distance_m, distance_m / delta_seconds)
+        )
+
+    interval_count = len(positive_intervals)
+    total_distance_m = sum(item[1] for item in positive_intervals)
+    elapsed_seconds = sum(item[0] for item in positive_intervals)
+    speed_values = [item[2] for item in positive_intervals]
+    interpretable_intervals = [
+        item
+        for item in positive_intervals
+        if item[0] <= max_interval_seconds
+    ]
+    accepted_count = sum(
+        normal_walking_min_kmh < item[2] * 3.6 < normal_walking_max_kmh
+        for item in interpretable_intervals
+    )
+    below_window_count = sum(
+        item[2] * 3.6 <= normal_walking_min_kmh
+        for item in interpretable_intervals
+    )
+    above_window_count = sum(
+        item[2] * 3.6 >= normal_walking_max_kmh
+        for item in interpretable_intervals
+    )
+    stationary_count = sum(
+        item[2] <= stationary_speed_mps for item in interpretable_intervals
+    )
+    non_walking_share = (
+        above_window_count / len(interpretable_intervals)
+        if interpretable_intervals
+        else None
+    )
+    if sum(point.observed_at is not None for point in segment) < 2:
+        interpretability = "missing_time"
+        reason = "fewer_than_two_timestamped_points"
+    elif not positive_intervals:
+        interpretability = "low_interpretability"
+        reason = "no_positive_timestamp_interval"
+    elif accepted_count:
+        interpretability = "usable"
+        reason = "contains_adjacent_pairs_in_strict_speed_window"
+    else:
+        interpretability = "low_interpretability"
+        reason = "no_adjacent_pair_in_strict_speed_window"
+
+    return {
+        "track_segment_index": track_segment_index,
+        "point_count": len(segment),
+        "timestamped_point_count": sum(
+            point.observed_at is not None for point in segment
+        ),
+        "positive_interval_count": interval_count,
+        "observed_distance_m": _round(total_distance_m, 3),
+        "elapsed_seconds": _round(elapsed_seconds, 3),
+        "average_speed_kmh": _round(
+            total_distance_m / elapsed_seconds * 3.6
+            if elapsed_seconds > 0
+            else None,
+            3,
+        ),
+        "median_interval_speed_kmh": _round(
+            statistics.median(speed_values) * 3.6 if speed_values else None,
+            3,
+        ),
+        "accepted_pair_count": accepted_count,
+        "walking_interval_count": accepted_count,
+        "below_speed_window_pair_count": below_window_count,
+        "above_speed_window_pair_count": above_window_count,
+        "non_walking_interval_count": above_window_count,
+        "stationary_interval_count": stationary_count,
+        "non_walking_interval_share": _round(non_walking_share, 4),
+        "long_gap_interval_count": sum(
+            item[0] > max_interval_seconds for item in positive_intervals
+        ),
+        "interpretability": interpretability,
+        "interpretability_reason": reason,
+        "speed_filter_unit": "adjacent_trackpoint_pair",
+        "minimum_speed_kmh_exclusive": _round(normal_walking_min_kmh, 3),
+        "maximum_speed_kmh_exclusive": _round(normal_walking_max_kmh, 3),
+        "whole_segment_average_used_for_filtering": False,
+        "locomotion_class": "unknown",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _crowd_supported_axis(
+    route_bins: list[dict[str, Any]],
+    *,
+    source_route_distance_m: float,
+    route_bin_m: float,
+    min_tracks_for_guidance: int,
+) -> dict[str, Any]:
+    source_distance_m = max(0.0, float(source_route_distance_m))
+    if source_distance_m <= 0.0:
+        source_distance_m = max(
+            (
+                _float_or_none(item.get("end_distance_m")) or 0.0
+                for item in route_bins
+            ),
+            default=0.0,
+        )
+    required_run_bins = max(2, int(math.ceil(1_000.0 / route_bin_m)))
+    supported_indices = sorted(
+        {
+            int(item.get("route_bin_index") or 0)
+            for item in route_bins
+            if bool(item.get("guidance_eligible"))
+            and int(item.get("distinct_track_count") or 0)
+            >= min_tracks_for_guidance
+        }
+    )
+    run_start: int | None = None
+    run_length = 0
+    sustained_start: int | None = None
+    previous_index: int | None = None
+    for route_bin_index in supported_indices:
+        if previous_index is None or route_bin_index != previous_index + 1:
+            run_start = route_bin_index
+            run_length = 1
+        else:
+            run_length += 1
+        if run_length >= required_run_bins and run_start is not None:
+            sustained_start = run_start
+            break
+        previous_index = route_bin_index
+
+    first_sustained_support_m = (
+        sustained_start * route_bin_m if sustained_start is not None else 0.0
+    )
+    leading_bins = [
+        item
+        for item in route_bins
+        if (_float_or_none(item.get("start_distance_m")) or 0.0)
+        < first_sustained_support_m
+    ]
+    expected_leading_bins = max(
+        1,
+        int(math.ceil(first_sustained_support_m / route_bin_m)),
+    )
+    leading_coverage = len(
+        {int(item.get("route_bin_index") or 0) for item in leading_bins}
+    ) / expected_leading_bins
+    return {
+        "status": "golden_route_axis_retained",
+        "route_axis_basis": "golden_route_scope",
+        "source_route_distance_m": _round(source_distance_m, 3),
+        "analysis_origin_m": 0.0,
+        "analysis_distance_m": _round(source_distance_m, 3),
+        "axis_rebased": False,
+        "first_sustained_crowd_support_m": _round(
+            first_sustained_support_m,
+            3,
+        ),
+        "leading_span_m": 0.0,
+        "leading_observed_bin_count": len(leading_bins),
+        "leading_observed_coverage": _round(leading_coverage, 4),
+        "sustained_support_run_minimum_m": _round(
+            required_run_bins * route_bin_m,
+            3,
+        ),
+        "minimum_distinct_tracks": int(min_tracks_for_guidance),
+        "leading_span_interpretability": "not_applicable",
+        "locomotion_inference": "unknown",
+        "requires_human_review": False,
+        "golden_route_role": (
+            "authoritative_start_finish_scope_and_equal_weight_observation"
+        ),
+        "crowd_support_role": "coverage_and_confidence_diagnostic_only",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _route_bin_with_crowd_axis(
+    item: dict[str, Any],
+    *,
+    crowd_axis: dict[str, Any],
+) -> dict[str, Any]:
+    source_start_m = _float_or_none(item.get("start_distance_m")) or 0.0
+    source_end_m = _float_or_none(item.get("end_distance_m")) or source_start_m
+    route_extent_m = (
+        _float_or_none(crowd_axis.get("source_route_distance_m"))
+        or source_end_m
+    )
+    source_end_m = min(source_end_m, route_extent_m)
+    origin_m = _float_or_none(crowd_axis.get("analysis_origin_m")) or 0.0
+    in_scope = source_start_m < route_extent_m and (
+        source_end_m > origin_m or origin_m == 0.0
+    )
+    return {
+        **item,
+        "start_distance_m": _round(source_start_m, 3),
+        "end_distance_m": _round(source_end_m, 3),
+        "source_start_distance_m": _round(source_start_m, 3),
+        "source_end_distance_m": _round(source_end_m, 3),
+        "in_crowd_analysis_scope": in_scope,
+        "analysis_start_distance_m": (
+            _round(max(0.0, source_start_m - origin_m), 3)
+            if in_scope
+            else None
+        ),
+        "analysis_end_distance_m": (
+            _round(max(0.0, source_end_m - origin_m), 3)
+            if in_scope
+            else None
+        ),
+    }
+
+
 def _track_report(
     *,
     source: dict[str, Any],
     source_path: str,
     filtered_path: Path | None,
     status: str,
+    analysis_source_kind: str = "missing",
+    analysis_source_ref: str | None = None,
     point_count: int = 0,
     time_count: int = 0,
     intervals: list[float] | None = None,
@@ -842,6 +1765,10 @@ def _track_report(
     traversal_count: int = 0,
     excluded: Counter[str] | None = None,
     speed_values: list[float] | None = None,
+    segment_diagnostics: list[dict[str, Any]] | None = None,
+    speed_window_eligible_count: int = 0,
+    normal_walking_min_kmh: float = DEFAULT_NORMAL_WALKING_MIN_KMH,
+    normal_walking_max_kmh: float = DEFAULT_NORMAL_WALKING_MAX_KMH,
 ) -> dict[str, Any]:
     intervals = intervals or []
     speed_values = speed_values or []
@@ -856,13 +1783,28 @@ def _track_report(
         "source_path": source_path,
         "sha256": str(source.get("sha256") or filtered_sha256 or ""),
         "source_filename": str(source.get("original_filename") or "unknown.gpx"),
+        "source_role": _crowd_source_role(source),
+        "statistical_weight": "equal_track_route_bin_traversal",
+        "analysis_source": {
+            "kind": analysis_source_kind,
+            "source_path": analysis_source_ref,
+            "sha256": filtered_sha256,
+            "complete_source_points_read_before_pair_filter": (
+                analysis_source_kind == "workspace_raw_gpx"
+            ),
+        },
         "filtered_source": {
             "source_path": (
                 f"normalized/routes/filtered/{filtered_path.name}"
                 if filtered_path is not None
+                and analysis_source_kind == "speed_filtered_fallback"
                 else None
             ),
-            "sha256": filtered_sha256,
+            "sha256": (
+                filtered_sha256
+                if analysis_source_kind == "speed_filtered_fallback"
+                else None
+            ),
         },
         "status": status,
         "trackpoint_count": point_count,
@@ -879,7 +1821,23 @@ def _track_report(
         "route_traversal_count": traversal_count,
         "pause_reset_count": pause_reset_count,
         "observed_moving_speed_mps": _distribution(speed_values),
+        "adjacent_pair_speed_filter": {
+            "unit_of_analysis": "adjacent_trackpoint_pair",
+            "minimum_speed_kmh_exclusive": _round(
+                normal_walking_min_kmh,
+                3,
+            ),
+            "maximum_speed_kmh_exclusive": _round(
+                normal_walking_max_kmh,
+                3,
+            ),
+            "strict_bounds": True,
+            "whole_track_or_segment_average_used_for_filtering": False,
+            "positive_timed_pair_count": timed_segment_count,
+            "accepted_pair_count": speed_window_eligible_count,
+        },
         "excluded_segment_counts": dict(sorted((excluded or Counter()).items())),
+        "segment_diagnostics": list(segment_diagnostics or []),
         "data_quality": _track_quality(status, time_count, point_count, traversal_count),
         "privacy": {
             "aggregate_only": True,
@@ -1422,7 +2380,16 @@ def _track_point(element: ET.Element) -> _TrackPoint:
     )
 
 
-def _filtered_reference_path(root: Path, source: dict[str, Any]) -> Path | None:
+def _analysis_gpx_path(
+    root: Path,
+    source: dict[str, Any],
+) -> tuple[Path | None, str, str | None]:
+    workspace_ref = source.get("workspace_ref")
+    if isinstance(workspace_ref, str):
+        candidate = _resolve_project_ref(root, workspace_ref)
+        if candidate.is_file():
+            return candidate, "workspace_raw_gpx", workspace_ref
+
     source_id = str(source.get("source_id") or "")
     match = re.search(r"\.reference\.(\d+)$", source_id)
     if match:
@@ -1433,13 +2400,33 @@ def _filtered_reference_path(root: Path, source: dict[str, Any]) -> Path | None:
             )
         )
         if matches:
-            return matches[0]
-    workspace_ref = source.get("workspace_ref")
-    if isinstance(workspace_ref, str):
-        candidate = _resolve_project_ref(root, workspace_ref)
-        if candidate.is_file():
-            return candidate
-    return None
+            path = matches[0]
+            return (
+                path,
+                "speed_filtered_fallback",
+                path.relative_to(root).as_posix(),
+            )
+    if _crowd_source_role(source) == "scope_reference":
+        matches = sorted(
+            (root / "normalized/routes/filtered").glob(
+                "primary.*.speed_filtered.gpx"
+            )
+        )
+        if matches:
+            path = matches[0]
+            return (
+                path,
+                "speed_filtered_fallback",
+                path.relative_to(root).as_posix(),
+            )
+    return None, "missing", None
+
+
+def _crowd_source_role(source: dict[str, Any]) -> str:
+    role = str(source.get("route_role") or source.get("role") or "")
+    if role in {"golden_route", "golden_route_reference"}:
+        return "scope_reference"
+    return "reference_track"
 
 
 def _signed_grade(

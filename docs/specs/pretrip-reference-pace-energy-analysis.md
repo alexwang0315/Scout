@@ -19,7 +19,38 @@ Pace Dashboard:
 This analysis does not infer medical condition, fatigue, comfort, motivation, or
 absolute metabolic energy from GPX alone.
 
-## First Workspace Finding
+### 2026-07-21 Golden-Scope And Pairwise-Filter Correction
+
+Architecture measures route demand from the crowd corpus inside the route the
+operator intends to walk. The operator-selected, curated `golden_route` defines
+the complete `0K -> finish` geometry, order, and start/end scope for the current
+trip. Crowd coverage may change bin confidence, but it must never move the 0K
+origin, truncate a sparse prefix, or replace this scope with a crowd-derived
+axis.
+
+The golden route is also one statistical observation. It is analyzed as a
+`scope_reference` alongside historical `reference_track` records with no
+privileged statistical weight; each usable `track x route-bin traversal` gets
+the same vote. Its geometry role and its statistical role are separate.
+
+Statistical eligibility is evaluated on every adjacent trackpoint pair using
+its own distance and actual `delta_t`. The V0 default is the strict open interval
+`1 < speed_kmh < 10`. Missing time, non-positive time, long gaps, and out-of-window
+pairs are excluded one pair at a time. A whole track or `<trkseg>` must never be
+rejected from its average speed, and the analyzer should read the complete staged
+source GPX before applying this pair filter. A speed-filtered derived GPX is only
+a compatibility fallback when the staged source is unavailable.
+
+recording error, synthetic timestamps, another locomotion mode, or transport;
+`locomotion_class=unknown` is mandatory until independent evidence resolves it.
+An out-of-range pair or segment cannot be called vehicle travel from GPX alone.
+It may be recording error, synthetic timestamps, another locomotion mode, or
+transport; `locomotion_class=unknown` is mandatory until independent evidence
+resolves it.
+recording error, synthetic timestamps, another locomotion mode, or transport;
+`locomotion_class=unknown` is mandatory until independent evidence resolves it.
+
+## Historical V0 Workspace Finding
 
 The active workspace used for the V0 proof was:
 
@@ -27,7 +58,9 @@ The active workspace used for the V0 proof was:
 <workspace-root>/chilai_nanhua_day1_scoutAI
 ```
 
-Its 23 reference tracks produced:
+This table records the pre-correction experiment over 23 reference tracks. It is
+retained as research history, not as the current artifact contract or a reason to
+crop the route axis:
 
 | Finding | Observed value |
 | --- | ---: |
@@ -101,18 +134,26 @@ short steep steps and switchbacks. The zero-count `60%+` stratum must remain
 DTM elevation at a declared horizontal window and reject elevation spikes before
 claiming support for very steep terrain.
 
-### Normal-Walking-Speed Sensitivity Check
+### Adjacent-Pair Speed Eligibility And Sensitivity Checks
 
-The requested sensitivity range is a strict open interval:
+The production V0 analysis contract now uses the strict pairwise discovery
+window `1 < speed < 10 km/h` before any route-bin traversal is accumulated.
+Every accepted traversal is therefore composed only of accepted adjacent pairs.
+Whole-track and whole-segment average speeds remain diagnostics and never decide
+whether valid pairs elsewhere in that source survive.
+
+The earlier `3-10 km/h` experiment below remains a sensitivity comparison only.
+
+That historical sensitivity range was the strict open interval:
 
 ```text
 3 km/h < speed < 10 km/h
 ```
 
-The base pipeline already removes stationary intervals at or below `0.08 m/s`,
-long timestamp gaps, non-walking speeds, off-corridor points, and ambiguous route
-transitions. Therefore this sensitivity filter does more than remove true rest:
-it also removes valid sustained slow movement below `3 km/h`.
+The pipeline also separates stationary intervals at or below `0.08 m/s`, long
+timestamp gaps, off-corridor points, and ambiguous route transitions. The
+historical sensitivity filter removed more than true rest: it also removed valid
+sustained slow movement below `3 km/h`.
 
 V0 reports two views so device sampling rate is not confused with independent
 hiker evidence:
@@ -144,11 +185,12 @@ falling below the normal range, pause/rest burden, and recovery after pauses by
 bout age. Correlation among samples that still maintain `3-10 km/h` cannot rule
 out duration-related deterioration.
 
-#### Broadened 1-10 km/h Discovery Window
+#### Current 1-10 km/h Discovery Window
 
 The follow-up experiment broadened the strict lower bound to `1 km/h`. This is
-the V0 discovery default because it retains sustained technical/slow movement
-while still excluding near-stationary observations:
+the V0 default because it retains sustained technical/slow movement while still
+excluding near-stationary observations. The table remains the historical
+experiment that motivated the current pairwise contract:
 
 | Analysis unit | Samples | Retained share | risk-speed rho | duration-speed rho |
 | --- | ---: | ---: | ---: | ---: |
@@ -226,8 +268,11 @@ differ materially; see
 
 ```mermaid
 flowchart LR
-  GPX["[x] 23 reference GPX"] --> Time["[x] Actual delta_t and pause/gap filter"]
-  Time --> Match["[x] 100 m centerline projection and jump rejection"]
+  Golden["[x] Curated golden route: 0K to finish scope"] --> Scope["[x] Golden/Overpass route axis"]
+  GPX["[x] Complete reference GPX + equal-weight scope reference"] --> Time["[x] Actual adjacent-pair delta_t"]
+  Time --> Pair["[x] Strict 1 < speed < 10 km/h pair filter"]
+  Pair --> Match["[x] 100 m centerline projection and jump rejection"]
+  Scope --> Match
   Risk["[x] Overpass risk-score centerline"] --> Match
   Pressure["[x] Route pressure terrain bins"] --> Demand["[x] Grade and W/kg mechanical proxies"]
   Match --> Traverse["[x] Track x route-bin traversals"]
@@ -239,25 +284,38 @@ flowchart LR
   Personal["[ ] Personal mass, pack, wearable, RPE calibration"] --> Dashboard
 ```
 
-The canonical spatial axis remains the Overpass/risk-ribbon centerline. GPX
-provides timing and movement behavior after projection; it does not replace the
-route centerline or become runtime route truth.
+The canonical spatial lookup remains the golden-route-scoped,
+Overpass/risk-ribbon-backed centerline. GPX provides timing and movement behavior
+after projection; it does not become runtime route truth. Architecture always
+retains the complete golden `0K -> finish` axis. Crowd support is a coverage and
+confidence diagnostic, not authority to rebase mileage.
 
 ## V0 Filtering And Aggregation
 
-For every reference source:
+For every reference source and the equal-weight golden/scope reference:
 
-1. Resolve the speed-filtered GPX from the historical source index.
-2. Parse every track segment and actual timestamp.
-3. Reject missing/non-positive intervals.
-4. Reset continuous movement after a meaningful 300-second pause or long gap.
-5. Separate stationary samples and non-walking speed candidates.
-6. Project points within 100 m of the canonical route.
-7. Reject route-distance jumps inconsistent with physical movement.
-8. Aggregate contiguous movement into `track x direction x bout x 250 m bin`.
-9. Give each traversal one statistical vote, so a 3-second logger does not
+1. Resolve the complete staged source GPX from the historical source index; use
+   the derived speed-filtered GPX only as a compatibility fallback.
+2. Parse every `<trkseg>` and every actual timestamp without assuming a sample
+   frequency.
+3. Form only adjacent trackpoint pairs; reject missing/non-positive intervals
+   one pair at a time.
+4. Apply strict `1 < speed_kmh < 10` to each adjacent pair. Never use a whole
+   track/segment average as the filter and never discard other valid pairs.
+5. Reset continuous movement after a meaningful 300-second pause or long gap.
+6. Separate stationary, below-window, and above-window pair counts as explicit
+   diagnostics with `locomotion_class=unknown`.
+7. Project accepted pairs within 100 m of the canonical route using sequential
+   route-distance continuity, so ordinary out-and-back overlap follows the
+   golden itinerary instead of collapsing return points onto outbound mileage.
+8. Reject route-distance jumps inconsistent with physical movement.
+9. Aggregate contiguous accepted movement into
+   `track x direction x bout x 250 m bin`.
+10. Give each traversal one statistical vote, so a 3-second logger does not
    dominate a 30-second logger.
-10. Require at least three distinct tracks before a bin is guidance-eligible.
+11. Require at least three distinct tracks before a bin is guidance-eligible.
+12. Retain unsupported golden-route bins as in-scope geometry with
+    `insufficient evidence`; do not crop or rebase the route.
 
 Short stationary noise does not immediately reset a bout. The 300-second V0
 threshold is a signal-quality compromise and must remain configurable. Hidden
@@ -304,6 +362,36 @@ For each route bin:
 P25 speed / P75 time is the conservative public-reference comparator. It is not
 the current user's safe pace and must later be calibrated against their Scout
 Pace Coefficient and Energy Reserve.
+
+### CP/MCP Passage Timing Contract
+
+`checkpoint_passage_timing.nodes[]` projects every distance-resolved CP and MCP
+onto the complete golden-route axis. V0 uses a fixed 500 m route window centered
+on each node and shifted at the route ends so CP density or an inserted MCP does
+not change the quantity being compared.
+
+Each duration sample is one contiguous `track x segment x bout x direction`
+passage assembled only from traversals that already passed the strict adjacent-
+pair speed, timestamp-gap, corridor, and route-transition filters. At least 60%
+of the 500 m window must be observed; accepted partial coverage is normalized to
+500 m and retains its coverage ratio. No route-bin P50 is expanded into synthetic
+samples.
+
+Every node remains present, including nodes with insufficient evidence, and
+exposes:
+
+- `duration_minutes.min`;
+- `duration_minutes.max`;
+- `duration_minutes.average`;
+- `duration_minutes.mode_5min`, rounded half-up to the nearest 5-minute bucket
+  with a minimum bucket of 5 minutes;
+- `mode_5min_tied_buckets`, sample count, distinct-track count, direction counts,
+  coverage ratio, and data quality;
+- `named_places[]` when reviewed MCP/named-point evidence can be placed within
+  300 m of the node.
+
+The mode is a descriptive crowd-passage cluster, not a guide time, personal pace
+target, completion probability, or runtime safety threshold.
 
 ### Mechanical Power Proxies
 
@@ -404,13 +492,25 @@ Selection details should show support counts, P25/P50/P75, signed grade, risk,
 continuous bout age, direction, and association flags. A bin with fewer than
 three distinct tracks must display `insufficient evidence`, not a pace target.
 
+Route Fingerprint also renders every `checkpoint_passage_timing.nodes[]` item on
+the same distance axis. Each CP/MCP card shows Min / Avg / 5-minute Mode / Max,
+sample and track counts, and a named place when available. Selecting a card must
+focus the nearest observed route bin in Map and Segment Microscope. Missing
+timing stays visible as unavailable rather than being interpolated.
+
 ## V1 Analysis Debt
 
 - Normalize speed within each source track and signed-grade band before testing
   risk or duration effects.
 - Add a mixed-effects or hierarchical model with track/source as a random effect.
 - Detect duplicate geometry and mirrored copies so one trip cannot vote twice.
+- Add a reviewed ambiguity resolver for a track segment that starts mid-route on
+  exactly overlapping out-and-back geometry; V0 seeds a new segment forward and
+  then follows route-distance continuity.
 - Separate walking, trail running, transport, and unknown locomotion cohorts.
+- Add a full crowd-derived support graph and independently reviewed
+  movement-mode classifier without allowing either to replace the golden-route
+  start/end axis.
 - Add hill slope, terrain obstruction/surface, weather, altitude, and direction.
 - Add a smoothed canonical DTM local-slope index with declared window length,
   elevation-spike rejection, and route-pressure net-grade fallback.
