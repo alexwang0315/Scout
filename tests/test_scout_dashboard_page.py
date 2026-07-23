@@ -1120,7 +1120,7 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert "scheduleMapEvidenceFocusRetry" in html
     assert "pretripMapHasRenderedTargets" in html
     assert "Loading pre-trip timeline evidence for map focus." in html
-    assert '["Checkpoints", "AI GIS CP", "Major Critical Points"].includes(group.title)' in html
+    assert "function pretripEvidenceGroupOpen(_group, _index)" in html
     assert "mapWindow.focusMapFor" in html
     assert "mapWindow.selectEvidence" in html
     assert "data-map-evidence-source" in html
@@ -2242,6 +2242,20 @@ def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> Non
     assert 'data-evidence-page-action="previous"' in html
     assert 'data-evidence-page-action="next"' in html
     assert 'aria-label="Evidence pagination"' in html
+
+    group_open_policy = html.split(
+        "function pretripEvidenceGroupOpen", 1
+    )[1].split("function pretripEvidenceGroups", 1)[0]
+    assert "return false;" in group_open_policy
+    assert "index < 2" not in group_open_policy
+
+    pagination = html.split(
+        "function paginateEvidenceGroups", 1
+    )[1].split("function evidencePageForSource", 1)[0]
+    assert "const pageItems =" in pagination
+    assert "pageGroups.push({" in pagination
+    assert "Evidence exists in this category but is on another page." in pagination
+    assert "else if (!itemCount && page === 1)" not in pagination
 
 
 def test_dashboard_joint_review_information_architecture_and_qa_contract() -> None:

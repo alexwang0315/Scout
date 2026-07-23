@@ -45,6 +45,51 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-23 - Keep Timeline Evidence categories collapsed and visible
+
+User request:
+
+- Review the pretrip evidence contract after Risk and Boss categories appeared
+  to be missing.
+- Keep every category title visible even when its content is null or lies on a
+  later evidence page.
+- Start every Timeline Evidence category collapsed so large groups do not make
+  the remaining capability categories look absent.
+
+Implementation steps:
+
+- Confirmed that Risk, Major Critical Points, Boss Points, mileage, Overpass,
+  environment, GPX and review categories were already projected by the
+  Dashboard.
+- Removed the default-open policy for the first two groups and selected CP/MCP
+  groups. Every evidence `<details>` group now starts collapsed.
+- Changed evidence pagination to paginate rows while retaining every category
+  shell on every page.
+- Added distinct empty copy for a category with no loaded evidence versus a
+  category whose evidence rows are available on another page.
+
+Boundary:
+
+- This is a read-only information-architecture correction. It does not add,
+  infer, accept or mutate pretrip evidence, and it does not change Phase 1
+  runtime safety truth.
+
+Verification:
+
+- Focused Dashboard regression: `3 passed, 42 deselected`.
+- Frontend lint passed; the package typecheck smoke passed (`1 passed`).
+- The package test suite reached `15 passed, 2 failed`; both failures are
+  pre-existing Scout AI OS documentation-token expectations in
+  `tests/test_scout_ai_os_docs.py`, outside this Dashboard change.
+- Live browser smoke at
+  `http://127.0.0.1:9099/admin/dashboard#timeline`: CP/Timeline rendered eight
+  category titles with zero open groups, including Major Critical Points, Boss
+  Points and Mileage Tags.
+- Map/Risk rendered 31 category titles with zero open groups, including Risk
+  Score, Baseline Risk, Calibrated Heat and Risk Delta.
+- After moving to page 2 of 61, all 31 Map/Risk category titles remained
+  present and collapsed. Browser console error count was zero.
+
 ### 2026-07-21 - Remove duplicate Safety / Emergency outer headers
 
 User request:
