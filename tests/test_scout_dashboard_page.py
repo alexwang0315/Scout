@@ -1165,6 +1165,23 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert "mapData.routePath" not in segment_branch
 
 
+def test_scout_dashboard_map_route_removes_header_without_losing_mobile_navigation() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    header_rule = html.split(
+        ".dashboard-shell.is-frame-full .topbar {", 1
+    )[1].split("}", 1)[0]
+    frame_rule = html.split(
+        ".dashboard-shell.is-frame-full .dashboard-frame {", 1
+    )[1].split("}", 1)[0]
+    assert "display: none;" in header_rule
+    assert "grid-template-rows: minmax(0, 1fr);" in frame_rule
+    assert 'id="dashboardMapNavToggle"' in html
+    assert html.count("data-dashboard-nav-toggle aria-controls") == 2
+    assert 'document.querySelectorAll("[data-dashboard-nav-toggle]")' in html
+    assert 'state.route === "map" ? "dashboardMapNavToggle"' in html
+
+
 def test_scout_dashboard_map_exposes_cwa_imagery_bridge_and_controls() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")

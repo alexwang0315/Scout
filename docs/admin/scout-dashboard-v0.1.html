@@ -239,6 +239,14 @@
       background: var(--surface);
     }
 
+    .dashboard-shell.is-frame-full .topbar {
+      display: none;
+    }
+
+    .dashboard-shell.is-frame-full .dashboard-frame {
+      grid-template-rows: minmax(0, 1fr);
+    }
+
     .topbar h2 {
       margin: 0;
       font-size: 18px;
@@ -253,6 +261,18 @@
       align-items: center;
       justify-content: center;
       font-size: 20px;
+    }
+
+    .dashboard-map-nav-toggle {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 250;
+      border-color: rgba(147, 181, 191, .5);
+      background: rgba(9, 18, 22, .92);
+      color: var(--text);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, .34);
+      backdrop-filter: blur(10px);
     }
 
     .topbar-title-row {
@@ -5423,7 +5443,7 @@
     <main class="dashboard-frame">
       <header class="topbar">
         <div class="topbar-title-row">
-          <button class="dashboard-nav-toggle" type="button" id="dashboardNavToggle" aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Open dashboard navigation">☰</button>
+          <button class="dashboard-nav-toggle" type="button" id="dashboardNavToggle" data-dashboard-nav-toggle aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Open dashboard navigation">☰</button>
           <h2 id="pageTitle">Home</h2>
         </div>
         <div class="status-strip" id="dashboardTruthStrip" aria-label="Dashboard truth status" aria-live="polite">
@@ -5439,6 +5459,7 @@
       <div class="content-grid">
         <section class="workspace" id="workspace" tabindex="-1" aria-live="polite"></section>
         <section class="pretrip-map-only-shell" id="dashboardMap" data-map-source="/admin/pretrip" data-map-mode="pretrip-map-only" hidden aria-hidden="true" tabindex="-1">
+          <button class="dashboard-nav-toggle dashboard-map-nav-toggle" type="button" id="dashboardMapNavToggle" data-dashboard-nav-toggle aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Open dashboard navigation">☰</button>
           <span class="sr-only" id="dashboardMapStatus" data-map-connected="true">pre-trip map only</span>
           <iframe class="pretrip-map-only-frame" id="pretripMapFrame" title="Pre-trip map" loading="eager"></iframe>
           <aside class="map-evidence-rail" id="dashboardMapEvidence" aria-label="Map evidence and timeline context"></aside>
@@ -6535,12 +6556,14 @@
 
     function setDashboardNavigationOpen(open, {returnFocus = false} = {}) {
       const sidebar = document.getElementById("dashboardSidebar");
-      const toggle = document.getElementById("dashboardNavToggle");
-      if (!sidebar || !toggle) return;
+      const toggles = Array.from(document.querySelectorAll("[data-dashboard-nav-toggle]"));
+      if (!sidebar || !toggles.length) return;
       const mobile = window.matchMedia("(max-width: 1120px)").matches;
       sidebar.classList.toggle("is-open", mobile && open);
-      toggle.setAttribute("aria-expanded", mobile && open ? "true" : "false");
-      toggle.setAttribute("aria-label", mobile && open ? "Close dashboard navigation" : "Open dashboard navigation");
+      toggles.forEach((toggle) => {
+        toggle.setAttribute("aria-expanded", mobile && open ? "true" : "false");
+        toggle.setAttribute("aria-label", mobile && open ? "Close dashboard navigation" : "Open dashboard navigation");
+      });
       if (mobile) {
         sidebar.inert = !open;
         sidebar.setAttribute("aria-hidden", open ? "false" : "true");
@@ -6548,17 +6571,22 @@
         sidebar.inert = false;
         sidebar.removeAttribute("aria-hidden");
       }
-      if (returnFocus && !open) toggle.focus();
+      if (returnFocus && !open) {
+        const returnTargetId = state.route === "map" ? "dashboardMapNavToggle" : "dashboardNavToggle";
+        document.getElementById(returnTargetId)?.focus();
+      }
     }
 
     function bindMobileNavigation() {
       const sidebar = document.getElementById("dashboardSidebar");
-      const toggle = document.getElementById("dashboardNavToggle");
-      if (!sidebar || !toggle) return;
+      const toggles = Array.from(document.querySelectorAll("[data-dashboard-nav-toggle]"));
+      if (!sidebar || !toggles.length) return;
       setDashboardNavigationOpen(false);
-      toggle.addEventListener("click", () => {
-        const open = !sidebar.classList.contains("is-open");
-        setDashboardNavigationOpen(open);
+      toggles.forEach((toggle) => {
+        toggle.addEventListener("click", () => {
+          const open = !sidebar.classList.contains("is-open");
+          setDashboardNavigationOpen(open);
+        });
       });
       window.addEventListener("resize", () => setDashboardNavigationOpen(false));
       document.addEventListener("keydown", event => {

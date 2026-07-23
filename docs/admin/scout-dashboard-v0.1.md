@@ -2853,3 +2853,38 @@ Verification:
 - The only observed console error was the existing `/favicon.ico` 404; all
   Dashboard, pre-trip projection, OSM vector, and imagery requests used by the
   map returned 200.
+
+## 2026-07-23 - Remove the Dashboard Map header
+
+User request:
+
+- Remove the large Map header containing the page title, maturity badge, and
+  truth-status cards.
+
+Implementation steps:
+
+- Hide the outer Dashboard topbar whenever the Map route uses its full-frame
+  layout, giving the map the released vertical space.
+- Added a compact Map-only navigation toggle for viewports at or below 1120px,
+  so removing the header does not strand mobile operators inside the Map route.
+- Synchronized both navigation toggles through the existing sidebar state and
+  Escape-key focus return path.
+- Corrected the full-frame grid to a single `minmax(0, 1fr)` row. The initial
+  header removal left the original two-row template in place, which auto-placed
+  Map into a 150px `auto` row and pushed Map Evidence above the viewport.
+
+Boundary notes:
+
+- The embedded map, layer controls, Map Evidence rail, and truth-resolution
+  data remain unchanged; this is a route-local presentation change only.
+
+Verification:
+
+- `./venv/bin/python -m pytest tests/test_scout_dashboard_page.py -q`: 45
+  passed.
+- Corrected desktop smoke at 1600x900 confirmed the Dashboard frame, content
+  grid, Map shell, and iframe all use the full 900px height; Map Evidence is
+  inside the viewport at `y=14` and the desktop navigation overlay is hidden.
+- Corrected 430px smoke confirmed the frame, content grid, Map shell, and
+  iframe all use the full 557px viewport height; Map Evidence is inside the
+  viewport at `y=277` and the compact navigation toggle remains available.
