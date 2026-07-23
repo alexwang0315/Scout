@@ -11886,8 +11886,8 @@
       `;
     }
 
-    function pretripEvidenceGroupOpen(group, index) {
-      return index < 2 || ["Checkpoints", "AI GIS CP", "Major Critical Points"].includes(group.title);
+    function pretripEvidenceGroupOpen(_group, _index) {
+      return false;
     }
 
     function pretripEvidenceGroups(view) {
@@ -12055,11 +12055,15 @@
         const groupEnd = groupStart + items.length;
         const sliceStart = Math.max(0, startIndex - groupStart);
         const sliceEnd = Math.min(items.length, endIndex - groupStart);
-        if (sliceStart < sliceEnd) {
-          pageGroups.push({...group, items: items.slice(sliceStart, sliceEnd)});
-        } else if (!itemCount && page === 1) {
-          pageGroups.push({...group, items: []});
-        }
+        const pageItems = sliceStart < sliceEnd
+          ? items.slice(sliceStart, sliceEnd)
+          : [];
+        const emptyNote = pageItems.length
+          ? group.emptyNote
+          : items.length
+            ? "Evidence exists in this category but is on another page."
+            : group.emptyNote || "No evidence loaded for this category.";
+        pageGroups.push({...group, items: pageItems, emptyNote});
         cursor = groupEnd;
       });
       return {
