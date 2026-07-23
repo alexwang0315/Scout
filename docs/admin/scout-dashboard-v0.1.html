@@ -1965,6 +1965,197 @@
       font-size: 12px;
     }
 
+    .weather-decision-evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+    }
+
+    .weather-decision-evidence-card {
+      min-width: 0;
+      min-height: 138px;
+      padding: 15px;
+      border-right: 1px solid var(--line);
+      background: rgba(255, 255, 255, .015);
+    }
+
+    .weather-decision-evidence-card:last-child { border-right: 0; }
+
+    .weather-decision-evidence-card small,
+    .weather-risk-feature small,
+    .weather-route-trend-card small {
+      display: block;
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .weather-decision-evidence-card strong {
+      display: block;
+      margin: 10px 0 7px;
+      color: var(--text);
+      font-size: 16px;
+      overflow-wrap: anywhere;
+    }
+
+    .weather-decision-evidence-card p,
+    .weather-decision-evidence-card li {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .weather-decision-evidence-card ul {
+      margin: 8px 0 0;
+      padding-left: 17px;
+    }
+
+    .weather-risk-feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+      padding: 14px;
+      border-top: 1px solid var(--line);
+      background: rgba(8, 16, 14, .5);
+    }
+
+    .weather-risk-feature {
+      min-width: 0;
+      padding: 11px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .weather-risk-feature strong {
+      display: block;
+      margin-top: 7px;
+      color: #dce6d8;
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .weather-risk-feature[data-signal="true"] {
+      border-color: rgba(255, 107, 74, .62);
+      background: rgba(255, 107, 74, .07);
+    }
+
+    .weather-risk-feature[data-signal="true"] strong { color: #ff947d; }
+
+    .weather-route-trend-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 0 14px 14px;
+      background: rgba(8, 16, 14, .5);
+    }
+
+    .weather-route-trend-card {
+      padding: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .weather-route-trend-card strong,
+    .weather-route-trend-card span {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .weather-route-trend-card strong { margin: 7px 0 4px; }
+    .weather-route-trend-card span { color: var(--muted); font-size: 12px; }
+
+    .weather-terrain-rule-list {
+      display: grid;
+      gap: 7px;
+      padding: 0 14px 14px;
+      background: rgba(8, 16, 14, .5);
+    }
+
+    .weather-terrain-rule {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-left: 3px solid var(--bad);
+      color: var(--muted);
+      background: rgba(255, 107, 74, .055);
+    }
+
+    .weather-terrain-rule strong { color: #ff947d; }
+
+    .weather-cwa-control-deck {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8, 16, 14, .9);
+    }
+
+    .weather-cwa-control-deck label {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .weather-cwa-control-deck select,
+    .weather-cwa-control-deck input,
+    .weather-cwa-control-deck button {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .weather-cwa-control-deck input[type="range"] { accent-color: var(--candidate); }
+
+    .weather-cwa-control-status {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .weather-cwa-frame-shell {
+      position: relative;
+      height: 560px;
+      min-height: 560px;
+      overflow: hidden;
+      background: #071512;
+    }
+
+    .weather-cwa-map-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #071512;
+    }
+
+    .weather-cwa-frame-state {
+      position: absolute;
+      z-index: 4;
+      top: 14px;
+      left: 14px;
+      padding: 8px 10px;
+      border: 1px solid rgba(98, 184, 198, .48);
+      color: #bceaf0;
+      background: rgba(8, 16, 14, .88);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .04em;
+    }
+
     .pace-subtabs {
       display: flex;
       flex-wrap: wrap;
@@ -3946,6 +4137,11 @@
       .weather-workspace {
         grid-template-columns: 1fr;
       }
+      .weather-decision-evidence-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .weather-decision-evidence-card:nth-child(2) { border-right: 0; }
+      .weather-decision-evidence-card:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
       .workspace,
       .evidence-drawer {
         overflow: visible;
@@ -4066,7 +4262,11 @@
         grid-template-columns: 1fr;
       }
       .weather-decision-band,
-      .weather-timeline-grid {
+      .weather-timeline-grid,
+      .weather-decision-evidence-grid,
+      .weather-risk-feature-grid,
+      .weather-route-trend-grid,
+      .weather-cwa-control-deck {
         grid-template-columns: 1fr;
       }
       .weather-intersection-header {
@@ -4094,6 +4294,18 @@
       }
       .weather-map-timeline {
         padding: 15px 12px;
+      }
+      .weather-decision-evidence-card,
+      .weather-decision-evidence-card:nth-child(2) {
+        min-height: 0;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .weather-decision-evidence-card:last-child { border-bottom: 0; }
+      .weather-cwa-control-status { display: grid; }
+      .weather-cwa-frame-shell {
+        height: 440px;
+        min-height: 440px;
       }
       .weather-decision-primary,
       .weather-decision-metric,
@@ -4536,78 +4748,6 @@
     .field-instrument-theme .status.error,
     .field-instrument-theme .error {
       color: #ff9a83;
-    }
-
-    .field-instrument-theme .weather-field-hero {
-      position: relative;
-      display: grid;
-      grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr);
-      gap: 28px;
-      align-items: end;
-      min-height: 210px;
-      margin-bottom: 14px;
-      padding: clamp(24px, 4vw, 46px);
-      overflow: hidden;
-      border: 1px solid var(--line);
-      background:
-        radial-gradient(circle at 85% 25%, rgba(98, 184, 198, .19), transparent 18rem),
-        linear-gradient(120deg, rgba(18, 60, 52, .96), rgba(8, 16, 14, .98));
-      box-shadow: 0 22px 70px rgba(0, 0, 0, .27);
-    }
-
-    .field-instrument-theme .weather-field-hero::after {
-      content: "W";
-      position: absolute;
-      right: -22px;
-      bottom: -90px;
-      color: rgba(255, 255, 255, .025);
-      font: 500 260px/1 Georgia, serif;
-      transform: rotate(-8deg);
-    }
-
-    .field-instrument-theme .weather-field-hero > * {
-      position: relative;
-      z-index: 1;
-    }
-
-    .field-instrument-theme .weather-field-eyebrow {
-      margin: 0 0 8px;
-      color: var(--accent);
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: .15em;
-      text-transform: uppercase;
-    }
-
-    .field-instrument-theme .weather-field-hero h2 {
-      max-width: 780px;
-      margin: 0;
-      font: 500 clamp(34px, 5vw, 66px)/.93 Georgia, "Times New Roman", serif;
-      letter-spacing: -.055em;
-    }
-
-    .field-instrument-theme .weather-field-hero h2 em {
-      display: block;
-      color: var(--muted);
-      font-weight: 400;
-    }
-
-    .field-instrument-theme .weather-field-boundary {
-      padding: 15px;
-      border-left: 3px solid var(--accent-2);
-      color: var(--muted);
-      background: rgba(8, 16, 14, .48);
-    }
-
-    .field-instrument-theme .weather-field-boundary strong {
-      display: block;
-      margin-bottom: 6px;
-      color: #f4ca7c;
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .11em;
-      text-transform: uppercase;
     }
 
     .field-instrument-theme .weather-decision-band {
@@ -5312,7 +5452,6 @@
 
     @media (max-width: 1120px) {
       .field-instrument-theme .dashboard-shell { grid-template-columns: 1fr; }
-      .field-instrument-theme .weather-field-hero { grid-template-columns: 1fr; }
       .architecture-workbench,
       .architecture-lower-grid { grid-template-columns: 1fr; }
     }
@@ -5367,8 +5506,6 @@
 
     @media (max-width: 620px) {
       .field-instrument-theme .workspace { padding: 12px; }
-      .field-instrument-theme .weather-field-hero { min-height: 0; padding: 24px 18px; }
-      .field-instrument-theme .weather-field-hero h2 { font-size: 38px; }
       .field-instrument-theme .topbar { padding: 12px; }
     }
 
@@ -5990,11 +6127,30 @@
       pendingTabFocus: null,
       weatherData: {
         status: "idle",
+        schemaVersion: "weatherDecisionDashboard.v1",
+        dashboard: null,
         rainfall: null,
         imagery: null,
+        routeTrend: null,
+        routeRisk: null,
+        loraAlert: null,
+        decision: null,
         errors: [],
       },
+      connectedPreparation: null,
+      connectedPreparationPollTimer: null,
+      weatherLocationTrendStatus: {
+        status: "idle",
+        text: "位置尚未授權；目前不會讀取或保存隊伍座標。",
+      },
+      weatherTargetCheckpointId: "",
       weatherTimelineIndex: 0,
+      weatherCwaProduct: "radar",
+      weatherCwaWindowId: "12h",
+      weatherRadarOpacityPercent: 62,
+      weatherSatelliteOpacityPercent: 48,
+      weatherRainfallOpacityPercent: 56,
+      weatherCwaPlaying: false,
       selectedAction: "film",
       activeDebugDetail: "state",
       activeEvidenceTab: "default",
@@ -6103,9 +6259,9 @@
         routeEvidenceBundle: "normalized/routes/route_evidence_bundle.json",
         routeCorridorM: "500",
         referenceTrackCorridorM: "300",
-        prepareProfile: "pi-offline",
-        networkMode: "no-network",
-        allowNetworkFetch: false,
+        prepareProfile: "mac-workstation",
+        networkMode: "explicit-fetch",
+        allowNetworkFetch: true,
         aiMode: "fixture-or-precomputed",
         aiOutputPolicy: "hash-and-summary",
         imageryMinZoom: "12",
@@ -6153,6 +6309,7 @@
       bindMobileNavigation();
       bindAgentChatControls();
       setRoute(routeFromHash());
+      void triggerDashboardConnectedPreparation("dashboard-open");
       loadData().finally(() => {
         if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
       });
@@ -6262,6 +6419,74 @@
       } finally {
         window.clearTimeout(timer);
       }
+    }
+
+    function stopConnectedPreparationPolling() {
+      if (!state.connectedPreparationPollTimer) return;
+      window.clearTimeout(state.connectedPreparationPollTimer);
+      state.connectedPreparationPollTimer = null;
+    }
+
+    function scheduleConnectedPreparationPolling() {
+      stopConnectedPreparationPolling();
+      if (!["queued", "running"].includes(state.connectedPreparation?.status)) return;
+      state.connectedPreparationPollTimer = window.setTimeout(async () => {
+        state.connectedPreparationPollTimer = null;
+        const project = encodeURIComponent(projectId());
+        const priorCompletedAt = state.connectedPreparation?.completedAt || "";
+        try {
+          const status = await fetchJson(
+            `/admin/pretrip/projects/${project}/connected-preparation`,
+          );
+          state.connectedPreparation = status;
+          if (
+            status.completedAt
+            && status.completedAt !== priorCompletedAt
+            && state.route === "outdoor-weather"
+          ) {
+            await loadWeatherData();
+          }
+        } catch (error) {
+          state.connectedPreparation = {
+            ...(state.connectedPreparation || {}),
+            status: "error",
+            lastError: {message: String(error?.message || error || "Connected preparation status unavailable")},
+          };
+        } finally {
+          const preparationStillRunning = ["queued", "running"].includes(
+            state.connectedPreparation?.status,
+          );
+          if (!preparationStillRunning) refreshCurrentDataView();
+          scheduleConnectedPreparationPolling();
+        }
+      }, 3000);
+    }
+
+    async function triggerDashboardConnectedPreparation(reason = "dashboard-open", {force = false} = {}) {
+      const project = encodeURIComponent(projectId());
+      try {
+        state.connectedPreparation = await postJson(
+          `/admin/pretrip/projects/${project}/connected-preparation`,
+          {reason, force},
+        );
+      } catch (error) {
+        state.connectedPreparation = {
+          schemaVersion: "dashboardConnectedPreparation.v1",
+          projectId: projectId(),
+          status: "error",
+          lastError: {message: String(error?.message || error || "Connected preparation unavailable")},
+        };
+      }
+      refreshCurrentDataView();
+      scheduleConnectedPreparationPolling();
+      return state.connectedPreparation;
+    }
+
+    function connectedPreparationActivityLabel(value, status) {
+      if (["queued", "running"].includes(status)) return "in progress";
+      if (value === true) return "true";
+      if (value === false) return "false";
+      return status === "failed" ? "unknown · preparation failed" : "not started";
     }
 
     async function fetchFirstPretripJson(pathForProjectId, options = {}) {
@@ -6440,23 +6665,63 @@
       state.weatherData = {...state.weatherData, status: "loading", errors: []};
       refreshCurrentDataView();
       const project = encodeURIComponent(projectId());
-      const [rainfallResult, imageryResult] = await Promise.allSettled([
-        fetchJson(`/admin/pretrip/projects/${project}/rainfall-grids`),
-        fetchJson(`/admin/pretrip/projects/${project}/weather-imagery`),
-      ]);
-      const rainfall = rainfallResult.status === "fulfilled" ? rainfallResult.value : null;
-      const imagery = imageryResult.status === "fulfilled" ? imageryResult.value : null;
-      const errors = [rainfallResult, imageryResult]
-        .filter(result => result.status === "rejected")
-        .map(result => String(result.reason?.message || result.reason || "CWA cache unavailable"));
-      state.weatherData = {
-        status: rainfall && imagery ? "ready" : rainfall || imagery ? "partial" : errors.length ? "error" : "unavailable",
-        rainfall,
-        imagery,
-        errors,
-        loadedAt: new Date().toISOString(),
-        boundary: "cache-only",
-      };
+      try {
+        const [dashboardResult, preparationResult] = await Promise.allSettled([
+          fetchJson(`/admin/pretrip/projects/${project}/weather-dashboard`),
+          fetchJson(`/admin/pretrip/projects/${project}/connected-preparation`),
+        ]);
+        if (preparationResult.status === "fulfilled") {
+          state.connectedPreparation = preparationResult.value;
+          scheduleConnectedPreparationPolling();
+        }
+        if (dashboardResult.status === "rejected") throw dashboardResult.reason;
+        const dashboard = dashboardResult.value;
+        state.weatherData = {
+          status: dashboard.status || "unavailable",
+          schemaVersion: dashboard.schemaVersion || "weatherDecisionDashboard.v1",
+          dashboard,
+          rainfall: dashboard.rainfall || null,
+          imagery: dashboard.imagery || null,
+          routeTrend: dashboard.routeTrend || null,
+          routeRisk: dashboard.routeRisk || null,
+          loraAlert: dashboard.loraAlert || null,
+          decision: dashboard.decision || null,
+          connectedPreparation: state.connectedPreparation,
+          errors: [],
+          loadedAt: new Date().toISOString(),
+          boundary: "cache-only",
+        };
+      } catch (error) {
+        const preparationInProgress = ["queued", "running"].includes(
+          state.connectedPreparation?.status,
+        );
+        if (preparationInProgress) {
+          state.weatherData = {
+            ...state.weatherData,
+            status: "preparing",
+            connectedPreparation: state.connectedPreparation,
+            errors: [],
+            loadedAt: new Date().toISOString(),
+            boundary: "cache-only",
+          };
+          return;
+        }
+        state.weatherData = {
+          ...state.weatherData,
+          status: "error",
+          dashboard: null,
+          rainfall: null,
+          imagery: null,
+          routeTrend: null,
+          routeRisk: null,
+          loraAlert: null,
+          decision: null,
+          connectedPreparation: state.connectedPreparation,
+          errors: [String(error?.message || error || "Weather decision API unavailable")],
+          loadedAt: new Date().toISOString(),
+          boundary: "cache-only",
+        };
+      }
     }
 
     async function loadTrackedDebugEndpoint(key, path, applyPayload) {
@@ -8090,8 +8355,8 @@
                   ${renderImportTextField("prepareRouteEvidenceBundle", "Route evidence bundle", draft.routeEvidenceBundle || "", "normalized/routes/route_evidence_bundle.json")}
                   ${renderImportNumberField("prepareRouteCorridorM", "Route corridor (m)", draft.routeCorridorM || "500")}
                   ${renderImportNumberField("prepareReferenceTrackCorridorM", "Reference track corridor (m)", draft.referenceTrackCorridorM || "300")}
-                  ${renderImportTextField("prepareLayersProfile", "Prepare profile", draft.prepareProfile || "pi-offline", "pi-offline")}
-                  ${renderImportTextField("prepareLayersNetworkMode", "Network mode", draft.networkMode || "no-network", "no-network")}
+                  ${renderImportTextField("prepareLayersProfile", "Prepare profile", draft.prepareProfile || "mac-workstation", "mac-workstation")}
+                  ${renderImportTextField("prepareLayersNetworkMode", "Network mode", draft.networkMode || "explicit-fetch", "explicit-fetch")}
                   ${renderImportTextField("prepareAiMode", "AI mode", draft.aiMode || "fixture-or-precomputed", "fixture-or-precomputed")}
                   ${renderImportTextField("prepareAiOutputPolicy", "AI output policy", draft.aiOutputPolicy || "hash-and-summary", "hash-and-summary")}
                   ${renderImportNumberField("prepareImageryMinZoom", "Imagery min zoom", draft.imageryMinZoom || "12")}
@@ -9339,6 +9604,18 @@
       `;
     }
 
+    function weatherImageryFrames(snapshot, family = state.weatherCwaProduct, windowId = state.weatherCwaWindowId) {
+      const overlay = snapshot?.weather?.imagery?.childOverlays?.[family] || {};
+      const frames = asArray(overlay.frames)
+        .filter(frame => frame && frame.sourceTimestamp)
+        .slice()
+        .sort((left, right) => String(left.sourceTimestamp).localeCompare(String(right.sourceTimestamp)));
+      const windowFrameIds = asArray(overlay.windows?.[windowId]);
+      if (!windowFrameIds.length) return frames;
+      const allowed = new Set(windowFrameIds);
+      return frames.filter(frame => allowed.has(frame.frameId));
+    }
+
     function weatherCandidateSnapshot() {
       const weather = state.weatherData || {};
       const compactRainfallProducts = asArray(state.project?.cwa_qpf?.rainfall_products);
@@ -9369,6 +9646,11 @@
         imageryFamilies,
         loading: weather.status === "idle" || weather.status === "loading",
         preferredRainfall,
+        decision: weather.decision || null,
+        routeRisk: weather.routeRisk || null,
+        routeTrend: weather.routeTrend || null,
+        loraAlert: weather.loraAlert || null,
+        connectedPreparation: weather.connectedPreparation || state.connectedPreparation,
         statusMeta,
         weather,
       };
@@ -9380,6 +9662,17 @@
         tone: "info",
         summary: "Loading cache-only CWA evidence before route impact can be reviewed.",
       };
+      const apiDecision = snapshot.decision?.candidateDecision;
+      if (apiDecision) {
+        const tone = apiDecision === "GO"
+          ? "ok"
+          : (apiDecision === "NO_GO" || apiDecision === "CHANGE_PLAN" ? "bad" : "warn");
+        return {
+          label: apiDecision.replaceAll("_", " "),
+          tone,
+          summary: snapshot.decision.summary || "Weather decision candidate requires operator review.",
+        };
+      }
       const hasImagery = snapshot.imageryFamilies.some(item => Boolean(item.current));
       if (!snapshot.preferredRainfall && !hasImagery) return {
         label: "DELAY",
@@ -9413,17 +9706,196 @@
       };
     }
 
+    function weatherBooleanLabel(value) {
+      if (value === true) return "YES";
+      if (value === false) return "NO";
+      return "UNKNOWN";
+    }
+
+    function weatherNumberLabel(value, suffix = "", digits = 0) {
+      if (value === null || value === undefined || value === "" || typeof value === "boolean") return "UNKNOWN";
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "UNKNOWN";
+      return `${number.toFixed(digits)}${suffix}`;
+    }
+
+    function weatherPercentLabel(value, digits = 0) {
+      if (value === null || value === undefined || value === "" || typeof value === "boolean") {
+        return "0% · no evidence";
+      }
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "0% · no evidence";
+      return weatherNumberLabel(number * 100, "%", digits);
+    }
+
+    function weatherTrendTargets() {
+      return asArray(state.project?.checkpoints)
+        .filter(item => item && Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon)))
+        .map(item => ({
+          id: String(item.candidate_id || item.source_id || item.label || "checkpoint"),
+          label: String(item.label || item.candidate_id || item.source_id || "Checkpoint"),
+          lat: Number(item.lat),
+          lon: Number(item.lon),
+        }));
+    }
+
+    function selectedWeatherTrendTarget() {
+      const targets = weatherTrendTargets();
+      return targets.find(item => item.id === state.weatherTargetCheckpointId)
+        || targets.find(item => item.id !== "cp.start")
+        || targets[0]
+        || null;
+    }
+
+    function browserCurrentPosition() {
+      if (!navigator.geolocation) return Promise.reject(new Error("Browser geolocation is unavailable"));
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          position => resolve(position),
+          error => reject(new Error(error?.message || "Location access was not approved")),
+          {enableHighAccuracy: true, timeout: 15000, maximumAge: 60000},
+        );
+      });
+    }
+
+    async function requestAuthorizedRainfallTrend() {
+      const target = selectedWeatherTrendTarget();
+      if (!target) {
+        state.weatherLocationTrendStatus = {status: "error", text: "沒有可用的目標 checkpoint。"};
+        refreshCurrentDataView();
+        return;
+      }
+      state.weatherLocationTrendStatus = {
+        status: "requesting",
+        text: "等待瀏覽器位置授權；原始座標不會寫入 workspace。",
+      };
+      refreshCurrentDataView();
+      try {
+        const position = await browserCurrentPosition();
+        const project = encodeURIComponent(projectId());
+        const approval = await postJson(
+          `/admin/pretrip/projects/${project}/rainfall-location-approvals`,
+          {
+            confirmLocationAccess: true,
+            scope: "current_trip_rainfall_sampling",
+            operatorAlias: "dashboard_operator",
+            ttlMinutes: 30,
+          },
+        );
+        const trend = await postJson(
+          `/admin/pretrip/projects/${project}/rainfall-trend`,
+          {
+            currentPosition: {
+              lat: position.coords.latitude,
+              lon: position.coords.longitude,
+              observedAt: new Date(position.timestamp || Date.now()).toISOString(),
+              accuracyM: Number.isFinite(Number(position.coords.accuracy)) ? Number(position.coords.accuracy) : null,
+            },
+            targetPosition: {lat: target.lat, lon: target.lon, id: target.id},
+            confirmLocationAccess: true,
+            locationApprovalReference: approval.reference,
+            locationApprovedAt: approval.approvedAt,
+            locationApprovalScope: approval.scope,
+          },
+        );
+        state.weatherData = {...state.weatherData, routeTrend: trend};
+        state.weatherLocationTrendStatus = {
+          status: "ready",
+          text: `${target.label} 趨勢已更新；rawCoordinatesPersisted=${trend.boundary?.rawCoordinatesPersisted === true ? "true" : "false"}。`,
+        };
+      } catch (error) {
+        state.weatherLocationTrendStatus = {
+          status: "error",
+          text: String(error?.message || error || "位置雨量趨勢更新失敗"),
+        };
+      }
+      refreshCurrentDataView();
+    }
+
+    function renderWeatherDecisionEvidence(snapshot) {
+      const decision = snapshot.decision || {};
+      const risk = snapshot.routeRisk || {};
+      const features = risk.imageryFeatures || {};
+      const trend = snapshot.routeTrend || {};
+      const current = trend.currentPosition || {};
+      const target = trend.target || {};
+      const interactions = asArray(risk.weatherTerrainInteractions);
+      const why = asArray(decision.why);
+      const where = asArray(decision.where);
+      const featureRows = [
+        ["Current rain on route", weatherBooleanLabel(features.currentRainOnRoute), features.currentRainOnRoute === true],
+        ["Nearby strong echo", weatherBooleanLabel(features.nearbyStrongEcho), features.nearbyStrongEcho === true],
+        ["Rain band approaching", weatherBooleanLabel(features.rainBandApproaching), features.rainBandApproaching === true],
+        ["Estimated rain arrival", weatherNumberLabel(features.estimatedRainArrivalMinutes, " min"), features.estimatedRainArrivalMinutes !== null && features.estimatedRainArrivalMinutes !== undefined && Number.isFinite(Number(features.estimatedRainArrivalMinutes))],
+        ["Convective cell score", weatherPercentLabel(features.convectiveCellScore), Number(features.convectiveCellScore) >= .7],
+        ["Satellite convective cloud", weatherPercentLabel(features.satelliteConvectiveCloudScore), Number(features.satelliteConvectiveCloudScore) >= .7],
+        ["Cloud motion toward route", weatherBooleanLabel(features.cloudMotionTowardRoute), features.cloudMotionTowardRoute === true],
+        ["Data delay", weatherNumberLabel(features.dataDelayMinutes, " min"), false],
+        ["Confidence", weatherPercentLabel(features.confidence), false],
+      ];
+      const trendTargets = weatherTrendTargets();
+      const selectedTarget = selectedWeatherTrendTarget();
+      const locationStatus = state.weatherLocationTrendStatus || {status: "idle", text: "位置尚未授權。"};
+      const routeTrendCard = (label, item, fallbackId = "") => `
+        <div class="weather-route-trend-card">
+          <small>${escapeHtml(label)}</small>
+          <strong>${escapeHtml(item?.id || fallbackId || item?.status || "unresolved")} · ${escapeHtml(item?.trend || "unknown")}</strong>
+          <span>Past 1h ${escapeHtml(weatherNumberLabel(item?.past1hMm, " mm", 1))} → next 1h ${escapeHtml(weatherNumberLabel(item?.next1hMm, " mm", 1))}</span>
+        </div>
+      `;
+      return `
+        <section class="panel" data-weather-decision-evidence="true">
+          <div class="panel-header">
+            <h3>Weather → Decision API</h3>
+            <span class="chip ${decision.candidateDecision === "GO" ? "ok" : decision.candidateDecision ? "warn" : "bad"}">${escapeHtml(snapshot.weather.schemaVersion || "weatherDecisionDashboard.v1")}</span>
+          </div>
+          <p class="small-note" style="padding:0 14px 12px">Decision / Why / Where / When · route-specific candidate evidence aligned to SCOUT_OUTDOOR_AI_AGENT_STANDARD §10.</p>
+          <div class="weather-decision-evidence-grid">
+            <article class="weather-decision-evidence-card"><small>Decision</small><strong>${escapeHtml(decision.candidateDecision || "DELAY")}</strong><p>${escapeHtml(decision.summary || "Weather decision evidence is unavailable.")}</p></article>
+            <article class="weather-decision-evidence-card"><small>Why</small><strong>${why.length} route signals</strong><ul>${why.length ? why.slice(0, 5).map(item => `<li>${escapeHtml(item)}</li>`).join("") : "<li>No adequate route-specific conclusion.</li>"}</ul></article>
+            <article class="weather-decision-evidence-card"><small>Where</small><strong>${escapeHtml(where.join(" · ") || "route buffer unresolved")}</strong><p>${interactions.length ? `${interactions.length} explicit weather × TEII interaction candidates.` : "No explicit terrain interaction candidate is prepared."}</p></article>
+            <article class="weather-decision-evidence-card"><small>When</small><strong>${escapeHtml(decision.when || "unresolved")}</strong><p>${escapeHtml(decision.recommendedAction || "Refresh prepared evidence before route review.")}</p></article>
+          </div>
+          <div class="weather-risk-feature-grid">
+            ${featureRows.map(([label, value, signal]) => `<div class="weather-risk-feature" data-signal="${signal ? "true" : "false"}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></div>`).join("")}
+          </div>
+          <div class="weather-route-trend-grid">
+            ${routeTrendCard("Team position rainfall trend", current)}
+            ${routeTrendCard("Target rainfall trend", target, "target unresolved")}
+          </div>
+          <div class="panel-body" data-weather-location-trend="true">
+            <label class="metric-row"><span>趨勢目標</span><select data-weather-target-checkpoint="true">
+              ${trendTargets.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === selectedTarget?.id ? "selected" : ""}>${escapeHtml(item.label)} · ${escapeHtml(item.id)}</option>`).join("")}
+            </select></label>
+            <button type="button" data-weather-authorize-location="true" ${locationStatus.status === "requesting" || !selectedTarget ? "disabled" : ""}>授權目前位置並更新降雨趨勢</button>
+            <p class="small-note" data-weather-location-status="${escapeHtml(locationStatus.status)}">${escapeHtml(locationStatus.text)}</p>
+          </div>
+          ${interactions.length ? `<div class="weather-terrain-rule-list">${interactions.map(item => `<div class="weather-terrain-rule"><strong>${escapeHtml(item.ruleCode || "weather-terrain")}</strong><span>${escapeHtml(item.segmentId || "segment unresolved")} · TEII ${escapeHtml(weatherNumberLabel(item.teii_20m))}</span></div>`).join("")}</div>` : ""}
+          <p class="small-note" style="padding:0 14px 14px">LoRa preview: ${escapeHtml(weatherNumberLabel(snapshot.loraAlert?.byteLength, " B"))} · sent=${snapshot.loraAlert?.sent === true ? "true" : "false"} · no RF action is authorized.</p>
+        </section>
+      `;
+    }
+
     function renderWeatherLiveSummary(snapshot = weatherCandidateSnapshot()) {
       if (snapshot.loading) {
         return `<section class="panel" data-weather-status="loading"><div class="panel-header"><h3>CWA Live Cache</h3><span class="chip info">loading</span></div><div class="panel-body">Loading cache-only rainfall and imagery evidence for this project.</div></section>`;
       }
-      const {availableCells, coverageStatus, derived, freshness, imageryFamilies, preferredRainfall, statusMeta, weather} = snapshot;
+      const {availableCells, coverageStatus, connectedPreparation, derived, freshness, imageryFamilies, preferredRainfall, routeRisk, routeTrend, statusMeta, weather} = snapshot;
+      const preparation = connectedPreparation || {};
       return `
         <section class="panel" data-weather-status="${escapeHtml(derived)}">
-          <div class="panel-header"><h3>CWA Live Cache</h3><span class="chip ${statusMeta.tone}">${escapeHtml(statusMeta.label)}</span></div>
+          <div class="panel-header"><h3>Weather API provenance</h3><span class="chip ${statusMeta.tone}">${escapeHtml(statusMeta.label)}</span></div>
           <div class="panel-body">
             <div class="metric-line">
-              <div class="metric-row"><span>Boundary</span><strong>cache-only · candidate-only</strong></div>
+              <div class="metric-row"><span>Boundary</span><strong>read cache-only · server connected refresh · candidate-only</strong></div>
+              <div class="metric-row"><span>Background preparation</span><strong>${escapeHtml(preparation.status || "not_started")}</strong></div>
+              <div class="metric-row"><span>Fetch policy</span><strong>${escapeHtml(`${preparation.profile || "mac-workstation"} · ${preparation.networkMode || "explicit-fetch"} · allow=${preparation.allowNetworkFetch === true}`)}</strong></div>
+              <div class="metric-row"><span>CWA request attempted</span><strong>${escapeHtml(connectedPreparationActivityLabel(preparation.cwaApiRequestAttempted, preparation.status))}</strong></div>
+              <div class="metric-row"><span>External API calls</span><strong>${escapeHtml(connectedPreparationActivityLabel(preparation.externalApiCallsMade, preparation.status))}</strong></div>
+              <div class="metric-row"><span>Next server refresh</span><strong>${escapeHtml(formatCwaTimestamp(preparation.nextRunAt, "pending"))}</strong></div>
+              <div class="metric-row"><span>API contract</span><strong>${escapeHtml(weather.schemaVersion || "weatherDecisionDashboard.v1")}</strong></div>
+              <div class="metric-row"><span>Route risk</span><strong>${escapeHtml(routeRisk?.status || "not_prepared")}</strong></div>
+              <div class="metric-row"><span>Position / target trend</span><strong>${escapeHtml(routeTrend?.status || "not_prepared")}</strong></div>
               <div class="metric-row"><span>Rainfall product</span><strong>${escapeHtml(preferredRainfall?.gridKind || "unavailable")}</strong></div>
               <div class="metric-row"><span>Freshness</span><strong>${escapeHtml(freshness)}</strong></div>
               <div class="metric-row"><span>Coverage</span><strong>${escapeHtml(coverageStatus === "covered" ? `${availableCells} route-bbox cells` : coverageStatus)}</strong></div>
@@ -9438,10 +9910,11 @@
     }
 
     function weatherTimelineFrames(snapshot) {
-      return asArray(snapshot.weather?.imagery?.childOverlays?.radar?.frames)
-        .filter(frame => frame && frame.sourceTimestamp)
-        .slice()
-        .sort((left, right) => String(left.sourceTimestamp).localeCompare(String(right.sourceTimestamp)));
+      return weatherImageryFrames(
+        snapshot,
+        state.weatherCwaProduct,
+        state.weatherCwaWindowId,
+      );
     }
 
     function renderWeatherTimeline(snapshot) {
@@ -9450,18 +9923,18 @@
       const frames = weatherTimelineFrames(snapshot);
       const maxIndex = Math.max(0, frames.length - 1);
       const selectedIndex = Math.min(Math.max(0, Number(state.weatherTimelineIndex || 0)), maxIndex);
-      const selectedFrame = frames[selectedIndex] || radar;
+      const selectedFrame = frames[selectedIndex] || (state.weatherCwaProduct === "satellite" ? satellite : radar);
       const steps = [
         ["Rainfall basis", formatCwaTimestamp(snapshot.preferredRainfall?.sourceTimestamp, "not available"), snapshot.preferredRainfall?.gridKind || "no product", ""],
-        ["Radar frame", formatCwaTimestamp(selectedFrame?.sourceTimestamp, "not available"), selectedFrame ? `${selectedIndex + 1} / ${frames.length || 1} cached frame` : "no cached frame", "is-current"],
+        [`${state.weatherCwaProduct} frame`, formatCwaTimestamp(selectedFrame?.sourceTimestamp, "not available"), selectedFrame ? `${selectedIndex + 1} / ${frames.length || 1} cached frame` : "no cached frame", "is-current"],
         ["Satellite frame", formatCwaTimestamp(satellite?.sourceTimestamp, "not available"), satellite ? "latest cached frame" : "no cached frame", ""],
         ["Evidence valid until", formatCwaTimestamp(snapshot.preferredRainfall?.validUntil, "unresolved"), "recheck after this boundary", "is-expiry"],
       ];
       return `
         <div class="weather-map-timeline" data-weather-timeline="true">
           <div class="weather-map-time-labels">
-            <strong>Evidence timeline · ${escapeHtml(formatCwaTimestamp(selectedFrame?.sourceTimestamp, "no cached radar frames"))}</strong>
-            <span>${frames.length > 1 ? `${frames.length} cache frames` : "timeline unavailable"}</span>
+            <strong data-weather-evidence-time="true">Evidence timeline · ${escapeHtml(formatCwaTimestamp(selectedFrame?.sourceTimestamp, `no cached ${state.weatherCwaProduct} frames`))}</strong>
+            <span data-weather-evidence-count="true">${frames.length > 1 ? `${frames.length} cache frames · slider enabled` : "one or zero frames · animation unavailable"}</span>
           </div>
           <input type="range" min="0" max="${maxIndex}" value="${selectedIndex}" step="1" data-weather-evidence-timeline="true" aria-label="Select cached radar evidence frame" ${frames.length < 2 ? "disabled" : ""}>
           <div class="weather-timeline-grid">
@@ -9518,60 +9991,33 @@
 
     function renderWeatherIntersectionMap(snapshot) {
       const mapData = buildMapData();
-      const radarEnabled = Boolean(state.layerEnabled["cwa-weather"]);
-      const rainfallEnabled = Boolean(state.layerEnabled["cwa-qpf"] || state.layerEnabled["antecedent-rain"]);
-      const routeEnabled = Boolean(state.layerEnabled.route || state.layerEnabled.segments || state.layerEnabled.checkpoints);
-      const radarAvailable = snapshot.imageryFamilies.some(item => item.family === "radar" && item.current);
-      const rainfallAvailable = snapshot.coverageStatus === "covered";
-      const routePath = mapData.connected
-        ? mapData.routePath
-        : "M96 500 C188 418 222 344 328 304 C424 267 516 214 646 130 C750 61 839 43 920 76";
-      const routeMarkers = weatherRouteMarkers(mapData);
       const callout = weatherIntersectionCallout(snapshot, mapData);
-      const layerControls = [
-        ["radar", "RADAR", radarEnabled],
-        ["rainfall", "RAINFALL GRID", rainfallEnabled],
-        ["route", "ROUTE", routeEnabled],
-      ];
-      const rainfallOpacity = rainfallAvailable ? ".34" : ".12";
+      const frames = weatherTimelineFrames(snapshot);
+      const maxIndex = Math.max(0, frames.length - 1);
+      const selectedIndex = Math.min(Math.max(0, Number(state.weatherTimelineIndex || 0)), maxIndex);
+      const selectedFrame = frames[selectedIndex] || null;
+      const animationWindows = asArray(snapshot.weather?.imagery?.animationWindowsHours).length
+        ? asArray(snapshot.weather.imagery.animationWindowsHours)
+        : [3, 6, 9, 12];
       return `
         <section class="panel weather-intersection-panel" data-weather-intersection-map="true">
           <div class="weather-intersection-header">
-            <h3>Route-weather intersection</h3>
-            <span class="chip ${mapData.connected ? "info" : "warn"}">${mapData.connected ? "route bbox · candidate only" : "visual fallback · not live runtime"}</span>
+            <div><h3>Canonical Pre-trip Map</h3><p class="small-note">The Weather page reuses the MAP renderer and its prepared CWA overlays; no browser image processing is added.</p></div>
+            <button type="button" data-weather-open-map="true">Open full MAP page</button>
           </div>
-          <div class="weather-intersection-map">
-            <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="Route-weather intersection candidate evidence map">
-              <defs>
-                <pattern id="weatherContourPattern" width="126" height="96" patternUnits="userSpaceOnUse">
-                  <path d="M-18 74 Q42 24 108 72 T234 72" fill="none" stroke="#264139" stroke-width="2" opacity=".76"></path>
-                  <path d="M-18 88 Q42 38 108 86 T234 86" fill="none" stroke="#1c332d" stroke-width="1.5" opacity=".9"></path>
-                </pattern>
-              </defs>
-              <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="#071512"></rect>
-              <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="url(#weatherContourPattern)"></rect>
-              <g data-weather-map-visual="rainfall" data-layer-hidden="${rainfallEnabled ? "false" : "true"}" data-weather-rainfall-state="${escapeHtml(snapshot.coverageStatus)}">
-                <rect x="594" y="86" width="138" height="136" fill="#36a7c0" opacity="${rainfallOpacity}"></rect>
-                <rect x="732" y="86" width="138" height="136" fill="#c2ad46" opacity="${rainfallOpacity}"></rect>
-                <rect x="870" y="86" width="138" height="136" fill="#d55d3f" opacity="${rainfallOpacity}"></rect>
-                <rect x="594" y="222" width="138" height="136" fill="#5f9e91" opacity="${rainfallOpacity}"></rect>
-                <rect x="732" y="222" width="138" height="136" fill="#c38b34" opacity="${rainfallOpacity}"></rect>
-                <rect x="870" y="222" width="138" height="136" fill="#c8563d" opacity="${rainfallOpacity}"></rect>
-                ${rainfallAvailable ? "" : `<rect x="594" y="86" width="406" height="272" fill="none" stroke="#7e9189" stroke-width="2" stroke-dasharray="10 9"></rect><text x="797" y="207" text-anchor="middle" fill="#a9b5ad" font-family="ui-monospace, monospace" font-size="14">NO CACHED ROUTE-BBOX CELLS</text>`}
-              </g>
-              <g data-weather-map-visual="radar" data-layer-hidden="${radarEnabled ? "false" : "true"}" data-weather-radar-state="${radarAvailable ? "available" : "unavailable"}">
-                <ellipse cx="790" cy="177" rx="172" ry="118" fill="${radarAvailable ? "#47a8bd" : "none"}" opacity="${radarAvailable ? ".16" : "1"}" stroke="#58b6c9" stroke-width="3" stroke-dasharray="12 10"></ellipse>
-                ${radarAvailable ? "" : `<text x="790" y="181" text-anchor="middle" fill="#8bb9bd" font-family="ui-monospace, monospace" font-size="13">NO CACHED RADAR FRAME</text>`}
-              </g>
-              <g data-weather-map-visual="route" data-layer-hidden="${routeEnabled ? "false" : "true"}" data-route-source="${escapeHtml(mapData.sourcePath)}">
-                <path d="${routePath}" fill="none" stroke="#f3dc92" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 14"></path>
-                ${rainfallAvailable ? `<path d="${routePath}" fill="none" stroke="#ff684a" stroke-width="18" stroke-linecap="round" opacity=".5" stroke-dasharray="0 590 145 999"></path>` : ""}
-                ${routeMarkers.map(({x, y, label}) => `<g><circle cx="${Number(x).toFixed(1)}" cy="${Number(y).toFixed(1)}" r="9" fill="#071512" stroke="#d8ddd2" stroke-width="3"></circle><text x="${Number(x).toFixed(1)}" y="${(Number(y) + 31).toFixed(1)}" text-anchor="middle" fill="#d8ddd2" font-family="ui-monospace, monospace" font-size="13">${escapeHtml(label)}</text></g>`).join("")}
-              </g>
-            </svg>
-            <div class="weather-map-layer-stack" aria-label="Weather map layers">
-              ${layerControls.map(([id, label, enabled]) => `<button type="button" data-weather-map-layer="${id}" aria-pressed="${enabled ? "true" : "false"}">${label}</button>`).join("")}
-            </div>
+          <div class="weather-cwa-control-deck" aria-label="Weather CWA imagery controls">
+            <label>Product<select data-weather-cwa-product="true"><option value="radar" ${state.weatherCwaProduct === "radar" ? "selected" : ""}>Radar echo</option><option value="satellite" ${state.weatherCwaProduct === "satellite" ? "selected" : ""}>Satellite cloud</option></select></label>
+            <label>Window<select data-weather-cwa-window="true">${animationWindows.map(hours => `<option value="${Number(hours)}h" ${state.weatherCwaWindowId === `${Number(hours)}h` ? "selected" : ""}>${Number(hours)} hours</option>`).join("")}</select></label>
+            <label>Frame<input type="range" min="0" max="${maxIndex}" value="${selectedIndex}" step="1" data-weather-cwa-timeline="true" ${frames.length < 2 ? "disabled" : ""}></label>
+            <label>Radar opacity<input type="range" min="0" max="100" value="${Number(state.weatherRadarOpacityPercent)}" data-weather-cwa-opacity="radar"></label>
+            <label>Satellite opacity<input type="range" min="0" max="100" value="${Number(state.weatherSatelliteOpacityPercent)}" data-weather-cwa-opacity="satellite"></label>
+            <label>Rain-grid opacity<input type="range" min="0" max="100" value="${Number(state.weatherRainfallOpacityPercent)}" data-weather-cwa-rainfall-opacity="true"></label>
+            <button type="button" data-weather-cwa-play="true" aria-pressed="${state.weatherCwaPlaying ? "true" : "false"}" ${frames.length < 2 ? "disabled" : ""}>${state.weatherCwaPlaying ? "Pause" : "Play"}</button>
+            <div class="weather-cwa-control-status"><output data-weather-cwa-status="true">${escapeHtml(selectedFrame ? `${selectedIndex + 1}/${frames.length} · ${formatCwaTimestamp(selectedFrame.sourceTimestamp)}` : `No cached ${state.weatherCwaProduct} frame`)}</output><span>${escapeHtml(state.weatherCwaWindowId)} · cache-only</span></div>
+          </div>
+          <div class="weather-intersection-map weather-cwa-frame-shell">
+            <iframe class="weather-cwa-map-frame" data-weather-cwa-map-frame="true" title="Canonical Pre-trip CWA weather map" src="${escapeHtml(surfaceSrc("/admin/pretrip"))}" loading="eager"></iframe>
+            <span class="weather-cwa-frame-state" data-weather-cwa-frame-state="loading">CWA MAP BRIDGE · LOADING</span>
             <div class="weather-map-route-callout" data-weather-intersection-callout="true">
               <strong>${escapeHtml(callout.title)}</strong>
               <span>${escapeHtml(callout.detail)}</span>
@@ -9586,12 +10032,13 @@
       const coverage = snapshot.coverageStatus === "covered"
         ? `${snapshot.availableCells} route-bbox cells available`
         : snapshot.coverageStatus;
+      const decision = snapshot.decision || {};
       return `
         <section class="panel" data-weather-actions="true">
           <div class="panel-header"><h3>Do next</h3><span class="chip warn">operator review</span></div>
           <div class="panel-body">
             <div class="weather-action-list">
-              <div class="weather-action-item"><b>1</b><div><strong>Inspect route-weather overlap</strong><span>Use the shared Scout Map to locate exposed ridge, creek and retreat intersections.</span></div></div>
+              <div class="weather-action-item"><b>1</b><div><strong>${escapeHtml(decision.candidateDecision || "DELAY")} candidate</strong><span>${escapeHtml(decision.recommendedAction || "Refresh route-specific weather evidence before review.")}</span></div></div>
               <div class="weather-action-item"><b>2</b><div><strong>Verify evidence integrity</strong><span>Freshness: ${escapeHtml(snapshot.freshness)} · Coverage: ${escapeHtml(coverage)}.</span></div></div>
               <div class="weather-action-item"><b>3</b><div><strong>Recheck before committing</strong><span>A new cache read may change the candidate posture; it never mutates runtime safety truth.</span></div></div>
             </div>
@@ -9629,20 +10076,13 @@
       const routeCoverage = snapshot.coverageStatus === "covered"
         ? `${snapshot.availableCells} route-bbox cells`
         : snapshot.coverageStatus;
-      const criticalWindow = formatCwaTimestamp(snapshot.preferredRainfall?.validUntil, "unresolved");
+      const arrivalMinutes = snapshot.routeRisk?.imageryFeatures?.estimatedRainArrivalMinutes;
+      const criticalWindow = arrivalMinutes !== null && arrivalMinutes !== undefined && Number.isFinite(Number(arrivalMinutes))
+        ? `${Number(arrivalMinutes)} min estimated arrival`
+        : formatCwaTimestamp(snapshot.preferredRainfall?.validUntil, "unresolved");
       const radarTime = formatCwaTimestamp(snapshot.imageryFamilies.find(item => item.family === "radar")?.current?.sourceTimestamp, "awaiting frame");
       return `
         ${outdoorTabs(force.route)}
-        <section class="weather-field-hero" data-weather-field-hero="true">
-          <div>
-            <p class="weather-field-eyebrow">Weather → route decision</p>
-            <h2>Weather is not a forecast.<em>It is a route constraint.</em></h2>
-          </div>
-          <div class="weather-field-boundary">
-            <strong>Candidate evidence only</strong>
-            Cache-only rainfall, radar and satellite layers support operator review. They never represent or mutate runtime safety truth.
-          </div>
-        </section>
         <section class="panel weather-decision-band" data-weather-decision-band="true">
           <div class="weather-decision-primary" data-tone="${escapeHtml(posture.tone)}">
             <small>Weather decision readiness · candidate posture</small>
@@ -9656,10 +10096,11 @@
         <div style="height:12px"></div>
         <div class="weather-workspace">
           <div class="weather-primary-stack">
+            ${renderWeatherDecisionEvidence(snapshot)}
             ${renderWeatherIntersectionMap(snapshot)}
           </div>
           <aside class="weather-side-stack">
-            <p class="weather-boundary-note"><strong>Candidate evidence only.</strong> Cache-only weather layers support review; they do not represent or mutate runtime safety truth.</p>
+            <p class="weather-boundary-note"><strong>Candidate evidence only.</strong> Reads stay cache-only while the Mac/server performs connected preparation in the background; neither path mutates runtime safety truth.</p>
             ${renderWeatherActions(snapshot)}
             ${renderWeatherLiveSummary(snapshot)}
             ${renderWeatherExampleRules()}
@@ -11717,7 +12158,10 @@
 
     function dashboardWeatherDerivedStatus(weather = state.weatherData || {}, project = state.project || {}) {
       if (weather.status === "idle" || weather.status === "loading") return "loading";
+      if (weather.status === "preparing") return "loading";
       if (weather.status === "error") return "error";
+      if (weather.status === "unavailable") return "unavailable";
+      if (weather.status === "stale_data") return "stale_data";
       const compactRainfallProducts = asArray(project?.cwa_qpf?.rainfall_products);
       const rainfallProducts = asArray(weather.rainfall?.products).length
         ? asArray(weather.rainfall.products).map((product) => ({
@@ -11739,6 +12183,7 @@
       const coverageStatus = preferredRainfall
         ? (availableCells > 0 ? "covered" : "no_coverage")
         : "unavailable";
+      if (weather.status === "partial" && !preferredRainfall && !currentImagery) return "partial";
       return dashboardCwaDerivedStatus({
         status: weather.status === "partial" ? "partial" : imageryStatus === "cache_missing" ? "unavailable" : "ready",
         bridgeReady: true,
@@ -12744,9 +13189,232 @@
       });
     }
 
+    function weatherCwaMapController(frame = document.querySelector('[data-weather-cwa-map-frame="true"]')) {
+      try {
+        return frame?.contentWindow?.scoutCwaImageryController || null;
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function syncWeatherCwaBridgeState(snapshot = {}) {
+      state.weatherCwaProduct = ["radar", "satellite"].includes(snapshot.productId)
+        ? snapshot.productId
+        : state.weatherCwaProduct;
+      state.weatherCwaWindowId = ["3h", "6h", "9h", "12h"].includes(snapshot.windowId)
+        ? snapshot.windowId
+        : state.weatherCwaWindowId;
+      state.weatherTimelineIndex = Math.max(0, Number(snapshot.frameIndex) || 0);
+      state.weatherRadarOpacityPercent = Math.max(0, Math.min(100, Number(snapshot.radarOpacityPercent) || 0));
+      state.weatherSatelliteOpacityPercent = Math.max(0, Math.min(100, Number(snapshot.satelliteOpacityPercent) || 0));
+      state.weatherRainfallOpacityPercent = Math.max(0, Math.min(100, Number(snapshot.rainfallOpacityPercent) || 0));
+      state.weatherCwaPlaying = Boolean(snapshot.playing);
+      const product = document.querySelector('[data-weather-cwa-product="true"]');
+      const windowSelect = document.querySelector('[data-weather-cwa-window="true"]');
+      const timeline = document.querySelector('[data-weather-cwa-timeline="true"]');
+      const evidenceTimeline = document.querySelector('[data-weather-evidence-timeline="true"]');
+      const radarOpacity = document.querySelector('[data-weather-cwa-opacity="radar"]');
+      const satelliteOpacity = document.querySelector('[data-weather-cwa-opacity="satellite"]');
+      const rainfallOpacity = document.querySelector('[data-weather-cwa-rainfall-opacity="true"]');
+      const play = document.querySelector('[data-weather-cwa-play="true"]');
+      if (product) product.value = state.weatherCwaProduct;
+      if (windowSelect) windowSelect.value = state.weatherCwaWindowId;
+      if (timeline) {
+        timeline.max = String(Math.max(0, Number(snapshot.maxFrameIndex) || 0));
+        timeline.value = String(state.weatherTimelineIndex);
+        timeline.disabled = Number(snapshot.maxFrameIndex || 0) < 1;
+      }
+      if (evidenceTimeline) {
+        evidenceTimeline.max = String(Math.max(0, Number(snapshot.maxFrameIndex) || 0));
+        evidenceTimeline.value = String(state.weatherTimelineIndex);
+        evidenceTimeline.disabled = Number(snapshot.maxFrameIndex || 0) < 1;
+      }
+      if (radarOpacity) radarOpacity.value = String(state.weatherRadarOpacityPercent);
+      if (satelliteOpacity) satelliteOpacity.value = String(state.weatherSatelliteOpacityPercent);
+      if (rainfallOpacity) rainfallOpacity.value = String(state.weatherRainfallOpacityPercent);
+      if (play) {
+        play.disabled = Number(snapshot.maxFrameIndex || 0) < 1;
+        play.textContent = state.weatherCwaPlaying ? "Pause" : "Play";
+        play.setAttribute("aria-pressed", state.weatherCwaPlaying ? "true" : "false");
+      }
+      const current = snapshot.current || null;
+      const evidenceTime = document.querySelector('[data-weather-evidence-time="true"]');
+      const evidenceCount = document.querySelector('[data-weather-evidence-count="true"]');
+      if (evidenceTime) {
+        evidenceTime.textContent = current
+          ? `Evidence timeline · ${formatCwaTimestamp(current.sourceTimestamp)}`
+          : `Evidence timeline · no cached ${state.weatherCwaProduct} frames`;
+      }
+      if (evidenceCount) {
+        const frameCount = Number(snapshot.maxFrameIndex || 0) + (current ? 1 : 0);
+        evidenceCount.textContent = frameCount > 1
+          ? `${frameCount} cache frames · slider enabled`
+          : "one or zero frames · animation unavailable";
+      }
+      const status = document.querySelector('[data-weather-cwa-status="true"]');
+      if (status) {
+        status.textContent = current
+          ? `${state.weatherTimelineIndex + 1}/${Number(snapshot.maxFrameIndex || 0) + 1} · ${formatCwaTimestamp(current.sourceTimestamp)} · delay ${current.dataDelayMinutes ?? "?"} min`
+          : `No cached ${state.weatherCwaProduct} frame`;
+      }
+      const frameState = document.querySelector("[data-weather-cwa-frame-state]");
+      if (frameState) {
+        frameState.dataset.weatherCwaFrameState = snapshot.status || "unavailable";
+        frameState.textContent = `CWA MAP BRIDGE · ${String(snapshot.status || "unavailable").toUpperCase().replaceAll("_", " ")}`;
+      }
+    }
+
+    function weatherCwaBridgeShouldWait(snapshot = {}) {
+      const parentFrameCount = weatherTimelineFrames(weatherCandidateSnapshot()).length;
+      const bridgeFrameCount = snapshot.current
+        ? Math.max(1, Number(snapshot.maxFrameIndex || 0) + 1)
+        : 0;
+      return parentFrameCount > 1 && bridgeFrameCount < 2;
+    }
+
+    function scheduleWeatherCwaBridgeRetry(frame, attempt) {
+      if (!frame?.isConnected || attempt >= 240) return;
+      if (frame.weatherCwaBridgeRetryTimer) {
+        window.clearTimeout(frame.weatherCwaBridgeRetryTimer);
+      }
+      frame.weatherCwaBridgeRetryTimer = window.setTimeout(() => {
+        frame.weatherCwaBridgeRetryTimer = null;
+        applyWeatherCwaMapFrame(frame, attempt + 1);
+      }, 250);
+    }
+
+    function invokeWeatherCwaMap(method, ...args) {
+      const controller = weatherCwaMapController();
+      if (!controller || typeof controller[method] !== "function") return null;
+      try {
+        const snapshot = controller[method](...args);
+        syncWeatherCwaBridgeState(snapshot || controller.getState?.() || {});
+        return snapshot;
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function applyWeatherCwaMapFrame(frame, attempt = 0) {
+      if (!frame?.isConnected || state.route !== "outdoor-weather") return;
+      try {
+        const doc = frame.contentDocument;
+        if (!doc?.head || !doc.documentElement) {
+          scheduleWeatherCwaBridgeRetry(frame, attempt);
+          return;
+        }
+        let style = doc.getElementById("scout-dashboard-weather-map-style");
+        if (!style) {
+          style = doc.createElement("style");
+          style.id = "scout-dashboard-weather-map-style";
+          doc.head.appendChild(style);
+        }
+        style.textContent = `
+          html, body { width:100% !important; height:100% !important; min-height:100% !important; overflow:hidden !important; }
+          body { display:block !important; }
+          #readinessStrip, .toolbar, .route-pane, .detail-pane, #hoverHint { display:none !important; }
+          .shell { display:grid !important; grid-template-columns:minmax(0,1fr) !important; grid-template-areas:"map" !important; grid-template-rows:minmax(0,1fr) !important; width:100vw !important; height:100vh !important; min-height:0 !important; overflow:hidden !important; }
+          .map-pane { grid-area:map !important; display:block !important; position:relative !important; width:100vw !important; height:100vh !important; min-height:0 !important; border:0 !important; overflow:hidden !important; }
+          .map-wrap { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; min-height:0 !important; }
+          #map { display:block !important; width:100% !important; height:100% !important; min-height:100% !important; }
+        `;
+        const childWindow = frame.contentWindow;
+        if (childWindow && frame.weatherCwaBridgeWindow !== childWindow) {
+          if (frame.weatherCwaBridgeWindow && frame.weatherCwaBridgeHandler) {
+            frame.weatherCwaBridgeWindow.removeEventListener("scout:cwa-imagery-state", frame.weatherCwaBridgeHandler);
+          }
+          const handler = event => {
+            if (!event?.detail) return;
+            if (weatherCwaBridgeShouldWait(event.detail)) {
+              scheduleWeatherCwaBridgeRetry(frame, attempt);
+              return;
+            }
+            syncWeatherCwaBridgeState(event.detail);
+          };
+          childWindow.addEventListener("scout:cwa-imagery-state", handler);
+          frame.weatherCwaBridgeWindow = childWindow;
+          frame.weatherCwaBridgeHandler = handler;
+        }
+        const controller = weatherCwaMapController(frame);
+        if (!controller || typeof controller.getState !== "function") {
+          scheduleWeatherCwaBridgeRetry(frame, attempt);
+          return;
+        }
+        if (frame.dataset.weatherCwaInitialState !== "applied") {
+          controller.setLayerEnabled(true);
+          controller.setRainfallLayerEnabled(true);
+          controller.setProduct(state.weatherCwaProduct);
+          controller.setWindow(state.weatherCwaWindowId);
+          controller.setFrameIndex(state.weatherTimelineIndex);
+          controller.setOpacity("radar", state.weatherRadarOpacityPercent);
+          controller.setOpacity("satellite", state.weatherSatelliteOpacityPercent);
+          controller.setRainfallOpacity(state.weatherRainfallOpacityPercent);
+          frame.dataset.weatherCwaInitialState = "applied";
+        }
+        const bridgeSnapshot = controller.getState();
+        if (weatherCwaBridgeShouldWait(bridgeSnapshot)) {
+          scheduleWeatherCwaBridgeRetry(frame, attempt);
+          return;
+        }
+        syncWeatherCwaBridgeState(bridgeSnapshot);
+      } catch (_error) {
+        scheduleWeatherCwaBridgeRetry(frame, attempt);
+      }
+    }
+
+    function bindWeatherCwaMapFrame(frame) {
+      if (!frame || frame.dataset.weatherCwaBound === "true") return;
+      frame.dataset.weatherCwaBound = "true";
+      frame.addEventListener("load", () => applyWeatherCwaMapFrame(frame));
+      window.setTimeout(() => applyWeatherCwaMapFrame(frame), 0);
+      window.setTimeout(() => applyWeatherCwaMapFrame(frame), 250);
+    }
+
+    function bindWeatherCwaControls() {
+      const frame = document.querySelector('[data-weather-cwa-map-frame="true"]');
+      if (frame) bindWeatherCwaMapFrame(frame);
+      document.querySelector('[data-weather-cwa-product="true"]')?.addEventListener("change", event => {
+        state.weatherCwaProduct = event.currentTarget.value === "satellite" ? "satellite" : "radar";
+        state.weatherTimelineIndex = 0;
+        invokeWeatherCwaMap("setProduct", state.weatherCwaProduct);
+      });
+      document.querySelector('[data-weather-cwa-window="true"]')?.addEventListener("change", event => {
+        state.weatherCwaWindowId = event.currentTarget.value;
+        state.weatherTimelineIndex = 0;
+        invokeWeatherCwaMap("setWindow", state.weatherCwaWindowId);
+      });
+      document.querySelector('[data-weather-cwa-timeline="true"]')?.addEventListener("input", event => {
+        state.weatherTimelineIndex = Number(event.currentTarget.value || 0);
+        invokeWeatherCwaMap("setFrameIndex", state.weatherTimelineIndex);
+      });
+      document.querySelectorAll("[data-weather-cwa-opacity]").forEach(input => {
+        input.addEventListener("input", event => {
+          const family = event.currentTarget.dataset.weatherCwaOpacity;
+          const value = Math.max(0, Math.min(100, Number(event.currentTarget.value) || 0));
+          if (family === "radar") state.weatherRadarOpacityPercent = value;
+          if (family === "satellite") state.weatherSatelliteOpacityPercent = value;
+          invokeWeatherCwaMap("setOpacity", family, value);
+        });
+      });
+      document.querySelector('[data-weather-cwa-rainfall-opacity="true"]')?.addEventListener("input", event => {
+        state.weatherRainfallOpacityPercent = Math.max(0, Math.min(100, Number(event.currentTarget.value) || 0));
+        invokeWeatherCwaMap("setRainfallOpacity", state.weatherRainfallOpacityPercent);
+      });
+      document.querySelector('[data-weather-cwa-play="true"]')?.addEventListener("click", () => {
+        invokeWeatherCwaMap("setPlaying", !state.weatherCwaPlaying);
+      });
+      document.querySelector('[data-weather-target-checkpoint="true"]')?.addEventListener("change", event => {
+        state.weatherTargetCheckpointId = String(event.currentTarget.value || "");
+      });
+      document.querySelector('[data-weather-authorize-location="true"]')?.addEventListener("click", () => {
+        void requestAuthorizedRainfallTrend();
+      });
+    }
+
     function bindRenderedControls() {
       bindLivingControls();
       bindArchitectureControls();
+      bindWeatherCwaControls();
       const pretripMapFrame = document.getElementById("pretripMapFrame");
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
       const surfaceFrame = document.getElementById("surfaceFrame");
@@ -12825,7 +13493,7 @@
       });
       document.querySelector("[data-weather-evidence-timeline]")?.addEventListener("input", (event) => {
         state.weatherTimelineIndex = Number(event.currentTarget.value || 0);
-        render();
+        invokeWeatherCwaMap("setFrameIndex", state.weatherTimelineIndex);
       });
       document.querySelector("[data-weather-recheck]")?.addEventListener("click", async (button) => {
         button.disabled = true;
@@ -13233,8 +13901,8 @@
           routeEvidenceBundle: fieldValue("prepareRouteEvidenceBundle"),
           routeCorridorM: fieldValue("prepareRouteCorridorM") || "500",
           referenceTrackCorridorM: fieldValue("prepareReferenceTrackCorridorM") || "300",
-          prepareProfile: fieldValue("prepareLayersProfile") || "pi-offline",
-          networkMode: fieldValue("prepareLayersNetworkMode") || "no-network",
+          prepareProfile: fieldValue("prepareLayersProfile") || "mac-workstation",
+          networkMode: fieldValue("prepareLayersNetworkMode") || "explicit-fetch",
           allowNetworkFetch: fieldChecked("prepareAllowNetworkFetch"),
           aiMode: fieldValue("prepareAiMode") || "fixture-or-precomputed",
           aiOutputPolicy: fieldValue("prepareAiOutputPolicy") || "hash-and-summary",

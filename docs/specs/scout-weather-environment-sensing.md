@@ -274,6 +274,20 @@ assets, georeferences them from registry metadata, samples the GPX route
 buffer, and estimates echo/cloud motion. Raspberry Pi and mobile profiles must
 not decode, resize, classify, sample, or motion-process these images. They may
 only consume the compact JSON packages and cache-only display assets.
+Dense GPX routes are sampled with a server-side route-segment spatial index;
+the worker must not perform a grid-cell by every-route-segment all-pairs scan.
+This preserves the bounded 160-pixel analysis grid while keeping recurring Mac
+jobs practical and avoiding multi-gigabyte transient allocation. Sampling may
+use a temporary Ramer-Douglas-Peucker route with at most 0.025 km deviation
+(or 5% of a smaller sampling radius); the original route/buffer artifact stays
+unchanged and each compact sample reports `routeGeometryToleranceKm`.
+Frames with identical raster geometry reuse a bounded server-side route-cell
+membership result; pixel values remain frame-specific. The cache never contains
+image pixels, credentials, raw GPX files, or a runtime safety decision.
+Motion regression uses the newest contiguous frame suffix with valid intervals
+of at most two hours. Older cached frames remain available to the 12-hour
+animation but cannot invalidate a usable recent sequence merely because the
+collector was stopped for several hours.
 
 The server worker enforces an 8 MiB/20-megapixel limit per source image, a hard
 24-frame limit per product (evenly spaced so the full 12-hour window remains
@@ -304,6 +318,55 @@ duplicating projection or image-processing code. The browser path remains
 cache-only; all fetch, decode, georeference, route sampling, and motion work is
 server-side, while Pi/mobile surfaces consume only prepared display assets and
 compact candidate features.
+
+Dashboard `Exploring for Six Axis -> Weather` uses the same renderer through a
+second same-origin bridge instead of implementing another projection path. Its
+single read contract is:
+
+```text
+GET /admin/pretrip/projects/{project_id}/weather-dashboard
+schemaVersion=weatherDecisionDashboard.v1
+```
+
+The response composes the redacted rainfall manifest, redacted imagery
+manifest, persisted route precipitation trend, compact route imagery risk
+features, explicit weather/TEII interactions, and byte-bounded LoRa preview.
+It adds a deterministic candidate decision projection with `Decision / Why /
+Where / When`, confidence, uncertainty, and a required operator action. It does
+not run a new upstream fetch or accept a new position on read.
+
+The Weather page exposes radar/satellite product, 3/6/9/12-hour window, frame,
+play/pause, rainfall opacity, radar opacity, and satellite opacity against the
+canonical map controller. When fewer than two real cached frames exist, the
+frame slider and play control remain disabled; the UI must not fabricate an
+animation. Missing or stale route evidence fails closed as `DELAY`, and unknown
+booleans remain `null` rather than reassuring `false`.
+
+Dashboard opening also invokes the local server coordinator through
+`POST .../connected-preparation`. This write endpoint is intentionally separate
+from the cache-only Weather GET: it loads local server credentials, runs the
+provider-backed Overpass/CWA/GEE refresh subset as `mac-workstation +
+explicit-fetch + allow-network-fetch + prepare-cwa-imagery`, and reports progress through
+`GET .../connected-preparation`. The coordinator is single-flight and performs
+a service-lifetime refresh every 600 seconds by default so real radar and
+satellite frames accumulate. Existing route, terrain, and TEII artifacts remain
+sampling/risk inputs without being regenerated. It never runs image/grid
+processing in the browser, Raspberry Pi, or mobile client.
+
+The connected request sets both `run_post_layer_enrichments=false` and
+`run_map_preparation_spec_artifacts=false`. The first skips OCR, Boss, and
+mileage alignment; the second reuses existing terrain route samples and
+visualizations. Neither flag removes those artifacts from route-weather risk
+inputs, and the normal full preparation path keeps both rebuild stages enabled.
+
+The Weather page may evaluate current-position versus target rainfall only
+after a direct user gesture. The gesture requests browser geolocation, obtains
+a server-issued short-lived `current_trip_rainfall_sampling` approval, then
+calls the existing cache-only `POST .../rainfall-trend` with one explicitly
+selected prepared checkpoint. Raw coordinates remain request-only and are not
+written to workspace artifacts. A null numeric score may be presented as
+`0% · no evidence`; the qualifier is mandatory so missing evidence is never
+presented as measured zero risk.
 
 Required workspace outputs:
 

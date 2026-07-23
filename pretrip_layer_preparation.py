@@ -415,6 +415,8 @@ class LayerPreparationRequest:
     imagery_min_zoom: int = DEFAULT_IMAGERY_TILE_CACHE_MIN_ZOOM
     imagery_max_zoom: int = DEFAULT_IMAGERY_TILE_CACHE_MAX_ZOOM
     seed_imagery_cache: bool = False
+    run_post_layer_enrichments: bool = True
+    run_map_preparation_spec_artifacts: bool = True
     imagery_provider_allows_offline_prefetch: bool = False
     imagery_seed_max_tiles: int | None = None
     imagery_cache_fallback_project_ids: tuple[str, ...] = ()
@@ -474,12 +476,26 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     _write_json(project_root / outputs["layer_map_projection_ref"], map_projection)
     _write_jsonl(project_root / outputs["layer_debug_projection_events_ref"], debug_events)
     _write_layer_plan_files(project_root, manifest)
-    _write_map_preparation_spec_artifacts(project_root, manifest)
+    if request.run_map_preparation_spec_artifacts:
+        _write_map_preparation_spec_artifacts(project_root, manifest)
+        map_preparation_spec_artifacts = {
+            "status": "completed",
+            "name": "map_preparation_spec_artifacts",
+        }
+    else:
+        map_preparation_spec_artifacts = _skipped_connected_refresh_post_enrichment(
+            "map_preparation_spec_artifacts"
+        )
+    manifest["map_preparation_spec_artifacts"] = map_preparation_spec_artifacts
     outputs.update(_write_planned_overpass_evidence(project_root, manifest))
     _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
-    raster_label_preparation = _run_raster_label_preparation_after_layer_preparation(
-        project_root=project_root,
-        manifest=manifest,
+    raster_label_preparation = (
+        _run_raster_label_preparation_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+        )
+        if request.run_post_layer_enrichments
+        else _skipped_connected_refresh_post_enrichment("raster_label_preparation")
     )
     manifest["raster_label_preparation"] = raster_label_preparation
     outputs.update(raster_label_preparation.get("output_refs", {}))
@@ -490,9 +506,13 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             outputs,
             manifest["finished_at"],
         )
-    boss_point_synthesis = _run_boss_point_synthesis_after_layer_preparation(
-        project_root=project_root,
-        manifest=manifest,
+    boss_point_synthesis = (
+        _run_boss_point_synthesis_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+        )
+        if request.run_post_layer_enrichments
+        else _skipped_connected_refresh_post_enrichment("boss_point_synthesis")
     )
     manifest["boss_point_synthesis"] = boss_point_synthesis
     if boss_point_synthesis.get("status") == "completed":
@@ -518,9 +538,13 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             outputs,
             manifest["finished_at"],
         )
-    mileage_tag_alignment = _run_mileage_tag_alignment_after_layer_preparation(
-        project_root=project_root,
-        manifest=manifest,
+    mileage_tag_alignment = (
+        _run_mileage_tag_alignment_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+        )
+        if request.run_post_layer_enrichments
+        else _skipped_connected_refresh_post_enrichment("mileage_tag_alignment")
     )
     manifest["mileage_tag_alignment"] = mileage_tag_alignment
     if mileage_tag_alignment.get("status") == "completed":
@@ -2505,6 +2529,10 @@ def _build_layer_preparation_manifest(
         "project_id": request.project_id,
         "profile": request.profile,
         "network_mode": request.network_mode,
+        "run_post_layer_enrichments": request.run_post_layer_enrichments,
+        "run_map_preparation_spec_artifacts": (
+            request.run_map_preparation_spec_artifacts
+        ),
         "requested_layers": list(request.layers),
         "normalized_layers": normalized_layers,
         "started_at": prepared_at,
@@ -4951,6 +4979,20 @@ def _run_overpass_route_alignment_after_layer_preparation(
         "trigger": "prepare_layers_with_overpass_or_risk",
         "boundary": boundary,
         **result,
+    }
+
+
+def _skipped_connected_refresh_post_enrichment(name: str) -> dict[str, Any]:
+    return {
+        "status": "skipped_connected_refresh",
+        "reason": "non_weather_post_enrichment_is_not_part_of_recurring_api_refresh",
+        "trigger": "dashboard_connected_refresh",
+        "component": name,
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "workspace_file_mutation_allowed": False,
+        },
     }
 
 

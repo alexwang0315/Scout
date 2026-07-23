@@ -127,6 +127,66 @@ Verification:
   desktop iframe, zero mobile surfaces/devices, zero horizontal overflow, and no
   HTTP or JavaScript errors. No Emergency control was clicked.
 
+### 2026-07-21 - Connect Six Axis Weather to the route decision API and CWA Map
+
+User request:
+
+- Generate the `Exploring for Six Axis -> Weather` page from APIs, using
+  `scout-weather-environment-sensing` and Section 10 of
+  `SCOUT_OUTDOOR_AI_AGENT_STANDARD` as the functional contract.
+- Reuse the CWA capability already present on MAP inside Weather.
+
+Implementation steps:
+
+- Added cache-only
+  `GET /admin/pretrip/projects/{project_id}/weather-dashboard`, which composes
+  redacted rainfall/imagery manifests, persisted route rainfall trend, the nine
+  route imagery risk features, explicit weather x TEII interactions, and the
+  compact LoRa preview.
+- Added a deterministic `Decision / Why / Where / When` candidate projection.
+  Missing or stale evidence fails closed to `DELAY`; explicit echo, motion,
+  convection, or terrain interaction evidence can produce `CHANGE_PLAN`.
+- Changed Weather to make one API request and render the candidate decision,
+  position/target one-hour trends, route risk features, terrain intersections,
+  freshness, data delay, confidence, and LoRa `sent` state.
+- Embedded the canonical Pre-trip Map through a same-origin Weather bridge.
+  Radar/satellite product, 3/6/9/12-hour window, frame, play/pause, rainfall
+  opacity, radar opacity, and satellite opacity invoke the existing CWA map
+  controller. No projection or image-processing code is duplicated.
+- Removed the oversized Weather editorial hero and its dedicated responsive
+  styles. Weather now moves directly from the Six Axis tabs into the candidate
+  decision band; the compact candidate-only boundary remains beside the
+  operational evidence.
+
+Boundary:
+
+- All output remains cache-only, candidate-only, and human-review-required.
+  The API does not fetch CWA upstream, evaluate a newly submitted location,
+  persist coordinates, call `/safety/*`, send LoRa/RF, control hardware, or
+  mutate runtime safety truth.
+- Raspberry Pi and mobile clients consume prepared display assets and compact
+  JSON only; image decode, georeference, route sampling, and motion estimation
+  remain server-side.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py`: 44 passed. The embedded Dashboard
+  JavaScript also parses successfully as one script.
+- `tests/test_admin_cwa_imagery_overlay.py` plus
+  `tests/test_admin_cwa_precipitation_grid.py`: 17 passed, covering prepared
+  route-decision evidence, missing-cache state, image assets, and rainfall-grid
+  projection.
+- Live 9099 browser smoke resolved the current project to `unavailable` and
+  `DELAY`, rendered all nine route imagery risk fields as unknown/zero-confidence,
+  and disabled Frame/Play because this workspace currently has no prepared CWA
+  imagery frames. Missing coverage was not rendered as zero rain.
+- An isolated two-frame cache browser smoke reached `CWA MAP BRIDGE · READY`.
+  Frame moved from `1/2` to `2/2`, both visible timeline controls synchronized
+  to frame index `1`, and radar opacity changed from `62` to `40` through the
+  canonical map controller. No image processing ran in the Dashboard client.
+- A 390 x 844 responsive smoke retained `DELAY`, the visible canonical map, and
+  zero horizontal overflow; the viewport override was reset after verification.
+
 ### 2026-07-21 - Move desktop Emergency UI from Pace Fit to Safety / Emergency
 
 User request:
@@ -2933,3 +2993,43 @@ Verification:
 - Corrected 430px smoke confirmed the frame, content grid, Map shell, and
   iframe all use the full 557px viewport height; Map Evidence is inside the
   viewport at `y=277` and the compact navigation toggle remains available.
+
+## 2026-07-23 - Dashboard connected weather preparation
+
+- Dashboard startup now triggers the local server-side
+  `POST /admin/pretrip/projects/{project_id}/connected-preparation` job and
+  polls its GET status. It no longer relies on a Dashboard default of
+  `pi-offline + no-network`; connected map-preparation defaults are
+  `mac-workstation + explicit-fetch + allow-network-fetch`.
+- The manager loads the local repository `.env` or explicit `SCOUT_ENV_FILE`
+  without exposing values, sets the CWA imagery server capability, requires a
+  cache outside the workspace/repository, refreshes the provider-backed
+  Overpass/CWA/GEE layer subset, and enables `prepare_cwa_imagery`. Existing
+  route, terrain, and TEII artifacts remain inputs and are not regenerated on
+  every refresh.
+- The job is single-flight and schedules a service-lifetime refresh every ten
+  minutes by default. Repeated Dashboard opens reuse the active/completed job
+  and do not duplicate it. Stopping the Dashboard service cancels its timers.
+- Queued/running request outcomes are tri-state: request/call fields remain
+  `null` with `requestActivityState=in-progress` until observed results exist,
+  and the UI shows `in progress` rather than a premature `false`.
+- Connected polling no longer re-renders the Weather controls every three
+  seconds while a job is active, so a Frame drag is not detached/reset. A
+  temporary route-identity mismatch during manifest publication is rendered as
+  preparing/loading and retried at completion, not as a permanent source error.
+- Recurring refresh skips raster OCR, Boss-point synthesis, and mileage-tag
+  alignment plus terrain/map-spec artifact regeneration
+  (`skipped_connected_refresh`); those non-weather rebuilds remain available in
+  the normal full preparation flow. Existing terrain artifacts are still read
+  by route risk extraction.
+- Weather keeps all reads cache-only, displays connected job provenance, and
+  reloads prepared artifacts when the background run completes. Radar and
+  satellite animation windows therefore accumulate only real fetched frames.
+- The Weather page adds an explicit geolocation gesture. After the user selects
+  a prepared checkpoint and approves browser location access, it obtains a
+  short-lived server approval and calls `rainfall-trend`; submitted coordinates
+  are not persisted. Null score presentation is `0% · no evidence`, not an
+  unqualified zero-risk claim.
+- Server-side outputs remain candidate-only. LoRa stays a byte-bounded
+  `sent=false` preview; there is no RF send, hardware control, `/safety/*`
+  mutation, Pi image processing, or mobile image processing.
