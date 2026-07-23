@@ -18,7 +18,7 @@ from scout.agents.pydantic_ai_compat import (
 
 
 def test_pydantic_ai_runtime_version_supports_slim_install() -> None:
-    assert pydantic_ai_runtime_version() == "2.13.0"
+    assert pydantic_ai_runtime_version() == "2.14.1"
     assert packaged_runtime_version() == pydantic_ai_runtime_version()
 
 
