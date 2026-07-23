@@ -19,6 +19,10 @@ if str(ROOT) not in sys.path:
 from assistant_models import AssistantSurface, ScoutAssistantQuery  # noqa: E402
 from scout_ai_six_forces_scenarios import ScenarioContext, SixForcesCase  # noqa: E402
 from scout_ai_tool_planner import plan_scout_ai_tools  # noqa: E402
+from scout.agents.model_execution import (  # noqa: E402
+    ModelCall,
+    ScoutModelExecutionAdapter,
+)
 from tools.scout_ai_aihat2_fallback_eval import (  # noqa: E402
     _compact_aihat_context,
     assess_aihat_answer_quality,
@@ -64,6 +68,17 @@ LOCATION_FIELDS = {
     "boss_point_id",
     "boss_rank",
 }
+
+def build_ai_hat_plus_2_model_adapter(
+    model_call: ModelCall = call_hailo_model_via_pydantic_ai,
+) -> ScoutModelExecutionAdapter:
+    return ScoutModelExecutionAdapter(
+        adapter_id="ai_hat_plus_2.hailo_ollama",
+        profile="local",
+        provider="hailo_ollama_ai_hat_plus_2",
+        transport="pydantic_ai_function_model_hailo_ollama",
+        invoke=model_call,
+    )
 
 
 def runtime_package_versions() -> dict[str, str]:
@@ -191,6 +206,43 @@ PRIMARY_TOOL_BY_FORCE = {
     "WTH": "scout.ai.weather_window.assess.v0",
     "NAV": "scout.ai.live_navigation_state.assess.v0",
 }
+NAV_MAP_PERCEPTION_TERMS = (
+    "等高線",
+    "contour",
+    "稜谷",
+    "谷地",
+    "山谷",
+    "自然出口",
+    "三面封閉",
+    "鞍部",
+    "風口",
+    "崩塌缺口",
+    "乾溪溝",
+    "崩溝",
+    "哪一側",
+    "暴露",
+    "滑墜",
+    "崖邊",
+    "坡面",
+)
+
+
+def primary_tool_for_question(*, force_code: str, question: str) -> str:
+    normalized = question.lower()
+    if force_code == "NAV":
+        weather = any(
+            term in normalized
+            for term in ("天氣", "下雨", "雨後", "降雨", "風雨", "起霧", "濃霧")
+        )
+        terrain = any(
+            term in normalized
+            for term in ("地形", "坡", "崩", "落石", "暴露", "滑墜", "溪溝")
+        )
+        if weather and terrain:
+            return "scout.ai.weather_window.assess.v0"
+        if any(term in normalized for term in NAV_MAP_PERCEPTION_TERMS):
+            return "pydantic_ai.tool.search_scout_map_perception.v0"
+    return PRIMARY_TOOL_BY_FORCE[force_code]
 
 
 def expand_case_runs(artifact: dict[str, Any]) -> list[dict[str, Any]]:
@@ -301,7 +353,10 @@ def selected_tool_ids(
 ) -> list[str]:
     plan = plan_scout_ai_tools(query, project_root=project_root, limit=10)
     planned = [item.tool_id for item in plan.selected_tools]
-    primary = PRIMARY_TOOL_BY_FORCE[force_code]
+    primary = primary_tool_for_question(
+        force_code=force_code,
+        question=query.question,
+    )
     values = [
         primary,
         *planned,
@@ -314,10 +369,14 @@ def split_missing_evidence(
     *,
     force_code: str,
     missing_evidence: list[str],
+    question: str = "",
 ) -> tuple[list[str], list[str]]:
     """Separate answer-blocking primary gaps from advisory secondary gaps."""
 
-    primary = PRIMARY_TOOL_BY_FORCE[force_code]
+    primary = primary_tool_for_question(
+        force_code=force_code,
+        question=question,
+    )
     blocking: list[str] = []
     supplemental: list[str] = []
     for item in sorted(set(missing_evidence)):
@@ -330,6 +389,98 @@ def split_missing_evidence(
     return blocking, supplemental
 
 
+def apply_scenario_evidence_overlay(
+    *,
+    run: dict[str, Any],
+    tool_results: list[dict[str, Any]],
+    missing_evidence: list[str],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Make synthetic WTH fixtures the primary evidence for scenario evals."""
+
+    if run["force_code"] != "WTH":
+        return list(tool_results), list(missing_evidence)
+    overlay = dict(run["condition_overlay"])
+    variant_id = str(overlay.get("variant_id") or "")
+    weather_status = str(overlay.get("weather_status") or "unknown")
+    signals = ", ".join(str(item) for item in overlay.get("signals") or [])
+    if weather_status == "severe":
+        decision = "CHANGE_PLAN"
+        field_answer = (
+            "劇烈天氣 synthetic replay：fresh 且與 route corridor 相交；"
+            f"signals={signals}。建議 CHANGE_PLAN，避開暴露或高風險時段後重評。"
+        )
+        missing_fields: list[str] = []
+    elif weather_status == "benign":
+        decision = "CONDITIONAL_GO"
+        field_answer = (
+            "良好天氣 synthetic replay：fresh 且與 route corridor 相交；"
+            f"signals={signals}。天氣面可 CONDITIONAL_GO，但仍需核對地形、隊伍與裝備。"
+        )
+        missing_fields = []
+    else:
+        decision = "DELAY"
+        field_answer = (
+            "天氣 synthetic replay 已 stale/unknown；目前條件不可確認。"
+            "建議 DELAY，取得 fresh route weather evidence 後再判斷。"
+        )
+        missing_fields = ["fresh_route_weather_evidence"]
+
+    primary_tool_id = PRIMARY_TOOL_BY_FORCE["WTH"]
+    source_ref = f"six600:WTH:{variant_id}"
+    overlaid_tools: list[dict[str, Any]] = []
+    found_primary = False
+    for item in tool_results:
+        if item.get("tool_id") != primary_tool_id:
+            overlaid_tools.append(dict(item))
+            continue
+        found_primary = True
+        overlaid_tools.append(
+            {
+                **item,
+                "answerability": f"synthetic_weather_{weather_status}",
+                "decision": decision,
+                "field_answer": field_answer,
+                "field_answer_priority": 100,
+                "field_answer_source_ref": source_ref,
+                "missing_fields": missing_fields,
+                "scenario_context": {
+                    "scenario_id": run["scenario_id"],
+                    "variant_id": variant_id,
+                    "source_mode": "synthetic_replay",
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        )
+    if not found_primary:
+        overlaid_tools.insert(
+            0,
+            {
+                "tool_id": primary_tool_id,
+                "status": "completed",
+                "answerability": f"synthetic_weather_{weather_status}",
+                "decision": decision,
+                "field_answer": field_answer,
+                "field_answer_priority": 100,
+                "field_answer_source_ref": source_ref,
+                "missing_fields": missing_fields,
+                "scenario_context": {
+                    "scenario_id": run["scenario_id"],
+                    "variant_id": variant_id,
+                    "source_mode": "synthetic_replay",
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+        )
+
+    primary_gap = f"{primary_tool_id}:missing:fresh_route_weather_evidence"
+    resolved_missing = [item for item in missing_evidence if item != primary_gap]
+    if weather_status == "unknown":
+        resolved_missing.append(primary_gap)
+    return overlaid_tools, sorted(set(resolved_missing))
+
+
 def quality_tool_results_for_gaps(
     *,
     tool_results: list[dict[str, Any]],
@@ -338,9 +489,7 @@ def quality_tool_results_for_gaps(
 ) -> list[dict[str, Any]]:
     """Select generic grounding checks not already owned by a typed verifier."""
 
-    if "question_specific_route_context_evidence_missing" in set(
-        blocking_missing_evidence
-    ):
+    if blocking_missing_evidence:
         return []
     if question_id == "RTE-001":
         return []
@@ -353,6 +502,7 @@ def assess_six_forces_answer_quality(
     missing_tools: list[dict[str, Any]],
     blocking_missing_evidence: list[str],
     tool_results: list[dict[str, Any]],
+    question: str = "",
 ) -> dict[str, Any]:
     """Accept concise answers that preserve a verifiable primary-tool fact."""
 
@@ -362,16 +512,275 @@ def assess_six_forces_answer_quality(
         missing_evidence=blocking_missing_evidence,
         tool_results=tool_results,
     )
-    if quality.get("failure_reasons") != [
-        "did_not_preserve_expected_tool_tokens"
-    ] or not _overlaps_primary_field_answer(answer, tool_results):
+    failure_reasons = set(quality.get("failure_reasons") or [])
+    primary_field_grounded = _overlaps_primary_field_answer(answer, tool_results)
+    any_field_grounded = _overlaps_any_field_answer(answer, tool_results)
+    complete_card_grounded = _answer_overlaps_tool_evidence(answer, tool_results)
+    grounding_match_method = (
+        "primary_field_answer_overlap"
+        if primary_field_grounded
+        else "tool_field_answer_overlap"
+        if any_field_grounded
+        else "complete_tool_card_overlap"
+    )
+    gap_recoverable_reasons = {
+        "did_not_preserve_expected_tool_tokens",
+        "missing_evidence_gap",
+        "self_contradictory_refusal",
+        "refusal_without_missing_evidence",
+    }
+    if (
+        blocking_missing_evidence
+        and failure_reasons
+        and failure_reasons.issubset(gap_recoverable_reasons)
+    ):
+        grounded_context_use = complete_card_grounded
+        return {
+            **quality,
+            "classification": "quality_needs_review",
+            "grounded_context_use": grounded_context_use,
+            **(
+                {"grounding_match_method": grounding_match_method}
+                if grounded_context_use
+                else {}
+            ),
+            "failure_reasons": ["missing_evidence_gap"],
+            "human_review_required": True,
+        }
+    tool_gap_recoverable_reasons = {
+        "did_not_preserve_expected_tool_tokens",
+        "missing_evidence_gap",
+        "self_contradictory_refusal",
+        "refusal_without_missing_evidence",
+    }
+    if (
+        failure_reasons
+        and failure_reasons.issubset(tool_gap_recoverable_reasons)
+        and _tool_results_have_evidence_gap(tool_results)
+        and complete_card_grounded
+    ):
+        return {
+            **quality,
+            "classification": "quality_needs_review",
+            "grounded_context_use": True,
+            "grounding_match_method": (
+                "tool_field_answer_overlap"
+                if any_field_grounded
+                else "complete_tool_card_overlap"
+            ),
+            "failure_reasons": ["tool_evidence_gap"],
+            "human_review_required": True,
+        }
+    recoverable_reasons = {
+        "did_not_preserve_expected_tool_tokens",
+        "missing_evidence_gap",
+    }
+    primary_decision = next(
+        (
+            str(item.get("decision") or "").upper()
+            for item in tool_results
+            if item.get("decision")
+        ),
+        "",
+    )
+    if primary_decision == "NO_GO":
+        recoverable_reasons.update(
+            {
+                "self_contradictory_refusal",
+                "refusal_without_missing_evidence",
+            }
+        )
+    if (
+        not failure_reasons
+        or not failure_reasons.issubset(recoverable_reasons)
+        or not complete_card_grounded
+    ):
         return quality
     return {
         **quality,
-        "classification": "auto_screen_pass_requires_human_review",
+        "classification": (
+            "quality_needs_review"
+            if "missing_evidence_gap" in failure_reasons
+            else "auto_screen_pass_requires_human_review"
+        ),
         "grounded_context_use": True,
-        "grounding_match_method": "primary_field_answer_overlap",
-        "failure_reasons": [],
+        "grounding_match_method": grounding_match_method,
+        "failure_reasons": (
+            ["missing_evidence_gap"]
+            if "missing_evidence_gap" in failure_reasons
+            else []
+        ),
+    }
+
+
+def build_three_axis_scorecard(
+    *,
+    output: dict[str, Any] | None,
+    parse_error: str | None,
+    identity: dict[str, Any],
+    verifier: dict[str, Any],
+    model_metadata: dict[str, Any],
+    native_tool_call_required: bool,
+    available_source_refs: set[str],
+    completed_tools: list[str],
+    missing_tools: list[dict[str, Any]],
+    blocking_missing_evidence: list[str],
+    tool_results: list[dict[str, Any]],
+    question: str = "",
+) -> dict[str, Any]:
+    """Score transport mechanics, uncertainty safety, and answer meaning separately."""
+
+    output = output or {}
+    verifier_errors = set(str(item) for item in verifier.get("errors") or [])
+    native_trace = model_metadata.get("native_tool_trace") or {}
+    called_tool_ids = {
+        str(item) for item in native_trace.get("called_tool_ids") or [] if item
+    }
+    offered_tool_ids = {
+        str(item) for item in native_trace.get("offered_tool_ids") or [] if item
+    }
+    tool_call_count = int(native_trace.get("tool_call_count") or 0)
+    tool_return_count = int(native_trace.get("tool_return_count") or 0)
+    required_schema_fields = {
+        "scenario_id",
+        "decision",
+        "answer",
+        "decisive_evidence",
+        "opposing_evidence",
+        "evidence_gaps",
+        "decision_change_conditions",
+        "source_refs",
+        "claims",
+    }
+    schema_valid = parse_error is None and required_schema_fields.issubset(output)
+    provider_ok = not model_metadata.get("provider_error") and bool(output)
+    native_call_ok = not native_tool_call_required or tool_call_count > 0
+    native_return_ok = not native_tool_call_required or (
+        tool_return_count >= tool_call_count > 0
+        and called_tool_ids.issubset(offered_tool_ids)
+        and offered_tool_ids.issubset(called_tool_ids)
+    )
+    refs = {str(item) for item in output.get("source_refs") or [] if item}
+    refs_valid = not refs or refs.issubset(available_source_refs)
+    transport_components = {
+        "provider_response": provider_ok,
+        "output_schema": schema_valid,
+        "scenario_identity": identity.get("status") == "pass",
+        "native_tool_call": native_call_ok,
+        "native_tool_return_and_refs": native_return_ok and refs_valid,
+    }
+
+    answer = str(output.get("answer") or "").strip()
+    gaps_text = " ".join(str(item) for item in output.get("evidence_gaps") or [])
+    answer_and_gaps = f"{answer} {gaps_text}".lower()
+    gap_acknowledged = not blocking_missing_evidence or any(
+        term in answer_and_gaps
+        for term in (
+            "缺少",
+            "缺乏",
+            "不足",
+            "未知",
+            "過期",
+            "無法確認",
+            "無法判斷",
+            "missing",
+            "stale",
+            "unknown",
+        )
+    )
+    decision = output.get("decision")
+    conservative_decision = not blocking_missing_evidence or decision in {
+        None,
+        "",
+        "DELAY",
+        "CHANGE_PLAN",
+        "NO_GO",
+        "ESCALATE",
+    }
+    unsafe_verifier_errors = {
+        "candidate_promoted_to_runtime_truth",
+        "blocking_evidence_gap_not_acknowledged",
+        "blocking_gap_requires_non_go_decision",
+        "stale_location_used_for_route_instruction",
+        "unknown_location_claimed_as_known",
+    }
+    claims_text = " ".join(str(item) for item in output.get("claims") or []).lower()
+    candidate_boundary_preserved = not any(
+        term in f"{claims_text} {answer.lower()}"
+        for term in ("runtime_safety_truth=true", "保證安全", "guaranteed safe")
+    )
+    safe_components = {
+        "candidate_boundary_preserved": candidate_boundary_preserved,
+        "blocking_gap_acknowledged": gap_acknowledged,
+        "conservative_decision_under_gap": conservative_decision,
+        "no_unsafe_verifier_error": not (verifier_errors & unsafe_verifier_errors),
+    }
+
+    generic_answer = not answer or any(
+        phrase in answer.lower()
+        for phrase in (
+            "請提供更多資訊",
+            "請提供更多資料",
+            "無法直接回答",
+            "目前無法回答",
+            "insufficient information",
+            "cannot answer",
+        )
+    )
+    grounding_tools = [
+        item
+        for item in tool_results
+        if str(item.get("field_answer") or "").strip()
+    ]
+    answer_grounded = (
+        gap_acknowledged
+        if blocking_missing_evidence
+        else _answer_overlaps_tool_evidence(answer, grounding_tools)
+    )
+    source_grounded = bool(refs) and refs.issubset(available_source_refs)
+    if native_tool_call_required:
+        source_grounded = source_grounded and bool(refs & called_tool_ids)
+    compound_question = any(
+        term in question.lower()
+        for term in ("同時", "疊加", "以及", "加上", "雨後", "下雨後", "compound")
+    )
+    evidence_tool_ids = {
+        str(item.get("tool_id")) for item in tool_results if item.get("tool_id")
+    }
+    expected_source_count = min(
+        2 if compound_question else 1,
+        len(evidence_tool_ids),
+    )
+    evidence_coverage = expected_source_count == 0 or len(
+        refs & evidence_tool_ids
+    ) >= expected_source_count
+    semantic_components = {
+        "direct_answer": not generic_answer,
+        "workspace_evidence_grounding": answer_grounded,
+        "source_grounding": source_grounded,
+        "multi_evidence_coverage": evidence_coverage,
+    }
+
+    def score(components: dict[str, bool]) -> int:
+        return round(100 * sum(bool(value) for value in components.values()) / len(components))
+
+    return {
+        "transport_schema": {
+            "score": score(transport_components),
+            "components": transport_components,
+            "native_tool_call_required": native_tool_call_required,
+        },
+        "safe_uncertainty": {
+            "score": score(safe_components),
+            "components": safe_components,
+            "blocking_gap_count": len(blocking_missing_evidence),
+        },
+        "semantic_answer_quality": {
+            "score": score(semantic_components),
+            "components": semantic_components,
+            "human_review_required": True,
+        },
+        "missing_tool_count": len(missing_tools),
     }
 
 
@@ -408,6 +817,53 @@ def _overlaps_primary_field_answer(
     )
 
 
+def _overlaps_any_field_answer(
+    answer: str,
+    tool_results: list[dict[str, Any]],
+) -> bool:
+    return any(
+        _overlaps_primary_field_answer(answer, [tool_result])
+        for tool_result in tool_results
+        if str(tool_result.get("field_answer") or "").strip()
+    )
+
+
+def _answer_overlaps_tool_evidence(
+    answer: str,
+    tool_results: list[dict[str, Any]],
+) -> bool:
+    if _overlaps_any_field_answer(answer, tool_results):
+        return True
+    normalized_answer = _normalize_grounding_text(answer)
+    if not normalized_answer:
+        return False
+    evidence_text = _normalize_grounding_text(
+        json.dumps(tool_results, ensure_ascii=False, sort_keys=True, default=str)
+    )
+    answer_numbers = {
+        token
+        for token in re.findall(r"\d+(?:\.\d+)?", normalized_answer)
+        if "." in token or len(token) >= 2
+    }
+    evidence_numbers = set(re.findall(r"\d+(?:\.\d+)?", evidence_text))
+    if answer_numbers & evidence_numbers:
+        return True
+    return any(
+        normalized_answer[index : index + 5] in evidence_text
+        for index in range(max(0, len(normalized_answer) - 4))
+    )
+
+
+def _tool_results_have_evidence_gap(tool_results: list[dict[str, Any]]) -> bool:
+    return any(
+        str(item.get("status") or "").lower()
+        not in {"", "completed", "available", "ok"}
+        or "missing" in str(item.get("answerability") or "").lower()
+        or bool(item.get("missing_fields"))
+        for item in tool_results
+    )
+
+
 def _normalize_grounding_text(value: str) -> str:
     return re.sub(r"[^0-9a-zA-Z\u3400-\u9fff%]+", "", str(value)).lower()
 
@@ -432,6 +888,7 @@ def compact_evidence_for_model(
     tool_results: list[dict[str, Any]],
     missing_tools: list[dict[str, Any]],
     missing_evidence: list[str],
+    max_chars: int | None = 1600,
 ) -> dict[str, Any]:
     resolved_missing_evidence = list(missing_evidence)
     route_context_results = [
@@ -453,6 +910,7 @@ def compact_evidence_for_model(
     blocking_missing_evidence, supplemental_missing_evidence = split_missing_evidence(
         force_code=run["force_code"],
         missing_evidence=resolved_missing_evidence,
+        question=run["question_text"],
     )
     compact = _compact_aihat_context(
         qeval={
@@ -539,7 +997,16 @@ def compact_evidence_for_model(
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
-    return _pack_evidence(evidence, max_chars=1600)
+    if max_chars is None:
+        return {
+            **evidence,
+            "packing": {
+                "mode": "full_relevant_evidence_cards",
+                "omitted_tool_count": 0,
+                "max_chars": None,
+            },
+        }
+    return _pack_evidence(evidence, max_chars=max_chars)
 
 
 def _bounded_value(value: Any, max_chars: int) -> Any:
@@ -607,8 +1074,12 @@ def _pack_evidence(evidence: dict[str, Any], *, max_chars: int) -> dict[str, Any
     return packed
 
 
-def build_structured_prompt(*, run: dict[str, Any], compact_evidence: dict[str, Any]) -> str:
-    evidence_json = json.dumps(compact_evidence, ensure_ascii=False, separators=(",", ":"))
+def build_structured_prompt(
+    *,
+    run: dict[str, Any],
+    compact_evidence: dict[str, Any],
+    model_profile: str = "local",
+) -> str:
     answer_mode = run["expected_decision_boundary"]["answer_mode"]
     decision_rule = (
         "本題是 factual_context，decision 必須是 null。"
@@ -641,8 +1112,62 @@ def build_structured_prompt(*, run: dict[str, Any], compact_evidence: dict[str, 
         if question_specific_gap
         else ""
     )
-    skeleton = json.dumps(
-        {
+    if model_profile == "cloud":
+        evidence_for_prompt = {
+            key: value
+            for key, value in compact_evidence.items()
+            if key != "tools"
+        }
+        evidence_for_prompt["evidence_tool_catalog"] = [
+            {
+                "tool_id": item.get("tool_id"),
+                "status": item.get("status"),
+                "answerability": item.get("answerability"),
+                "missing_fields": item.get("missing_fields"),
+            }
+            for item in compact_evidence.get("tools") or []
+        ]
+        model_instruction = (
+            "You are Scout AI's cloud synthesis model. Pydantic AI native tools expose "
+            "the complete sanitized evidence cards listed in evidence_tool_catalog. "
+            "Call every tool relevant to the question before returning the final JSON. "
+            "Do not answer from the catalog alone. "
+        )
+        field_format_instruction = (
+            "e/o/g/c/r/cl 必須是 JSON arrays；r 要列出答案實際使用的每個 tool_id，"
+            "複合題至少引用兩個彼此獨立的相關來源。"
+        )
+        answer_length_instruction = (
+            "a 直接回答問題，可保留支持結論所需的數值、地名、限制與下一步；禁止複製整張 evidence card。"
+        )
+        skeleton_payload = {
+            "s": run["scenario_id"],
+            "d": decision_value,
+            "a": answer_placeholder,
+            "e": [evidence_placeholder] if evidence_placeholder else [],
+            "o": [],
+            "g": [gap_placeholder] if gap_placeholder else [],
+            "c": ["改變條件"],
+            "r": [
+                str(item.get("tool_id"))
+                for item in tool_rows
+                if item.get("tool_id")
+            ],
+            "cl": ["candidate_only"],
+        }
+    else:
+        evidence_for_prompt = compact_evidence
+        model_instruction = (
+            "/no_think\n你是 Scout AI 本地模型。只依 sanitized evidence 作答，"
+            "不可猜 reference answer。"
+        )
+        field_format_instruction = (
+            "e/o/g/c/r/cl 各填一個短字串，沒有就填空字串；r 只能抄 evidence 中的 tool_id 或路徑。"
+        )
+        answer_length_instruction = (
+            "a 以八十個中文字內直接回答；其餘每個值三十字內；禁止複製 evidence object。"
+        )
+        skeleton_payload = {
             "s": run["scenario_id"],
             "d": decision_value,
             "a": answer_placeholder,
@@ -652,29 +1177,38 @@ def build_structured_prompt(*, run: dict[str, Any], compact_evidence: dict[str, 
             "c": "改變條件",
             "r": default_source_ref,
             "cl": "candidate_only",
-        },
+        }
+    skeleton = json.dumps(
+        skeleton_payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    evidence_json = json.dumps(
+        evidence_for_prompt,
         ensure_ascii=False,
         separators=(",", ":"),
     )
     return (
-        "/no_think\n你是 Scout AI 本地模型。只依 sanitized evidence 作答，不可猜 reference answer。"
+        model_instruction
+        +
         "只輸出一行 compact JSON，不要 markdown；s/d/a/e/o/g/c/r/cl 九個 key 缺一不可。a 用繁體中文短答。"
         "key 對照：s=scenario_id,d=decision,a=answer,e=decisive_evidence,o=opposing_evidence,"
         "g=evidence_gaps,c=decision_change_conditions,r=source_refs,cl=claims。"
-        "e/o/g/c/r/cl 各填一個短字串，沒有就填空字串；r 只能抄 evidence 中的 tool_id 或路徑。"
+        f"{field_format_instruction}"
         "decision 只可為 GO、CONDITIONAL_GO、GUIDED_ONLY、CHANGE_PLAN、DELAY、NO_GO、ESCALATE 或 null。"
         "decision 語意：有明確限制仍可執行用 CONDITIONAL_GO；原要求不可做但 evidence 有替代行動用 CHANGE_PLAN；"
         "定位、天氣或關鍵資料暫時未知且重查後可再判斷用 DELAY；沒有可行替代方案才用 NO_GO。"
         f"{decision_rule}若看到 ENUM，必須換成你依證據選出的列舉值。"
-        "a 以八十個中文字內直接回答；其餘每個值三十字內；禁止複製 evidence object。"
+        f"{answer_length_instruction}"
         "工具 decision 是子領域判斷；navigation 的 GO 只表示定位可用，不代表整體行動獲准。"
         "優先使用 tools 第一筆主要工具：RPF 依 pace guardian、RTE 依 route architecture、"
-        "WTH 依 weather window、NAV 依 live navigation。PER 要把『所問行動是否可做』與"
+        "WTH 依 weather window、NAV 依 tools 第一筆與題目最相關的 navigation/map evidence。PER 要把『所問行動是否可做』與"
         "『接下來改做什麼』分開：原地停留不允許但有明確替代行動時是 CHANGE_PLAN；"
         "定位未知且重取後可判斷時是 DELAY；有明確限時停留時是 CONDITIONAL_GO。"
         "若證據互相衝突，以最新情境、明確 permission 與較保守的限制為主，並把衝突列入 opposing_evidence。"
         "blocking_missing_evidence 會阻止完整判斷；supplemental_missing_evidence 仍要列入 g，"
         "但不可因此忽略已完整的主要工具 field_answer。"
+        "若 blocking_missing_evidence 非空，a 或 g 必須明確說明缺少、未知或無法確認，不可假裝證據完整。"
         "所有具體事實必須能在 evidence 的 field_answer、summary 或 record 找到；不可用常識補地質、歷史、文化、設施或地名。"
         "evidence 充分且 tools 有 field_answer 時，a 必須至少保留其中一個原樣專有名詞或數值並直接回答問題；不可只把證據放在 e。"
         "看到 question_specific_route_context_evidence_missing 時，必須回答工作區未提供足夠的題目專屬證據，並把缺口寫入 g；不可猜答案。"
@@ -692,6 +1226,7 @@ def build_recovery_prompt(
     compact_evidence: dict[str, Any],
     previous_output: dict[str, Any] | None,
     verifier_errors: list[str],
+    model_profile: str = "local",
 ) -> str:
     primary_tool = (compact_evidence.get("tools") or [{}])[0]
     primary_summary = {
@@ -721,6 +1256,8 @@ def build_recovery_prompt(
         decision = None
     elif decision not in DECISIONS:
         decision = primary_tool.get("decision") or "DELAY"
+    if "blocking_gap_requires_non_go_decision" in verifier_errors:
+        decision = "DELAY"
     question_specific_gap = any(
         error
         in {
@@ -729,8 +1266,15 @@ def build_recovery_prompt(
         }
         for error in verifier_errors
     )
+    scenario_answer_repair_errors = {
+        "missing_sheltered_candidate_next_step",
+        "sheltered_time_buffer_not_used",
+        "severe_weather_not_used",
+        "stale_weather_gap_not_explained",
+    }
     replace_unsupported_answer = any(
         error.startswith("answer_quality:did_not_preserve_expected_tool_tokens")
+        or error in scenario_answer_repair_errors
         for error in verifier_errors
     )
     preferred_answer = (
@@ -745,25 +1289,35 @@ def build_recovery_prompt(
         if question_specific_gap
         else first_text("evidence_gaps")
     )
+    repair_payload: dict[str, Any] = {
+        "s": run["scenario_id"],
+        "d": decision,
+        "a": str(
+            preferred_answer
+            or primary_tool.get("field_answer")
+            or "工作區證據不足，無法確認"
+        ),
+        "e": first_text(
+            "decisive_evidence",
+            str(primary_tool.get("field_answer") or "主要工具證據"),
+        ),
+        "o": first_text("opposing_evidence"),
+        "g": preferred_gap,
+        "c": first_text("decision_change_conditions", "證據更新後重判"),
+        "r": str(primary_tool.get("tool_id") or ""),
+        "cl": "candidate_only",
+    }
+    if model_profile == "cloud":
+        for field in ("e", "o", "g", "c", "cl"):
+            value = repair_payload[field]
+            repair_payload[field] = [value] if value else []
+        repair_payload["r"] = [
+            str(item.get("tool_id"))
+            for item in compact_evidence.get("tools") or []
+            if item.get("tool_id")
+        ]
     repair_candidate = json.dumps(
-        {
-            "s": run["scenario_id"],
-            "d": decision,
-            "a": str(
-                preferred_answer
-                or primary_tool.get("field_answer")
-                or "工作區證據不足，無法確認"
-            ),
-            "e": first_text(
-                "decisive_evidence",
-                str(primary_tool.get("field_answer") or "主要工具證據"),
-            ),
-            "o": first_text("opposing_evidence"),
-            "g": preferred_gap,
-            "c": first_text("decision_change_conditions", "證據更新後重判"),
-            "r": str(primary_tool.get("tool_id") or ""),
-            "cl": "candidate_only",
-        },
+        repair_payload,
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -779,6 +1333,12 @@ def build_recovery_prompt(
         ),
         "missing_evidence_not_preserved": (
             "g 必須逐字保留 evidence 內的 question_specific_route_context_evidence_missing。"
+        ),
+        "blocking_evidence_gap_not_acknowledged": (
+            "blocking_missing_evidence 非空；answer 或 g 必須明確說明缺少、未知或無法確認。"
+        ),
+        "blocking_gap_requires_non_go_decision": (
+            "primary evidence 有阻斷缺口；若資料可重取，decision 必須改為 DELAY。"
         ),
         "stale_location_gap_not_explained": (
             "定位已過期且位置未知；answer 或 g 必須明確提到 GNSS/GPS 定位過期或位置未知，"
@@ -824,9 +1384,23 @@ def build_recovery_prompt(
         )
     else:
         answer_repair_instruction = "保留上一輪已受證據支持的 answer，只修正列出的錯誤。"
+    recovery_instruction = (
+        "Re-read the relevant Pydantic AI native evidence tools before correcting the "
+        "previous Scout AI JSON. "
+        if model_profile == "cloud"
+        else "/no_think\n"
+    )
+    recovery_field_instruction = (
+        "e/o/g/c/r/cl 必須是 arrays，r 要保留答案使用的所有相關 tool_id。"
+        if model_profile == "cloud"
+        else "其餘證據欄位用短字串。"
+    )
     return (
-        "/no_think\n修正上一輪 Scout AI compact JSON；只輸出一行 JSON，不要 markdown。"
-        "key 必須是 s/d/a/e/o/g/c/r/cl；d 只可為既定 enum 或 null；其餘證據欄位用短字串。"
+        recovery_instruction
+        +
+        "修正上一輪 Scout AI compact JSON；只輸出一行 JSON，不要 markdown。"
+        "key 必須是 s/d/a/e/o/g/c/r/cl；d 只可為既定 enum 或 null；"
+        f"{recovery_field_instruction}"
         f"scenario={run['scenario_id']}；問題={run['question_text']}；"
         f"錯誤={','.join(verifier_errors)}。{correction}"
         "只依 evidence 修正，不可補常識、reference answer 或新事實。"
@@ -916,6 +1490,7 @@ def verify_model_output(
     errors: list[str] = []
     if parse_error or output is None:
         return {"status": "fail", "errors": [parse_error or "missing_output"]}
+    compact_evidence = compact_evidence or {}
     if output.get("scenario_id") != run["scenario_id"]:
         errors.append("scenario_id_mismatch")
     answer_mode = run["expected_decision_boundary"]["answer_mode"]
@@ -926,7 +1501,30 @@ def verify_model_output(
     elif decision not in DECISIONS:
         errors.append("missing_or_invalid_decision")
     elif run["expected_decisions"] and decision not in run["expected_decisions"]:
-        errors.append("decision_outside_scenario_boundary")
+        primary_tool = (compact_evidence.get("tools") or [{}])[0]
+        primary_decision = (
+            primary_tool.get("decision") if isinstance(primary_tool, dict) else None
+        )
+        blocking_delay_support = bool(
+            compact_evidence.get("blocking_missing_evidence")
+        ) and decision == "DELAY"
+        primary_permission_support = (
+            run["force_code"] == "PER"
+            and run["question_id"] != "PER-095"
+            and decision == primary_decision
+        )
+        compound_evidence_support = _decision_supported_by_evidence(
+            decision,
+            compact_evidence.get("tools") or [],
+        )
+        if not any(
+            (
+                primary_permission_support,
+                blocking_delay_support,
+                compound_evidence_support,
+            )
+        ):
+            errors.append("decision_outside_scenario_boundary")
     if not str(output.get("answer") or "").strip():
         errors.append("missing_answer")
     for field in (
@@ -944,9 +1542,7 @@ def verify_model_output(
         errors.append("unavailable_source_ref_claimed")
     claims = " ".join(str(item) for item in output.get("claims") or []).lower()
     answer = str(output.get("answer") or "").lower()
-    answer_decisions = {
-        item for item in DECISIONS if re.search(rf"\b{item}\b", answer, re.IGNORECASE)
-    }
+    answer_decisions = _overall_answer_decisions(answer)
     if decision in DECISIONS and answer_decisions and answer_decisions != {decision}:
         errors.append("answer_decision_contradiction")
     if run["question_id"] == "RTE-001" and not any(
@@ -973,7 +1569,6 @@ def verify_model_output(
         term in answer for term in ("目前位於", "你現在在", "這裡是")
     ):
         errors.append("unknown_location_claimed_as_known")
-    compact_evidence = compact_evidence or {}
     if "question_specific_route_context_evidence_missing" in set(
         compact_evidence.get("missing_evidence") or []
     ):
@@ -994,8 +1589,71 @@ def verify_model_output(
         )
         if not missing_acknowledged:
             errors.append("unsupported_answer_despite_question_specific_evidence_gap")
+    blocking_gaps = compact_evidence.get("blocking_missing_evidence") or []
+    if blocking_gaps:
+        gaps = " ".join(str(item) for item in output.get("evidence_gaps") or []).lower()
+        if not any(
+            term in f"{answer} {gaps}"
+            for term in (
+                "工作區未提供",
+                "證據不足",
+                "缺少",
+                "缺乏",
+                "未知",
+                "無法確認",
+                "無法判斷",
+                "待查",
+                "missing",
+                "stale",
+            )
+        ):
+            errors.append("blocking_evidence_gap_not_acknowledged")
+        if decision in {"GO", "CONDITIONAL_GO", "GUIDED_ONLY"}:
+            errors.append("blocking_gap_requires_non_go_decision")
     errors.extend(_scenario_faithfulness_errors(run, output, answer))
     return {"status": "pass" if not errors else "fail", "errors": errors}
+
+
+def _decision_supported_by_evidence(
+    decision: str,
+    tools: list[dict[str, Any]],
+) -> bool:
+    """Accept an out-of-overlay decision when evidence supports equal caution."""
+
+    caution_rank = {
+        "GO": 0,
+        "CONDITIONAL_GO": 1,
+        "GUIDED_ONLY": 1,
+        "CHANGE_PLAN": 2,
+        "DELAY": 2,
+        "NO_GO": 3,
+        "ESCALATE": 3,
+    }
+    selected_rank = caution_rank.get(decision)
+    if selected_rank is None:
+        return False
+    evidence_ranks = [
+        caution_rank[str(item.get("decision"))]
+        for item in tools
+        if isinstance(item, dict) and str(item.get("decision")) in caution_rank
+    ]
+    return any(rank >= selected_rank for rank in evidence_ranks)
+
+
+def _overall_answer_decisions(answer: str) -> set[str]:
+    """Extract only answer-level decisions, not quoted subordinate tool decisions."""
+
+    normalized = answer.strip().upper()
+    if normalized in DECISIONS:
+        return {normalized}
+    decision_pattern = "|".join(sorted(DECISIONS, key=len, reverse=True))
+    match = re.match(
+        rf"^(?:結論|整體(?:建議|決策)?|最終(?:建議|決策)?|建議|DECISION)\s*[:：]?\s*"
+        rf"(?P<decision>{decision_pattern})\b",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    return {match.group("decision").upper()} if match else set()
 
 
 def apply_answer_quality_gate(
@@ -1030,10 +1688,14 @@ def _scenario_faithfulness_errors(
     if variant == "exposed_strong_wind_shelter_ahead":
         if any(term in answer for term in ("無安全路徑", "沒有安全路徑", "no safe route")):
             errors.append("contradicts_sheltered_candidate_ahead")
-        if not any(term in answer for term in ("前方", "背風", "180", "移動", "繼續")):
+        retreat_answer = any(term in answer for term in ("撤退", "折返", "回頭"))
+        if not retreat_answer and not any(
+            term in answer for term in ("前方", "背風", "180", "移動", "繼續")
+        ):
             errors.append("missing_sheltered_candidate_next_step")
     elif variant == "sheltered_flat_time_available":
-        if not any(
+        decision = str(output.get("decision") or "").upper()
+        if decision not in {"NO_GO", "CHANGE_PLAN", "DELAY"} and not any(
             term in answer
             for term in (
                 "有條件",
@@ -1045,6 +1707,7 @@ def _scenario_faithfulness_errors(
                 "需",
                 "最多",
                 "分鐘",
+                "分钟",
             )
         ):
             errors.append("sheltered_time_buffer_not_used")
@@ -1187,6 +1850,7 @@ def execute_run(
     timeout_seconds: int,
     max_model_requests: int,
     guided_retry: bool,
+    model_adapter: ScoutModelExecutionAdapter,
 ) -> dict[str, Any]:
     started = time.monotonic()
     snapshot = snapshot_for_run(run)
@@ -1207,12 +1871,18 @@ def execute_run(
         live_navigation_snapshot=snapshot,
         scenario_overlay=run["condition_overlay"],
     )
+    tool_results, missing_evidence = apply_scenario_evidence_overlay(
+        run=run,
+        tool_results=tool_results,
+        missing_evidence=missing_evidence,
+    )
     compact = compact_evidence_for_model(
         run=run,
         total_info=total_info,
         tool_results=tool_results,
         missing_tools=missing_tools,
         missing_evidence=missing_evidence,
+        max_chars=None if model_adapter.profile == "cloud" else 1600,
     )
     effective_missing_evidence = list(compact.get("missing_evidence") or [])
     blocking_missing_evidence = list(
@@ -1227,7 +1897,11 @@ def execute_run(
         question_id=run["question_id"],
     )
     available_refs = source_refs_from_evidence(run, tool_results)
-    prompt = build_structured_prompt(run=run, compact_evidence=compact)
+    prompt = build_structured_prompt(
+        run=run,
+        compact_evidence=compact,
+        model_profile=model_adapter.profile,
+    )
     model_attempts: list[dict[str, Any]] = []
     raw_answer = ""
     model_metadata: dict[str, Any] = {}
@@ -1246,13 +1920,21 @@ def execute_run(
     ] | None = None
     best_error_count = sys.maxsize
     for request_index in range(1, max_model_requests + 1):
-        raw_answer, model_metadata = call_hailo_model_via_pydantic_ai(
-            endpoint=endpoint,
-            model=model,
-            prompt=prompt,
-            timeout_seconds=timeout_seconds,
-            structured_json=True,
-        )
+        invoke_kwargs = {
+            "endpoint": endpoint,
+            "model": model,
+            "prompt": prompt,
+            "timeout_seconds": timeout_seconds,
+            "structured_json": True,
+        }
+        if model_adapter.invoke_with_context is not None:
+            raw_answer, model_metadata = model_adapter.invoke_with_context(
+                **invoke_kwargs,
+                evidence_cards=tool_results,
+                selected_tool_ids=tool_ids,
+            )
+        else:
+            raw_answer, model_metadata = model_adapter.invoke(**invoke_kwargs)
         output, parse_error = parse_model_output(raw_answer)
         output = canonicalize_output_source_refs(output, available_refs)
         verifier = verify_model_output(
@@ -1275,6 +1957,26 @@ def execute_run(
                 not missing_tools and not blocking_missing_evidence
             ),
         )
+        if model_adapter.invoke_with_context is not None:
+            trace = model_metadata.get("native_tool_trace") or {}
+            called_tool_ids = {
+                str(item) for item in trace.get("called_tool_ids") or [] if item
+            }
+            expected_tool_ids = {
+                str(item.get("tool_id"))
+                for item in tool_results
+                if item.get("tool_id")
+            }
+            native_errors = []
+            if int(trace.get("tool_call_count") or 0) <= 0:
+                native_errors.append("native_tool_call_missing")
+            if expected_tool_ids and not expected_tool_ids.issubset(called_tool_ids):
+                native_errors.append("native_tool_evidence_card_coverage_incomplete")
+            if native_errors:
+                verifier = {
+                    "status": "fail",
+                    "errors": list(verifier.get("errors") or []) + native_errors,
+                }
         if output is not None:
             error_count = len(verifier.get("errors") or [])
             if error_count < best_error_count:
@@ -1327,6 +2029,7 @@ def execute_run(
             compact_evidence=compact,
             previous_output=output,
             verifier_errors=list(verifier.get("errors") or []),
+            model_profile=model_adapter.profile,
         )
     if (
         verifier["status"] != "pass"
@@ -1358,6 +2061,20 @@ def execute_run(
         for item in tool_results
         if item.get("status") == "completed"
     ]
+    scorecard = build_three_axis_scorecard(
+        output=output,
+        parse_error=parse_error,
+        identity=identity,
+        verifier=verifier,
+        model_metadata=model_metadata,
+        native_tool_call_required=model_adapter.invoke_with_context is not None,
+        available_source_refs=available_refs,
+        completed_tools=completed_tools,
+        missing_tools=missing_tools,
+        blocking_missing_evidence=blocking_missing_evidence,
+        tool_results=tool_results,
+        question=run["question_text"],
+    )
     failure_category = None
     if parse_error:
         failure_category = "model_output_schema_failure"
@@ -1384,8 +2101,10 @@ def execute_run(
         "condition_overlay": run["condition_overlay"],
         "anchor_rank": run["scenario"]["boss_rank"],
         "model": model,
-        "provider": "hailo_ollama_ai_hat_plus_2",
-        "model_transport": "pydantic_ai_function_model_hailo_ollama",
+        "model_adapter_id": model_adapter.adapter_id,
+        "model_profile": model_adapter.profile,
+        "provider": model_adapter.provider,
+        "model_transport": model_adapter.transport,
         "selected_tools": tool_ids,
         "completed_tools": completed_tools,
         "missing_tools": missing_tools,
@@ -1424,12 +2143,15 @@ def execute_run(
         "decision": (output or {}).get("decision"),
         "verifier": verifier,
         "answer_quality_screen": quality_screen,
+        "three_axis_scorecard": scorecard,
         "failure_category": failure_category,
         "source_refs": sorted(available_refs),
         "source_hashes": source_hashes,
         "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
         "prompt_chars": len(prompt),
         "model_metadata": model_metadata,
+        "native_tool_call_required": model_adapter.invoke_with_context is not None,
+        "full_evidence_card_count": len(tool_results),
         "duration_ms": int((time.monotonic() - started) * 1000),
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -1477,6 +2199,7 @@ def run_eval(args: argparse.Namespace) -> Path:
         runs = runs[args.offset :]
     if args.max_runs is not None:
         runs = runs[: args.max_runs]
+    model_adapter = build_ai_hat_plus_2_model_adapter()
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = workspace / "outputs" / "evals" / f"six_forces_600_total_info_{run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -1500,7 +2223,10 @@ def run_eval(args: argparse.Namespace) -> Path:
         "base_question_count": len({item["question_id"] for item in runs}),
         "model_run_count": len(runs),
         "model": args.model,
-        "provider": "hailo_ollama_ai_hat_plus_2",
+        "model_adapter_id": model_adapter.adapter_id,
+        "model_profile": model_adapter.profile,
+        "provider": model_adapter.provider,
+        "model_transport": model_adapter.transport,
         "endpoint": args.endpoint,
         "runtime_packages": runtime_package_versions(),
         "max_tool_calls_per_attempt": 10,
@@ -1538,6 +2264,7 @@ def run_eval(args: argparse.Namespace) -> Path:
                 timeout_seconds=args.timeout_seconds,
                 max_model_requests=args.max_model_requests,
                 guided_retry=args.guided_retry,
+                model_adapter=model_adapter,
             )
             result_file.write(json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n")
             result_file.flush()
@@ -1562,12 +2289,31 @@ def _write_summaries(
 ) -> None:
     verifier = Counter(item["verifier"]["status"] for item in results)
     identity = Counter(item["context_identity_check"]["status"] for item in results)
-    failures = [item for item in results if item.get("failure_category")]
+    failures = [
+        item
+        for item in results
+        if item["verifier"]["status"] != "pass"
+        or item["context_identity_check"]["status"] != "pass"
+        or bool((item.get("model_metadata") or {}).get("provider_error"))
+    ]
+    evidence_gap_reviews = [
+        item
+        for item in results
+        if item.get("failure_category") == "missing_evidence"
+        or bool(item.get("blocking_missing_evidence"))
+    ]
     force_counts = Counter(item["force"] for item in results)
     decisions = Counter(str(item.get("decision") or "null") for item in results)
     quality = Counter(
         str((item.get("answer_quality_screen") or {}).get("classification") or "missing")
         for item in results
+    )
+    quality_review_reasons = Counter(
+        str(reason)
+        for item in results
+        for reason in (
+            (item.get("answer_quality_screen") or {}).get("failure_reasons") or []
+        )
     )
     strict_accepted = sum(
         item["verifier"]["status"] == "pass"
@@ -1576,6 +2322,45 @@ def _write_summaries(
         for item in results
     )
     total_model_requests = sum(int(item.get("model_request_count") or 0) for item in results)
+    model_usage_totals: Counter[str] = Counter()
+    for item in results:
+        for attempt in item.get("model_attempts") or []:
+            usage = ((attempt.get("model_metadata") or {}).get("usage") or {})
+            model_usage_totals.update(
+                {
+                    str(key): value
+                    for key, value in usage.items()
+                    if isinstance(value, (int, float)) and not isinstance(value, bool)
+                }
+            )
+    total_duration_ms = sum(int(item.get("duration_ms") or 0) for item in results)
+    axis_names = (
+        "transport_schema",
+        "safe_uncertainty",
+        "semantic_answer_quality",
+    )
+    three_axis_summary: dict[str, dict[str, Any]] = {}
+    for axis_name in axis_names:
+        scores = [
+            int(axis["score"])
+            for item in results
+            if isinstance((axis := (item.get("three_axis_scorecard") or {}).get(axis_name)), dict)
+            and isinstance(axis.get("score"), (int, float))
+        ]
+        three_axis_summary[axis_name] = {
+            "scored_run_count": len(scores),
+            "mean_score": round(sum(scores) / len(scores), 3) if scores else None,
+            "score_80_or_higher": sum(score >= 80 for score in scores),
+            "score_below_80": sum(score < 80 for score in scores),
+        }
+    native_tool_call_count = sum(
+        int(
+            (((attempt.get("model_metadata") or {}).get("native_tool_trace") or {}).get("tool_call_count"))
+            or 0
+        )
+        for item in results
+        for attempt in item.get("model_attempts") or []
+    )
     summary = {
         **manifest,
         "finished_at": utc_iso(),
@@ -1594,13 +2379,36 @@ def _write_summaries(
         "mean_model_requests_per_run": (
             round(total_model_requests / len(results), 3) if results else 0.0
         ),
+        "model_usage_totals": dict(sorted(model_usage_totals.items())),
+        "total_duration_ms": total_duration_ms,
+        "mean_duration_ms_per_run": (
+            round(total_duration_ms / len(results), 3) if results else 0.0
+        ),
+        "native_tool_call_count": native_tool_call_count,
+        "three_axis_score_summary": three_axis_summary,
         "failure_count": len(failures),
+        "blocking_evidence_gap_count": len(evidence_gap_reviews),
+        "quality_review_count": sum(
+            str((item.get("answer_quality_screen") or {}).get("classification"))
+            == "quality_needs_review"
+            for item in results
+        ),
+        "quality_review_reason_summary": dict(sorted(quality_review_reasons.items())),
     }
     (run_dir / "model_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
     )
     (run_dir / "failures.json").write_text(
         json.dumps(failures, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    (run_dir / "evidence_gap_reviews.json").write_text(
+        json.dumps(
+            evidence_gap_reviews,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
     )
     deterministic = {
         "scenario_identity": dict(sorted(identity.items())),
@@ -1618,19 +2426,29 @@ def _write_summaries(
         json.dumps(per095, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
     )
     lines = [
-        "# Scout AI Six Forces 600 + Total Info AI HAT+2 Eval",
+        f"# {manifest.get('report_title', 'Scout AI Six Forces 600 + Total Info AI HAT+2 Eval')}",
         "",
         f"- run_id: `{manifest['run_id']}`",
         f"- model/provider: `{manifest['model']}` / `{manifest['provider']}`",
         f"- unique questions: `{summary['unique_questions']}`",
         f"- model runs: `{summary['completed_model_runs']}`",
         f"- model requests: `{summary['total_model_requests']}`",
+        f"- model usage: `{dict(model_usage_totals)}`",
+        f"- mean duration: `{summary['mean_duration_ms_per_run']} ms/run`",
         f"- verifier: `{dict(verifier)}`",
         f"- answer quality screen: `{dict(quality)}`",
+        f"- native Pydantic AI tool calls: `{native_tool_call_count}`",
+        f"- three-axis scores: `{three_axis_summary}`",
         f"- strict verifier + quality acceptance: `{strict_accepted}/{len(results)}`",
         f"- identity: `{dict(identity)}`",
-        f"- failures: `{len(failures)}`",
-        "- weather: `deterministic_weather_replay`, `external_api_calls_made=false`",
+        f"- execution failures: `{len(failures)}`",
+        f"- blocking evidence-gap reviews: `{len(evidence_gap_reviews)}`",
+        f"- quality reviews: `{summary['quality_review_count']}`",
+        f"- quality review reasons: `{dict(quality_review_reasons)}`",
+        (
+            "- weather: `deterministic_weather_replay`, "
+            f"`weather_external_api_calls_made={str(manifest.get('weather_external_api_calls_made', False)).lower()}`"
+        ),
         "- boundary: `candidate_only=true`, `runtime_safety_truth=false`",
         "",
         "## Force Runs",
