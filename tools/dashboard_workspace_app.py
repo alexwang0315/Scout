@@ -13,7 +13,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scout_env import ScoutEnvLoadResult, load_scout_env_files  # noqa: E402
+
+_BOOTSTRAP_ENV_LOAD_RESULT = load_scout_env_files(repo_root=ROOT)
+
 from admin_api import create_admin_router  # noqa: E402
+from dashboard_connected_preparation import (  # noqa: E402
+    create_dashboard_connected_preparation_manager,
+)
 from assistant_api import (  # noqa: E402
     create_assistant_provider_from_env,
     create_assistant_provider_status,
@@ -25,16 +32,33 @@ from debug_event_provenance import DebugEventIngestionChannel  # noqa: E402
 from hardware_readiness_api import create_hardware_readiness_router  # noqa: E402
 from mock_outbound_transport import MockOutboundTransport  # noqa: E402
 from runtime_debug_log import MemoryRuntimeDebugEventLog  # noqa: E402
-from scout_env import load_scout_env_files  # noqa: E402
 from tools.admin_ui_smoke_app import _debug_events  # noqa: E402
 
 
-def load_repo_env(root: Path = ROOT) -> None:
-    load_scout_env_files(repo_root=root)
+def load_repo_env(root: Path = ROOT) -> ScoutEnvLoadResult:
+    current = load_scout_env_files(repo_root=root)
+    if root.resolve() != ROOT.resolve():
+        return current
+    return ScoutEnvLoadResult(
+        loaded_files=tuple(
+            dict.fromkeys(
+                _BOOTSTRAP_ENV_LOAD_RESULT.loaded_files + current.loaded_files
+            )
+        ),
+        loaded_keys=tuple(
+            dict.fromkeys(
+                _BOOTSTRAP_ENV_LOAD_RESULT.loaded_keys + current.loaded_keys
+            )
+        ),
+        credential_values_exposed=(
+            _BOOTSTRAP_ENV_LOAD_RESULT.credential_values_exposed
+            or current.credential_values_exposed
+        ),
+    )
 
 
 def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
-    load_repo_env()
+    env_load_result = load_repo_env()
     os.environ.setdefault("SCOUT_AI_ASSISTANT_PROVIDER", "pydantic_ai")
     os.environ.setdefault(
         "SCOUT_AI_ASSISTANT_CONFIG_PATH",
@@ -46,7 +70,19 @@ def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
 
     app = FastAPI(title="Scout Dashboard Workspace App")
     app.add_middleware(GZipMiddleware, minimum_size=1_024, compresslevel=5)
-    app.include_router(create_admin_router(pretrip_workspace_root=workspace_root))
+    connected_preparation_manager = create_dashboard_connected_preparation_manager(
+        repo_root=ROOT,
+        workspace_root=workspace_root,
+        initial_env_load_result=env_load_result,
+    )
+    app.state.connected_preparation_manager = connected_preparation_manager
+    app.include_router(
+        create_admin_router(
+            pretrip_workspace_root=workspace_root,
+            connected_preparation_manager=connected_preparation_manager,
+        )
+    )
+    app.router.on_shutdown.append(connected_preparation_manager.stop)
 
     debug_log = MemoryRuntimeDebugEventLog(_debug_events())
     transport = MockOutboundTransport(

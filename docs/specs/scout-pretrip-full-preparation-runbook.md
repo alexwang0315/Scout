@@ -316,8 +316,9 @@ After the run, verify these refs in `project.json`:
 The rainfall frames are persistent evidence snapshots but keep
 `cacheable=false`, `ttl=0`, and `mustRefetchOnPrepare=true`; never treat the
 latest stored frame as fresh without a new explicit run. No recurring ten-
-minute fetch is installed by this command. Long-term monitoring remains a
-separate approval-gated operation.
+minute fetch is installed by this command alone. Long-term monitoring remains
+a separate approval-gated operation; the local Dashboard service-lifetime job
+described below is the approved implementation for the current Mac/server.
 
 Treat QPE `-1` and QPF `-99` as provider-invalid/no-data, not zero rainfall.
 The route trend samples a 1.5 km route buffer; if no valid QPF cell intersects
@@ -389,8 +390,90 @@ Required checks:
 - `outputs/route_weather_lora_alert.json` has `sent=false` and does not invoke
   radio or outbound providers.
 
-Do not add a recurring fetch schedule automatically. Long-term background
-monitoring requires a separately reviewed operator deployment/approval.
+### Dashboard-Triggered Connected Preparation And Recurring Frame Collection
+
+The current local Mac/server Dashboard is approved to start connected
+preparation when `/admin/dashboard` opens. The browser does not fetch provider
+assets itself. It posts to the local coordinator:
+
+```text
+POST /admin/pretrip/projects/{project_id}/connected-preparation
+GET  /admin/pretrip/projects/{project_id}/connected-preparation
+schemaVersion=dashboardConnectedPreparation.v1
+```
+
+The server coordinator loads the repository `.env` (or the explicitly selected
+`SCOUT_ENV_FILE`) without logging values, sets
+`SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1`, uses an external cache at
+`~/.scout/cache/cwa-weather-imagery` by default, and refreshes the
+provider-backed Overpass/CWA/GEE layer subset with:
+
+```text
+profile=mac-workstation
+network_mode=explicit-fetch
+allow_network_fetch=true
+prepare_cwa_imagery=true
+```
+
+It is single-flight per project and schedules the next service-lifetime refresh
+after 600 seconds by default. Configure the interval with
+`SCOUT_DASHBOARD_CONNECTED_REFRESH_SECONDS`; values below 60 seconds are
+clamped. Stop the Dashboard service to stop this in-process schedule. This is
+not an OS login item, LaunchAgent, cron entry, or Pi/mobile worker.
+
+Run the exact same connected path once from the terminal with:
+
+```bash
+SCOUT_ENV_FILE=/Users/alexwang0315/scout-fusion/.env \
+SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1 \
+SCOUT_CWA_IMAGERY_CACHE_ROOT=/Users/alexwang0315/.scout/cache/cwa-weather-imagery \
+PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m dashboard_connected_preparation \
+  --project-id "$PROJECT_ID" \
+  --workspace-root "$WORKSPACE_ROOT" \
+  --repo-root /Users/alexwang0315/scout-fusion \
+  --cache-root /Users/alexwang0315/.scout/cache/cwa-weather-imagery
+```
+
+The redacted status may expose credential *names* and env-file paths, but never
+credential values. It reports `cwaApiRequestAttempted`, `externalApiCallsMade`,
+component statuses, next refresh time, and prepared artifact refs. Every run
+retains older observed frames in the bounded external cache so the real
+3/6/9/12-hour windows can grow over time without fabricated history.
+While a run is queued or running, the three request-result booleans are `null`
+and `requestActivityState=in-progress`; the Dashboard renders this as
+`in progress`, not the misleading `false`. A completed run replaces them with
+observed booleans.
+
+Current-position and target sampling is a separate user gesture in Weather.
+The user selects a prepared checkpoint and presses `授權目前位置並更新降雨趨勢`.
+Only then does the browser request geolocation, obtain a server-issued short-
+lived approval, and call `POST .../rainfall-trend`. The response is kept in UI
+state; the server persists only the sanitized approval audit with
+`rawCoordinatesPersisted=false`.
+
+The 2026-07-23 operator approval covers the Dashboard service-lifetime recurring
+timer described above. It is intentionally not installed as a Login Item,
+LaunchAgent, cron job, Pi worker, or mobile worker; a durable OS-level schedule
+still requires a separate deployment review and approval.
+
+Dashboard connected refresh requests only the provider-backed layers needed to
+refresh Overpass, CWA, and GEE evidence. Existing GPX, route, terrain, and TEII
+artifacts stay in the workspace and remain inputs to rainfall grids, imagery
+route sampling, motion, risk-package extraction, and the LoRa preview; they are
+not regenerated every ten minutes. The refresh also sets
+`run_post_layer_enrichments=false`. Raster-label OCR, Boss-point synthesis, and
+mileage-tag alignment are route-enrichment jobs, not time-sensitive API
+refreshes; their manifest status is `skipped_connected_refresh`, and they remain
+available through the normal full preparation path. Connected refresh also sets
+`run_map_preparation_spec_artifacts=false`: it reuses existing terrain route
+samples/visualizations instead of spending minutes regenerating them after the
+provider data is already ready. The manifest records the same
+`skipped_connected_refresh` status for that bounded optimization.
+
+Radar/satellite motion estimation consumes the newest contiguous cached frame
+suffix whose adjacent intervals are at most two hours. A longer historical gap
+does not discard recent usable motion evidence; it only separates the older
+animation history from the regression window.
 
 When `SCOUT_PRETRIP_DURABLE_EVIDENCE_SOURCE_ROOT` is set, the wrapper performs
 a final durable evidence restore after route context collection. This is not a

@@ -1908,20 +1908,33 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         "function renderWeatherTimeline",
         "function renderWeatherIntersectionMap",
         "function renderWeatherActions",
-        "/rainfall-grids",
-        "/weather-imagery",
+        "/weather-dashboard",
+        "weatherDecisionDashboard.v1",
+        "routeRisk",
+        "routeTrend",
+        "candidateDecision",
+        "function renderWeatherDecisionEvidence",
+        "Decision / Why / Where / When",
+        'data-weather-cwa-map-frame="true"',
+        'data-weather-cwa-product="true"',
+        'data-weather-cwa-window="true"',
+        'data-weather-cwa-timeline="true"',
+        'data-weather-cwa-opacity="radar"',
+        'data-weather-cwa-opacity="satellite"',
+        "function bindWeatherCwaMapFrame",
+        "function scheduleWeatherCwaBridgeRetry",
+        "function weatherCwaBridgeShouldWait",
+        "if (weatherCwaBridgeShouldWait(event.detail))",
+        "scoutCwaImageryController",
         'data-weather-status',
         'data-weather-decision-band="true"',
-        'data-weather-field-hero="true"',
-        "Weather is not a forecast.",
-        "It is a route constraint.",
         'data-weather-timeline="true"',
         'data-weather-evidence-timeline="true"',
+        'data-weather-evidence-time="true"',
+        "evidenceTimeline.value = String(state.weatherTimelineIndex)",
         'data-weather-intersection-map="true"',
-        'data-weather-map-layer=',
         'data-weather-intersection-callout="true"',
-        "NO CACHED ROUTE-BBOX CELLS",
-        "NO CACHED RADAR FRAME",
+        "Canonical Pre-trip Map",
         'data-weather-actions="true"',
         'data-weather-recheck="true"',
         "renderWeatherIntersectionMap(snapshot)",
@@ -1932,8 +1945,35 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         "Weather decision reference",
         "example rules",
         'loadDataForRoute("outdoor-weather", {force: true})',
+        "function triggerDashboardConnectedPreparation",
+        "function connectedPreparationActivityLabel",
+        "preparationInProgress",
+        "preparationStillRunning",
+        'status: "preparing"',
+        'if (weather.status === "preparing") return "loading";',
+        'connectedPreparationActivityLabel(preparation.cwaApiRequestAttempted, preparation.status)',
+        'connectedPreparationActivityLabel(preparation.externalApiCallsMade, preparation.status)',
+        "/connected-preparation",
+        'triggerDashboardConnectedPreparation("dashboard-open")',
+        "connectedPreparation",
+        "function weatherPercentLabel",
+        "function requestAuthorizedRainfallTrend",
+        "/rainfall-location-approvals",
+        "/rainfall-trend",
+        "navigator.geolocation.getCurrentPosition",
+        "confirmLocationAccess: true",
+        'data-weather-location-trend="true"',
     ):
         assert marker in html
+
+    assert "weatherPercentLabel(features.convectiveCellScore)" in html
+    assert "weatherPercentLabel(features.satelliteConvectiveCloudScore)" in html
+    assert "weatherPercentLabel(features.confidence)" in html
+    assert "weatherNumberLabel(Number(features.convectiveCellScore) * 100" not in html
+    assert "weatherNumberLabel(Number(features.satelliteConvectiveCloudScore) * 100" not in html
+    assert 'prepareProfile: "mac-workstation"' in html
+    assert 'networkMode: "explicit-fetch"' in html
+    assert "allowNetworkFetch: true" in html
 
     weather_page = html.split("function renderWeatherPage", 1)[1].split(
         "function renderNavigationPage", 1
@@ -1942,6 +1982,10 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
     assert "13:00" not in weather_page
     assert "CP087" not in weather_page
     assert 'renderMapPanel("weather")' not in weather_page
+    assert 'data-weather-field-hero="true"' not in weather_page
+    assert "Weather is not a forecast." not in weather_page
+    assert "It is a route constraint." not in weather_page
+    assert ".weather-field-hero" not in html
 
 
 def test_dashboard_uses_weather_field_instrument_design_system_across_routes() -> None:

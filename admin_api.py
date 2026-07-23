@@ -51,6 +51,10 @@ from admin_weather_overlay import (
     build_weather_api_runtime_status,
     fetch_open_meteo_weather_snapshot,
 )
+from dashboard_connected_preparation import (
+    DashboardConnectedPreparationManager,
+    create_dashboard_connected_preparation_manager,
+)
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
     build_pretrip_admin_view,
@@ -2085,6 +2089,27 @@ class CompanionMatchRefreshRequest(BaseModel):
     review_score_threshold: int = Field(default=75, ge=0, le=100)
 
 
+class DashboardConnectedPreparationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        default="dashboard-open",
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+    )
+    force: bool = False
+
+
+def _connected_preparation_manager_from_env(
+    workspace_root: Path,
+) -> DashboardConnectedPreparationManager:
+    return create_dashboard_connected_preparation_manager(
+        repo_root=ROOT,
+        workspace_root=workspace_root,
+    )
+
+
 def create_admin_app(
     *,
     incident_store_path: Path | None = None,
@@ -2096,6 +2121,7 @@ def create_admin_app(
         Callable[[str, int], Any] | None
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
+    connected_preparation_manager: Any | None = None,
 ) -> FastAPI:
     resolved_alpha_sandbox_enabled = (
         alpha_sandbox_enabled
@@ -2105,6 +2131,12 @@ def create_admin_app(
     )
     app = FastAPI(title="Scout Fusion Admin API")
     app.add_middleware(GZipMiddleware, minimum_size=1_024, compresslevel=5)
+    resolved_connected_preparation_manager = connected_preparation_manager
+    if resolved_connected_preparation_manager is None and pretrip_workspace_root is not None:
+        resolved_connected_preparation_manager = _connected_preparation_manager_from_env(
+            pretrip_workspace_root
+        )
+    app.state.connected_preparation_manager = resolved_connected_preparation_manager
     app.include_router(
         create_admin_router(
             incident_store_path=incident_store_path,
@@ -2116,11 +2148,14 @@ def create_admin_app(
                 route_context_briefing_variants_runner_factory
             ),
             now_factory=now_factory,
+            connected_preparation_manager=resolved_connected_preparation_manager,
         )
     )
     app.include_router(create_emergency_mobile_ui_router())
     if resolved_alpha_sandbox_enabled:
         app.include_router(create_alpha_simulation_ui_router())
+    if hasattr(resolved_connected_preparation_manager, "stop"):
+        app.router.on_shutdown.append(resolved_connected_preparation_manager.stop)
     return app
 
 
@@ -2135,6 +2170,7 @@ def create_admin_router(
         Callable[[str, int], Any] | None
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
+    connected_preparation_manager: Any | None = None,
 ) -> APIRouter:
     load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
@@ -4333,6 +4369,170 @@ def create_admin_router(
                 "mobileGridProcessing": False,
             },
         }
+
+    @router.get("/pretrip/projects/{project_id}/weather-dashboard")
+    def pretrip_project_weather_dashboard(project_id: str) -> dict[str, Any]:
+        """Project cache projection for Weather-to-Decision Intelligence.
+
+        This route never fetches CWA upstream data and never evaluates a newly
+        submitted position. It only composes redacted artifacts prepared by the
+        workstation/server jobs into one compact Dashboard contract.
+        """
+
+        project_root = _validated_pretrip_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="invalid pre-trip project",
+            ) from exc
+        if not isinstance(project, dict):
+            raise HTTPException(status_code=422, detail="invalid pre-trip project")
+
+        try:
+            rainfall = pretrip_project_rainfall_grids(project_id)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            rainfall = _empty_weather_dashboard_rainfall(project_id)
+        imagery = pretrip_project_weather_imagery(project_id)
+        trend_raw = _load_weather_dashboard_artifact(
+            project_root,
+            project,
+            ref_key="cwa_rainfall_route_trend_ref",
+            artifact_label="rainfall trend",
+        )
+        risk_raw = _load_weather_dashboard_artifact(
+            project_root,
+            project,
+            ref_key="route_weather_risk_package_ref",
+            artifact_label="route weather risk package",
+        )
+        alert_raw = _load_weather_dashboard_artifact(
+            project_root,
+            project,
+            ref_key="route_weather_lora_alert_ref",
+            artifact_label="route weather LoRa alert",
+        )
+        for artifact, label in (
+            (trend_raw, "rainfall trend"),
+            (risk_raw, "route weather risk package"),
+        ):
+            if artifact is not None:
+                _validate_cwa_artifact_route_identity(
+                    project_root,
+                    requested_project_id=project_id,
+                    artifact=artifact,
+                    artifact_label=label,
+                )
+        pair_verification = {
+            "rainfallTrend": _weather_dashboard_pair_verification(
+                rainfall,
+                trend_raw,
+                first_label="rainfall grid manifest",
+                second_label="rainfall trend",
+            ),
+            "imageryRisk": _weather_dashboard_pair_verification(
+                imagery,
+                risk_raw,
+                first_label="weather imagery manifest",
+                second_label="route weather risk package",
+            ),
+        }
+        evaluated_at = resolved_now_factory().isoformat()
+        return _build_weather_decision_dashboard(
+            project_id=project_id,
+            evaluated_at=evaluated_at,
+            rainfall=rainfall,
+            imagery=imagery,
+            trend=trend_raw,
+            risk=risk_raw,
+            alert=alert_raw,
+            pair_verification=pair_verification,
+            source_refs={
+                "rainfallTrend": project.get("cwa_rainfall_route_trend_ref"),
+                "imageryManifest": project.get("cwa_weather_imagery_manifest_ref"),
+                "routeRisk": project.get("route_weather_risk_package_ref"),
+                "loraAlert": project.get("route_weather_lora_alert_ref"),
+            },
+        )
+
+    @router.post(
+        "/pretrip/projects/{project_id}/connected-preparation",
+        status_code=202,
+    )
+    def trigger_pretrip_project_connected_preparation(
+        project_id: str,
+        request: DashboardConnectedPreparationRequest,
+    ) -> dict[str, Any]:
+        project_root = _validated_pretrip_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if connected_preparation_manager is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Connected preparation manager is not configured",
+            )
+        try:
+            return connected_preparation_manager.trigger(
+                project_id,
+                reason=request.reason,
+                force=request.force,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Pre-trip project not found",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Connected preparation request is invalid",
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Connected preparation manager is unavailable",
+            ) from exc
+
+    @router.get("/pretrip/projects/{project_id}/connected-preparation")
+    def pretrip_project_connected_preparation_status(
+        project_id: str,
+    ) -> dict[str, Any]:
+        project_root = _validated_pretrip_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if connected_preparation_manager is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Connected preparation manager is not configured",
+            )
+        try:
+            return connected_preparation_manager.snapshot(project_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Pre-trip project not found",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Connected preparation request is invalid",
+            ) from exc
 
     @router.get("/pretrip/projects/{project_id}/rainfall-grid-overlay")
     def pretrip_project_rainfall_grid_overlay(
@@ -8982,6 +9182,560 @@ def _empty_cwa_weather_imagery_manifest(project_id: str) -> dict[str, Any]:
             "mobileImageProcessing": False,
             "candidateOnly": True,
             "runtimeSafetyTruth": False,
+        },
+    }
+
+
+_ROUTE_WEATHER_FEATURE_KEYS = (
+    "currentRainOnRoute",
+    "nearbyStrongEcho",
+    "rainBandApproaching",
+    "estimatedRainArrivalMinutes",
+    "convectiveCellScore",
+    "satelliteConvectiveCloudScore",
+    "cloudMotionTowardRoute",
+    "dataDelayMinutes",
+    "confidence",
+)
+
+
+def _empty_weather_dashboard_rainfall(project_id: str) -> dict[str, Any]:
+    return {
+        "artifactKind": "cwaRainfallGridManifest",
+        "schemaVersion": "cwaRainfallGridManifest.v1",
+        "projectId": project_id,
+        "layerId": "cwa-qpf",
+        "status": "not_prepared",
+        "products": [],
+        "processingBoundary": {
+            "adminReadIsCacheOnly": True,
+            "upstreamFetchOnRead": False,
+            "candidateOnly": True,
+            "runtimeSafetyTruth": False,
+            "raspberryPiGridProcessing": False,
+            "mobileGridProcessing": False,
+        },
+    }
+
+
+def _load_weather_dashboard_artifact(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    ref_key: str,
+    artifact_label: str,
+) -> dict[str, Any] | None:
+    ref = project.get(ref_key)
+    if ref is None or ref == "":
+        return None
+    path = _safe_pretrip_project_ref_path(project_root, ref)
+    if path is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unsafe {artifact_label} path",
+        )
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"invalid {artifact_label}",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=422,
+            detail=f"invalid {artifact_label} contract",
+        )
+    return payload
+
+
+def _weather_dashboard_pair_verification(
+    first: dict[str, Any] | None,
+    second: dict[str, Any] | None,
+    *,
+    first_label: str,
+    second_label: str,
+) -> str:
+    if not isinstance(first, dict) or not isinstance(second, dict):
+        return "not_available"
+    if first.get("status") in {"not_prepared", "unavailable"}:
+        return "not_available"
+    return _validate_cwa_pair_for_api(
+        first,
+        second,
+        first_label=first_label,
+        second_label=second_label,
+    )
+
+
+def _weather_dashboard_number(
+    value: Any,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> int | float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if not math.isfinite(number):
+        return None
+    if minimum is not None and number < minimum:
+        return None
+    if maximum is not None and number > maximum:
+        return None
+    return int(number) if number.is_integer() else number
+
+
+def _weather_dashboard_bool(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _compact_weather_dashboard_risk(
+    risk: dict[str, Any] | None,
+) -> dict[str, Any]:
+    raw_features = risk.get("imageryFeatures", {}) if isinstance(risk, dict) else {}
+    features = {
+        "currentRainOnRoute": _weather_dashboard_bool(
+            raw_features.get("currentRainOnRoute")
+        ),
+        "nearbyStrongEcho": _weather_dashboard_bool(
+            raw_features.get("nearbyStrongEcho")
+        ),
+        "rainBandApproaching": _weather_dashboard_bool(
+            raw_features.get("rainBandApproaching")
+        ),
+        "estimatedRainArrivalMinutes": _weather_dashboard_number(
+            raw_features.get("estimatedRainArrivalMinutes"),
+            minimum=0,
+        ),
+        "convectiveCellScore": _weather_dashboard_number(
+            raw_features.get("convectiveCellScore"),
+            minimum=0,
+            maximum=1,
+        ),
+        "satelliteConvectiveCloudScore": _weather_dashboard_number(
+            raw_features.get("satelliteConvectiveCloudScore"),
+            minimum=0,
+            maximum=1,
+        ),
+        "cloudMotionTowardRoute": _weather_dashboard_bool(
+            raw_features.get("cloudMotionTowardRoute")
+        ),
+        "dataDelayMinutes": _weather_dashboard_number(
+            raw_features.get("dataDelayMinutes"),
+            minimum=0,
+        ),
+        "confidence": _weather_dashboard_number(
+            raw_features.get("confidence"),
+            minimum=0,
+            maximum=1,
+        )
+        or 0,
+    }
+    interactions: list[dict[str, Any]] = []
+    for raw in (risk or {}).get("weatherTerrainInteractions", []):
+        if not isinstance(raw, dict):
+            continue
+        rule_code = str(raw.get("ruleCode") or "").strip()
+        if not rule_code:
+            continue
+        source_refs = [
+            ref
+            for ref in raw.get("terrainSourceRefs", [])
+            if _weather_dashboard_public_ref(ref) is not None
+        ][:8]
+        interactions.append(
+            {
+                "ruleCode": rule_code[:80],
+                "segmentId": str(raw.get("segmentId") or "")[:160] or None,
+                "teii_20m": _weather_dashboard_number(raw.get("teii_20m")),
+                "weatherConfidence": _weather_dashboard_number(
+                    raw.get("weatherConfidence"),
+                    minimum=0,
+                    maximum=1,
+                ),
+                "terrainSourceRefs": source_refs,
+                "candidateOnly": True,
+                "runtimeSafetyTruth": False,
+            }
+        )
+    return {
+        "status": str((risk or {}).get("status") or "not_prepared"),
+        "generatedAt": (risk or {}).get("generatedAt"),
+        "imageryFeatures": features,
+        "weatherTerrainInteractions": interactions,
+        "radarFrameCount": int(
+            _weather_dashboard_number(
+                (risk or {}).get("radarFrameCount"),
+                minimum=0,
+            )
+            or 0
+        ),
+        "satelliteFrameCount": int(
+            _weather_dashboard_number(
+                (risk or {}).get("satelliteFrameCount"),
+                minimum=0,
+            )
+            or 0
+        ),
+        "humanReviewRequired": True,
+        "boundary": {
+            "candidateOnly": True,
+            "runtimeSafetyTruth": False,
+            "outboundSendAllowed": False,
+            "raspberryPiImageProcessing": False,
+            "mobileImageProcessing": False,
+        },
+    }
+
+
+def _compact_weather_dashboard_position(
+    value: Any,
+    *,
+    include_id: bool,
+) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    result = {
+        "status": str(source.get("status") or "not_provided"),
+        "past1hMm": _weather_dashboard_number(source.get("past1hMm"), minimum=0),
+        "next1hMm": _weather_dashboard_number(source.get("next1hMm"), minimum=0),
+        "trend": str(source.get("trend") or "unknown")[:80],
+    }
+    if include_id:
+        result["id"] = str(source.get("id") or "")[:160] or None
+    return result
+
+
+def _compact_weather_dashboard_trend(
+    trend: dict[str, Any] | None,
+) -> dict[str, Any]:
+    source = trend or {}
+    raw_corridor = source.get("corridor")
+    corridor = raw_corridor if isinstance(raw_corridor, dict) else {}
+    compact_corridor: dict[str, Any] = {
+        "sampleCount": int(
+            _weather_dashboard_number(corridor.get("sampleCount"), minimum=0) or 0
+        ),
+        "coveredRouteSampleCount": int(
+            _weather_dashboard_number(
+                corridor.get("coveredRouteSampleCount"),
+                minimum=0,
+            )
+            or 0
+        ),
+        "trend": str(corridor.get("trend") or "unknown")[:80],
+    }
+    for key in (
+        "maxPast1hMm",
+        "meanPast1hMm",
+        "maxNext1hMm",
+        "meanNext1hMm",
+    ):
+        compact_corridor[key] = _weather_dashboard_number(
+            corridor.get(key),
+            minimum=0,
+        )
+    source_timestamps = source.get("sourceTimestamps")
+    source_timestamps = source_timestamps if isinstance(source_timestamps, dict) else {}
+    valid_windows = source.get("validWindows")
+    valid_windows = valid_windows if isinstance(valid_windows, dict) else {}
+    data_freshness = source.get("dataFreshness")
+    data_freshness = data_freshness if isinstance(data_freshness, dict) else {}
+    return {
+        "status": str(source.get("status") or "not_prepared"),
+        "evaluatedAt": source.get("evaluatedAt"),
+        "currentPosition": _compact_weather_dashboard_position(
+            source.get("currentPosition"),
+            include_id=False,
+        ),
+        "target": _compact_weather_dashboard_position(
+            source.get("target"),
+            include_id=True,
+        ),
+        "corridor": compact_corridor,
+        "sourceTimestamps": {
+            str(key)[:80]: str(value)[:120]
+            for key, value in source_timestamps.items()
+            if isinstance(value, str)
+        },
+        "validWindows": {
+            str(key)[:80]: [str(item)[:120] for item in value[:2]]
+            for key, value in valid_windows.items()
+            if isinstance(value, list)
+            and all(isinstance(item, str) for item in value[:2])
+        },
+        "dataDelayMinutes": _weather_dashboard_number(
+            source.get("dataDelayMinutes"),
+            minimum=0,
+        ),
+        "dataFreshness": {
+            str(key)[:80]: value
+            for key, value in data_freshness.items()
+            if isinstance(value, (str, bool, int, float))
+        },
+        "confidence": _weather_dashboard_number(
+            source.get("confidence"),
+            minimum=0,
+            maximum=1,
+        )
+        or 0,
+        "boundary": {
+            "candidateOnly": True,
+            "runtimeSafetyTruth": False,
+            "positionAccessRequiresApproval": True,
+            "rawCoordinatesPersisted": False,
+            "raspberryPiGridProcessing": False,
+            "mobileGridProcessing": False,
+        },
+    }
+
+
+def _compact_weather_dashboard_lora_alert(
+    alert: dict[str, Any] | None,
+    risk: dict[str, Any] | None,
+) -> dict[str, Any]:
+    source = alert if isinstance(alert, dict) else (risk or {}).get("loraAlert")
+    if not isinstance(source, dict):
+        return {
+            "status": "not_prepared",
+            "encoded": None,
+            "byteLength": 0,
+            "sent": False,
+            "candidateOnly": True,
+            "runtimeSafetyTruth": False,
+        }
+    encoded = source.get("encoded")
+    encoded = encoded if isinstance(encoded, str) else ""
+    byte_length = len(encoded.encode("utf-8"))
+    within_budget = byte_length <= 160
+    return {
+        "status": "ready" if within_budget and encoded else "invalid_byte_budget",
+        "artifactKind": "routeWeatherLoraAlert",
+        "encoding": str(source.get("encoding") or "json-utf8"),
+        "encoded": encoded if within_budget and encoded else None,
+        "byteLength": byte_length,
+        "sent": _weather_dashboard_bool(source.get("sent")) is True,
+        "candidateOnly": True,
+        "runtimeSafetyTruth": False,
+        "outboundSendAllowed": False,
+    }
+
+
+def _weather_dashboard_public_ref(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if path.is_absolute() or any(part in {".", ".."} for part in path.parts):
+        return None
+    return value
+
+
+def _weather_dashboard_status(
+    *,
+    rainfall: dict[str, Any],
+    imagery: dict[str, Any],
+    trend: dict[str, Any] | None,
+    risk: dict[str, Any] | None,
+) -> str:
+    rainfall_ready = bool(rainfall.get("products"))
+    imagery_ready = any(
+        bool((overlay or {}).get("frames"))
+        for overlay in (imagery.get("childOverlays") or {}).values()
+        if isinstance(overlay, dict)
+    )
+    prepared = sum((rainfall_ready, imagery_ready, trend is not None, risk is not None))
+    if prepared == 0:
+        return "unavailable"
+    source_statuses = {
+        str(rainfall.get("status") or ""),
+        str(imagery.get("status") or ""),
+        str((trend or {}).get("status") or ""),
+    }
+    if prepared == 4 and any("stale" in status for status in source_statuses):
+        return "stale_data"
+    if prepared < 4:
+        return "partial"
+    if rainfall_ready and imagery_ready:
+        return "ready"
+    return "partial"
+
+
+def _build_weather_dashboard_decision(
+    *,
+    status: str,
+    route_risk: dict[str, Any],
+    route_trend: dict[str, Any],
+) -> dict[str, Any]:
+    features = route_risk["imageryFeatures"]
+    interactions = route_risk["weatherTerrainInteractions"]
+    confidence = float(features.get("confidence") or 0)
+    required_classifications = (
+        "currentRainOnRoute",
+        "nearbyStrongEcho",
+        "rainBandApproaching",
+        "convectiveCellScore",
+        "satelliteConvectiveCloudScore",
+        "cloudMotionTowardRoute",
+        "dataDelayMinutes",
+    )
+    missing_classifications = [
+        key for key in required_classifications if features.get(key) is None
+    ]
+    positive_signals = any(
+        features.get(key) is True
+        for key in (
+            "currentRainOnRoute",
+            "nearbyStrongEcho",
+            "rainBandApproaching",
+            "cloudMotionTowardRoute",
+        )
+    ) or any(
+        float(features.get(key) or 0) >= 0.7
+        for key in (
+            "convectiveCellScore",
+            "satelliteConvectiveCloudScore",
+        )
+    )
+    why: list[str] = []
+    signal_labels = (
+        ("currentRainOnRoute", "Current radar echo overlaps the route buffer."),
+        ("nearbyStrongEcho", "A strong echo is near the route buffer."),
+        ("rainBandApproaching", "Recent radar frames indicate a rain band moving toward the route."),
+        ("cloudMotionTowardRoute", "Recent satellite frames indicate convective cloud motion toward the route."),
+    )
+    why.extend(label for key, label in signal_labels if features.get(key) is True)
+    if float(features.get("convectiveCellScore") or 0) >= 0.7:
+        why.append("Radar convective-cell evidence is elevated.")
+    if float(features.get("satelliteConvectiveCloudScore") or 0) >= 0.7:
+        why.append("Satellite convective-cloud evidence is elevated.")
+    where = [
+        str(item.get("segmentId"))
+        for item in interactions
+        if item.get("segmentId")
+    ]
+    if interactions:
+        why.extend(
+            f"{item['ruleCode']} intersects explicit terrain evidence."
+            for item in interactions
+        )
+    arrival = features.get("estimatedRainArrivalMinutes")
+    when = (
+        f"Estimated rain arrival is {arrival} minutes."
+        if arrival is not None
+        else "Rain-arrival time is unresolved."
+    )
+    if status in {"unavailable", "stale_data"}:
+        decision = "DELAY"
+        summary = "Weather evidence is missing or stale; do not infer a safe route window."
+        action = "Refresh the server-side CWA preparation before departure review."
+    elif positive_signals or interactions:
+        decision = "CHANGE_PLAN"
+        summary = "Weather is on, near, or moving toward the planned route."
+        action = "Review exposed ridge, creek, scree/cliff and steep-descent segments; shorten, reroute or delay the exposed window."
+    elif missing_classifications:
+        decision = "DELAY"
+        summary = "Route-specific weather hazard classification is incomplete."
+        action = "Refresh radar and satellite evidence before selecting a route window."
+    elif status == "ready" and confidence >= 0.5:
+        decision = "GO"
+        summary = "Prepared weather evidence shows no current route-overlap signal."
+        action = "Keep the recheck boundary and complete the human departure review."
+    else:
+        decision = "DELAY"
+        summary = "Route-specific weather evidence is incomplete or low-confidence."
+        action = "Resolve missing coverage and route-risk features before selecting a route window."
+    if not why:
+        why.append("No adequate route-specific radar/satellite hazard conclusion is available.")
+    uncertainty = [
+        "This is candidate evidence, not runtime safety truth or departure approval.",
+    ]
+    if status != "ready":
+        uncertainty.append(f"Weather dashboard evidence status is {status}.")
+    if missing_classifications:
+        uncertainty.append(
+            "Weather hazard classification is incomplete: "
+            + ", ".join(missing_classifications)
+            + "."
+        )
+    if route_trend.get("status") in {
+        "not_prepared",
+        "awaiting_position_and_target",
+        "awaiting_position_or_target",
+    }:
+        uncertainty.append("Current-position or target rainfall trend is not fully prepared.")
+    return {
+        "schemaVersion": "weatherDecisionCandidate.v1",
+        "candidateDecision": decision,
+        "decisionVocabulary": ["GO", "DELAY", "CHANGE_PLAN", "NO_GO"],
+        "summary": summary,
+        "why": why,
+        "where": where or ["route buffer unresolved"],
+        "when": when,
+        "recommendedAction": action,
+        "confidence": round(confidence, 4),
+        "uncertaintyNotes": uncertainty,
+        "humanReviewRequired": True,
+        "candidateOnly": True,
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _build_weather_decision_dashboard(
+    *,
+    project_id: str,
+    evaluated_at: str,
+    rainfall: dict[str, Any],
+    imagery: dict[str, Any],
+    trend: dict[str, Any] | None,
+    risk: dict[str, Any] | None,
+    alert: dict[str, Any] | None,
+    pair_verification: dict[str, str],
+    source_refs: dict[str, Any],
+) -> dict[str, Any]:
+    route_risk = _compact_weather_dashboard_risk(risk)
+    route_trend = _compact_weather_dashboard_trend(trend)
+    lora_alert = _compact_weather_dashboard_lora_alert(alert, risk)
+    status = _weather_dashboard_status(
+        rainfall=rainfall,
+        imagery=imagery,
+        trend=trend,
+        risk=risk,
+    )
+    decision = _build_weather_dashboard_decision(
+        status=status,
+        route_risk=route_risk,
+        route_trend=route_trend,
+    )
+    return {
+        "artifactKind": "weatherDecisionDashboard",
+        "schemaVersion": "weatherDecisionDashboard.v1",
+        "projectId": project_id,
+        "status": status,
+        "evaluatedAt": evaluated_at,
+        "decision": decision,
+        "rainfall": rainfall,
+        "imagery": imagery,
+        "routeTrend": route_trend,
+        "routeRisk": route_risk,
+        "loraAlert": lora_alert,
+        "pairVerification": pair_verification,
+        "sourceRefs": {
+            key: ref
+            for key, value in source_refs.items()
+            if (ref := _weather_dashboard_public_ref(value)) is not None
+        },
+        "processingBoundary": {
+            "adminReadIsCacheOnly": True,
+            "upstreamFetchOnRead": False,
+            "positionEvaluationOnRead": False,
+            "candidateOnly": True,
+            "runtimeSafetyTruth": False,
+            "phase1MutationAllowed": False,
+            "outboundSendAllowed": False,
+            "raspberryPiImageProcessing": False,
+            "mobileImageProcessing": False,
         },
     }
 

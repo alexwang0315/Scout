@@ -25,11 +25,14 @@ def estimate_motion_toward_route(
     usable.sort(key=lambda item: item[0])
     if len(usable) < 2:
         return _unknown_motion("insufficient_frames")
-    intervals = [
-        (current[0] - previous[0]).total_seconds() / 3600.0
-        for previous, current in zip(usable, usable[1:])
-    ]
-    if any(interval <= 0 or interval > 2 for interval in intervals):
+    contiguous = [usable[-1]]
+    for previous in reversed(usable[:-1]):
+        interval = (contiguous[0][0] - previous[0]).total_seconds() / 3600.0
+        if interval <= 0 or interval > 2:
+            break
+        contiguous.insert(0, previous)
+    usable = contiguous
+    if len(usable) < 2:
         return _unknown_motion("invalid_frame_interval")
     distances = [distance_to_route_km(lat, lon, route_buffer) for _time, lat, lon in usable]
     elapsed = [(item[0] - usable[0][0]).total_seconds() / 3600.0 for item in usable]

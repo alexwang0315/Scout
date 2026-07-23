@@ -760,6 +760,66 @@ Scout 正確輸出：
 
 > 不建議照原計畫出發。降雨機率本身不是唯一原因；主要問題是此路線含兩處渡溪點，前 24 小時已有降雨，且你們隊伍沒有渡溪經驗。建議延期 48 小時或改走低風險替代路線。
 
+### 10.4 Weather Dashboard Decision Contract
+
+Dashboard `Exploring for Six Axis -> Weather` 必須先回答四個操作問題，不能把
+雷達、雲圖與雨量卡片留給使用者自行拼湊：
+
+1. `Decision`：目前候選姿態是 `GO / DELAY / CHANGE_PLAN / NO_GO` 的哪一種；
+2. `Why`：是哪一筆降雨、回波、雲系移動或 weather x terrain 證據造成；
+3. `Where`：影響 route buffer、target 或哪一個明確 segment；
+4. `When`：資料有效界線、預估雨帶抵達時間與下一次 recheck 時點。
+
+目前的 cache-only API 契約為：
+
+```text
+GET /admin/pretrip/projects/{project_id}/weather-dashboard
+schemaVersion=weatherDecisionDashboard.v1
+```
+
+它只讀取 workstation/server 已準備的 CWA 數值雨量、雷達／衛星影像清單、
+route precipitation trend、route weather risk package 與 LoRa compact preview。
+Weather 頁透過同源 bridge 重用 canonical Pre-trip Map 的 `cwa-weather` 與
+`cwa-qpf` renderer；product、3/6/9/12h、frame、play/pause、rain/radar/
+satellite opacity 直接控制既有 map controller，不在 browser、Raspberry Pi
+或 mobile 上重做 decode、georeference、sampling 或 motion estimation。
+
+缺少 coverage、freshness、classification 或 route pairing 時，boolean 必須是
+`null/unknown`，候選決策必須 fail closed 為 `DELAY`；不得以 `false`、零雨量或
+`GO` 掩蓋資料缺口。`CHANGE_PLAN` 可由明確的 route echo overlap、approaching
+rain band、convective signal 或 weather x TEII interaction 觸發。即使候選值為
+`GO`，仍然只是人員 departure review 的輸入，不能改寫 runtime safety truth。
+
+Weather API 與 UI 不呼叫 `/safety/*`、不執行 LoRa/RF send、不控制硬體，也不
+把目前位置或 target 座標重新持久化。LoRa 僅顯示 byte-bounded、`sent=false`
+的候選預覽。
+
+Dashboard 開啟時可透過同源
+`POST /admin/pretrip/projects/{project_id}/connected-preparation` 觸發本機
+Mac/server 背景準備；狀態由同路徑的 GET 讀取。此 coordinator 必須固定使用
+`mac-workstation + explicit-fetch + allow-network-fetch + prepare-cwa-imagery`、
+只載入 server-side `.env`、使用 workspace/repository 外部 cache、單飛執行並以
+受控週期刷新 Overpass/CWA/GEE、累積真實 frames。既有 route、terrain、TEII
+artifact 保留為 sampling/risk input，不隨每次 refresh 重建。Weather 的
+`GET .../weather-dashboard` 仍然只讀 cache，browser、Pi 與 mobile 不得因此承擔
+full-grid 或 image processing。
+queued/running 階段的 request/call 結果必須是 `null + in-progress`，不可在尚未
+取得實際結果前顯示 `false`；密集 GPX 的 route imagery sampling 必須在 server
+使用 segment spatial index，避免 cell x segment 的全配對掃描。
+採樣用的暫時簡化線最大容差為 0.025 km（較小半徑則不得超過 5%），原始 route
+與 buffer artifact 不得改寫，輸出必須揭露 `routeGeometryToleranceKm`。
+相同 grid geometry 的 frames 可共用 bounded route-cell membership，但每張影像
+的 pixel value 與風險特徵仍須獨立計算；active-job polling 不得反覆替換 Frame
+control DOM。Dashboard recurring refresh 不重跑 raster OCR、Boss-point 或 mileage
+alignment，也不重生 terrain route samples / visualization；這些既有 artifact
+仍作為 weather x terrain 判斷輸入，完整重建保留於一般 full preparation。
+
+隊伍目前位置不得隨 Dashboard 開啟自動取得。必須由使用者按下明確位置授權，
+選定 workspace checkpoint 作為 target，取得 server-issued 短效 approval 後才可
+呼叫 `POST .../rainfall-trend`。原始座標只存在於該 request；workspace 只保留
+`rawCoordinatesPersisted=false` 的去識別 audit。UI 若將缺值 score 顯示成 0%，
+必須同時標示 `no evidence`，不得暗示已測得零風險。
+
 ---
 
 ## 11. Navigation & Terrain Intelligence：地圖力的 Scout 化

@@ -107,6 +107,47 @@ def test_same_run_overpass_alignment_precedes_cwa_preparation(
     assert call_order == ["alignment", "environment"]
 
 
+def test_connected_refresh_skips_non_weather_post_layer_enrichments(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+
+    def unexpected_post_enrichment(**_kwargs):
+        pytest.fail("connected weather refresh must not run post-layer enrichment")
+
+    for name in (
+        "_run_raster_label_preparation_after_layer_preparation",
+        "_run_boss_point_synthesis_after_layer_preparation",
+        "_run_mileage_tag_alignment_after_layer_preparation",
+        "_write_map_preparation_spec_artifacts",
+    ):
+        monkeypatch.setattr(
+            pretrip_layer_preparation,
+            name,
+            unexpected_post_enrichment,
+        )
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("weather",),
+            run_post_layer_enrichments=False,
+            run_map_preparation_spec_artifacts=False,
+            prepared_at="2026-07-23T04:00:00+00:00",
+        )
+    )
+
+    for key in (
+        "raster_label_preparation",
+        "boss_point_synthesis",
+        "mileage_tag_alignment",
+        "map_preparation_spec_artifacts",
+    ):
+        assert manifest[key]["status"] == "skipped_connected_refresh"
+
+
 def test_project_source_refs_accept_directory_refs(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     cache_dir = project_root / "outputs" / "layers" / "cache" / "raster_label_ocr_tiles"
