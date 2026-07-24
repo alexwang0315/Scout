@@ -292,6 +292,35 @@ def _synthetic_field_context_arguments(
     """Fixture-like field context for AI HAT eval, explicitly marked in outputs."""
 
     normalized = question.lower()
+    spatial_tool_ids = {
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "pydantic_ai.tool.search_scout_map_perception.v0",
+    }
+    location_terms = (
+        "目前",
+        "現在",
+        "這裡",
+        "這個",
+        "這段",
+        "眼前",
+        "前方",
+        "哪一側",
+        "附近",
+        "周圍",
+    )
+    snapshot = live_navigation_snapshot or {}
+    if (
+        tool_id in spatial_tool_ids
+        and any(term in normalized for term in location_terms)
+        and snapshot.get("lat") is not None
+        and snapshot.get("lon") is not None
+    ):
+        return {
+            "lat": float(snapshot["lat"]),
+            "lon": float(snapshot["lon"]),
+            "radius_m": 1500.0,
+        }
     if tool_id == "scout.ai.energy_vitals.assess.v0":
         return {
             "subject_id": "synthetic_hiker_1",
@@ -541,6 +570,7 @@ def _contextual_permission_arguments(
 ) -> dict[str, Any]:
     overlay = scenario_overlay or {}
     variant = str(overlay.get("variant_id") or "baseline")
+    overlay_time_buffer = overlay.get("time_buffer_minutes")
     common: dict[str, Any] = {
         "current_time": str(overlay.get("current_time") or observed_at),
         "requested_duration_minutes": 8,
@@ -555,7 +585,11 @@ def _contextual_permission_arguments(
     if variant == "exposed_strong_wind_shelter_ahead":
         return {
             **common,
-            "remaining_safety_buffer_minutes": 35,
+            "remaining_safety_buffer_minutes": (
+                overlay_time_buffer
+                if isinstance(overlay_time_buffer, (int, float))
+                else 35
+            ),
             "weather_reserve_minutes": 20,
             "daylight_reserve_minutes": 10,
             "weather_window_impact": "strong_wind_and_exposure",
@@ -568,7 +602,11 @@ def _contextual_permission_arguments(
     if variant == "sheltered_flat_time_available":
         return {
             **common,
-            "remaining_safety_buffer_minutes": 70,
+            "remaining_safety_buffer_minutes": (
+                overlay_time_buffer
+                if isinstance(overlay_time_buffer, (int, float))
+                else 70
+            ),
             "current_delay_minutes": 0,
             "next_segment_uncertainty_minutes": 4,
             "weather_reserve_minutes": 5,
@@ -1789,6 +1827,74 @@ def _truncate_utf8(value: str, max_bytes: int) -> str:
     return encoded[:max_bytes].decode("utf-8", errors="ignore").rstrip()
 
 
+def _hailo_short_answer_complete(answer: str) -> bool:
+    if "<SCOUT_DONE>" in answer:
+        return True
+    normalized = answer.strip()
+    return bool(
+        re.search(
+            r"A=.+[。！!]\s*$",
+            normalized,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+    )
+
+
+def _hailo_repeated_clause_cutoff(answer: str) -> int | None:
+    answer_marker = answer.find("A=")
+    if answer_marker < 0:
+        return None
+    body_start = answer_marker + 2
+    body = answer[body_start:]
+    seen: set[str] = set()
+    for match in re.finditer(r"([^。；;！!\n]+)[。；;！!\n]+", body):
+        clause = re.sub(r"\s+", " ", match.group(1)).strip().casefold()
+        if len(clause) < 20:
+            continue
+        if clause in seen:
+            return body_start + match.start()
+        seen.add(clause)
+    return None
+
+
+def _hailo_repeated_tool_cutoff(answer: str) -> int | None:
+    answer_marker = answer.find("A=")
+    if answer_marker < 0:
+        return None
+    body_start = answer_marker + 2
+    body = answer[body_start:]
+    seen: set[str] = set()
+    for match in re.finditer(
+        r"\b(?:scout\.ai|pydantic_ai\.tool)\.[A-Za-z0-9_.-]+",
+        body,
+        flags=re.IGNORECASE,
+    ):
+        tool_id = match.group(0).casefold()
+        if tool_id in seen:
+            return body_start + match.start()
+        seen.add(tool_id)
+    return None
+
+
+def _hailo_repeated_fragment_cutoff(
+    answer: str,
+    *,
+    fragment_chars: int = 20,
+) -> int | None:
+    if len(answer) < fragment_chars * 2:
+        return None
+    seen: dict[str, int] = {}
+    for index in range(len(answer) - fragment_chars + 1):
+        fragment = answer[index : index + fragment_chars]
+        if len(re.findall(r"[A-Za-z0-9\u3400-\u9fff]", fragment)) < 12:
+            continue
+        previous = seen.get(fragment)
+        if previous is not None and index - previous >= fragment_chars:
+            return index
+        seen.setdefault(fragment, index)
+    return None
+
+
 def call_hailo_model(
     *,
     endpoint: str,
@@ -1804,10 +1910,12 @@ def call_hailo_model(
         "options": {
             "temperature": 0.2,
         },
-        "stream": False,
+        "stream": True,
     }
     if structured_json:
         payload["format"] = "json"
+    else:
+        payload["options"]["stop"] = ["<SCOUT_DONE>"]
     if model.casefold().startswith("qwen3"):
         payload["think"] = False
     request = urllib.request.Request(
@@ -1817,20 +1925,89 @@ def call_hailo_model(
         method="POST",
     )
     started = time.monotonic()
+    chunks: list[dict[str, Any]] = []
+    answer_parts: list[str] = []
+    semantic_completion = False
+    semantic_stop = None
+    semantic_cutoff: int | None = None
     try:
         request_timeout = timeout_seconds if timeout_seconds > 0 else None
         with urllib.request.urlopen(request, timeout=request_timeout) as response:
-            raw = response.read().decode("utf-8", errors="replace")
+            if hasattr(response, "readline"):
+                while True:
+                    line = response.readline()
+                    if not line:
+                        break
+                    raw_line = line.decode("utf-8", errors="replace").strip()
+                    if not raw_line:
+                        continue
+                    data = json.loads(raw_line)
+                    if not isinstance(data, dict):
+                        continue
+                    chunks.append(data)
+                    answer_parts.append(
+                        str(((data.get("message") or {}).get("content") or ""))
+                    )
+                    answer_so_far = "".join(answer_parts)
+                    repeated_clause_cutoff = _hailo_repeated_clause_cutoff(
+                        answer_so_far
+                    )
+                    if not structured_json and repeated_clause_cutoff is not None:
+                        semantic_completion = True
+                        semantic_stop = "repeated_clause"
+                        semantic_cutoff = repeated_clause_cutoff
+                        break
+                    repeated_tool_cutoff = _hailo_repeated_tool_cutoff(
+                        answer_so_far
+                    )
+                    if not structured_json and repeated_tool_cutoff is not None:
+                        semantic_completion = True
+                        semantic_stop = "repeated_tool_id"
+                        semantic_cutoff = repeated_tool_cutoff
+                        break
+                    repeated_fragment_cutoff = _hailo_repeated_fragment_cutoff(
+                        answer_so_far
+                    )
+                    if (
+                        not structured_json
+                        and repeated_fragment_cutoff is not None
+                    ):
+                        semantic_completion = True
+                        semantic_stop = "repeated_fragment"
+                        semantic_cutoff = repeated_fragment_cutoff
+                        break
+                    if not structured_json and _hailo_short_answer_complete(
+                        answer_so_far
+                    ):
+                        semantic_completion = True
+                        semantic_stop = "short_answer_complete"
+                        break
+                    if data.get("done"):
+                        break
+            else:
+                raw = response.read().decode("utf-8", errors="replace")
+                data = json.loads(raw)
+                if isinstance(data, dict):
+                    chunks.append(data)
+                    answer_parts.append(
+                        str(((data.get("message") or {}).get("content") or ""))
+                    )
     except (TimeoutError, urllib.error.URLError) as exc:
         return "", {"error": f"{type(exc).__name__}: {exc}", "latency_ms": int((time.monotonic() - started) * 1000)}
+    except json.JSONDecodeError as exc:
+        return "", {
+            "error": f"JSONDecodeError: {exc}",
+            "latency_ms": int((time.monotonic() - started) * 1000),
+            "stream_response_count": len(chunks),
+        }
     except Exception as exc:  # noqa: BLE001 - eval must record per-case model failures.
         return "", {"error": f"{type(exc).__name__}: {exc}", "latency_ms": int((time.monotonic() - started) * 1000)}
     latency_ms = int((time.monotonic() - started) * 1000)
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        return "", {"error": f"JSONDecodeError: {exc}", "raw_head": raw[:500], "latency_ms": latency_ms}
-    answer = ((data.get("message") or {}).get("content") or "").strip()
+    data = chunks[-1] if chunks else {}
+    answer = "".join(answer_parts)
+    if semantic_cutoff is not None:
+        answer = answer[:semantic_cutoff].rstrip(" \r\n；;,，")
+    answer = answer.replace("<SCOUT_DONE>", "").strip()
     metadata = {
         "model": data.get("model"),
         "done": data.get("done"),
@@ -1838,6 +2015,11 @@ def call_hailo_model(
         "total_duration": data.get("total_duration"),
         "eval_count": data.get("eval_count"),
         "latency_ms": latency_ms,
+        "streaming": True,
+        "stream_response_count": len(chunks),
+        "semantic_completion": semantic_completion,
+        "semantic_stop": semantic_stop,
+        "semantic_cutoff_chars": semantic_cutoff,
     }
     return answer, metadata
 

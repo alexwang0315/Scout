@@ -121,6 +121,7 @@ def test_aihat2_eval_normalizes_hailo_chat_control_characters(monkeypatch) -> No
         payload = json.loads(request.data.decode("utf-8"))
         captured["content"] = payload["messages"][0]["content"]
         captured["think"] = payload.get("think")
+        captured["stream"] = payload.get("stream")
         return FakeResponse()
 
     monkeypatch.setattr(
@@ -138,9 +139,414 @@ def test_aihat2_eval_normalizes_hailo_chat_control_characters(monkeypatch) -> No
     assert captured["content"].startswith("第一行 第二行 第三行")
     assert captured["content"].count("甲") == 5000
     assert captured["think"] is False
+    assert captured["stream"] is True
     assert len(captured["content"].encode("utf-8")) > 3600
     assert answer == "結論：測試完成"
     assert metadata["model"] == "qwen3:1.7b"
+
+
+def test_aihat2_eval_stream_stops_after_complete_short_answer(monkeypatch) -> None:
+    chunks = [
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "D=null\nA=稜線啞口觀景點約在 8.2 km。"},
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "這段不應再被讀取。"},
+        },
+    ]
+
+    class FakeStreamingResponse:
+        def __init__(self) -> None:
+            self.read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def readline(self) -> bytes:
+            if self.read_count >= len(chunks):
+                return b""
+            payload = chunks[self.read_count]
+            self.read_count += 1
+            return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+
+    response = FakeStreamingResponse()
+    monkeypatch.setattr(
+        "tools.scout_ai_aihat2_fallback_eval.urllib.request.urlopen",
+        lambda request, timeout: response,
+    )
+
+    answer, metadata = call_hailo_model(
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        prompt="請直接短答",
+        timeout_seconds=10,
+        structured_json=False,
+    )
+
+    assert answer == "D=null\nA=稜線啞口觀景點約在 8.2 km。"
+    assert response.read_count == 1
+    assert metadata["streaming"] is True
+    assert metadata["semantic_completion"] is True
+
+
+def test_aihat2_eval_stream_does_not_stop_on_decimal_point(monkeypatch) -> None:
+    chunks = [
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "D=null\nA=里程約 8."},
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "2 km。"},
+        },
+    ]
+
+    class FakeStreamingResponse:
+        def __init__(self) -> None:
+            self.read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def readline(self) -> bytes:
+            if self.read_count >= len(chunks):
+                return b""
+            payload = chunks[self.read_count]
+            self.read_count += 1
+            return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+
+    response = FakeStreamingResponse()
+    monkeypatch.setattr(
+        "tools.scout_ai_aihat2_fallback_eval.urllib.request.urlopen",
+        lambda request, timeout: response,
+    )
+
+    answer, metadata = call_hailo_model(
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        prompt="請直接短答",
+        timeout_seconds=10,
+        structured_json=False,
+    )
+
+    assert answer == "D=null\nA=里程約 8.2 km。"
+    assert response.read_count == 2
+    assert metadata["semantic_completion"] is True
+
+
+def test_aihat2_eval_stream_does_not_stop_on_question_echo(monkeypatch) -> None:
+    chunks = [
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "D=CHANGE_PLAN\nA=今天適合照原計畫出發嗎？"},
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "不適合；有強風與低能見度，先改變計畫。"},
+        },
+    ]
+
+    class FakeStreamingResponse:
+        def __init__(self) -> None:
+            self.read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def readline(self) -> bytes:
+            if self.read_count >= len(chunks):
+                return b""
+            payload = chunks[self.read_count]
+            self.read_count += 1
+            return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+
+    response = FakeStreamingResponse()
+    monkeypatch.setattr(
+        "tools.scout_ai_aihat2_fallback_eval.urllib.request.urlopen",
+        lambda request, timeout: response,
+    )
+
+    answer, metadata = call_hailo_model(
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        prompt="請直接短答",
+        timeout_seconds=10,
+        structured_json=False,
+    )
+
+    assert "強風與低能見度" in answer
+    assert response.read_count == 2
+    assert metadata["semantic_completion"] is True
+
+
+def test_aihat2_eval_stream_stops_after_complete_answer_with_invalid_decision(
+    monkeypatch,
+) -> None:
+    chunks = [
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {
+                "content": (
+                    "D=Route context candidate。"
+                    "A=稜線啞口觀景點可觀察稜線、鞍部與谷線的關係。"
+                )
+            },
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "A=不應再重複這一句。"},
+        },
+    ]
+
+    class FakeStreamingResponse:
+        def __init__(self) -> None:
+            self.read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def readline(self) -> bytes:
+            if self.read_count >= len(chunks):
+                return b""
+            payload = chunks[self.read_count]
+            self.read_count += 1
+            return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+
+    response = FakeStreamingResponse()
+    monkeypatch.setattr(
+        "tools.scout_ai_aihat2_fallback_eval.urllib.request.urlopen",
+        lambda request, timeout: response,
+    )
+
+    answer, metadata = call_hailo_model(
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        prompt="請直接短答",
+        timeout_seconds=10,
+        structured_json=False,
+    )
+
+    assert "不應再重複" not in answer
+    assert response.read_count == 1
+    assert metadata["semantic_completion"] is True
+    assert metadata["semantic_stop"] == "short_answer_complete"
+
+
+def test_aihat2_eval_stream_stops_and_trims_repeated_clause(monkeypatch) -> None:
+    repeated_clause = "在這些區域中，歷史與地形的交點被視為重要觀察點"
+    chunks = [
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {
+                "content": (
+                    "D=GO\nA=沿途脈絡先連結舊林道與自然環境；"
+                    f"{repeated_clause}；"
+                )
+            },
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": f"{repeated_clause}；"},
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "這一段不應再被讀取。"},
+        },
+    ]
+
+    class FakeStreamingResponse:
+        def __init__(self) -> None:
+            self.read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def readline(self) -> bytes:
+            if self.read_count >= len(chunks):
+                return b""
+            payload = chunks[self.read_count]
+            self.read_count += 1
+            return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+
+    response = FakeStreamingResponse()
+    monkeypatch.setattr(
+        "tools.scout_ai_aihat2_fallback_eval.urllib.request.urlopen",
+        lambda request, timeout: response,
+    )
+
+    answer, metadata = call_hailo_model(
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        prompt="請直接短答",
+        timeout_seconds=10,
+        structured_json=False,
+    )
+
+    assert answer.count(repeated_clause) == 1
+    assert "不應再被讀取" not in answer
+    assert response.read_count == 2
+    assert metadata["semantic_completion"] is True
+    assert metadata["semantic_stop"] == "repeated_clause"
+
+
+def test_aihat2_eval_stream_stops_and_trims_repeated_tool_id(monkeypatch) -> None:
+    repeated_tool = "scout.ai.weather_window.assess.v0"
+    chunks = [
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {
+                "content": (
+                    "D=DELAY\nA=先重新取得 GNSS 定位並人工確認周邊；"
+                    "工具:scout.ai.live_navigation_state.assess.v0,"
+                    f"{repeated_tool},"
+                )
+            },
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": f"{repeated_tool},"},
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "這一段不應再被讀取。"},
+        },
+    ]
+
+    class FakeStreamingResponse:
+        def __init__(self) -> None:
+            self.read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def readline(self) -> bytes:
+            if self.read_count >= len(chunks):
+                return b""
+            payload = chunks[self.read_count]
+            self.read_count += 1
+            return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+
+    response = FakeStreamingResponse()
+    monkeypatch.setattr(
+        "tools.scout_ai_aihat2_fallback_eval.urllib.request.urlopen",
+        lambda request, timeout: response,
+    )
+
+    answer, metadata = call_hailo_model(
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        prompt="請直接短答",
+        timeout_seconds=10,
+        structured_json=False,
+    )
+
+    assert answer.count(repeated_tool) == 1
+    assert "不應再被讀取" not in answer
+    assert response.read_count == 2
+    assert metadata["semantic_completion"] is True
+    assert metadata["semantic_stop"] == "repeated_tool_id"
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "D=沿途地名與地形的關聯如下：",
+        "D=GO\nA=秋冬林相與視野的差異是，",
+    ],
+)
+def test_aihat2_eval_stream_stops_on_format_independent_repeated_fragment(
+    monkeypatch,
+    prefix: str,
+) -> None:
+    repeated_fragment = "視野會因樹木層次與枝葉覆蓋而變得更為模糊"
+    chunks = [
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": f"{prefix}{repeated_fragment}，"},
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": f"{repeated_fragment}，"},
+        },
+        {
+            "model": "qwen3:1.7b",
+            "done": False,
+            "message": {"content": "這一段不應再被讀取。"},
+        },
+    ]
+
+    class FakeStreamingResponse:
+        def __init__(self) -> None:
+            self.read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def readline(self) -> bytes:
+            if self.read_count >= len(chunks):
+                return b""
+            payload = chunks[self.read_count]
+            self.read_count += 1
+            return (json.dumps(payload, ensure_ascii=False) + "\n").encode()
+
+    response = FakeStreamingResponse()
+    monkeypatch.setattr(
+        "tools.scout_ai_aihat2_fallback_eval.urllib.request.urlopen",
+        lambda request, timeout: response,
+    )
+
+    answer, metadata = call_hailo_model(
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        prompt="請直接短答",
+        timeout_seconds=10,
+        structured_json=False,
+    )
+
+    assert answer.count(repeated_fragment) == 1
+    assert "不應再被讀取" not in answer
+    assert response.read_count == 2
+    assert metadata["semantic_completion"] is True
+    assert metadata["semantic_stop"] == "repeated_fragment"
 
 
 def test_aihat2_eval_can_route_hailo_through_pydantic_ai_v2() -> None:
@@ -160,7 +566,7 @@ def test_aihat2_eval_can_route_hailo_through_pydantic_ai_v2() -> None:
 
     assert answer == '{"a":"grounded"}'
     assert metadata["pydantic_ai"]["used"] is True
-    assert metadata["pydantic_ai"]["runtime_version"] == "2.13.0"
+    assert metadata["pydantic_ai"]["runtime_version"].startswith("2.14.")
     assert metadata["pydantic_ai"]["requests"] == 1
 
 
