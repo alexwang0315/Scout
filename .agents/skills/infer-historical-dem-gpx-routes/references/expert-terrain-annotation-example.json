@@ -1,0 +1,58 @@
+{
+  "annotation_set_id": "expert-contour-reading-example",
+  "source_refs": [
+    "expert-contour-reading-example.jpg"
+  ],
+  "georeference": {
+    "status": "unreferenced"
+  },
+  "annotations": [
+    {
+      "id": "main-ridge-01",
+      "semantic_role": "main_ridge",
+      "geometry_type": "LineString",
+      "image_coordinates": [
+        [42, 28],
+        [88, 45],
+        [132, 38]
+      ],
+      "source_refs": [
+        "expert-contour-reading-example.jpg"
+      ]
+    },
+    {
+      "id": "spur-ridge-01",
+      "semantic_role": "spur_ridge",
+      "geometry_type": "LineString",
+      "image_coordinates": [
+        [88, 45],
+        [74, 82]
+      ],
+      "source_refs": [
+        "expert-contour-reading-example.jpg"
+      ]
+    },
+    {
+      "id": "ridge-divide-01",
+      "semantic_role": "ridge_divide_point",
+      "geometry_type": "Point",
+      "image_coordinates": [88, 45],
+      "source_refs": [
+        "expert-contour-reading-example.jpg"
+      ]
+    },
+    {
+      "id": "contour-traverse-band-01",
+      "semantic_role": "contour_traverse_band",
+      "geometry_type": "LineString",
+      "image_coordinates": [
+        [30, 96],
+        [104, 94],
+        [145, 102]
+      ],
+      "source_refs": [
+        "expert-contour-reading-example.jpg"
+      ]
+    }
+  ]
+}

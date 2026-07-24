@@ -1,0 +1,4 @@
+interface:
+  display_name: "Historical DEM + GPX Route Inference"
+  short_description: "Infer candidate routes from historical records, DEM, and GPX"
+  default_prompt: "Use $infer-historical-dem-gpx-routes to reconstruct a candidate route topology from historical records, DEM terrain, and public GPX evidence."

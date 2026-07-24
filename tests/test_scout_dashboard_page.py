@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
 DOC = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.md"
 PRETRIP_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
+AFTER_ACTION_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
+DEBUG_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
 LAYER_CONTRACT_DOC = ROOT / "docs" / "specs" / "scout-admin-map-layer-contract.md"
 WEATHER_DOC = ROOT / "docs" / "specs" / "scout-weather-environment-sensing.md"
 SMOKE_TOOL = ROOT / "tools" / "admin_ui_visual_smoke.js"
@@ -33,6 +35,138 @@ def test_scout_dashboard_page_serves_static_shell() -> None:
     assert 'id="dashboardMap"' in response.text
     assert 'id="dashboardAgent"' in response.text
     assert 'id="dashboardEvidence"' in response.text
+
+
+def test_navigation_terrain_intelligence_api_projects_bounded_workspace_evidence(
+    tmp_path: Path,
+) -> None:
+    project_id = "navigation-terrain-demo"
+    project_root = tmp_path / project_id
+    terrain_ref = "outputs/layers/normalized/terrain_visualization.geojson"
+    samples_ref = "outputs/layers/normalized/terrain_route_samples.geojson"
+    risk_ref = "outputs/layers/candidates/terrain_risk_candidates.json"
+    (project_root / "project.json").parent.mkdir(parents=True, exist_ok=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "terrain_visualization_ref": terrain_ref,
+                "terrain_route_samples_ref": samples_ref,
+                "terrain_risk_candidates_ref": risk_ref,
+            }
+        ),
+        encoding="utf-8",
+    )
+    terrain_path = project_root / terrain_ref
+    terrain_path.parent.mkdir(parents=True, exist_ok=True)
+    terrain_path.write_text(
+        json.dumps(
+            {
+                "counts": {
+                    "source_dtm_tile_count": 1,
+                    "contour_marker_count": 12,
+                    "slope_class_counts": {"slope-30-40": 9},
+                },
+                "dtm_grid": {
+                    "bbox_wgs84": {
+                        "west": 121.1,
+                        "south": 24.0,
+                        "east": 121.2,
+                        "north": 24.1,
+                    },
+                    "crs": "EPSG:3826-compatible",
+                    "cell_resolution_m": 20,
+                    "selected_cell_count": 30,
+                },
+                "features": [],
+                "raster_overlays": [
+                    {
+                        "mode": "contours",
+                        "source_path": (
+                            "outputs/layers/normalized/terrain_contours.png"
+                        ),
+                        "bbox_wgs84": {
+                            "west": 121.1,
+                            "south": 24.0,
+                            "east": 121.2,
+                            "north": 24.1,
+                        },
+                        "pixel_width": 432,
+                        "pixel_height": 169,
+                        "cell_resolution_m": 20,
+                        "sha256": "a" * 64,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    sample_path = project_root / samples_ref
+    sample_path.parent.mkdir(parents=True, exist_ok=True)
+    sample_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.15, 24.05],
+                        },
+                        "properties": {
+                            "candidate_id": "sample-1",
+                            "distance_m": 0,
+                            "elevation_m": 2200,
+                            "pretrip_risk": 60,
+                            "teii_20m": 72,
+                            "tri": 80,
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    risk_path = project_root / risk_ref
+    risk_path.parent.mkdir(parents=True, exist_ok=True)
+    risk_path.write_text(
+        json.dumps(
+            {
+                "candidates": [
+                    {
+                        "candidate_id": "risk-1",
+                        "candidate_kind": "terrain_risk_candidate",
+                        "lon": 121.16,
+                        "lat": 24.06,
+                        "reason": "candidate review",
+                        "risk_dimensions": {"teii_20m": 91},
+                        "source_refs": ["outputs/risk/source.json#risk-1"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{project_id}/navigation-terrain-intelligence"
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "ready_with_structure_gaps"
+    assert payload["terrain_surface"]["available_overlay_modes"] == ["contours"]
+    assert payload["route_samples"]["rendered_count"] == 1
+    assert payload["risk_candidates"]["rendered_count"] == 1
+    assert payload["feature_extraction"]["ridge"]["status"] == "not_prepared"
+    assert payload["terrain_structures"]["status"] == "not_prepared"
+    assert payload["source_ledger"]["boundary"]["raw_gpx_embedded"] is False
+    assert payload["route_topology"]["status"] == "not_prepared"
+    assert payload["boundary"]["candidate_only"] is True
+    assert payload["boundary"]["runtime_safety_truth"] is False
+    assert payload["boundary"]["safe_or_walkable"] == "not_determined"
 
 
 def test_scout_dashboard_living_closed_loop_contract() -> None:
@@ -1165,6 +1299,97 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert "mapData.routePath" not in segment_branch
 
 
+def test_dashboard_spatial_maps_share_the_canonical_map_navigation_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    for marker in (
+        "function renderDashboardMapControls(",
+        "function renderDashboardMapViewport(",
+        "function createDashboardMapViewportController(",
+        "function bindDashboardMapViewports()",
+        "bindDashboardMapViewports();",
+        'data-map-control="zoom-in"',
+        'data-map-control="zoom-out"',
+        'data-map-control="reset"',
+        'data-map-control="pan"',
+        'data-map-control="box-zoom"',
+        'data-map-zoom-level',
+        'addEventListener("pointerdown"',
+        'addEventListener("pointermove"',
+        'addEventListener("pointerup"',
+        'addEventListener("pointercancel"',
+        'addEventListener("wheel"',
+        'addEventListener("keydown"',
+        'event.key === "ArrowUp"',
+        'event.key === "ArrowDown"',
+        'event.key === "ArrowLeft"',
+        'event.key === "ArrowRight"',
+        'event.key === "+"',
+        'event.key === "-"',
+        'event.key === "0"',
+        'event.key.toLowerCase() === "p"',
+        'event.key.toLowerCase() === "b"',
+        'event.key === "Escape"',
+    ):
+        assert marker in html
+
+    for viewport_id in (
+        "dashboard-map-preview",
+        "pace-fit-map",
+        "architecture-map",
+        "navigation-training-map",
+        "navigation-workspace-map",
+    ):
+        assert f'renderDashboardMapViewport("{viewport_id}"' in html
+
+    assert "mapViewportById: {}" in html
+    assert 'role="region"' in html
+    assert 'tabindex="0"' in html
+    assert 'aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape"' in html
+    assert "data-dashboard-map-stage" in html
+    assert "data-dashboard-map-selection" in html
+    assert "drag down-right to zoom in; drag up-left to zoom out" in html
+
+
+def test_embedded_map_surfaces_support_mouse_pan_and_matching_keyboard_tools() -> None:
+    for page in (PRETRIP_PAGE, AFTER_ACTION_PAGE, DEBUG_PAGE):
+        html = page.read_text(encoding="utf-8")
+
+        for marker in (
+            'id="panMode"',
+            'aria-label="Mouse drag pan"',
+            "function setMapInteractionMode(",
+            "function beginMapPointerPan(",
+            "function updateMapPointerPan(",
+            "function finishMapPointerPan(",
+            "function handleMapWheelZoom(",
+            'addEventListener("wheel", handleMapWheelZoom',
+            'event.key === "+"',
+            'event.key === "-"',
+            'event.key === "0"',
+            'event.key.toLowerCase() === "p"',
+            'event.key.toLowerCase() === "b"',
+            'event.key === "Escape"',
+        ):
+            assert marker in html
+
+
+def test_weather_embedded_map_keeps_the_basic_map_view_controls_visible() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    weather_embed_style = html.split(
+        'style.id = "scout-dashboard-weather-map-style"', 1
+    )[1].split("const childWindow", 1)[0]
+    frame_state_rule = html.split(".weather-cwa-frame-state {", 1)[1].split("}", 1)[0]
+
+    assert "#readinessStrip, .toolbar-title" in weather_embed_style
+    assert ".toolbar { display:block !important;" in weather_embed_style
+    assert '.control-group[aria-label="Map view controls"]' in weather_embed_style
+    assert '.toolbar-row[aria-label="Map tools"]' in weather_embed_style
+    assert ".toolbar .layer-menu" in weather_embed_style
+    assert "#readinessStrip, .toolbar," not in weather_embed_style
+    assert "top: 58px;" in frame_state_rule
+
+
 def test_scout_dashboard_map_route_removes_header_without_losing_mobile_navigation() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
@@ -1382,6 +1607,138 @@ def test_scout_dashboard_outdoor_six_forces_subtree_contract() -> None:
         "ESCALATE",
     ):
         assert decision in html
+
+
+def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    navigation = html.split("function renderNavigationPage", 1)[1].split(
+        "function architectureSnapshot", 1
+    )[0]
+
+    for marker in (
+        'data-navigation-terrain-intelligence="true"',
+        'data-terrain-contour-map="true"',
+        'data-terrain-feature-detail="true"',
+        'data-terrain-reading-checklist="true"',
+        'data-navigation-boundary="candidate-only"',
+        "function navigationTerrainFeatures()",
+        "function renderNavigationTerrainMap(",
+        "function renderNavigationTerrainDetail(",
+        "function bindNavigationTerrainControls()",
+        "bindNavigationTerrainControls();",
+        "navigationSelectedFeatureId",
+        "navigationSelectedLivePointId",
+        "navigationSelectedStructurePointId",
+        "navigationSelectedTerrainEventId",
+        "navigationTerrainLens",
+        "navigationTerrainSourceMode",
+        "navigationTerrainData",
+        "loadNavigationTerrainData",
+        "function renderNavigationWorkspaceMap(",
+        "function renderNavigationFeatureExtraction(",
+        "function renderNavigationSourceLedger(",
+        "function renderNavigationOrderedClues(",
+        "function renderNavigationTopology(",
+        "function renderNavigationEvidenceGaps(",
+        "function renderNavigationEvidenceWorkbench(",
+        "function navigationTerrainHierarchyPath(",
+        "function renderNavigationTerrainEventTimeline(",
+        "function renderNavigationTerrainEventDetail(",
+        'data-navigation-workspace-map="true"',
+        'data-navigation-structure-point-id="',
+        'data-navigation-structure-kind="',
+        'data-navigation-route-path="true"',
+        'data-navigation-terrain-edge-kind="',
+        'data-navigation-terrain-event-id="',
+        'data-navigation-terrain-event-timeline="true"',
+        'data-navigation-source-ledger="true"',
+        'data-navigation-ordered-clues="true"',
+        'data-navigation-route-topology="true"',
+        'data-navigation-historical-option="',
+        'data-navigation-evidence-gaps="true"',
+        "Workspace DEM + candidate morphology",
+        "Prepared DTM + GPX source ledger",
+        "主稜／支稜",
+        "看到什麼",
+        "走錯徵兆",
+        "回復檢查",
+        "/navigation-terrain-intelligence",
+    ):
+        assert marker in html
+
+    for lens, label in (
+        ("structure", "地形結構"),
+        ("pressure", "坡度壓力"),
+        ("risk", "風險地形"),
+        ("retreat", "撤退方向"),
+        ("events", "路線事件"),
+    ):
+        assert f'["{lens}", "{label}"]' in navigation
+
+    for feature in (
+        "ridge",
+        "valley",
+        "saddle",
+        "fork",
+        "cliff",
+        "gully",
+        "steep-slope",
+        "exposure",
+    ):
+        assert f'type: "{feature}"' in html
+
+    for label in (
+        "稜線",
+        "谷線",
+        "鞍部",
+        "岔路",
+        "崩壁",
+        "溪谷",
+        "陡坡",
+        "曝露地形",
+        "撤退方向",
+        "等高線判讀",
+    ):
+        assert label in html
+
+    assert "safe route" not in navigation.lower()
+    assert "不能單獨證明步道存在" in navigation
+    assert "需要來源與人工複核" in navigation
+    assert 'role="listitem"\n                class="navigation-event-card"' not in navigation
+    assert 'if (state.route !== "outdoor-navigation") {' in html
+    assert 'const pageHeaderHidden = route === "outdoor-navigation";' in html
+    assert (
+        'dashboardShell?.classList.toggle("is-page-header-hidden", pageHeaderHidden);'
+        in html
+    )
+    assert ".dashboard-shell.is-page-header-hidden .topbar {" in html
+    assert ".dashboard-shell.is-page-header-hidden .dashboard-frame {" in html
+    assert 'class="navigation-terrain-brief"' not in navigation
+    assert "data-navigation-terrain-source=" not in navigation
+    assert 'class="navigation-reading-header"' in html
+    assert '<summary class="navigation-reading-summary">' in html
+    assert navigation.count("${renderNavigationReadingChecklist()}") == 1
+    assert navigation.index("${renderNavigationReadingChecklist()}") < navigation.index(
+        'class="navigation-terrain-lenses"'
+    )
+    assert 'class="navigation-terrain-primary"' in navigation
+    assert ".navigation-terrain-primary {" in html
+    assert (
+        navigation.count(
+            "renderNavigationTerrainEventTimeline(snapshot, selectedTerrainEvent)"
+        )
+        == 1
+    )
+    assert navigation.index(
+        "renderNavigationTerrainEventTimeline(snapshot, selectedTerrainEvent)"
+    ) < navigation.index('class="navigation-terrain-side"')
+    assert "Workspace Terrain Evidence" not in navigation
+    assert "讀懂地形，才知道方向何時開始消失。" not in navigation
+    assert "Training fixture" not in navigation
+    assert "not_prepared" in html
+    assert "尚未由目前 terrain pipeline 抽取" in html
+    assert "P0、P1、P2 不合併成一個安全分數" in html
+    assert "reference GPX 不自動升格成替代路線" in html
 
 
 def test_scout_dashboard_pace_fit_removes_low_information_blocks() -> None:
@@ -2064,6 +2421,11 @@ def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_s
         'data-debug-retry',
     ):
         assert marker in html
+
+    project_scope = html.split("project: [", 1)[1].split("],", 1)[0]
+    assert '"outdoor-navigation"' not in project_scope
+    assert "const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;" in html
+    assert "{timeoutMs: NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS}" in html
 
 
 def test_dashboard_primary_information_architecture_and_mobile_shell_contract() -> None:

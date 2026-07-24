@@ -235,6 +235,113 @@ Verification:
   horizontal overflow, and no HTTP or JavaScript errors on a clean reload. No
   Emergency decision control was clicked.
 
+### 2026-07-21 - Retain the complete golden-route axis and filter GPX pairwise
+
+User request:
+
+- Treat the curated golden GPX as the complete current-trip start/finish scope,
+  include it as one statistical source, and filter speed per adjacent point pair
+  instead of rejecting a whole track or segment from its average.
+
+Implementation steps:
+
+- Removed the provisional crowd-support rebase from the Architecture projection.
+  The page now always renders the golden-route `0K -> finish` axis; sparse crowd
+  coverage appears as missing/low-confidence bins rather than a cropped prefix.
+- Reference pace/energy analysis now prefers each complete staged source GPX,
+  applies strict `1 < speed_kmh < 10` to each adjacent timed pair, and retains all
+  other valid pairs from the same source.
+- Kept the golden route as an equal-weight `scope_reference`; its geometry role
+  does not grant special statistical weight.
+- Updated Route Fingerprint, map lens metadata, and the summary board to explain
+  the golden-scope contract directly.
+
+Boundary:
+
+- This remains aggregate, candidate-only pretrip route-demand evidence. No raw
+  GPX or precise timestamps are embedded, no runtime safety truth is changed,
+  and no `/safety/*` or outbound transport is used.
+
+### 2026-07-21 - Add a dynamic Architecture lens color legend
+
+User request:
+
+- Explain directly on the Architecture map what each lens color means.
+
+Implementation steps:
+
+- Added a lens-aware legend to the map instead of presenting only the active
+  lens name and geometry provenance.
+- Terrain, Slow Passage, and Risk Passage now expose the shared candidate
+  pressure bands: low `0–31`, moderate `32–54`, high `55–77`, and very high
+  `78–100`, plus an explicit no-observed-bin state.
+- Evidence exposes high, medium, low, unknown, and unmatched-bin meanings.
+  Structure explains that cyan encodes connected geometry rather than metric
+  magnitude; Reversibility explains that gray remains unverified candidate
+  topology rather than a safe-return claim.
+- Added symbols for the selected-segment amber glow and white checkpoint marker.
+  The legend is a full-width block below the SVG on desktop and mobile, so it
+  never overlays or obscures the route.
+
+Boundary:
+
+- Legend text explains existing candidate metrics only. It does not add a map
+  layer, promote candidate evidence, or alter runtime safety truth.
+
+### 2026-07-21 - Connect Architecture to the real chilai workspace
+
+User request:
+
+- Point the Dashboard at `chilai_nanhua_day1_scoutAI`, calculate the planned
+  Architecture content from that workspace, and render the missing map.
+
+Implementation steps:
+
+- Diagnosed the active `9099` process as the generic `server:app` launch without
+  `SCOUT_PRETRIP_WORKSPACE_ROOT`; the requested project API therefore returned
+  `404` even though the local workspace was complete. The supported local entry
+  point is `tools.dashboard_workspace_app --workspace-root
+  /Users/alexwang0315/workspace`.
+- Fixed shared map-data normalization so a compact route with
+  `display_geometry.coordinate_segments` and no flattened `coordinates` is
+  treated as connected geometry. Route bounds now accept `bounds`,
+  `display_bounds`, or the existing `bbox_wgs84` shapes.
+- Loaded the project-selected `compiled_mission_graph_candidate_ref` and used it
+  only as candidate topology. The deterministic projection now derives a
+  candidate route type, graph node/edge counts, and summed graph baseline time
+  while keeping reviewed topology and reversibility explicitly unverified.
+- Added real workspace counts to the page: route distance, CP/segment topology,
+  reference tracks and mobility bins, route-pressure samples/peaks, Boss
+  candidates, graph duration, artifact lineage, and rendered geometry count.
+
+Observed `chilai_nanhua_day1_scoutAI` evidence:
+
+- route source name `12能高安東軍00`, 112.258 km;
+- 23 reference tracks, 260 observed bins, 245 guidance-eligible bins;
+- 240 checkpoints, 239 candidate graph edges, one retreat candidate;
+- 225 route-pressure samples, 20 peaks, five Boss candidates;
+- `closed_route_candidate`, based on a 95.643 m start/finish gap;
+- `late_route_pressure`, strongest observed bin at 98.50–98.75K;
+- 52.168 hours summed candidate-graph baseline duration;
+- normalized route architecture and reviewed mission graph remain missing, so
+  status stays `partial` and reversibility stays
+  `candidate_graph_unverified`.
+
+Boundary:
+
+- Candidate-only pretrip projection. No raw GPX is embedded in the browser
+  payload, no `/safety/*` call or Phase 1 mutation occurs, and no outbound or
+  hardware action is introduced.
+
+Verification:
+
+- Focused Architecture and Dashboard tests: `48 passed`.
+- Scoped Ruff checks: passed.
+- Real workspace compact API: 260 bins, 239 graph edges, 239 route geometry
+  segments, candidate graph duration 52.168 hours.
+- Browser smoke: map rendered with 453 colored path groups, 25 sampled CP
+  markers, all 260 fingerprint bins, and no document-level horizontal overflow.
+
 ### 2026-07-20 - Build Route Architecture Intelligence workbench
 
 User request:
@@ -3033,3 +3140,369 @@ Verification:
 - Server-side outputs remain candidate-only. LoRa stays a byte-bounded
   `sent=false` preview; there is no RF send, hardware control, `/safety/*`
   mutation, Pi image processing, or mobile image processing.
+
+## 2026-07-23 - Navigation & Terrain Intelligence contour workbench
+
+User request:
+
+- Redesign the Dashboard Navigation route around
+  `SCOUT_OUTDOOR_AI_AGENT_STANDARD` section 11 and mark terrain structure,
+  decision points, and terrain-risk areas on a contour map.
+
+Implementation:
+
+- Replaced the previous two-card Navigation reference with a full-width,
+  interactive terrain-reading workbench.
+- Added four reading lenses: terrain structure, slope pressure, risk terrain,
+  and retreat direction.
+- Added eight numbered contour-map annotations: ridge, valley, saddle, fork,
+  cliff, gully, steep slope, and exposed terrain.
+- Clicking an annotation updates a Terrain Inspector with recognition cues,
+  terrain pressure, the field question to ask, and the next evidence required.
+- Added a six-item map-literacy checklist covering offline maps, GPX/direction,
+  contour reading, fork strategy, retreat direction, and positioning backup.
+- Kept the 720px contour fixture horizontally scrollable inside the map at
+  narrow widths instead of allowing it to widen the entire Dashboard.
+
+Boundary notes:
+
+- The contour map is explicitly a synthetic UX fixture and candidate terrain
+  interpretation. It does not claim that the annotations belong to the current
+  route, prove current walkability, recommend a safe route, or write runtime
+  safety truth.
+- The change does not alter canonical layer IDs/order, import preparation,
+  workspace artifacts, `/safety/*`, hardware, location permission, or outbound
+  transport.
+
+Verification:
+
+- `./venv/bin/python -m pytest tests/test_scout_dashboard_page.py -q`: 46
+  passed.
+- Desktop browser smoke at 1440x1050 showed all eight annotations, all four
+  lenses, no page-level horizontal overflow, and a selected saddle detail.
+  Switching to Risk and selecting Cliff changed the active detail to `崩壁`.
+- Mobile browser smoke at 390x844 showed a 366px workbench/map panel with the
+  720px contour SVG contained in the map's own scroll region; the document had
+  no horizontal overflow.
+- Browser console inspection reported no errors or warnings.
+
+## 2026-07-23 - Workspace DEM projection for Terrain Intelligence
+
+Implementation:
+
+- Added a bounded, read-only
+  `GET /admin/pretrip/projects/{project_id}/navigation-terrain-intelligence`
+  projection. It reads prepared terrain visualization, route-aligned samples,
+  and terrain-risk candidates from the selected local workspace.
+- The projection returns same-origin raster URLs plus at most 240 evenly sampled
+  route points and 50 review candidates. Raw DEM and GPX payloads are not
+  embedded in the Dashboard response.
+- Navigation now defaults to `Workspace evidence`; the original synthetic
+  contour exercise remains available as `Training fixture`.
+- The structure, pressure, risk, and retreat lenses share one terrain surface.
+  Pressure uses the prepared slope-shading raster; risk points open a bounded
+  inspector with TEII, TRI, pretrip-risk, review state, and the next evidence
+  needed.
+- The current bitmap fallback does not prepare reviewed ridge, valley, or
+  saddle vectors. Those three capabilities render as `not_prepared` instead of
+  being inferred from the raster by the UI.
+
+Candidate boundary:
+
+- All projected evidence is `candidate_only=true`,
+  `runtime_safety_truth=false`, and `human_review_required=true`.
+- Terrain-risk candidates are displayed as pressure locations, not relabeled as
+  cliff, valley, exposed terrain, a retreat point, or a walkable route.
+- The endpoint does not call `/safety/*`, mutate Phase 1 truth, control hardware,
+  or perform outbound transport.
+
+Chilai Nanhua replay:
+
+- Prepared DTM: 20m cells, 12 source tiles, 35,546 selected cells, and 3,534
+  contour markers.
+- Route evidence: 1,826 source samples projected to 240 deterministic display
+  points.
+- Risk evidence: 50 source candidates; the map displays the first 30 ranked
+  pressure points to keep the interactive SVG bounded.
+- Desktop at 1440x1050 loaded the 432x169 hillshade/contour rasters, one route
+  path, and 30 candidate markers with no page-level horizontal overflow.
+- Mobile at 390x844 kept the 720px map surface inside a 364px horizontal scroll
+  container while the document itself had no horizontal overflow.
+- Browser interaction confirmed workspace/training source switching, risk-point
+  selection, and slope-pressure lens rendering with hillshade, slope shading,
+  contours, and 30 pressure dots.
+
+Verification:
+
+- `./venv/bin/python -m pytest tests/test_navigation_terrain_projection.py
+  tests/test_scout_dashboard_page.py -q`: 50 passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed, including its focused scaffold import test.
+- The deterministic 32-layer contract verifier was not run because this slice
+  did not change layer IDs, order, import preparation, or shared map-layer
+  behavior.
+
+## 2026-07-23 - DEM morphology, source ledger, and shared route topology
+
+Implementation:
+
+- The Navigation workspace projection now reads the bounded 20m DTM grid files
+  behind the prepared slope bitmap and extracts deterministic ridge, valley,
+  and saddle morphology candidates inside the route corridor. It uses local
+  TPI, relief, neighbor sign changes, and non-maximum spacing; the browser does
+  not infer candidates from raster pixels.
+- The Chilai Nanhua replay examines 35,546 selected cells from 12 grid files.
+  Raw candidates are ridge 698, valley 966, and saddle 61; the API and map
+  expose at most 24 of each kind.
+- Added a tier-preserving source ledger: P0 official DEM baseline, P1 archival
+  or historical prose, and P2 operator-supplied GPX. Missing P1 evidence stays
+  visible as a gap and P0/P1/P2 are never merged into a safety score.
+- Added an ordered GPX waypoint clue chain and an explicit coordinate audit for
+  EPSG:3826/TWVD2001 versus EPSG:4326/WGS84. These are navigation clues, not
+  historical proof or survey-grade control.
+- Added a shared route graph. The prepared Chilai route is represented as eight
+  nodes, seven reusable observed edges, and one baseline option; 23 reference
+  GPX files remain evidence sources rather than invented detours. A separately
+  compiled historical hypothesis can add candidate options over shared edges.
+- The workbench now shows the structure candidates, Source Ledger, Ordered Clue
+  Chain, Shared Route Topology, and Contradictions & Gaps. Selecting a
+  morphology point opens its TPI, local relief, slope, morphology score, and
+  route proximity.
+- Navigation terrain loading has its own 60-second bounded timeout and no longer
+  starts the unrelated project aggregate scope on a direct Navigation open.
+  This prevents cold DEM extraction from being aborted by concurrent
+  project-preparation work.
+
+Candidate boundary:
+
+- A morphology candidate does not establish a ridge trail, valley trail,
+  saddle shortcut, retreat line, access permission, present walkability, or
+  suitability for solo travel.
+- Historical options remain `candidate_only=true`,
+  `runtime_safety_truth=false`, and `safe_or_walkable=not_determined`.
+- The slice is read-only and does not write `/safety/*`, mutate Phase 1 truth,
+  control hardware, expose raw GPX, or perform outbound transport.
+
+Browser verification:
+
+- Desktop 1440x1050: status
+  `ready_with_candidate_structures`, 72 visible morphology points, one bounded
+  route path, two 432x169 raster layers in the structure lens, four evidence
+  panels, and no page-level horizontal overflow.
+- Interaction: selecting valley candidate 24 updated the inspector; Risk showed
+  30 risk-review candidates and hid morphology points; Pressure showed the
+  slope-shading overlay, one route path, and 30 pressure dots; Training retained
+  all eight synthetic teaching markers.
+
+## 2026-07-23 - Chilai P1 evidence and compiled candidate topology
+
+Correction:
+
+- The Chilai workspace now links one P0 official historical baseline, one P1
+  professional SameJan itinerary, and one P1 Keepon completed-trip/GPX landing
+  page. The source ledger keeps those separate from the P2 operator-supplied
+  GPX inventory.
+- The historical compiler produces exactly three P1-described combinations:
+  Qilai South plus Nanhua, Qilai South only, and Nanhua only. It reuses the
+  shared approach edges instead of copying three independent route lines.
+- The observed workspace route remains the sole baseline. Compiled variants
+  render only as candidate topology with `runtime_safety_truth=false` and
+  `safe_or_walkable=not_determined`; no additional luxury route or detour is
+  invented.
+- The former 1,472-line `navigation_terrain_workspace.py` is now a 17-line
+  compatibility facade. DEM extraction, coordinate conversion, provenance
+  projection, and topology projection live in separate focused modules.
+- Mobile 390x844: the document had no horizontal overflow, all four evidence
+  panels collapsed to one 364px column, and the 720px terrain map remained
+  horizontally scrollable inside its 364px container. Selecting saddle
+  candidate 24 updated the inspector.
+- Browser console inspection reported no errors or warnings.
+
+Verification:
+
+- 64 focused tests passed across workspace extraction, API projection,
+  historical compiler, and Dashboard contracts.
+- Skill validation passed for
+  `.agents/skills/infer-historical-dem-gpx-routes`.
+- `pnpm lint`, `pnpm typecheck`, and Python bytecode compilation passed.
+- The Iroko reference fixture compiled two route options with five shared
+  edges while preserving the candidate/runtime boundary.
+- The deterministic 32-layer contract verifier remains not applicable because
+  no layer IDs, order, GPX/import preparation, or shared map behavior changed.
+
+## 2026-07-24 - Expert terrain hierarchy and route-event slices
+
+Implementation:
+
+- Added a continuous candidate terrain hierarchy over the prepared 20m DEM:
+  91 main-ridge edges, 29 spur-ridge edges, 98 drainage-trunk edges, and 22
+  tributary edges are included in the bounded Chilai projection.
+- Added ordered GPX-to-terrain events. The current replay generates 93
+  candidates and projects the first 80 by route distance; events include ridge
+  and watershed crossings, drainage crossings, saddle passages, ridge divides,
+  headwater candidates, and alignment transitions.
+- Added a `路線事件` workspace lens and a horizontally scrollable event
+  timeline. Selecting an event updates both the map marker and inspector with
+  `看到什麼`, `走錯徵兆`, `回復檢查`, and the evidence boundary.
+- Training fixture now exposes only its four applicable contour-reading
+  lenses. Switching from workspace events to training automatically returns to
+  `地形結構`, avoiding an empty GPX-event lens.
+- Event cards retain native button semantics and `aria-pressed`; the conflicting
+  `role=listitem` override found during browser inspection was removed.
+- A direct Navigation open no longer starts unrelated connected preparation.
+  It requests only the Dashboard document, Navigation projection, and the
+  terrain raster images required by the active lens.
+
+Projection and safety boundary:
+
+- The API returns at most 240 hierarchy edges, 500 nodes, 64 points per edge,
+  and 80 route-terrain events. It does not embed raw DEM or GPX payloads.
+- The hierarchy and event sequence remain
+  `candidate_only=true`, `runtime_safety_truth=false`, and
+  `safe_or_walkable=not_determined`.
+- Terrain branches are not relabeled as trail forks. Event prompts are review
+  cues and never establish path existence, current access, walkability, or
+  suitability for solo travel.
+
+Chilai browser replay:
+
+- Desktop 1440x1050 displayed all 240 bounded hierarchy edges and 72 morphology
+  points with no document-level horizontal overflow.
+- The `路線事件` lens displayed 80 red event rings and 80 native event buttons.
+  Selecting event 27 changed the inspector to the 4.46km saddle passage and
+  synchronized the selected map ring.
+- Workspace-to-training switching removed the event lens and reset the active
+  lens to structure; switching back restored the workspace hierarchy.
+- Mobile 390x844 kept the 720px terrain map and the long event timeline inside
+  their own horizontal scroll containers. The document remained 390px wide
+  with zero page-level horizontal overflow.
+- A clean direct Navigation load issued four successful requests: Dashboard,
+  Navigation projection, hillshade, and contours. Browser console inspection
+  reported no errors, warnings, or issues.
+
+Verification:
+
+- 78 focused tests passed across expert annotations, DEM hierarchy, ordered
+  events, workspace extraction, bounded projection, historical-route inference,
+  and the full Dashboard page contract.
+- The deterministic 32-layer verifier passed 32/32 against the real Chilai
+  workspace with no errors or warnings.
+- `pnpm lint`, `pnpm typecheck`, Ruff, Python compilation, and the
+  `infer-historical-dem-gpx-routes` skill validator passed.
+- The package-level `pnpm test` still has two unrelated existing documentation
+  assertions: the current `AGENTS.md` no longer contains the old Phase 9 marker
+  and one legacy generated-code-network phrase. The other 15 package tests
+  passed.
+
+## 2026-07-24 - Navigation page chrome reduction
+
+- Navigation retains the six-axis switcher in its established order: Route
+  Context, Pace Fit, Permission, Architecture, Weather, and Navigation.
+- The shared Dashboard title/truth header and the Navigation intro, status, and
+  source-selector hero are hidden on Navigation only. The switcher now leads
+  directly into Workspace Terrain Evidence.
+- Other six-axis routes retain the shared Dashboard header; switching from
+  Weather back to Navigation reapplies the Navigation-only layout.
+- Desktop 1440x1050 and mobile 390x844 browser checks showed no document-level
+  horizontal overflow. The mobile terrain map remains horizontally scrollable
+  inside its bounded panel.
+- A clean Navigation load issued four successful requests: Dashboard,
+  Navigation projection, hillshade, and contours. Browser console inspection
+  reported no errors, warnings, or issues.
+
+## 2026-07-24 - Compact Map Literacy header
+
+- Map Literacy Checklist now replaces the former Workspace Terrain Evidence
+  heading at the top of the terrain map panel.
+- The six training checks remain available in a native disclosure, but are
+  collapsed by default because they are supporting information rather than an
+  ability-test result.
+- The separate right-column checklist card was removed. Route × Terrain Event
+  and Terrain Event Timeline now remain in the same visible work sequence
+  without the always-expanded checklist between them.
+- The collapsed header measured 59px high on both desktop and mobile checks.
+  The event-detail-to-timeline gap measured 122px at 1440x1050 and 105px at
+  390x844.
+- Expanding the disclosure exposed all six checks in the accessibility tree.
+  Desktop and mobile retained zero document-level horizontal overflow, and the
+  browser console reported no errors, warnings, or issues.
+
+## 2026-07-24 - Attach Terrain Event Timeline to the map
+
+- The former layout placed the Timeline after the complete two-column
+  workspace. Because the right-side Inspector was taller than the map, its
+  height delayed the Timeline and left an empty block below the map.
+- Map and Timeline now compose a dedicated primary column. The Inspector stays
+  in the secondary column and no longer controls the Timeline start position.
+- At 1440px the map-to-Timeline gap changed from 192px to the standard 14px
+  component gap.
+- At 1024px, 768px, and 320px the primary column retains the same 14px gap,
+  followed by the Inspector. The 320px document has zero page-level horizontal
+  overflow; the 720px map and long event track remain independently scrollable.
+- DOM and accessibility reading order follows the visual hierarchy: map,
+  Timeline, then Inspector on single-column layouts.
+
+## 2026-07-24 - Shared map navigation contract
+
+All spatial map surfaces now expose the same basic view operations:
+
+- `+`, `-`, and `Fit` buttons zoom in, zoom out, and reset the view.
+- `Pan` is the default interaction. Pointer drag pans the map; arrow keys pan
+  the focused map; the mouse wheel zooms around the pointer.
+- `Box` supports point zoom and directional rectangle zoom. A click zooms in,
+  a down-right rectangle zooms in, and an up-left rectangle zooms out.
+- Keyboard shortcuts are consistent across surfaces: arrows pan, `+`/`-`
+  zoom, `0` resets, `P` selects Pan, `B` selects Box, and `Escape` cancels the
+  active gesture.
+
+Coverage:
+
+- Dashboard-native maps use one shared viewport controller: Scout map preview
+  (Overview, LBS, and Permission), Pace Fit, Architecture, Navigation training,
+  and Navigation workspace DTM.
+- Dashboard Map and Weather reuse the canonical Pre-trip renderer. Weather
+  keeps the five basic map controls visible while hiding unrelated layer/edit
+  chrome.
+- Direct Pre-trip, After-Action Admin, and Runtime Debug maps expose the same
+  Pan/Box modes and keyboard contract.
+
+Responsive behavior:
+
+- Verified at 1440, 1024, 768, and 320px with zero document-level horizontal
+  overflow on the Navigation route.
+- At 320px, map controls remain within the visible viewport. The Navigation
+  workspace status moves below the controls, the shared Scout map preview
+  shrinks to the containing panel, and the Weather CWA state badge sits below
+  rather than over the map controls.
+- This supersedes the earlier mobile horizontal-scroll behavior for map
+  canvases. Large map content is now explored through the common pan/zoom
+  controller; long evidence timelines may still scroll inside their own
+  bounded container.
+
+Browser evidence:
+
+- Dashboard Navigation accepted button zoom, arrow-key pan, mouse drag pan,
+  point zoom, forward rectangle zoom, reverse rectangle zoom, and Fit reset.
+- The canonical Pre-trip map changed viewBox origin without changing its size
+  during mouse drag pan, and changed viewBox size during point zoom.
+- After-Action Admin and Runtime Debug accepted button zoom and focused-map
+  keyboard pan.
+- Pace Fit, Permission, Architecture mobile Map view, Dashboard Map, and
+  Weather exposed all five controls. Weather controls and its CWA bridge badge
+  have non-overlapping bounds on both 320px and 1440px layouts.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py`: 50 passed.
+- Pre-trip, Debug, After-Action, and Assistant page suites: 70 passed plus 8
+  subtests.
+- Real Chilai workspace layer verifier: 32/32 layers passed with no errors or
+  warnings.
+- `pnpm lint` and `pnpm typecheck` passed.
+- The package-level `pnpm test` retains two unrelated documentation failures:
+  the removed Phase 9 marker in `AGENTS.md` and a legacy generated-code-network
+  phrase. The other 15 package tests passed.
+
+The controller changes map presentation only. They do not add route approval,
+walkability proof, Phase 1 mutation, outbound transport, or runtime safety
+truth.

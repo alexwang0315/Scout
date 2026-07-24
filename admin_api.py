@@ -55,6 +55,10 @@ from dashboard_connected_preparation import (
     DashboardConnectedPreparationManager,
     create_dashboard_connected_preparation_manager,
 )
+from navigation_terrain_projection import (
+    NavigationTerrainProjectionError,
+    build_navigation_terrain_projection,
+)
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
     build_pretrip_admin_view,
@@ -3973,6 +3977,37 @@ def create_admin_router(
             "outputs": collection.get("outputs", {}),
             "boundary": regeneration_payload["boundary"],
         }
+
+    @router.get(
+        "/pretrip/projects/{project_id}/navigation-terrain-intelligence"
+    )
+    def pretrip_project_navigation_terrain_intelligence(
+        project_id: str,
+    ) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+            if not isinstance(project, dict):
+                raise NavigationTerrainProjectionError(
+                    "pre-trip project must be an object"
+                )
+            return build_navigation_terrain_projection(
+                project_root,
+                project,
+                project_id=project_id,
+            )
+        except (json.JSONDecodeError, OSError, NavigationTerrainProjectionError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Navigation terrain projection could not be prepared",
+            ) from exc
 
     @router.get("/pretrip/projects/{project_id}/terrain-overlays/{mode}.png")
     def pretrip_project_terrain_overlay(project_id: str, mode: str) -> Response:
