@@ -588,6 +588,66 @@ class AssistantApiTests(unittest.TestCase):
         self.assertNotIn("api_key", serialized)
         self.assertNotIn("bearer ", serialized)
 
+    def test_observability_projects_mser_state_without_runtime_authority(self):
+        class ProviderWithMserTrace:
+            last_mser_trace = {
+                "mode": "shadow",
+                "final": {
+                    "packet": {
+                        "compact_context": {
+                            "certificate": {"status": "sufficient"}
+                        }
+                    },
+                    "reasoning": {"disposition": "ready_to_reason"},
+                },
+                "selected_tool_ids": [
+                    "scout.ai.weather_window.assess.v0",
+                    "pydantic_ai.tool.search_scout_risk_scores.v0",
+                ],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+            last_mser_answer_verification = {
+                "passed": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="candidate-only MSER answer",
+            sources=[],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=ProviderWithMserTrace(),
+            sources=[],
+            started_at=0,
+            safe_failure=False,
+        )
+
+        self.assertEqual(observed.observability.mser_mode, "shadow")
+        self.assertEqual(
+            observed.observability.mser_sufficiency_status,
+            "sufficient",
+        )
+        self.assertEqual(
+            observed.observability.mser_reasoning_disposition,
+            "ready_to_reason",
+        )
+        self.assertEqual(
+            observed.observability.mser_selected_tool_ids,
+            [
+                "scout.ai.weather_window.assess.v0",
+                "pydantic_ai.tool.search_scout_risk_scores.v0",
+            ],
+        )
+        self.assertTrue(
+            observed.observability.mser_answer_verification_passed
+        )
+
     def test_new_request_does_not_reuse_previous_provider_ledger(self):
         class ProviderWithStaleLedger:
             last_agent_run_ledger = {

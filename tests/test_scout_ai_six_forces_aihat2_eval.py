@@ -19,9 +19,11 @@ from tools.scout_ai_six_forces_aihat2_eval import (
     canonicalize_output_source_refs,
     runtime_package_versions,
     build_recovery_prompt,
+    build_local_model_envelope,
     build_structured_prompt,
     build_three_axis_scorecard,
     compact_evidence_for_model,
+    estimate_hailo_input_tokens,
     expand_case_runs,
     health_guard,
     parse_model_output,
@@ -161,7 +163,7 @@ def test_structured_prompt_excludes_reference_and_allowed_decisions() -> None:
     assert "allowed_decisions" not in prompt
     assert run["question_text"] in prompt
     assert "candidate_only" in prompt
-    assert "a 必須至少保留" in prompt
+    assert "a 必須先原樣摘錄" in prompt
 
 
 def test_structured_prompt_uses_missing_evidence_response_mode_without_reference() -> None:
@@ -859,6 +861,80 @@ def test_cloud_evidence_keeps_all_relevant_cards_without_1600_character_packing(
     assert len(json.dumps(evidence, ensure_ascii=False)) > 1600
 
 
+def test_local_prompt_fits_hailo_budget_and_preserves_every_tool_id() -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "RPF")
+    tool_results = [
+        {
+            "tool_id": f"scout.ai.test_{index}.assess.v0",
+            "status": "completed",
+            "decision": "CONDITIONAL_GO",
+            "field_answer": f"工具 {index} 的繁體中文證據：" + ("路線與風險資料" * 80),
+            "field_answer_priority": 100 - index,
+            "records": [{"index": index, "payload": "候選資料" * 80}],
+        }
+        for index in range(6)
+    ]
+
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=tool_results,
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+    prompt = build_structured_prompt(
+        run=run,
+        compact_evidence=evidence,
+        model_profile="local",
+    )
+
+    assert [item["tool_id"] for item in evidence["tools"]] == [
+        f"scout.ai.test_{index}.assess.v0" for index in range(6)
+    ]
+    assert all(
+        f"scout.ai.test_{index}.assess.v0" in prompt
+        for index in range(6)
+    )
+    assert evidence["packing"]["omitted_tool_count"] == 0
+    assert estimate_hailo_input_tokens(prompt) <= 1200
+
+
+def test_local_model_answer_is_preserved_in_deterministic_envelope() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "exposed_strong_wind_shelter_ahead"
+    )
+    raw = "D=CHANGE_PLAN\nA=不要停在暴露處，前往約 180 公尺外的背風候選點。"
+    output, error = build_local_model_envelope(
+        raw=raw,
+        run=run,
+        compact_evidence={
+            "tools": [
+                {
+                    "tool_id": "scout.ai.contextual_permission.assess.v0",
+                    "decision": "CHANGE_PLAN",
+                    "field_answer": "前方約 180 公尺有背風候選點。",
+                }
+            ],
+            "blocking_missing_evidence": [],
+            "supplemental_missing_evidence": ["fresh_weather_optional"],
+        },
+        available_source_refs={"scout.ai.contextual_permission.assess.v0"},
+    )
+
+    assert error is None
+    assert output is not None
+    assert output["decision"] == "CHANGE_PLAN"
+    assert output["answer"] == "不要停在暴露處，前往約 180 公尺外的背風候選點。"
+    assert output["decisive_evidence"] == ["前方約 180 公尺有背風候選點。"]
+    assert output["evidence_gaps"] == ["fresh_weather_optional"]
+    assert output["source_refs"] == ["scout.ai.contextual_permission.assess.v0"]
+    assert output["claims"] == ["candidate_only"]
+
+
 def test_fresh_weather_overlay_replaces_stale_primary_weather_gap() -> None:
     run = next(
         item
@@ -970,14 +1046,11 @@ def test_recovery_prompt_carries_verifier_feedback_without_reference_answer() ->
     assert "工作區未提供" in prompt
     assert "deterministic_reference" not in prompt
     assert "allowed_decisions" not in prompt
-    assert prompt.rstrip().endswith('"cl":"candidate_only"}')
-    assert f'"s":"{run["scenario_id"]}"' in prompt
+    assert "只輸出 D=<決策>|A=<一個完整繁中句子><SCOUT_DONE>" in prompt
+    assert "決策:DELAY" in prompt
     assert "山體由花崗岩構成" in prompt
-    assert '"scenario_id"' not in prompt
-    repair_candidate = prompt.rsplit("correction candidate", maxsplit=1)[-1]
-    assert "工作區未提供足夠的題目專屬證據" in repair_candidate
-    assert "question_specific_route_context_evidence_missing" in repair_candidate
-    assert "山體由花崗岩構成" not in repair_candidate
+    assert "工作區未提供足夠的題目專屬證據" in prompt
+    assert "question_specific_route_context_evidence_missing" in prompt
 
 
 def test_recovery_prompt_replaces_unsupported_answer_with_primary_field_answer() -> None:
@@ -1002,9 +1075,9 @@ def test_recovery_prompt_replaces_unsupported_answer_with_primary_field_answer()
         verifier_errors=["answer_quality:did_not_preserve_expected_tool_tokens"],
     )
 
-    repair_candidate = prompt.rsplit("correction candidate", maxsplit=1)[-1]
-    assert field_answer in repair_candidate
-    assert "路線僅有登頂" not in repair_candidate
+    assert field_answer in prompt
+    assert "上一答:路線僅有登頂" in prompt
+    assert "answer_quality:did_not_preserve_expected_tool_tokens" in prompt
 
 
 def test_recovery_prompt_replaces_answer_when_sheltered_next_step_is_missing() -> None:
@@ -1031,9 +1104,9 @@ def test_recovery_prompt_replaces_answer_when_sheltered_next_step_is_missing() -
         verifier_errors=["missing_sheltered_candidate_next_step"],
     )
 
-    repair_candidate = prompt.rsplit("correction candidate", maxsplit=1)[-1]
-    assert field_answer in repair_candidate
-    assert "會犧牲 35 分鐘 buffer" not in repair_candidate
+    assert field_answer in prompt
+    assert "上一答:會犧牲 35 分鐘 buffer" in prompt
+    assert "missing_sheltered_candidate_next_step" in prompt
 
 
 def test_summary_requires_verifier_and_quality_acceptance(tmp_path: Path) -> None:

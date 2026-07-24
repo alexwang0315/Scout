@@ -88,6 +88,11 @@ class AssistantObservability(BaseModel):
     budget_stop_reason: str | None = None
     selected_tool_ids: list[str] = Field(default_factory=list)
     executed_tool_ids: list[str] = Field(default_factory=list)
+    mser_mode: Literal["off", "shadow", "enforce"] | None = None
+    mser_sufficiency_status: str | None = None
+    mser_reasoning_disposition: str | None = None
+    mser_selected_tool_ids: list[str] = Field(default_factory=list)
+    mser_answer_verification_passed: bool | None = None
     retry_count: int | None = Field(default=None, ge=0)
     repair_count: int | None = Field(default=None, ge=0, le=1)
     request_ledger: list[AgentRequestLedger] = Field(default_factory=list)

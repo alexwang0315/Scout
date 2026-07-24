@@ -689,6 +689,43 @@ def _with_observability(
     model_profile_used = _provider_metadata(provider, "last_profile")
     run_ledger = _provider_runtime_value(provider, "last_agent_run_ledger")
     ledger = run_ledger if isinstance(run_ledger, dict) else {}
+    raw_mser_trace = _provider_runtime_value(provider, "last_mser_trace")
+    mser_trace = raw_mser_trace if isinstance(raw_mser_trace, dict) else {}
+    raw_mser_verification = _provider_runtime_value(
+        provider,
+        "last_mser_answer_verification",
+    )
+    mser_verification = (
+        raw_mser_verification
+        if isinstance(raw_mser_verification, dict)
+        else {}
+    )
+    mser_state = (
+        mser_trace.get("final")
+        if isinstance(mser_trace.get("final"), dict)
+        else mser_trace.get("initial")
+    )
+    mser_state = mser_state if isinstance(mser_state, dict) else {}
+    mser_packet = (
+        mser_state.get("packet")
+        if isinstance(mser_state.get("packet"), dict)
+        else {}
+    )
+    mser_context = (
+        mser_packet.get("compact_context")
+        if isinstance(mser_packet.get("compact_context"), dict)
+        else {}
+    )
+    mser_certificate = (
+        mser_context.get("certificate")
+        if isinstance(mser_context.get("certificate"), dict)
+        else {}
+    )
+    mser_reasoning = (
+        mser_state.get("reasoning")
+        if isinstance(mser_state.get("reasoning"), dict)
+        else {}
+    )
     raw_cost_estimate_available = ledger.get("cost_estimate_available")
     cost_estimate_available = (
         raw_cost_estimate_available
@@ -739,6 +776,29 @@ def _with_observability(
         ),
         selected_tool_ids=_string_list(ledger.get("selected_tool_ids")),
         executed_tool_ids=_string_list(ledger.get("executed_tool_ids")),
+        mser_mode=(
+            str(mser_trace["mode"])
+            if mser_trace.get("mode") in {"off", "shadow", "enforce"}
+            else None
+        ),
+        mser_sufficiency_status=(
+            str(mser_certificate["status"])
+            if mser_certificate.get("status")
+            else None
+        ),
+        mser_reasoning_disposition=(
+            str(mser_reasoning["disposition"])
+            if mser_reasoning.get("disposition")
+            else None
+        ),
+        mser_selected_tool_ids=_string_list(
+            mser_trace.get("selected_tool_ids")
+        ),
+        mser_answer_verification_passed=(
+            bool(mser_verification["passed"])
+            if isinstance(mser_verification.get("passed"), bool)
+            else None
+        ),
         retry_count=_optional_nonnegative_int(ledger.get("retry_count")),
         repair_count=_optional_nonnegative_int(ledger.get("repair_count")),
         request_ledger=(

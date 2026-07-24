@@ -8,6 +8,7 @@ import pytest
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from scout.services.mser_runtime_adapter import MSERRuntimeAdapter
 from tools import scout_ai_six_forces_openrouter_eval as eval_module
 
 
@@ -15,9 +16,10 @@ def test_normalizes_exact_openrouter_model_name() -> None:
     assert eval_module.normalize_openrouter_model("deepseek/deepseek-v4-flash") == (
         "openrouter:deepseek/deepseek-v4-flash"
     )
-    assert eval_module.normalize_openrouter_model(
-        "openrouter:deepseek/deepseek-v4-flash"
-    ) == "openrouter:deepseek/deepseek-v4-flash"
+    assert (
+        eval_module.normalize_openrouter_model("openrouter:deepseek/deepseek-v4-flash")
+        == "openrouter:deepseek/deepseek-v4-flash"
+    )
 
 
 def test_normalizes_explicit_thinking_setting() -> None:
@@ -157,6 +159,13 @@ def test_run_eval_records_openrouter_manifest_and_scenario_snapshot(
         encoding="utf-8",
     )
     monkeypatch.setattr(eval_module, "expand_case_runs", lambda _artifact: [])
+    monkeypatch.setattr(
+        eval_module,
+        "require_pydantic_ai_214",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("no provider gate is needed when no model call is pending")
+        ),
+    )
     args = SimpleNamespace(
         workspace=workspace,
         scenario_artifact=Path("outputs/evals/scenario.json"),
@@ -188,7 +197,7 @@ def test_run_eval_records_openrouter_manifest_and_scenario_snapshot(
     assert manifest["model_run_count"] == 0
     assert manifest["workers"] == 4
     assert manifest["thinking"] is None
-    assert manifest["model_external_api_calls_made"] is True
+    assert manifest["model_external_api_calls_made"] is False
     assert manifest["weather_external_api_calls_made"] is False
     assert manifest["candidate_only"] is True
     assert manifest["runtime_safety_truth"] is False
@@ -240,7 +249,9 @@ def test_resume_preserves_original_start_time_and_records_resume_time(
     assert manifest["resumed_at"] == "2026-07-21T02:00:00+00:00"
 
 
-def test_resume_retries_failed_run_and_uses_latest_passing_result(tmp_path: Path) -> None:
+def test_resume_retries_failed_run_and_uses_latest_passing_result(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "per_case_results.jsonl"
     path.write_text(
         "\n".join(
@@ -278,6 +289,48 @@ def test_resume_retries_failed_run_and_uses_latest_passing_result(tmp_path: Path
     assert completed == {"case-2"}
     assert len(existing) == 1
     assert existing[0]["attempt"] == "latest"
+
+
+def test_mser_revalidation_integrity_report_proves_model_payload_is_preserved(
+    tmp_path: Path,
+) -> None:
+    results_path = tmp_path / "per_case_results.jsonl"
+    output_path = tmp_path / "mser_revalidation_integrity.json"
+    provider_row = {
+        "run_case_id": "case-1",
+        "model_output": {"answer": "provider answer"},
+        "raw_model_output": "raw provider answer",
+        "model_metadata": {"provider": "openrouter"},
+        "model_request_count": 1,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    shadow_row = {
+        **provider_row,
+        "mser_mode": "shadow",
+        "mser_error": None,
+        "revalidation": {"model_call_performed": False},
+    }
+    results_path.write_text(
+        "\n".join(
+            json.dumps(item, ensure_ascii=False) for item in (provider_row, shadow_row)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = eval_module._write_mser_revalidation_integrity_report(
+        results_path=results_path,
+        output_path=output_path,
+    )
+
+    assert report["latest_run_count"] == 1
+    assert report["compared_run_count"] == 1
+    assert report["preserved_model_payload_count"] == 1
+    assert report["mismatched_run_case_ids"] == []
+    assert report["model_call_performed_count"] == 0
+    assert report["mser_mode_counts"] == {"shadow": 1}
+    assert json.loads(output_path.read_text(encoding="utf-8")) == report
 
 
 def test_revalidate_existing_result_preserves_model_output_without_new_call() -> None:
@@ -346,3 +399,104 @@ def test_revalidate_existing_result_preserves_model_output_without_new_call() ->
     assert result["three_axis_scorecard"]["transport_schema"]["score"] == 100
     assert result["three_axis_scorecard"]["semantic_answer_quality"]["score"] == 100
     assert result["revalidation"]["model_call_performed"] is False
+
+
+def test_revalidate_existing_result_adds_mser_shadow_trace_without_model_call() -> None:
+    source_ref = "outputs/weather/route_weather_package.json"
+    weather_tool_id = "scout.ai.weather_window.assess.v0"
+    run = {
+        "scenario_id": "scenario-1",
+        "question_id": "WTH-002",
+        "question_text": "哪些地方下雨後會變危險？",
+        "force_code": "WTH",
+        "variant_id": "rain",
+        "condition_overlay": {"variant_id": "rain"},
+        "expected_decisions": ["REVIEW"],
+        "expected_decision_boundary": {"answer_mode": "decision"},
+        "scenario": {
+            "scenario_id": "scenario-1",
+            "observed_at": "2026-07-24T01:30:00+00:00",
+        },
+    }
+    output = {
+        "scenario_id": "scenario-1",
+        "decision": "REVIEW",
+        "answer": "雨後應優先檢查高風險坡段。",
+        "decisive_evidence": [source_ref],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["取得更新的降雨證據"],
+        "source_refs": [source_ref],
+        "claims": ["candidate_only"],
+    }
+    row = {
+        "question_id": "WTH-002",
+        "run_case_id": "case-2",
+        "question": run["question_text"],
+        "model_output": output,
+        "raw_model_output": "preserved raw output",
+        "source_refs": [source_ref],
+        "completed_tools": [weather_tool_id],
+        "selected_tools": [weather_tool_id],
+        "missing_tools": [],
+        "blocking_missing_evidence": [],
+        "tool_evidence_stage": [
+            {
+                "tool_id": weather_tool_id,
+                "status": "completed",
+                "quality": "verified",
+                "source_refs": [source_ref],
+                "weather_trend": "deteriorating",
+                "danger_window": "within_3_hours",
+            }
+        ],
+        "compact_evidence_stage": {
+            "blocking_missing_evidence": [],
+            "missing_evidence": [],
+            "tools": [],
+        },
+        "context_identity_check": {"status": "pass"},
+        "native_tool_call_required": True,
+        "model_metadata": {
+            "native_tool_trace": {
+                "offered_tool_ids": [weather_tool_id],
+                "called_tool_ids": [weather_tool_id],
+                "tool_call_count": 1,
+                "tool_return_count": 1,
+            }
+        },
+        "verifier": {"status": "pass"},
+        "answer_quality_screen": {"classification": "quality_pass"},
+        "failure_category": None,
+    }
+
+    result = eval_module.revalidate_existing_result(
+        row,
+        run=run,
+        mser_mode="shadow",
+        mser_runtime_adapter=MSERRuntimeAdapter(),
+    )
+
+    assert result["model_output"] == output
+    assert result["mser_mode"] == "shadow"
+    assert result["mser_error"] is None
+    assert result["mser_trace"]["candidate_only"] is True
+    assert result["mser_trace"]["runtime_safety_truth"] is False
+    assert result["mser_trace"]["initial"]["decision"]["type"] == "weather"
+    assert result["mser_answer_verification"]["passed"] is False
+    assert result["mser_answer_verification"]["violations"][0]["code"] == (
+        "reasoning_not_allowed"
+    )
+    assert result["revalidation"]["model_call_performed"] is False
+
+    enforced = eval_module.revalidate_existing_result(
+        row,
+        run=run,
+        mser_mode="enforce",
+        mser_runtime_adapter=MSERRuntimeAdapter(),
+    )
+
+    assert enforced["model_output"] == output
+    assert enforced["verifier"]["status"] == "fail"
+    assert "mser_reasoning_blocked:evidence_gap" in enforced["verifier"]["errors"]
+    assert enforced["revalidation"]["model_call_performed"] is False

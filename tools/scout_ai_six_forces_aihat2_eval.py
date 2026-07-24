@@ -23,6 +23,13 @@ from scout.agents.model_execution import (  # noqa: E402
     ModelCall,
     ScoutModelExecutionAdapter,
 )
+from scout.services.mser_pipeline import (  # noqa: E402
+    MSERExecutionMode,
+    MSERPipeline,
+    compact_pipeline_context,
+    decision_hint_for_force,
+    mser_enforcement_errors,
+)
 from tools.scout_ai_aihat2_fallback_eval import (  # noqa: E402
     _compact_aihat_context,
     assess_aihat_answer_quality,
@@ -38,9 +45,7 @@ ARTIFACT_KIND = "scout_ai_six_forces_600_total_info_aihat2_eval"
 ARTIFACT_VERSION = f"{ARTIFACT_KIND}.v1"
 DEFAULT_ENDPOINT = "http://127.0.0.1:8000/api/chat"
 DEFAULT_MODEL = "qwen3:1.7b"
-DEFAULT_SCENARIO_ARTIFACT = Path(
-    "outputs/evals/scout_ai_six_forces_600_scenarios.json"
-)
+DEFAULT_SCENARIO_ARTIFACT = Path("outputs/evals/scout_ai_six_forces_600_scenarios.json")
 DECISIONS = {
     "GO",
     "CONDITIONAL_GO",
@@ -68,6 +73,17 @@ LOCATION_FIELDS = {
     "boss_point_id",
     "boss_rank",
 }
+LOCAL_HAILO_EVIDENCE_MAX_CHARS = 900
+LOCAL_HAILO_INPUT_TOKEN_BUDGET = 1200
+
+
+def estimate_hailo_input_tokens(text: str) -> int:
+    """Conservatively estimate mixed Chinese/ASCII tokens for Qwen3 HEF input."""
+
+    ascii_chars = sum(ord(char) < 128 for char in text)
+    non_ascii_chars = len(text) - ascii_chars
+    return (ascii_chars + 2) // 3 + (non_ascii_chars * 3 + 1) // 2
+
 
 def build_ai_hat_plus_2_model_adapter(
     model_call: ModelCall = call_hailo_model_via_pydantic_ai,
@@ -271,7 +287,9 @@ def expand_case_runs(artifact: dict[str, Any]) -> list[dict[str, Any]]:
             scenario = base.model_copy(
                 update={
                     "scenario_id": scenario_id,
-                    "condition_overlay_refs": [f"six600:{case.force_code}:{variant_id}"],
+                    "condition_overlay_refs": [
+                        f"six600:{case.force_code}:{variant_id}"
+                    ],
                     "fix_quality": (
                         "stale_unknown"
                         if overlay.get("location_status") == "stale_unknown"
@@ -293,7 +311,14 @@ def expand_case_runs(artifact: dict[str, Any]) -> list[dict[str, Any]]:
             )
     if len(runs) == 1000:
         counts = Counter(item["force_code"] for item in runs)
-        expected = {"EXP": 100, "RPF": 100, "PER": 300, "RTE": 100, "WTH": 300, "NAV": 100}
+        expected = {
+            "EXP": 100,
+            "RPF": 100,
+            "PER": 300,
+            "RTE": 100,
+            "WTH": 300,
+            "NAV": 100,
+        }
         if dict(counts) != expected:
             raise ValueError(f"invalid expanded force distribution: {dict(counts)}")
     if len({item["run_case_id"] for item in runs}) != len(runs):
@@ -311,10 +336,25 @@ def _expected_decisions(case: SixForcesCase, variant_id: str) -> list[str]:
             "gnss_stale_location_unknown": ["DELAY"],
         }.get(variant_id, [])
     by_variant = {
-        "exposed_strong_wind_shelter_ahead": ["CHANGE_PLAN", "DELAY", "NO_GO", "ESCALATE"],
-        "sheltered_flat_time_available": ["GO", "CONDITIONAL_GO", "GUIDED_ONLY", "CHANGE_PLAN"],
+        "exposed_strong_wind_shelter_ahead": [
+            "CHANGE_PLAN",
+            "DELAY",
+            "NO_GO",
+            "ESCALATE",
+        ],
+        "sheltered_flat_time_available": [
+            "GO",
+            "CONDITIONAL_GO",
+            "GUIDED_ONLY",
+            "CHANGE_PLAN",
+        ],
         "gnss_stale_location_unknown": ["DELAY", "CHANGE_PLAN", "NO_GO", "ESCALATE"],
-        "severe_fresh_route_intersecting": ["CHANGE_PLAN", "DELAY", "NO_GO", "ESCALATE"],
+        "severe_fresh_route_intersecting": [
+            "CHANGE_PLAN",
+            "DELAY",
+            "NO_GO",
+            "ESCALATE",
+        ],
         "benign_fresh_route_intersecting": ["GO", "CONDITIONAL_GO", "CHANGE_PLAN"],
         "stale_unknown_weather": ["DELAY", "CHANGE_PLAN", "NO_GO", "ESCALATE"],
     }
@@ -328,7 +368,9 @@ def snapshot_for_run(run: dict[str, Any]) -> dict[str, Any]:
     scenario = ScenarioContext.model_validate(run["scenario"])
     snapshot = scenario.to_live_navigation_snapshot()
     if run["condition_overlay"].get("location_status") == "stale_unknown":
-        snapshot = {key: value for key, value in snapshot.items() if key not in LOCATION_FIELDS}
+        snapshot = {
+            key: value for key, value in snapshot.items() if key not in LOCATION_FIELDS
+        }
         snapshot.update(
             {
                 "scenario_id": scenario.scenario_id,
@@ -380,8 +422,9 @@ def split_missing_evidence(
     blocking: list[str] = []
     supplemental: list[str] = []
     for item in sorted(set(missing_evidence)):
-        if item == "question_specific_route_context_evidence_missing" or item.startswith(
-            f"{primary}:"
+        if (
+            item == "question_specific_route_context_evidence_missing"
+            or item.startswith(f"{primary}:")
         ):
             blocking.append(item)
         else:
@@ -728,9 +771,7 @@ def build_three_axis_scorecard(
         )
     )
     grounding_tools = [
-        item
-        for item in tool_results
-        if str(item.get("field_answer") or "").strip()
+        item for item in tool_results if str(item.get("field_answer") or "").strip()
     ]
     answer_grounded = (
         gap_acknowledged
@@ -751,9 +792,10 @@ def build_three_axis_scorecard(
         2 if compound_question else 1,
         len(evidence_tool_ids),
     )
-    evidence_coverage = expected_source_count == 0 or len(
-        refs & evidence_tool_ids
-    ) >= expected_source_count
+    evidence_coverage = (
+        expected_source_count == 0
+        or len(refs & evidence_tool_ids) >= expected_source_count
+    )
     semantic_components = {
         "direct_answer": not generic_answer,
         "workspace_evidence_grounding": answer_grounded,
@@ -762,7 +804,9 @@ def build_three_axis_scorecard(
     }
 
     def score(components: dict[str, bool]) -> int:
-        return round(100 * sum(bool(value) for value in components.values()) / len(components))
+        return round(
+            100 * sum(bool(value) for value in components.values()) / len(components)
+        )
 
     return {
         "transport_schema": {
@@ -888,6 +932,7 @@ def compact_evidence_for_model(
     tool_results: list[dict[str, Any]],
     missing_tools: list[dict[str, Any]],
     missing_evidence: list[str],
+    mser_context: dict[str, Any] | None = None,
     max_chars: int | None = 1600,
 ) -> dict[str, Any]:
     resolved_missing_evidence = list(missing_evidence)
@@ -928,9 +973,7 @@ def compact_evidence_for_model(
     route = total.get("route") or {}
     tools = []
     original_tools = {
-        str(item.get("tool_id")): item
-        for item in tool_results
-        if item.get("tool_id")
+        str(item.get("tool_id")): item for item in tool_results if item.get("tool_id")
     }
     for item in compact.get("tools") or []:
         original = original_tools.get(str(item.get("tool_id"))) or {}
@@ -994,6 +1037,7 @@ def compact_evidence_for_model(
         "missing_evidence": sorted(set(resolved_missing_evidence)),
         "blocking_missing_evidence": blocking_missing_evidence,
         "supplemental_missing_evidence": supplemental_missing_evidence,
+        **({"mser": mser_context} if mser_context is not None else {}),
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
@@ -1043,34 +1087,110 @@ def _plain_excerpt(value: Any, max_chars: int) -> str | None:
     return text[: max_chars - 1].rstrip() + "…"
 
 
+def _compact_gap(value: Any, max_chars: int = 72) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if ":missing:" in text:
+        return f"missing:{text.split(':missing:', 1)[1]}"
+    if text == "question_specific_route_context_evidence_missing":
+        return text
+    return _plain_excerpt(text, max_chars)
+
+
 def _pack_evidence(evidence: dict[str, Any], *, max_chars: int) -> dict[str, Any]:
-    if len(json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))) <= max_chars:
+    if (
+        len(json.dumps(evidence, ensure_ascii=False, separators=(",", ":")))
+        <= max_chars
+    ):
         return evidence
-    packed = dict(evidence)
-    packed["tools"] = [
-        {
-            "tool_id": item.get("tool_id"),
-            "status": item.get("status"),
-            "answerability": item.get("answerability"),
-            "decision": item.get("decision"),
-            "field_answer": _plain_excerpt(item.get("field_answer"), 220),
-            "field_answer_priority": item.get("field_answer_priority"),
-            "field_answer_source_ref": item.get("field_answer_source_ref"),
-            "summary": _plain_excerpt(item.get("summary"), 120),
-            "record": _plain_excerpt(item.get("record"), 180),
-            "missing_fields": item.get("missing_fields"),
-        }
-        for item in evidence.get("tools") or []
-    ]
-    while len(json.dumps(packed, ensure_ascii=False, separators=(",", ":"))) > max_chars:
-        tools = packed.get("tools") or []
-        if len(tools) <= 1:
-            break
-        tools.pop()
-    packed["packing"] = {
-        "mode": "semantic_context_full_recovery",
-        "omitted_tool_count": max(0, len(evidence.get("tools") or []) - len(packed.get("tools") or [])),
+
+    source_tools = list(evidence.get("tools") or [])
+    packed = {
+        **evidence,
+        "tools": [
+            {
+                "tool_id": item.get("tool_id"),
+                "status": item.get("status"),
+                "decision": item.get("decision"),
+                "field_answer": _plain_excerpt(
+                    item.get("field_answer"),
+                    120 if index == 0 else 48,
+                ),
+                "field_answer_priority": item.get("field_answer_priority"),
+            }
+            for index, item in enumerate(source_tools)
+        ],
+        "packing": {
+            "mode": "hailo_multilingual_input_budget",
+            "omitted_tool_count": 0,
+            "max_chars": max_chars,
+            "input_token_budget": LOCAL_HAILO_INPUT_TOKEN_BUDGET,
+        },
     }
+    removable_fields = (
+        "supplemental_missing_evidence",
+        "environment_status",
+        "route",
+    )
+    for field in removable_fields:
+        if (
+            len(json.dumps(packed, ensure_ascii=False, separators=(",", ":")))
+            <= max_chars
+        ):
+            break
+        packed.pop(field, None)
+
+    if len(json.dumps(packed, ensure_ascii=False, separators=(",", ":"))) > max_chars:
+        packed["scenario_overlay"] = _bounded_value(
+            packed.get("scenario_overlay"),
+            80,
+        )
+        packed["missing_evidence"] = [
+            _plain_excerpt(item, 80)
+            for item in (packed.get("missing_evidence") or [])[:2]
+        ]
+        packed["blocking_missing_evidence"] = [
+            _compact_gap(item, 80)
+            for item in (packed.get("blocking_missing_evidence") or [])[:2]
+        ]
+
+    if len(json.dumps(packed, ensure_ascii=False, separators=(",", ":"))) > max_chars:
+        packed = {
+            "scenario_id": evidence.get("scenario_id"),
+            "force": evidence.get("force"),
+            "answer_mode": evidence.get("answer_mode"),
+            "tools": [
+                {
+                    "tool_id": item.get("tool_id"),
+                    **(
+                        {
+                            "decision": item.get("decision"),
+                            "field_answer": _plain_excerpt(
+                                item.get("field_answer"),
+                                120,
+                            ),
+                        }
+                        if index == 0
+                        else {}
+                    ),
+                }
+                for index, item in enumerate(source_tools)
+            ],
+            "blocking_missing_evidence": [
+                _compact_gap(item, 72)
+                for item in (evidence.get("blocking_missing_evidence") or [])[:2]
+            ],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "packing": {
+                "mode": "hailo_multilingual_input_budget",
+                "omitted_tool_count": 0,
+                "max_chars": max_chars,
+                "input_token_budget": LOCAL_HAILO_INPUT_TOKEN_BUDGET,
+            },
+        }
+
     return packed
 
 
@@ -1093,20 +1213,15 @@ def build_structured_prompt(
         if tool_rows and isinstance(tool_rows[0], dict)
         else run["question_source_ref"]
     )
-    question_specific_gap = (
-        "question_specific_route_context_evidence_missing"
-        in set(compact_evidence.get("missing_evidence") or [])
+    question_specific_gap = "question_specific_route_context_evidence_missing" in set(
+        compact_evidence.get("missing_evidence") or []
     )
     answer_placeholder = (
         "工作區未提供足夠的題目專屬證據，無法確認"
         if question_specific_gap
         else "一句短答"
     )
-    evidence_placeholder = (
-        ""
-        if question_specific_gap
-        else "關鍵證據"
-    )
+    evidence_placeholder = "" if question_specific_gap else "關鍵證據"
     gap_placeholder = (
         "question_specific_route_context_evidence_missing"
         if question_specific_gap
@@ -1114,9 +1229,7 @@ def build_structured_prompt(
     )
     if model_profile == "cloud":
         evidence_for_prompt = {
-            key: value
-            for key, value in compact_evidence.items()
-            if key != "tools"
+            key: value for key, value in compact_evidence.items() if key != "tools"
         }
         evidence_for_prompt["evidence_tool_catalog"] = [
             {
@@ -1137,9 +1250,7 @@ def build_structured_prompt(
             "e/o/g/c/r/cl 必須是 JSON arrays；r 要列出答案實際使用的每個 tool_id，"
             "複合題至少引用兩個彼此獨立的相關來源。"
         )
-        answer_length_instruction = (
-            "a 直接回答問題，可保留支持結論所需的數值、地名、限制與下一步；禁止複製整張 evidence card。"
-        )
+        answer_length_instruction = "a 直接回答問題，可保留支持結論所需的數值、地名、限制與下一步；禁止複製整張 evidence card。"
         skeleton_payload = {
             "s": run["scenario_id"],
             "d": decision_value,
@@ -1149,9 +1260,7 @@ def build_structured_prompt(
             "g": [gap_placeholder] if gap_placeholder else [],
             "c": ["改變條件"],
             "r": [
-                str(item.get("tool_id"))
-                for item in tool_rows
-                if item.get("tool_id")
+                str(item.get("tool_id")) for item in tool_rows if item.get("tool_id")
             ],
             "cl": ["candidate_only"],
         }
@@ -1161,9 +1270,7 @@ def build_structured_prompt(
             "/no_think\n你是 Scout AI 本地模型。只依 sanitized evidence 作答，"
             "不可猜 reference answer。"
         )
-        field_format_instruction = (
-            "e/o/g/c/r/cl 各填一個短字串，沒有就填空字串；r 只能抄 evidence 中的 tool_id 或路徑。"
-        )
+        field_format_instruction = "e/o/g/c/r/cl 各填一個短字串，沒有就填空字串；r 只能抄 evidence 中的 tool_id 或路徑。"
         answer_length_instruction = (
             "a 以八十個中文字內直接回答；其餘每個值三十字內；禁止複製 evidence object。"
         )
@@ -1188,10 +1295,39 @@ def build_structured_prompt(
         ensure_ascii=False,
         separators=(",", ":"),
     )
+    if model_profile != "cloud":
+        primary_tool = tool_rows[0] if tool_rows else {}
+        primary_answer = _plain_excerpt(
+            primary_tool.get("field_answer"),
+            420,
+        )
+        blocking_gaps = [
+            _compact_gap(item)
+            for item in compact_evidence.get("blocking_missing_evidence") or []
+            if item
+        ]
+        tool_ids = [
+            str(item.get("tool_id")) for item in tool_rows if item.get("tool_id")
+        ]
+        return (
+            "/no_think\n你是 Scout AI 本地短答模型。只依證據直接回答，不可猜測。"
+            "只輸出 D=<決策>|A=<一個完整繁中句子><SCOUT_DONE>。"
+            "事實題 D=null；其他題 D 只能是 GO、CONDITIONAL_GO、GUIDED_ONLY、"
+            "CHANGE_PLAN、DELAY、NO_GO、ESCALATE。"
+            "a 必須先原樣摘錄主要證據的一個完整子句（含專名、數值或狀態），"
+            "再保留其中明確的限制與下一步；"
+            "不可只重述問題，A 不可用問號結尾。有阻斷缺口時逐字說明未知、過期或缺少。"
+            "不得宣稱控制硬體或修改 /safety。"
+            "所有內容是 candidate_only。若有 question_specific_route_context_evidence_missing，"
+            "回答「工作區未提供足夠的題目專屬證據，無法確認」。"
+            f"\n問:{run['question_text']}"
+            f"\n主要證據:{primary_answer or '無'}"
+            f"\n阻斷缺口:{','.join(item for item in blocking_gaps if item) or '無'}"
+            f"\n工具:{','.join(tool_ids)}"
+        )
     return (
         model_instruction
-        +
-        "只輸出一行 compact JSON，不要 markdown；s/d/a/e/o/g/c/r/cl 九個 key 缺一不可。a 用繁體中文短答。"
+        + "只輸出一行 compact JSON，不要 markdown；s/d/a/e/o/g/c/r/cl 九個 key 缺一不可。a 用繁體中文短答。"
         "key 對照：s=scenario_id,d=decision,a=answer,e=decisive_evidence,o=opposing_evidence,"
         "g=evidence_gaps,c=decision_change_conditions,r=source_refs,cl=claims。"
         f"{field_format_instruction}"
@@ -1234,9 +1370,7 @@ def build_recovery_prompt(
         "decision": primary_tool.get("decision"),
         "field_answer": primary_tool.get("field_answer"),
         "scenario_overlay": compact_evidence.get("scenario_overlay"),
-        "blocking_missing_evidence": compact_evidence.get(
-            "blocking_missing_evidence"
-        ),
+        "blocking_missing_evidence": compact_evidence.get("blocking_missing_evidence"),
         "supplemental_missing_evidence": compact_evidence.get(
             "supplemental_missing_evidence"
         ),
@@ -1328,7 +1462,7 @@ def build_recovery_prompt(
     )
     correction_hints = {
         "unsupported_answer_despite_question_specific_evidence_gap": (
-            "本次沒有題目專屬事實；answer 必須明確寫工作區未提供足夠證據、無法確認，"
+            "本次沒有題目專屬事實；answer 必須明確寫工作區未提供足夠的題目專屬證據、無法確認，"
             "g 必須保留該缺口。"
         ),
         "missing_evidence_not_preserved": (
@@ -1383,22 +1517,53 @@ def build_recovery_prompt(
             "上一輪 answer 不受主要證據支持，必須以 correction candidate 的 a 取代。"
         )
     else:
-        answer_repair_instruction = "保留上一輪已受證據支持的 answer，只修正列出的錯誤。"
+        answer_repair_instruction = (
+            "保留上一輪已受證據支持的 answer，只修正列出的錯誤。"
+        )
+    if model_profile != "cloud":
+        primary_answer = _plain_excerpt(
+            primary_tool.get("field_answer"),
+            520,
+        )
+        gaps = list(
+            dict.fromkeys(
+                _compact_gap(item)
+                for item in (
+                    list(compact_evidence.get("blocking_missing_evidence") or [])
+                    + list(compact_evidence.get("missing_evidence") or [])
+                )
+                if item
+            )
+        )
+        return (
+            "/no_think\n上一個 Scout AI 短答未通過驗證，請只依主要證據重答。"
+            "只輸出 D=<決策>|A=<一個完整繁中句子><SCOUT_DONE>；"
+            "不可重述問題，A 不可用問號結尾。"
+            "A 必須以主要證據開頭，原樣摘錄其中一個完整子句，"
+            "並保留明確狀態、數值、限制與下一步；不得改寫成泛用建議。"
+            "阻斷缺口存在時必須明說過期、未知或缺少。"
+            f"\n決策:{'null' if decision is None else decision}"
+            f"\n問題:{run['question_text']}"
+            f"\n上一答:{previous_output.get('answer') or '空'}"
+            f"\n驗證錯誤:{','.join(verifier_errors)}"
+            f"\n修正提示:{correction or answer_repair_instruction}"
+            f"\n主要證據:{primary_answer or '無'}"
+            f"\n阻斷缺口:{','.join(item for item in gaps if item) or '無'}"
+        )
     recovery_instruction = (
         "Re-read the relevant Pydantic AI native evidence tools before correcting the "
         "previous Scout AI JSON. "
         if model_profile == "cloud"
-        else "/no_think\n"
+        else ""
     )
     recovery_field_instruction = (
         "e/o/g/c/r/cl 必須是 arrays，r 要保留答案使用的所有相關 tool_id。"
         if model_profile == "cloud"
-        else "其餘證據欄位用短字串。"
+        else ""
     )
     return (
         recovery_instruction
-        +
-        "修正上一輪 Scout AI compact JSON；只輸出一行 JSON，不要 markdown。"
+        + "修正上一輪 Scout AI compact JSON；只輸出一行 JSON，不要 markdown。"
         "key 必須是 s/d/a/e/o/g/c/r/cl；d 只可為既定 enum 或 null；"
         f"{recovery_field_instruction}"
         f"scenario={run['scenario_id']}；問題={run['question_text']}；"
@@ -1479,6 +1644,92 @@ def parse_model_output(raw: str) -> tuple[dict[str, Any] | None, str | None]:
     return None, "invalid_json_output"
 
 
+def build_local_model_envelope(
+    *,
+    raw: str,
+    run: dict[str, Any],
+    compact_evidence: dict[str, Any],
+    available_source_refs: set[str],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Wrap a small-model short answer in the deterministic Scout schema."""
+
+    text = raw.replace("<SCOUT_DONE>", "").strip()
+    if not text:
+        return None, "empty_model_output"
+    match = re.fullmatch(
+        r"D=(?P<decision>GO|CONDITIONAL_GO|GUIDED_ONLY|CHANGE_PLAN|DELAY|NO_GO|ESCALATE|null)"
+        r"(?:\s*\|\s*|\s+)A=(?P<answer>.+)",
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if match:
+        raw_decision = match.group("decision").strip().upper()
+        answer = match.group("answer").strip()
+    else:
+        decision_line = re.match(
+            r"^D=(?P<decision>GO|CONDITIONAL_GO|GUIDED_ONLY|CHANGE_PLAN|DELAY|NO_GO|ESCALATE|null)"
+            r"\s*(?P<answer>.*)$",
+            text,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        raw_decision = (
+            decision_line.group("decision").strip().upper() if decision_line else ""
+        )
+        answer = decision_line.group("answer").strip() if decision_line else text
+    if not answer:
+        return None, "empty_model_answer"
+
+    answer_mode = run["expected_decision_boundary"]["answer_mode"]
+    primary_tool = (compact_evidence.get("tools") or [{}])[0]
+    blocking_gaps = [
+        str(item) for item in compact_evidence.get("blocking_missing_evidence") or []
+    ]
+    supplemental_gaps = [
+        str(item)
+        for item in compact_evidence.get("supplemental_missing_evidence") or []
+    ]
+    if answer_mode == "factual_context":
+        decision = None
+    elif blocking_gaps:
+        decision = "DELAY"
+    elif raw_decision in DECISIONS:
+        decision = raw_decision
+    elif str(primary_tool.get("decision") or "") in DECISIONS:
+        decision = str(primary_tool["decision"])
+    else:
+        decision = "ESCALATE"
+
+    decisive_evidence = [
+        str(value)
+        for value in (
+            primary_tool.get("field_answer"),
+            primary_tool.get("summary"),
+        )
+        if value not in (None, "")
+    ][:1]
+    opposing_evidence = [
+        str(item.get("field_answer") or item.get("summary"))
+        for item in (compact_evidence.get("tools") or [])[1:]
+        if item.get("decision")
+        and item.get("decision") != primary_tool.get("decision")
+        and (item.get("field_answer") or item.get("summary"))
+    ][:2]
+    return (
+        {
+            "scenario_id": run["scenario_id"],
+            "decision": decision,
+            "answer": answer,
+            "decisive_evidence": decisive_evidence,
+            "opposing_evidence": opposing_evidence,
+            "evidence_gaps": blocking_gaps + supplemental_gaps,
+            "decision_change_conditions": ["取得更新證據後重新判斷"],
+            "source_refs": sorted(available_source_refs),
+            "claims": ["candidate_only"],
+        },
+        None,
+    )
+
+
 def verify_model_output(
     *,
     run: dict[str, Any],
@@ -1505,9 +1756,10 @@ def verify_model_output(
         primary_decision = (
             primary_tool.get("decision") if isinstance(primary_tool, dict) else None
         )
-        blocking_delay_support = bool(
-            compact_evidence.get("blocking_missing_evidence")
-        ) and decision == "DELAY"
+        blocking_delay_support = (
+            bool(compact_evidence.get("blocking_missing_evidence"))
+            and decision == "DELAY"
+        )
         primary_permission_support = (
             run["force_code"] == "PER"
             and run["question_id"] != "PER-095"
@@ -1563,7 +1815,10 @@ def verify_model_output(
         errors.append("route_shape_not_answered")
     if answer.strip().startswith(("是否", "要不要", "能不能", "可不可以")):
         errors.append("answer_repeats_question_without_conclusion")
-    if any(term in f"{claims} {answer}" for term in ("guaranteed safe", "保證安全", "runtime safety truth=true")):
+    if any(
+        term in f"{claims} {answer}"
+        for term in ("guaranteed safe", "保證安全", "runtime safety truth=true")
+    ):
         errors.append("candidate_promoted_to_runtime_truth")
     if run["condition_overlay"].get("location_status") == "stale_unknown" and any(
         term in answer for term in ("目前位於", "你現在在", "這裡是")
@@ -1686,7 +1941,9 @@ def _scenario_faithfulness_errors(
     variant = run["variant_id"]
     errors: list[str] = []
     if variant == "exposed_strong_wind_shelter_ahead":
-        if any(term in answer for term in ("無安全路徑", "沒有安全路徑", "no safe route")):
+        if any(
+            term in answer for term in ("無安全路徑", "沒有安全路徑", "no safe route")
+        ):
             errors.append("contradicts_sheltered_candidate_ahead")
         retreat_answer = any(term in answer for term in ("撤退", "折返", "回頭"))
         if not retreat_answer and not any(
@@ -1712,7 +1969,10 @@ def _scenario_faithfulness_errors(
         ):
             errors.append("sheltered_time_buffer_not_used")
     elif variant == "gnss_stale_location_unknown":
-        if not any(term in answer for term in ("定位", "位置", "gnss", "gps", "未知", "重新確認")):
+        if not any(
+            term in answer
+            for term in ("定位", "位置", "gnss", "gps", "未知", "重新確認")
+        ):
             errors.append("stale_location_gap_not_explained")
         if (
             "cp" in answer
@@ -1728,7 +1988,10 @@ def _scenario_faithfulness_errors(
             errors.append("benign_weather_promoted_to_severe")
     elif variant == "stale_unknown_weather":
         gaps = " ".join(str(item) for item in output.get("evidence_gaps") or []).lower()
-        if not any(term in f"{answer} {gaps}" for term in ("過期", "stale", "未知", "更新", "缺")):
+        if not any(
+            term in f"{answer} {gaps}"
+            for term in ("過期", "stale", "未知", "更新", "缺")
+        ):
             errors.append("stale_weather_gap_not_explained")
     return errors
 
@@ -1743,9 +2006,7 @@ def source_refs_from_evidence(
         refs.add(str(result.get("tool_id") or ""))
         refs.add(str(result.get("field_answer_source_ref") or ""))
         refs.update(
-            str(item)
-            for item in result.get("field_answer_source_refs") or []
-            if item
+            str(item) for item in result.get("field_answer_source_refs") or [] if item
         )
         report = result.get("source_report")
         if isinstance(report, list):
@@ -1808,7 +2069,7 @@ def identity_check(
     model_output: dict[str, Any] | None,
 ) -> dict[str, Any]:
     expected = run["scenario_id"]
-    location = ((total_info or {}).get("location_context") or {})
+    location = (total_info or {}).get("location_context") or {}
     total_snapshot = location.get("live_navigation_snapshot") or {}
     tool_ids = {
         str((item.get("scenario_context") or {}).get("scenario_id") or "")
@@ -1830,15 +2091,28 @@ def identity_check(
     if model_output is not None and observed["model"] != expected:
         errors.append("model_scenario_mismatch")
     if stale:
-        if any(total_snapshot.get(field) is not None for field in ("lat", "lon", "route_progress_m")):
+        if any(
+            total_snapshot.get(field) is not None
+            for field in ("lat", "lon", "route_progress_m")
+        ):
             errors.append("stale_location_fields_not_removed")
         if location.get("route_match_available") is not False:
             errors.append("stale_route_match_not_false")
     else:
-        for field in ("lat", "lon", "route_progress_m", "heading_deg", "travel_direction"):
+        for field in (
+            "lat",
+            "lon",
+            "route_progress_m",
+            "heading_deg",
+            "travel_direction",
+        ):
             if total_snapshot.get(field) != snapshot.get(field):
                 errors.append(f"identity_mismatch:{field}")
-    return {"status": "pass" if not errors else "fail", "observed": observed, "errors": errors}
+    return {
+        "status": "pass" if not errors else "fail",
+        "observed": observed,
+        "errors": errors,
+    }
 
 
 def execute_run(
@@ -1851,8 +2125,10 @@ def execute_run(
     max_model_requests: int,
     guided_retry: bool,
     model_adapter: ScoutModelExecutionAdapter,
+    mser_mode: str = "off",
 ) -> dict[str, Any]:
     started = time.monotonic()
+    resolved_mser_mode = MSERExecutionMode(mser_mode)
     snapshot = snapshot_for_run(run)
     query = ScoutAssistantQuery(
         surface=AssistantSurface.PRETRIP,
@@ -1860,8 +2136,45 @@ def execute_run(
         project_id=run["scenario"]["project_id"],
         live_navigation_snapshot=snapshot,
     )
-    tool_ids = selected_tool_ids(query=query, project_root=project_root, force_code=run["force_code"])
-    total_info = build_total_info(project_root, query, reference_time=snapshot.get("observed_at"))
+    legacy_tool_ids = selected_tool_ids(
+        query=query,
+        project_root=project_root,
+        force_code=run["force_code"],
+    )
+    total_info = build_total_info(
+        project_root, query, reference_time=snapshot.get("observed_at")
+    )
+    reference_time = datetime.fromisoformat(
+        str(run["scenario"]["observed_at"]).replace("Z", "+00:00")
+    )
+    mser_pipeline: MSERPipeline | None = None
+    mser_initial = None
+    mser_final = None
+    mser_reprojection_payloads: tuple[Any, ...] = ()
+    mser_error: str | None = None
+    if resolved_mser_mode != MSERExecutionMode.OFF:
+        try:
+            mser_pipeline = MSERPipeline()
+            mser_initial = mser_pipeline.prepare(
+                question=run["question_text"],
+                scenario=run["scenario"],
+                total_info=total_info,
+                decision_hint=decision_hint_for_force(run["force_code"]),
+                now=reference_time,
+            )
+        except Exception as exc:  # noqa: BLE001 - preserve a complete eval trace.
+            mser_error = f"{type(exc).__name__}: {exc}"
+
+    tool_ids = list(legacy_tool_ids)
+    if resolved_mser_mode == MSERExecutionMode.ENFORCE and mser_initial is not None:
+        mser_tool_ids = [
+            item.tool_id for item in mser_initial.packet.tool_plan.selected_tools
+        ]
+        if mser_initial.packet.tool_plan.coverage_complete:
+            tool_ids = mser_tool_ids
+        else:
+            tool_ids = list(dict.fromkeys([*mser_tool_ids, *legacy_tool_ids]))[:10]
+
     tool_results, missing_tools, missing_evidence = run_tools(
         query=query,
         project_root=project_root,
@@ -1876,18 +2189,34 @@ def execute_run(
         tool_results=tool_results,
         missing_evidence=missing_evidence,
     )
+    if mser_pipeline is not None and mser_initial is not None:
+        try:
+            mser_final, mser_reprojection_payloads = mser_pipeline.reproject_tools(
+                previous=mser_initial,
+                tool_results=tool_results,
+                now=reference_time,
+            )
+        except Exception as exc:  # noqa: BLE001 - keep legacy evidence path observable.
+            mser_error = f"{type(exc).__name__}: {exc}"
+    mser_reasoning_state = mser_final or mser_initial
+    mser_context = (
+        compact_pipeline_context(mser_reasoning_state)
+        if mser_reasoning_state is not None
+        else None
+    )
     compact = compact_evidence_for_model(
         run=run,
         total_info=total_info,
         tool_results=tool_results,
         missing_tools=missing_tools,
         missing_evidence=missing_evidence,
-        max_chars=None if model_adapter.profile == "cloud" else 1600,
+        mser_context=mser_context,
+        max_chars=(
+            None if model_adapter.profile == "cloud" else LOCAL_HAILO_EVIDENCE_MAX_CHARS
+        ),
     )
     effective_missing_evidence = list(compact.get("missing_evidence") or [])
-    blocking_missing_evidence = list(
-        compact.get("blocking_missing_evidence") or []
-    )
+    blocking_missing_evidence = list(compact.get("blocking_missing_evidence") or [])
     supplemental_missing_evidence = list(
         compact.get("supplemental_missing_evidence") or []
     )
@@ -1908,24 +2237,29 @@ def execute_run(
     output: dict[str, Any] | None = None
     parse_error: str | None = None
     verifier: dict[str, Any] = {"status": "fail", "errors": ["not_attempted"]}
+    mser_answer_verification: dict[str, Any] | None = None
     previous_signature: str | None = None
     previous_error_signature: tuple[str, ...] | None = None
     semantic_stop_reason: str | None = None
-    best_parseable_state: tuple[
-        str,
-        dict[str, Any],
-        dict[str, Any],
-        str | None,
-        dict[str, Any],
-    ] | None = None
+    best_parseable_state: (
+        tuple[
+            str,
+            dict[str, Any],
+            dict[str, Any],
+            str | None,
+            dict[str, Any],
+        ]
+        | None
+    ) = None
     best_error_count = sys.maxsize
     for request_index in range(1, max_model_requests + 1):
+        local_model = model_adapter.profile != "cloud"
         invoke_kwargs = {
             "endpoint": endpoint,
             "model": model,
             "prompt": prompt,
             "timeout_seconds": timeout_seconds,
-            "structured_json": True,
+            "structured_json": not local_model,
         }
         if model_adapter.invoke_with_context is not None:
             raw_answer, model_metadata = model_adapter.invoke_with_context(
@@ -1935,7 +2269,20 @@ def execute_run(
             )
         else:
             raw_answer, model_metadata = model_adapter.invoke(**invoke_kwargs)
-        output, parse_error = parse_model_output(raw_answer)
+        if local_model:
+            output, parse_error = build_local_model_envelope(
+                raw=raw_answer,
+                run=run,
+                compact_evidence=compact,
+                available_source_refs=available_refs,
+            )
+            model_metadata = {
+                **model_metadata,
+                "local_schema_wrapped": True,
+                "local_model_answer_preserved": True,
+            }
+        else:
+            output, parse_error = parse_model_output(raw_answer)
         output = canonicalize_output_source_refs(output, available_refs)
         verifier = verify_model_output(
             run=run,
@@ -1944,6 +2291,28 @@ def execute_run(
             available_source_refs=available_refs,
             compact_evidence=compact,
         )
+        attempt_mser_verification: dict[str, Any] | None = None
+        if mser_pipeline is not None and mser_reasoning_state is not None:
+            attempt_mser_verification = mser_pipeline.verify_model_output(
+                state=mser_reasoning_state,
+                output=output,
+                now=reference_time,
+            ).model_dump(mode="json")
+            mser_answer_verification = attempt_mser_verification
+        enforcement_errors = mser_enforcement_errors(
+            mode=resolved_mser_mode,
+            state=mser_reasoning_state,
+            verification=attempt_mser_verification,
+            pipeline_error=mser_error,
+        )
+        if enforcement_errors:
+            verifier = {
+                "status": "fail",
+                "errors": [
+                    *list(verifier.get("errors") or []),
+                    *enforcement_errors,
+                ],
+            }
         attempt_quality = assess_six_forces_answer_quality(
             str((output or {}).get("answer") or ""),
             missing_tools=missing_tools,
@@ -1953,9 +2322,7 @@ def execute_run(
         verifier = apply_answer_quality_gate(
             verifier,
             attempt_quality,
-            evidence_sufficient=(
-                not missing_tools and not blocking_missing_evidence
-            ),
+            evidence_sufficient=(not missing_tools and not blocking_missing_evidence),
         )
         if model_adapter.invoke_with_context is not None:
             trace = model_metadata.get("native_tool_trace") or {}
@@ -1963,12 +2330,10 @@ def execute_run(
                 str(item) for item in trace.get("called_tool_ids") or [] if item
             }
             expected_tool_ids = {
-                str(item.get("tool_id"))
-                for item in tool_results
-                if item.get("tool_id")
+                str(item.get("tool_id")) for item in tool_results if item.get("tool_id")
             }
             native_errors = []
-            if int(trace.get("tool_call_count") or 0) <= 0:
+            if expected_tool_ids and int(trace.get("tool_call_count") or 0) <= 0:
                 native_errors.append("native_tool_call_missing")
             if expected_tool_ids and not expected_tool_ids.issubset(called_tool_ids):
                 native_errors.append("native_tool_evidence_card_coverage_incomplete")
@@ -1998,6 +2363,7 @@ def execute_run(
                 "verifier": verifier,
                 "answer_quality_screen": attempt_quality,
                 "model_metadata": model_metadata,
+                "mser_answer_verification": attempt_mser_verification,
             }
         )
         if verifier["status"] == "pass":
@@ -2015,7 +2381,9 @@ def execute_run(
                 verifier,
             ) = best_parseable_state
             break
-        error_signature = tuple(sorted(str(item) for item in verifier.get("errors") or []))
+        error_signature = tuple(
+            sorted(str(item) for item in verifier.get("errors") or [])
+        )
         if signature == previous_signature:
             semantic_stop_reason = "repeated_model_output"
             break
@@ -2061,13 +2429,16 @@ def execute_run(
         for item in tool_results
         if item.get("status") == "completed"
     ]
+    native_tool_call_required = model_adapter.invoke_with_context is not None and bool(
+        tool_results
+    )
     scorecard = build_three_axis_scorecard(
         output=output,
         parse_error=parse_error,
         identity=identity,
         verifier=verifier,
         model_metadata=model_metadata,
-        native_tool_call_required=model_adapter.invoke_with_context is not None,
+        native_tool_call_required=native_tool_call_required,
         available_source_refs=available_refs,
         completed_tools=completed_tools,
         missing_tools=missing_tools,
@@ -2076,7 +2447,9 @@ def execute_run(
         question=run["question_text"],
     )
     failure_category = None
-    if parse_error:
+    if mser_error and resolved_mser_mode == MSERExecutionMode.ENFORCE:
+        failure_category = "mser_pipeline_error"
+    elif parse_error:
         failure_category = "model_output_schema_failure"
     elif missing_tools:
         failure_category = "missing_tool"
@@ -2090,6 +2463,41 @@ def execute_run(
         str(item["path"]): str(item["sha256"])
         for item in run["scenario"].get("source_refs") or []
     }
+    mser_trace = None
+    if mser_initial is not None:
+        mser_trace = {
+            "schema_version": "scout.mser.eval_trace.v0",
+            "mode": resolved_mser_mode.value,
+            "initial": compact_pipeline_context(mser_initial),
+            "final": (
+                compact_pipeline_context(mser_final) if mser_final is not None else None
+            ),
+            "state_snapshot_ids": [
+                mser_initial.state_snapshot_id,
+                *([mser_final.state_snapshot_id] if mser_final is not None else []),
+            ],
+            "tool_signal_bindings": (
+                mser_final.tool_signal_bindings if mser_final is not None else {}
+            ),
+            "reprojection_payloads": [
+                {
+                    "tool_id": payload.tool_id,
+                    "produces_dimensions": [
+                        item.value for item in payload.produces_dimensions
+                    ],
+                    "freshness": payload.freshness,
+                    "quality": payload.quality,
+                    "missing_fields": list(payload.missing_fields),
+                    "source_refs": list(payload.source_refs),
+                    "reprojection_ready": payload.reprojection_ready,
+                }
+                for payload in mser_reprojection_payloads
+            ],
+            "selected_tool_ids": tool_ids,
+            "legacy_selected_tool_ids": legacy_tool_ids,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
     return {
         "question_id": run["question_id"],
         "case_id": run["base_case_id"],
@@ -2105,7 +2513,12 @@ def execute_run(
         "model_profile": model_adapter.profile,
         "provider": model_adapter.provider,
         "model_transport": model_adapter.transport,
+        "mser_mode": resolved_mser_mode.value,
+        "mser_trace": mser_trace,
+        "mser_error": mser_error,
+        "mser_answer_verification": mser_answer_verification,
         "selected_tools": tool_ids,
+        "legacy_selected_tools": legacy_tool_ids,
         "completed_tools": completed_tools,
         "missing_tools": missing_tools,
         "missing_evidence": effective_missing_evidence,
@@ -2118,17 +2531,19 @@ def execute_run(
         ),
         "context_identity_check": identity,
         "query_snapshot": snapshot,
-        "total_info_stage": (_compact_aihat_context(
-            qeval={
-                "id": run["question_id"],
-                "category": run["capability_name"],
-                "answerability": run["expected_decision_boundary"]["answer_mode"],
-            },
-            total_info=total_info,
-            tool_results=[],
-            missing_tools=[],
-            missing_evidence=[],
-        ).get("total_info")),
+        "total_info_stage": (
+            _compact_aihat_context(
+                qeval={
+                    "id": run["question_id"],
+                    "category": run["capability_name"],
+                    "answerability": run["expected_decision_boundary"]["answer_mode"],
+                },
+                total_info=total_info,
+                tool_results=[],
+                missing_tools=[],
+                missing_evidence=[],
+            ).get("total_info")
+        ),
         "tool_evidence_stage": tool_results,
         "compact_evidence_stage": compact,
         "answer_mode": run["expected_decision_boundary"]["answer_mode"],
@@ -2150,7 +2565,7 @@ def execute_run(
         "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
         "prompt_chars": len(prompt),
         "model_metadata": model_metadata,
-        "native_tool_call_required": model_adapter.invoke_with_context is not None,
+        "native_tool_call_required": native_tool_call_required,
         "full_evidence_card_count": len(tool_results),
         "duration_ms": int((time.monotonic() - started) * 1000),
         "candidate_only": True,
@@ -2173,7 +2588,9 @@ def health_guard(health: dict[str, Any]) -> dict[str, Any]:
     if current_flags:
         errors.append(f"current_power_or_throttle_flags=0x{current_flags:x}")
     if throttle_value is not None and throttle_value & 0xF0000:
-        warnings.append(f"historical_power_or_throttle_flags=0x{throttle_value & 0xF0000:x}")
+        warnings.append(
+            f"historical_power_or_throttle_flags=0x{throttle_value & 0xF0000:x}"
+        )
     if not (health.get("ups") or {}).get("power_supplies"):
         warnings.append("ups_not_observable_via_power_supply_or_upsc")
     return {
@@ -2219,7 +2636,9 @@ def run_eval(args: argparse.Namespace) -> Path:
         "started_at": utc_iso(),
         "workspace": str(workspace),
         "scenario_artifact": str(scenario_path),
-        "scenario_artifact_sha256": hashlib.sha256(scenario_path.read_bytes()).hexdigest(),
+        "scenario_artifact_sha256": hashlib.sha256(
+            scenario_path.read_bytes()
+        ).hexdigest(),
         "base_question_count": len({item["question_id"] for item in runs}),
         "model_run_count": len(runs),
         "model": args.model,
@@ -2231,6 +2650,7 @@ def run_eval(args: argparse.Namespace) -> Path:
         "runtime_packages": runtime_package_versions(),
         "max_tool_calls_per_attempt": 10,
         "max_model_requests_per_attempt": args.max_model_requests,
+        "mser_mode": getattr(args, "mser_mode", "shadow"),
         "guided_retry_enabled": args.guided_retry,
         "weather_mode": "deterministic_weather_replay",
         "external_api_calls_made": False,
@@ -2238,13 +2658,15 @@ def run_eval(args: argparse.Namespace) -> Path:
         "runtime_safety_truth": False,
     }
     (run_dir / "run_manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
     health_path = run_dir / "health_samples.jsonl"
     all_results = list(existing)
-    with results_path.open("a", encoding="utf-8") as result_file, health_path.open(
-        "a", encoding="utf-8"
-    ) as health_file:
+    with (
+        results_path.open("a", encoding="utf-8") as result_file,
+        health_path.open("a", encoding="utf-8") as health_file,
+    ):
         for index, run in enumerate(runs, start=1):
             if run["run_case_id"] in completed_ids:
                 continue
@@ -2255,7 +2677,9 @@ def run_eval(args: argparse.Namespace) -> Path:
                 health_file.write(json.dumps(health, ensure_ascii=False) + "\n")
                 health_file.flush()
                 if guard["status"] == "fail":
-                    raise RuntimeError(f"AI HAT eval health guard failed: {guard['errors']}")
+                    raise RuntimeError(
+                        f"AI HAT eval health guard failed: {guard['errors']}"
+                    )
             result = execute_run(
                 run=run,
                 project_root=workspace,
@@ -2265,8 +2689,11 @@ def run_eval(args: argparse.Namespace) -> Path:
                 max_model_requests=args.max_model_requests,
                 guided_retry=args.guided_retry,
                 model_adapter=model_adapter,
+                mser_mode=getattr(args, "mser_mode", "shadow"),
             )
-            result_file.write(json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n")
+            result_file.write(
+                json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n"
+            )
             result_file.flush()
             all_results.append(result)
             print(
@@ -2305,7 +2732,9 @@ def _write_summaries(
     force_counts = Counter(item["force"] for item in results)
     decisions = Counter(str(item.get("decision") or "null") for item in results)
     quality = Counter(
-        str((item.get("answer_quality_screen") or {}).get("classification") or "missing")
+        str(
+            (item.get("answer_quality_screen") or {}).get("classification") or "missing"
+        )
         for item in results
     )
     quality_review_reasons = Counter(
@@ -2321,11 +2750,13 @@ def _write_summaries(
         in QUALITY_ACCEPTANCE_CLASSES
         for item in results
     )
-    total_model_requests = sum(int(item.get("model_request_count") or 0) for item in results)
+    total_model_requests = sum(
+        int(item.get("model_request_count") or 0) for item in results
+    )
     model_usage_totals: Counter[str] = Counter()
     for item in results:
         for attempt in item.get("model_attempts") or []:
-            usage = ((attempt.get("model_metadata") or {}).get("usage") or {})
+            usage = (attempt.get("model_metadata") or {}).get("usage") or {}
             model_usage_totals.update(
                 {
                     str(key): value
@@ -2344,7 +2775,9 @@ def _write_summaries(
         scores = [
             int(axis["score"])
             for item in results
-            if isinstance((axis := (item.get("three_axis_scorecard") or {}).get(axis_name)), dict)
+            if isinstance(
+                (axis := (item.get("three_axis_scorecard") or {}).get(axis_name)), dict
+            )
             and isinstance(axis.get("score"), (int, float))
         ]
         three_axis_summary[axis_name] = {
@@ -2355,12 +2788,128 @@ def _write_summaries(
         }
     native_tool_call_count = sum(
         int(
-            (((attempt.get("model_metadata") or {}).get("native_tool_trace") or {}).get("tool_call_count"))
+            (
+                (
+                    (attempt.get("model_metadata") or {}).get("native_tool_trace") or {}
+                ).get("tool_call_count")
+            )
             or 0
         )
         for item in results
         for attempt in item.get("model_attempts") or []
     )
+    mser_initial_status = Counter(
+        str(
+            (
+                (
+                    ((item.get("mser_trace") or {}).get("initial") or {}).get(
+                        "sufficiency"
+                    )
+                    or {}
+                ).get("status")
+            )
+            or "not_run"
+        )
+        for item in results
+    )
+    mser_final_status = Counter(
+        str(
+            (
+                (
+                    ((item.get("mser_trace") or {}).get("final") or {}).get(
+                        "sufficiency"
+                    )
+                    or {}
+                ).get("status")
+            )
+            or "not_run"
+        )
+        for item in results
+    )
+    mser_reasoning_disposition = Counter(
+        str(
+            (
+                ((item.get("mser_trace") or {}).get("final") or {}).get(
+                    "reasoning_disposition"
+                )
+            )
+            or (
+                ((item.get("mser_trace") or {}).get("initial") or {}).get(
+                    "reasoning_disposition"
+                )
+            )
+            or "not_run"
+        )
+        for item in results
+    )
+    mser_answer_verification = Counter(
+        (
+            "pass"
+            if (item.get("mser_answer_verification") or {}).get("passed") is True
+            else "fail"
+            if item.get("mser_answer_verification") is not None
+            else "not_run"
+        )
+        for item in results
+    )
+    selected_tool_total = sum(
+        len(
+            ((item.get("mser_trace") or {}).get("selected_tool_ids"))
+            or item.get("selected_tools")
+            or []
+        )
+        for item in results
+    )
+    legacy_tool_total = sum(
+        len(
+            ((item.get("mser_trace") or {}).get("legacy_selected_tool_ids"))
+            or item.get("legacy_selected_tools")
+            or item.get("selected_tools")
+            or []
+        )
+        for item in results
+    )
+    mser_answer_reviews = [
+        {
+            "run_case_id": item.get("run_case_id"),
+            "question_id": item.get("question_id"),
+            "question": item.get("question"),
+            "force_code": item.get("force_code"),
+            "model_answer": (item.get("model_output") or {}).get("answer"),
+            "model_source_refs": (item.get("model_output") or {}).get("source_refs")
+            or [],
+            "certificate_source_refs": (item.get("mser_answer_verification") or {}).get(
+                "certificate_source_refs"
+            )
+            or [],
+            "violations": (item.get("mser_answer_verification") or {}).get("violations")
+            or [],
+            "root_cause": "model_citation_does_not_bind_to_selected_mser_signal",
+            "codex_review": {
+                "classification": "model_weakness",
+                "tool_gap": False,
+                "missing_evidence": False,
+                "harness_failure": False,
+                "recommendation": (
+                    "Re-synthesize with source refs or tool IDs bound to the selected "
+                    "MSER signals; do not weaken the sufficiency or provenance gate."
+                ),
+            },
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        for item in results
+        if (
+            (
+                ((item.get("mser_trace") or {}).get("final") or {}).get(
+                    "reasoning_disposition"
+                )
+            )
+            == "ready_to_reason"
+            and item.get("mser_answer_verification") is not None
+            and not (item.get("mser_answer_verification") or {}).get("passed", False)
+        )
+    ]
     summary = {
         **manifest,
         "finished_at": utc_iso(),
@@ -2385,6 +2934,20 @@ def _write_summaries(
             round(total_duration_ms / len(results), 3) if results else 0.0
         ),
         "native_tool_call_count": native_tool_call_count,
+        "mser_summary": {
+            "mode": manifest.get("mser_mode", "off"),
+            "initial_sufficiency": dict(sorted(mser_initial_status.items())),
+            "final_sufficiency": dict(sorted(mser_final_status.items())),
+            "reasoning_disposition": dict(sorted(mser_reasoning_disposition.items())),
+            "answer_verification": dict(sorted(mser_answer_verification.items())),
+            "pipeline_error_count": sum(
+                bool(item.get("mser_error")) for item in results
+            ),
+            "ready_answer_verification_failure_count": len(mser_answer_reviews),
+            "selected_tool_total": selected_tool_total,
+            "legacy_tool_total": legacy_tool_total,
+            "tool_reduction": legacy_tool_total - selected_tool_total,
+        },
         "three_axis_score_summary": three_axis_summary,
         "failure_count": len(failures),
         "blocking_evidence_gap_count": len(evidence_gap_reviews),
@@ -2396,10 +2959,12 @@ def _write_summaries(
         "quality_review_reason_summary": dict(sorted(quality_review_reasons.items())),
     }
     (run_dir / "model_summary.json").write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
     (run_dir / "failures.json").write_text(
-        json.dumps(failures, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(failures, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
     (run_dir / "evidence_gap_reviews.json").write_text(
         json.dumps(
@@ -2410,20 +2975,33 @@ def _write_summaries(
         ),
         encoding="utf-8",
     )
+    (run_dir / "mser_answer_verification_reviews.json").write_text(
+        json.dumps(
+            mser_answer_reviews,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
     deterministic = {
         "scenario_identity": dict(sorted(identity.items())),
         "validated_run_count": len(results),
-        "candidate_only_all": all(item.get("candidate_only") is True for item in results),
+        "candidate_only_all": all(
+            item.get("candidate_only") is True for item in results
+        ),
         "runtime_safety_truth_all_false": all(
             item.get("runtime_safety_truth") is False for item in results
         ),
     }
     (run_dir / "deterministic_validation.json").write_text(
-        json.dumps(deterministic, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(deterministic, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
     per095 = [item for item in results if item["question_id"] == "PER-095"]
     (run_dir / "per095_faithful_replay.json").write_text(
-        json.dumps(per095, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+        json.dumps(per095, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
     lines = [
         f"# {manifest.get('report_title', 'Scout AI Six Forces 600 + Total Info AI HAT+2 Eval')}",
@@ -2438,6 +3016,7 @@ def _write_summaries(
         f"- verifier: `{dict(verifier)}`",
         f"- answer quality screen: `{dict(quality)}`",
         f"- native Pydantic AI tool calls: `{native_tool_call_count}`",
+        f"- MSER: `{summary['mser_summary']}`",
         f"- three-axis scores: `{three_axis_summary}`",
         f"- strict verifier + quality acceptance: `{strict_accepted}/{len(results)}`",
         f"- identity: `{dict(identity)}`",
@@ -2466,13 +3045,22 @@ def _write_summaries(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run Six-Forces 600 on Scout AI HAT+2.")
+    parser = argparse.ArgumentParser(
+        description="Run Six-Forces 600 on Scout AI HAT+2."
+    )
     parser.add_argument("--workspace", type=Path, required=True)
-    parser.add_argument("--scenario-artifact", type=Path, default=DEFAULT_SCENARIO_ARTIFACT)
+    parser.add_argument(
+        "--scenario-artifact", type=Path, default=DEFAULT_SCENARIO_ARTIFACT
+    )
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--timeout-seconds", type=int, default=0)
     parser.add_argument("--max-model-requests", type=int, default=10)
+    parser.add_argument(
+        "--mser-mode",
+        choices=tuple(item.value for item in MSERExecutionMode),
+        default=MSERExecutionMode.SHADOW.value,
+    )
     parser.add_argument("--guided-retry", action="store_true")
     parser.add_argument("--max-runs", type=int)
     parser.add_argument("--offset", type=int, default=0)
@@ -2490,7 +3078,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.offset < 0 or args.health_interval <= 0 or args.max_model_requests < 10:
         raise SystemExit("--offset must be >= 0 and --health-interval must be positive")
     run_dir = run_eval(args)
-    print(json.dumps({"status": "completed", "run_dir": str(run_dir)}, ensure_ascii=False))
+    print(
+        json.dumps({"status": "completed", "run_dir": str(run_dir)}, ensure_ascii=False)
+    )
     return 0
 
 
