@@ -452,10 +452,13 @@
     }
     #map {
       background: #121619;
-      cursor: crosshair;
+      cursor: grab;
       touch-action: none;
       user-select: none;
     }
+    #map[data-map-interaction-mode="box"],
+    #map.is-selecting { cursor: crosshair; }
+    #map.is-panning { cursor: grabbing; }
     .zoom-selection {
       fill: rgba(45, 79, 112, .16);
       stroke: #2d4f70;
@@ -1976,7 +1979,8 @@
               <button id="zoomIn" class="tool-button compact" type="button" title="Zoom in" aria-label="Zoom in">+</button>
               <button id="zoomOut" class="tool-button compact" type="button" title="Zoom out" aria-label="Zoom out">-</button>
               <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
-              <button id="boxZoomMode" class="tool-button compact is-active" type="button" title="Rectangle drag zoom is active: drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="true">▣</button>
+              <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
+              <button id="boxZoomMode" class="tool-button compact" type="button" title="Point or rectangle zoom: click to zoom in, drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
               <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
               <details class="layer-menu">
                 <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
@@ -2342,7 +2346,7 @@
         boundary: "reference tracks stay planning evidence only; not runtime safety truth"
       }
     ];
-    const state = { view: null, projected: null, selected: null, zoom: 1, panX: 0, panY: 0, zoomSelection: null, completedTripRecordings: null, focusedLabelIds: new Set(), mapKeyboardActive: false, evidenceTreeOpenGroups: new Set(), activeEvidenceTreeTab: "default", evidenceTreeTabCounts: {}, osmPbfVector: null, osmPbfVectorStatus: "not_loaded", osmCartoPaletteStatus: "not_loaded" };
+    const state = { view: null, projected: null, selected: null, zoom: 1, panX: 0, panY: 0, zoomSelection: null, panSelection: null, mapInteractionMode: "pan", completedTripRecordings: null, focusedLabelIds: new Set(), mapKeyboardActive: false, evidenceTreeOpenGroups: new Set(), activeEvidenceTreeTab: "default", evidenceTreeTabCounts: {}, osmPbfVector: null, osmPbfVectorStatus: "not_loaded", osmCartoPaletteStatus: "not_loaded" };
     const svg = document.getElementById("map");
     const hoverHint = document.getElementById("hoverHint");
     let treeClickFocusTimer = null;
@@ -4997,8 +5001,62 @@
       return selection.current.x < selection.start.x && selection.current.y < selection.start.y;
     }
 
+    function beginMapPointerPan(event) {
+      if (state.mapInteractionMode !== "pan" || event.button !== 0) return;
+      state.panSelection = {
+        pointerId: event.pointerId,
+        screenX: event.clientX,
+        screenY: event.clientY,
+        currentScreenX: event.clientX,
+        currentScreenY: event.clientY,
+        moved: false
+      };
+      svg.classList.add("is-panning");
+      svg.setPointerCapture(event.pointerId);
+    }
+
+    function updateMapPointerPan(event) {
+      const selection = state.panSelection;
+      if (!selection || selection.pointerId !== event.pointerId) return;
+      const dx = event.clientX - selection.currentScreenX;
+      const dy = event.clientY - selection.currentScreenY;
+      const rect = svg.getBoundingClientRect();
+      const nextSelection = {
+        ...selection,
+        currentScreenX: event.clientX,
+        currentScreenY: event.clientY,
+        moved: selection.moved
+          || Math.abs(event.clientX - selection.screenX) > 6
+          || Math.abs(event.clientY - selection.screenY) > 6
+      };
+      state.panSelection = nextSelection;
+      if (!nextSelection.moved || !rect.width || !rect.height || (!dx && !dy)) return;
+      panMap(-dx * MAP_WIDTH / rect.width, -dy * MAP_HEIGHT / rect.height);
+      event.preventDefault();
+    }
+
+    function finishMapPointerPan(event) {
+      const selection = state.panSelection;
+      if (!selection || selection.pointerId !== event.pointerId) return false;
+      state.panSelection = null;
+      svg.classList.remove("is-panning");
+      if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+      return selection.moved;
+    }
+
+    function cancelMapPointerPan() {
+      state.panSelection = null;
+      svg.classList.remove("is-panning");
+    }
+
+    function handleMapWheelZoom(event) {
+      if (event.ctrlKey || event.metaKey) return;
+      event.preventDefault();
+      zoomMap(event.deltaY < 0 ? 1 : -1);
+    }
+
     function beginMapRectangleZoom(event) {
-      if (event.button !== 0) return;
+      if (state.mapInteractionMode !== "box" || event.button !== 0) return;
       const start = mapPointFromPointerEvent(event);
       if (!start) return;
       state.zoomSelection = {
@@ -5038,7 +5096,7 @@
         const box = boxFromPoints(selection.start, selection.current);
         if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
         else zoomMapToBox(box);
-      }
+      } else if (selection) zoomMap(1);
     }
 
     function cancelMapRectangleZoom() {
@@ -6192,11 +6250,20 @@
     function handleMapKeyboardPan(event) {
       if (event.defaultPrevented) return;
       const delta = mapKeyboardPanDelta(event);
-      if (!delta || event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
       const mapHasFocus = document.activeElement === svg || svg.contains(document.activeElement);
       if (!state.mapKeyboardActive && !mapHasFocus) return;
+      if (delta) panMap(delta[0], delta[1]);
+      else if (event.key === "+" || event.key === "=") zoomMap(1);
+      else if (event.key === "-") zoomMap(-1);
+      else if (event.key === "0") resetMapView();
+      else if (event.key.toLowerCase() === "p") setMapInteractionMode("pan");
+      else if (event.key.toLowerCase() === "b") setMapInteractionMode("box");
+      else if (event.key === "Escape") {
+        cancelMapRectangleZoom();
+        cancelMapPointerPan();
+      } else return;
       event.preventDefault();
-      panMap(delta[0], delta[1]);
     }
     function activateMapKeyboardPan() {
       state.mapKeyboardActive = true;
@@ -6210,7 +6277,22 @@
       if (!node) return;
       const zoomText = `${state.zoom.toFixed(2)}x`;
       node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
-      node.title = "Map zoom; rectangle drag zoom is active.";
+      node.title = state.mapInteractionMode === "box"
+        ? "Map zoom; point and rectangle zoom are active."
+        : "Map zoom; mouse drag pan is active.";
+    }
+    function setMapInteractionMode(mode) {
+      state.mapInteractionMode = mode === "box" ? "box" : "pan";
+      cancelMapRectangleZoom();
+      cancelMapPointerPan();
+      svg.dataset.mapInteractionMode = state.mapInteractionMode;
+      const panButton = document.getElementById("panMode");
+      const boxButton = document.getElementById("boxZoomMode");
+      panButton?.classList.toggle("is-active", state.mapInteractionMode === "pan");
+      boxButton?.classList.toggle("is-active", state.mapInteractionMode === "box");
+      panButton?.setAttribute("aria-pressed", state.mapInteractionMode === "pan" ? "true" : "false");
+      boxButton?.setAttribute("aria-pressed", state.mapInteractionMode === "box" ? "true" : "false");
+      updateMapZoomIndicator(state.mapInteractionMode);
     }
     function mapStrokeWidthPx(node, scale) {
       let base = 1.35;
@@ -6618,7 +6700,8 @@
     document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
     document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
     document.getElementById("fitRoute").addEventListener("click", resetMapView);
-    document.getElementById("boxZoomMode").addEventListener("click", () => updateMapZoomIndicator("box"));
+    document.getElementById("panMode").addEventListener("click", () => setMapInteractionMode("pan"));
+    document.getElementById("boxZoomMode").addEventListener("click", () => setMapInteractionMode("box"));
     document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
     document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
     document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
@@ -6632,6 +6715,12 @@
     svg.addEventListener("pointermove", updateMapRectangleZoom);
     svg.addEventListener("pointerup", finishMapRectangleZoom);
     svg.addEventListener("pointercancel", cancelMapRectangleZoom);
+    svg.addEventListener("pointerdown", beginMapPointerPan);
+    svg.addEventListener("pointermove", updateMapPointerPan);
+    svg.addEventListener("pointerup", finishMapPointerPan);
+    svg.addEventListener("pointercancel", cancelMapPointerPan);
+    svg.addEventListener("wheel", handleMapWheelZoom, {passive: false});
+    setMapInteractionMode("pan");
     initSplitters();
     bindAssistantControls();
     bindCwaWeatherImageryControls();

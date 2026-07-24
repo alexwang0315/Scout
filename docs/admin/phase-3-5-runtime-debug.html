@@ -1060,10 +1060,13 @@
       aspect-ratio: 16 / 9;
       min-height: 260px;
       background: #111820;
-      cursor: crosshair;
+      cursor: grab;
       touch-action: none;
       user-select: none;
     }
+    #runtimeMap[data-map-interaction-mode="box"],
+    #runtimeMap.is-selecting { cursor: crosshair; }
+    #runtimeMap.is-panning { cursor: grabbing; }
     .zoom-selection {
       fill: rgba(125, 194, 165, .18);
       stroke: #7dc2a5;
@@ -2264,7 +2267,8 @@
                 <button id="zoomIn" class="tool-button compact" type="button" title="Zoom in" aria-label="Zoom in">+</button>
                 <button id="zoomOut" class="tool-button compact" type="button" title="Zoom out" aria-label="Zoom out">-</button>
                 <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
-                <button id="boxZoomMode" class="tool-button compact is-active" type="button" title="Rectangle drag zoom is active: drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="true">▣</button>
+                <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
+                <button id="boxZoomMode" class="tool-button compact" type="button" title="Point or rectangle zoom: click to zoom in, drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
                 <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
                 <details class="layer-menu">
                   <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
@@ -2555,6 +2559,8 @@
       panX: 0,
       panY: 0,
       zoomSelection: null,
+      panSelection: null,
+      mapInteractionMode: "pan",
       focusedLabelIds: new Set(),
       mapKeyboardActive: false,
       hoveredMapTarget: null,
@@ -3576,11 +3582,20 @@
     function handleMapKeyboardPan(event) {
       if (event.defaultPrevented) return;
       const delta = mapKeyboardPanDelta(event);
-      if (!delta || event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
       const mapHasFocus = document.activeElement === runtimeMap || runtimeMap.contains(document.activeElement);
       if (!debugPageState.mapKeyboardActive && !mapHasFocus) return;
+      if (delta) panMap(delta[0], delta[1]);
+      else if (event.key === "+" || event.key === "=") zoomMap(1);
+      else if (event.key === "-") zoomMap(-1);
+      else if (event.key === "0") resetMapView();
+      else if (event.key.toLowerCase() === "p") setMapInteractionMode("pan");
+      else if (event.key.toLowerCase() === "b") setMapInteractionMode("box");
+      else if (event.key === "Escape") {
+        cancelMapRectangleZoom();
+        cancelMapPointerPan();
+      } else return;
       event.preventDefault();
-      panMap(delta[0], delta[1]);
     }
     function activateMapKeyboardPan() {
       debugPageState.mapKeyboardActive = true;
@@ -3594,7 +3609,22 @@
       if (!node) return;
       const zoomText = `${debugPageState.zoom.toFixed(2)}x`;
       node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
-      node.title = "Map zoom; rectangle drag zoom is active.";
+      node.title = debugPageState.mapInteractionMode === "box"
+        ? "Map zoom; point and rectangle zoom are active."
+        : "Map zoom; mouse drag pan is active.";
+    }
+    function setMapInteractionMode(mode) {
+      debugPageState.mapInteractionMode = mode === "box" ? "box" : "pan";
+      cancelMapRectangleZoom();
+      cancelMapPointerPan();
+      runtimeMap.dataset.mapInteractionMode = debugPageState.mapInteractionMode;
+      const panButton = document.getElementById("panMode");
+      const boxButton = document.getElementById("boxZoomMode");
+      panButton?.classList.toggle("is-active", debugPageState.mapInteractionMode === "pan");
+      boxButton?.classList.toggle("is-active", debugPageState.mapInteractionMode === "box");
+      panButton?.setAttribute("aria-pressed", debugPageState.mapInteractionMode === "pan" ? "true" : "false");
+      boxButton?.setAttribute("aria-pressed", debugPageState.mapInteractionMode === "box" ? "true" : "false");
+      updateMapZoomIndicator(debugPageState.mapInteractionMode);
     }
     function mapStrokeWidthPx(node, scale) {
       let base = 1.35;
@@ -6322,8 +6352,64 @@
       return selection.current.x < selection.start.x && selection.current.y < selection.start.y;
     }
 
+    function beginMapPointerPan(event) {
+      if (debugPageState.mapInteractionMode !== "pan" || event.button !== 0) return;
+      debugPageState.panSelection = {
+        pointerId: event.pointerId,
+        screenX: event.clientX,
+        screenY: event.clientY,
+        currentScreenX: event.clientX,
+        currentScreenY: event.clientY,
+        moved: false,
+        clickTarget: event.target?.closest?.('[data-map-hover="true"]') || null
+      };
+      runtimeMap.classList.add("is-panning");
+      runtimeMap.setPointerCapture(event.pointerId);
+    }
+
+    function updateMapPointerPan(event) {
+      const selection = debugPageState.panSelection;
+      if (!selection || selection.pointerId !== event.pointerId) return;
+      const dx = event.clientX - selection.currentScreenX;
+      const dy = event.clientY - selection.currentScreenY;
+      const rect = runtimeMap.getBoundingClientRect();
+      const nextSelection = {
+        ...selection,
+        currentScreenX: event.clientX,
+        currentScreenY: event.clientY,
+        moved: selection.moved
+          || Math.abs(event.clientX - selection.screenX) > 6
+          || Math.abs(event.clientY - selection.screenY) > 6
+      };
+      debugPageState.panSelection = nextSelection;
+      if (!nextSelection.moved || !rect.width || !rect.height || (!dx && !dy)) return;
+      panMap(-dx * MAP_WIDTH / rect.width, -dy * MAP_HEIGHT / rect.height);
+      event.preventDefault();
+    }
+
+    function finishMapPointerPan(event) {
+      const selection = debugPageState.panSelection;
+      if (!selection || selection.pointerId !== event.pointerId) return false;
+      debugPageState.panSelection = null;
+      runtimeMap.classList.remove("is-panning");
+      if (runtimeMap.hasPointerCapture(event.pointerId)) runtimeMap.releasePointerCapture(event.pointerId);
+      if (!selection.moved && selection.clickTarget) selectTimelineForMapTarget(selection.clickTarget);
+      return selection.moved;
+    }
+
+    function cancelMapPointerPan() {
+      debugPageState.panSelection = null;
+      runtimeMap.classList.remove("is-panning");
+    }
+
+    function handleMapWheelZoom(event) {
+      if (event.ctrlKey || event.metaKey) return;
+      event.preventDefault();
+      zoomMap(event.deltaY < 0 ? 1 : -1);
+    }
+
     function beginMapRectangleZoom(event) {
-      if (event.button !== 0) return;
+      if (debugPageState.mapInteractionMode !== "box" || event.button !== 0) return;
       const start = mapPointFromPointerEvent(event);
       if (!start) return;
       const clickTarget = event.target?.closest?.('[data-map-hover="true"]') || null;
@@ -6366,8 +6452,9 @@
         if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
         else zoomMapToBox(box);
       } else if (selection?.clickTarget) {
+        zoomMap(1);
         selectTimelineForMapTarget(selection.clickTarget);
-      }
+      } else if (selection) zoomMap(1);
     }
 
     function cancelMapRectangleZoom() {
@@ -6775,7 +6862,8 @@
       document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
       document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
       document.getElementById("fitRoute").addEventListener("click", resetMapView);
-      document.getElementById("boxZoomMode").addEventListener("click", () => updateMapZoomIndicator("box"));
+      document.getElementById("panMode").addEventListener("click", () => setMapInteractionMode("pan"));
+      document.getElementById("boxZoomMode").addEventListener("click", () => setMapInteractionMode("box"));
       document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
       document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
       document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
@@ -6792,6 +6880,12 @@
       runtimeMap.addEventListener("pointerleave", hideMapHoverTooltip);
       runtimeMap.addEventListener("pointercancel", cancelMapRectangleZoom);
       runtimeMap.addEventListener("pointercancel", hideMapHoverTooltip);
+      runtimeMap.addEventListener("pointerdown", beginMapPointerPan);
+      runtimeMap.addEventListener("pointermove", updateMapPointerPan);
+      runtimeMap.addEventListener("pointerup", finishMapPointerPan);
+      runtimeMap.addEventListener("pointercancel", cancelMapPointerPan);
+      runtimeMap.addEventListener("wheel", handleMapWheelZoom, {passive: false});
+      setMapInteractionMode("pan");
     }
 
     function closeLayerMenus(exceptMenu = null) {

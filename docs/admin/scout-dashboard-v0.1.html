@@ -247,6 +247,14 @@
       grid-template-rows: minmax(0, 1fr);
     }
 
+    .dashboard-shell.is-page-header-hidden .topbar {
+      display: none;
+    }
+
+    .dashboard-shell.is-page-header-hidden .dashboard-frame {
+      grid-template-rows: minmax(0, 1fr);
+    }
+
     .topbar h2 {
       margin: 0;
       font-size: 18px;
@@ -1045,8 +1053,10 @@
     }
 
     .map-panel {
+      min-width: 0;
       min-height: 420px;
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-rows: auto minmax(0, 1fr);
     }
 
@@ -1356,6 +1366,110 @@
       height: 100%;
       min-height: 420px;
       display: block;
+    }
+
+    .dashboard-map-viewport {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .dashboard-map-viewport:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    .dashboard-map-viewport[data-map-mode="box"] {
+      cursor: crosshair;
+    }
+
+    .dashboard-map-viewport[data-map-dragging="true"] {
+      cursor: grabbing;
+    }
+
+    .dashboard-map-stage {
+      position: absolute;
+      inset: 0;
+      min-width: 100%;
+      min-height: 100%;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .dashboard-map-controls {
+      position: absolute;
+      z-index: 30;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      max-width: calc(100% - 20px);
+      padding: 5px;
+      border: 1px solid rgba(255, 255, 255, .16);
+      border-radius: 8px;
+      background: rgba(7, 14, 17, .9);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .3);
+      backdrop-filter: blur(8px);
+      user-select: none;
+    }
+
+    .dashboard-map-controls button {
+      min-width: 30px;
+      min-height: 30px;
+      padding: 4px 8px;
+      border: 1px solid rgba(255, 255, 255, .16);
+      border-radius: 6px;
+      color: var(--text);
+      background: rgba(255, 255, 255, .045);
+      font: 800 11px/1 var(--sans);
+      cursor: pointer;
+    }
+
+    .dashboard-map-controls button:hover,
+    .dashboard-map-controls button:focus-visible {
+      border-color: var(--accent);
+      color: #e9fbff;
+      outline: none;
+    }
+
+    .dashboard-map-controls button[aria-pressed="true"] {
+      border-color: var(--accent);
+      color: #e9fbff;
+      background: rgba(98, 184, 198, .18);
+      box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    .dashboard-map-controls output {
+      min-width: 44px;
+      color: var(--muted);
+      font: 800 10px/1 var(--mono);
+      text-align: center;
+    }
+
+    .dashboard-map-selection {
+      position: absolute;
+      z-index: 24;
+      border: 2px solid #eafcff;
+      background: rgba(98, 184, 198, .18);
+      box-shadow: 0 0 0 1px rgba(6, 15, 18, .9);
+      pointer-events: none;
+    }
+
+    .dashboard-map-selection[hidden] {
+      display: none;
+    }
+
+    .architecture-map-surface {
+      min-height: 490px;
     }
 
     .map-layer {
@@ -2145,7 +2259,7 @@
     .weather-cwa-frame-state {
       position: absolute;
       z-index: 4;
-      top: 14px;
+      top: 58px;
       left: 14px;
       padding: 8px 10px;
       border: 1px solid rgba(98, 184, 198, .48);
@@ -4253,6 +4367,23 @@
       .workspace {
         padding: 10px;
       }
+      .dashboard-map-controls {
+        top: 6px;
+        right: 6px;
+        gap: 3px;
+        max-width: calc(100% - 12px);
+        padding: 4px;
+      }
+      .dashboard-map-controls button {
+        min-width: 28px;
+        min-height: 28px;
+        padding: 3px 6px;
+        font-size: 10px;
+      }
+      .dashboard-map-controls output {
+        min-width: 38px;
+        font-size: 9px;
+      }
       .brand,
       .topbar {
         padding-left: 12px;
@@ -5476,6 +5607,7 @@
       .route-architecture-shell[data-mobile-view="segment"] [data-architecture-mobile-panel="segment"] { display: block; }
       .architecture-map-canvas,
       .architecture-map-canvas svg { min-height: 390px; }
+      .architecture-map-surface { min-height: 390px; }
       .architecture-map-legend-scale { grid-template-columns: 1fr 1fr; }
       .route-architecture-shell[data-mobile-view="segment"] .architecture-segment-inspector {
         position: sticky;
@@ -5509,8 +5641,1006 @@
       .field-instrument-theme .topbar { padding: 12px; }
     }
 
+    .navigation-terrain-shell {
+      --terrain-ink: #08110e;
+      --terrain-panel: #101b17;
+      --terrain-rule: rgba(233, 234, 220, .14);
+      --terrain-cyan: #62b8c6;
+      --terrain-lime: #b7cf63;
+      --terrain-amber: #f0ae3b;
+      --terrain-coral: #ff6b4a;
+      display: grid;
+      gap: 14px;
+    }
+
+    .navigation-terrain-brief {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) repeat(3, minmax(142px, .55fr));
+      border: 1px solid var(--terrain-rule);
+      background: linear-gradient(115deg, #13211b, #0a110e 58%);
+      min-height: 128px;
+    }
+
+    .navigation-terrain-brief > div {
+      padding: 18px;
+      border-right: 1px solid var(--terrain-rule);
+    }
+
+    .navigation-terrain-brief > div:last-child { border-right: 0; }
+    .navigation-terrain-brief small {
+      display: block;
+      color: #82958b;
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .navigation-terrain-brief h3 {
+      margin: 5px 0 8px;
+      color: #f0f2e7;
+      font-size: clamp(20px, 2.4vw, 34px);
+      letter-spacing: -.035em;
+    }
+
+    .navigation-terrain-brief p {
+      margin: 0;
+      max-width: 720px;
+      color: #a8b7ae;
+      line-height: 1.55;
+    }
+
+    .navigation-terrain-stat strong {
+      display: block;
+      margin-top: 12px;
+      color: #f0f2e7;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .navigation-terrain-stat span {
+      display: block;
+      margin-top: 7px;
+      color: #8fa096;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .navigation-terrain-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.9fr) minmax(300px, .72fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .navigation-terrain-primary {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+      align-content: start;
+    }
+
+    .navigation-terrain-workspace > *,
+    .navigation-terrain-primary,
+    .navigation-terrain-map-panel,
+    .navigation-terrain-side {
+      min-width: 0;
+    }
+
+    .navigation-terrain-map-panel,
+    .navigation-terrain-detail {
+      border: 1px solid var(--terrain-rule);
+      background: var(--terrain-panel);
+      box-shadow: 0 16px 34px rgba(0, 0, 0, .18);
+    }
+
+    .navigation-terrain-map-head,
+    .navigation-terrain-detail-head,
+    .navigation-reading-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--terrain-rule);
+    }
+
+    .navigation-terrain-map-head h3,
+    .navigation-terrain-detail-head h3,
+    .navigation-reading-head h3 {
+      margin: 0;
+      color: #e9eadc;
+      font-size: 15px;
+    }
+
+    .navigation-terrain-map-head p,
+    .navigation-terrain-detail-head p,
+    .navigation-reading-head p {
+      margin: 4px 0 0;
+      color: #82958b;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .navigation-terrain-lenses {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--terrain-rule);
+      background: #0c1511;
+    }
+
+    .navigation-terrain-lenses button {
+      min-height: 34px;
+      padding: 7px 10px;
+      border: 1px solid rgba(233, 234, 220, .16);
+      background: #15221c;
+      color: #9eb0a6;
+      font-size: 11px;
+      letter-spacing: .035em;
+    }
+
+    .navigation-terrain-lenses button[aria-pressed="true"] {
+      border-color: var(--terrain-lime);
+      background: #26321d;
+      color: #eef3d8;
+      box-shadow: inset 0 -2px 0 var(--terrain-lime);
+    }
+
+    .navigation-terrain-source-switch {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 14px;
+    }
+
+    .navigation-terrain-source-switch button {
+      min-height: 34px;
+      padding: 7px 11px;
+      border: 1px solid rgba(233, 234, 220, .18);
+      background: #121d18;
+      color: #9eafa5;
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .navigation-terrain-source-switch button[aria-pressed="true"] {
+      border-color: var(--terrain-cyan);
+      color: #e5f5f2;
+      box-shadow: inset 0 -2px 0 var(--terrain-cyan);
+    }
+
+    .navigation-terrain-map {
+      position: relative;
+      overflow: hidden;
+      min-height: 580px;
+      background:
+        radial-gradient(circle at 73% 19%, rgba(183, 207, 99, .08), transparent 29%),
+        linear-gradient(150deg, #17231d, #0b130f);
+    }
+
+    .navigation-terrain-map svg {
+      display: block;
+      width: 100%;
+      min-width: 720px;
+      height: auto;
+    }
+
+    .terrain-contour {
+      fill: none;
+      stroke: rgba(211, 224, 207, .22);
+      stroke-width: 1.3;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .terrain-contour.is-index {
+      stroke: rgba(231, 235, 214, .34);
+      stroke-width: 2;
+    }
+
+    .terrain-contour-label {
+      fill: #87988e;
+      font-size: 10px;
+      letter-spacing: .05em;
+    }
+
+    .terrain-route-reference {
+      fill: none;
+      stroke: #e9eadc;
+      stroke-width: 3;
+      stroke-dasharray: 7 6;
+      opacity: .78;
+    }
+
+    .terrain-retreat-arrow {
+      fill: none;
+      stroke: var(--terrain-cyan);
+      stroke-width: 3;
+      stroke-dasharray: 5 5;
+    }
+
+    .terrain-feature-target {
+      cursor: pointer;
+      outline: none;
+    }
+
+    .terrain-feature-target .terrain-feature-halo {
+      fill: rgba(8, 17, 14, .9);
+      stroke: var(--feature-color);
+      stroke-width: 3;
+      transition: transform .16s ease, opacity .16s ease;
+      transform-origin: center;
+    }
+
+    .terrain-feature-target .terrain-feature-number {
+      fill: #f8f8ef;
+      font-size: 12px;
+      font-weight: 800;
+      text-anchor: middle;
+      pointer-events: none;
+    }
+
+    .terrain-feature-target .terrain-feature-label {
+      fill: #f3f4ea;
+      font-size: 12px;
+      font-weight: 700;
+      paint-order: stroke;
+      stroke: #08110e;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+    .terrain-feature-target[data-lens-match="false"] { opacity: .34; }
+    .terrain-feature-target[data-terrain-feature-selected="true"] .terrain-feature-halo,
+    .terrain-feature-target:focus .terrain-feature-halo,
+    .terrain-feature-target:hover .terrain-feature-halo {
+      stroke-width: 5;
+      transform: scale(1.18);
+      filter: drop-shadow(0 0 8px var(--feature-color));
+    }
+
+    .terrain-pressure-zone {
+      fill: rgba(240, 174, 59, .11);
+      stroke: rgba(240, 174, 59, .62);
+      stroke-width: 1.5;
+      stroke-dasharray: 6 5;
+    }
+
+    .terrain-risk-zone {
+      fill: rgba(255, 107, 74, .12);
+      stroke: rgba(255, 107, 74, .7);
+      stroke-width: 2;
+      stroke-dasharray: 3 5;
+    }
+
+    .terrain-structure-line {
+      fill: none;
+      stroke: var(--terrain-lime);
+      stroke-width: 4;
+      opacity: .75;
+    }
+
+    .terrain-valley-line {
+      fill: none;
+      stroke: var(--terrain-cyan);
+      stroke-width: 4;
+      stroke-dasharray: 7 6;
+      opacity: .75;
+    }
+
+    .navigation-terrain-legend {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      border-top: 1px solid var(--terrain-rule);
+      background: var(--terrain-rule);
+    }
+
+    .navigation-terrain-legend span {
+      padding: 10px 12px;
+      background: #0d1713;
+      color: #97a89e;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .navigation-terrain-legend strong { color: #e7eadb; }
+    .navigation-workspace-map {
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      min-height: 400px;
+      aspect-ratio: 432 / 169;
+      background:
+        linear-gradient(rgba(9, 17, 14, .2), rgba(9, 17, 14, .2)),
+        #050906;
+    }
+
+    .navigation-workspace-map img,
+    .navigation-workspace-map svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .navigation-workspace-map img {
+      object-fit: fill;
+      pointer-events: none;
+    }
+
+    .navigation-workspace-map img[data-terrain-overlay="hillshade"] {
+      opacity: .74;
+      filter: contrast(1.12) brightness(.72);
+    }
+
+    .navigation-workspace-map img[data-terrain-overlay="contours"] {
+      opacity: .94;
+      filter: brightness(3.1) saturate(.35);
+    }
+
+    .navigation-workspace-map img[data-terrain-overlay="slope_shading"] {
+      opacity: .68;
+      mix-blend-mode: screen;
+    }
+
+    .navigation-workspace-map img[data-terrain-overlay="elevation_tint"] {
+      opacity: .64;
+      mix-blend-mode: screen;
+    }
+
+    .navigation-workspace-route {
+      fill: none;
+      stroke: #f0f2e7;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      paint-order: stroke;
+      filter: drop-shadow(0 1px 2px #000);
+    }
+
+    .navigation-live-point {
+      cursor: pointer;
+      outline: none;
+      opacity: .84;
+    }
+
+    .navigation-live-point circle {
+      fill: rgba(8, 17, 14, .92);
+      stroke: var(--terrain-coral);
+      stroke-width: 2.3;
+      transition: r .15s ease, stroke-width .15s ease;
+    }
+
+    .navigation-live-point text {
+      fill: #fff5e8;
+      font-size: 9px;
+      font-weight: 800;
+      text-anchor: middle;
+      pointer-events: none;
+    }
+
+    .navigation-live-point[data-navigation-live-selected="true"] circle,
+    .navigation-live-point:hover circle,
+    .navigation-live-point:focus circle {
+      r: 10px;
+      stroke-width: 4;
+      filter: drop-shadow(0 0 7px var(--terrain-coral));
+    }
+
+    .navigation-route-pressure-dot {
+      stroke: rgba(8, 17, 14, .8);
+      stroke-width: 1;
+      opacity: .8;
+    }
+
+    .navigation-structure-point {
+      cursor: pointer;
+      outline: none;
+    }
+
+    .navigation-structure-point circle {
+      fill: rgba(8, 17, 14, .88);
+      stroke: var(--structure-color);
+      stroke-width: 2;
+      transition: r .15s ease, stroke-width .15s ease;
+    }
+
+    .navigation-structure-point text {
+      fill: #f5f7ed;
+      font-size: 8px;
+      font-weight: 850;
+      text-anchor: middle;
+      pointer-events: none;
+    }
+
+    .navigation-structure-point[data-navigation-structure-selected="true"] circle,
+    .navigation-structure-point:hover circle,
+    .navigation-structure-point:focus circle {
+      r: 8px;
+      stroke-width: 4;
+      filter: drop-shadow(0 0 7px var(--structure-color));
+    }
+
+    .navigation-terrain-hierarchy-edge {
+      fill: none;
+      stroke: var(--terrain-edge-color);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      opacity: .82;
+      pointer-events: none;
+    }
+
+    .navigation-terrain-hierarchy-edge[data-navigation-terrain-edge-kind="main_ridge_candidate"] {
+      stroke-width: 3.6;
+      filter: drop-shadow(0 0 2px rgba(183, 207, 99, .5));
+    }
+
+    .navigation-terrain-hierarchy-edge[data-navigation-terrain-edge-kind="spur_ridge_candidate"] {
+      stroke-width: 1.8;
+      opacity: .72;
+    }
+
+    .navigation-terrain-hierarchy-edge[data-navigation-terrain-edge-kind="drainage_trunk"] {
+      stroke-width: 3.1;
+      stroke-dasharray: 8 4;
+    }
+
+    .navigation-terrain-hierarchy-edge[data-navigation-terrain-edge-kind="tributary"] {
+      stroke-width: 1.6;
+      stroke-dasharray: 5 5;
+      opacity: .72;
+    }
+
+    .navigation-terrain-event {
+      cursor: pointer;
+      outline: none;
+    }
+
+    .navigation-terrain-event circle {
+      fill: rgba(8, 17, 14, .82);
+      stroke: #ff6b4a;
+      stroke-width: 2.5;
+      transition: r .15s ease, stroke-width .15s ease;
+    }
+
+    .navigation-terrain-event text {
+      fill: #fff5e8;
+      font-size: 8px;
+      font-weight: 850;
+      text-anchor: middle;
+      pointer-events: none;
+    }
+
+    .navigation-terrain-event[data-navigation-terrain-event-selected="true"] circle,
+    .navigation-terrain-event:hover circle,
+    .navigation-terrain-event:focus circle {
+      r: 9px;
+      stroke-width: 4;
+      filter: drop-shadow(0 0 8px rgba(255, 107, 74, .84));
+    }
+
+    .navigation-workspace-map-status {
+      position: absolute;
+      z-index: 3;
+      top: 12px;
+      left: 12px;
+      max-width: min(360px, calc(100% - 24px));
+      padding: 10px 12px;
+      border: 1px solid rgba(233, 234, 220, .18);
+      background: rgba(5, 10, 7, .86);
+      color: #dce4d6;
+      font-size: 10px;
+      line-height: 1.45;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .navigation-workspace-map-status strong {
+      display: block;
+      margin-bottom: 2px;
+      color: #f1f2e9;
+      font-size: 11px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .navigation-workspace-scale {
+      position: absolute;
+      z-index: 3;
+      right: 14px;
+      bottom: 12px;
+      color: #dce4d6;
+      font-size: 9px;
+      text-shadow: 0 1px 3px #000;
+      pointer-events: none;
+    }
+
+    @media (max-width: 620px) {
+      .navigation-workspace-map-status {
+        top: 54px;
+      }
+    }
+
+    .navigation-feature-gap-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      border-top: 1px solid var(--terrain-rule);
+      background: var(--terrain-rule);
+    }
+
+    .navigation-feature-gap {
+      padding: 11px 12px;
+      background: #0c1511;
+    }
+
+    .navigation-feature-gap small {
+      display: block;
+      color: #74877d;
+      font-size: 9px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .navigation-feature-gap strong {
+      display: block;
+      margin-top: 4px;
+      color: #dfe4d6;
+      font-size: 11px;
+    }
+
+    .navigation-feature-gap em {
+      display: block;
+      margin-top: 4px;
+      color: var(--terrain-amber);
+      font-size: 9px;
+      font-style: normal;
+      line-height: 1.4;
+    }
+
+    .navigation-evidence-workbench {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid var(--terrain-rule);
+      background: var(--terrain-rule);
+    }
+
+    .navigation-event-timeline {
+      min-width: 0;
+      border: 1px solid var(--terrain-rule);
+      background: #0d1713;
+      box-shadow: 0 16px 34px rgba(0, 0, 0, .18);
+    }
+
+    .navigation-event-track {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(188px, 238px);
+      gap: 8px;
+      overflow-x: auto;
+      padding: 12px 14px 15px;
+      scroll-snap-type: x proximity;
+      overscroll-behavior-inline: contain;
+    }
+
+    .navigation-event-card {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 9px;
+      min-height: 86px;
+      padding: 10px;
+      border: 1px solid rgba(233, 234, 220, .12);
+      background: #111d18;
+      color: #dfe4d6;
+      text-align: left;
+      scroll-snap-align: start;
+    }
+
+    .navigation-event-card b {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--terrain-coral);
+      border-radius: 50%;
+      color: #fff5e8;
+      font-size: 9px;
+    }
+
+    .navigation-event-card span,
+    .navigation-event-card strong,
+    .navigation-event-card small,
+    .navigation-event-card em {
+      display: block;
+      min-width: 0;
+    }
+
+    .navigation-event-card small {
+      color: #7f9388;
+      font-size: 9px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .navigation-event-card strong {
+      margin-top: 4px;
+      color: #eef0e4;
+      font-size: 12px;
+    }
+
+    .navigation-event-card em {
+      margin-top: 5px;
+      color: #9faf9f;
+      font-size: 9px;
+      font-style: normal;
+      line-height: 1.35;
+    }
+
+    .navigation-event-card[data-navigation-terrain-event-selected="true"],
+    .navigation-event-card:hover,
+    .navigation-event-card:focus {
+      border-color: var(--terrain-coral);
+      background: rgba(255, 107, 74, .1);
+      box-shadow: inset 0 -2px 0 var(--terrain-coral);
+    }
+
+    .navigation-event-limit,
+    .navigation-event-empty {
+      margin: 0;
+      padding: 0 14px 12px;
+      color: var(--terrain-amber);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .navigation-detail-step.is-cue {
+      border-left: 3px solid var(--terrain-coral);
+    }
+
+    .navigation-detail-step.is-recovery {
+      border-left: 3px solid var(--terrain-cyan);
+    }
+
+    .navigation-evidence-panel {
+      min-width: 0;
+      padding: 14px;
+      background: #0d1713;
+    }
+
+    .navigation-evidence-panel h3 {
+      margin: 0;
+      color: #e9eadc;
+      font-size: 13px;
+    }
+
+    .navigation-evidence-panel > p {
+      margin: 5px 0 11px;
+      color: #82958b;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .navigation-evidence-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .navigation-evidence-metric,
+    .navigation-evidence-row {
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid rgba(233, 234, 220, .1);
+      background: rgba(0, 0, 0, .12);
+    }
+
+    .navigation-evidence-metric small,
+    .navigation-evidence-row small {
+      display: block;
+      color: #74877d;
+      font-size: 8px;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .navigation-evidence-metric strong,
+    .navigation-evidence-row strong {
+      display: block;
+      margin-top: 4px;
+      color: #e5e9dc;
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .navigation-evidence-list {
+      display: grid;
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .navigation-evidence-row em {
+      display: block;
+      margin-top: 3px;
+      color: var(--terrain-amber);
+      font-size: 9px;
+      font-style: normal;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .navigation-topology-chain {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      overflow-x: auto;
+      padding: 8px 0 4px;
+    }
+
+    .navigation-topology-chain span {
+      flex: 0 0 auto;
+      border: 1px solid rgba(98, 184, 198, .34);
+      padding: 5px 7px;
+      color: #d9e9e6;
+      background: rgba(98, 184, 198, .07);
+      font: 800 9px var(--mono);
+    }
+
+    .navigation-live-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 12px;
+      background: var(--terrain-rule);
+    }
+
+    .navigation-live-metric {
+      padding: 11px;
+      background: #0d1713;
+    }
+
+    .navigation-live-metric small {
+      display: block;
+      color: #758a7f;
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+
+    .navigation-live-metric strong {
+      display: block;
+      margin-top: 4px;
+      color: #e8eadf;
+      font-size: 16px;
+    }
+
+    .navigation-terrain-side { display: grid; gap: 14px; }
+    .navigation-terrain-detail-body { padding: 16px; }
+
+    .navigation-feature-kicker {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #8fa096;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+    }
+
+    .navigation-feature-kicker::before {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--feature-color);
+      content: "";
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--feature-color) 18%, transparent);
+    }
+
+    .navigation-terrain-detail-body h4 {
+      margin: 8px 0 6px;
+      color: #f2f3e9;
+      font-size: 24px;
+    }
+
+    .navigation-terrain-detail-body > p {
+      margin: 0 0 14px;
+      color: #a4b4ab;
+      line-height: 1.55;
+    }
+
+    .navigation-detail-steps {
+      display: grid;
+      gap: 1px;
+      margin-top: 12px;
+      background: var(--terrain-rule);
+    }
+
+    .navigation-detail-step {
+      padding: 12px;
+      background: #0d1713;
+    }
+
+    .navigation-detail-step small {
+      display: block;
+      margin-bottom: 4px;
+      color: #778c81;
+      font-size: 9px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .navigation-detail-step strong {
+      color: #dfe4d5;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .navigation-reading-header {
+      border-bottom: 1px solid var(--terrain-rule);
+      background: linear-gradient(112deg, #13211b, #0c1511 62%);
+    }
+
+    .navigation-reading-summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto 22px;
+      gap: 12px;
+      align-items: center;
+      min-height: 58px;
+      padding: 10px 14px;
+      color: #dce2d3;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .navigation-reading-summary::-webkit-details-marker { display: none; }
+
+    .navigation-reading-summary::after {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border: 1px solid rgba(233, 234, 220, .18);
+      border-radius: 50%;
+      color: #9fb1a7;
+      font-size: 15px;
+      line-height: 1;
+      content: "+";
+    }
+
+    .navigation-reading-header[open] .navigation-reading-summary::after {
+      content: "−";
+    }
+
+    .navigation-reading-summary strong,
+    .navigation-reading-summary small {
+      display: block;
+    }
+
+    .navigation-reading-summary strong {
+      color: #e9eadc;
+      font-size: 15px;
+    }
+
+    .navigation-reading-summary small {
+      margin-top: 3px;
+      color: #82958b;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    .navigation-reading-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      border-top: 1px solid var(--terrain-rule);
+      background: var(--terrain-rule);
+    }
+
+    .navigation-reading-item {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 13px;
+      background: #0d1713;
+    }
+
+    .navigation-reading-item b {
+      display: grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border: 1px solid rgba(233, 234, 220, .18);
+      border-radius: 50%;
+      color: #9fb1a7;
+      font-size: 10px;
+    }
+
+    .navigation-reading-item strong {
+      display: block;
+      color: #dce2d3;
+      font-size: 12px;
+    }
+
+    .navigation-reading-item small {
+      display: block;
+      margin-top: 3px;
+      color: #788d82;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+
+    .navigation-reading-item em {
+      color: var(--terrain-amber);
+      font-size: 9px;
+      font-style: normal;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .navigation-boundary-note {
+      margin: 0;
+      padding: 13px 15px;
+      border-left: 3px solid var(--terrain-amber);
+      background: rgba(240, 174, 59, .08);
+      color: #c9cfbf;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 1180px) {
+      .navigation-terrain-brief { grid-template-columns: 1fr 1fr 1fr; }
+      .navigation-terrain-brief > div:first-child {
+        grid-column: 1 / -1;
+        border-right: 0;
+        border-bottom: 1px solid var(--terrain-rule);
+      }
+      .navigation-terrain-workspace { grid-template-columns: 1fr; }
+      .navigation-terrain-side { grid-template-columns: 1fr 1fr; }
+      .navigation-evidence-workbench { grid-template-columns: 1fr 1fr; }
+      .navigation-reading-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      .navigation-terrain-brief { grid-template-columns: 1fr; }
+      .navigation-terrain-brief > div {
+        border-right: 0;
+        border-bottom: 1px solid var(--terrain-rule);
+      }
+      .navigation-terrain-map {
+        overflow-x: hidden;
+        width: 100%;
+        max-width: 100%;
+        min-height: 500px;
+        overscroll-behavior-inline: contain;
+      }
+      .navigation-terrain-map svg { width: 720px; }
+      .navigation-terrain-legend { grid-template-columns: 1fr 1fr; }
+      .navigation-workspace-map {
+        min-height: 330px;
+        aspect-ratio: auto;
+      }
+      .navigation-workspace-map img,
+      .navigation-workspace-map svg {
+        width: 720px;
+        max-width: none;
+      }
+      .navigation-workspace-map { overflow-x: hidden; }
+      .navigation-feature-gap-grid,
+      .navigation-live-metrics { grid-template-columns: 1fr; }
+      .navigation-terrain-side { grid-template-columns: 1fr; }
+      .navigation-evidence-workbench { grid-template-columns: 1fr; }
+      .navigation-reading-list { grid-template-columns: 1fr; }
+      .navigation-event-track { grid-auto-columns: minmax(236px, 82vw); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .field-instrument-theme .workspace > * { animation: none; }
+      .terrain-feature-target .terrain-feature-halo { transition: none; }
     }
   </style>
 </head>
@@ -5654,6 +6784,7 @@
     const ASSISTANT_QUERY_PATH = "/assistant/query";
     const ASSISTANT_QUERY_TIMEOUT_MS = 240000;
     const FETCH_TIMEOUT_MS = 20000;
+    const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;
     const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
     const BODY_INDEX_FETCH_TIMEOUT_MS = 180000;
     const BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index";
@@ -5704,13 +6835,14 @@
       "outdoor-permission": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Static class descriptions", action: "Read-only selector", verification: "No runtime decision", provenance: "Static rule set", mode: "Static rule set"}),
       "observer": Object.freeze({maturity: "preview", surface: "Technical prototype", data: "Projected ingress · broker unverified", action: "Read-only · no publish", verification: "Connection/data lifecycle unverified", provenance: "Debug ingress references", mode: "Technical Prototype"}),
       "outdoor-architecture": Object.freeze({maturity: "partial", surface: "Operational analysis", data: "Loading route architecture evidence", action: "Read-only candidate analysis", verification: "Awaiting route topology projection", provenance: "Pretrip workspace + historical GPX aggregates", mode: "Candidate analysis"}),
-      "outdoor-navigation": Object.freeze({maturity: "preview", surface: "Reference only", data: "Navigation reference", action: "Read-only", verification: "Reference rendered", provenance: "Static rule set", mode: "Reference"}),
+      "outdoor-navigation": Object.freeze({maturity: "partial", surface: "Terrain reading workbench", data: "Workspace DEM + candidate morphology", action: "Read-only feature inspection", verification: "Workspace API + UX verified", provenance: "Prepared DTM + GPX source ledger", mode: "Operational analysis"}),
     });
     const ROUTE_DATA_SCOPES = Object.freeze({
-      project: ["home", "map", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-pretrip", "surface-admin", "surface-debug", "emergency", "outdoor-route-context", "outdoor-architecture", "outdoor-navigation", "outdoor-weather"],
+      project: ["home", "map", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-pretrip", "surface-admin", "surface-debug", "emergency", "outdoor-route-context", "outdoor-architecture", "outdoor-weather"],
       briefing: ["outdoor-route-context"],
       body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index"],
       weather: ["home", "outdoor-weather"],
+      navigation_terrain: ["outdoor-navigation"],
       debug: ["debug"],
       hardware: ["debug"],
       living: ["living"],
@@ -6166,6 +7298,14 @@
       architectureSelectedPassageNodeId: "",
       architectureMobileView: "spine",
       architectureFingerprintScrollLeft: 0,
+      navigationSelectedFeatureId: "saddle-west",
+      navigationTerrainLens: "structure",
+      navigationTerrainSourceMode: "workspace",
+      navigationTerrainData: null,
+      navigationSelectedLivePointId: "",
+      navigationSelectedStructurePointId: "",
+      navigationSelectedTerrainEventId: "",
+      mapViewportById: {},
       mapEvidenceCollapsed: false,
       evidenceDrawerExpandedRoutes: {},
       selectedMapEvidenceSourceId: "",
@@ -6309,7 +7449,9 @@
       bindMobileNavigation();
       bindAgentChatControls();
       setRoute(routeFromHash());
-      void triggerDashboardConnectedPreparation("dashboard-open");
+      if (state.route !== "outdoor-navigation") {
+        void triggerDashboardConnectedPreparation("dashboard-open");
+      }
       loadData().finally(() => {
         if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
       });
@@ -6386,6 +7528,11 @@
         });
         if (!response.ok) throw new Error(`${response.status} ${path}`);
         return response.json();
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          throw new Error(`request timed out after ${Math.round(timeoutMs / 1000)}s: ${path}`);
+        }
+        throw error;
       } finally {
         window.clearTimeout(timer);
       }
@@ -6581,6 +7728,7 @@
       if (scope === "briefing") return loadBriefingData();
       if (scope === "body") return loadBodyIndexData();
       if (scope === "weather") return loadWeatherData();
+      if (scope === "navigation_terrain") return loadNavigationTerrainData();
       if (scope === "debug") return loadDebugData();
       if (scope === "hardware") return loadHardwareData();
       if (scope === "living") return loadLivingData();
@@ -6590,6 +7738,25 @@
       state.livingProjection = await fetchJson(DASHBOARD_LIVING_PATH, {
         timeoutMs: FETCH_TIMEOUT_MS,
       });
+    }
+
+    async function loadNavigationTerrainData() {
+      state.navigationTerrainData = await fetchJson(
+        `/admin/pretrip/projects/${encodeURIComponent(projectId())}/navigation-terrain-intelligence`,
+        {timeoutMs: NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS},
+      );
+      const firstRisk = asArray(state.navigationTerrainData?.risk_candidates?.points)[0];
+      if (!state.navigationSelectedLivePointId && firstRisk?.id) {
+        state.navigationSelectedLivePointId = String(firstRisk.id);
+      }
+      const firstStructure = asArray(state.navigationTerrainData?.terrain_structures?.points)[0];
+      if (!state.navigationSelectedStructurePointId && firstStructure?.id) {
+        state.navigationSelectedStructurePointId = String(firstStructure.id);
+      }
+      const firstTerrainEvent = asArray(state.navigationTerrainData?.route_terrain_events?.events)[0];
+      if (!state.navigationSelectedTerrainEventId && firstTerrainEvent?.id) {
+        state.navigationSelectedTerrainEventId = String(firstTerrainEvent.id);
+      }
     }
 
     function stopLivingRefresh() {
@@ -6790,6 +7957,7 @@
 
     function routeUsesWideFrame(route) {
       if (route === "outdoor-architecture") return true;
+      if (route === "outdoor-navigation") return true;
       return route === "agent" || route === "debug" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";
     }
 
@@ -7085,6 +8253,7 @@
       renderTruthStrip(route);
       const frameFull = routeUsesFullFrame(route);
       const frameWide = routeUsesWideFrame(route);
+      const pageHeaderHidden = route === "outdoor-navigation";
       const evidenceCollapsed = evidenceDrawerCollapsed(route);
       contentGrid?.classList.toggle("is-frame-full", frameFull);
       contentGrid?.classList.toggle("is-frame-wide", frameWide);
@@ -7092,6 +8261,7 @@
       evidence.classList.toggle("is-collapsed", evidenceCollapsed);
       evidence.dataset.evidenceDrawerState = evidenceCollapsed ? "collapsed" : "expanded";
       dashboardShell?.classList.toggle("is-frame-full", frameFull);
+      dashboardShell?.classList.toggle("is-page-header-hidden", pageHeaderHidden);
       document.body.classList.toggle("is-frame-full", frameFull);
       if (route === "map") {
         workspace.hidden = true;
@@ -10109,19 +11279,848 @@
       `;
     }
 
+    function navigationTerrainFeatures() {
+      return [
+        {
+          id: "ridge-east",
+          index: "01",
+          type: "ridge",
+          label: "稜線",
+          shortLabel: "主稜",
+          x: 358,
+          y: 176,
+          color: "#b7cf63",
+          lenses: ["structure", "retreat"],
+          meaning: "等高線向低處凸出，形成可維持方向感的長形骨架。",
+          pressure: "稜上方向通常清楚，但離開稜線後的回切成本需要先理解。",
+          recognition: "追蹤等高線凸出的連續方向，不要只看單一高點。",
+          routeQuestion: "路線是在稜頂、稜側腰繞，還是即將離稜？",
+          nextCheck: "確認離線地圖、GPX與撤退方向是否指向同一條地形骨架。",
+        },
+        {
+          id: "valley-main",
+          index: "02",
+          type: "valley",
+          label: "谷線",
+          shortLabel: "主谷",
+          x: 574,
+          y: 348,
+          color: "#62b8c6",
+          lenses: ["structure", "risk"],
+          meaning: "等高線向高處凹入，水流與迷向壓力可能沿谷底集中。",
+          pressure: "谷線能提供方向線索，也可能伴隨落差、濕滑與訊號遮蔽。",
+          recognition: "辨認一連串向上游凹入的 V 字，不把溪溝誤認成平順通道。",
+          routeQuestion: "路線是過谷、沿谷，還是在谷頭換層？",
+          nextCheck: "查看溪谷、降雨、坡度與實際過溪點證據。",
+        },
+        {
+          id: "saddle-west",
+          index: "03",
+          type: "saddle",
+          label: "鞍部",
+          shortLabel: "換層點",
+          x: 464,
+          y: 232,
+          color: "#f0ae3b",
+          lenses: ["structure", "retreat"],
+          meaning: "兩側高、兩側低的地形頸部，是稜線、谷線與路線選擇交會處。",
+          pressure: "鞍部常是確認方向、切換稜系與評估折返的節點。",
+          recognition: "從兩組閉合等高線之間找最低頸部，確認四個方向的升降。",
+          routeQuestion: "離開鞍部後，哪個方向維持主稜？哪個方向會落入溪谷？",
+          nextCheck: "把鞍部設為 CP，預先記住來向、去向與撤退向。",
+        },
+        {
+          id: "fork-north",
+          index: "04",
+          type: "fork",
+          label: "岔路",
+          shortLabel: "決策點",
+          x: 668,
+          y: 262,
+          color: "#f0ae3b",
+          lenses: ["pressure", "retreat"],
+          meaning: "人造路徑分叉與地形線分叉同時出現，容易被明顯踏跡帶離主線。",
+          pressure: "岔路不是看到路牌才開始；進入前就應知道正確地形方向。",
+          recognition: "比較 GPX 方位、等高線走勢與預期下一個 CP，而非只跟最寬路徑。",
+          routeQuestion: "若 GPS 漂移，仍能用稜谷方向排除錯誤分支嗎？",
+          nextCheck: "建立岔路前確認點與走錯後的回復規則。",
+        },
+        {
+          id: "cliff-east",
+          index: "05",
+          type: "cliff",
+          label: "崩壁",
+          shortLabel: "地形斷點",
+          x: 782,
+          y: 184,
+          color: "#ff6b4a",
+          lenses: ["risk"],
+          meaning: "等高線極密或中斷的坡面，代表地形快速失去容錯空間。",
+          pressure: "崩壁邊緣可能使路線被迫改線，DEM 也可能低估新崩塌。",
+          recognition: "找出密集等高線、裸露影像與路徑急轉是否重疊。",
+          routeQuestion: "這裡是穿越、繞行，還是接近崩壁上緣？",
+          nextCheck: "要求近期影像、路況與現地證據；不可只靠等高線推斷可通行。",
+        },
+        {
+          id: "gully-south",
+          index: "06",
+          type: "gully",
+          label: "溪谷",
+          shortLabel: "溪溝",
+          x: 621,
+          y: 452,
+          color: "#62b8c6",
+          lenses: ["risk"],
+          meaning: "集中逕流的狹長低地，乾季踏跡與雨後狀態可能完全不同。",
+          pressure: "過溪失敗、濕滑、落石與回切點不明會同時提高導航需求。",
+          recognition: "用等高線 V 字、水系與前後坡向確認過溪位置。",
+          routeQuestion: "過溪後要回到哪一條稜或腰繞帶？",
+          nextCheck: "把過溪點與對岸回切點成對標示，加入降雨條件。",
+        },
+        {
+          id: "steep-west",
+          index: "07",
+          type: "steep-slope",
+          label: "陡坡",
+          shortLabel: "坡度壓力",
+          x: 236,
+          y: 366,
+          color: "#f0ae3b",
+          lenses: ["pressure", "risk"],
+          meaning: "等高線間距縮小，單位水平距離需要換取更大高度變化。",
+          pressure: "上升耗時、下坡制動與走錯後回爬成本都會增加。",
+          recognition: "比較路線前後等高線間距，不用單一坡度數字替代整段判讀。",
+          routeQuestion: "這段陡坡是否接在體力下降或摸黑窗口之前？",
+          nextCheck: "把坡度與節段時間、天黑、濕滑和撤退成本一起看。",
+        },
+        {
+          id: "exposure-high",
+          index: "08",
+          type: "exposure",
+          label: "曝露地形",
+          shortLabel: "開闊稜段",
+          x: 526,
+          y: 104,
+          color: "#ff6b4a",
+          lenses: ["pressure", "risk"],
+          meaning: "缺乏遮蔽且退路受限的稜段，風、雷與失足後果可能放大。",
+          pressure: "地圖上看似方向清楚，不代表停留與通過成本低。",
+          recognition: "結合稜線位置、坡面落差、植被／影像與天氣圖層。",
+          routeQuestion: "是否有較低的替代線，或必須在什麼窗口前離開？",
+          nextCheck: "查看強風、雷雨、能見度與替代路線；不要由此圖直接下安全結論。",
+        },
+      ];
+    }
+
+    function navigationTerrainLensLabel(lens = state.navigationTerrainLens) {
+      return {
+        structure: "地形結構",
+        pressure: "坡度壓力",
+        risk: "風險地形",
+        retreat: "撤退方向",
+        events: "路線事件",
+      }[lens] || "地形結構";
+    }
+
+    function renderNavigationTerrainMap(features, selected) {
+      const activeLens = state.navigationTerrainLens || "structure";
+      const contourPaths = [
+        "M48 508 C142 432 167 329 118 250 C86 198 124 124 224 83 C323 42 427 62 456 132 C477 182 442 252 360 302 C278 352 248 444 323 520",
+        "M78 532 C170 462 200 367 163 288 C134 225 170 153 248 116 C331 76 401 92 420 145 C440 198 400 246 335 287 C260 336 239 423 296 498",
+        "M118 548 C198 487 232 396 205 326 C181 263 207 197 276 158 C337 123 383 131 391 170 C401 213 363 249 311 283 C250 324 238 401 276 472",
+        "M208 548 C255 492 287 425 273 364 C259 304 280 251 323 222 C357 199 379 202 385 226 C393 258 365 285 332 316 C297 349 293 404 313 455",
+        "M840 522 C748 468 710 387 739 319 C767 254 746 190 685 151 C628 114 573 124 553 173 C532 224 566 272 622 311 C681 352 692 432 650 500",
+        "M886 492 C801 446 766 378 790 325 C817 268 796 217 747 183 C704 154 664 160 648 197 C631 236 659 275 704 309 C752 346 761 410 727 466",
+        "M917 452 C844 418 817 365 837 324 C857 279 840 241 803 214 C770 191 740 198 729 227 C718 258 741 287 776 315 C811 344 821 392 796 432",
+        "M331 48 C373 86 405 105 456 108 C507 110 540 86 581 46",
+        "M354 67 C390 99 418 120 457 122 C499 125 530 104 560 70",
+        "M377 89 C406 113 429 136 458 138 C489 140 513 121 538 94",
+      ];
+      const featureMarkup = features.map(feature => {
+        const selectedFeature = feature.id === selected.id;
+        const lensMatch = feature.lenses.includes(activeLens);
+        return `
+          <g
+            class="terrain-feature-target"
+            role="button"
+            tabindex="${selectedFeature ? "0" : "-1"}"
+            aria-label="${escapeHtml(`${feature.index} ${feature.label}：${feature.shortLabel}`)}"
+            data-terrain-feature="${escapeHtml(feature.type)}"
+            data-terrain-feature-id="${escapeHtml(feature.id)}"
+            data-terrain-feature-selected="${selectedFeature ? "true" : "false"}"
+            data-lens-match="${lensMatch ? "true" : "false"}"
+            style="--feature-color:${feature.color}"
+          >
+            <circle class="terrain-feature-halo" cx="${feature.x}" cy="${feature.y}" r="15"></circle>
+            <text class="terrain-feature-number" x="${feature.x}" y="${feature.y + 4}">${feature.index}</text>
+            <text class="terrain-feature-label" x="${feature.x + 22}" y="${feature.y + 4}">${escapeHtml(feature.label)}</text>
+            <title>${escapeHtml(`${feature.label} · ${feature.meaning}`)}</title>
+          </g>
+        `;
+      }).join("");
+      const mapSvg = `
+          <svg viewBox="0 0 960 580" role="img" aria-label="等高線判讀示意圖，標示稜線、谷線、鞍部、岔路、崩壁、溪谷、陡坡與曝露地形">
+            <defs>
+              <marker id="terrainRetreatArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#62b8c6"></path></marker>
+              <pattern id="terrainCliffHatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="9" stroke="#ff6b4a" stroke-opacity=".34" stroke-width="3"></line></pattern>
+            </defs>
+            <rect x="0" y="0" width="960" height="580" fill="#0b140f"></rect>
+            ${contourPaths.map((path, index) => `<path class="terrain-contour ${index % 3 === 0 ? "is-index" : ""}" d="${path}"></path>`).join("")}
+            <text class="terrain-contour-label" x="102" y="520">1200</text>
+            <text class="terrain-contour-label" x="190" y="472">1300</text>
+            <text class="terrain-contour-label" x="328" y="70">1500</text>
+            <text class="terrain-contour-label" x="824" y="438">1250</text>
+
+            <path class="terrain-pressure-zone" d="M125 313 C175 273 265 281 303 337 C326 372 310 430 260 470 C208 511 138 476 112 421 C94 383 99 339 125 313 Z"></path>
+            <path class="terrain-risk-zone" d="M707 91 C774 84 851 112 885 166 C903 195 895 229 860 247 L745 231 C712 195 697 139 707 91 Z"></path>
+            <path d="M707 91 C774 84 851 112 885 166 C903 195 895 229 860 247 L745 231 C712 195 697 139 707 91 Z" fill="url(#terrainCliffHatch)"></path>
+            <path class="terrain-structure-line" d="M294 405 C316 332 363 279 420 241 C471 206 499 150 526 91"></path>
+            <path class="terrain-valley-line" d="M572 534 C596 470 596 402 573 347 C554 302 542 260 551 216"></path>
+            <path class="terrain-route-reference" d="M96 470 C196 422 288 352 364 291 C416 249 453 231 493 220 C553 203 612 224 669 264 C718 298 770 322 848 306"></path>
+            <path class="terrain-retreat-arrow" d="M466 235 C399 269 321 340 246 421 C208 461 167 488 113 514" marker-end="url(#terrainRetreatArrow)"></path>
+
+            <g aria-hidden="true">
+              <rect x="20" y="18" width="262" height="60" rx="6" fill="rgba(8,17,14,.9)" stroke="rgba(233,234,220,.14)"></rect>
+              <text x="34" y="41" fill="#e9eadc" font-size="13" font-weight="700">CONTOUR READING FIXTURE</text>
+              <text x="34" y="61" fill="#82958b" font-size="10">UX sample · not current route evidence</text>
+              <path d="M900 63 L900 24 L893 39 L900 34 L907 39 Z" fill="#e9eadc"></path>
+              <text x="900" y="78" text-anchor="middle" fill="#a5b4ab" font-size="10">N</text>
+              <line x1="778" y1="548" x2="890" y2="548" stroke="#e9eadc" stroke-width="3"></line>
+              <line x1="778" y1="542" x2="778" y2="554" stroke="#e9eadc" stroke-width="2"></line>
+              <line x1="890" y1="542" x2="890" y2="554" stroke="#e9eadc" stroke-width="2"></line>
+              <text x="834" y="568" text-anchor="middle" fill="#a5b4ab" font-size="10">500 m reference</text>
+            </g>
+            ${featureMarkup}
+          </svg>
+      `;
+      return renderDashboardMapViewport("navigation-training-map",
+        "Navigation contour-reading training map",
+        mapSvg,
+        {className: "navigation-terrain-map", attributes: 'data-terrain-contour-map="true"'},
+      );
+    }
+
+    function renderNavigationTerrainDetail(feature) {
+      return `
+        <section class="navigation-terrain-detail" data-terrain-feature-detail="true" style="--feature-color:${feature.color}">
+          <div class="navigation-terrain-detail-head">
+            <div><h3>Terrain Inspector</h3><p>點地圖標記，把等高線翻成下一個檢查問題。</p></div>
+            <span class="chip warn">candidate</span>
+          </div>
+          <div class="navigation-terrain-detail-body">
+            <span class="navigation-feature-kicker">${escapeHtml(feature.type)} · ${escapeHtml(feature.index)}</span>
+            <h4>${escapeHtml(feature.label)}</h4>
+            <p>${escapeHtml(feature.meaning)}</p>
+            <div class="navigation-detail-steps">
+              <div class="navigation-detail-step"><small>如何辨識</small><strong>${escapeHtml(feature.recognition)}</strong></div>
+              <div class="navigation-detail-step"><small>地形壓力</small><strong>${escapeHtml(feature.pressure)}</strong></div>
+              <div class="navigation-detail-step"><small>現場要問</small><strong>${escapeHtml(feature.routeQuestion)}</strong></div>
+              <div class="navigation-detail-step"><small>下一個證據</small><strong>${escapeHtml(feature.nextCheck)}</strong></div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderNavigationReadingChecklist() {
+      const checks = [
+        ["01", "離線地圖", "Rudy+TW／等高線／必要影像已離線", "待驗證"],
+        ["02", "GPX 與方向", "路線、來向與錯誤分支可辨識", "待驗證"],
+        ["03", "等高線判讀", "能說出坡度、稜谷與鞍部", "練習"],
+        ["04", "岔路策略", "岔路前 CP 與走錯回復規則", "待建立"],
+        ["05", "撤退方向", "不用 GPS 仍知道往哪個地形骨架退", "待演練"],
+        ["06", "定位備援", "電力、指南針、第二裝置或紙圖", "待驗證"],
+      ];
+      return `
+        <details class="navigation-reading-header" data-terrain-reading-checklist="true">
+          <summary class="navigation-reading-summary">
+            <span><strong role="heading" aria-level="3">Map Literacy Checklist</strong><small>訓練清單 · 非能力測驗</small></span>
+            <span class="chip info">6 checks</span>
+          </summary>
+          <div class="navigation-reading-list">
+            ${checks.map(([index, label, detail, stateLabel]) => `
+              <div class="navigation-reading-item">
+                <b>${index}</b>
+                <span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small></span>
+                <em>${escapeHtml(stateLabel)}</em>
+              </div>
+            `).join("")}
+          </div>
+        </details>
+      `;
+    }
+
+    function navigationTerrainSnapshot() {
+      if (state.navigationTerrainData && typeof state.navigationTerrainData === "object") {
+        return state.navigationTerrainData;
+      }
+      const error = state.dataScopeErrors?.navigation_terrain;
+      return {
+        status: error ? "unavailable" : "loading",
+        project_id: projectId(),
+        terrain_surface: {overlays: [], slope_class_counts: {}},
+        route_samples: {source_count: 0, rendered_count: 0, points: []},
+        risk_candidates: {source_count: 0, rendered_count: 0, points: []},
+        feature_extraction: {},
+        terrain_structures: {status: "not_prepared", counts: {}, rendered_counts: {}, points: []},
+        terrain_hierarchy: {status: "not_prepared", nodes: [], edges: [], rendered_node_count: 0, rendered_edge_count: 0},
+        route_terrain_events: {status: "not_prepared", candidate_count: 0, rendered_count: 0, truncated: false, events: []},
+        source_ledger: {status: "not_prepared", source_tier_counts: {P0: 0, P1: 0, P2: 0}, sources: [], ordered_clues: [], evidence_gaps: []},
+        route_topology: {status: "not_prepared", nodes: [], edges: [], route_options: [], shared_edge_ids: []},
+        missing_artifacts: error ? ["navigation_terrain_projection"] : [],
+        boundary: {candidate_only: true, runtime_safety_truth: false},
+      };
+    }
+
+    function navigationTerrainOverlay(snapshot, mode) {
+      return asArray(snapshot?.terrain_surface?.overlays)
+        .find(item => item?.mode === mode) || null;
+    }
+
+    function navigationTerrainPointPosition(point, bounds, width = 1000, height = 392) {
+      if (!bounds || !Number.isFinite(Number(point?.lon)) || !Number.isFinite(Number(point?.lat))) return null;
+      const longitudeSpan = Number(bounds.east) - Number(bounds.west);
+      const latitudeSpan = Number(bounds.north) - Number(bounds.south);
+      if (!(longitudeSpan > 0) || !(latitudeSpan > 0)) return null;
+      return {
+        x: Math.max(0, Math.min(width, (Number(point.lon) - Number(bounds.west)) / longitudeSpan * width)),
+        y: Math.max(0, Math.min(height, (Number(bounds.north) - Number(point.lat)) / latitudeSpan * height)),
+      };
+    }
+
+    function navigationTerrainRoutePath(snapshot, width = 1000, height = 392) {
+      const bounds = snapshot?.terrain_surface?.bbox_wgs84;
+      const projected = asArray(snapshot?.route_samples?.points)
+        .map(point => navigationTerrainPointPosition(point, bounds, width, height))
+        .filter(Boolean);
+      return projected.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+    }
+
+    function navigationPressureColor(value) {
+      const score = Number(value || 0);
+      if (score >= 90) return "#ff6b4a";
+      if (score >= 75) return "#f0ae3b";
+      if (score >= 55) return "#b7cf63";
+      return "#62b8c6";
+    }
+
+    function navigationStructureColor(kind) {
+      return {ridge: "#b7cf63", valley: "#62b8c6", saddle: "#f0ae3b"}[kind] || "#d8ded2";
+    }
+
+    function navigationStructureLabel(kind) {
+      return {ridge: "稜", valley: "谷", saddle: "鞍"}[kind] || "?";
+    }
+
+    function navigationTerrainHierarchyColor(kind) {
+      return {
+        main_ridge_candidate: "#b7cf63",
+        spur_ridge_candidate: "#8fa84d",
+        drainage_trunk: "#62b8c6",
+        tributary: "#4f91a2",
+        watershed_boundary: "#d5df95",
+      }[kind] || "#93a299";
+    }
+
+    function navigationTerrainHierarchyLabel(kind) {
+      return {
+        main_ridge_candidate: "主稜候選",
+        spur_ridge_candidate: "支稜候選",
+        drainage_trunk: "主谷候選",
+        tributary: "支流候選",
+        watershed_boundary: "分水界候選",
+      }[kind] || "地形骨架候選";
+    }
+
+    function navigationTerrainEventLabel(eventType) {
+      return {
+        watershed_crossing: "穿越分水界",
+        drainage_crossing: "穿越谷線",
+        saddle_passage: "通過鞍部",
+        ridge_divide_passage: "通過分稜點",
+        headwater_crossing: "穿越源頭凹地",
+        drainage_branch: "通過水系分支",
+        route_terrain_transition: "路線／地形轉換",
+      }[eventType] || "地形事件";
+    }
+
+    function navigationTerrainHierarchyPath(edge, bounds, width = 1000, height = 392) {
+      return asArray(edge?.coordinates)
+        .map(point => navigationTerrainPointPosition(point, bounds, width, height))
+        .filter(Boolean)
+        .map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+        .join(" ");
+    }
+
+    function renderNavigationWorkspaceMap(snapshot, selectedPoint, selectedStructurePoint, selectedEvent) {
+      const lens = state.navigationTerrainLens || "structure";
+      const bounds = snapshot?.terrain_surface?.bbox_wgs84;
+      const hillshade = navigationTerrainOverlay(snapshot, "hillshade");
+      const contours = navigationTerrainOverlay(snapshot, "contours");
+      const activeOverlay = navigationTerrainOverlay(
+        snapshot,
+        lens === "pressure" ? "slope_shading" : lens === "structure" ? "contours" : "elevation_tint",
+      );
+      const routePath = navigationTerrainRoutePath(snapshot);
+      const pressurePoints = asArray(snapshot?.route_samples?.points)
+        .filter((_point, index) => index % 8 === 0)
+        .map(point => ({
+          ...point,
+          position: navigationTerrainPointPosition(point, bounds),
+        }))
+        .filter(point => point.position);
+      const riskPoints = asArray(snapshot?.risk_candidates?.points)
+        .slice(0, 30)
+        .map((point, index) => ({
+          ...point,
+          index: index + 1,
+          position: navigationTerrainPointPosition(point, bounds),
+        }))
+        .filter(point => point.position);
+      const structureCounters = {ridge: 0, valley: 0, saddle: 0};
+      const structurePoints = asArray(snapshot?.terrain_structures?.points)
+        .map(point => ({
+          ...point,
+          index: (structureCounters[point.feature_kind] = (structureCounters[point.feature_kind] || 0) + 1),
+          position: navigationTerrainPointPosition(point, bounds),
+        }))
+        .filter(point => point.position);
+      const hierarchyEdges = asArray(snapshot?.terrain_hierarchy?.edges)
+        .map(edge => ({
+          ...edge,
+          path: navigationTerrainHierarchyPath(edge, bounds),
+        }))
+        .filter(edge => edge.path);
+      const terrainEvents = asArray(snapshot?.route_terrain_events?.events)
+        .map(event => ({
+          ...event,
+          position: navigationTerrainPointPosition(event, bounds),
+        }))
+        .filter(event => event.position);
+      const overlayImages = [
+        hillshade,
+        activeOverlay && activeOverlay.mode !== "contours" ? activeOverlay : null,
+        contours,
+      ].filter((item, index, list) => item && list.findIndex(other => other?.mode === item.mode) === index);
+      const structureGap = ["ridge", "valley", "saddle"]
+        .filter(kind => !["candidate_vectors", "candidate_points"].includes(snapshot?.feature_extraction?.[kind]?.status));
+      const statusText = lens === "structure" && hierarchyEdges.length
+        ? `${hierarchyEdges.length} 條連續主稜／支稜／谷線骨架；地形分支不等於步道岔路。`
+        : lens === "events"
+          ? `${terrainEvents.length} 個 GPX × terrain events；紅圈是複核提示，不是安全判定。`
+          : lens === "structure" && structureGap.length
+        ? `真實 contour raster；${structureGap.join(" / ")} vectors 尚未抽取。`
+        : lens === "structure"
+          ? `${structurePoints.length} 個 DEM morphology candidates；不是已確認地形線或步道。`
+        : lens === "retreat"
+          ? "反向路徑僅表示回看既有 route geometry；撤退可行性尚未審查。"
+          : `${navigationTerrainLensLabel(lens)} · workspace candidate evidence。`;
+      const mapContent = `
+          ${overlayImages.map(item => `<img src="${escapeHtml(item.runtime_href)}" alt="" aria-hidden="true" data-terrain-overlay="${escapeHtml(item.mode)}">`).join("")}
+          <svg viewBox="0 0 1000 392" role="img" aria-label="工作區 DTM 地形圖、路線取樣與人工複核地形風險候選">
+            <defs>
+              <marker id="navigationWorkspaceRetreatArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#62b8c6"></path></marker>
+            </defs>
+            ${["structure", "events"].includes(lens) ? hierarchyEdges.map(edge => `
+              <path
+                class="navigation-terrain-hierarchy-edge"
+                data-navigation-terrain-edge-kind="${escapeHtml(edge.kind)}"
+                data-navigation-terrain-edge-id="${escapeHtml(edge.id)}"
+                d="${edge.path}"
+                style="--terrain-edge-color:${navigationTerrainHierarchyColor(edge.kind)}"
+              >
+                <title>${escapeHtml(`${navigationTerrainHierarchyLabel(edge.kind)} · ${formatDistanceKm(edge.length_m)} · candidate only`)}</title>
+              </path>
+            `).join("") : ""}
+            ${routePath ? `<path class="navigation-workspace-route" data-navigation-route-path="true" d="${routePath}" ${lens === "retreat" ? 'marker-start="url(#navigationWorkspaceRetreatArrow)"' : ""}></path>` : ""}
+            ${lens === "pressure" ? pressurePoints.map(point => `
+              <circle class="navigation-route-pressure-dot" cx="${point.position.x.toFixed(1)}" cy="${point.position.y.toFixed(1)}" r="4.5" fill="${navigationPressureColor(point.teii_20m ?? point.pretrip_risk ?? point.tri)}">
+                <title>${escapeHtml(`${formatDistanceKm(point.distance_m)} · TEII ${valueOrDash(point.teii_20m)}`)}</title>
+              </circle>
+            `).join("") : ""}
+            ${lens === "structure" ? structurePoints.map(point => `
+              <g
+                class="navigation-structure-point"
+                role="button"
+                tabindex="${point.id === selectedStructurePoint?.id ? "0" : "-1"}"
+                data-navigation-structure-point-id="${escapeHtml(point.id)}"
+                data-navigation-structure-kind="${escapeHtml(point.feature_kind)}"
+                data-navigation-structure-selected="${point.id === selectedStructurePoint?.id ? "true" : "false"}"
+                aria-label="${escapeHtml(`${navigationStructureLabel(point.feature_kind)}候選 ${point.index}, score ${point.score}`)}"
+                style="--structure-color:${navigationStructureColor(point.feature_kind)}"
+              >
+                <circle cx="${point.position.x.toFixed(1)}" cy="${point.position.y.toFixed(1)}" r="${point.id === selectedStructurePoint?.id ? "8" : "5"}"></circle>
+                <text x="${point.position.x.toFixed(1)}" y="${(point.position.y + 2.8).toFixed(1)}">${escapeHtml(navigationStructureLabel(point.feature_kind))}</text>
+                <title>${escapeHtml(`${point.feature_kind} candidate · TPI ${valueOrDash(point.tpi_m)}m · local relief ${valueOrDash(point.local_relief_m)}m`)}</title>
+              </g>
+            `).join("") : ""}
+            ${riskPoints.map(point => `
+              <g
+                class="navigation-live-point"
+                role="button"
+                tabindex="${point.id === selectedPoint?.id ? "0" : "-1"}"
+                data-navigation-live-point-id="${escapeHtml(point.id)}"
+                data-navigation-live-selected="${point.id === selectedPoint?.id ? "true" : "false"}"
+                aria-label="${escapeHtml(`Terrain pressure candidate ${point.index}, display pressure ${point.display_pressure}`)}"
+                style="${lens === "risk" ? "" : "display:none"}"
+              >
+                <circle cx="${point.position.x.toFixed(1)}" cy="${point.position.y.toFixed(1)}" r="${point.id === selectedPoint?.id ? "9" : "6"}"></circle>
+                <text x="${point.position.x.toFixed(1)}" y="${(point.position.y + 3).toFixed(1)}">${point.index}</text>
+                <title>${escapeHtml(point.reason || "Terrain pressure candidate requires review")}</title>
+              </g>
+            `).join("")}
+            ${lens === "events" ? terrainEvents.map(event => `
+              <g
+                class="navigation-terrain-event"
+                role="button"
+                tabindex="${event.id === selectedEvent?.id ? "0" : "-1"}"
+                data-navigation-terrain-event-id="${escapeHtml(event.id)}"
+                data-navigation-terrain-event-selected="${event.id === selectedEvent?.id ? "true" : "false"}"
+                aria-label="${escapeHtml(`${event.sequence} ${navigationTerrainEventLabel(event.event_type)}, ${formatDistanceKm(event.route_distance_m)}`)}"
+              >
+                <circle cx="${event.position.x.toFixed(1)}" cy="${event.position.y.toFixed(1)}" r="${event.id === selectedEvent?.id ? "9" : "6"}"></circle>
+                <text x="${event.position.x.toFixed(1)}" y="${(event.position.y + 3).toFixed(1)}">${escapeHtml(event.sequence)}</text>
+                <title>${escapeHtml(`${navigationTerrainEventLabel(event.event_type)} · ${event.terrain_relation}`)}</title>
+              </g>
+            `).join("") : ""}
+          </svg>
+      `;
+      const mapOverlay = `
+          <div class="navigation-workspace-map-status"><strong>Workspace DTM · ${escapeHtml(snapshot.status)}</strong>${escapeHtml(statusText)}</div>
+          <div class="navigation-workspace-scale">${escapeHtml(`${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m cells · ${formatInteger(snapshot?.terrain_surface?.source_dtm_tile_count)} DTM tiles`)}</div>
+      `;
+      return renderDashboardMapViewport("navigation-workspace-map",
+        "Workspace DTM terrain intelligence map",
+        mapContent,
+        {
+          className: "navigation-workspace-map",
+          attributes: `data-navigation-workspace-map="true" data-navigation-overlay-mode="${escapeHtml(activeOverlay?.mode || contours?.mode || "unavailable")}"`,
+          overlayHtml: mapOverlay,
+        },
+      );
+    }
+
+    function renderNavigationFeatureExtraction(snapshot) {
+      const labels = {ridge: "稜線", valley: "谷線", saddle: "鞍部"};
+      return `
+        <div class="navigation-feature-gap-grid" aria-label="Terrain structure extraction status">
+          ${Object.entries(labels).map(([kind, label]) => {
+            const feature = snapshot?.feature_extraction?.[kind] || {status: "not_prepared"};
+            return `
+              <div class="navigation-feature-gap">
+                <small>${escapeHtml(label)} DEM candidate</small>
+                <strong>${escapeHtml(feature.status || "not_prepared")}</strong>
+                <em>${escapeHtml(
+                  ["candidate_vectors", "candidate_points"].includes(feature.status)
+                    ? `${formatInteger(feature.rendered_count ?? feature.count ?? 0)} displayed / ${formatInteger(feature.count || 0)} raw`
+                    : "尚未由目前 terrain pipeline 抽取"
+                )}</em>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderNavigationTerrainEventDetail(snapshot, selectedEvent) {
+      if (!selectedEvent) {
+        return `
+          <section class="navigation-terrain-detail" data-terrain-feature-detail="true">
+            <div class="navigation-terrain-detail-head"><div><h3>Route × Terrain Event</h3><p>目前沒有可顯示的路線地形事件。</p></div><span class="chip warn">not prepared</span></div>
+            <div class="navigation-terrain-detail-body"><p>事件只會由已準備的 GPX 與候選 terrain hierarchy 交會產生。</p></div>
+          </section>
+        `;
+      }
+      return `
+        <section class="navigation-terrain-detail" data-terrain-feature-detail="true" data-navigation-event-detail="${escapeHtml(selectedEvent.id)}" style="--feature-color:#ff6b4a">
+          <div class="navigation-terrain-detail-head">
+            <div><h3>Route × Terrain Event</h3><p>把座標提示翻成現場可觀察的地形關係。</p></div>
+            <span class="chip warn">candidate ${escapeHtml(selectedEvent.sequence)}</span>
+          </div>
+          <div class="navigation-terrain-detail-body">
+            <span class="navigation-feature-kicker">${escapeHtml(selectedEvent.event_type)} · ${escapeHtml(formatDistanceKm(selectedEvent.route_distance_m))}</span>
+            <h4>${escapeHtml(navigationTerrainEventLabel(selectedEvent.event_type))}</h4>
+            <p>${escapeHtml(selectedEvent.terrain_relation || "candidate terrain relation")}</p>
+            <div class="navigation-live-metrics">
+              <div class="navigation-live-metric"><small>Route distance</small><strong>${escapeHtml(formatDistanceKm(selectedEvent.route_distance_m))}</strong></div>
+              <div class="navigation-live-metric"><small>Off-route fit</small><strong>${escapeHtml(`${valueOrDash(selectedEvent.off_route_distance_m)}m`)}</strong></div>
+              <div class="navigation-live-metric"><small>Crossing angle</small><strong>${escapeHtml(selectedEvent.crossing_angle_degrees === null ? "aligned / n.a." : `${selectedEvent.crossing_angle_degrees}°`)}</strong></div>
+            </div>
+            <div class="navigation-detail-steps">
+              <div class="navigation-detail-step"><small>看到什麼</small><strong>${escapeHtml(selectedEvent.observation_prompt || "核對預期地形轉折。")}</strong></div>
+              <div class="navigation-detail-step is-cue"><small>走錯徵兆</small><strong>${escapeHtml(selectedEvent.wrong_way_cue || "地形關係長時間與預期不符。")}</strong></div>
+              <div class="navigation-detail-step is-recovery"><small>回復檢查</small><strong>${escapeHtml(selectedEvent.recovery_prompt || "回到上一個可確認地形點重新比對。")}</strong></div>
+              <div class="navigation-detail-step"><small>證據邊界</small><strong>${formatInteger(asArray(selectedEvent.source_refs).length)} source refs · 不證明步道存在、可通行或安全。</strong></div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderNavigationWorkspaceDetail(snapshot, selectedPoint, selectedStructurePoint, selectedEvent) {
+      const lens = state.navigationTerrainLens || "structure";
+      if (lens === "events") {
+        return renderNavigationTerrainEventDetail(snapshot, selectedEvent);
+      }
+      if (lens === "structure" && selectedStructurePoint) {
+        const featureIndex = asArray(snapshot?.terrain_structures?.points)
+          .filter(item => item.feature_kind === selectedStructurePoint.feature_kind)
+          .findIndex(item => item.id === selectedStructurePoint.id) + 1;
+        return `
+          <section class="navigation-terrain-detail" data-terrain-feature-detail="true" style="--feature-color:${navigationStructureColor(selectedStructurePoint.feature_kind)}">
+            <div class="navigation-terrain-detail-head">
+              <div><h3>Terrain Inspector</h3><p>來源是 20m DTM local morphology candidate，不是已確認稜線、谷線或鞍部。</p></div>
+              <span class="chip warn">human review</span>
+            </div>
+            <div class="navigation-terrain-detail-body">
+              <span class="navigation-feature-kicker">${escapeHtml(selectedStructurePoint.feature_kind)} candidate · ${String(featureIndex).padStart(2, "0")}</span>
+              <h4>${escapeHtml(`${navigationStructureLabel(selectedStructurePoint.feature_kind)}候選 ${featureIndex}`)}</h4>
+              <p>以鄰近八格高差、TPI、局部起伏與符號轉換抽取；它指出應複核的位置，不證明路徑存在。</p>
+              <div class="navigation-live-metrics">
+                <div class="navigation-live-metric"><small>TPI</small><strong>${escapeHtml(`${valueOrDash(selectedStructurePoint.tpi_m)}m`)}</strong></div>
+                <div class="navigation-live-metric"><small>Local relief</small><strong>${escapeHtml(`${valueOrDash(selectedStructurePoint.local_relief_m)}m`)}</strong></div>
+                <div class="navigation-live-metric"><small>Slope</small><strong>${escapeHtml(`${valueOrDash(selectedStructurePoint.slope_degrees)}°`)}</strong></div>
+              </div>
+              <div class="navigation-detail-steps">
+                <div class="navigation-detail-step"><small>Morphology score</small><strong>${escapeHtml(valueOrDash(selectedStructurePoint.score))} · ${escapeHtml(selectedStructurePoint.confidence || "low")} confidence</strong></div>
+                <div class="navigation-detail-step"><small>Route proximity</small><strong>${escapeHtml(selectedStructurePoint.distance_to_route_m === null ? "not prepared" : `${selectedStructurePoint.distance_to_route_m}m from prepared samples`)}</strong></div>
+                <div class="navigation-detail-step"><small>不能推論</small><strong>不可據此宣稱有稜線路、谷線路、鞍部捷徑、撤退線或目前可通行。</strong></div>
+                <div class="navigation-detail-step"><small>下一個證據</small><strong>對照等高線、影像、重複 GPX、來源註記與現地形跡，再支持或反駁這個候選。</strong></div>
+              </div>
+            </div>
+            ${renderNavigationFeatureExtraction(snapshot)}
+          </section>
+        `;
+      }
+      const dimensions = selectedPoint?.risk_dimensions || {};
+      if (!selectedPoint) {
+        return `
+          <section class="navigation-terrain-detail" data-terrain-feature-detail="true">
+            <div class="navigation-terrain-detail-head"><div><h3>Terrain Inspector</h3><p>沒有可顯示的 terrain-risk candidate。</p></div><span class="chip warn">unavailable</span></div>
+            <div class="navigation-terrain-detail-body"><p>保留地形 raster 與路線取樣；不產生替代風險點。</p></div>
+            ${renderNavigationFeatureExtraction(snapshot)}
+          </section>
+        `;
+      }
+      const index = asArray(snapshot?.risk_candidates?.points).findIndex(item => item.id === selectedPoint.id) + 1;
+      return `
+        <section class="navigation-terrain-detail" data-terrain-feature-detail="true" style="--feature-color:#ff6b4a">
+          <div class="navigation-terrain-detail-head">
+            <div><h3>Terrain Inspector</h3><p>來源是工作區 terrain-risk candidate，不是地形類別判定。</p></div>
+            <span class="chip warn">human review</span>
+          </div>
+          <div class="navigation-terrain-detail-body">
+            <span class="navigation-feature-kicker">terrain pressure · ${String(index).padStart(2, "0")}</span>
+            <h4>${escapeHtml(`候選壓力點 ${index}`)}</h4>
+            <p>${escapeHtml(selectedPoint.reason || "Candidate requires human review.")}</p>
+            <div class="navigation-live-metrics">
+              <div class="navigation-live-metric"><small>TEII 20m</small><strong>${escapeHtml(valueOrDash(dimensions.teii_20m))}</strong></div>
+              <div class="navigation-live-metric"><small>TRI</small><strong>${escapeHtml(valueOrDash(dimensions.tri))}</strong></div>
+              <div class="navigation-live-metric"><small>Pretrip risk</small><strong>${escapeHtml(valueOrDash(dimensions.pretrip_risk))}</strong></div>
+            </div>
+            <div class="navigation-detail-steps">
+              <div class="navigation-detail-step"><small>Evidence type</small><strong>${escapeHtml(selectedPoint.kind || "terrain_risk_candidate")} · ${escapeHtml(selectedPoint.confidence || "unknown")} confidence</strong></div>
+              <div class="navigation-detail-step"><small>Review state</small><strong>${escapeHtml(selectedPoint.review_state || "candidate")} · requires human review</strong></div>
+              <div class="navigation-detail-step"><small>不能推論</small><strong>不可把此點直接命名為崩壁、溪谷或可撤退點，也不可視為 runtime safety truth。</strong></div>
+              <div class="navigation-detail-step"><small>下一個證據</small><strong>對照近期影像、等高線、路線紀錄與現地觀察，再決定候選地形類別。</strong></div>
+            </div>
+          </div>
+          ${renderNavigationFeatureExtraction(snapshot)}
+        </section>
+      `;
+    }
+
+    function renderNavigationTerrainEventTimeline(snapshot, selectedEvent) {
+      const eventProjection = snapshot?.route_terrain_events || {};
+      const events = asArray(eventProjection.events);
+      return `
+        <section class="navigation-event-timeline" data-navigation-terrain-event-timeline="true">
+          <div class="navigation-reading-head">
+            <div><h3>Terrain Event Timeline</h3><p>依 GPX 里程排列：先知道應看到什麼，再定義走錯徵兆與回復檢查。</p></div>
+            <span class="chip ${eventProjection.truncated ? "warn" : "info"}">${formatInteger(eventProjection.rendered_count || events.length)} / ${formatInteger(eventProjection.candidate_count || events.length)}</span>
+          </div>
+          <div class="navigation-event-track" aria-label="Route terrain event sequence">
+            ${events.length ? events.map(event => `
+              <button
+                type="button"
+                class="navigation-event-card"
+                data-navigation-terrain-event-id="${escapeHtml(event.id)}"
+                data-navigation-terrain-event-selected="${event.id === selectedEvent?.id ? "true" : "false"}"
+                aria-pressed="${event.id === selectedEvent?.id ? "true" : "false"}"
+              >
+                <b>${escapeHtml(String(event.sequence).padStart(2, "0"))}</b>
+                <span><small>${escapeHtml(formatDistanceKm(event.route_distance_m))}</small><strong>${escapeHtml(navigationTerrainEventLabel(event.event_type))}</strong><em>${escapeHtml(event.terrain_relation || "candidate relation")}</em></span>
+              </button>
+            `).join("") : '<div class="navigation-event-empty">尚無 GPX × terrain hierarchy 事件；不捏造提示。</div>'}
+          </div>
+          ${eventProjection.truncated ? '<p class="navigation-event-limit">事件已依 bounded projection 截斷；完整候選仍需閾值校準與人工複核。</p>' : ""}
+        </section>
+      `;
+    }
+
+    function renderNavigationSourceLedger(snapshot) {
+      const ledger = snapshot?.source_ledger || {};
+      const tiers = ledger.source_tier_counts || {};
+      const audit = ledger.coordinate_audit || {};
+      const sources = asArray(ledger.sources).slice(0, 4);
+      return `
+        <section class="navigation-evidence-panel" data-navigation-source-ledger="true">
+          <h3>Source Ledger</h3>
+          <p>來源層級保持分離；P0、P1、P2 不合併成一個安全分數。</p>
+          <div class="navigation-evidence-metrics">
+            ${["P0", "P1", "P2"].map(tier => `<div class="navigation-evidence-metric"><small>${tier}</small><strong>${formatInteger(tiers[tier] || 0)}</strong></div>`).join("")}
+          </div>
+          <div class="navigation-evidence-list">
+            <div class="navigation-evidence-row"><small>Coordinate audit</small><strong>${escapeHtml(`${audit?.dtm?.crs || "DEM unavailable"} ↔ ${audit?.gpx?.crs || "GPX unavailable"}`)}</strong><em>${escapeHtml(`${audit?.dtm?.vertical_datum || "vertical datum unavailable"} · survey grade=${String(Boolean(audit?.comparison_transform?.survey_grade))}`)}</em></div>
+            ${sources.map(source => `<div class="navigation-evidence-row"><small>${escapeHtml(`${source.tier || "?"} · ${source.family || "source"}`)}</small><strong>${escapeHtml(source.provider || source.id || "source")}</strong><em>${escapeHtml(source.role || source.limitations || "candidate evidence")}</em></div>`).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderNavigationOrderedClues(snapshot) {
+      const ledger = snapshot?.source_ledger || {};
+      const clues = asArray(ledger.ordered_clues);
+      return `
+        <section class="navigation-evidence-panel" data-navigation-ordered-clues="true">
+          <h3>Ordered Clue Chain</h3>
+          <p>${escapeHtml(ledger.ordered_clue_chain_kind === "gpx_waypoint_clues" ? "GPX waypoint 線索，不冒充歷史敘事。" : "沒有可用的有序線索鏈。")}</p>
+          <div class="navigation-evidence-list">
+            ${clues.length ? clues.map((clue, index) => `<div class="navigation-evidence-row"><small>${String(index + 1).padStart(2, "0")} · ${escapeHtml(clue.clue_type || "waypoint")}</small><strong>${escapeHtml(clue.label || clue.id || "clue")}</strong><em>${escapeHtml(clue.elevation_m === null || clue.elevation_m === undefined ? "elevation unavailable" : `${clue.elevation_m}m · human review`)}</em></div>`).join("") : '<div class="navigation-evidence-row"><small>not prepared</small><strong>No ordered clues</strong><em>保留為 evidence gap。</em></div>'}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderNavigationTopology(snapshot) {
+      const topology = snapshot?.route_topology || {};
+      const historical = topology.prepared_historical_topology || {};
+      const edgeIds = asArray(topology.edges).map(edge => edge.id).filter(Boolean);
+      const historicalOptions = asArray(historical.route_options);
+      return `
+        <section class="navigation-evidence-panel" data-navigation-route-topology="true">
+          <h3>Shared Route Topology</h3>
+          <p>共用 edge 只保存一次；reference GPX 不自動升格成替代路線。</p>
+          <div class="navigation-evidence-metrics">
+            <div class="navigation-evidence-metric"><small>Nodes</small><strong>${formatInteger(asArray(topology.nodes).length)}</strong></div>
+            <div class="navigation-evidence-metric"><small>Edges</small><strong>${formatInteger(asArray(topology.edges).length)}</strong></div>
+            <div class="navigation-evidence-metric"><small>Options</small><strong>${formatInteger(topology.route_option_count || 0)}</strong></div>
+          </div>
+          <div class="navigation-topology-chain" aria-label="Observed reusable edge sequence">
+            ${edgeIds.length ? edgeIds.map(edgeId => `<span>${escapeHtml(edgeId)}</span>`).join("<b>→</b>") : "<span>not prepared</span>"}
+          </div>
+          <div class="navigation-evidence-list">
+            <div class="navigation-evidence-row"><small>Observed baseline</small><strong>${escapeHtml(topology.status || "not_prepared")}</strong><em>invented detours=${formatInteger(topology?.boundary?.invented_detour_count || 0)}</em></div>
+            <div class="navigation-evidence-row"><small>Historical topology</small><strong>${escapeHtml(historical.status || "not_prepared")}</strong><em>${formatInteger(historical.route_option_count || 0)} options · ${formatInteger(asArray(historical.shared_edge_ids).length)} shared edges</em></div>
+            ${historicalOptions.map(option => `<div class="navigation-evidence-row" data-navigation-historical-option="${escapeHtml(option.id || "candidate")}"><small>candidate only</small><strong>${escapeHtml(option.label || option.id || "Historical candidate")}</strong><em>${formatInteger(asArray(option.edge_ids).length)} reusable edges · not walkability proof</em></div>`).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderNavigationEvidenceGaps(snapshot) {
+      const ledger = snapshot?.source_ledger || {};
+      const topology = snapshot?.route_topology || {};
+      const historical = topology.prepared_historical_topology || {};
+      const items = Array.from(new Set([
+        ...asArray(ledger.evidence_gaps),
+        ...asArray(topology.limitations),
+        ...asArray(historical.evidence_gaps),
+        ...asArray(historical.contradictions).map(item => item?.claim).filter(Boolean),
+      ])).slice(0, 10);
+      return `
+        <section class="navigation-evidence-panel" data-navigation-evidence-gaps="true">
+          <h3>Contradictions & Gaps</h3>
+          <p>缺口留在畫面上，避免把資料缺失轉換成模型信心。</p>
+          <div class="navigation-evidence-list">
+            ${items.length ? items.map((item, index) => `<div class="navigation-evidence-row"><small>Gap ${String(index + 1).padStart(2, "0")}</small><strong>${escapeHtml(item)}</strong><em>requires source or field review</em></div>`).join("") : '<div class="navigation-evidence-row"><small>none reported</small><strong>No bounded gaps in projection</strong><em>仍不代表路線安全或可通行。</em></div>'}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderNavigationEvidenceWorkbench(snapshot) {
+      return `
+        <div class="navigation-evidence-workbench" data-navigation-evidence-workbench="true">
+          ${renderNavigationSourceLedger(snapshot)}
+          ${renderNavigationOrderedClues(snapshot)}
+          ${renderNavigationTopology(snapshot)}
+          ${renderNavigationEvidenceGaps(snapshot)}
+        </div>
+      `;
+    }
+
+    function renderNavigationWorkspaceLoading(snapshot) {
+      const error = state.dataScopeErrors?.navigation_terrain;
+      return `
+        <div class="navigation-workspace-map" data-navigation-workspace-map="${error ? "unavailable" : "loading"}">
+          <div class="architecture-empty"><div><strong>${error ? "Workspace terrain projection unavailable." : "Loading workspace terrain evidence."}</strong>${escapeHtml(error || "Reading prepared DTM raster, route samples, and review candidates.")}</div></div>
+        </div>
+      `;
+    }
+
     function renderNavigationPage(force) {
+      const features = navigationTerrainFeatures();
+      const selected = features.find(feature => feature.id === state.navigationSelectedFeatureId) || features[2];
+      const lens = state.navigationTerrainLens || "structure";
+      const sourceMode = "workspace";
+      const snapshot = navigationTerrainSnapshot();
+      const liveReady = !["loading", "unavailable"].includes(snapshot.status)
+        && Boolean(snapshot?.terrain_surface?.bbox_wgs84);
+      const riskPoints = asArray(snapshot?.risk_candidates?.points);
+      const selectedLivePoint = riskPoints.find(point => point.id === state.navigationSelectedLivePointId) || riskPoints[0] || null;
+      const structurePoints = asArray(snapshot?.terrain_structures?.points);
+      const selectedStructurePoint = structurePoints.find(point => point.id === state.navigationSelectedStructurePointId) || structurePoints[0] || null;
+      const terrainEvents = asArray(snapshot?.route_terrain_events?.events);
+      const selectedTerrainEvent = terrainEvents.find(event => event.id === state.navigationSelectedTerrainEventId) || terrainEvents[0] || null;
       return `
         ${outdoorTabs(force.route)}
-        <div class="grid-2">
-          ${renderMapPanel("navigation")}
-          ${renderMetricPanel("Navigation Reference", [
-            ["Offline maps", "Rudy+TW, imagery, OSM cache"],
-            ["GPX", "route and reference tracks available"],
-            ["Terrain literacy", "contour, ridge, valley, saddle"],
-            ["Fallback", "battery, GPS drift and manual retreat direction"],
-            ["Reference rule", "high map demand + low map skill => GUIDED_ONLY; not evaluated here"],
-          ])}
-        </div>
+        <section class="navigation-terrain-shell" data-navigation-terrain-intelligence="true" data-navigation-boundary="candidate-only">
+          <div class="navigation-terrain-workspace">
+            <div class="navigation-terrain-primary">
+              <section class="navigation-terrain-map-panel">
+                ${renderNavigationReadingChecklist()}
+                <div class="navigation-terrain-lenses" role="group" aria-label="Terrain reading lenses">
+                  ${[
+                    ["structure", "地形結構"],
+                    ["pressure", "坡度壓力"],
+                    ["risk", "風險地形"],
+                    ["retreat", "撤退方向"],
+                    ...(sourceMode === "workspace" ? [["events", "路線事件"]] : []),
+                  ].map(([lensId, label]) => `
+                    <button type="button" data-navigation-terrain-lens="${lensId}" aria-pressed="${lens === lensId ? "true" : "false"}">${escapeHtml(label)}</button>
+                  `).join("")}
+                </div>
+                ${sourceMode === "training"
+                  ? renderNavigationTerrainMap(features, selected)
+                  : liveReady
+                    ? renderNavigationWorkspaceMap(snapshot, selectedLivePoint, selectedStructurePoint, selectedTerrainEvent)
+                    : renderNavigationWorkspaceLoading(snapshot)}
+                <div class="navigation-terrain-legend" aria-label="Terrain map legend">
+                  ${sourceMode === "workspace" ? `
+                    <span><strong>DTM raster</strong><br>${escapeHtml(snapshot?.terrain_surface?.cell_resolution_m ? `${snapshot.terrain_surface.cell_resolution_m}m cells` : "unavailable")}</span>
+                    <span><strong>白線</strong><br>bounded route samples</span>
+                    <span><strong>綠線</strong><br>主稜／支稜候選</span>
+                    <span><strong>藍線／紅圈</strong><br>谷線與 route-terrain event</span>
+                  ` : `
+                    <span><strong>綠實線</strong><br>稜線骨架</span>
+                    <span><strong>藍虛線</strong><br>谷線／撤退方向</span>
+                    <span><strong>琥珀區</strong><br>坡度壓力</span>
+                    <span><strong>珊瑚斜線</strong><br>崩壁／曝露風險</span>
+                  `}
+                </div>
+              </section>
+              ${sourceMode === "workspace" && liveReady ? renderNavigationTerrainEventTimeline(snapshot, selectedTerrainEvent) : ""}
+            </div>
+            <aside class="navigation-terrain-side">
+              ${sourceMode === "workspace"
+                ? renderNavigationWorkspaceDetail(snapshot, selectedLivePoint, selectedStructurePoint, selectedTerrainEvent)
+                : renderNavigationTerrainDetail(selected)}
+              <p class="navigation-boundary-note"><strong>判讀邊界：</strong> 等高線與 DEM 能指出「哪裡值得注意」，不能單獨證明步道存在、目前可通行或適合獨攀。Workspace risk candidates 也不能直接命名為崩壁、溪谷或曝露地形；需要來源與人工複核。</p>
+            </aside>
+          </div>
+          ${sourceMode === "workspace" && liveReady ? renderNavigationEvidenceWorkbench(snapshot) : ""}
+        </section>
       `;
     }
 
@@ -10556,7 +12555,7 @@
         ["reversibility", "Reversibility"],
         ["evidence_quality", "Evidence"],
       ];
-      const mapContent = mapData.connected && bins.length ? `
+      const architectureMapSvg = `
         <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="Route architecture lens map">
           <defs>
             <pattern id="architectureTopoGrid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M0 24 Q12 5 24 24 T48 24 M0 40 Q12 21 24 40 T48 40" fill="none" stroke="#6e8b78" stroke-opacity=".11" stroke-width="1"></path></pattern>
@@ -10567,6 +12566,9 @@
           <g data-layer-group="segments" data-architecture-lens="${escapeHtml(state.architectureLens)}">${architectureMapSlices(mapData, bins, selected, routeDistance)}</g>
           <g data-layer-group="checkpoints">${architectureMapCheckpointPoints(mapData)}</g>
         </svg>
+      `;
+      const mapContent = mapData.connected && bins.length ? `
+        ${renderDashboardMapViewport("architecture-map", "Route architecture lens map", architectureMapSvg, {className: "architecture-map-surface"})}
         <div class="architecture-map-legend" data-architecture-legend="${escapeHtml(state.architectureLens)}" aria-label="Architecture lens color legend">
           <div class="architecture-map-legend-head"><strong>${escapeHtml(architectureLensLabel())}</strong><span>${escapeHtml(architectureLensLegendSubtitle())}</span></div>
           ${renderArchitectureLensLegend()}
@@ -11503,35 +13505,361 @@
       `;
     }
 
+    function renderDashboardMapControls(viewportId, mode = "pan") {
+      const panActive = mode !== "box";
+      return `
+        <div class="dashboard-map-controls" data-dashboard-map-controls="${escapeHtml(viewportId)}" aria-label="Map view controls">
+          <button type="button" data-map-control="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
+          <button type="button" data-map-control="zoom-out" aria-label="Zoom out" title="Zoom out (-)">−</button>
+          <button type="button" data-map-control="reset" aria-label="Reset map view" title="Fit map (0)">Fit</button>
+          <button type="button" data-map-control="pan" aria-label="Mouse drag pan" aria-pressed="${panActive ? "true" : "false"}" title="Mouse drag pan (P)">Pan</button>
+          <button type="button" data-map-control="box-zoom" aria-label="Point or rectangle zoom" aria-pressed="${panActive ? "false" : "true"}" title="Point zoom or rectangle drag: drag down-right to zoom in; drag up-left to zoom out (B)">▣</button>
+          <output data-map-zoom-level aria-label="Map zoom level">100%</output>
+        </div>
+      `;
+    }
+
+    function renderDashboardMapViewport(viewportId, label, content, options = {}) {
+      const saved = state.mapViewportById?.[viewportId] || {};
+      const mode = saved.mode === "box" ? "box" : "pan";
+      const className = ["dashboard-map-viewport", options.className || ""].filter(Boolean).join(" ");
+      return `
+        <div
+          class="${escapeHtml(className)}"
+          data-dashboard-map-viewport="${escapeHtml(viewportId)}"
+          data-map-mode="${mode}"
+          data-map-zoom="1.000"
+          ${options.attributes || ""}
+          role="region"
+          tabindex="0"
+          aria-label="${escapeHtml(`${label}. Use mouse drag or arrow keys to pan; plus, minus, point zoom, or rectangle drag to zoom.`)}"
+          aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape"
+        >
+          <div class="dashboard-map-stage" data-dashboard-map-stage>${content}</div>
+          <div class="dashboard-map-selection" data-dashboard-map-selection hidden aria-hidden="true"></div>
+          ${renderDashboardMapControls(viewportId, mode)}
+          <span class="sr-only" data-dashboard-map-live role="status" aria-live="polite"></span>
+          ${options.overlayHtml || ""}
+        </div>
+      `;
+    }
+
+    function createDashboardMapViewportController(viewport) {
+      const viewportId = viewport.dataset.dashboardMapViewport || "dashboard-map";
+      const stage = viewport.querySelector("[data-dashboard-map-stage]");
+      const selection = viewport.querySelector("[data-dashboard-map-selection]");
+      const controls = viewport.querySelector("[data-dashboard-map-controls]");
+      const live = viewport.querySelector("[data-dashboard-map-live]");
+      if (!stage || !selection || !controls) return null;
+
+      const saved = state.mapViewportById?.[viewportId] || {};
+      let viewState = {
+        zoom: Math.max(1, Math.min(12, Number(saved.zoom) || 1)),
+        x: Number(saved.x) || 0,
+        y: Number(saved.y) || 0,
+        mode: saved.mode === "box" ? "box" : "pan",
+      };
+      let pointerState = null;
+      let suppressNextClick = false;
+
+      const metrics = () => {
+        const width = Math.max(1, viewport.clientWidth || viewport.getBoundingClientRect().width || 1);
+        const height = Math.max(1, viewport.clientHeight || viewport.getBoundingClientRect().height || 1);
+        const stageWidth = Math.max(width, stage.scrollWidth || 0, stage.offsetWidth || 0);
+        const stageHeight = Math.max(height, stage.scrollHeight || 0, stage.offsetHeight || 0);
+        return {width, height, stageWidth, stageHeight};
+      };
+
+      const clampedState = (candidate) => {
+        const {width, height, stageWidth, stageHeight} = metrics();
+        const scaledWidth = stageWidth * candidate.zoom;
+        const scaledHeight = stageHeight * candidate.zoom;
+        const minX = Math.min(0, width - scaledWidth);
+        const minY = Math.min(0, height - scaledHeight);
+        return {
+          ...candidate,
+          x: Math.max(minX, Math.min(0, candidate.x)),
+          y: Math.max(minY, Math.min(0, candidate.y)),
+        };
+      };
+
+      const persist = () => {
+        state.mapViewportById = {
+          ...(state.mapViewportById || {}),
+          [viewportId]: {
+            zoom: viewState.zoom,
+            x: viewState.x,
+            y: viewState.y,
+            mode: viewState.mode,
+          },
+        };
+      };
+
+      const announce = (message) => {
+        if (live) live.textContent = message;
+      };
+
+      const apply = (message = "") => {
+        viewState = clampedState(viewState);
+        stage.style.transform = `translate3d(${viewState.x.toFixed(2)}px, ${viewState.y.toFixed(2)}px, 0) scale(${viewState.zoom.toFixed(4)})`;
+        viewport.dataset.mapMode = viewState.mode;
+        viewport.dataset.mapZoom = viewState.zoom.toFixed(3);
+        controls.querySelector('[data-map-control="pan"]')?.setAttribute("aria-pressed", viewState.mode === "pan" ? "true" : "false");
+        controls.querySelector('[data-map-control="box-zoom"]')?.setAttribute("aria-pressed", viewState.mode === "box" ? "true" : "false");
+        const zoomLevel = controls.querySelector("[data-map-zoom-level]");
+        if (zoomLevel) zoomLevel.textContent = `${Math.round(viewState.zoom * 100)}%`;
+        persist();
+        if (message) announce(message);
+      };
+
+      const pointInViewport = (event) => {
+        const rect = viewport.getBoundingClientRect();
+        return {
+          x: Math.max(0, Math.min(rect.width, event.clientX - rect.left)),
+          y: Math.max(0, Math.min(rect.height, event.clientY - rect.top)),
+        };
+      };
+
+      const zoomAt = (factor, point = null, message = "") => {
+        const {width, height} = metrics();
+        const anchor = point || {x: width / 2, y: height / 2};
+        const nextZoom = Math.max(1, Math.min(12, viewState.zoom * factor));
+        const localX = (anchor.x - viewState.x) / viewState.zoom;
+        const localY = (anchor.y - viewState.y) / viewState.zoom;
+        viewState = {
+          ...viewState,
+          zoom: nextZoom,
+          x: anchor.x - localX * nextZoom,
+          y: anchor.y - localY * nextZoom,
+        };
+        apply(message || `Map zoom ${Math.round(nextZoom * 100)} percent.`);
+      };
+
+      const panBy = (dx, dy, message = "") => {
+        viewState = {...viewState, x: viewState.x + dx, y: viewState.y + dy};
+        apply(message);
+      };
+
+      const reset = () => {
+        viewState = {...viewState, zoom: 1, x: 0, y: 0};
+        apply("Map view reset.");
+      };
+
+      const setMode = (mode) => {
+        viewState = {...viewState, mode: mode === "box" ? "box" : "pan"};
+        pointerState = null;
+        selection.hidden = true;
+        viewport.dataset.mapDragging = "false";
+        apply(viewState.mode === "box"
+          ? "Box zoom active. Click to zoom, drag down-right to zoom in, or drag up-left to zoom out."
+          : "Mouse drag pan active.");
+      };
+
+      const updateSelection = (current) => {
+        if (!pointerState) return;
+        const left = Math.min(pointerState.startX, current.x);
+        const top = Math.min(pointerState.startY, current.y);
+        selection.style.left = `${left}px`;
+        selection.style.top = `${top}px`;
+        selection.style.width = `${Math.abs(current.x - pointerState.startX)}px`;
+        selection.style.height = `${Math.abs(current.y - pointerState.startY)}px`;
+        selection.hidden = false;
+      };
+
+      const finishBoxZoom = (pointer) => {
+        const {width: viewportWidth, height: viewportHeight} = metrics();
+        const boxWidth = Math.abs(pointer.lastX - pointer.startX);
+        const boxHeight = Math.abs(pointer.lastY - pointer.startY);
+        const center = {
+          x: (pointer.startX + pointer.lastX) / 2,
+          y: (pointer.startY + pointer.lastY) / 2,
+        };
+        if (!pointer.moved || boxWidth < 8 || boxHeight < 8) {
+          zoomAt(1.25, center, "Point zoom in.");
+          return;
+        }
+        const factor = Math.max(1.25, Math.min(viewportWidth / boxWidth, viewportHeight / boxHeight));
+        const zoomOut = pointer.lastX < pointer.startX && pointer.lastY < pointer.startY;
+        if (zoomOut) {
+          zoomAt(1 / factor, center, "Rectangle zoom out.");
+          return;
+        }
+        zoomAt(factor, center);
+        viewState = {
+          ...viewState,
+          x: viewState.x + viewportWidth / 2 - center.x,
+          y: viewState.y + viewportHeight / 2 - center.y,
+        };
+        apply("Rectangle zoom in.");
+      };
+
+      const onPointerDown = (event) => {
+        if (event.button !== 0 || event.target.closest("[data-dashboard-map-controls]")) return;
+        const point = pointInViewport(event);
+        pointerState = {
+          pointerId: event.pointerId,
+          kind: viewState.mode,
+          startX: point.x,
+          startY: point.y,
+          lastX: point.x,
+          lastY: point.y,
+          previousClientX: event.clientX,
+          previousClientY: event.clientY,
+          moved: false,
+        };
+        viewport.dataset.mapDragging = "true";
+        viewport.focus({preventScroll: true});
+        viewport.setPointerCapture?.(event.pointerId);
+      };
+
+      const onPointerMove = (event) => {
+        if (!pointerState || pointerState.pointerId !== event.pointerId) return;
+        const point = pointInViewport(event);
+        const moved = pointerState.moved
+          || Math.abs(point.x - pointerState.startX) > 6
+          || Math.abs(point.y - pointerState.startY) > 6;
+        if (pointerState.kind === "pan") {
+          const dx = event.clientX - pointerState.previousClientX;
+          const dy = event.clientY - pointerState.previousClientY;
+          pointerState = {
+            ...pointerState,
+            lastX: point.x,
+            lastY: point.y,
+            previousClientX: event.clientX,
+            previousClientY: event.clientY,
+            moved,
+          };
+          if (moved) panBy(dx, dy);
+        } else {
+          pointerState = {...pointerState, lastX: point.x, lastY: point.y, moved};
+          if (moved) updateSelection(point);
+        }
+        if (moved) event.preventDefault();
+      };
+
+      const finishPointer = (event, cancelled = false) => {
+        if (!pointerState || pointerState.pointerId !== event.pointerId) return;
+        const completed = pointerState;
+        pointerState = null;
+        viewport.dataset.mapDragging = "false";
+        if (viewport.hasPointerCapture?.(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+        selection.hidden = true;
+        if (cancelled) {
+          announce("Map gesture cancelled.");
+          return;
+        }
+        if (completed.kind === "box") {
+          finishBoxZoom(completed);
+        } else if (completed.moved) {
+          suppressNextClick = true;
+          window.setTimeout(() => { suppressNextClick = false; }, 0);
+          announce("Map panned.");
+        }
+      };
+
+      const onWheel = (event) => {
+        if (event.target.closest("[data-dashboard-map-controls]")) return;
+        event.preventDefault();
+        zoomAt(event.deltaY < 0 ? 1.25 : 0.8, pointInViewport(event));
+      };
+
+      const onKeyDown = (event) => {
+        if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+        const tag = String(event.target?.tagName || "").toLowerCase();
+        if (["input", "select", "textarea"].includes(tag) || event.target?.isContentEditable) return;
+        const key = event.key;
+        const lowerKey = key.toLowerCase();
+        let handled = true;
+        if (event.key === "ArrowUp") panBy(0, 64, "Map panned up.");
+        else if (event.key === "ArrowDown") panBy(0, -64, "Map panned down.");
+        else if (event.key === "ArrowLeft") panBy(64, 0, "Map panned left.");
+        else if (event.key === "ArrowRight") panBy(-64, 0, "Map panned right.");
+        else if (event.key === "+" || event.key === "=") zoomAt(1.25);
+        else if (event.key === "-") zoomAt(0.8);
+        else if (event.key === "0") reset();
+        else if (event.key.toLowerCase() === "p") setMode("pan");
+        else if (event.key.toLowerCase() === "b") setMode("box");
+        else if (event.key === "Escape") {
+          pointerState = null;
+          selection.hidden = true;
+          viewport.dataset.mapDragging = "false";
+          announce("Map gesture cancelled.");
+        } else handled = false;
+        if (handled) event.preventDefault();
+      };
+
+      controls.addEventListener("click", (event) => {
+        const control = event.target.closest("[data-map-control]");
+        if (!control) return;
+        const action = control.dataset.mapControl;
+        if (action === "zoom-in") zoomAt(1.25);
+        if (action === "zoom-out") zoomAt(0.8);
+        if (action === "reset") reset();
+        if (action === "pan") setMode("pan");
+        if (action === "box-zoom") setMode("box");
+        viewport.focus({preventScroll: true});
+      });
+      viewport.addEventListener("pointerdown", onPointerDown);
+      viewport.addEventListener("pointermove", onPointerMove);
+      viewport.addEventListener("pointerup", event => finishPointer(event));
+      viewport.addEventListener("pointercancel", event => finishPointer(event, true));
+      viewport.addEventListener("wheel", onWheel, {passive: false});
+      viewport.addEventListener("keydown", onKeyDown);
+      viewport.addEventListener("click", (event) => {
+        if (!suppressNextClick) return;
+        suppressNextClick = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }, true);
+      apply();
+
+      return {
+        getState: () => ({...viewState}),
+        panBy,
+        reset,
+        setMode,
+        zoomAt,
+      };
+    }
+
+    function bindDashboardMapViewports() {
+      document.querySelectorAll("[data-dashboard-map-viewport]").forEach(viewport => {
+        if (viewport.dataset.dashboardMapBound === "true") return;
+        viewport.dataset.dashboardMapBound = "true";
+        viewport.dashboardMapController = createDashboardMapViewportController(viewport);
+      });
+    }
+
     function renderPaceFitMiniMap() {
+      const mapSvg = `
+        <svg viewBox="0 0 420 240" role="img" aria-label="CP087 pace fit mini map">
+          <defs>
+            <pattern id="paceGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+              <path d="M24 0H0V24" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="1"></path>
+            </pattern>
+          </defs>
+          <rect width="420" height="240" fill="#0b1519"></rect>
+          <rect width="420" height="240" fill="url(#paceGrid)"></rect>
+          <path d="M24 190 C74 154 102 160 146 126 C190 93 226 88 268 72 C317 53 353 40 396 28" fill="none" stroke="#4ed3d8" stroke-width="4" stroke-linecap="round"></path>
+          <path d="M247 82 C223 113 206 139 188 176" fill="none" stroke="#f0b85c" stroke-width="2" stroke-dasharray="6 5"></path>
+          <path d="M228 58 L285 42 L308 88 L262 124 L218 108 Z" fill="rgba(98,181,196,.15)" stroke="rgba(98,181,196,.55)" stroke-width="1.5"></path>
+          <circle cx="24" cy="190" r="5" fill="#78bf75"></circle>
+          <circle cx="146" cy="126" r="5" fill="#78bf75"></circle>
+          <circle cx="246" cy="80" r="11" fill="rgba(105,174,244,.38)" stroke="#69aef4" stroke-width="3"></circle>
+          <circle cx="268" cy="72" r="5" fill="#f0b85c"></circle>
+          <circle cx="396" cy="28" r="5" fill="#d06363"></circle>
+          <text x="232" y="58" fill="#dff8fb" font-size="13" font-family="monospace">CP087</text>
+          <text x="262" y="136" fill="#f0b85c" font-size="12" font-family="monospace">shorter line</text>
+          <text x="20" y="220" fill="#a8b5bd" font-size="11" font-family="monospace">0</text>
+          <path d="M42 218H112" stroke="#dff8fb" stroke-width="3"></path>
+          <text x="118" y="222" fill="#a8b5bd" font-size="11" font-family="monospace">1 km</text>
+        </svg>
+      `;
       return `
         <section class="pace-fit-card">
           <div class="pace-fit-card-head"><h3>Synchronized Map</h3><span class="chip info">CP087</span></div>
           <div class="pace-fit-card-body">
-            <div class="pace-mini-map" aria-label="Pace fit synchronized route map">
-              <svg viewBox="0 0 420 240" role="img" aria-label="CP087 pace fit mini map">
-                <defs>
-                  <pattern id="paceGrid" width="24" height="24" patternUnits="userSpaceOnUse">
-                    <path d="M24 0H0V24" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="1"></path>
-                  </pattern>
-                </defs>
-                <rect width="420" height="240" fill="#0b1519"></rect>
-                <rect width="420" height="240" fill="url(#paceGrid)"></rect>
-                <path d="M24 190 C74 154 102 160 146 126 C190 93 226 88 268 72 C317 53 353 40 396 28" fill="none" stroke="#4ed3d8" stroke-width="4" stroke-linecap="round"></path>
-                <path d="M247 82 C223 113 206 139 188 176" fill="none" stroke="#f0b85c" stroke-width="2" stroke-dasharray="6 5"></path>
-                <path d="M228 58 L285 42 L308 88 L262 124 L218 108 Z" fill="rgba(98,181,196,.15)" stroke="rgba(98,181,196,.55)" stroke-width="1.5"></path>
-                <circle cx="24" cy="190" r="5" fill="#78bf75"></circle>
-                <circle cx="146" cy="126" r="5" fill="#78bf75"></circle>
-                <circle cx="246" cy="80" r="11" fill="rgba(105,174,244,.38)" stroke="#69aef4" stroke-width="3"></circle>
-                <circle cx="268" cy="72" r="5" fill="#f0b85c"></circle>
-                <circle cx="396" cy="28" r="5" fill="#d06363"></circle>
-                <text x="232" y="58" fill="#dff8fb" font-size="13" font-family="monospace">CP087</text>
-                <text x="262" y="136" fill="#f0b85c" font-size="12" font-family="monospace">shorter line</text>
-                <text x="20" y="220" fill="#a8b5bd" font-size="11" font-family="monospace">0</text>
-                <path d="M42 218H112" stroke="#dff8fb" stroke-width="3"></path>
-                <text x="118" y="222" fill="#a8b5bd" font-size="11" font-family="monospace">1 km</text>
-              </svg>
-            </div>
+            ${renderDashboardMapViewport("pace-fit-map", "Pace Fit synchronized route map", mapSvg, {className: "pace-mini-map"})}
           </div>
         </section>
       `;
@@ -11721,11 +14049,11 @@
               </label>
             `).join("")}
           </div>
-          <div class="scout-map" id="dashboardMapPreview" aria-label="Scout dashboard map preview">
-            <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="chilai_nanhua_day1_scoutAI route map">
+          ${renderDashboardMapViewport("dashboard-map-preview", "Scout dashboard map preview", `
+            <svg id="dashboardMapPreview" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="chilai_nanhua_day1_scoutAI route map">
               ${SCOUT_LAYER_IDS.map((layerId, index) => mapLayerSvg(layerId, index, mode, compact, mapData)).join("")}
             </svg>
-          </div>
+          `, {className: "scout-map"})}
         </section>
       `;
     }
@@ -13084,6 +15412,92 @@
       `;
     }
 
+    function bindNavigationTerrainControls() {
+      const shell = document.querySelector('[data-navigation-terrain-intelligence="true"]');
+      if (!shell) return;
+      const rerenderNavigation = focusSelector => {
+        render();
+        window.requestAnimationFrame(() => {
+          document.querySelector(focusSelector)?.focus({preventScroll: true});
+        });
+      };
+      shell.querySelectorAll("[data-navigation-terrain-lens]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.navigationTerrainLens = button.dataset.navigationTerrainLens || "structure";
+          rerenderNavigation(`[data-navigation-terrain-lens="${cssEscape(state.navigationTerrainLens)}"]`);
+        });
+      });
+      shell.querySelectorAll("[data-navigation-terrain-source]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.navigationTerrainSourceMode = button.dataset.navigationTerrainSource || "workspace";
+          if (
+            state.navigationTerrainSourceMode === "training"
+            && state.navigationTerrainLens === "events"
+          ) {
+            state.navigationTerrainLens = "structure";
+          }
+          rerenderNavigation(
+            `[data-navigation-terrain-source="${cssEscape(state.navigationTerrainSourceMode)}"]`,
+          );
+        });
+      });
+      shell.querySelectorAll("[data-navigation-live-point-id]").forEach(target => {
+        const selectLivePoint = () => {
+          state.navigationSelectedLivePointId = target.dataset.navigationLivePointId || "";
+          rerenderNavigation(
+            `[data-navigation-live-point-id="${cssEscape(state.navigationSelectedLivePointId)}"]`,
+          );
+        };
+        target.addEventListener("click", selectLivePoint);
+        target.addEventListener("keydown", event => {
+          if (!["Enter", " ", "Spacebar"].includes(event.key)) return;
+          event.preventDefault();
+          selectLivePoint();
+        });
+      });
+      shell.querySelectorAll("[data-navigation-structure-point-id]").forEach(target => {
+        const selectStructurePoint = () => {
+          state.navigationSelectedStructurePointId = target.dataset.navigationStructurePointId || "";
+          rerenderNavigation(
+            `[data-navigation-structure-point-id="${cssEscape(state.navigationSelectedStructurePointId)}"]`,
+          );
+        };
+        target.addEventListener("click", selectStructurePoint);
+        target.addEventListener("keydown", event => {
+          if (!["Enter", " ", "Spacebar"].includes(event.key)) return;
+          event.preventDefault();
+          selectStructurePoint();
+        });
+      });
+      shell.querySelectorAll("[data-navigation-terrain-event-id]").forEach(target => {
+        const selectTerrainEvent = () => {
+          state.navigationSelectedTerrainEventId = target.dataset.navigationTerrainEventId || "";
+          state.navigationTerrainLens = "events";
+          rerenderNavigation(
+            `[data-navigation-terrain-event-id="${cssEscape(state.navigationSelectedTerrainEventId)}"]`,
+          );
+        };
+        target.addEventListener("click", selectTerrainEvent);
+        target.addEventListener("keydown", event => {
+          if (!["Enter", " ", "Spacebar"].includes(event.key)) return;
+          event.preventDefault();
+          selectTerrainEvent();
+        });
+      });
+      shell.querySelectorAll("[data-terrain-feature-id]").forEach(target => {
+        const selectFeature = () => {
+          state.navigationSelectedFeatureId = target.dataset.terrainFeatureId || "saddle-west";
+          rerenderNavigation(`[data-terrain-feature-id="${cssEscape(state.navigationSelectedFeatureId)}"]`);
+        };
+        target.addEventListener("click", selectFeature);
+        target.addEventListener("keydown", event => {
+          if (!["Enter", " ", "Spacebar"].includes(event.key)) return;
+          event.preventDefault();
+          selectFeature();
+        });
+      });
+    }
+
     function bindArchitectureControls() {
       const shell = document.querySelector('[data-route-architecture-intelligence="true"]');
       if (!shell) return;
@@ -13312,9 +15726,14 @@
         style.textContent = `
           html, body { width:100% !important; height:100% !important; min-height:100% !important; overflow:hidden !important; }
           body { display:block !important; }
-          #readinessStrip, .toolbar, .route-pane, .detail-pane, #hoverHint { display:none !important; }
+          #readinessStrip, .toolbar-title, .toolbar .layer-menu, .toolbar .map-pan-controls, .toolbar .tool-disclosure, .route-pane, .detail-pane, #hoverHint { display:none !important; }
           .shell { display:grid !important; grid-template-columns:minmax(0,1fr) !important; grid-template-areas:"map" !important; grid-template-rows:minmax(0,1fr) !important; width:100vw !important; height:100vh !important; min-height:0 !important; overflow:hidden !important; }
           .map-pane { grid-area:map !important; display:block !important; position:relative !important; width:100vw !important; height:100vh !important; min-height:0 !important; border:0 !important; overflow:hidden !important; }
+          .toolbar { display:block !important; position:absolute !important; z-index:60 !important; top:8px !important; right:8px !important; width:auto !important; max-width:calc(100% - 16px) !important; padding:0 !important; border:0 !important; background:transparent !important; overflow:visible !important; pointer-events:none !important; }
+          .toolbar-grid { display:block !important; }
+          .control-group[aria-label="Map view controls"] { display:block !important; padding:0 !important; border:0 !important; background:transparent !important; box-shadow:none !important; }
+          .control-group[aria-label="Map view controls"] .control-group-header { display:none !important; }
+          .toolbar-row[aria-label="Map tools"] { display:flex !important; justify-content:flex-end !important; gap:4px !important; padding:5px !important; border:1px solid rgba(42,64,74,.7) !important; border-radius:8px !important; background:rgba(247,250,252,.94) !important; box-shadow:0 8px 24px rgba(0,0,0,.25) !important; pointer-events:auto !important; }
           .map-wrap { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; min-height:0 !important; }
           #map { display:block !important; width:100% !important; height:100% !important; min-height:100% !important; }
         `;
@@ -13414,7 +15833,9 @@
     function bindRenderedControls() {
       bindLivingControls();
       bindArchitectureControls();
+      bindNavigationTerrainControls();
       bindWeatherCwaControls();
+      bindDashboardMapViewports();
       const pretripMapFrame = document.getElementById("pretripMapFrame");
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
       const surfaceFrame = document.getElementById("surfaceFrame");
