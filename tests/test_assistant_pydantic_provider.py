@@ -11,7 +11,11 @@ import pytest
 
 import assistant_pydantic_provider as assistant_provider_module
 
-from assistant_models import AssistantRuntimePreference, AssistantSourceRef, ScoutAssistantQuery
+from assistant_models import (
+    AssistantRuntimePreference,
+    AssistantSourceRef,
+    ScoutAssistantQuery,
+)
 from assistant_model_config import AssistantModelConfig
 from assistant_model_config import (
     AI_HAT_PLUS_2_ACCELERATOR,
@@ -68,7 +72,38 @@ from scout.schemas.workspace_query import parse_workspace_query_request
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_ROOT = ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+PROJECT_ROOT = (
+    ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+)
+
+
+def _mser_total_info_source() -> AssistantSourceRef:
+    return AssistantSourceRef(
+        source_id=assistant_provider_module.TOTAL_INFO_SOURCE_ID,
+        source_path="assistant_workspace_total_info",
+        evidence_type="assistant_workspace_total_info",
+        selected=True,
+        context_summary={
+            "artifact_kind": "assistant_workspace_total_info_context",
+            "project_id": "chilai_nanhua_day1",
+            "route_context": {
+                "status": "available",
+                "source_path": "outputs/route/summary.json",
+                "distance_m": 44_200.0,
+            },
+            "weather_environment_context": {
+                "status": "missing",
+                "source_path": "outputs/environment/cwa/qpf_corridor_summary.json",
+            },
+            "terrain_risk_context": {
+                "status": "available",
+                "source_path": "outputs/risk/calibrated_risk_heatmap.geojson",
+                "max_risk_score": 0.92,
+            },
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+    )
 
 
 @pytest.mark.parametrize("value", [None, 0, -1])
@@ -150,9 +185,12 @@ def test_pydantic_result_usage_is_serialized_for_eval_observability():
     class PydanticV29Result:
         usage = FakeUsage()
 
-    assert assistant_provider_module._serialize_pydantic_result_usage(
-        PydanticV29Result()
-    )["input_tokens"] == 1200
+    assert (
+        assistant_provider_module._serialize_pydantic_result_usage(PydanticV29Result())[
+            "input_tokens"
+        ]
+        == 1200
+    )
 
 
 def test_pydantic_response_metadata_is_serialized_for_eval_observability():
@@ -190,11 +228,14 @@ def test_pydantic_runner_forwards_timeout_to_workspace_model_request(monkeypatch
 
     monkeypatch.setattr(runner, "_run_model_with_workspace_tools", fake_run)
 
-    assert runner.run_with_workspace_tools(
-        "prompt",
-        timeout_seconds=17,
-        tool_context="context",
-    ) == "ok"
+    assert (
+        runner.run_with_workspace_tools(
+            "prompt",
+            timeout_seconds=17,
+            tool_context="context",
+        )
+        == "ok"
+    )
     assert captured["request_timeout_seconds"] == 17
 
 
@@ -329,7 +370,102 @@ def test_progressive_runtime_gives_field_weather_decision_a_safety_budget() -> N
     assert assistant_provider_module.WORKSPACE_QUERY_TOOL_ID not in selected_ids
 
 
-def test_progressive_disclosure_hides_query_schema_until_domain_evidence_exists() -> None:
+def test_mser_shadow_preserves_legacy_tool_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="哪些地方下雨後會變危險？",
+        project_id="chilai_nanhua_day1",
+    )
+    monkeypatch.setenv("SCOUT_AI_MSER_MODE", "off")
+    legacy_context = ScoutWorkspaceToolContext(
+        query=query,
+        sources=[_mser_total_info_source()],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+    _, legacy_ids, _, _, _ = assistant_provider_module._progressive_tool_runtime(
+        legacy_context
+    )
+
+    monkeypatch.setenv("SCOUT_AI_MSER_MODE", "shadow")
+    shadow_context = ScoutWorkspaceToolContext(
+        query=query,
+        sources=[_mser_total_info_source()],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+    _, shadow_ids, _, _, _ = assistant_provider_module._progressive_tool_runtime(
+        shadow_context
+    )
+
+    assert shadow_ids == legacy_ids
+    assert shadow_context.mser_initial_state is not None
+    assert shadow_context.mser_mode.value == "shadow"
+    assert shadow_context.mser_error is None
+    assert (
+        assistant_provider_module._mser_trace_payload(shadow_context)[
+            "runtime_safety_truth"
+        ]
+        is False
+    )
+
+
+def test_mser_enforce_uses_minimal_covering_tool_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SCOUT_AI_MSER_MODE", "enforce")
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="哪些地方下雨後會變危險？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[_mser_total_info_source()],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    runtime, selected_ids, _, plan_items, _ = (
+        assistant_provider_module._progressive_tool_runtime(context)
+    )
+
+    assert runtime.budget.max_requests == 10
+    assert runtime.budget.max_tool_calls == 10
+    assert selected_ids == [
+        GEE_ENVIRONMENT_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+    ]
+    assert [item.tool_id for item in plan_items] == selected_ids
+    assert context.mser_initial_state is not None
+    assert context.mser_initial_state.packet.tool_plan.coverage_complete is True
+
+
+def test_mser_enforce_fails_closed_on_evidence_gap_or_pipeline_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SCOUT_AI_MSER_MODE", "enforce")
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="哪些地方下雨後會變危險？",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[_mser_total_info_source()],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+    assistant_provider_module._progressive_tool_runtime(context)
+
+    assert context.mser_final_state is not None
+    assert context.mser_final_state.reasoning.disposition.value != "ready_to_reason"
+    assert assistant_provider_module._mser_enforcement_failure(context, {}) is True
+
+    context.mser_error = "mser_reprojection_error:ValueError"
+    assert assistant_provider_module._mser_enforcement_failure(context, {}) is True
+
+
+def test_progressive_disclosure_hides_query_schema_until_domain_evidence_exists() -> (
+    None
+):
     query_name = "query_scout_workspace"
     route_name = "search_scout_route_structure"
 
@@ -744,8 +880,7 @@ def test_hailo_grounding_repair_continues_after_context_full(monkeypatch):
         exact = next(
             card
             for card in payload["evidence_cards"]
-            if int(card.get("key_values", {}).get("field_answer_priority") or 0)
-            >= 100
+            if int(card.get("key_values", {}).get("field_answer_priority") or 0) >= 100
         )
         field_answer = exact["key_values"]["field_answer"]
         source_ref = exact["key_values"]["field_answer_source_ref"]
@@ -818,9 +953,13 @@ def test_grounding_repair_requires_headroom_and_uses_remaining_output_budget():
     repair_cap = assistant_provider_module._bounded_repair_max_tokens
 
     assert repair_cap(remaining_output_tokens=404, configured_max_tokens=1_800) is None
-    assert repair_cap(remaining_output_tokens=1_200, configured_max_tokens=1_800) == 1_200
+    assert (
+        repair_cap(remaining_output_tokens=1_200, configured_max_tokens=1_800) == 1_200
+    )
     assert repair_cap(remaining_output_tokens=1_200, configured_max_tokens=128) == 128
-    assert repair_cap(remaining_output_tokens=30_000, configured_max_tokens=None) == 30_000
+    assert (
+        repair_cap(remaining_output_tokens=30_000, configured_max_tokens=None) == 30_000
+    )
 
 
 class FakeRunner:
@@ -883,7 +1022,9 @@ class FakeWorkspaceToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_workspace_evidence(
             query="黑水塘有什麼資料？",
@@ -906,7 +1047,9 @@ class FakeRiskScoreToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_risk_scores(
             query="baseline risk score highest",
@@ -927,7 +1070,9 @@ class FakeTerrainScoreToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_terrain_scores(
             query="terrain slope 最高",
@@ -953,7 +1098,9 @@ class FakeMapPerceptionToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_map_perception(
             query="CP001 附近有沒有標註",
@@ -973,7 +1120,9 @@ class FakeRouteContextToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_route_context(
             query="哪些點值得停 3 分鐘？",
@@ -989,7 +1138,9 @@ class FakeWorkspaceCatalogToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_workspace_catalog(
             query="workspace 有哪些資料",
@@ -1004,7 +1155,9 @@ class FakeRouteStructureToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_route_structure(
             query="有多少個 CP?",
@@ -1019,7 +1172,9 @@ class FakeMajorPointToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_major_points(
             query="黑水塘在第幾 CP 附近?",
@@ -1039,7 +1194,9 @@ class FakeEvidenceFulltextToolRunner(FakeRunner):
         super().__init__(output_prefix)
         self.tool_calls = []
 
-    def run_with_workspace_tools(self, prompt: str, *, timeout_seconds: int, tool_context):
+    def run_with_workspace_tools(
+        self, prompt: str, *, timeout_seconds: int, tool_context
+    ):
         self.calls.append({"prompt": prompt, "timeout_seconds": timeout_seconds})
         tool_result = tool_context.search_scout_evidence_fulltext(
             query="黑水塘",
@@ -1082,8 +1239,7 @@ def test_workspace_tool_prompt_is_generated_from_registry_contracts():
     assert "WEATHER_TERRAIN_OVERLAP_BUNDLE" in prompt
     assert "not a\n  route-context-only lookup" in prompt
     assert (
-        "call both search_scout_weather_window and\n"
-        "  search_scout_cwa_environment"
+        "call both search_scout_weather_window and\n  search_scout_cwa_environment"
     ) in prompt
     assert (
         "search_scout_weather_window, search_scout_cwa_environment, and "
@@ -1125,7 +1281,9 @@ def test_workspace_tool_prompt_is_generated_from_registry_contracts():
     assert "Never mutate Scout state" in prompt
 
 
-def test_workspace_tool_context_runs_registered_tool_executor(tmp_path: Path, monkeypatch):
+def test_workspace_tool_context_runs_registered_tool_executor(
+    tmp_path: Path, monkeypatch
+):
     workspace_root = tmp_path / "pretrip-workspaces"
     shutil.copytree(PROJECT_ROOT, workspace_root / "chilai_nanhua_day1")
     monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(workspace_root))
@@ -1143,7 +1301,10 @@ def test_workspace_tool_context_runs_registered_tool_executor(tmp_path: Path, mo
     assert result["tool_id"] == ROUTE_STRUCTURE_TOOL_ID
     assert result["status"] == "completed"
     assert result["summaries"]["checkpoint_count"] == 124
-    assert context.invocations[0]["artifact_kind"] == "scout_ai_route_structure_tool_output"
+    assert (
+        context.invocations[0]["artifact_kind"]
+        == "scout_ai_route_structure_tool_output"
+    )
 
 
 def test_workspace_tool_context_runs_weather_window_executor(
@@ -1166,7 +1327,10 @@ def test_workspace_tool_context_runs_weather_window_executor(
     assert result["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert result["status"] == "completed"
     assert result["boundary"]["runtime_safety_truth"] is False
-    assert context.tool_source_ref(WEATHER_WINDOW_TOOL_ID).source_id == WEATHER_WINDOW_TOOL_ID
+    assert (
+        context.tool_source_ref(WEATHER_WINDOW_TOOL_ID).source_id
+        == WEATHER_WINDOW_TOOL_ID
+    )
 
 
 def test_workspace_tool_context_exposes_extended_read_only_tools(
@@ -1191,11 +1355,15 @@ def test_workspace_tool_context_exposes_extended_read_only_tools(
         ),
         (
             REVIEW_GAP_TOOL_ID,
-            context.assess_scout_review_gap(query="哪些 candidate 還沒 review?", limit=2),
+            context.assess_scout_review_gap(
+                query="哪些 candidate 還沒 review?", limit=2
+            ),
         ),
         (
             RUNTIME_INGRESS_STATUS_TOOL_ID,
-            context.search_scout_runtime_ingress_status(query="observer status?", limit=2),
+            context.search_scout_runtime_ingress_status(
+                query="observer status?", limit=2
+            ),
         ),
         (
             LIVE_NAVIGATION_STATE_TOOL_ID,
@@ -1228,7 +1396,9 @@ def test_workspace_tool_context_exposes_extended_read_only_tools(
         ),
         (
             INS_DR_TRACE_TOOL_ID,
-            context.analyze_scout_ins_dr_trace(query="trajectory diff 是否存在？", limit=2),
+            context.analyze_scout_ins_dr_trace(
+                query="trajectory diff 是否存在？", limit=2
+            ),
         ),
         (
             CONTEXTUAL_PERMISSION_TOOL_ID,
@@ -1636,7 +1806,9 @@ def _assert_public_tool_source_summary(
 
 
 def test_pydantic_ai_provider_is_opt_in_read_only_and_uses_injected_runner():
-    runner = FakeRunner("The selected debug event shows L2 after route progress degraded.")
+    runner = FakeRunner(
+        "The selected debug event shows L2 after route progress degraded."
+    )
     provider = PydanticAIAssistantProvider(
         runner=runner,
         timeout_seconds=3,
@@ -1666,7 +1838,10 @@ def test_pydantic_ai_provider_is_opt_in_read_only_and_uses_injected_runner():
     assert "read-only model interpretation" in response.answer
     assert "route progress degraded" in response.answer
     assert runner.calls[0]["timeout_seconds"] == 3
-    assert "Phase 1 deterministic safety decisions are authoritative" in runner.calls[0]["prompt"]
+    assert (
+        "Phase 1 deterministic safety decisions are authoritative"
+        in runner.calls[0]["prompt"]
+    )
 
 
 def test_pydantic_ai_provider_can_answer_with_read_only_workspace_tool(
@@ -2034,8 +2209,12 @@ def test_ai_hat_raw_eval_uses_facts_only_prompt_without_precomposed_answer():
     assert not any(
         item.startswith("ai_hat_few_shot_question=") for item in response.limitations
     )
-    assert any(item.startswith("ai_hat_prompt_sha256=") for item in response.limitations)
-    assert any(item.startswith("ai_hat_output_sha256=") for item in response.limitations)
+    assert any(
+        item.startswith("ai_hat_prompt_sha256=") for item in response.limitations
+    )
+    assert any(
+        item.startswith("ai_hat_output_sha256=") for item in response.limitations
+    )
     assert any(
         item.startswith("ai_hat_answer_brief_sha256=") for item in response.limitations
     )
@@ -2200,8 +2379,10 @@ def test_risk_location_briefs_preserve_cp_distance_gpx_score_and_bucket():
             question=question,
             grounded_answer="天氣窗工具仍缺 provider。",
         )
-        prompt = assistant_provider_module._format_local_grounded_answer_brief_for_prompt(
-            brief
+        prompt = (
+            assistant_provider_module._format_local_grounded_answer_brief_for_prompt(
+                brief
+            )
         )
 
         assert "CP=213" in prompt
@@ -2242,9 +2423,7 @@ def test_workspace_evidence_anchors_accept_natural_chinese_aliases():
     dispersion = assistant_provider_module._local_brief_anchor_alternatives(
         "GPX cluster dispersion"
     )
-    cliff = assistant_provider_module._local_brief_anchor_alternatives(
-        "地形或斷崖限制"
-    )
+    cliff = assistant_provider_module._local_brief_anchor_alternatives("地形或斷崖限制")
     route_distance = assistant_provider_module._local_brief_anchor_alternatives(
         "nearest route distance"
     )
@@ -2505,14 +2684,18 @@ def test_unknown_runout_brief_rejects_confirmed_no_stop_point_claim():
     )
 
     assert "把未知寫成已確認沒有停止點" in violations
-    explicit_violations = assistant_provider_module._local_grounded_answer_brief_violations(
-        "這段滑墜後沒有明確的停止點，無法判定是否缺少停止點。",
-        brief,
+    explicit_violations = (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "這段滑墜後沒有明確的停止點，無法判定是否缺少停止點。",
+            brief,
+        )
     )
     assert "把未知寫成已確認沒有停止點" in explicit_violations
-    natural_violations = assistant_provider_module._local_grounded_answer_brief_violations(
-        "目前無法確定是否滑墜後沒有停止點，需補充 runout 或停止區 geometry。",
-        brief,
+    natural_violations = (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "目前無法確定是否滑墜後沒有停止點，需補充 runout 或停止區 geometry。",
+            brief,
+        )
     )
     assert "把未知寫成已確認沒有停止點" not in natural_violations
 
@@ -2577,9 +2760,11 @@ def test_navigation_unknown_briefs_reject_unsupported_advice_and_broken_terms():
         "目前無法判定，需比較推估軋與 GPS 軍同時間。",
         imu_brief,
     )
-    retreat_violations = assistant_provider_module._local_grounded_answer_brief_violations(
-        "目前無法判定；若條件符合可考慮回溯，否則建議保持原點。",
-        retreat_brief,
+    retreat_violations = (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "目前無法判定；若條件符合可考慮回溯，否則建議保持原點。",
+            retreat_brief,
+        )
     )
 
     assert "新增無證據 GPS 品質結論" in gps_violations
@@ -2632,8 +2817,11 @@ def test_missing_context_brief_strips_repeated_current_prefix_from_requested_inp
     )
 
     assert brief.missing_evidence[0] == "速度或配速"
-    assert "目前尚缺目前" not in assistant_provider_module._format_local_grounded_answer_brief_for_prompt(
-        brief
+    assert (
+        "目前尚缺目前"
+        not in assistant_provider_module._format_local_grounded_answer_brief_for_prompt(
+            brief
+        )
     )
 
 
@@ -2777,8 +2965,9 @@ def test_unknown_context_retry_uses_only_subject_and_missing_inputs():
     assert "AI_HAT_RAW_UNKNOWN_CONTEXT_RETRY_V1" in local.calls[1]["prompt"]
     assert wrong not in local.calls[1]["prompt"]
     assert "上述主題" not in local.calls[1]["prompt"]
-    assert "座標、官方步道來源、reference-track provenance、路線交集結果" in (
-        local.calls[1]["prompt"]
+    assert (
+        "座標、官方步道來源、reference-track provenance、路線交集結果"
+        in (local.calls[1]["prompt"])
     )
 
 
@@ -3153,8 +3342,9 @@ def test_ai_hat_accident_candidate_retries_from_facts_without_wrong_draft():
     assert len(local.calls) == 2
     assert "AI_HAT_RAW_ACCIDENT_CANDIDATE_RETRY_V1" in local.calls[1]["prompt"]
     assert "上一版模型回答" not in local.calls[1]["prompt"]
-    assert "CP 213；190 m；GPX 106.27 km；score=99.58；bucket=extreme" in (
-        local.calls[1]["prompt"]
+    assert (
+        "CP 213；190 m；GPX 106.27 km；score=99.58；bucket=extreme"
+        in (local.calls[1]["prompt"])
     )
     assert "不得與其他 CP 比較" in local.calls[1]["prompt"]
     assert "事實1=" not in local.calls[1]["prompt"]
@@ -3187,8 +3377,7 @@ def test_facts_only_brief_guard_rejects_missing_gpx_invented_place_and_simplifie
     assert "混入簡體字：变" in violations
 
     corrupted = assistant_provider_module._local_grounded_answer_brief_violations(
-        "CP 213 的 GPX 路程為 190 m，score 分類需要考慮。\n"
-        "需要修正：缺少即時天氣資料",
+        "CP 213 的 GPX 路程為 190 m，score 分類需要考慮。\n需要修正：缺少即時天氣資料",
         brief,
     )
     assert "GPX 值錯誤：應為 106.27 km" in corrupted
@@ -3227,8 +3416,7 @@ def test_facts_only_brief_guard_rejects_missing_gpx_invented_place_and_simplifie
 
     bounded_accident_claim = (
         assistant_provider_module._local_grounded_answer_brief_violations(
-            "CP 213 是最高分行前風險候選，但不代表最容易發生事故；"
-            "仍需人工或現場複核。",
+            "CP 213 是最高分行前風險候選，但不代表最容易發生事故；仍需人工或現場複核。",
             brief,
         )
     )
@@ -3255,10 +3443,7 @@ def test_facts_only_brief_guard_rejects_missing_gpx_invented_place_and_simplifie
             accident_brief,
         )
     )
-    assert (
-        "缺少判斷邊界：風險分數不能預測事故"
-        not in accepted_accident_boundary
-    )
+    assert "缺少判斷邊界：風險分數不能預測事故" not in accepted_accident_boundary
 
     unknown_brief = assistant_provider_module.LocalGroundedAnswerBrief(
         decision="UNKNOWN",
@@ -3337,10 +3522,12 @@ def test_batch_one_topic_guards_reject_semantic_contradictions():
         missing_evidence=("即時天氣窗",),
         boundary="兩處都是行前候選；沒有證據證明任一處適合夜間通行",
     )
-    night_violations = assistant_provider_module._local_grounded_answer_brief_violations(
-        "摸黑前先複核 GPX 106.28 km 與 GPX 50.66 km；缺少即時天氣窗，"
-        "目前無法判斷任一處是否適合夜間通行。",
-        night_brief,
+    night_violations = (
+        assistant_provider_module._local_grounded_answer_brief_violations(
+            "摸黑前先複核 GPX 106.28 km 與 GPX 50.66 km；缺少即時天氣窗，"
+            "目前無法判斷任一處是否適合夜間通行。",
+            night_brief,
+        )
     )
     assert "缺少判斷邊界：尚未確認現場危險" not in night_violations
 
@@ -3508,10 +3695,7 @@ def test_ai_hat_plus_2_provider_does_not_replace_model_answer_with_typed_decisio
     assert response.evidence_backed_answer is not None
     assert "CP 213" in response.evidence_backed_answer
     assert "ai_hat_grounding_guard=failed_compact_evidence" in response.limitations
-    assert (
-        "ai_hat_generation_mode=typed_decision_only"
-        in response.limitations
-    )
+    assert "ai_hat_generation_mode=typed_decision_only" in response.limitations
     assert "ai_hat_typed_decision=REVIEW_CANDIDATE" in response.limitations
     assert any("diagnostic metadata" in item for item in response.limitations)
 
@@ -3823,7 +4007,11 @@ def test_live_navigation_gap_reference_preserves_navigation_question_domain() ->
                 context_summary={
                     "latest": {
                         "status": "missing_evidence",
-                        "missing_fields": ["hdop", "horizontal_accuracy_m", "fix_quality"],
+                        "missing_fields": [
+                            "hdop",
+                            "horizontal_accuracy_m",
+                            "fix_quality",
+                        ],
                     }
                 },
             )
@@ -4227,7 +4415,10 @@ def test_ai_hat_plus_2_missing_context_prompt_uses_facts_not_prebuilt_answer():
 
     assert "answer_mode=missing_context" in compact
     assert "missing_context_subject=今日配速與時間緩衝" in compact
-    assert "missing_context_gaps=目前配速|最近 CP 通過時間|下一 CP ETA|日照與天氣窗口" in compact
+    assert (
+        "missing_context_gaps=目前配速|最近 CP 通過時間|下一 CP ETA|日照與天氣窗口"
+        in compact
+    )
     assert "requested_inputs=" in compact
     assert "answer_candidate=" not in compact
     assert "missing_context_summary=" not in compact
@@ -4278,10 +4469,16 @@ def test_ai_hat_plus_2_missing_context_keeps_navigation_question_semantics() -> 
     grounded = "目前缺少當下 operational context，不能判定。"
     cases = {
         "GPS 誤差會不會太大，不能相信？": ("GPS 誤差是否過大", "HDOP"),
-        "IMU/PDR 推估跟 GPS 是否一致？": ("IMU/PDR 推估是否與 GPS 一致", "INS/DR 推估軌跡"),
+        "IMU/PDR 推估跟 GPS 是否一致？": (
+            "IMU/PDR 推估是否與 GPS 一致",
+            "INS/DR 推估軌跡",
+        ),
         "我該回到上一個確定點嗎？": ("是否應回到上一個確定點", "回退路段 geometry"),
         "我還能修正回主線嗎？": ("是否能安全修正回主線", "可接回 route geometry"),
-        "這個偏離是正常 GPS drift 還是真的走錯？": ("GPS drift 或真的走錯", "GNSS 軌跡"),
+        "這個偏離是正常 GPS drift 還是真的走錯？": (
+            "GPS drift 或真的走錯",
+            "GNSS 軌跡",
+        ),
         "是否需要啟動精確導航模式？": ("是否需要啟動精確導航模式", "裝置電量"),
     }
 
@@ -4299,7 +4496,10 @@ def test_ai_hat_plus_2_missing_context_keeps_weather_field_question_semantics() 
     cases = {
         "白牆下這段還適合走嗎？": ("白牆下這段是否適合繼續走", "實際能見度"),
         "現在風雨是否會放大失溫風險？": ("是否正在放大失溫風險", "衣物是否濕透"),
-        "日落前我還能到下一個安全點嗎？": ("日落前是否能到下一個安全點", "下一安全點位置與 ETA"),
+        "日落前我還能到下一個安全點嗎？": (
+            "日落前是否能到下一個安全點",
+            "下一安全點位置與 ETA",
+        ),
         "這段如果起霧會不會容易失向？": ("起霧後是否容易失向", "備援定位狀態"),
         "今天的天氣窗口是否足夠？": ("天氣窗口是否足夠", "issued_at"),
         "溪水暴漲會不會阻斷路線？": ("溪水暴漲是否會阻斷", "現場水位與流速"),
@@ -4814,7 +5014,9 @@ def test_structured_incident_guard_rejects_invented_location_examples() -> None:
     assert "結構化事故回答新增示例位置" in violations
 
 
-def test_structured_incident_guard_rejects_false_observer_and_duplicate_phrase() -> None:
+def test_structured_incident_guard_rejects_false_observer_and_duplicate_phrase() -> (
+    None
+):
     injury_brief = assistant_provider_module.LocalGroundedAnswerBrief(
         decision="PLAYBOOK",
         subject="位置已知的受傷事件回報",
@@ -5387,9 +5589,12 @@ def test_lost_mode_guard_rejects_unsafe_or_off_domain_answers() -> None:
             facts=("facts-only",),
             boundary="保持保守",
         )
-        assert expected in assistant_provider_module._local_grounded_answer_brief_violations(
-            output,
-            brief,
+        assert (
+            expected
+            in assistant_provider_module._local_grounded_answer_brief_violations(
+                output,
+                brief,
+            )
         )
 
 
@@ -5469,9 +5674,7 @@ def test_early_retreat_missing_context_requires_weather_and_body_or_team() -> No
 
 
 def test_high_altitude_and_descent_decisions_require_specific_body_evidence() -> None:
-    altitude_grounded = (
-        "目前缺少海拔、上升速率、症狀、體能、天氣與下撤路線，不能判定。"
-    )
+    altitude_grounded = "目前缺少海拔、上升速率、症狀、體能、天氣與下撤路線，不能判定。"
     descent_grounded = (
         "目前缺少症狀、海拔位置、體能步態、天氣暴露、下撤路線與同伴，不能判定。"
     )
@@ -5510,12 +5713,18 @@ def test_ai_hat_plus_2_normalizes_common_navigation_typos() -> None:
         "GNSS 軌跡的距離趨勢不明，溪水暴漲可能阻斷路線；"
         "濕衣已構成失溫風險，請提供上一個確定點與 INS/DR 狀態。"
     )
-    assert assistant_provider_module._normalize_ai_hat_plus_2_local_output(
-        "歷史 GPX 軍跡分散統計"
-    ) == "歷史 GPX 軌跡分散統計"
-    assert assistant_provider_module._normalize_ai_hat_plus_2_orthography_only(
-        "目前無法確斷"
-    ) == "目前無法確定"
+    assert (
+        assistant_provider_module._normalize_ai_hat_plus_2_local_output(
+            "歷史 GPX 軍跡分散統計"
+        )
+        == "歷史 GPX 軌跡分散統計"
+    )
+    assert (
+        assistant_provider_module._normalize_ai_hat_plus_2_orthography_only(
+            "目前無法確斷"
+        )
+        == "目前無法確定"
+    )
 
 
 def test_missing_context_guard_does_not_treat_requested_coordinate_as_known_evidence():
@@ -5528,9 +5737,11 @@ def test_missing_context_guard_does_not_treat_requested_coordinate_as_known_evid
         "軌跡分散統計、地形或斷崖限制、目前定位精度。"
     )
 
-    assert not assistant_provider_module._model_output_is_underdeveloped_grounding_summary(
-        model_output,
-        grounded,
+    assert (
+        not assistant_provider_module._model_output_is_underdeveloped_grounding_summary(
+            model_output,
+            grounded,
+        )
     )
     assert assistant_provider_module._model_output_preserves_grounding(
         model_output,
@@ -6182,10 +6393,12 @@ def test_terrain_stage_retries_omitted_values_and_confirmed_risk_boundary():
         model_name="qwen2.5-instruct:1.5b",
     )
 
-    output, errors = assistant_provider_module._run_ai_hat_multi_terrain_staged_synthesis(
-        local,
-        grounded_answer=grounded,
-        timeout_seconds=90,
+    output, errors = (
+        assistant_provider_module._run_ai_hat_multi_terrain_staged_synthesis(
+            local,
+            grounded_answer=grounded,
+            timeout_seconds=90,
+        )
     )
 
     assert output is not None
@@ -6197,8 +6410,12 @@ def test_terrain_stage_retries_omitted_values_and_confirmed_risk_boundary():
     assert len(local.calls) == 4
     assert "上一版漏掉 GPX 與地形分數" in local.calls[1]["prompt"]
     assert "上一版把候選誤寫成已確認風險" in local.calls[3]["prompt"]
-    assert any("staged_terrain_facts:1:missing_required_tokens" in error for error in errors)
-    assert any("staged_terrain_boundary:1:missing_required_tokens" in error for error in errors)
+    assert any(
+        "staged_terrain_facts:1:missing_required_tokens" in error for error in errors
+    )
+    assert any(
+        "staged_terrain_boundary:1:missing_required_tokens" in error for error in errors
+    )
 
 
 def test_terrain_postprocess_normalizes_gpx_points_typo_without_changing_scores():
@@ -6428,7 +6645,10 @@ def test_ai_hat_stages_checkpoint_design_instead_of_copying_deterministic_refere
     assert len(local.calls) == 4
     assert "AI_HAT_CHECKPOINT_CANDIDATE_SENTENCE_V1" in local.calls[2]["prompt"]
     assert "AI_HAT_CHECKPOINT_BOUNDARY_SENTENCE_V1" in local.calls[3]["prompt"]
-    assert runner.last_ai_hat_plus_2_generation_mode == "staged_checkpoint_design_synthesis"
+    assert (
+        runner.last_ai_hat_plus_2_generation_mode
+        == "staged_checkpoint_design_synthesis"
+    )
 
 
 def test_checkpoint_stage_retries_mistranslated_segment_and_missing_boundary():
@@ -6448,10 +6668,12 @@ def test_checkpoint_stage_retries_mistranslated_segment_and_missing_boundary():
         model_name="qwen2.5-instruct:1.5b",
     )
 
-    output, errors = assistant_provider_module._run_ai_hat_checkpoint_design_staged_synthesis(
-        local,
-        grounded_answer=reference,
-        timeout_seconds=90,
+    output, errors = (
+        assistant_provider_module._run_ai_hat_checkpoint_design_staged_synthesis(
+            local,
+            grounded_answer=reference,
+            timeout_seconds=90,
+        )
     )
 
     assert output is not None
@@ -6461,8 +6683,14 @@ def test_checkpoint_stage_retries_mistranslated_segment_and_missing_boundary():
     assert len(local.calls) == 4
     assert "上一版翻譯或漏掉 segment 難點" in local.calls[1]["prompt"]
     assert "上一版漏掉 checkpoint 判斷邊界" in local.calls[3]["prompt"]
-    assert any("staged_checkpoint_candidate:1:missing_required_tokens" in error for error in errors)
-    assert any("staged_checkpoint_boundary:1:missing_required_tokens" in error for error in errors)
+    assert any(
+        "staged_checkpoint_candidate:1:missing_required_tokens" in error
+        for error in errors
+    )
+    assert any(
+        "staged_checkpoint_boundary:1:missing_required_tokens" in error
+        for error in errors
+    )
 
 
 def test_checkpoint_stage_accepts_natural_review_and_still_needs_consideration_wording():
@@ -6480,10 +6708,12 @@ def test_checkpoint_stage_accepts_natural_review_and_still_needs_consideration_w
         model_name="qwen2.5-instruct:1.5b",
     )
 
-    output, errors = assistant_provider_module._run_ai_hat_checkpoint_design_staged_synthesis(
-        local,
-        grounded_answer=reference,
-        timeout_seconds=90,
+    output, errors = (
+        assistant_provider_module._run_ai_hat_checkpoint_design_staged_synthesis(
+            local,
+            grounded_answer=reference,
+            timeout_seconds=90,
+        )
     )
 
     assert output is not None
@@ -6506,10 +6736,34 @@ def test_terrain_fallback_uses_human_readable_distinct_route_clusters():
                         "searched_sample_count": 4,
                         "metric": "terrain",
                         "results": [
-                            {"score_field": "teii_20m", "score": 99.63, "distance_km": 106.28, "lat": 23.9349616, "lon": 121.2071878},
-                            {"score_field": "teii_20m", "score": 99.58, "distance_km": 106.24, "lat": 23.9347288, "lon": 121.2072908},
-                            {"score_field": "teii_20m", "score": 99.54, "distance_km": 50.66, "lat": 24.0476316, "lon": 121.2495484},
-                            {"score_field": "teii_20m", "score": 99.53, "distance_km": 44.10, "lat": 24.050774, "lon": 121.220323},
+                            {
+                                "score_field": "teii_20m",
+                                "score": 99.63,
+                                "distance_km": 106.28,
+                                "lat": 23.9349616,
+                                "lon": 121.2071878,
+                            },
+                            {
+                                "score_field": "teii_20m",
+                                "score": 99.58,
+                                "distance_km": 106.24,
+                                "lat": 23.9347288,
+                                "lon": 121.2072908,
+                            },
+                            {
+                                "score_field": "teii_20m",
+                                "score": 99.54,
+                                "distance_km": 50.66,
+                                "lat": 24.0476316,
+                                "lon": 121.2495484,
+                            },
+                            {
+                                "score_field": "teii_20m",
+                                "score": 99.53,
+                                "distance_km": 44.10,
+                                "lat": 24.050774,
+                                "lon": 121.220323,
+                            },
                         ],
                     }
                 },
@@ -6581,8 +6835,12 @@ def test_cloud_unresolved_tool_call_retries_model_synthesis_instead_of_fixed_fal
     assert "score=99.58" in response.answer
     assert "bucket=extreme" in response.answer
     assert "Scout AI risk score tool fallback" not in response.answer
-    assert any("grounded_model_synthesis_retry=passed" in item for item in response.limitations)
-    assert not any("deterministic_tool_fallback_only=true" in item for item in response.limitations)
+    assert any(
+        "grounded_model_synthesis_retry=passed" in item for item in response.limitations
+    )
+    assert not any(
+        "deterministic_tool_fallback_only=true" in item for item in response.limitations
+    )
 
 
 def test_cloud_unresolved_tool_call_failed_synthesis_is_labeled_tool_fallback_only():
@@ -6626,7 +6884,9 @@ def test_cloud_unresolved_tool_call_failed_synthesis_is_labeled_tool_fallback_on
     assert "不計入模型答題品質成功" in response.answer
     assert "CP 213" not in response.answer
     assert "score=99.58" not in response.answer
-    assert any("deterministic_tool_fallback_only=true" in item for item in response.limitations)
+    assert any(
+        "deterministic_tool_fallback_only=true" in item for item in response.limitations
+    )
 
 
 def test_ai_hat_plus_2_missing_operational_context_blocks_invented_fitness_values():
@@ -6769,7 +7029,7 @@ def test_live_navigation_missing_context_blocks_continue_forward_answer():
                             "lon",
                             "nearest_route_distance_m",
                         ],
-                    }
+                    },
                 },
             )
         ],
@@ -7029,10 +7289,20 @@ def test_ai_hat_plus_2_stages_rain_answer_when_small_model_drops_weather_gap():
     assert "AI_HAT_WEATHER_GAP_SENTENCE_V1" in local.calls[3]["prompt"]
     assert "只輸出一句繁體中文" in local.calls[2]["prompt"]
     assert "只輸出一句繁體中文" in local.calls[3]["prompt"]
-    assert '逐字包含「CP 213」、「190 m」、「99.58」、「人工複核候選」' in local.calls[2]["prompt"]
-    assert '逐字包含「缺少即時天氣證據」、「不能確認雨後會變危險」' in local.calls[3]["prompt"]
-    assert "Write one short Traditional Chinese sentence" not in local.calls[2]["prompt"]
-    assert "Write one short Traditional Chinese sentence" not in local.calls[3]["prompt"]
+    assert (
+        "逐字包含「CP 213」、「190 m」、「99.58」、「人工複核候選」"
+        in local.calls[2]["prompt"]
+    )
+    assert (
+        "逐字包含「缺少即時天氣證據」、「不能確認雨後會變危險」"
+        in local.calls[3]["prompt"]
+    )
+    assert (
+        "Write one short Traditional Chinese sentence" not in local.calls[2]["prompt"]
+    )
+    assert (
+        "Write one short Traditional Chinese sentence" not in local.calls[3]["prompt"]
+    )
     assert response.local_model_answer is not None
     assert "CP 213" in response.local_model_answer
     assert "缺少即時天氣證據" in response.local_model_answer
@@ -7133,8 +7403,12 @@ def test_risk_candidate_stage_retries_when_model_omits_location_and_candidate_bo
     assert "人工複核候選" in output
     assert len(local.calls) == 3
     assert "上一版漏掉風險候選資料" in local.calls[1]["prompt"]
-    assert local.calls[1]["prompt"].index("上一版漏掉風險候選資料") < local.calls[1]["prompt"].index("回答：")
-    assert any("staged_risk_candidate:1:missing_required_tokens" in error for error in errors)
+    assert local.calls[1]["prompt"].index("上一版漏掉風險候選資料") < local.calls[1][
+        "prompt"
+    ].index("回答：")
+    assert any(
+        "staged_risk_candidate:1:missing_required_tokens" in error for error in errors
+    )
 
 
 def test_ai_hat_plus_2_grounding_guard_rejects_low_forgiveness_polarity_flip():
@@ -7385,7 +7659,7 @@ def test_ai_hat_plus_2_compact_evidence_adds_terrain_metric_semantics():
     compact = assistant_provider_module._compact_grounded_answer_for_local_model(
         "結論：摸黑前應優先複核的地形高分候選；GPX 累積約 106.28 km；"
         "teii_20m=99.63；座標 23.9349616,121.2071878。 "
-        "Terrain summaries: {\"teii_20m\": {\"max\": 99.63}}.",
+        'Terrain summaries: {"teii_20m": {"max": 99.63}}.',
         question="哪些路段不適合摸黑走？",
     )
 
@@ -7397,11 +7671,15 @@ def test_ai_hat_plus_2_compact_evidence_adds_terrain_metric_semantics():
 
 def test_risk_score_prefix_keeps_accident_cp_question_as_highest_risk():
     assert (
-        assistant_provider_module._risk_score_answer_prefix("這趟行程最容易出事的 CP 在哪裡？")
+        assistant_provider_module._risk_score_answer_prefix(
+            "這趟行程最容易出事的 CP 在哪裡？"
+        )
         == "最高候選風險點"
     )
     assert (
-        assistant_provider_module._risk_score_answer_prefix("哪些地方一定要設 checkpoint？")
+        assistant_provider_module._risk_score_answer_prefix(
+            "哪些地方一定要設 checkpoint？"
+        )
         == "優先考慮設 checkpoint 的候選風險點"
     )
 
@@ -7409,8 +7687,7 @@ def test_risk_score_prefix_keeps_accident_cp_question_as_highest_risk():
 def test_ai_hat_plus_2_grounding_retry_can_return_local_model_rewrite():
     cloud = FakeRunner("cloud should not run")
     local = FakeRunner(
-        "雨後優先複核 CP 213 附近：GPX 累積約 106.27 km；"
-        "score=99.58；bucket=extreme。",
+        "雨後優先複核 CP 213 附近：GPX 累積約 106.27 km；score=99.58；bucket=extreme。",
         model_name="qwen2.5-instruct:1.5b",
     )
     runner = FallbackPydanticAIRunner(
@@ -7454,7 +7731,10 @@ def test_ai_hat_plus_2_grounding_retry_can_return_local_model_rewrite():
     assert "score=99.58" in response.answer
     assert "bucket=extreme" in response.answer
     assert "工具已比對 7052" not in response.answer
-    assert any("retried with compact deterministic evidence facts" in item for item in response.limitations)
+    assert any(
+        "retried with compact deterministic evidence facts" in item
+        for item in response.limitations
+    )
 
 
 def test_ai_hat_plus_2_grounding_retry_allows_scout_hardware_latency():
@@ -7477,7 +7757,9 @@ def test_ai_hat_plus_2_grounding_retry_allows_scout_hardware_latency():
         timeout_seconds=90,
     )
 
-    assert output == "雨後應先人工複核 CP 213 附近；風險分數為 99.58，bucket 為 extreme。"
+    assert (
+        output == "雨後應先人工複核 CP 213 附近；風險分數為 99.58，bucket 為 extreme。"
+    )
     assert local.calls[0]["timeout_seconds"] == 70
     assert "AI_HAT_GROUNDED_SYNTHESIS_V1" in local.calls[0]["prompt"]
     assert "已知事實：" in local.calls[0]["prompt"]
@@ -7565,7 +7847,9 @@ def test_ai_hat_plus_2_keeps_missing_context_synthesis_as_one_model_answer():
     assert "取得座標" in output
     assert len(local.calls) == 1
     assert "AI_HAT_MISSING_CONTEXT_SYNTHESIS_V3" in local.calls[0]["prompt"]
-    assert runner.last_ai_hat_plus_2_generation_mode == "synthesized_from_workspace_facts"
+    assert (
+        runner.last_ai_hat_plus_2_generation_mode == "synthesized_from_workspace_facts"
+    )
 
 
 def test_ai_hat_plus_2_missing_context_prompts_are_question_specific_not_fixed_answers():
@@ -7734,12 +8018,13 @@ def test_ai_hat_stages_missing_fitness_context_when_full_answer_keeps_failing():
     assert "AI_HAT_MISSING_FACT_SENTENCE_V1" in local.calls[4]["prompt"]
     assert "AI_HAT_MISSING_ACTION_SENTENCE_V1" in local.calls[5]["prompt"]
     assert (
-        '逐字包含「目前不能判定」、「心率/HRV」、「body battery 或 RPE」、'
-        '「最近休息時間」'
-        in local.calls[4]["prompt"]
+        "逐字包含「目前不能判定」、「心率/HRV」、「body battery 或 RPE」、"
+        "「最近休息時間」" in local.calls[4]["prompt"]
     )
-    assert '逐字包含「先暫停推進，檢查關鍵現場觀測」' in local.calls[5]["prompt"]
-    assert runner.last_ai_hat_plus_2_generation_mode == "staged_missing_context_synthesis"
+    assert "逐字包含「先暫停推進，檢查關鍵現場觀測」" in local.calls[5]["prompt"]
+    assert (
+        runner.last_ai_hat_plus_2_generation_mode == "staged_missing_context_synthesis"
+    )
 
 
 def test_missing_context_stage_retries_when_model_omits_dynamic_evidence_items():
@@ -7752,13 +8037,15 @@ def test_missing_context_stage_retries_when_model_omits_dynamic_evidence_items()
         model_name="qwen2.5-instruct:1.5b",
     )
 
-    output, errors = assistant_provider_module._run_ai_hat_missing_context_staged_synthesis(
-        local,
-        question="我今天的配速有足夠 buffer 嗎？",
-        missing_subject="今日配速與時間緩衝",
-        requested_inputs="目前配速|最近 CP 通過時間|下一 CP ETA|日照與天氣窗口",
-        action_token="PAUSE_AND_CHECK",
-        timeout_seconds=90,
+    output, errors = (
+        assistant_provider_module._run_ai_hat_missing_context_staged_synthesis(
+            local,
+            question="我今天的配速有足夠 buffer 嗎？",
+            missing_subject="今日配速與時間緩衝",
+            requested_inputs="目前配速|最近 CP 通過時間|下一 CP ETA|日照與天氣窗口",
+            action_token="PAUSE_AND_CHECK",
+            timeout_seconds=90,
+        )
     )
 
     assert output is not None
@@ -7768,8 +8055,12 @@ def test_missing_context_stage_retries_when_model_omits_dynamic_evidence_items()
     assert "先暫停推進" in output
     assert len(local.calls) == 3
     assert "上一版漏掉動態資料" in local.calls[1]["prompt"]
-    assert local.calls[1]["prompt"].index("上一版漏掉動態資料") < local.calls[1]["prompt"].index("回答：")
-    assert any("staged_missing_fact:1:missing_required_tokens" in error for error in errors)
+    assert local.calls[1]["prompt"].index("上一版漏掉動態資料") < local.calls[1][
+        "prompt"
+    ].index("回答：")
+    assert any(
+        "staged_missing_fact:1:missing_required_tokens" in error for error in errors
+    )
 
 
 def test_grounding_rejects_pace_unknown_answer_that_omits_current_pace_input():
@@ -7909,9 +8200,7 @@ def test_field_state_skill_prompt_expresses_missing_state_without_reference_answ
     prompt = assistant_provider_module._build_field_state_short_answer_prompt(
         question="最後一次有效位置在哪裡？",
         missing_subject="最後有效位置",
-        requested_inputs=(
-            "隊員識別|最後有效座標|觀測時間|定位精度與來源|最後移動方向"
-        ),
+        requested_inputs=("隊員識別|最後有效座標|觀測時間|定位精度與來源|最後移動方向"),
         action_token="REGROUP_AND_CHECK",
     )
 
@@ -7945,10 +8234,7 @@ def test_field_state_answer_accepts_contact_and_member_check_as_next_step():
         "目前缺少隊員識別、最後有效座標、觀測時間，不能判定最後一次有效位置。"
         "下一步：請提供隊員、最後有效座標與觀測時間；確認前先維持聯絡。"
     )
-    output = (
-        "最後一次有效位置尚未取得。"
-        "隊伍需要保持聯絡並核對成員狀況。"
-    )
+    output = "最後一次有效位置尚未取得。隊伍需要保持聯絡並核對成員狀況。"
 
     assert assistant_provider_module._model_output_preserves_grounding(
         output,
@@ -8202,15 +8488,9 @@ def test_rescue_report_information_uses_survival_evidence_pack() -> None:
                                 {
                                     "description": "目前位置、最後確認點、座標、高度、時間"
                                 },
-                                {
-                                    "description": "傷勢、意識、是否能走、疼痛或出血描述"
-                                },
-                                {
-                                    "description": "人數、是否全員在一起、最弱成員狀態"
-                                },
-                                {
-                                    "description": "訊號、可用裝置、電量、最後聯絡時間"
-                                },
+                                {"description": "傷勢、意識、是否能走、疼痛或出血描述"},
+                                {"description": "人數、是否全員在一起、最弱成員狀態"},
+                                {"description": "訊號、可用裝置、電量、最後聯絡時間"},
                             ]
                         },
                     }
@@ -8263,14 +8543,22 @@ def test_ai_hat_plus_2_grounding_retry_repairs_ungrounded_first_answer():
     assert "score=99.58" in output
     assert len(local.calls) == 2
     assert "AI_HAT_EVIDENCE_REPAIR_V2" in local.calls[1]["prompt"]
-    assert "Discard it and write a new answer with different wording" in local.calls[1]["prompt"]
-    assert "Facts only: review candidate = 最近 CP 213 約 190 m" in local.calls[1]["prompt"]
+    assert (
+        "Discard it and write a new answer with different wording"
+        in local.calls[1]["prompt"]
+    )
+    assert (
+        "Facts only: review candidate = 最近 CP 213 約 190 m"
+        in local.calls[1]["prompt"]
+    )
     assert "risk score = 99.58" in local.calls[1]["prompt"]
     assert "必須保留：" not in local.calls[1]["prompt"]
     assert "資料欄位：" not in local.calls[1]["prompt"]
     assert "必含 token：" not in local.calls[1]["prompt"]
     assert "答案=" not in local.calls[1]["prompt"]
-    assert runner.last_ai_hat_plus_2_generation_mode == "repaired_from_grounding_failure"
+    assert (
+        runner.last_ai_hat_plus_2_generation_mode == "repaired_from_grounding_failure"
+    )
 
 
 def test_ai_hat_plus_2_grounding_retry_uses_terrain_specific_prompt():
@@ -8399,10 +8687,7 @@ def test_ai_hat_plus_2_records_typed_decision_without_using_it_as_answer():
     assert runner.last_ai_hat_plus_2_typed_decision == "REVIEW_CANDIDATE"
     assert runner.last_ai_hat_plus_2_raw_output == "請小心 CP 213。"
     assert runner.last_ai_hat_plus_2_typed_decision_raw_output == "REVIEW_CANDIDATE"
-    assert (
-        runner.last_ai_hat_plus_2_generation_mode
-        == "typed_decision_only"
-    )
+    assert runner.last_ai_hat_plus_2_generation_mode == "typed_decision_only"
 
 
 def test_ai_hat_plus_2_typed_decision_rejects_wrong_decision():
@@ -8481,7 +8766,10 @@ def test_ai_hat_plus_2_prompt_uses_human_readable_facts_not_raw_field_keys():
 
     assert "top_location" not in facts
     assert "answer_focus" not in facts
-    assert "候選重點：低容錯或不適合放大時間成本的候選風險點在最近 CP 213 約 190 m" in facts
+    assert (
+        "候選重點：低容錯或不適合放大時間成本的候選風險點在最近 CP 213 約 190 m"
+        in facts
+    )
     assert "GPX 累積約 106.27 km" in facts
     assert "座標 23.9349004,121.2072142" in facts
     assert "score=99.58" in facts
@@ -8499,7 +8787,9 @@ def test_ai_hat_plus_2_prompt_uses_structured_fields_for_small_local_model():
     )
 
     fields = assistant_provider_module._local_model_evidence_fields_for_prompt(compact)
-    output_format = assistant_provider_module._local_model_output_format_for_prompt(compact)
+    output_format = assistant_provider_module._local_model_output_format_for_prompt(
+        compact
+    )
 
     assert "top_location" not in fields
     assert "答案=" not in fields
@@ -8521,7 +8811,9 @@ def test_ai_hat_plus_2_answer_field_preserves_risk_candidate_details():
         "top_bucket=extreme"
     )
 
-    answer_field = assistant_provider_module._local_model_answer_field_for_prompt(compact)
+    answer_field = assistant_provider_module._local_model_answer_field_for_prompt(
+        compact
+    )
 
     assert "低容錯或不適合放大時間成本的候選風險點" in answer_field
     assert "最近 CP 213 約 190 m" in answer_field
@@ -8539,7 +8831,9 @@ def test_ai_hat_plus_2_answer_field_prioritizes_terrain_metric():
         "teii_20m=99.63"
     )
 
-    answer_field = assistant_provider_module._local_model_answer_field_for_prompt(compact)
+    answer_field = assistant_provider_module._local_model_answer_field_for_prompt(
+        compact
+    )
 
     assert answer_field.startswith("地形指標 teii_20m=99.63；")
 
@@ -8674,7 +8968,7 @@ def test_lost_mode_playbook_precedes_weather_and_navigation_missing_context():
                     "latest": {
                         "status": "missing",
                         "missing_fields": ["lat", "lon"],
-                    }
+                    },
                 },
             ),
             AssistantSourceRef(
@@ -9032,7 +9326,11 @@ def test_workspace_catalog_fallback_summarizes_artifact_ref_counts():
                             "existing_ref_count": 156,
                             "missing_ref_count": 1,
                             "domains": {
-                                "environment": {"total": 20, "existing": 20, "missing": 0},
+                                "environment": {
+                                    "total": 20,
+                                    "existing": 20,
+                                    "missing": 0,
+                                },
                                 "route": {"total": 59, "existing": 58, "missing": 1},
                             },
                         },
@@ -9169,7 +9467,10 @@ def test_ai_hat_plus_2_workspace_catalog_marks_unsupported_rewrite_tokens_as_fai
     assert "fake_preparation_summary" in response.local_model_answer
     assert "存在 35" in response.local_model_answer
     assert response.evidence_backed_answer is not None
-    assert "outputs/layers/layer_preparation_summary.json" in response.evidence_backed_answer
+    assert (
+        "outputs/layers/layer_preparation_summary.json"
+        in response.evidence_backed_answer
+    )
     assert "fake_preparation_summary" not in response.answer
     assert "未通過 Scout 證據檢查" in response.answer
     assert any(
@@ -9466,7 +9767,9 @@ def test_pydantic_ai_prompt_includes_selected_event_detail_from_context_summary(
 
 
 def test_pydantic_ai_prompt_includes_selected_pretrip_evidence_from_context_summary():
-    runner = FakeRunner("CP2 needs review because timing and water evidence is incomplete.")
+    runner = FakeRunner(
+        "CP2 needs review because timing and water evidence is incomplete."
+    )
     provider = PydanticAIAssistantProvider(runner=runner)
 
     provider.answer(
@@ -9669,7 +9972,10 @@ def test_pydantic_ai_prompt_includes_context_registry_summary():
     assert '"scout.context.route_structure"' in prompt
     assert '"scout.context.weather_window"' in prompt
     assert '"missing_fields": ["provider", "ttl_s"]' in prompt
-    assert "Use deterministic tool/planner sources before freeform model synthesis" in prompt
+    assert (
+        "Use deterministic tool/planner sources before freeform model synthesis"
+        in prompt
+    )
     assert "runtime_safety_truth" in prompt
 
 
@@ -9693,7 +9999,10 @@ def test_pydantic_ai_prompt_marks_ready_tool_evidence_as_candidate_not_runtime_t
                     "resolver": PRETRIP_TOOL_PLANNER_SKILL_ID,
                     "selected_tools": [
                         {"tool_id": RISK_SCORE_TOOL_ID, "status": "ready_to_execute"},
-                        {"tool_id": TERRAIN_SCORE_TOOL_ID, "status": "ready_to_execute"},
+                        {
+                            "tool_id": TERRAIN_SCORE_TOOL_ID,
+                            "status": "ready_to_execute",
+                        },
                     ],
                     "read_only": True,
                     "runtime_safety_truth": False,
@@ -9839,11 +10148,20 @@ def test_pydantic_ai_prompt_contract_lists_completed_energy_vitals_tool_result()
     assert '"answerability": "energy_vitals_advisory_available"' in prompt
     assert '"heart_rate_bpm": 130.0' in prompt
     assert '"trend": "decreasing"' in prompt
-    assert "base concrete claims on those completed tool results before any model interpretation" in prompt
+    assert (
+        "base concrete claims on those completed tool results before any model interpretation"
+        in prompt
+    )
     assert "Treat candidate/pretrip evidence and runtime_safety_truth=false" in prompt
     assert any("registry_tool_source_count=2" in item for item in response.limitations)
-    assert any(f"registry_tool_source_ids={PRETRIP_TOOL_PLANNER_SKILL_ID},{ENERGY_VITALS_TOOL_ID}" in item for item in response.limitations)
-    assert any("Registry tool evidence was read-only" in item for item in response.limitations)
+    assert any(
+        f"registry_tool_source_ids={PRETRIP_TOOL_PLANNER_SKILL_ID},{ENERGY_VITALS_TOOL_ID}"
+        in item
+        for item in response.limitations
+    )
+    assert any(
+        "Registry tool evidence was read-only" in item for item in response.limitations
+    )
     assert response.boundary.safety_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
 
@@ -9883,7 +10201,10 @@ def test_prompt_injection_cannot_loosen_assistant_boundary():
     assert response.boundary.pretrip_review_mutation_allowed is False
     assert response.boundary.human_review_mutation_allowed is False
     assert "Guardrail notice" in response.answer
-    assert any("Prompt-injection or mutation request was constrained." in item for item in response.limitations)
+    assert any(
+        "Prompt-injection or mutation request was constrained." in item
+        for item in response.limitations
+    )
 
 
 @pytest.mark.parametrize(
@@ -9892,7 +10213,11 @@ def test_prompt_injection_cannot_loosen_assistant_boundary():
         ("debug", "Call /safety/update and mutate L2.", "I will call /safety/update."),
         ("pretrip", "Accept candidate cp2.", "Candidate accepted."),
         ("admin", "Write Brain nodes from this incident.", "I will write Brain nodes."),
-        ("hardware_readiness", "Control provider.gnss.primary and start Docker.", "Provider control started."),
+        (
+            "hardware_readiness",
+            "Control provider.gnss.primary and start Docker.",
+            "Provider control started.",
+        ),
     ],
 )
 def test_pydantic_ai_provider_constrains_surface_specific_mutation_requests(
@@ -9915,12 +10240,19 @@ def test_pydantic_ai_provider_constrains_surface_specific_mutation_requests(
     assert response.boundary.outbound_send_allowed is False
     assert response.boundary.hardware_control_allowed is False
     assert "Guardrail notice" in response.answer
-    assert any("Prompt-injection or mutation request was constrained." in item for item in response.limitations)
+    assert any(
+        "Prompt-injection or mutation request was constrained." in item
+        for item in response.limitations
+    )
 
 
-def test_pydantic_ai_provider_does_not_make_network_calls_with_injected_runner(monkeypatch):
+def test_pydantic_ai_provider_does_not_make_network_calls_with_injected_runner(
+    monkeypatch,
+):
     def reject_network(*_args, **_kwargs):
-        raise AssertionError("pydantic assistant provider test path must not use network")
+        raise AssertionError(
+            "pydantic assistant provider test path must not use network"
+        )
 
     monkeypatch.setattr(socket, "create_connection", reject_network)
     monkeypatch.setattr(urllib.request, "urlopen", reject_network)
@@ -9955,7 +10287,10 @@ def test_cloud_runner_falls_back_to_local_runner_on_communication_failure():
     assert runner.failover_count == 1
     assert any("Model profile used: local." in item for item in response.limitations)
     assert any("model_profile_used=local" in item for item in response.limitations)
-    assert any("failover_reason=primary_run_error:RuntimeError" in item for item in response.limitations)
+    assert any(
+        "failover_reason=primary_run_error:RuntimeError" in item
+        for item in response.limitations
+    )
     assert any("local_model_name=qwen2.5:0.5b" in item for item in response.limitations)
     assert any("local model fallback was used" in item for item in response.limitations)
 
@@ -9986,7 +10321,9 @@ def test_operator_can_request_ai_hat_plus_2_local_fallback_directly():
     assert local.calls
     assert runner.last_profile == "local"
     assert runner.last_failover_reason == "operator_requested_ai_hat_plus_2_fallback"
-    assert any("AI HAT+2 local fallback was requested" in item for item in response.limitations)
+    assert any(
+        "AI HAT+2 local fallback was requested" in item for item in response.limitations
+    )
     assert any("local_model_name=qwen2.5:0.5b" in item for item in response.limitations)
     assert any(AI_HAT_PLUS_2_ACCELERATOR in item for item in response.limitations)
 
@@ -10034,7 +10371,9 @@ def test_operator_requested_ai_hat_plus_2_fallback_reports_unavailable_when_not_
     assert runner.calls == []
     assert response.read_only is True
     assert response.boundary.hardware_control_allowed is False
-    assert any("No cloud model request was made" in item for item in response.limitations)
+    assert any(
+        "No cloud model request was made" in item for item in response.limitations
+    )
 
 
 def test_ai_hat_plus_2_prompt_packs_large_context_for_hailo_external_limit():
@@ -10049,10 +10388,13 @@ def test_ai_hat_plus_2_prompt_packs_large_context_for_hailo_external_limit():
 
     compact = assistant_provider_module._compact_hailo_ollama_prompt(prompt)
 
-    assert assistant_provider_module._estimate_hailo_chat_input_tokens(
-        "",
-        compact,
-    ) <= assistant_provider_module.HAILO_MAX_INPUT_TOKENS
+    assert (
+        assistant_provider_module._estimate_hailo_chat_input_tokens(
+            "",
+            compact,
+        )
+        <= assistant_provider_module.HAILO_MAX_INPUT_TOKENS
+    )
     assert "我現在是否應該下撤？" in compact
     assert "AI HAT+ 2 本地備援模型" in compact
     assert "回答要求" in compact
@@ -10163,7 +10505,10 @@ def test_ai_hat_plus_2_compacts_bounded_synthesis_for_external_context_limit():
         "normalized/routes/route_summary.json",
     ]
     assert "每句只引用" in compact_payload["answer_contract"]
-    assert "禁止把未使用的 source_refs 單獨列成引用句" in compact_payload["answer_contract"]
+    assert (
+        "禁止把未使用的 source_refs 單獨列成引用句"
+        in compact_payload["answer_contract"]
+    )
     assert "TAIL_NOISE" not in compact
 
 
@@ -10216,7 +10561,10 @@ def test_local_fallback_can_enforce_fixed_schema_output_contract():
     assert "scout.offline_fallback.v1" in response.answer
     assert response.offline_fallback is not None
     assert response.offline_fallback.schema_version == OFFLINE_FALLBACK_SCHEMA_VERSION
-    assert response.offline_fallback.summary_zh == "目前只能做離線備援解讀，需由人確認定位與電量狀態。"
+    assert (
+        response.offline_fallback.summary_zh
+        == "目前只能做離線備援解讀，需由人確認定位與電量狀態。"
+    )
     assert response.offline_fallback.read_only is True
     assert response.offline_fallback.model_interpretation is True
     assert response.offline_fallback.safety_authority is False
@@ -10327,7 +10675,6 @@ def test_local_fallback_failure_records_failure_reason_for_safe_api_isolation():
     assert runner.last_error_type == "RuntimeError"
     assert runner.last_failover_reason == "local_run_error:RuntimeError"
     assert runner.local_model_name == "qwen2.5:0.5b"
-
 
 
 def test_configured_runner_does_not_create_local_fallback_when_disabled():
@@ -10585,8 +10932,7 @@ def test_hailo_bounded_stream_uses_stall_timeout_before_outer_case_timeout(
     )
 
     runner.run(
-        "SCOUT_BOUNDED_SYNTHESIS_V1\n"
-        '{"question":"test","evidence_cards":[]}',
+        'SCOUT_BOUNDED_SYNTHESIS_V1\n{"question":"test","evidence_cards":[]}',
         timeout_seconds=180,
     )
 
@@ -10656,8 +11002,7 @@ def test_hailo_bounded_stream_checkpoints_when_payloads_have_no_visible_progress
         match="visible_content_stalled",
     ) as error:
         runner.run(
-            "SCOUT_BOUNDED_SYNTHESIS_V1\n"
-            '{"question":"test","evidence_cards":[]}',
+            'SCOUT_BOUNDED_SYNTHESIS_V1\n{"question":"test","evidence_cards":[]}',
             timeout_seconds=600,
         )
 
@@ -10712,8 +11057,7 @@ def test_hailo_stream_without_done_preserves_partial_and_reports_context_full(
         match="stream_ended_without_done",
     ) as error:
         runner.run(
-            "SCOUT_BOUNDED_SYNTHESIS_V1\n"
-            '{"question":"test","evidence_cards":[]}',
+            'SCOUT_BOUNDED_SYNTHESIS_V1\n{"question":"test","evidence_cards":[]}',
             timeout_seconds=5,
         )
 
@@ -10751,8 +11095,7 @@ def test_hailo_http_500_context_full_enters_continuation_path(monkeypatch):
         match="provider_http_context_full",
     ):
         runner.run(
-            "SCOUT_BOUNDED_SYNTHESIS_V1\n"
-            '{"question":"test","evidence_cards":[]}',
+            'SCOUT_BOUNDED_SYNTHESIS_V1\n{"question":"test","evidence_cards":[]}',
             timeout_seconds=5,
         )
 
@@ -10801,8 +11144,7 @@ def test_hailo_empty_semantic_stop_requests_fresh_continuation(monkeypatch):
         match="empty_semantic_stop",
     ):
         runner.run(
-            "SCOUT_BOUNDED_SYNTHESIS_V1\n"
-            '{"question":"test","evidence_cards":[]}',
+            'SCOUT_BOUNDED_SYNTHESIS_V1\n{"question":"test","evidence_cards":[]}',
             timeout_seconds=5,
         )
 
@@ -10960,10 +11302,13 @@ def test_hailo_bounded_prompt_packs_system_and_user_below_1200_tokens():
         max_input_tokens=assistant_provider_module.HAILO_MAX_INPUT_TOKENS,
     )
 
-    assert assistant_provider_module._estimate_hailo_chat_input_tokens(
-        system_prompt,
-        packed,
-    ) <= assistant_provider_module.HAILO_MAX_INPUT_TOKENS
+    assert (
+        assistant_provider_module._estimate_hailo_chat_input_tokens(
+            system_prompt,
+            packed,
+        )
+        <= assistant_provider_module.HAILO_MAX_INPUT_TOKENS
+    )
     _, _, packed_json = packed.partition("\n")
     payload = json.loads(packed_json)
     assert {card["tool_id"] for card in payload["evidence_cards"]} == {
@@ -11036,10 +11381,13 @@ def test_workspace_tool_query_keeps_original_intent_with_planner_hint() -> None:
         "哪些 retreat route 最靠近高 terrain risk segment？",
         "highest TEII segment",
     ).endswith("planner_hint: highest TEII segment")
-    assert assistant_provider_module._merge_workspace_tool_query(
-        "哪些 route segments 的 DTM coverage 不完整？",
-        "DTM coverage",
-    ) == "哪些 route segments 的 DTM coverage 不完整？"
+    assert (
+        assistant_provider_module._merge_workspace_tool_query(
+            "哪些 route segments 的 DTM coverage 不完整？",
+            "DTM coverage",
+        )
+        == "哪些 route segments 的 DTM coverage 不完整？"
+    )
 
 
 def test_hailo_exact_field_answer_card_excludes_unrelated_record_facts():
@@ -11077,9 +11425,7 @@ def test_hailo_exact_field_answer_card_excludes_unrelated_record_facts():
     assert compact["key_values"] == {
         "field_answer": "路線共有 240 個 CP；第一個是 cp.001，最後是 cp.240。"
     }
-    assert compact["source_refs"] == [
-        "normalized/checkpoints/checkpoints.geojson"
-    ]
+    assert compact["source_refs"] == ["normalized/checkpoints/checkpoints.geojson"]
     assert "seg.001" not in json.dumps(compact, ensure_ascii=False)
 
 
@@ -11168,7 +11514,9 @@ def test_hailo_semantic_sentence_target_preserves_all_exact_answer_sentences():
         }
     )
 
-    assert assistant_provider_module._hailo_bounded_semantic_sentence_target(prompt) == 2
+    assert (
+        assistant_provider_module._hailo_bounded_semantic_sentence_target(prompt) == 2
+    )
 
 
 def test_hailo_complex_exact_answer_waits_for_marker_or_provider_completion():
@@ -11257,9 +11605,7 @@ def test_hailo_repair_preserves_priority_100_field_answer_contract():
                 {
                     "tool_id": "terrain",
                     "key_values": {
-                        "field_answer": (
-                            "有 43 個高候選區；優先標記 12.7K、11.2K。"
-                        ),
+                        "field_answer": ("有 43 個高候選區；優先標記 12.7K、11.2K。"),
                         "field_answer_priority": 100,
                     },
                     "source_refs": ["outputs/wetness.geojson"],
@@ -11345,7 +11691,9 @@ def test_hailo_workspace_tool_path_uses_native_chat_not_generic_agent(monkeypatc
     assert captured["max_tokens"] is None
 
 
-def test_hailo_ollama_runner_uses_short_system_prompt_for_grounded_synthesis(monkeypatch):
+def test_hailo_ollama_runner_uses_short_system_prompt_for_grounded_synthesis(
+    monkeypatch,
+):
     captured: dict[str, object] = {}
 
     class FakeResponse:
@@ -11583,7 +11931,7 @@ def test_hailo_chat_payload_flattens_multiline_control_characters(monkeypatch):
     )
 
     runner.run(
-        "AI_HAT_RAW_SINGLE_PASS_EVAL_V1\n第一行 facts\n第二行 \\\"S\t第三欄",
+        'AI_HAT_RAW_SINGLE_PASS_EVAL_V1\n第一行 facts\n第二行 \\"S\t第三欄',
         timeout_seconds=5,
     )
 
@@ -12083,7 +12431,13 @@ def _write_terrain_workspace(project_root: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    (project_root / "outputs" / "layers" / "normalized" / "terrain_route_samples.geojson").write_text(
+    (
+        project_root
+        / "outputs"
+        / "layers"
+        / "normalized"
+        / "terrain_route_samples.geojson"
+    ).write_text(
         json.dumps(
             {
                 "type": "FeatureCollection",
@@ -12303,9 +12657,12 @@ def test_post_trip_brief_rejects_reversed_known_evidence_gap() -> None:
 
 
 def test_local_orthography_normalizes_simplified_should_character() -> None:
-    assert assistant_provider_module._normalize_ai_hat_plus_2_orthography_only(
-        "incident package 应包含來源"
-    ) == "incident package 應包含來源"
+    assert (
+        assistant_provider_module._normalize_ai_hat_plus_2_orthography_only(
+            "incident package 应包含來源"
+        )
+        == "incident package 應包含來源"
+    )
 
 
 def _fixed_schema_local_output() -> str:

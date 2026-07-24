@@ -9,6 +9,7 @@ import re
 import sys
 import threading
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -30,6 +31,14 @@ from pydantic_ai_runtime_compat import (  # noqa: E402
     pydantic_result_output,
 )
 from scout.agents.model_execution import ScoutModelExecutionAdapter  # noqa: E402
+from scout.services.mser_pipeline import (  # noqa: E402
+    MSERExecutionMode,
+    MSERPipeline,
+    compact_pipeline_context,
+    decision_hint_for_force,
+    mser_enforcement_errors,
+)
+from scout.services.mser_runtime_adapter import MSERRuntimeAdapter  # noqa: E402
 from tools.scout_ai_live_tool_selection_eval import load_env_file  # noqa: E402
 from tools.scout_ai_six_forces_aihat2_eval import (  # noqa: E402
     ARTIFACT_KIND as AIHAT_ARTIFACT_KIND,
@@ -179,7 +188,9 @@ class OpenRouterModelCaller:
         except Exception as exc:  # noqa: BLE001 - provider failures belong in eval traces.
             return "", {
                 "provider_error_type": type(exc).__name__,
-                "provider_error": redact_provider_error(str(exc), secrets=(self.api_key,)),
+                "provider_error": redact_provider_error(
+                    str(exc), secrets=(self.api_key,)
+                ),
             }
         return str(pydantic_result_output(result)), {
             "usage": _serialize_pydantic_result_usage(result),
@@ -247,9 +258,7 @@ def build_native_evidence_tools(
     selected_tool_ids: list[str],
 ) -> tuple[list[Tool], dict[str, str]]:
     cards_by_id = {
-        str(card.get("tool_id")): card
-        for card in evidence_cards
-        if card.get("tool_id")
+        str(card.get("tool_id")): card for card in evidence_cards if card.get("tool_id")
     }
     ordered_ids = [tool_id for tool_id in selected_tool_ids if tool_id in cards_by_id]
     ordered_ids.extend(tool_id for tool_id in cards_by_id if tool_id not in ordered_ids)
@@ -311,9 +320,7 @@ def native_tool_trace(
                 )
             elif isinstance(part, ToolReturnPart) and part.tool_name in tool_name_to_id:
                 return_count += 1
-    called_tool_ids = list(
-        dict.fromkeys(call["tool_id"] for call in calls)
-    )
+    called_tool_ids = list(dict.fromkeys(call["tool_id"] for call in calls))
     return {
         "offered_tool_ids": list(offered_tool_ids),
         "called_tool_ids": called_tool_ids,
@@ -343,13 +350,94 @@ def _load_existing_results(results_path: Path) -> tuple[list[dict[str, Any]], se
     return existing, completed_ids
 
 
+def _write_mser_revalidation_integrity_report(
+    *,
+    results_path: Path,
+    output_path: Path,
+) -> dict[str, Any]:
+    """Prove that deterministic MSER replay preserved provider responses."""
+
+    latest_by_id: dict[str, dict[str, Any]] = {}
+    prior_provider_by_id: dict[str, dict[str, Any]] = {}
+    line_count = 0
+    with results_path.open(encoding="utf-8") as result_file:
+        for line in result_file:
+            if not line.strip():
+                continue
+            item = json.loads(line)
+            run_case_id = str(item["run_case_id"])
+            line_count += 1
+            latest_by_id[run_case_id] = item
+            if item.get("mser_mode") not in {
+                MSERExecutionMode.SHADOW.value,
+                MSERExecutionMode.ENFORCE.value,
+            }:
+                prior_provider_by_id[run_case_id] = item
+
+    preserved_fields = (
+        "model_output",
+        "raw_model_output",
+        "model_metadata",
+        "model_request_count",
+    )
+    mismatched_run_case_ids: list[str] = []
+    compared_count = 0
+    for run_case_id, latest in latest_by_id.items():
+        prior = prior_provider_by_id.get(run_case_id)
+        if prior is None:
+            continue
+        compared_count += 1
+        if any(latest.get(field) != prior.get(field) for field in preserved_fields):
+            mismatched_run_case_ids.append(run_case_id)
+
+    report = {
+        "artifact_kind": "scout_ai_mser_revalidation_integrity",
+        "schema_version": "scout.ai.mser.revalidation_integrity.v0",
+        "jsonl_line_count": line_count,
+        "latest_run_count": len(latest_by_id),
+        "prior_provider_run_count": len(prior_provider_by_id),
+        "compared_run_count": compared_count,
+        "preserved_model_payload_count": compared_count - len(mismatched_run_case_ids),
+        "mismatched_run_case_ids": mismatched_run_case_ids,
+        "model_call_performed_count": sum(
+            bool((item.get("revalidation") or {}).get("model_call_performed"))
+            for item in latest_by_id.values()
+        ),
+        "mser_mode_counts": dict(
+            sorted(
+                Counter(
+                    str(item.get("mser_mode") or "off")
+                    for item in latest_by_id.values()
+                ).items()
+            )
+        ),
+        "mser_pipeline_error_count": sum(
+            bool(item.get("mser_error")) for item in latest_by_id.values()
+        ),
+        "candidate_only_all": all(
+            item.get("candidate_only") is True for item in latest_by_id.values()
+        ),
+        "runtime_safety_truth_all_false": all(
+            item.get("runtime_safety_truth") is False for item in latest_by_id.values()
+        ),
+    }
+    output_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return report
+
+
 def revalidate_existing_result(
     row: dict[str, Any],
     *,
     run: dict[str, Any],
+    mser_mode: str = "off",
+    mser_runtime_adapter: MSERRuntimeAdapter | None = None,
 ) -> dict[str, Any]:
     """Reapply deterministic gates without making another model request."""
 
+    resolved_mser_mode = MSERExecutionMode(mser_mode)
     output = row.get("model_output")
     compact = row.get("compact_evidence_stage") or {}
     missing_tools = list(row.get("missing_tools") or [])
@@ -377,6 +465,92 @@ def revalidate_existing_result(
         quality,
         evidence_sufficient=not missing_tools and not blocking,
     )
+    mser_trace: dict[str, Any] | None = None
+    mser_answer_verification: dict[str, Any] | None = None
+    mser_error: str | None = None
+    final = None
+    if resolved_mser_mode != MSERExecutionMode.OFF:
+        try:
+            reference_time = datetime.fromisoformat(
+                str(run["scenario"]["observed_at"]).replace("Z", "+00:00")
+            )
+            pipeline = MSERPipeline(runtime_adapter=mser_runtime_adapter)
+            initial = pipeline.prepare(
+                question=str(run["question_text"]),
+                scenario=run["scenario"],
+                total_info=(
+                    row.get("total_info_stage")
+                    if isinstance(row.get("total_info_stage"), dict)
+                    else None
+                ),
+                decision_hint=decision_hint_for_force(str(run["force_code"])),
+                now=reference_time,
+            )
+            final = initial
+            payloads: tuple[Any, ...] = ()
+            tool_results = row.get("tool_evidence_stage") or []
+            if tool_results:
+                final, payloads = pipeline.reproject_tools(
+                    previous=initial,
+                    tool_results=tool_results,
+                    now=reference_time,
+                )
+            mser_answer_verification = pipeline.verify_model_output(
+                state=final,
+                output=output,
+                now=reference_time,
+            ).model_dump(mode="json")
+            mser_trace = {
+                "schema_version": "scout.mser.eval_trace.v0",
+                "mode": resolved_mser_mode.value,
+                "initial": compact_pipeline_context(initial),
+                "final": compact_pipeline_context(final),
+                "state_snapshot_ids": [
+                    initial.state_snapshot_id,
+                    *(
+                        [final.state_snapshot_id]
+                        if final.state_snapshot_id != initial.state_snapshot_id
+                        else []
+                    ),
+                ],
+                "tool_signal_bindings": final.tool_signal_bindings,
+                "reprojection_payloads": [
+                    {
+                        "tool_id": payload.tool_id,
+                        "produces_dimensions": [
+                            item.value for item in payload.produces_dimensions
+                        ],
+                        "freshness": payload.freshness,
+                        "quality": payload.quality,
+                        "missing_fields": list(payload.missing_fields),
+                        "source_refs": list(payload.source_refs),
+                        "reprojection_ready": payload.reprojection_ready,
+                    }
+                    for payload in payloads
+                ],
+                "selected_tool_ids": list(row.get("selected_tools") or []),
+                "legacy_selected_tool_ids": list(
+                    row.get("legacy_selected_tools") or row.get("selected_tools") or []
+                ),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        except Exception as exc:  # noqa: BLE001 - preserve row and classify the failure.
+            mser_error = f"{type(exc).__name__}"
+    enforcement_errors = mser_enforcement_errors(
+        mode=resolved_mser_mode,
+        state=final if resolved_mser_mode != MSERExecutionMode.OFF else None,
+        verification=mser_answer_verification,
+        pipeline_error=mser_error,
+    )
+    if enforcement_errors:
+        verifier = {
+            "status": "fail",
+            "errors": [
+                *list(verifier.get("errors") or []),
+                *enforcement_errors,
+            ],
+        }
     identity = row.get("context_identity_check") or {}
     scorecard = build_three_axis_scorecard(
         output=output,
@@ -392,7 +566,9 @@ def revalidate_existing_result(
         tool_results=list(row.get("tool_evidence_stage") or []),
         question=str(row.get("question") or ""),
     )
-    if output is None:
+    if mser_error and resolved_mser_mode == MSERExecutionMode.ENFORCE:
+        failure_category = "mser_pipeline_error"
+    elif output is None:
         failure_category = "model_output_schema_failure"
     elif missing_tools:
         failure_category = "missing_tool"
@@ -406,6 +582,10 @@ def revalidate_existing_result(
         failure_category = None
     return {
         **row,
+        "mser_mode": resolved_mser_mode.value,
+        "mser_trace": mser_trace,
+        "mser_error": mser_error,
+        "mser_answer_verification": mser_answer_verification,
         "verifier": verifier,
         "answer_quality_screen": quality,
         "three_axis_scorecard": scorecard,
@@ -414,13 +594,13 @@ def revalidate_existing_result(
             "at": utc_iso(),
             "model_call_performed": False,
             "preserved_model_output": True,
-            "policy": "deterministic_answer_and_evidence_gates",
+            "policy": "deterministic_answer_evidence_and_mser_gates",
         },
     }
 
 
 def run_eval(args: argparse.Namespace) -> Path:
-    runtime_versions = require_pydantic_ai_214()
+    runtime_versions = runtime_package_versions()
     thinking = normalize_thinking_setting(args.thinking)
     workspace = args.workspace.expanduser().resolve()
     scenario_path = workspace / args.scenario_artifact
@@ -436,7 +616,12 @@ def run_eval(args: argparse.Namespace) -> Path:
 
     model = normalize_openrouter_model(args.model)
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = workspace / "outputs" / "evals" / f"six_forces_600_openrouter_deepseek_v4_flash_{run_id}"
+    run_dir = (
+        workspace
+        / "outputs"
+        / "evals"
+        / f"six_forces_600_openrouter_deepseek_v4_flash_{run_id}"
+    )
     run_dir.mkdir(parents=True, exist_ok=True)
     snapshot_path = run_dir / "scenario_artifact.snapshot.json"
     if not snapshot_path.exists():
@@ -451,28 +636,70 @@ def run_eval(args: argparse.Namespace) -> Path:
         _load_existing_results(results_path) if args.resume else ([], set())
     )
     run_by_id = {str(item["run_case_id"]): item for item in runs}
-    revalidated_rows: list[dict[str, Any]] = []
     if args.revalidate_existing:
+        resolved_mser_mode = MSERExecutionMode(
+            getattr(args, "mser_mode", MSERExecutionMode.SHADOW.value)
+        )
+        mser_runtime_adapter = (
+            MSERRuntimeAdapter()
+            if resolved_mser_mode != MSERExecutionMode.OFF
+            else None
+        )
         updated_existing: list[dict[str, Any]] = []
-        for row in existing:
-            run = run_by_id.get(str(row.get("run_case_id") or ""))
-            if run is None:
-                updated_existing.append(row)
-                continue
-            revalidated = revalidate_existing_result(row, run=run)
-            updated_existing.append(revalidated)
-            if any(
-                revalidated.get(field) != row.get(field)
-                for field in (
-                    "verifier",
-                    "answer_quality_screen",
-                    "three_axis_scorecard",
-                    "failure_category",
+        with results_path.open("a", encoding="utf-8") as revalidation_file:
+            for index, row in enumerate(existing, start=1):
+                run = run_by_id.get(str(row.get("run_case_id") or ""))
+                if run is None:
+                    updated_existing.append(row)
+                    continue
+                revalidated = revalidate_existing_result(
+                    row,
+                    run=run,
+                    mser_mode=resolved_mser_mode.value,
+                    mser_runtime_adapter=mser_runtime_adapter,
                 )
-            ):
-                revalidated_rows.append(revalidated)
+                updated_existing.append(revalidated)
+                if any(
+                    revalidated.get(field) != row.get(field)
+                    for field in (
+                        "mser_mode",
+                        "mser_trace",
+                        "mser_error",
+                        "mser_answer_verification",
+                        "verifier",
+                        "answer_quality_screen",
+                        "three_axis_scorecard",
+                        "failure_category",
+                    )
+                ):
+                    revalidation_file.write(
+                        json.dumps(
+                            revalidated,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        )
+                        + "\n"
+                    )
+                    revalidation_file.flush()
+                if index % 25 == 0 or index == len(existing):
+                    print(
+                        "[six-forces-openrouter] "
+                        f"revalidated={index}/{len(existing)} "
+                        f"mser_mode={resolved_mser_mode.value}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
         existing = updated_existing
         completed_ids = {str(item["run_case_id"]) for item in existing}
+    model_calls_required = any(
+        str(item["run_case_id"]) not in completed_ids for item in runs
+    )
+    if model_calls_required:
+        if not args.api_key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY is required because model calls are pending"
+            )
+        runtime_versions = require_pydantic_ai_214()
     current_time = utc_iso()
     manifest = {
         "artifact_kind": ARTIFACT_KIND,
@@ -484,7 +711,9 @@ def run_eval(args: argparse.Namespace) -> Path:
         "workspace": str(workspace),
         "scenario_artifact": str(scenario_path),
         "scenario_artifact_snapshot": str(snapshot_path),
-        "scenario_artifact_sha256": hashlib.sha256(scenario_path.read_bytes()).hexdigest(),
+        "scenario_artifact_sha256": hashlib.sha256(
+            scenario_path.read_bytes()
+        ).hexdigest(),
         "base_question_count": len({item["question_id"] for item in runs}),
         "model_run_count": len(runs),
         "model": model,
@@ -503,8 +732,10 @@ def run_eval(args: argparse.Namespace) -> Path:
         "cloud_evidence_transport": "pydantic_native_tools_full_cards",
         "cloud_prompt_character_limit": None,
         "native_tool_calls_required": True,
+        "mser_mode": getattr(args, "mser_mode", "shadow"),
         "weather_mode": "deterministic_weather_replay",
-        "model_external_api_calls_made": True,
+        "model_external_api_calls_made": model_calls_required,
+        "preserved_model_outputs_from_prior_provider_run": bool(existing),
         "weather_external_api_calls_made": False,
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -549,6 +780,7 @@ def run_eval(args: argparse.Namespace) -> Path:
                     model_caller(),
                     contextual_model_call=model_caller().call_with_context,
                 ),
+                mser_mode=getattr(args, "mser_mode", "shadow"),
             )
         except Exception as exc:  # noqa: BLE001 - continue the matrix with an audit record.
             result = {
@@ -564,7 +796,15 @@ def run_eval(args: argparse.Namespace) -> Path:
                 "model_profile": "cloud",
                 "provider": "openrouter",
                 "model_transport": "pydantic_ai_openrouter",
+                "mser_mode": getattr(args, "mser_mode", "shadow"),
+                "mser_trace": None,
+                "mser_error": (
+                    f"{type(exc).__name__}:"
+                    f"{redact_provider_error(str(exc), secrets=(args.api_key,))}"
+                ),
+                "mser_answer_verification": None,
                 "selected_tools": [],
+                "legacy_selected_tools": [],
                 "completed_tools": [],
                 "missing_tools": [],
                 "missing_evidence": [],
@@ -598,7 +838,9 @@ def run_eval(args: argparse.Namespace) -> Path:
                 "source_hashes": {},
                 "model_metadata": {
                     "run_error_type": type(exc).__name__,
-                    "run_error": redact_provider_error(str(exc), secrets=(args.api_key,)),
+                    "run_error": redact_provider_error(
+                        str(exc), secrets=(args.api_key,)
+                    ),
                 },
                 "duration_ms": int((time.monotonic() - started) * 1000),
                 "candidate_only": True,
@@ -613,10 +855,9 @@ def run_eval(args: argparse.Namespace) -> Path:
         if run["run_case_id"] not in completed_ids
     ]
     with results_path.open("a", encoding="utf-8") as result_file:
-        for row in revalidated_rows:
-            result_file.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-        result_file.flush()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=args.workers
+        ) as executor:
             futures = {
                 executor.submit(evaluate_one, index, run): (index, run)
                 for index, run in pending
@@ -638,6 +879,11 @@ def run_eval(args: argparse.Namespace) -> Path:
                     flush=True,
                 )
     _write_summaries(run_dir, manifest, all_results)
+    if args.revalidate_existing:
+        _write_mser_revalidation_integrity_report(
+            results_path=results_path,
+            output_path=run_dir / "mser_revalidation_integrity.json",
+        )
     return run_dir
 
 
@@ -646,7 +892,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run Scout Six-Forces 600 on Mac through OpenRouter."
     )
     parser.add_argument("--workspace", type=Path, default=DEFAULT_WORKSPACE)
-    parser.add_argument("--scenario-artifact", type=Path, default=DEFAULT_SCENARIO_ARTIFACT)
+    parser.add_argument(
+        "--scenario-artifact", type=Path, default=DEFAULT_SCENARIO_ARTIFACT
+    )
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
     parser.add_argument("--api-key-env-var", default="OPENROUTER_API_KEY")
     parser.add_argument("--model", default=DEFAULT_MODEL)
@@ -659,6 +907,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pydantic AI thinking setting recorded in the run manifest.",
     )
     parser.add_argument("--max-model-requests", type=int, default=10)
+    parser.add_argument(
+        "--mser-mode",
+        choices=tuple(item.value for item in MSERExecutionMode),
+        default=MSERExecutionMode.SHADOW.value,
+    )
     parser.add_argument(
         "--guided-retry",
         action=argparse.BooleanOptionalAction,
@@ -694,12 +947,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.revalidate_existing and not args.resume:
         parser.error("--revalidate-existing requires --resume")
     os.environ.update(load_env_file(args.env_file))
-    api_key = os.environ.get(args.api_key_env_var)
-    if not api_key:
+    api_key = os.environ.get(args.api_key_env_var, "")
+    if not api_key and not args.revalidate_existing:
         raise SystemExit(f"{args.api_key_env_var} is missing; not running live eval")
     args.api_key = api_key
     run_dir = run_eval(args)
-    print(json.dumps({"status": "completed", "run_dir": str(run_dir)}, ensure_ascii=False))
+    print(
+        json.dumps({"status": "completed", "run_dir": str(run_dir)}, ensure_ascii=False)
+    )
     return 0
 
 

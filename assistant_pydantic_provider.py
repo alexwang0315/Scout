@@ -66,6 +66,14 @@ from scout.schemas.workspace_query import WorkspaceQueryRequest
 from scout.services.agent_budget_policy import AgentBudgetPolicy
 from scout.services.agent_recovery import AgentRecoveryOrchestrator
 from scout.services.bounded_agent_runtime import BoundedAgentRuntime, estimate_tokens
+from scout.services.mser_pipeline import (
+    MSERExecutionMode,
+    MSERPipeline,
+    MSERPipelineState,
+    MSERPipelineTrace,
+    compact_pipeline_context,
+    mser_enforcement_errors,
+)
 from scout_ai_tool_contracts import (
     ScoutAiToolImplementationStatus,
     ScoutAiToolStatus,
@@ -267,6 +275,7 @@ class HailoContinuationRequired(RuntimeError):
 class HailoContextFullError(HailoContinuationRequired):
     """External Hailo context/cache exhaustion with an optional partial answer."""
 
+
 PYDANTIC_USAGE_FIELDS = (
     "requests",
     "tool_calls",
@@ -324,6 +333,7 @@ def _request_timeout(timeout_seconds: int | None) -> float | None:
     if timeout_seconds is None or timeout_seconds <= 0:
         return None
     return float(max(1, timeout_seconds - 1))
+
 
 WORKSPACE_EVIDENCE_TOOL_ID = "pydantic_ai.tool.search_scout_workspace_evidence.v0"
 PRETRIP_TOOL_PLANNER_SKILL_ID = "assistant_skill.pretrip.tool_planner.v0"
@@ -556,18 +566,18 @@ def _prompt_args_for_tool(tool_id: str) -> str:
         return (
             'query, surface="all", limit=6, min_score=None, risk_bucket=None, '
             "distance_km_min=None, distance_km_max=None, cp=None, lat=None, "
-            "lon=None, radius_m=None, sort=\"auto\""
+            'lon=None, radius_m=None, sort="auto"'
         )
     if tool_id == TERRAIN_SCORE_TOOL_ID:
         return (
             'query, metric="auto", limit=6, min_score=None, '
             "min_slope_degrees=None, distance_km_min=None, distance_km_max=None, "
-            "cp=None, lat=None, lon=None, radius_m=None, sort=\"auto\""
+            'cp=None, lat=None, lon=None, radius_m=None, sort="auto"'
         )
     if tool_id == MAP_PERCEPTION_TOOL_ID:
         return (
-            'query, limit=6, evidence_types=None, cp=None, lat=None, lon=None, '
-            "radius_m=None, sort=\"auto\""
+            "query, limit=6, evidence_types=None, cp=None, lat=None, lon=None, "
+            'radius_m=None, sort="auto"'
         )
     if tool_id == WEATHER_WINDOW_TOOL_ID:
         return (
@@ -692,7 +702,7 @@ def _registered_tool_descriptions() -> dict[str, str]:
             descriptions[contract.tool_id] += (
                 " For route reference lookup questions, use this tool for CP/MCP/K "
                 "mileage anchors, OCR labels, route notes, named points, and "
-                "\"where is / near which point / can I trust this label\" queries. "
+                '"where is / near which point / can I trust this label" queries. '
                 " Do not use route context as the primary tool for fog, whiteout, "
                 "visibility, wind, rain, weather-window, hydrology, rockfall, "
                 "landslide, or departure safety questions. Chinese terms such as "
@@ -782,9 +792,7 @@ def build_bounded_assistant_prompt(
         filters=None,
         top_k=10,
         token_budget=(
-            None
-            if max_context_chars is None
-            else max(4_000, max_context_chars // 4)
+            None if max_context_chars is None else max(4_000, max_context_chars // 4)
         ),
     )
     payload = {
@@ -824,9 +832,7 @@ def _context_handle_from_source(source: AssistantSourceRef) -> ContextHandle:
         relevance_score=0.6 if source.selected else 0.25,
         estimated_tokens=max(
             12,
-            estimate_tokens(
-                f"{source.source_id} {source_ref} {evidence_type}"
-            ),
+            estimate_tokens(f"{source.source_id} {source_ref} {evidence_type}"),
         ),
         sensitivity="internal",
     )
@@ -953,15 +959,15 @@ def _workspace_context_handles(
         safe_source_refs = [
             canonical
             for source_path in entry.source_paths
-            if (
-                canonical := _canonical_workspace_ref(project_root, source_path)
-            )
+            if (canonical := _canonical_workspace_ref(project_root, source_path))
             is not None
         ]
         if entry.source_paths and not safe_source_refs:
             continue
-        source_ref = safe_source_refs[0] if safe_source_refs else (
-            f"workspace-context:{entry.source_id}"
+        source_ref = (
+            safe_source_refs[0]
+            if safe_source_refs
+            else (f"workspace-context:{entry.source_id}")
         )
         artifact_kind = (
             entry.evidence_types[0]
@@ -981,9 +987,7 @@ def _workspace_context_handles(
                     "evidence_types": entry.evidence_types,
                     "missing_fields": entry.missing_fields[:12],
                 },
-                relevance_score=(
-                    0.8 if entry.status.value == "available" else 0.5
-                ),
+                relevance_score=(0.8 if entry.status.value == "available" else 0.5),
                 estimated_tokens=max(
                     12,
                     estimate_tokens(
@@ -1019,9 +1023,8 @@ def _workspace_project_ref_handles(project_root: Path) -> list[ContextHandle]:
     handles: list[ContextHandle] = []
     for key, value in project.items():
         ref_key = str(key)
-        if (
-            ref_key not in SUPPORTED_WORKSPACE_MANIFEST_REF_KEYS
-            or not isinstance(value, str)
+        if ref_key not in SUPPORTED_WORKSPACE_MANIFEST_REF_KEYS or not isinstance(
+            value, str
         ):
             continue
         source_ref = value.strip()
@@ -1337,6 +1340,237 @@ def _sanitize_public_source_ref(
     return path.as_posix()
 
 
+@dataclass(frozen=True)
+class _ProgressiveToolPlanItem:
+    """Small execution record for tools selected by MSER rather than the legacy planner."""
+
+    tool_id: str
+    request: dict[str, object]
+
+
+def _configured_mser_mode(
+    environ: dict[str, str] | None = None,
+) -> MSERExecutionMode:
+    resolved = os.environ if environ is None else environ
+    raw = str(resolved.get("SCOUT_AI_MSER_MODE", "off")).strip().casefold()
+    try:
+        return MSERExecutionMode(raw)
+    except ValueError:
+        return MSERExecutionMode.OFF
+
+
+def _workspace_total_info_payload(
+    sources: list[AssistantSourceRef],
+) -> dict[str, object] | None:
+    for source in sources:
+        if source.source_id != TOTAL_INFO_SOURCE_ID:
+            continue
+        summary = source.context_summary
+        if isinstance(summary, dict) and summary:
+            return dict(summary)
+    return None
+
+
+def _initialize_mser_context(
+    tool_context: "ScoutWorkspaceToolContext",
+    *,
+    legacy_selected_tool_ids: list[str],
+) -> None:
+    mode = _configured_mser_mode()
+    tool_context.mser_mode = mode
+    tool_context.mser_legacy_selected_tool_ids = list(legacy_selected_tool_ids)
+    if mode == MSERExecutionMode.OFF:
+        return
+    scenario = tool_context.query.live_navigation_snapshot
+    total_info = _workspace_total_info_payload(tool_context.sources)
+    if not scenario and not total_info:
+        tool_context.mser_error = "mser_context_unavailable"
+        return
+    pipeline = MSERPipeline()
+    try:
+        initial = pipeline.prepare(
+            question=tool_context.query.question,
+            scenario=scenario,
+            total_info=total_info,
+        )
+    except (
+        Exception
+    ) as exc:  # Candidate-only optimization must preserve legacy runtime.
+        tool_context.mser_error = f"mser_prepare_error:{type(exc).__name__}"
+        return
+    tool_context.mser_pipeline = pipeline
+    tool_context.mser_initial_state = initial
+    tool_context.mser_final_state = initial
+
+
+def _mser_selected_tool_ids(
+    tool_context: "ScoutWorkspaceToolContext",
+) -> tuple[list[str], bool]:
+    state = tool_context.mser_initial_state
+    if state is None:
+        return [], False
+    plan = state.packet.tool_plan
+    selected = [
+        item.tool_id
+        for item in plan.selected_tools
+        if item.tool_id in REGISTERED_WORKSPACE_TOOL_NAMES
+    ]
+    return list(dict.fromkeys(selected)), plan.coverage_complete
+
+
+def _mser_plan_items(
+    tool_context: "ScoutWorkspaceToolContext",
+    *,
+    selected_tool_ids: list[str],
+    legacy_plan_items: list[object],
+) -> list[object]:
+    legacy_by_id = {
+        str(getattr(item, "tool_id", "")): item
+        for item in legacy_plan_items
+        if str(getattr(item, "tool_id", ""))
+    }
+    items: list[object] = []
+    for tool_id in selected_tool_ids:
+        if tool_id == WORKSPACE_QUERY_TOOL_ID:
+            continue
+        legacy = legacy_by_id.get(tool_id)
+        if legacy is not None:
+            items.append(legacy)
+            continue
+        items.append(
+            _ProgressiveToolPlanItem(
+                tool_id=tool_id,
+                request={
+                    "arguments": {
+                        "query": tool_context.query.question,
+                        "limit": tool_context.default_limit,
+                    }
+                },
+            )
+        )
+    return items
+
+
+def _reproject_mser_tools(
+    tool_context: "ScoutWorkspaceToolContext",
+) -> MSERPipelineState | None:
+    pipeline = tool_context.mser_pipeline
+    initial = tool_context.mser_initial_state
+    if pipeline is None or initial is None:
+        return None
+    invocation_count = len(tool_context.invocations)
+    if tool_context.mser_reprojected_invocation_count == invocation_count:
+        return tool_context.mser_final_state
+    if invocation_count == 0:
+        tool_context.mser_final_state = initial
+        tool_context.mser_reprojected_invocation_count = 0
+        return initial
+    try:
+        final, payloads = pipeline.reproject_tools(
+            previous=initial,
+            tool_results=tool_context.invocations,
+        )
+    except Exception as exc:
+        tool_context.mser_error = f"mser_reprojection_error:{type(exc).__name__}"
+        return tool_context.mser_final_state
+    tool_context.mser_final_state = final
+    tool_context.mser_reprojection_payloads = payloads
+    tool_context.mser_reprojected_invocation_count = invocation_count
+    return final
+
+
+def _mser_prompt_section(
+    tool_context: "ScoutWorkspaceToolContext",
+    *,
+    reproject_tools: bool = False,
+) -> str:
+    state = (
+        _reproject_mser_tools(tool_context)
+        if reproject_tools
+        else tool_context.mser_final_state or tool_context.mser_initial_state
+    )
+    if state is None:
+        return ""
+    compact = compact_pipeline_context(state)
+    return (
+        "\nMSER minimal sufficient environmental context:\n"
+        f"{json.dumps(compact, ensure_ascii=False, sort_keys=True)}"
+        "\nUse only selected MSER signals and deterministic tool evidence. "
+        "Missing, stale, conflicting, or low-confidence dimensions are not safe facts.\n"
+    )
+
+
+def _mser_trace_payload(
+    tool_context: "ScoutWorkspaceToolContext",
+) -> dict[str, object]:
+    initial = tool_context.mser_initial_state
+    if initial is None:
+        return {
+            "mode": tool_context.mser_mode.value,
+            "error": tool_context.mser_error,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    trace = MSERPipelineTrace(
+        mode=tool_context.mser_mode,
+        initial=initial,
+        final=tool_context.mser_final_state,
+        reprojection_payloads=tool_context.mser_reprojection_payloads,
+        selected_tool_ids=tuple(tool_context.mser_selected_tool_ids),
+        legacy_selected_tool_ids=tuple(tool_context.mser_legacy_selected_tool_ids),
+    )
+    payload = trace.model_dump(mode="json")
+    if tool_context.mser_error:
+        payload["error"] = tool_context.mser_error
+    return payload
+
+
+def _mser_verify_output(
+    tool_context: "ScoutWorkspaceToolContext",
+    *,
+    output: str,
+    evidence_cards: list[dict[str, Any]],
+    grounding_verification: GroundingVerification | None,
+) -> dict[str, object]:
+    pipeline = tool_context.mser_pipeline
+    final = _reproject_mser_tools(tool_context)
+    if pipeline is None or final is None:
+        return {}
+    source_refs: list[str] = []
+    if grounding_verification is not None:
+        source_refs.extend(grounding_verification.cited_source_refs)
+    for card in evidence_cards:
+        refs = card.get("source_refs")
+        if not isinstance(refs, list):
+            continue
+        source_refs.extend(
+            ref for ref in refs if isinstance(ref, str) and ref and ref in output
+        )
+    verification = pipeline.verify_model_output(
+        state=final,
+        output={
+            "answer": output,
+            "source_refs": list(dict.fromkeys(source_refs)),
+        },
+    )
+    tool_context.mser_answer_verification = verification.model_dump(mode="json")
+    return tool_context.mser_answer_verification
+
+
+def _mser_enforcement_failure(
+    tool_context: "ScoutWorkspaceToolContext",
+    verification: dict[str, object],
+) -> bool:
+    return bool(
+        mser_enforcement_errors(
+            mode=tool_context.mser_mode,
+            state=tool_context.mser_final_state,
+            verification=verification or None,
+            pipeline_error=tool_context.mser_error,
+        )
+    )
+
+
 def _progressive_tool_runtime(
     tool_context: "ScoutWorkspaceToolContext",
 ) -> tuple[BoundedAgentRuntime, list[str], list[str], list[object], object]:
@@ -1359,6 +1593,10 @@ def _progressive_tool_runtime(
         and item.implementation_status
         == ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
     ]
+    _initialize_mser_context(
+        tool_context,
+        legacy_selected_tool_ids=planner_ids,
+    )
     budget = AgentBudgetPolicy.for_query(
         question_class=planner_plan.question_class,
         expected_operations=[item.value for item in planner_plan.expected_operations],
@@ -1390,9 +1628,18 @@ def _progressive_tool_runtime(
                 top_k=3,
             )
             selected_ids = [card.tool_id for card in selected_cards]
-    selected_ids = list(dict.fromkeys([*selected_ids, *follow_up_ids]))[
+    legacy_selected_ids = list(dict.fromkeys([*selected_ids, *follow_up_ids]))[
         : budget.max_tool_calls
     ]
+    selected_ids = list(legacy_selected_ids)
+    mser_ids, mser_coverage_complete = _mser_selected_tool_ids(tool_context)
+    if tool_context.mser_mode == MSERExecutionMode.ENFORCE and mser_ids:
+        selected_ids = (
+            mser_ids
+            if mser_coverage_complete
+            else list(dict.fromkeys([*mser_ids, *legacy_selected_ids]))
+        )[: budget.max_tool_calls]
+    tool_context.mser_selected_tool_ids = list(selected_ids)
     selected_names = [
         name
         for tool_id in selected_ids
@@ -1404,9 +1651,18 @@ def _progressive_tool_runtime(
         budget=budget,
     )
     selected_id_set = set(selected_ids)
-    selected_plan_items = [
+    legacy_plan_items = [
         item for item in planner_plan.selected_tools if item.tool_id in selected_id_set
     ]
+    selected_plan_items = (
+        _mser_plan_items(
+            tool_context,
+            selected_tool_ids=selected_ids,
+            legacy_plan_items=legacy_plan_items,
+        )
+        if tool_context.mser_mode == MSERExecutionMode.ENFORCE
+        else legacy_plan_items
+    )
     return runtime, selected_ids, selected_names, selected_plan_items, planner_plan
 
 
@@ -1427,7 +1683,11 @@ def _progressive_available_tool_names(
     available: list[str] = []
     for name in selected_tool_names:
         if name == query_tool_name:
-            if domain_tools_complete and stop_reason is None and not operations_complete:
+            if (
+                domain_tools_complete
+                and stop_reason is None
+                and not operations_complete
+            ):
                 available.append(name)
         elif name not in executed_tool_names:
             available.append(name)
@@ -1674,8 +1934,7 @@ def _actual_budget_overrun_reason(ledger: AgentRunLedger) -> str | None:
             return "output_tokens budget exceeded"
         if (
             budget.max_total_tokens is not None
-            and ledger.input_tokens + ledger.output_tokens
-            > budget.max_total_tokens
+            and ledger.input_tokens + ledger.output_tokens > budget.max_total_tokens
         ):
             return "total_tokens budget exceeded"
     if ledger.tool_call_count > budget.max_tool_calls:
@@ -1691,6 +1950,7 @@ def _actual_budget_overrun_reason(ledger: AgentRunLedger) -> str | None:
     ):
         return "estimated_cost budget exceeded"
     return None
+
 
 MUTATION_INTENT_FRAGMENTS = (
     "ignore previous",
@@ -1715,8 +1975,7 @@ MUTATION_INTENT_FRAGMENTS = (
 
 
 class PydanticAIRunner(Protocol):
-    def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
-        ...
+    def run(self, prompt: str, *, timeout_seconds: int | None) -> str: ...
 
 
 class ScoutWorkspaceToolContext:
@@ -1734,6 +1993,16 @@ class ScoutWorkspaceToolContext:
         self.default_limit = default_limit
         self.invocations: list[dict[str, object]] = []
         self.model_arguments_untrusted = False
+        self.mser_mode = MSERExecutionMode.OFF
+        self.mser_pipeline: MSERPipeline | None = None
+        self.mser_initial_state: MSERPipelineState | None = None
+        self.mser_final_state: MSERPipelineState | None = None
+        self.mser_reprojection_payloads: tuple[object, ...] = ()
+        self.mser_reprojected_invocation_count = -1
+        self.mser_selected_tool_ids: list[str] = []
+        self.mser_legacy_selected_tool_ids: list[str] = []
+        self.mser_answer_verification: dict[str, object] = {}
+        self.mser_error: str | None = None
 
     @classmethod
     def from_query_and_env(
@@ -1762,7 +2031,9 @@ class ScoutWorkspaceToolContext:
             self.invocations.append(result)
             return result
         if project_root is None:
-            result = self._tool_error("pretrip_workspace_unavailable", search_text, bounded_limit)
+            result = self._tool_error(
+                "pretrip_workspace_unavailable", search_text, bounded_limit
+            )
             self.invocations.append(result)
             return result
 
@@ -1783,7 +2054,9 @@ class ScoutWorkspaceToolContext:
                 "retrieval_engine": kb_result.retrieval_engine,
                 "result_count": kb_result.result_count,
                 "searched_record_count": kb_result.searched_record_count,
-                "results": [_compact_tool_kb_result(item) for item in kb_result.results],
+                "results": [
+                    _compact_tool_kb_result(item) for item in kb_result.results
+                ],
                 "boundary": {
                     **kb_result.boundary.model_dump(mode="json"),
                     "read_only": True,
@@ -1816,9 +2089,10 @@ class ScoutWorkspaceToolContext:
             bounded_request = dict(request)
         else:
             bounded_request = request.model_dump(mode="json")
-        if self.model_arguments_untrusted and str(
-            bounded_request.get("operation") or ""
-        ) == "route_forward":
+        if (
+            self.model_arguments_untrusted
+            and str(bounded_request.get("operation") or "") == "route_forward"
+        ):
             bounded_request = {
                 key: value
                 for key, value in bounded_request.items()
@@ -2947,9 +3221,8 @@ class ScoutWorkspaceToolContext:
             return None
         if candidate != root and not candidate.is_relative_to(root):
             return None
-        if (
-            _confined_project_manifest_exists(candidate)
-            and _project_json_matches_id(candidate, project_id)
+        if _confined_project_manifest_exists(candidate) and _project_json_matches_id(
+            candidate, project_id
         ):
             return candidate
         return None
@@ -3110,10 +3383,14 @@ def augment_sources_with_workspace_evidence_tool(
             )
             if terrain_source is not None:
                 risk_sources = [
-                    source for source in augmented if source.source_id == RISK_SCORE_TOOL_ID
+                    source
+                    for source in augmented
+                    if source.source_id == RISK_SCORE_TOOL_ID
                 ]
                 other_sources = [
-                    source for source in augmented if source.source_id != RISK_SCORE_TOOL_ID
+                    source
+                    for source in augmented
+                    if source.source_id != RISK_SCORE_TOOL_ID
                 ]
                 augmented = [*risk_sources, terrain_source, *other_sources]
 
@@ -3138,7 +3415,8 @@ def augment_sources_with_workspace_evidence_tool(
                 other_sources = [
                     source
                     for source in augmented
-                    if source.source_id not in {RISK_SCORE_TOOL_ID, TERRAIN_SCORE_TOOL_ID}
+                    if source.source_id
+                    not in {RISK_SCORE_TOOL_ID, TERRAIN_SCORE_TOOL_ID}
                 ]
                 augmented = [*priority_sources, map_source, *other_sources]
 
@@ -3184,13 +3462,19 @@ def augment_sources_with_workspace_evidence_tool(
             )
             if tool_source is not None:
                 risk_sources = [
-                    source for source in augmented if source.source_id == RISK_SCORE_TOOL_ID
+                    source
+                    for source in augmented
+                    if source.source_id == RISK_SCORE_TOOL_ID
                 ]
                 terrain_sources = [
-                    source for source in augmented if source.source_id == TERRAIN_SCORE_TOOL_ID
+                    source
+                    for source in augmented
+                    if source.source_id == TERRAIN_SCORE_TOOL_ID
                 ]
                 map_sources = [
-                    source for source in augmented if source.source_id == MAP_PERCEPTION_TOOL_ID
+                    source
+                    for source in augmented
+                    if source.source_id == MAP_PERCEPTION_TOOL_ID
                 ]
                 structured_sources = [
                     source
@@ -3384,7 +3668,9 @@ def _has_safety_or_live_planner_evidence(sources: list[AssistantSourceRef]) -> b
             LIVE_NAVIGATION_STATE_TOOL_ID,
         }:
             continue
-        summary = source.context_summary if isinstance(source.context_summary, dict) else {}
+        summary = (
+            source.context_summary if isinstance(source.context_summary, dict) else {}
+        )
         if summary.get("resolver") == PRETRIP_TOOL_PLANNER_SKILL_ID:
             return True
     return False
@@ -3486,7 +3772,9 @@ def _build_risk_score_tool_fallback_response(
         evidence_lines[1:],
         label="其他候選風險路段",
     )
-    multi_candidate_text = f" {multi_candidate_sentence}" if multi_candidate_sentence else ""
+    multi_candidate_text = (
+        f" {multi_candidate_sentence}" if multi_candidate_sentence else ""
+    )
     answer = (
         f"{concise_answer}"
         f"{multi_candidate_text}"
@@ -3535,9 +3823,14 @@ def _risk_score_answer_prefix(question: str) -> str:
     normalized = str(question or "").casefold()
     if _looks_like_rain_risk_question(normalized):
         return "雨後需優先人工複核的最高候選風險點"
-    if any(term in normalized for term in ("出事", "事故", "最容易", "最高風險", "高風險")):
+    if any(
+        term in normalized for term in ("出事", "事故", "最容易", "最高風險", "高風險")
+    ):
         return "最高候選風險點"
-    if any(term in normalized for term in ("checkpoint", "cp", "檢查點", "設checkpoint", "設cp", "漏設")):
+    if any(
+        term in normalized
+        for term in ("checkpoint", "cp", "檢查點", "設checkpoint", "設cp", "漏設")
+    ):
         return "優先考慮設 checkpoint 的候選風險點"
     if any(term in normalized for term in ("拍照", "拍攝", "停留", "景觀點")):
         return "避免停留拍照的候選風險點"
@@ -3588,7 +3881,11 @@ def _risk_result_location(item: dict[str, object]) -> str:
         return readable.strip()
     checkpoint = item.get("nearest_checkpoint")
     if isinstance(checkpoint, dict):
-        label = checkpoint.get("label") or checkpoint.get("candidate_id") or checkpoint.get("id")
+        label = (
+            checkpoint.get("label")
+            or checkpoint.get("candidate_id")
+            or checkpoint.get("id")
+        )
         distance_m = (
             checkpoint.get("distance_m")
             or checkpoint.get("distance_to_point_m")
@@ -3614,7 +3911,9 @@ def _format_weather_evidence_gap_for_tool_fallback(
     for source in sources:
         if source.source_id != WEATHER_WINDOW_TOOL_ID:
             continue
-        summary = source.context_summary if isinstance(source.context_summary, dict) else {}
+        summary = (
+            source.context_summary if isinstance(source.context_summary, dict) else {}
+        )
         latest = summary.get("latest")
         if not isinstance(latest, dict):
             continue
@@ -3830,7 +4129,9 @@ def _model_output_preserves_grounding(
     if _model_output_preserves_route_geometry_uncertainty(output, grounded_answer):
         return True
     grounded_has_gpx = bool(re.search(r"GPX\s*累積約\s*\d", grounded_answer))
-    grounded_has_coord = bool(re.search(r"座標\s*[0-9.-]+\s*,\s*[0-9.-]+", grounded_answer))
+    grounded_has_coord = bool(
+        re.search(r"座標\s*[0-9.-]+\s*,\s*[0-9.-]+", grounded_answer)
+    )
     output_has_gpx = bool(re.search(r"GPX\s*累積約\s*\d", output))
     output_has_coord = bool(
         re.search(r"座標\s*[\(（]?[0-9.-]+\s*,\s*[0-9.-]+[\)）]?", output)
@@ -3838,7 +4139,9 @@ def _model_output_preserves_grounding(
     output_multi_coord_count = len(
         re.findall(r"座標\s*[\(（]?[0-9.-]+\s*,\s*[0-9.-]+[\)）]?", output)
     )
-    grounded_has_multi_candidate = "多個候選" in normalized_grounded or "多個地形候選" in normalized_grounded
+    grounded_has_multi_candidate = (
+        "多個候選" in normalized_grounded or "多個地形候選" in normalized_grounded
+    )
     if _model_output_has_actionable_multi_candidate_location_answer(
         output,
         grounded_answer,
@@ -3872,8 +4175,7 @@ def _model_output_preserves_grounding(
     if len(required_tokens) == 1:
         return bool(matched_tokens)
     if has_location and not any(
-        token.casefold().startswith(("score=", "bucket="))
-        for token in required_tokens
+        token.casefold().startswith(("score=", "bucket=")) for token in required_tokens
     ):
         return True
     return has_location and has_score_or_bucket
@@ -3893,7 +4195,8 @@ def _model_output_matches_missing_context_question_focus(
         output = re.sub(r"\s+", "", str(model_output or "").casefold())
         if any(term in question_text for term in ("原地等待", "找路")):
             has_stop_or_wait = any(
-                term in output for term in ("原地等待", "停止前進", "先停", "不要繼續移動")
+                term in output
+                for term in ("原地等待", "停止前進", "先停", "不要繼續移動")
             )
             has_no_route_search = any(
                 term in output
@@ -3919,7 +4222,14 @@ def _model_output_matches_missing_context_question_focus(
                 has_no_downcut = True
             has_reason_or_action = any(
                 term in output
-                for term in ("迷途", "失聯", "離開路線", "停止前進", "集合隊伍", "聚在一起")
+                for term in (
+                    "迷途",
+                    "失聯",
+                    "離開路線",
+                    "停止前進",
+                    "集合隊伍",
+                    "聚在一起",
+                )
             )
             return has_no_downcut and has_reason_or_action
     if not any(marker in grounded for marker in ("目前缺少", "缺少", "不能判定")):
@@ -3934,10 +4244,21 @@ def _model_output_matches_missing_context_question_focus(
             for term in ("應立即通報", "应该立即通报", "立即報案", "立即报案")
         ):
             return False
-        has_timing = any(term in output for term in ("預定", "预定", "逾時", "逾时", "時間", "时间"))
+        has_timing = any(
+            term in output for term in ("預定", "预定", "逾時", "逾时", "時間", "时间")
+        )
         has_last_state = any(
             term in output
-            for term in ("最後位置", "最后位置", "座標", "坐标", "聯絡", "联络", "狀態", "状态")
+            for term in (
+                "最後位置",
+                "最后位置",
+                "座標",
+                "坐标",
+                "聯絡",
+                "联络",
+                "狀態",
+                "状态",
+            )
         )
         has_uncertainty = any(
             term in output
@@ -3955,8 +4276,7 @@ def _model_output_matches_missing_context_question_focus(
         has_report_focus = any(term in output for term in ("通報", "報案", "通知"))
         return has_timing and has_last_state and has_uncertainty and has_report_focus
     if any(
-        term in question_text
-        for term in ("定時回報", "回報是不是逾時", "回報是否逾時")
+        term in question_text for term in ("定時回報", "回報是不是逾時", "回報是否逾時")
     ):
         has_uncertainty = any(
             term in output
@@ -3965,11 +4285,18 @@ def _model_output_matches_missing_context_question_focus(
         has_planned_time = any(
             term in output for term in ("原定回報", "預定回報", "回報間隔")
         )
-        has_current_time = any(term in output for term in ("目前時間", "現在的時間", "當前時間"))
+        has_current_time = any(
+            term in output for term in ("目前時間", "現在的時間", "當前時間")
+        )
         has_last_success = any(
             term in output for term in ("最後成功回報", "最後一次成功回報")
         )
-        return has_uncertainty and has_planned_time and has_current_time and has_last_success
+        return (
+            has_uncertainty
+            and has_planned_time
+            and has_current_time
+            and has_last_success
+        )
     if any(term in question_text for term in ("裝備濕掉", "装备湿掉", "裝備受潮")):
         has_uncertainty = any(
             term in output
@@ -3989,7 +4316,8 @@ def _model_output_matches_missing_context_question_focus(
         term in question_text for term in ("配速", "pace", "buffer", "eta")
     )
     asks_fitness_load = any(
-        term in question_text for term in ("體能", "体能", "體力", "体力", "太硬", "吃力")
+        term in question_text
+        for term in ("體能", "体能", "體力", "体力", "太硬", "吃力")
     )
     has_uncertainty = any(
         term in output
@@ -4091,8 +4419,7 @@ def _model_output_matches_missing_context_question_focus(
         ):
             return False
         has_current_pace = any(
-            term in output
-            for term in ("目前配速", "目前速度", "當前配速", "當前速度")
+            term in output for term in ("目前配速", "目前速度", "當前配速", "當前速度")
         )
         has_pace_focus = has_current_pace or any(
             term in output
@@ -4111,8 +4438,7 @@ def _model_output_matches_missing_context_question_focus(
             )
         )
         has_conservative_action = any(
-            term in output
-            for term in ("暫停", "先停", "檢查", "保守", "補齊", "確認")
+            term in output for term in ("暫停", "先停", "檢查", "保守", "補齊", "確認")
         )
         return (
             has_uncertainty
@@ -4158,7 +4484,9 @@ def _model_output_has_actionable_single_risk_answer(
     if any(term in normalized for term in ("因為", "因为", "相似風險", "相似风险")):
         return False
     has_location = bool(re.search(r"CP\s*\d+", output, flags=re.IGNORECASE))
-    has_gpx = bool(re.search(r"GPX\s*累積約\s*[0-9.]+\s*km", output, flags=re.IGNORECASE))
+    has_gpx = bool(
+        re.search(r"GPX\s*累積約\s*[0-9.]+\s*km", output, flags=re.IGNORECASE)
+    )
     has_coord = bool(re.search(r"座標\s*[0-9.-]+\s*,\s*[0-9.-]+", output))
     has_score = bool(
         re.search(
@@ -4252,13 +4580,13 @@ def _model_output_preserves_rain_candidate_evidence(
             "不能当成即时",
             "無法確認即時",
             "无法确认即时",
-                "不能完全信任它是即時",
-                "不能完全信任它是即时",
-                "尚未確認",
-                "尚未确认",
-                "尚無法確認",
-                "尚无法确认",
-            )
+            "不能完全信任它是即時",
+            "不能完全信任它是即时",
+            "尚未確認",
+            "尚未确认",
+            "尚無法確認",
+            "尚无法确认",
+        )
     ) or (
         any(
             term in normalized
@@ -4273,10 +4601,7 @@ def _model_output_preserves_rain_candidate_evidence(
                 "不能确定",
             )
         )
-        and any(
-            term in normalized
-            for term in ("下雨", "雨後", "雨后", "雨況", "雨况")
-        )
+        and any(term in normalized for term in ("下雨", "雨後", "雨后", "雨況", "雨况"))
     )
     grounded_is_high_risk = bool(
         re.search(
@@ -4296,7 +4621,10 @@ def _model_output_preserves_rain_candidate_evidence(
         has_checkpoint
         and (has_matching_score or has_matching_gpx)
         and not inverts_high_risk_semantics
-        and (has_candidate_boundary or (grounded_has_weather_gap and has_no_live_weather_claim))
+        and (
+            has_candidate_boundary
+            or (grounded_has_weather_gap and has_no_live_weather_claim)
+        )
         and (
             not grounded_has_weather_gap
             or (has_weather_gap and has_no_live_weather_claim)
@@ -4313,9 +4641,15 @@ def _model_output_has_actionable_multi_candidate_location_answer(
         return False
     output = str(model_output or "")
     normalized = re.sub(r"\s+", "", output.casefold())
-    if any(term in normalized for term in ("route候選", "risk候選", "位置一", "位置二", "地點一", "地點二")):
+    if any(
+        term in normalized
+        for term in ("route候選", "risk候選", "位置一", "位置二", "地點一", "地點二")
+    ):
         return False
-    if any(term in normalized for term in ("因為", "因为", "相似的風險", "相似风险", "座標相近", "坐标相近")):
+    if any(
+        term in normalized
+        for term in ("因為", "因为", "相似的風險", "相似风险", "座標相近", "坐标相近")
+    ):
         return False
     has_action = any(
         term in normalized
@@ -4337,7 +4671,9 @@ def _model_output_has_actionable_multi_candidate_location_answer(
     if not has_action:
         return False
     cp_count = len(re.findall(r"CP\s*\d+", output, flags=re.IGNORECASE))
-    gpx_count = len(re.findall(r"GPX\s*累積約\s*[0-9.]+\s*km", output, flags=re.IGNORECASE))
+    gpx_count = len(
+        re.findall(r"GPX\s*累積約\s*[0-9.]+\s*km", output, flags=re.IGNORECASE)
+    )
     distance_count = len(re.findall(r"約\s*[0-9.]+\s*m", output, flags=re.IGNORECASE))
     return cp_count >= 1 and max(gpx_count, distance_count) >= 2
 
@@ -4354,7 +4690,9 @@ def _model_output_has_actionable_multi_terrain_answer(
         return False
     output = str(model_output or "")
     normalized = re.sub(r"\s+", "", output.casefold())
-    if not any(term in normalized for term in ("摸黑", "地形候選", "地形高分", "複核", "复核")):
+    if not any(
+        term in normalized for term in ("摸黑", "地形候選", "地形高分", "複核", "复核")
+    ):
         return False
     return (
         len(re.findall(metric_pattern, output, flags=re.IGNORECASE)) >= 2
@@ -4371,11 +4709,17 @@ def _model_output_omits_multi_candidate_context(
     if "多個候選" not in grounded and "多個地形候選" not in grounded:
         return False
     output = re.sub(r"\s+", "", str(model_output or "").casefold())
-    if any(term in output for term in ("第一個候選", "第二個候選", "第一候選", "第二候選")):
+    if any(
+        term in output for term in ("第一個候選", "第二個候選", "第一候選", "第二候選")
+    ):
         if not re.search(r"(?:CP\s*\d+|GPX\s*累積約|座標\s*[0-9.-]+)", model_output):
             return True
-    if any(term in output for term in ("多個", "多个", "至少", "候選群", "候选群", "集中")):
-        coordinate_count = len(re.findall(r"座標\s*[0-9.-]+\s*,\s*[0-9.-]+", model_output))
+    if any(
+        term in output for term in ("多個", "多个", "至少", "候選群", "候选群", "集中")
+    ):
+        coordinate_count = len(
+            re.findall(r"座標\s*[0-9.-]+\s*,\s*[0-9.-]+", model_output)
+        )
         gpx_count = len(re.findall(r"GPX\s*累積約\s*[0-9.]+\s*km", model_output))
         cp_count = len(re.findall(r"CP\s*\d+", model_output, flags=re.IGNORECASE))
         if max(coordinate_count, gpx_count, cp_count) >= 2:
@@ -4474,7 +4818,9 @@ def _model_output_is_deterministic_reference_copy(
     if (
         evidence_token_count >= 4
         and data_list_separators >= 3
-        and re.match(r"^\s*(?:最近\s*CP|GPX|座標|score\s*=)", output, flags=re.IGNORECASE)
+        and re.match(
+            r"^\s*(?:最近\s*CP|GPX|座標|score\s*=)", output, flags=re.IGNORECASE
+        )
     ):
         return True
     repeated_route_tokens = max(
@@ -4542,8 +4888,7 @@ def _evidence_token_count(text: str) -> int:
         r"(?:teii_20m|terrain_score|tri|lec|sri)\s*=\s*[0-9.]+",
     )
     return sum(
-        len(re.findall(pattern, text, flags=re.IGNORECASE))
-        for pattern in patterns
+        len(re.findall(pattern, text, flags=re.IGNORECASE)) for pattern in patterns
     )
 
 
@@ -4555,10 +4900,7 @@ def _model_output_is_underdeveloped_grounding_summary(
     grounded = re.sub(r"\s+", "", str(grounded_answer or "").casefold())
     if not output:
         return True
-    if any(
-        marker in grounded
-        for marker in ("目前缺少", "不能判定", "不能精算")
-    ):
+    if any(marker in grounded for marker in ("目前缺少", "不能判定", "不能精算")):
         return False
     has_route_location_evidence = any(
         token in grounded
@@ -4575,12 +4917,16 @@ def _model_output_is_underdeveloped_grounding_summary(
         "terrain_score",
     )
     preserved_evidence_count = sum(1 for token in evidence_tokens if token in output)
-    if "score=" in grounded and "score=" not in output and re.search(
-        r"(?:風險)?分數(?:為|为|是|=|：|:)?[0-9.]", output
+    if (
+        "score=" in grounded
+        and "score=" not in output
+        and re.search(r"(?:風險)?分數(?:為|为|是|=|：|:)?[0-9.]", output)
     ):
         preserved_evidence_count += 1
-    if "bucket=" in grounded and "bucket=" not in output and re.search(
-        r"bucket(?:為|为|是|=|：|:)?[a-z_]", output
+    if (
+        "bucket=" in grounded
+        and "bucket=" not in output
+        and re.search(r"bucket(?:為|为|是|=|：|:)?[a-z_]", output)
     ):
         preserved_evidence_count += 1
     if preserved_evidence_count == 0:
@@ -4690,11 +5036,20 @@ def _model_output_omits_required_grounding_phrases(
     )
     required_phrase_groups = (
         ("行程有偏滿候選", ("偏滿", "排得比較滿", "排得較滿")),
-        ("不能用平均腳程硬推", ("不能用平均腳程硬推", "不要用平均腳程硬推", "不應硬推")),
+        (
+            "不能用平均腳程硬推",
+            ("不能用平均腳程硬推", "不要用平均腳程硬推", "不應硬推"),
+        ),
         ("保留折返窗口", ("折返窗口", "折返")),
         ("改短版或折返", ("改短版", "折返")),
-        ("目前缺少當下operationalcontext", ("缺少當下operationalcontext", "缺少當下資料", "資料不足")),
-        ("不能把候選evidence當成安全結論", ("不能把候選evidence當成安全結論", "不能當成安全結論")),
+        (
+            "目前缺少當下operationalcontext",
+            ("缺少當下operationalcontext", "缺少當下資料", "資料不足"),
+        ),
+        (
+            "不能把候選evidence當成安全結論",
+            ("不能把候選evidence當成安全結論", "不能當成安全結論"),
+        ),
         (
             "目前缺少水量",
             ("缺少水量", "目前水量", "不能判斷水量", "無法判斷水量"),
@@ -4865,7 +5220,9 @@ def _model_output_mistranslates_scout_terms(model_output: str) -> bool:
     )
 
 
-def _model_output_contradicts_grounding(model_output: str, grounded_answer: str) -> bool:
+def _model_output_contradicts_grounding(
+    model_output: str, grounded_answer: str
+) -> bool:
     output = re.sub(r"\s+", "", str(model_output or "").casefold())
     grounded = re.sub(r"\s+", "", str(grounded_answer or "").casefold())
     if any(marker in grounded for marker in ("目前缺少", "不能判定")) and any(
@@ -4941,7 +5298,11 @@ def _model_output_contradicts_grounding(model_output: str, grounded_answer: str)
         ):
             return True
     if "低容錯或不適合" in grounded:
-        if "低容錯" not in output and "低容错" not in output and "不適合放大時間成本" not in output:
+        if (
+            "低容錯" not in output
+            and "低容错" not in output
+            and "不適合放大時間成本" not in output
+        ):
             return True
         if any(
             phrase in output
@@ -5006,7 +5367,10 @@ def _model_output_contradicts_grounding(model_output: str, grounded_answer: str)
         )
     ):
         return True
-    if "teii_20m" in grounded and any(phrase in output for phrase in ("照明條件", "照明条件", "照明良好", "照明較差", "照明较差")):
+    if "teii_20m" in grounded and any(
+        phrase in output
+        for phrase in ("照明條件", "照明条件", "照明良好", "照明較差", "照明较差")
+    ):
         return True
     if "避免停留拍照" in grounded and "隱私" in output:
         return True
@@ -5025,27 +5389,27 @@ def _model_output_contradicts_grounding(model_output: str, grounded_answer: str)
         )
     ):
         return True
-    if "晚出發" in grounded and any(phrase in output for phrase in ("低風險候選", "低风险候选", "gps是否已連接", "gps是否已连接")):
+    if "晚出發" in grounded and any(
+        phrase in output
+        for phrase in ("低風險候選", "低风险候选", "gps是否已連接", "gps是否已连接")
+    ):
         return True
     if "不應直接照原計畫硬推" in grounded:
-        route_delay_decision_preserved = (
-            any(
-                phrase in output
-                for phrase in (
-                    "不應直接照原計畫硬推",
-                    "不應直接照原计划硬推",
-                    "不要照原計畫硬推",
-                    "不要照原计划硬推",
-                    "改短版",
-                    "折返",
-                )
+        route_delay_decision_preserved = any(
+            phrase in output
+            for phrase in (
+                "不應直接照原計畫硬推",
+                "不應直接照原计划硬推",
+                "不要照原計畫硬推",
+                "不要照原计划硬推",
+                "改短版",
+                "折返",
             )
-            and (
-                ("cp129" in output and "cp130" in output)
-                or "cpgraph" in output
-                or "折返" in output
-                or "改短版" in output
-            )
+        ) and (
+            ("cp129" in output and "cp130" in output)
+            or "cpgraph" in output
+            or "折返" in output
+            or "改短版" in output
         )
         if (
             any(phrase in grounded for phrase in ("缺天氣", "缺頭燈", "缺天氣、頭燈"))
@@ -5057,7 +5421,10 @@ def _model_output_contradicts_grounding(model_output: str, grounded_answer: str)
             and not route_delay_decision_preserved
         ):
             return True
-        if any(phrase in output for phrase in ("狀態不佳", "状态不佳")) and "狀態不佳" not in grounded:
+        if (
+            any(phrase in output for phrase in ("狀態不佳", "状态不佳"))
+            and "狀態不佳" not in grounded
+        ):
             return True
         if any(
             phrase in output
@@ -5070,7 +5437,12 @@ def _model_output_contradicts_grounding(model_output: str, grounded_answer: str)
             )
         ):
             return True
-        if "cp129" not in output and "cpgraph" not in output and "折返" not in output and "改短版" not in output:
+        if (
+            "cp129" not in output
+            and "cpgraph" not in output
+            and "折返" not in output
+            and "改短版" not in output
+        ):
             return True
     if "不能直接給出每個cp的最晚通過時間" in grounded:
         if any(
@@ -5088,10 +5460,15 @@ def _model_output_contradicts_grounding(model_output: str, grounded_answer: str)
         ):
             return True
     if "major_point_count不是已確認撤退點數" in grounded:
-        if any(phrase in output for phrase in ("6座", "六座", "6個撤退點", "六個撤退點")):
+        if any(
+            phrase in output for phrase in ("6座", "六座", "6個撤退點", "六個撤退點")
+        ):
             return True
     if "不可把欄位名稱誤當成轉折點" in grounded:
-        if any(phrase in output for phrase in ("欄位名稱", "測量值", "英制單位", "重覆計算")):
+        if any(
+            phrase in output
+            for phrase in ("欄位名稱", "測量值", "英制單位", "重覆計算")
+        ):
             return True
     return False
 
@@ -5134,7 +5511,11 @@ def _model_output_introduces_unsupported_evidence_tokens(
         "天气状况",
     )
     for phrase in unsupported_phrases:
-        if phrase in {"頭燈電量", "头灯电量"} and "頭燈" in grounded and "電量" in grounded:
+        if (
+            phrase in {"頭燈電量", "头灯电量"}
+            and "頭燈" in grounded
+            and "電量" in grounded
+        ):
             continue
         if phrase in {"隊伍狀態", "队伍状态"} and any(
             term in grounded for term in ("隊伍", "队伍", "同伴", "隊友", "队友")
@@ -5146,7 +5527,9 @@ def _model_output_introduces_unsupported_evidence_tokens(
             continue
         if phrase.casefold() in output and phrase.casefold() not in grounded:
             return True
-    for token in re.findall(r"[\u4e00-\u9fff]{2,}(?:省|縣|县|市|鎮|镇|鄉|乡)", model_output):
+    for token in re.findall(
+        r"[\u4e00-\u9fff]{2,}(?:省|縣|县|市|鎮|镇|鄉|乡)", model_output
+    ):
         if token.casefold() not in grounded:
             return True
     token_patterns = (
@@ -5168,9 +5551,19 @@ def _grounding_evidence_tokens(text: str) -> list[str]:
     tokens: list[str] = []
     tokens.extend(re.findall(r"\b[\w.-]+_ref\b", text))
     tokens.extend(re.findall(r"outputs/[^\s；;，。)）]+", text))
-    tokens.extend(re.findall(r"\b(?:artifact ref 共|存在|缺失|checkpoint_count|segment_count|result_count|total|existing|missing)=?\s*\d+", text))
+    tokens.extend(
+        re.findall(
+            r"\b(?:artifact ref 共|存在|缺失|checkpoint_count|segment_count|result_count|total|existing|missing)=?\s*\d+",
+            text,
+        )
+    )
     tokens.extend(re.findall(r"\b\d{2,}\b", text))
-    tokens.extend(re.findall(r"\b(?:workspace|environment|route|map|risk|terrain|review|runtime):\s*total=\d+", text))
+    tokens.extend(
+        re.findall(
+            r"\b(?:workspace|environment|route|map|risk|terrain|review|runtime):\s*total=\d+",
+            text,
+        )
+    )
     return _dedupe_preserving_order(tokens)
 
 
@@ -5213,7 +5606,10 @@ def _build_terrain_score_tool_fallback_response(
     concise_answer = _format_terrain_score_concise_answer(query, top)
     evidence_lines = _format_terrain_score_evidence_lines(results)
     other_candidates = ""
-    if _question_requests_multiple_candidates(query.question) and len(evidence_lines) > 1:
+    if (
+        _question_requests_multiple_candidates(query.question)
+        and len(evidence_lines) > 1
+    ):
         other_candidates = " 其他需複核路段：" + "；".join(evidence_lines[1:3]) + "。"
     weather_gap = _format_weather_evidence_gap_for_tool_fallback(sources)
     weather_gap_sentence = f" {weather_gap}" if weather_gap else ""
@@ -5250,7 +5646,9 @@ def _format_terrain_score_evidence_lines(results: list[object]) -> list[str]:
         parts: list[str] = []
         if gpx_km is not None:
             parts.append(f"GPX 累積約 {_format_number(gpx_km, decimals=2)} km")
-        score_field = str(item.get("score_field") or item.get("metric") or "terrain_score")
+        score_field = str(
+            item.get("score_field") or item.get("metric") or "terrain_score"
+        )
         score = _format_number(item.get("score"))
         if score:
             parts.append(f"{score_field}={score}")
@@ -5328,7 +5726,9 @@ def _build_map_perception_tool_fallback_response(
                 str(part)
                 for part in (
                     item.get("evidence_type"),
-                    item.get("label_text") or item.get("candidate_id") or item.get("layer_id"),
+                    item.get("label_text")
+                    or item.get("candidate_id")
+                    or item.get("layer_id"),
                     f"cp={','.join(item.get('checkpoint_refs', []))}"
                     if isinstance(item.get("checkpoint_refs"), list)
                     else None,
@@ -5340,7 +5740,9 @@ def _build_map_perception_tool_fallback_response(
                 if part
             )
         )
-    summaries = latest.get("summaries") if isinstance(latest.get("summaries"), dict) else {}
+    summaries = (
+        latest.get("summaries") if isinstance(latest.get("summaries"), dict) else {}
+    )
     answer = (
         "Scout AI map perception tool fallback: this read-only answer uses "
         "existing workspace map/tile perception materials. "
@@ -5383,9 +5785,7 @@ def _build_missing_operational_context_fallback_response(
             EQUIPMENT_RESOURCE_TOOL_ID,
         )
         equipment_summary = (
-            equipment_source.context_summary
-            if equipment_source is not None
-            else None
+            equipment_source.context_summary if equipment_source is not None else None
         )
         equipment_latest = (
             equipment_summary.get("latest")
@@ -5397,9 +5797,10 @@ def _build_missing_operational_context_fallback_response(
             if isinstance(equipment_latest, dict)
             else None
         )
-        if isinstance(resource_state, dict) and resource_state.get(
-            "phone_battery_percent"
-        ) is not None:
+        if (
+            isinstance(resource_state, dict)
+            and resource_state.get("phone_battery_percent") is not None
+        ):
             return None
     if _looks_like_rescue_report_information_question(normalized):
         return None
@@ -5481,7 +5882,9 @@ def _build_missing_operational_context_fallback_response(
             missing_by_tool[tool_id] = missing
     if not missing_by_tool:
         return None
-    if _first_tool_source_by_id(sources, ROUTE_ARCHITECTURE_TOOL_ID) is not None and any(
+    if _first_tool_source_by_id(
+        sources, ROUTE_ARCHITECTURE_TOOL_ID
+    ) is not None and any(
         term in normalized
         for term in (
             "排太滿",
@@ -5525,7 +5928,10 @@ def _build_missing_operational_context_fallback_response(
             f"請提供{requested_inputs}；確認前先維持聯絡、避免擴大隊伍距離，"
             "且不得把未確認位置當成最後有效位置。"
         )
-    elif any(term in normalized for term in ("主路", "邊緣", "边缘", "離主路", "离主路", "危險邊緣", "危险边缘")):
+    elif any(
+        term in normalized
+        for term in ("主路", "邊緣", "边缘", "離主路", "离主路", "危險邊緣", "危险边缘")
+    ):
         lead = (
             "目前缺少 GNSS/定位、route distance、heading/speed 與最近 CP evidence，"
             "不能判定你是不是離主路太近或站在危險邊緣。"
@@ -5570,7 +5976,9 @@ def _build_missing_operational_context_fallback_response(
                 "與最近 CP；定位未補齊前，workspace 候選只能作為行前複核資料。"
             )
         else:
-            lead = "目前缺少當下 operational context，不能把候選 evidence 當成安全結論。"
+            lead = (
+                "目前缺少當下 operational context，不能把候選 evidence 當成安全結論。"
+            )
             next_step = "請補齊缺失欄位後再做判斷；未補齊前採保守方案。"
     elif ENERGY_VITALS_TOOL_ID in missing_by_tool:
         missing_bundle = _missing_context_fact_bundle(query.question, "")
@@ -5599,7 +6007,10 @@ def _build_missing_operational_context_fallback_response(
             "請先取得 observed_at、座標、水平精度、nearest_route_distance_m、route_progress_m "
             "與最近 CP；定位未補齊前，workspace 候選只能作為行前複核資料。"
         )
-    elif any(term in normalized for term in ("歷史gpx", "历史gpx", "軌跡分散", "轨迹分散", "trace dispersion")):
+    elif any(
+        term in normalized
+        for term in ("歷史gpx", "历史gpx", "軌跡分散", "轨迹分散", "trace dispersion")
+    ):
         lead = (
             "目前缺少 reference track dispersion、INS/DR trace 與 GPS-only trajectory evidence，"
             "不能判定歷史 GPX 在這裡是否分散。"
@@ -5623,7 +6034,9 @@ def _build_missing_operational_context_fallback_response(
             "不能精算你需要準備多少水和補給。"
         )
         next_step = "請提供目前水量、食物可支撐小時數、剩餘路程/時間與最近補水點；未補齊前不要把 1.5L 當成安全結論。"
-    elif any(term in normalized for term in ("晚出發", "晚出发", "延後出發", "延遲出發")):
+    elif any(
+        term in normalized for term in ("晚出發", "晚出发", "延後出發", "延遲出發")
+    ):
         lead = (
             "目前缺少出發時間、日照 buffer、配速與裝備/頭燈 evidence，"
             "不能判定晚出發一小時仍可安全完成。"
@@ -5636,10 +6049,7 @@ def _build_missing_operational_context_fallback_response(
         f"{tool_id}: missing {', '.join(fields[:6])}"
         for tool_id, fields in missing_by_tool.items()
     )
-    answer = (
-        f"結論：{lead} 依據：{compact_missing}。"
-        f" 下一步：{next_step}"
-    )
+    answer = f"結論：{lead} 依據：{compact_missing}。 下一步：{next_step}"
     return ScoutAssistantResponse(
         surface=query.surface,
         answer=answer,
@@ -5693,7 +6103,15 @@ def _looks_like_rescue_report_information_question(question: str) -> bool:
     )
     asks_fields = any(
         term in normalized
-        for term in ("哪些資訊", "哪些信息", "需要什麼", "需要什么", "包含哪些", "欄位", "字段")
+        for term in (
+            "哪些資訊",
+            "哪些信息",
+            "需要什麼",
+            "需要什么",
+            "包含哪些",
+            "欄位",
+            "字段",
+        )
     )
     return asks_report and asks_fields
 
@@ -5804,7 +6222,9 @@ def _build_structured_workspace_tool_fallback_response(
         if not isinstance(latest, dict) or latest.get("status") != "completed":
             continue
         evidence_lines = _generic_tool_evidence_lines(latest)
-        summaries = latest.get("summaries") if isinstance(latest.get("summaries"), dict) else {}
+        summaries = (
+            latest.get("summaries") if isinstance(latest.get("summaries"), dict) else {}
+        )
         has_decision_output = isinstance(latest.get("decision_output"), dict)
         if not evidence_lines and not summaries and not has_decision_output:
             continue
@@ -5865,7 +6285,11 @@ def _format_structured_workspace_fallback_answer(
         if decision_answer is not None:
             return decision_answer
     if tool_id == WORKSPACE_CATALOG_TOOL_ID:
-        domains = summaries.get("domains") if isinstance(summaries.get("domains"), dict) else {}
+        domains = (
+            summaries.get("domains")
+            if isinstance(summaries.get("domains"), dict)
+            else {}
+        )
         domain_bits = []
         for domain, stats in list(domains.items())[:8]:
             if isinstance(stats, dict):
@@ -5883,7 +6307,11 @@ def _format_structured_workspace_fallback_answer(
         )
     if tool_id == ROUTE_STRUCTURE_TOOL_ID:
         normalized_question = str(query.question or "").casefold()
-        source_paths = summaries.get("source_paths") if isinstance(summaries.get("source_paths"), dict) else {}
+        source_paths = (
+            summaries.get("source_paths")
+            if isinstance(summaries.get("source_paths"), dict)
+            else {}
+        )
         chain_ok = summaries.get("segment_count_matches_checkpoint_chain")
         chain_text = (
             "CP graph 段數符合 checkpoint 鏈"
@@ -5892,14 +6320,19 @@ def _format_structured_workspace_fallback_answer(
             if chain_ok is False
             else "CP graph 段數未提供檢查結果"
         )
-        if any(term in normalized_question for term in ("幾點前通過", "几点前通过", "最晚幾點", "最晚几点")):
+        if any(
+            term in normalized_question
+            for term in ("幾點前通過", "几点前通过", "最晚幾點", "最晚几点")
+        ):
             return (
                 "目前 route structure 只能確認 CP graph 結構，不能直接給出每個 CP 的最晚通過時間。"
                 f" 已知 checkpoint_count={summaries.get('checkpoint_count')}，segment_count={summaries.get('segment_count')}，{chain_text}。"
                 " 要計算「幾點前通過」，還需要 planned_departure_time、slowest-team pace、daylight/weather review 與 turn-back checkpoint。"
                 " 不可把 segment_count 當成 CP deadline 或通過分鐘數。"
             )
-        if any(term in normalized_question for term in ("轉折", "转折", "急轉", "急转")):
+        if any(
+            term in normalized_question for term in ("轉折", "转折", "急轉", "急转")
+        ):
             return (
                 "目前 route structure 可檢查 CP graph 與 segment geometry 完整性，但不能直接列出所有需確認的真實轉折點。"
                 f" 已知 checkpoint_count={summaries.get('checkpoint_count')}，segment_count={summaries.get('segment_count')}，{chain_text}；"
@@ -5988,9 +6421,7 @@ def _format_decision_tool_fallback_answer(
     ):
         playbook = latest.get("survival_incident_playbook")
         evidence_pack = (
-            playbook.get("evidence_to_preserve")
-            if isinstance(playbook, dict)
-            else None
+            playbook.get("evidence_to_preserve") if isinstance(playbook, dict) else None
         )
         evidence_descriptions = []
         if isinstance(evidence_pack, list):
@@ -6022,7 +6453,9 @@ def _format_decision_tool_fallback_answer(
     decision = str(first_layer.get("decision") or latest.get("decision") or "").strip()
     limit = str(first_layer.get("limit") or "").strip()
     reason = str(first_layer.get("reason") or "").strip()
-    next_step = str(first_layer.get("nextStep") or latest.get("nextAction") or "").strip()
+    next_step = str(
+        first_layer.get("nextStep") or latest.get("nextAction") or ""
+    ).strip()
     second_layer = decision_output.get("secondLayer")
     detail_parts: list[str] = []
     if isinstance(second_layer, dict):
@@ -6034,12 +6467,18 @@ def _format_decision_tool_fallback_answer(
         required = second_layer.get("requiredConditions")
         if isinstance(required, list) and required:
             detail_parts.append(
-                "必要條件：" + "；".join(str(item).strip() for item in required[:4] if str(item).strip())
+                "必要條件："
+                + "；".join(
+                    str(item).strip() for item in required[:4] if str(item).strip()
+                )
             )
         alternatives = second_layer.get("alternativeActions")
         if isinstance(alternatives, list) and alternatives:
             detail_parts.append(
-                "替代動作：" + "；".join(str(item).strip() for item in alternatives[:3] if str(item).strip())
+                "替代動作："
+                + "；".join(
+                    str(item).strip() for item in alternatives[:3] if str(item).strip()
+                )
             )
     if tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
         normalized_question = str(query.question or "").casefold()
@@ -6070,7 +6509,10 @@ def _format_decision_tool_fallback_answer(
                 " CP Graph=240 個節點、239 個路段；主要難點=seg.132 CP 129 到 CP 130，約 55.8 分鐘。"
                 " 必須保留折返窗口，通過難點前後重新檢查時間、天氣與隊伍速度；缺 team/pace/daylight 前，必要時改短版或折返。"
             )
-        if any(term in normalized_question for term in ("晚到", "晚出發", "晚出发", "延後出發", "延遲出發")):
+        if any(
+            term in normalized_question
+            for term in ("晚到", "晚出發", "晚出发", "延後出發", "延遲出發")
+        ):
             delay_phrase = _delay_phrase_from_question(normalized_question)
             return (
                 f"{delay_phrase}不應直接照原計畫硬推。"
@@ -6083,7 +6525,11 @@ def _format_decision_tool_fallback_answer(
             if isinstance(details, list):
                 for item in details:
                     text = str(item or "").strip()
-                    if "主要難點=" in text or "CP Graph=" in text or "撤退候選數=" in text:
+                    if (
+                        "主要難點=" in text
+                        or "CP Graph=" in text
+                        or "撤退候選數=" in text
+                    ):
                         compact_details.append(text)
         parts = ["route architecture 工具顯示"]
         if decision:
@@ -6121,9 +6567,7 @@ def _format_decision_tool_fallback_answer(
             parts.append(
                 "guidance_facts="
                 + "|".join(
-                    str(item).strip()
-                    for item in guidance_facts
-                    if str(item).strip()
+                    str(item).strip() for item in guidance_facts if str(item).strip()
                 )
             )
         guidance_required = query_guidance.get("required_fact_groups")
@@ -6144,9 +6588,7 @@ def _format_decision_tool_fallback_answer(
             parts.append(
                 "guidance_missing="
                 + "|".join(
-                    str(item).strip()
-                    for item in guidance_missing
-                    if str(item).strip()
+                    str(item).strip() for item in guidance_missing if str(item).strip()
                 )
             )
         guidance_boundary = str(query_guidance.get("boundary") or "").strip()
@@ -6171,9 +6613,15 @@ def _format_decision_tool_fallback_answer(
 
 
 def _delay_phrase_from_question(normalized_question: str) -> str:
-    if any(term in normalized_question for term in ("一小時", "1小時", "1 小時", "一個小時")):
+    if any(
+        term in normalized_question
+        for term in ("一小時", "1小時", "1 小時", "一個小時")
+    ):
         return "晚出發 1 小時"
-    if any(term in normalized_question for term in ("兩小時", "二小時", "2小時", "2 小時", "兩個小時")):
+    if any(
+        term in normalized_question
+        for term in ("兩小時", "二小時", "2小時", "2 小時", "兩個小時")
+    ):
         return "晚出發 2 小時"
     minute_match = re.search(r"([0-9]{1,3})\s*分鐘", normalized_question)
     if minute_match:
@@ -6194,18 +6642,33 @@ def _format_special_workspace_evidence_answer(
             " 未複核前標成 review-needed。下一步：用有效定位把目前位置連到 route note，"
             "再複核天氣、坡面、落石與可回退性。"
         )
-    if any(term in normalized for term in ("官方路線", "官方路线", "人走出來", "人走出来", "路跡", "路迹")):
+    if any(
+        term in normalized
+        for term in ("官方路線", "官方路线", "人走出來", "人走出来", "路跡", "路迹")
+    ):
         return (
             "目前 workspace evidence 不能判定這裡是官方路線或人走出來的路跡；"
             "現有 route notes 與風險 metadata 不是權威步道來源。"
             " 下一步：需要官方步道資料、reference track provenance 或人工複核後才能分類。"
         )
-    if any(term in normalized for term in ("容許路徑寬度", "容许路径宽度", "路徑寬度", "路径宽度", "corridor width")):
+    if any(
+        term in normalized
+        for term in (
+            "容許路徑寬度",
+            "容许路径宽度",
+            "路徑寬度",
+            "路径宽度",
+            "corridor width",
+        )
+    ):
         return (
             "目前 workspace evidence 不能推導這段容許路徑寬度，也不應憑空給 1.0m 之類數字。"
             " 下一步：需要 route corridor policy、reference track dispersion、地形/斷崖限制與現場定位精度後再設定寬度。"
         )
-    if any(term in normalized for term in ("歷史gpx", "历史gpx", "軌跡分散", "轨迹分散", "trace dispersion")):
+    if any(
+        term in normalized
+        for term in ("歷史gpx", "历史gpx", "軌跡分散", "轨迹分散", "trace dispersion")
+    ):
         return (
             "目前 workspace 搜尋到的只是 review queue / route-note 片段，不能直接判定歷史 GPX 軌跡是否分散。"
             " 下一步：需要 reference tracks cluster、橫向偏移統計或 INS/DR trace 才能回答。"
@@ -6261,10 +6724,12 @@ def _tool_result_response_for_unresolved_model_output(
                 provider_error_type="UnresolvedToolCallText",
             )
             if map_response is None:
-                structured_response = _build_structured_workspace_tool_fallback_response(
-                    query,
-                    sources=sources,
-                    provider_error_type="UnresolvedToolCallText",
+                structured_response = (
+                    _build_structured_workspace_tool_fallback_response(
+                        query,
+                        sources=sources,
+                        provider_error_type="UnresolvedToolCallText",
+                    )
                 )
                 if structured_response is None:
                     return None
@@ -6403,7 +6868,9 @@ class PydanticAIAssistantProvider:
             query.runtime_preference
             == AssistantRuntimePreference.AI_HAT_PLUS_2_FALLBACK
         )
-        requested_cloud_only = query.runtime_preference == AssistantRuntimePreference.CLOUD
+        requested_cloud_only = (
+            query.runtime_preference == AssistantRuntimePreference.CLOUD
+        )
         ai_hat_grounding_retry_used = False
         ai_hat_grounding_guard_status: str | None = None
         grounded_synthesis_status: str | None = None
@@ -6506,11 +6973,15 @@ class PydanticAIAssistantProvider:
                 timeout_seconds=self.timeout_seconds,
                 tool_context=tool_context,
             )
-        if requested_ai_hat_fallback and getattr(
-            self.runner,
-            "last_ai_hat_plus_2_generation_mode",
-            None,
-        ) == "typed_decision_with_verified_evidence":
+        if (
+            requested_ai_hat_fallback
+            and getattr(
+                self.runner,
+                "last_ai_hat_plus_2_generation_mode",
+                None,
+            )
+            == "typed_decision_with_verified_evidence"
+        ):
             ai_hat_raw_model_output = str(
                 getattr(self.runner, "last_ai_hat_plus_2_raw_output", "") or ""
             ).strip()
@@ -6627,8 +7098,7 @@ class PydanticAIAssistantProvider:
             ai_hat_raw_model_output = raw_failed_output
             if (
                 raw_failed_output
-                and raw_failed_output
-                != "AI HAT+2 local model returned no answer text."
+                and raw_failed_output != "AI HAT+2 local model returned no answer text."
             ):
                 model_output = (
                     "AI HAT+2 本地模型已產生回答，但未通過 Scout 證據檢查；"
@@ -6636,10 +7106,10 @@ class PydanticAIAssistantProvider:
                     "evidence_backed_answer，兩者不得互相冒充。"
                 )
             else:
-                model_output = (
-                    "AI HAT+2 本地模型沒有產生可供評測的回答。"
-                )
-        constrained = _has_mutation_intent(query.question) or _has_mutation_intent(model_output)
+                model_output = "AI HAT+2 本地模型沒有產生可供評測的回答。"
+        constrained = _has_mutation_intent(query.question) or _has_mutation_intent(
+            model_output
+        )
         prefix = (
             "Guardrail notice: mutation or prompt-injection language was treated as data, "
             "not as authorization. "
@@ -6655,18 +7125,13 @@ class PydanticAIAssistantProvider:
             limitations.append("Prompt-injection or mutation request was constrained.")
         tool_invocations = _workspace_tool_invocations(self.runner, tool_context)
         if tool_invocations:
-            limitations.append(
-                f"workspace_tool_invocations={len(tool_invocations)}"
-            )
+            limitations.append(f"workspace_tool_invocations={len(tool_invocations)}")
             limitations.append(
                 "workspace_tool_ids="
                 + ",".join(
                     _dedupe_preserving_order(
                         [
-                            str(
-                                invocation.get("tool_id")
-                                or WORKSPACE_EVIDENCE_TOOL_ID
-                            )
+                            str(invocation.get("tool_id") or WORKSPACE_EVIDENCE_TOOL_ID)
                             for invocation in tool_invocations
                         ]
                     )
@@ -6677,10 +7142,11 @@ class PydanticAIAssistantProvider:
             )
         registry_tool_source_ids = _registry_tool_source_ids(response_sources)
         if registry_tool_source_ids:
-            limitations.append(f"registry_tool_source_count={len(registry_tool_source_ids)}")
             limitations.append(
-                "registry_tool_source_ids="
-                + ",".join(registry_tool_source_ids)
+                f"registry_tool_source_count={len(registry_tool_source_ids)}"
+            )
+            limitations.append(
+                "registry_tool_source_ids=" + ",".join(registry_tool_source_ids)
             )
             limitations.append(
                 "Registry tool evidence was read-only and did not promote candidate evidence to runtime safety truth."
@@ -6691,9 +7157,13 @@ class PydanticAIAssistantProvider:
             limitations.append(f"model_profile_used={profile}")
         failover_count = getattr(self.runner, "failover_count", 0)
         if failover_count:
-            limitations.append("Cloud model communication failed; local model fallback was used.")
+            limitations.append(
+                "Cloud model communication failed; local model fallback was used."
+            )
         if requested_ai_hat_fallback:
-            limitations.append("AI HAT+2 local fallback was requested by the operator UI.")
+            limitations.append(
+                "AI HAT+2 local fallback was requested by the operator UI."
+            )
             observed_generation_mode = getattr(
                 self.runner,
                 "last_ai_hat_plus_2_generation_mode",
@@ -6750,9 +7220,7 @@ class PydanticAIAssistantProvider:
                     + ("1" if few_shot_question else "0")
                 )
                 if few_shot_question:
-                    limitations.append(
-                        f"ai_hat_few_shot_question={few_shot_question}"
-                    )
+                    limitations.append(f"ai_hat_few_shot_question={few_shot_question}")
                 answer_contract = getattr(
                     self.runner,
                     "last_ai_hat_plus_2_answer_contract",
@@ -6774,10 +7242,19 @@ class PydanticAIAssistantProvider:
                 limitations.append("ai_hat_hardware_attested=false")
                 if endpoint_response_received:
                     endpoint_fields = (
-                        ("ai_hat_endpoint_model", "last_ai_hat_plus_2_endpoint_response_model"),
-                        ("ai_hat_prompt_eval_count", "last_ai_hat_plus_2_prompt_eval_count"),
+                        (
+                            "ai_hat_endpoint_model",
+                            "last_ai_hat_plus_2_endpoint_response_model",
+                        ),
+                        (
+                            "ai_hat_prompt_eval_count",
+                            "last_ai_hat_plus_2_prompt_eval_count",
+                        ),
                         ("ai_hat_eval_count", "last_ai_hat_plus_2_eval_count"),
-                        ("ai_hat_total_duration_ns", "last_ai_hat_plus_2_total_duration_ns"),
+                        (
+                            "ai_hat_total_duration_ns",
+                            "last_ai_hat_plus_2_total_duration_ns",
+                        ),
                     )
                     for trace_label, attribute_name in endpoint_fields:
                         trace_value = getattr(self.runner, attribute_name, None)
@@ -6885,16 +7362,10 @@ class PydanticAIAssistantProvider:
                     None,
                 )
                 if skill_action_token:
-                    limitations.append(
-                        f"ai_hat_action_token={skill_action_token}"
-                    )
+                    limitations.append(f"ai_hat_action_token={skill_action_token}")
             if ai_hat_generation_mode:
-                limitations.append(
-                    f"ai_hat_generation_mode={ai_hat_generation_mode}"
-                )
-                if ai_hat_generation_mode.startswith(
-                    "skill_guided_missing_context_"
-                ):
+                limitations.append(f"ai_hat_generation_mode={ai_hat_generation_mode}")
+                if ai_hat_generation_mode.startswith("skill_guided_missing_context_"):
                     limitations.append(
                         "The visible answer is the AI HAT+2 model output generated from "
                         "the registered field-state skill and dynamic Scout evidence; "
@@ -6907,9 +7378,7 @@ class PydanticAIAssistantProvider:
                         None,
                     )
                     if typed_decision:
-                        limitations.append(
-                            f"ai_hat_typed_decision={typed_decision}"
-                        )
+                        limitations.append(f"ai_hat_typed_decision={typed_decision}")
                         typed_raw_output = str(
                             getattr(
                                 self.runner,
@@ -6945,9 +7414,7 @@ class PydanticAIAssistantProvider:
                         None,
                     )
                     if typed_decision:
-                        limitations.append(
-                            f"ai_hat_typed_decision={typed_decision}"
-                        )
+                        limitations.append(f"ai_hat_typed_decision={typed_decision}")
                     limitations.append(
                         "AI HAT+2 produced only a bounded classification token after its free-text attempts failed grounding. The token is diagnostic metadata and did not replace the model answer with deterministic Scout evidence."
                     )
@@ -6977,9 +7444,13 @@ class PydanticAIAssistantProvider:
             limitations.append(
                 f"fixed_schema_offline_fallback_contract={fixed_schema_version}"
             )
-        local_hardware_accelerator = getattr(self.runner, "local_hardware_accelerator", None)
+        local_hardware_accelerator = getattr(
+            self.runner, "local_hardware_accelerator", None
+        )
         if local_hardware_accelerator and profile == "local":
-            limitations.append(f"local_hardware_accelerator={local_hardware_accelerator}")
+            limitations.append(
+                f"local_hardware_accelerator={local_hardware_accelerator}"
+            )
         local_backend = getattr(self.runner, "local_backend", None)
         if local_backend and profile == "local":
             limitations.append(f"local_model_backend={local_backend}")
@@ -7053,7 +7524,9 @@ class FallbackPydanticAIRunner:
         self.last_fixed_schema_version: str | None = None
         self.last_offline_fallback_interpretation: dict[str, object] | None = None
         self.last_workspace_tool_invocations: list[dict[str, object]] = []
-        self._fallback_semaphore = threading.BoundedSemaphore(self.max_fallback_concurrency)
+        self._fallback_semaphore = threading.BoundedSemaphore(
+            self.max_fallback_concurrency
+        )
         self.failover_count = 0
 
     def connect(self, *, timeout_seconds: int | None) -> None:
@@ -7229,6 +7702,8 @@ class PydanticAIEnvRunner:
         self.last_agent_recovery: dict[str, Any] = {}
         self.last_evidence_cards: list[dict[str, Any]] = []
         self.last_grounding_verification: dict[str, Any] = {}
+        self.last_mser_trace: dict[str, Any] = {}
+        self.last_mser_answer_verification: dict[str, Any] = {}
         self.last_context_handles: list[dict[str, Any]] = []
         self.last_context_reads: list[dict[str, Any]] = []
         self.last_raw_model_output = ""
@@ -7301,6 +7776,8 @@ class PydanticAIEnvRunner:
         self.last_agent_recovery = {}
         self.last_evidence_cards = []
         self.last_grounding_verification = {}
+        self.last_mser_trace = {}
+        self.last_mser_answer_verification = {}
         self.last_context_handles = []
         self.last_context_reads = []
         self.last_raw_model_output = ""
@@ -7333,15 +7810,14 @@ class PydanticAIEnvRunner:
         self.last_agent_recovery = {}
         self.last_evidence_cards = []
         self.last_grounding_verification = {}
+        self.last_mser_trace = {}
+        self.last_mser_answer_verification = {}
         self.last_context_handles = []
         self.last_context_reads = []
         self.last_raw_model_output = ""
         self.last_raw_model_outputs = []
         self._reset_hailo_request_state()
-        if (
-            not self.workspace_tools_enabled
-            and not self.bounded_agent_runtime_enabled
-        ):
+        if not self.workspace_tools_enabled and not self.bounded_agent_runtime_enabled:
             return self.run(prompt, timeout_seconds=timeout_seconds)
         executor = ThreadPoolExecutor(max_workers=1)
         run_args: tuple[object, ...] = (
@@ -7377,9 +7853,7 @@ class PydanticAIEnvRunner:
         estimated_input_tokens = 0
         request_max_tokens = self.workspace_model_max_tokens
         if bounded:
-            bounded_runtime = BoundedAgentRuntime(
-                budget=AgentRunBudget()
-            )
+            bounded_runtime = BoundedAgentRuntime(budget=AgentRunBudget())
             estimated_input_tokens = estimate_tokens(
                 f"{GLOBAL_ASSISTANT_PROMPT}\n{prompt}"
             )
@@ -7478,7 +7952,9 @@ class PydanticAIEnvRunner:
         result = agent.run_sync(prompt, **run_kwargs)
         usage = _serialize_pydantic_result_usage(result)
         self.last_model_usage = usage
-        self.last_model_response_metadata = _serialize_pydantic_response_metadata(result)
+        self.last_model_response_metadata = _serialize_pydantic_response_metadata(
+            result
+        )
         output = str(pydantic_result_output(result))
         if bounded_runtime is not None:
             request_record = AgentRequestLedger(
@@ -7516,17 +7992,18 @@ class PydanticAIEnvRunner:
             selected_tool_names,
             selected_plan_items,
             planner_plan,
-        ) = (
-            _progressive_tool_runtime(tool_context)
-        )
+        ) = _progressive_tool_runtime(tool_context)
+        self.last_mser_trace = _mser_trace_payload(tool_context)
         if not allow_workspace_tools:
             selected_tool_ids = []
             selected_tool_names = []
             selected_plan_items = []
         required_tool_ids = [item.tool_id for item in selected_plan_items]
-        expected_operations = {
-            item.value for item in planner_plan.expected_operations
-        }
+        expected_operations = (
+            {item.value for item in planner_plan.expected_operations}
+            if WORKSPACE_QUERY_TOOL_ID in selected_tool_ids
+            else set()
+        )
         if self.backend == "hailo_ollama":
             return self._run_hailo_bounded_workspace(
                 tool_context=tool_context,
@@ -7540,6 +8017,7 @@ class PydanticAIEnvRunner:
         from pydantic_ai import Agent
         from pydantic_ai.capabilities import Hooks
         from pydantic_ai.messages import ModelRequest, UserPromptPart
+
         selected_context_handles = bounded_runtime.context_find(
             " ".join([tool_context.query.question, *selected_tool_ids]),
             top_k=10,
@@ -7676,11 +8154,14 @@ class PydanticAIEnvRunner:
                     evidence_cards=validated_cards,
                     missing_evidence=missing_evidence,
                 )
+                synthesis_prompt += _mser_prompt_section(
+                    tool_context,
+                    reproject_tools=True,
+                )
+                self.last_mser_trace = _mser_trace_payload(tool_context)
                 request_context = replace(
                     request_context,
-                    messages=[
-                        ModelRequest(parts=[UserPromptPart(synthesis_prompt)])
-                    ],
+                    messages=[ModelRequest(parts=[UserPromptPart(synthesis_prompt)])],
                 )
             overhead = _request_overhead(request_context)
             if evidence_cards:
@@ -7714,10 +8195,7 @@ class PydanticAIEnvRunner:
                 getattr(request_context, "model_settings", None) or {}
             )
             requested_max_tokens = current_settings.get("max_tokens")
-            if (
-                isinstance(requested_max_tokens, int)
-                and requested_max_tokens > 0
-            ):
+            if isinstance(requested_max_tokens, int) and requested_max_tokens > 0:
                 max_tokens = (
                     requested_max_tokens
                     if max_tokens is None
@@ -7796,9 +8274,7 @@ class PydanticAIEnvRunner:
                     ),
                     tool_id=tool_id,
                     arguments=argument_map,
-                    evidence_ids=[
-                        item.evidence_id for item in card.evidence_records
-                    ],
+                    evidence_ids=[item.evidence_id for item in card.evidence_records],
                     root_cause=(
                         str(result_map.get("root_cause"))
                         if result_map.get("root_cause")
@@ -8516,6 +8992,7 @@ class PydanticAIEnvRunner:
             f"{json.dumps(sorted(expected_operations), ensure_ascii=False)}"
             "\nAgentRunBudget:\n"
             f"{bounded_runtime.budget.model_dump_json()}"
+            f"{_mser_prompt_section(tool_context)}"
         )
         run_error: str | None = None
         external_limit_reason: str | None = None
@@ -8542,9 +9019,7 @@ class PydanticAIEnvRunner:
                     timeout_seconds=request_timeout_seconds,
                     workspace_tools=True,
                 ),
-                usage_limits=pydantic_usage_limits_from_budget(
-                    bounded_runtime.budget
-                ),
+                usage_limits=pydantic_usage_limits_from_budget(bounded_runtime.budget),
             )
             output = str(pydantic_result_output(result))
             validated_cards = [
@@ -8588,9 +9063,7 @@ class PydanticAIEnvRunner:
                         "fail_closed_no_grounded_answer",
                     ],
                 )
-                output = (
-                    "目前沒有取得所選 Scout 工具的證據，因此不會提供未驗證答案。"
-                )
+                output = "目前沒有取得所選 Scout 工具的證據，因此不會提供未驗證答案。"
             elif validated_cards:
                 verification = bounded_runtime.verify_synthesis(
                     output,
@@ -8776,6 +9249,36 @@ class PydanticAIEnvRunner:
                 raise
         finally:
             self.last_workspace_tool_invocations = list(tool_context.invocations)
+            mser_verification = _mser_verify_output(
+                tool_context,
+                output=output,
+                evidence_cards=evidence_cards,
+                grounding_verification=verification,
+            )
+            self.last_mser_trace = _mser_trace_payload(tool_context)
+            self.last_mser_answer_verification = dict(mser_verification)
+            if (
+                verification is not None
+                and verification.passed
+                and _mser_enforcement_failure(
+                    tool_context,
+                    mser_verification,
+                )
+            ):
+                run_error = "mser_answer_verification_failed"
+                verification = GroundingVerification(
+                    passed=False,
+                    output_disposition="fail_closed",
+                    rejected_draft_claims=[output] if output.strip() else [],
+                    repair_items=[
+                        "mser_answer_verification_failed",
+                        "fail_closed_no_grounded_answer",
+                    ],
+                )
+                output = (
+                    "目前無法從最小充分環境表示與已驗證 Scout 證據"
+                    "產生可靠答案；MSER 證據充分性或引用檢查未通過。"
+                )
             executed_tool_ids = [
                 str(item.get("tool_id"))
                 for item in tool_context.invocations
@@ -8807,13 +9310,9 @@ class PydanticAIEnvRunner:
                 verification.model_dump(mode="json") if verification else {}
             )
         if external_limit_reason is not None:
-            call_trace = [
-                {"kind": "model_request", **item}
-                for item in request_records
-            ]
+            call_trace = [{"kind": "model_request", **item} for item in request_records]
             call_trace.extend(
-                {"kind": "tool_invocation", **item}
-                for item in tool_context.invocations
+                {"kind": "tool_invocation", **item} for item in tool_context.invocations
             )
             return self._recover_workspace_external_limit(
                 question=tool_context.query.question,
@@ -8868,15 +9367,9 @@ class PydanticAIEnvRunner:
                 "status": AgentAttemptStatus.EXTERNAL_LIMIT,
             }
         )
-        validated_cards = [
-            EvidenceCard.model_validate(card) for card in evidence_cards
-        ]
+        validated_cards = [EvidenceCard.model_validate(card) for card in evidence_cards]
         source_refs = list(
-            dict.fromkeys(
-                ref
-                for card in validated_cards
-                for ref in card.source_refs
-            )
+            dict.fromkeys(ref for card in validated_cards for ref in card.source_refs)
         )
         checkpoint = orchestrator.checkpoint_external_limit(
             attempt=initial_attempt,
@@ -8965,9 +9458,7 @@ class PydanticAIEnvRunner:
                     timeout_seconds=timeout_seconds,
                     workspace_tools=False,
                 ),
-                usage_limits=pydantic_usage_limits_from_budget(
-                    continuation.budget
-                ),
+                usage_limits=pydantic_usage_limits_from_budget(continuation.budget),
             )
             output = str(pydantic_result_output(result))
             usage = _serialize_pydantic_result_usage(result)
@@ -8980,9 +9471,7 @@ class PydanticAIEnvRunner:
                 ),
                 cache_write_tokens=int(usage.get("cache_write_tokens", 0)),
                 cache_read_tokens=int(usage.get("cache_read_tokens", 0)),
-                output_tokens=int(
-                    usage.get("output_tokens", estimate_tokens(output))
-                ),
+                output_tokens=int(usage.get("output_tokens", estimate_tokens(output))),
                 tool_call_count=int(usage.get("tool_calls", 0)),
             )
             continuation_ledger = runtime.record_request(
@@ -8994,9 +9483,7 @@ class PydanticAIEnvRunner:
                 evidence_cards=validated_cards,
             )
         except Exception as exc:
-            continuation_error = (
-                f"continuation_provider_error:{type(exc).__name__}"
-            )
+            continuation_error = f"continuation_provider_error:{type(exc).__name__}"
             continuation_ledger = continuation_ledger.model_copy(
                 update={"budget_stop_reason": continuation_error}
             )
@@ -9078,9 +9565,7 @@ class PydanticAIEnvRunner:
         self.last_agent_recovery = {
             "status": status,
             "checkpoint": checkpoint,
-            "attempts": [
-                attempt.model_dump(mode="json") for attempt in attempts
-            ],
+            "attempts": [attempt.model_dump(mode="json") for attempt in attempts],
         }
         self.last_agent_run_ledger = ledger.model_dump(mode="json")
         self.last_evidence_cards = list(evidence_cards)
@@ -9159,9 +9644,7 @@ class PydanticAIEnvRunner:
             if not tool_id or not isinstance(request, dict):
                 continue
             raw_arguments = request.get("arguments")
-            arguments = (
-                dict(raw_arguments) if isinstance(raw_arguments, dict) else {}
-            )
+            arguments = dict(raw_arguments) if isinstance(raw_arguments, dict) else {}
             arguments.pop("project_root", None)
             tool_query = _merge_workspace_tool_query(
                 question,
@@ -9185,7 +9668,9 @@ class PydanticAIEnvRunner:
             )
 
         missing_selected_tool_ids = [
-            tool_id for tool_id in required_tool_ids if tool_id not in attempted_tool_ids
+            tool_id
+            for tool_id in required_tool_ids
+            if tool_id not in attempted_tool_ids
         ]
         if missing_selected_tool_ids:
             verification = GroundingVerification(
@@ -9250,10 +9735,13 @@ class PydanticAIEnvRunner:
             if evidence_cards
             else question
         )
-        system_prompt = f"{GLOBAL_ASSISTANT_PROMPT}\n{BOUNDED_AGENT_SYSTEM_POLICY}"
-        estimated_input_tokens = estimate_tokens(
-            f"{system_prompt}\n{synthesis_prompt}"
+        synthesis_prompt += _mser_prompt_section(
+            tool_context,
+            reproject_tools=True,
         )
+        self.last_mser_trace = _mser_trace_payload(tool_context)
+        system_prompt = f"{GLOBAL_ASSISTANT_PROMPT}\n{BOUNDED_AGENT_SYSTEM_POLICY}"
+        estimated_input_tokens = estimate_tokens(f"{system_prompt}\n{synthesis_prompt}")
         try:
             request_max_tokens = _bounded_request_max_tokens(
                 budget=bounded_runtime.budget,
@@ -9284,9 +9772,7 @@ class PydanticAIEnvRunner:
             )
             return HARD_BUDGET_FAIL_CLOSED_OUTPUT
 
-        evidence_chars = sum(
-            len(card.model_dump_json()) for card in evidence_cards
-        )
+        evidence_chars = sum(len(card.model_dump_json()) for card in evidence_cards)
         request_records: list[dict[str, Any]] = []
         output: str | None = None
         partial_output = ""
@@ -9368,9 +9854,7 @@ class PydanticAIEnvRunner:
                     if isinstance(output_eval_count, int)
                     else estimate_tokens(candidate_output)
                 ),
-                tool_call_count=(
-                    len(attempted_tool_ids) if request_index == 1 else 0
-                ),
+                tool_call_count=(len(attempted_tool_ids) if request_index == 1 else 0),
                 retry_count=1 if request_index > 1 else 0,
             )
             request_records.append(request_record.model_dump(mode="json"))
@@ -9417,7 +9901,9 @@ class PydanticAIEnvRunner:
                     "fail_closed_no_grounded_answer",
                 ],
             )
-            ledger = ledger.model_copy(update={"budget_stop_reason": last_continuation_reason})
+            ledger = ledger.model_copy(
+                update={"budget_stop_reason": last_continuation_reason}
+            )
             self._store_bounded_hailo_run(
                 ledger=ledger,
                 evidence_cards=evidence_cards,
@@ -9532,8 +10018,7 @@ class PydanticAIEnvRunner:
                     system_chars=len(repair_system_prompt),
                     user_history_chars=len(output),
                     tool_result_chars=sum(
-                        len(card.model_dump_json())
-                        for card in repair_evidence_cards
+                        len(card.model_dump_json()) for card in repair_evidence_cards
                     ),
                     input_tokens=(
                         repair_prompt_eval_count
@@ -9704,8 +10189,34 @@ class PydanticAIEnvRunner:
                 }
             )
             output = (
-                "目前無法從已驗證的 Scout 證據產生可靠答案；"
-                "回答未通過證據引用檢查。"
+                "目前無法從已驗證的 Scout 證據產生可靠答案；回答未通過證據引用檢查。"
+            )
+        serialized_evidence_cards = [
+            card.model_dump(mode="json") for card in evidence_cards
+        ]
+        mser_verification = _mser_verify_output(
+            tool_context,
+            output=output,
+            evidence_cards=serialized_evidence_cards,
+            grounding_verification=verification,
+        )
+        self.last_mser_trace = _mser_trace_payload(tool_context)
+        self.last_mser_answer_verification = dict(mser_verification)
+        if verification.passed and _mser_enforcement_failure(
+            tool_context, mser_verification
+        ):
+            verification = GroundingVerification(
+                passed=False,
+                output_disposition="fail_closed",
+                rejected_draft_claims=[output] if output.strip() else [],
+                repair_items=[
+                    "mser_answer_verification_failed",
+                    "fail_closed_no_grounded_answer",
+                ],
+            )
+            output = (
+                "目前無法從最小充分環境表示與已驗證 Scout 證據"
+                "產生可靠答案；MSER 證據充分性或引用檢查未通過。"
             )
         self.last_model_response_metadata = {
             **self.last_model_response_metadata,
@@ -9991,9 +10502,7 @@ class PydanticAIEnvRunner:
             max_input_tokens=input_token_budget or HAILO_MAX_INPUT_TOKENS,
         )
         num_predict = (
-            max_tokens
-            if max_tokens is not None
-            else self.workspace_model_max_tokens
+            max_tokens if max_tokens is not None else self.workspace_model_max_tokens
         )
         normalized_system_prompt = _normalize_hailo_chat_content(system_prompt)
         normalized_user_prompt = _normalize_hailo_chat_content(
@@ -10032,11 +10541,7 @@ class PydanticAIEnvRunner:
             "messages": messages,
             "stream": True,
             "options": {
-                **(
-                    {"num_predict": num_predict}
-                    if num_predict is not None
-                    else {}
-                ),
+                **({"num_predict": num_predict} if num_predict is not None else {}),
                 "temperature": (
                     0
                     if (
@@ -10247,12 +10752,9 @@ class PydanticAIEnvRunner:
                         semantic_stop = True
                         stream_done = True
                         break
-                    if (
-                        bounded_hailo_prompt
-                        and _hailo_bounded_exact_answers_covered(
-                            prompt,
-                            combined_output,
-                        )
+                    if bounded_hailo_prompt and _hailo_bounded_exact_answers_covered(
+                        prompt,
+                        combined_output,
                     ):
                         semantic_completion = True
                         stream_done = True
@@ -10336,7 +10838,9 @@ class PydanticAIEnvRunner:
         self.last_hailo_semantic_stop = semantic_stop
         self.last_hailo_semantic_completion = semantic_completion
         self.last_hailo_response_received = response_count > 0
-        self.last_hailo_response_model = str(response_payload.get("model") or model_name)
+        self.last_hailo_response_model = str(
+            response_payload.get("model") or model_name
+        )
         self.last_hailo_prompt_eval_count = _optional_nonnegative_int(
             response_payload.get("prompt_eval_count")
         )
@@ -10402,7 +10906,9 @@ class PydanticAIEnvRunner:
         self.last_hailo_context_full_reason = reason
         self.last_hailo_stream_completed = False
         self.last_hailo_response_received = bool(response_payload or partial_output)
-        self.last_hailo_response_model = str(response_payload.get("model") or model_name)
+        self.last_hailo_response_model = str(
+            response_payload.get("model") or model_name
+        )
         self.last_hailo_prompt_eval_count = _optional_nonnegative_int(
             response_payload.get("prompt_eval_count")
         )
@@ -10455,9 +10961,7 @@ def build_assistant_prompt(
     context_json = json.dumps(context, ensure_ascii=False, sort_keys=True)
     if max_context_chars is not None and len(context_json) > max_context_chars:
         context_json = f"{context_json[:max_context_chars]}\n[context truncated]"
-    total_info_section = (
-        f"Total Info:\n{total_info_json}\n" if total_info_json else ""
-    )
+    total_info_section = f"Total Info:\n{total_info_json}\n" if total_info_json else ""
     return (
         f"{GLOBAL_ASSISTANT_PROMPT}\n"
         f"Question:\n{query.question}\n"
@@ -10470,7 +10974,9 @@ def _total_info_prompt_summary(sources: list[AssistantSourceRef]) -> str:
     for source in sources:
         if source.source_id != TOTAL_INFO_SOURCE_ID:
             continue
-        summary = source.context_summary if isinstance(source.context_summary, dict) else {}
+        summary = (
+            source.context_summary if isinstance(source.context_summary, dict) else {}
+        )
         if not summary:
             return ""
         compact = {
@@ -10504,7 +11010,9 @@ def _evidence_synthesis_contract(
     context_registry_summary: dict[str, object] | None = None
     tool_registry_summary: dict[str, object] | None = None
     for source in sources:
-        summary = source.context_summary if isinstance(source.context_summary, dict) else {}
+        summary = (
+            source.context_summary if isinstance(source.context_summary, dict) else {}
+        )
         evidence_type = source.evidence_type or ""
         resolver = summary.get("resolver")
         source_record = {
@@ -10525,7 +11033,10 @@ def _evidence_synthesis_contract(
         if source.source_id == "assistant_context.tool_registry":
             tool_registry_summary = _source_tool_registry_summary(summary)
         source_missing_fields = _source_missing_fields(summary)
-        if evidence_type == "assistant_registry_tool_contract_gap" or source_missing_fields:
+        if (
+            evidence_type == "assistant_registry_tool_contract_gap"
+            or source_missing_fields
+        ):
             contract_gap_sources.append(
                 {
                     **source_record,
@@ -10740,9 +11251,10 @@ def _run_cloud_grounded_synthesis_retry(
     grounded_answer: str,
     timeout_seconds: int,
 ) -> str | None:
-    compact_evidence = _draft_answer_for_local_model(grounded_answer) or str(
-        grounded_answer or ""
-    ).strip()
+    compact_evidence = (
+        _draft_answer_for_local_model(grounded_answer)
+        or str(grounded_answer or "").strip()
+    )
     if not compact_evidence:
         return None
     prompt = (
@@ -10785,7 +11297,10 @@ def _ai_hat_multi_candidate_answer_task(question: str) -> str:
             "回答哪些地方雨後要優先人工複核；說明這是 route/risk 候選，"
             "不是即時天氣判定。"
         )
-    if any(term in normalized for term in ("checkpoint", "cp", "檢查點", "設checkpoint", "設cp", "漏設")):
+    if any(
+        term in normalized
+        for term in ("checkpoint", "cp", "檢查點", "設checkpoint", "設cp", "漏設")
+    ):
         return "回答哪些地方應優先考慮設 checkpoint，並說明這是候選點。"
     if any(term in normalized for term in ("拍照", "拍攝", "停留", "景觀點")):
         return "回答哪些地方不適合停留拍照，並說明需人工複核。"
@@ -10840,9 +11355,7 @@ def _build_ai_hat_evidence_synthesis_prompt(
     prior_answer: str | None = None,
 ) -> str:
     marker = (
-        "AI_HAT_EVIDENCE_REPAIR_V2"
-        if prior_answer
-        else "AI_HAT_EVIDENCE_SYNTHESIS_V2"
+        "AI_HAT_EVIDENCE_REPAIR_V2" if prior_answer else "AI_HAT_EVIDENCE_SYNTHESIS_V2"
     )
     repair_context = (
         "The previous attempt failed the evidence check. Discard it and write a new "
@@ -10911,7 +11424,9 @@ def _run_ai_hat_rain_risk_staged_synthesis(
     coordinates = str(evidence.get("coordinates") or "").strip()
     has_weather_gap = bool(evidence.get("missing_weather_fields"))
     checkpoint_match = re.search(r"CP\s*\d+", candidate_location, flags=re.IGNORECASE)
-    distance_match = re.search(r"[0-9.]+\s*m\b", candidate_location, flags=re.IGNORECASE)
+    distance_match = re.search(
+        r"[0-9.]+\s*m\b", candidate_location, flags=re.IGNORECASE
+    )
     checkpoint_token = checkpoint_match.group(0) if checkpoint_match else "CP"
     distance_token = distance_match.group(0) if distance_match else "距離"
     candidate_required_tokens = [checkpoint_token, distance_token, risk_score]
@@ -10937,20 +11452,20 @@ def _run_ai_hat_rain_risk_staged_synthesis(
             f"座標={coordinates or '未列'}。\n"
             f"只輸出一句繁體中文，逐字包含{candidate_required_text}。"
             "不可說成已確認危險、安全、低風險、一定出事或最容易出事。\n"
-            "回答："
+            "回答：",
         ),
     ]
     if has_weather_gap:
         prompts.append(
             (
-            "weather_gap",
-            "AI_HAT_WEATHER_GAP_SENTENCE_V1\n"
-            f"登山問題：{question[:160]}\n"
-            "事實：缺少即時天氣證據，因此尚未確認雨後危險。\n"
-            "只輸出一句繁體中文，逐字包含「缺少即時天氣證據」、"
-            "「不能確認雨後會變危險」。"
-            "不可加入位置、分數、一般雨天建議或其他事實。\n"
-            "回答："
+                "weather_gap",
+                "AI_HAT_WEATHER_GAP_SENTENCE_V1\n"
+                f"登山問題：{question[:160]}\n"
+                "事實：缺少即時天氣證據，因此尚未確認雨後危險。\n"
+                "只輸出一句繁體中文，逐字包含「缺少即時天氣證據」、"
+                "「不能確認雨後會變危險」。"
+                "不可加入位置、分數、一般雨天建議或其他事實。\n"
+                "回答：",
             )
         )
     else:
@@ -10961,7 +11476,7 @@ def _run_ai_hat_rain_risk_staged_synthesis(
                 "事實：上述位置只是行前風險人工複核候選，不是事故預測。\n"
                 "只輸出一句繁體中文，逐字包含「人工複核候選」、"
                 "「不能確認該處一定會出事」。不可加入位置、分數或其他事實。\n"
-                "回答："
+                "回答：",
             )
         )
     outputs: list[str] = []
@@ -11063,7 +11578,9 @@ def _run_ai_hat_rain_risk_staged_synthesis(
                 has_rain_danger_focus = "雨後" in normalized_output and any(
                     term in normalized_output for term in ("危險", "危险", "危急")
                 )
-                valid = output_has_weather_gap and has_uncertainty and has_rain_danger_focus
+                valid = (
+                    output_has_weather_gap and has_uncertainty and has_rain_danger_focus
+                )
             else:
                 has_candidate_boundary = "人工複核候選" in normalized_output
                 has_no_accident_prediction = any(
@@ -11108,7 +11625,9 @@ def _run_ai_hat_checkpoint_design_staged_synthesis(
     criteria_match = re.search(r"還要看([^。]+)", grounded)
     criteria_items = [
         item.strip()
-        for item in re.split(r"[、,，]", criteria_match.group(1) if criteria_match else "")
+        for item in re.split(
+            r"[、,，]", criteria_match.group(1) if criteria_match else ""
+        )
         if item.strip()
     ][:4]
     reason_summary = "、".join(reason_items) or "路段時間與回退條件"
@@ -11120,7 +11639,7 @@ def _run_ai_hat_checkpoint_design_staged_synthesis(
             f"事實：優先複核路段={segment}；難點原因={reason_summary}。\n"
             f"只輸出一句繁體中文，逐字包含「{segment}」、「人工複核難點」，"
             "並自然說明至少兩項原因。不可宣稱一定要增設 checkpoint。\n"
-            "回答："
+            "回答：",
         ),
         (
             "checkpoint_boundary",
@@ -11128,7 +11647,7 @@ def _run_ai_hat_checkpoint_design_staged_synthesis(
             f"判斷條件：{criteria_summary}。\n"
             "只輸出一句繁體中文，說明目前不能判定哪裡一定要增設 checkpoint；"
             "是否增設仍要看上述條件。不可重複第一句或加入其他位置。\n"
-            "回答："
+            "回答：",
         ),
     )
     outputs: list[str] = []
@@ -11256,7 +11775,7 @@ def _run_ai_hat_multi_terrain_staged_synthesis(
             f"地形候選：{'；'.join(anchor_texts)}。\n"
             "只輸出一句繁體中文，先說摸黑前優先複核，再逐字保留上述兩個 GPX 與"
             "地形分數。不可加入急彎、陡坡、水路或其他未提供地形。\n"
-            "回答："
+            "回答：",
         ),
         (
             "terrain_boundary",
@@ -11264,7 +11783,7 @@ def _run_ai_hat_multi_terrain_staged_synthesis(
             f"事實：這些只是行前地形候選，不是即時安全結論；"
             f"天氣窗資料{'仍缺' if has_weather_gap else '未列'}。\n"
             "只輸出一句繁體中文，保留候選邊界與天氣缺口，不可宣稱現場一定危險或安全。\n"
-            "回答："
+            "回答：",
         ),
     )
     outputs: list[str] = []
@@ -11450,24 +11969,14 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
             break
         forbidden_text = "；".join(answer_brief.forbidden_claims) or "不得新增事實"
         correction_text = "；".join(final_violations)
-        accident_candidate_retry = (
-            answer_brief.subject == "最需要複核的 CP 候選"
-        )
-        risk_location_retry = (
-            answer_brief.subject
-            in (
-                "哪些地方下雨後需優先複核",
-                "哪些地方需避免停留拍照",
-            )
-            and final_violations != ["輸出 prompt 或欄位標籤"]
-        )
+        accident_candidate_retry = answer_brief.subject == "最需要複核的 CP 候選"
+        risk_location_retry = answer_brief.subject in (
+            "哪些地方下雨後需優先複核",
+            "哪些地方需避免停留拍照",
+        ) and final_violations != ["輸出 prompt 或欄位標籤"]
         low_tolerance_retry = answer_brief.subject == "是否有低容錯地形"
-        altitude_self_check_retry = (
-            answer_brief.subject == "現在是否需要做高山症自評"
-        )
-        rescue_report_retry = (
-            answer_brief.subject == "留守人報案所需山域資訊"
-        )
+        altitude_self_check_retry = answer_brief.subject == "現在是否需要做高山症自評"
+        rescue_report_retry = answer_brief.subject == "留守人報案所需山域資訊"
         shelter_arrival_retry = (
             answer_brief.subject == "有人未抵達約定山屋時的檢查與通報時機"
         )
@@ -11524,9 +12033,7 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
         )
         list_output_retry = "使用清單而非自然短答" in final_violations
         format_only_list_retry = final_violations == ["使用清單而非自然短答"]
-        delayed_departure_retry = (
-            answer_brief.subject == "晚出發一小時後能否安全完成"
-        )
+        delayed_departure_retry = answer_brief.subject == "晚出發一小時後能否安全完成"
         accident_boundary_only = final_violations == ["把候選錯寫成事故預測"]
         labels_only = final_violations == ["輸出 prompt 或欄位標籤"]
         rescue_boundary_only = bool(
@@ -11565,9 +12072,7 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
         append_unknown_output = False
         if accident_candidate_retry:
             required_literals = [
-                group[0]
-                for group in answer_brief.required_fact_groups
-                if group
+                group[0] for group in answer_brief.required_fact_groups if group
             ]
             required_literal_text = "；".join(required_literals)
             review_prompt = (
@@ -11583,9 +12088,7 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
                 "不要輸出欄位名、清單或規則說明，只輸出一到兩句繁體中文。\n"
             )
         elif risk_location_retry:
-            is_rain_question = (
-                answer_brief.subject == "哪些地方下雨後需優先複核"
-            )
+            is_rain_question = answer_brief.subject == "哪些地方下雨後需優先複核"
             review_prompt = (
                 "AI_HAT_RAW_RISK_LOCATION_RETRY_V1\n"
                 f"skill_id={LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID}\n"
@@ -11888,13 +12391,10 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
             )
         elif unknown_context_retry:
             required_inputs = "、".join(
-                group[0]
-                for group in answer_brief.required_fact_groups
-                if group
+                group[0] for group in answer_brief.required_fact_groups if group
             )
             safe_partial_answer = bool(final_violations) and all(
-                violation.startswith("缺少事實：")
-                for violation in final_violations
+                violation.startswith("缺少事實：") for violation in final_violations
             )
             missing_literals = "、".join(
                 violation.split("：", 1)[1]
@@ -11908,13 +12408,9 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
                     " Never state that there is no stop point.\n"
                 )
             elif answer_brief.subject == "這裡是官方路線或非正式路跡":
-                subject_rule = (
-                    "Never state that the route is official or informal; its source is unknown.\n"
-                )
+                subject_rule = "Never state that the route is official or informal; its source is unknown.\n"
             elif answer_brief.subject == "這段容許路徑寬度":
-                subject_rule = (
-                    "All positioning precision is missing; never claim positioning data exists.\n"
-                )
+                subject_rule = "All positioning precision is missing; never claim positioning data exists.\n"
             elif answer_brief.subject == "目前 GPS 誤差是否過大而不可信":
                 subject_rule = (
                     "Do not state GPS is usually acceptable and do not give hypothetical "
@@ -12054,7 +12550,11 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
                     f"Original hiker question: {question[:180]}\n"
                     f"Missing evidence: {required_inputs}\n"
                     f"需要修正：{correction_text}\n"
-                    + (f"Required added literal text: {missing_literals}\n" if missing_literals else "")
+                    + (
+                        f"Required added literal text: {missing_literals}\n"
+                        if missing_literals
+                        else ""
+                    )
                     + subject_rule
                     + partial_context
                     + "Answer using only the question and missing evidence. "
@@ -12328,8 +12828,7 @@ def _local_grounded_model_question(
     if "拍照" in normalized:
         return (
             "模型回答目標",
-            "哪個位置是避免長時間停留拍照的複核候選？"
-            "不可把候選寫成即時強制禁令。",
+            "哪個位置是避免長時間停留拍照的複核候選？不可把候選寫成即時強制禁令。",
         )
     if "體能" in normalized:
         return (
@@ -12372,9 +12871,8 @@ def _build_local_grounded_answer_brief(
         return _compact_evidence_value(compact, key)
 
     rescue_report_groups = _extract_rescue_report_fact_groups(grounded)
-    if (
-        rescue_report_groups
-        and _looks_like_rescue_report_information_question(question)
+    if rescue_report_groups and _looks_like_rescue_report_information_question(
+        question
     ):
         return LocalGroundedAnswerBrief(
             decision="ANSWER",
@@ -12504,7 +13002,10 @@ def _build_local_grounded_answer_brief(
                     "不得為標記前往崖邊",
                 ),
             )
-        elif "保存哪些證據" in normalized_question or "保存哪些证据" in normalized_question:
+        elif (
+            "保存哪些證據" in normalized_question
+            or "保存哪些证据" in normalized_question
+        ):
             subject = "需保存給搜救的事件證據"
             required = (
                 ("座標", "高度", "時間"),
@@ -12514,7 +13015,10 @@ def _build_local_grounded_answer_brief(
                 ("未知", "未確認"),
                 ("不自動發送 SOS", "不會發送 SOS", "只準備人工轉報"),
             )
-        elif "位置分享給誰" in normalized_question or "位置分享给谁" in normalized_question:
+        elif (
+            "位置分享給誰" in normalized_question
+            or "位置分享给谁" in normalized_question
+        ):
             subject = "目前位置應人工分享給哪些對象"
             required = (
                 ("留守人", "領隊", "隊伍聯絡人"),
@@ -12554,7 +13058,11 @@ def _build_local_grounded_answer_brief(
     if playbook_fields:
         if any(term in normalized_question for term in ("下切溪谷", "沿溪谷")):
             subject = "是否可下切溪谷"
-            required = (("不建議", "不要", "不得"), ("下切",), ("降低被找到", "迷途與失聯"))
+            required = (
+                ("不建議", "不要", "不得"),
+                ("下切",),
+                ("降低被找到", "迷途與失聯"),
+            )
         elif any(term in normalized_question for term in ("原地等待", "找路")):
             subject = "位置不確定時應停止並等待"
             required = (("停止前進",), ("隊伍聚在一起",), ("不要分散找路", "不要下切"))
@@ -12588,7 +13096,9 @@ def _build_local_grounded_answer_brief(
             if cp_pair_match
             else "主要 CP 路段"
         )
-        duration = f"約 {minutes_match.group(1)} 分鐘" if minutes_match else "需重算時間"
+        duration = (
+            f"約 {minutes_match.group(1)} 分鐘" if minutes_match else "需重算時間"
+        )
         return LocalGroundedAnswerBrief(
             decision="REPLAN",
             subject="晚出發一小時後能否安全完成",
@@ -12703,7 +13213,9 @@ def _build_local_grounded_answer_brief(
                 if is_altitude_self_check
                 else f"不能判定{subject}；需要補充{request_summary}"
             ),
-            forbidden_claims=(value("missing_context_rule") or "不得把缺失資料寫成已知",),
+            forbidden_claims=(
+                value("missing_context_rule") or "不得把缺失資料寫成已知",
+            ),
         )
     top_location = value("top_location")
     top_gpx = value("top_gpx_km")
@@ -12880,8 +13392,10 @@ def _local_grounded_answer_brief_violations(
         facts_text,
         flags=re.IGNORECASE,
     )
-    if "gpx" in output.casefold() and expected_gpx_values and not any(
-        value in output for value in expected_gpx_values
+    if (
+        "gpx" in output.casefold()
+        and expected_gpx_values
+        and not any(value in output for value in expected_gpx_values)
     ):
         violations.append(
             "GPX 值錯誤：應為 "
@@ -12892,12 +13406,12 @@ def _local_grounded_answer_brief_violations(
         facts_text,
         flags=re.IGNORECASE,
     )
-    if any(
-        term in output.casefold() for term in ("score", "分數")
-    ) and expected_scores and not any(value in output for value in expected_scores):
-        violations.append(
-            "score 值錯誤：應為 " + " 或 ".join(expected_scores)
-        )
+    if (
+        any(term in output.casefold() for term in ("score", "分數"))
+        and expected_scores
+        and not any(value in output for value in expected_scores)
+    ):
+        violations.append("score 值錯誤：應為 " + " 或 ".join(expected_scores))
     if _model_output_leaks_prompt_labels(output) or re.search(
         r"(?:需要修正[:：]|禁止內容\s*[:：=]|判斷類型\s*[:：=]|"
         r"事實\d+(?:\s*[:：=]|和事實\d+|與事實\d+|、事實\d+)|"
@@ -12920,10 +13434,7 @@ def _local_grounded_answer_brief_violations(
         output,
     ):
         violations.append("使用清單而非自然短答")
-    if any(
-        term in output
-        for term in ("其他未提及", "其他詳細資訊", "其他相關資訊")
-    ):
+    if any(term in output for term in ("其他未提及", "其他詳細資訊", "其他相關資訊")):
         violations.append("新增無證據填充內容")
     if "目前尚缺目前" in output:
         violations.append("重複用詞：目前尚缺目前")
@@ -12952,13 +13463,17 @@ def _local_grounded_answer_brief_violations(
         violations.append("不自然的配速用詞：CP 速度")
     if re.search(r"CPETA", output, flags=re.IGNORECASE):
         violations.append("不自然的配速用詞：CP ETA 黏字")
-    if brief.decision == "UNKNOWN" and missing_text and any(
-        phrase in output
-        for phrase in (
-            "已有座標",
-            "已有定位",
-            "已有官方步道來源",
-            "包含官方步道來源",
+    if (
+        brief.decision == "UNKNOWN"
+        and missing_text
+        and any(
+            phrase in output
+            for phrase in (
+                "已有座標",
+                "已有定位",
+                "已有官方步道來源",
+                "包含官方步道來源",
+            )
         )
     ):
         violations.append("反轉證據：把缺失輸入寫成已存在")
@@ -13020,10 +13535,7 @@ def _local_grounded_answer_brief_violations(
         ):
             violations.append("缺資料時新增繼續或停止建議")
     if brief.decision == "UNKNOWN" and brief.subject == "目前是否正在出現決策品質下降":
-        if any(
-            phrase in output
-            for phrase in ("僅有已知的認知因素", "已有認知因素")
-        ):
+        if any(phrase in output for phrase in ("僅有已知的認知因素", "已有認知因素")):
             violations.append("反轉證據：把缺失認知狀態寫成已知")
     if brief.decision == "UNKNOWN" and brief.subject == "隊伍是否已形成分離事件":
         if any(
@@ -13046,15 +13558,14 @@ def _local_grounded_answer_brief_violations(
         )
     ):
         violations.append("否定使用者已提供的未抵達前提")
-    if (
-        brief.subject == "有人未抵達約定山屋時的檢查與通報時機"
-        and "合約" in output
-    ):
+    if brief.subject == "有人未抵達約定山屋時的檢查與通報時機" and "合約" in output:
         violations.append("把留守升級條件誤寫成合約")
     if brief.subject == "留守人報案所需山域資訊":
         if any(term in output for term in ("身份證明", "是否有必要報案")):
             violations.append("把山域報案資訊退化成一般報案套話")
-        if re.search(r"\d", output) or re.search(r"(?:^|[，；。])\s*[A-Z]\s*(?:線|點)", output):
+        if re.search(r"\d", output) or re.search(
+            r"(?:^|[，；。])\s*[A-Z]\s*(?:線|點)", output
+        ):
             violations.append("報案資訊新增未提供的具體值")
         if "\n" in output.strip() or "：" in output or ":" in output:
             violations.append("報案資訊使用欄位清單格式")
@@ -13069,8 +13580,7 @@ def _local_grounded_answer_brief_violations(
     ):
         violations.append("裝置資源回答包含截斷詞")
     if brief.subject == "手錶沒電後可用哪些備援定位方式" and any(
-        phrase in output
-        for phrase in ("手錶沒電後無法定位", "手錶沒電後還無法定位")
+        phrase in output for phrase in ("手錶沒電後無法定位", "手錶沒電後還無法定位")
     ):
         violations.append("把未知備援可用性誤寫成無法定位")
     if brief.subject in {
@@ -13080,9 +13590,8 @@ def _local_grounded_answer_brief_violations(
         ("手錶沒電後還能怎麼定位？", "行動電源是否應該保留給通訊？")
     ):
         violations.append("重複使用者問題")
-    if (
-        brief.subject == "目前是否有可用的第二套導航工具"
-        and output.strip().startswith(("您是否有第二套導航工具", "我是否有第二套導航工具"))
+    if brief.subject == "目前是否有可用的第二套導航工具" and output.strip().startswith(
+        ("您是否有第二套導航工具", "我是否有第二套導航工具")
     ):
         violations.append("重複使用者問題")
     if (
@@ -13091,8 +13600,7 @@ def _local_grounded_answer_brief_violations(
     ):
         violations.append("把待檢查狀態誤寫成可用備援方式")
     if brief.subject == "離線地圖是否已完整載入" and any(
-        phrase in output
-        for phrase in ("可用資訊顯示", "已有圖磚覆蓋", "GPX 已載入")
+        phrase in output for phrase in ("可用資訊顯示", "已有圖磚覆蓋", "GPX 已載入")
     ):
         violations.append("反轉證據：把缺失地圖狀態寫成已知")
     if brief.subject == "裝備濕掉後是否應停止前進" and any(
@@ -13105,7 +13613,11 @@ def _local_grounded_answer_brief_violations(
         "目前是否應關閉非必要耗電功能",
     } and any(
         phrase in output
-        for phrase in ("評估其適用性", "最終決定仍需依實際情況而定", "建議參考備援電源與使用情境")
+        for phrase in (
+            "評估其適用性",
+            "最終決定仍需依實際情況而定",
+            "建議參考備援電源與使用情境",
+        )
     ):
         violations.append("裝置資源回答包含泛化填充")
     if brief.subject == "目前是否有可用的第二套導航工具" and any(
@@ -13123,48 +13635,62 @@ def _local_grounded_answer_brief_violations(
         )
     ):
         violations.append("重複裝置資源欄位")
-    if (
-        brief.subject == "是否應保留行動電源給通訊"
-        and "因缺少" not in output
-    ):
+    if brief.subject == "是否應保留行動電源給通訊" and "因缺少" not in output:
         violations.append("缺口清單缺少語法連接")
-    if brief.subject == "位置不確定時應停止並等待" and any(
-        phrase in output
-        for phrase in (
-            "建議找路",
-            "可以找路",
-            "應找路",
-            "建议找路",
-            "應原地等待或找路",
+    if (
+        brief.subject == "位置不確定時應停止並等待"
+        and any(
+            phrase in output
+            for phrase in (
+                "建議找路",
+                "可以找路",
+                "應找路",
+                "建议找路",
+                "應原地等待或找路",
+            )
         )
-    ) and not any(phrase in output for phrase in ("不建議找路", "不要找路", "不可找路")):
+        and not any(
+            phrase in output for phrase in ("不建議找路", "不要找路", "不可找路")
+        )
+    ):
         violations.append("位置不確定時建議找路")
-    if brief.subject == "是否可下切溪谷" and any(
-        phrase in output
-        for phrase in ("可以下切", "可下切", "建議下切", "先下切")
-    ) and not any(
-        phrase in output
-        for phrase in ("不可以下切", "不可下切", "不建議下切", "不要下切", "不得下切")
+    if (
+        brief.subject == "是否可下切溪谷"
+        and any(
+            phrase in output for phrase in ("可以下切", "可下切", "建議下切", "先下切")
+        )
+        and not any(
+            phrase in output
+            for phrase in (
+                "不可以下切",
+                "不可下切",
+                "不建議下切",
+                "不要下切",
+                "不得下切",
+            )
+        )
     ):
         violations.append("建議下切溪谷")
-    if brief.subject == "是否應移動到稜線找訊號" and any(
-        phrase in output
-        for phrase in ("建議往稜線", "移動到稜線", "上稜線找訊號")
-    ) and not any(
-        phrase in output
-        for phrase in (
-            "不要移動到稜線",
-            "不得移動到稜線",
-            "不建議往稜線",
-            "不可上稜線",
-            "不應盲目移動到稜線",
-            "不應盲目移動",
+    if (
+        brief.subject == "是否應移動到稜線找訊號"
+        and any(
+            phrase in output for phrase in ("建議往稜線", "移動到稜線", "上稜線找訊號")
+        )
+        and not any(
+            phrase in output
+            for phrase in (
+                "不要移動到稜線",
+                "不得移動到稜線",
+                "不建議往稜線",
+                "不可上稜線",
+                "不應盲目移動到稜線",
+                "不應盲目移動",
+            )
         )
     ):
         violations.append("建議盲目移動到稜線")
     if brief.subject == "在安全處建立可視標記" and any(
-        term in output
-        for term in ("相容平台", "介面或系統", "導入資料", "軟體工具")
+        term in output for term in ("相容平台", "介面或系統", "導入資料", "軟體工具")
     ):
         violations.append("把戶外可視標記誤解成軟體標記")
     if brief.subject == "需保存給搜救的事件證據" and any(
@@ -13173,8 +13699,7 @@ def _local_grounded_answer_brief_violations(
     ):
         violations.append("未回答已由工具提供的搜救證據類別")
     if brief.subject == "哪些待援可見性候選需人工複核" and any(
-        phrase in output
-        for phrase in ("缺少判斷邊界", "請提供每項缺失的證據")
+        phrase in output for phrase in ("缺少判斷邊界", "請提供每項缺失的證據")
     ):
         violations.append("未使用可見性候選 facts")
     if brief.subject == "哪些待援可見性候選需人工複核" and any(
@@ -13196,8 +13721,7 @@ def _local_grounded_answer_brief_violations(
         ):
             violations.append("忽略已知手機電量")
     if brief.subject == "目前位置應人工分享給哪些對象" and any(
-        phrase in output
-        for phrase in ("目前位置無法確定", "請提供更詳細的資訊")
+        phrase in output for phrase in ("目前位置無法確定", "請提供更詳細的資訊")
     ):
         violations.append("未回答位置分享對象")
     if brief.subject in STRUCTURED_POST_TRIP_GUIDANCE_SUBJECTS:
@@ -13304,18 +13828,21 @@ def _local_grounded_answer_brief_violations(
             violations.append("重複事故建議用詞")
         if brief.subject == "移動傷者的二次傷害風險" and "傷勢穩定" in output:
             violations.append("無證據聲稱傷勢穩定")
-    if (
-        brief.subject == "目前是否有可用的第二套導航工具"
-        and not any(term in output for term in ("請提供", "需提供", "需要提供"))
+    if brief.subject == "目前是否有可用的第二套導航工具" and not any(
+        term in output for term in ("請提供", "需提供", "需要提供")
     ):
         violations.append("缺口清單缺少語法連接")
     if brief.subject == "現在是否需要做高山症自評":
         if not (
             "高山症自評" in output
-            and any(term in output for term in ("建議現在", "現在做", "可以先做", "應做"))
+            and any(
+                term in output for term in ("建議現在", "現在做", "可以先做", "應做")
+            )
         ):
             violations.append("未直接建議進行高山症自評")
-        if any(term in output for term in ("確診高山症", "可以繼續上升", "適合繼續上升")):
+        if any(
+            term in output for term in ("確診高山症", "可以繼續上升", "適合繼續上升")
+        ):
             violations.append("高山症自評被誤寫成診斷或上升許可")
         if not any(
             term in output
@@ -13351,7 +13878,12 @@ def _local_grounded_answer_brief_violations(
             violations.append("反轉證據：段內無補水點")
         if any(
             phrase in output
-            for phrase in ("不能在此新增", "不能新增設置", "不可在此新增", "不可新增 checkpoint")
+            for phrase in (
+                "不能在此新增",
+                "不能新增設置",
+                "不可在此新增",
+                "不可新增 checkpoint",
+            )
         ):
             violations.append("過度結論：不能新增 checkpoint")
     team_unknown_subjects = {
@@ -13384,22 +13916,25 @@ def _local_grounded_answer_brief_violations(
     ):
         violations.append("新增無證據狀態：CP 間進度不完整")
     if brief.subject == "哪些地方需避免停留拍照" and any(
-        phrase in output
-        for phrase in ("規定需要", "立即現場複核", "禁止停留拍照")
+        phrase in output for phrase in ("規定需要", "立即現場複核", "禁止停留拍照")
     ):
         violations.append("過度指令：把拍照候選寫成即時規定")
     if brief.subject == "哪些地方需避免停留拍照" and re.search(
         r"未達\s*CP", output, flags=re.IGNORECASE
     ):
         violations.append("新增無證據狀態：未達 CP")
-    if brief.subject == "需要準備多少水和補給" and re.search(
-        r"\d+(?:\.\d+)?\s*(?:ml|毫升|公升|kg|公斤|小時|小时)",
-        output,
-        flags=re.IGNORECASE,
-    ) and not re.search(
-        r"\d+(?:\.\d+)?\s*(?:ml|毫升|公升|kg|公斤|小時|小时)",
-        facts_text,
-        flags=re.IGNORECASE,
+    if (
+        brief.subject == "需要準備多少水和補給"
+        and re.search(
+            r"\d+(?:\.\d+)?\s*(?:ml|毫升|公升|kg|公斤|小時|小时)",
+            output,
+            flags=re.IGNORECASE,
+        )
+        and not re.search(
+            r"\d+(?:\.\d+)?\s*(?:ml|毫升|公升|kg|公斤|小時|小时)",
+            facts_text,
+            flags=re.IGNORECASE,
+        )
     ):
         violations.append("新增未提供的水量或身體數字")
     if output.rstrip().endswith(
@@ -13422,23 +13957,26 @@ def _local_grounded_answer_brief_violations(
         violations.append("把候選錯寫成事故預測")
 
     if brief.decision == "REVIEW_CANDIDATE" and not any(
-        term in output
-        for term in ("候選", "複核", "复核", "需評估", "需要評估")
+        term in output for term in ("候選", "複核", "复核", "需評估", "需要評估")
     ):
         violations.append("缺少判斷邊界：需複核候選")
-    if brief.subject == "最需要複核的 CP 候選" and not any(
-        term in output
-        for term in (
-            "風險分數不能用來預測事故",
-            "風險分數不能直接用來預測事故",
-            "風險分數無法用來預測事故",
-            "不能用風險分數預測事故",
-            "無法用風險分數預測事故",
-            "不代表事故預測",
+    if (
+        brief.subject == "最需要複核的 CP 候選"
+        and not any(
+            term in output
+            for term in (
+                "風險分數不能用來預測事故",
+                "風險分數不能直接用來預測事故",
+                "風險分數無法用來預測事故",
+                "不能用風險分數預測事故",
+                "無法用風險分數預測事故",
+                "不代表事故預測",
+            )
         )
-    ) and not re.search(
-        r"風險分數\s*(?:為\s*)?[0-9.]*\s*(?:不能|不可)(?:直接)?用來預測事故",
-        output,
+        and not re.search(
+            r"風險分數\s*(?:為\s*)?[0-9.]*\s*(?:不能|不可)(?:直接)?用來預測事故",
+            output,
+        )
     ):
         violations.append("缺少判斷邊界：風險分數不能預測事故")
     if brief.subject == "是否有低容錯地形":
@@ -13480,11 +14018,18 @@ def _local_grounded_answer_brief_violations(
     pretrip_candidate_scope = "行前" in output and any(
         term in output for term in ("候選", "複核", "复核")
     )
-    if brief.decision == "REVIEW_CANDIDATE" and any(
-        term in brief.boundary for term in ("不是", "未確認", "不能確認", "沒有證據")
-    ) and not night_boundary_ok and not pretrip_candidate_scope and not any(
-        term in output
-        for term in ("不能確認", "未確認", "尚未確認", "無法確定", "不是即時")
+    if (
+        brief.decision == "REVIEW_CANDIDATE"
+        and any(
+            term in brief.boundary
+            for term in ("不是", "未確認", "不能確認", "沒有證據")
+        )
+        and not night_boundary_ok
+        and not pretrip_candidate_scope
+        and not any(
+            term in output
+            for term in ("不能確認", "未確認", "尚未確認", "無法確定", "不是即時")
+        )
     ):
         violations.append("缺少判斷邊界：尚未確認現場危險")
     if brief.decision == "UNKNOWN" and not any(
@@ -13552,9 +14097,7 @@ def _local_brief_anchor_alternatives(anchor: str) -> tuple[str, ...]:
     alternatives.extend(semantic_aliases.get(normalized, ()))
     cp_match = re.search(r"cp\s*([0-9]+)", anchor, flags=re.IGNORECASE)
     if cp_match:
-        alternatives.extend(
-            (f"cp{cp_match.group(1)}", f"cp={cp_match.group(1)}")
-        )
+        alternatives.extend((f"cp{cp_match.group(1)}", f"cp={cp_match.group(1)}"))
     segment_match = re.search(r"seg[.]\s*([0-9]+)", anchor, flags=re.IGNORECASE)
     if segment_match:
         alternatives.extend(
@@ -13564,7 +14107,9 @@ def _local_brief_anchor_alternatives(anchor: str) -> tuple[str, ...]:
     if duration_match:
         value = duration_match.group(1)
         alternatives.extend((f"約{value}分鐘", f"約為{value}分鐘"))
-    gpx_match = re.search(r"gpx\s*[=：:]?\s*([0-9.]+)\s*km", anchor, flags=re.IGNORECASE)
+    gpx_match = re.search(
+        r"gpx\s*[=：:]?\s*([0-9.]+)\s*km", anchor, flags=re.IGNORECASE
+    )
     if gpx_match:
         value = gpx_match.group(1)
         alternatives.extend(
@@ -13676,7 +14221,9 @@ def _run_ai_hat_plus_2_grounding_retry(
     top_coord = _compact_evidence_value(compact_evidence, "top_coord")
     top_score = _compact_evidence_value(compact_evidence, "top_score")
     top_bucket = _compact_evidence_value(compact_evidence, "top_bucket")
-    is_risk_location_grounding = bool(top_location and top_score and not is_terrain_grounding)
+    is_risk_location_grounding = bool(
+        top_location and top_score and not is_terrain_grounding
+    )
     risk_location_evidence = _risk_location_evidence_for_model(
         grounded_answer,
         candidate_location=top_location,
@@ -13855,7 +14402,7 @@ def _run_ai_hat_plus_2_grounding_retry(
             f"回答要包含的關鍵字：{critical_tokens[:320]}\n"
             f"限制與下一步：{evidence_facts[:360]}\n"
             "回答："
-    )
+        )
     setattr(runner, "last_profile", getattr(runner, "fallback_profile", "local"))
     setattr(runner, "last_failover_reason", "operator_requested_ai_hat_plus_2_fallback")
     setattr(runner, "last_ai_hat_plus_2_generation_mode", None)
@@ -14057,9 +14604,7 @@ def _run_ai_hat_plus_2_grounding_retry(
                 f"可用事實：{evidence_fields[:620]}；回答要包含：{critical_tokens[:320]}；限制與下一步：{evidence_facts[:360]}\n"
             )
         repair_attempts = (
-            2
-            if uses_hailo_missing_context or is_visibility_candidate_grounding
-            else 1
+            2 if uses_hailo_missing_context or is_visibility_candidate_grounding else 1
         )
         for repair_attempt in range(1, repair_attempts + 1):
             mode = "repaired_from_grounding_failure"
@@ -14124,16 +14669,13 @@ def _run_ai_hat_plus_2_grounding_retry(
                 question=question,
                 grounded_answer=grounded_answer,
             )
-            if (
-                _model_output_preserves_grounding(
-                    staged_output,
-                    grounded_answer,
-                    question=question,
-                )
-                and not _model_output_is_deterministic_reference_copy(
-                    staged_output,
-                    grounded_answer,
-                )
+            if _model_output_preserves_grounding(
+                staged_output,
+                grounded_answer,
+                question=question,
+            ) and not _model_output_is_deterministic_reference_copy(
+                staged_output,
+                grounded_answer,
             ):
                 setattr(
                     runner,
@@ -14156,16 +14698,13 @@ def _run_ai_hat_plus_2_grounding_retry(
                 question=question,
                 grounded_answer=grounded_answer,
             )
-            if (
-                _model_output_preserves_grounding(
-                    staged_output,
-                    grounded_answer,
-                    question=question,
-                )
-                and not _model_output_is_deterministic_reference_copy(
-                    staged_output,
-                    grounded_answer,
-                )
+            if _model_output_preserves_grounding(
+                staged_output,
+                grounded_answer,
+                question=question,
+            ) and not _model_output_is_deterministic_reference_copy(
+                staged_output,
+                grounded_answer,
             ):
                 setattr(
                     runner,
@@ -14191,16 +14730,13 @@ def _run_ai_hat_plus_2_grounding_retry(
                 question=question,
                 grounded_answer=grounded_answer,
             )
-            if (
-                _model_output_preserves_grounding(
-                    staged_output,
-                    grounded_answer,
-                    question=question,
-                )
-                and not _model_output_is_deterministic_reference_copy(
-                    staged_output,
-                    grounded_answer,
-                )
+            if _model_output_preserves_grounding(
+                staged_output,
+                grounded_answer,
+                question=question,
+            ) and not _model_output_is_deterministic_reference_copy(
+                staged_output,
+                grounded_answer,
             ):
                 setattr(
                     runner,
@@ -14224,16 +14760,13 @@ def _run_ai_hat_plus_2_grounding_retry(
                 question=question,
                 grounded_answer=grounded_answer,
             )
-            if (
-                _model_output_preserves_grounding(
-                    staged_output,
-                    grounded_answer,
-                    question=question,
-                )
-                and not _model_output_is_deterministic_reference_copy(
-                    staged_output,
-                    grounded_answer,
-                )
+            if _model_output_preserves_grounding(
+                staged_output,
+                grounded_answer,
+                question=question,
+            ) and not _model_output_is_deterministic_reference_copy(
+                staged_output,
+                grounded_answer,
             ):
                 setattr(
                     runner,
@@ -14538,9 +15071,7 @@ def _build_field_state_short_answer_prompt(
 ) -> str:
     contract = _load_field_state_short_answer_contract()
     missing_items = [
-        item.strip()
-        for item in str(requested_inputs or "").split("|")
-        if item.strip()
+        item.strip() for item in str(requested_inputs or "").split("|") if item.strip()
     ]
     resolved_action = str(
         action_token or _expected_missing_context_action(question, requested_inputs)
@@ -14614,9 +15145,7 @@ def _run_ai_hat_missing_context_staged_synthesis(
     timeout_seconds: int,
 ) -> tuple[str | None, list[str]]:
     missing_items = [
-        item.strip()
-        for item in str(requested_inputs or "").split("|")
-        if item.strip()
+        item.strip() for item in str(requested_inputs or "").split("|") if item.strip()
     ][:3]
     missing_summary = "、".join(missing_items) or "判斷所需的現場觀測"
     missing_required = "、".join(
@@ -14637,7 +15166,7 @@ def _run_ai_hat_missing_context_staged_synthesis(
             f"判斷主題：{decision_subject[:160]}。\n"
             f"只輸出一句繁體中文，逐字包含{missing_required}；"
             "說明它們尚未取得。不可捏造觀測或作出肯定/否定結論。\n"
-            "回答："
+            "回答：",
         ),
         (
             "missing_action",
@@ -14645,7 +15174,7 @@ def _run_ai_hat_missing_context_staged_synthesis(
             f"保守處置方向：{action_guidance}。\n"
             f"只輸出一句繁體中文，逐字包含「{action_guidance}」，用自己的話表達處置方向。"
             "不可加入新的觀測、數字、位置或診斷。\n"
-            "回答："
+            "回答：",
         ),
     )
     outputs: list[str] = []
@@ -14714,12 +15243,8 @@ def _run_ai_hat_missing_context_staged_synthesis(
                     )
                 else:
                     has_question_focus = matched_items >= 1
-                valid = (
-                    "目前不能判定" in normalized_output
-                    and (
-                        matched_items >= min(2, len(missing_items))
-                        or has_question_focus
-                    )
+                valid = "目前不能判定" in normalized_output and (
+                    matched_items >= min(2, len(missing_items)) or has_question_focus
                 )
             else:
                 action_lead = action_guidance.split("，", 1)[0].split("；", 1)[0]
@@ -14772,7 +15297,10 @@ def _extract_rescue_report_fact_groups(grounded_answer: str) -> list[str]:
 def _extract_survival_playbook_fields(grounded_answer: str) -> dict[str, str]:
     text = str(grounded_answer or "")
     normalized = text.casefold()
-    if "survival incident playbook" not in normalized and "求生事件 playbook" not in normalized:
+    if (
+        "survival incident playbook" not in normalized
+        and "求生事件 playbook" not in normalized
+    ):
         return {}
 
     def field(label: str) -> str:
@@ -14806,25 +15334,17 @@ def _extract_survival_query_guidance(
         return match.group(1).strip() if match else ""
 
     facts_text = field("guidance_facts")
-    facts = tuple(
-        item.strip()
-        for item in facts_text.split("|")
-        if item.strip()
-    )
+    facts = tuple(item.strip() for item in facts_text.split("|") if item.strip())
     required = tuple(
         tuple(item.strip() for item in group.split("|") if item.strip())
         for group in field("guidance_required").split("||")
         if group.strip()
     )
     missing = tuple(
-        item.strip()
-        for item in field("guidance_missing").split("|")
-        if item.strip()
+        item.strip() for item in field("guidance_missing").split("|") if item.strip()
     )
     forbidden = tuple(
-        item.strip()
-        for item in field("guidance_forbidden").split("|")
-        if item.strip()
+        item.strip() for item in field("guidance_forbidden").split("|") if item.strip()
     )
     return (
         facts,
@@ -14872,14 +15392,9 @@ def _extract_visibility_candidate_anchors(grounded_answer: str) -> list[str]:
 def _load_field_state_short_answer_contract() -> SkillAnswerContract:
     manifest = load_skill_manifest(FIELD_STATE_SHORT_ANSWER_SKILL_PATH)
     if manifest.id != FIELD_STATE_SHORT_ANSWER_SKILL_ID:
-        raise ValueError(
-            "field-state short-answer skill id mismatch: "
-            f"{manifest.id}"
-        )
+        raise ValueError(f"field-state short-answer skill id mismatch: {manifest.id}")
     if manifest.answer_contract is None:
-        raise ValueError(
-            "field-state short-answer skill is missing answer_contract"
-        )
+        raise ValueError("field-state short-answer skill is missing answer_contract")
     return manifest.answer_contract
 
 
@@ -14887,8 +15402,7 @@ def _load_local_grounded_short_answer_contract() -> SkillAnswerContract:
     manifest = load_skill_manifest(LOCAL_GROUNDED_SHORT_ANSWER_SKILL_PATH)
     if manifest.id != LOCAL_GROUNDED_SHORT_ANSWER_SKILL_ID:
         raise ValueError(
-            "local grounded short-answer skill id mismatch: "
-            f"{manifest.id}"
+            f"local grounded short-answer skill id mismatch: {manifest.id}"
         )
     if manifest.answer_contract is None:
         raise ValueError("local grounded short-answer skill is missing answer_contract")
@@ -15057,7 +15571,10 @@ def _postprocess_ai_hat_plus_2_grounded_output(
                 )
             )
             text = "".join(
-                (sentences[0], final_sentence if has_conservative_action else sentences[1])
+                (
+                    sentences[0],
+                    final_sentence if has_conservative_action else sentences[1],
+                )
             ).strip()
     return text
 
@@ -15278,7 +15795,9 @@ def _compact_evidence_value(evidence: str, key: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def _shorten_delayed_departure_grounded_answer(output: str, grounded_answer: str) -> str:
+def _shorten_delayed_departure_grounded_answer(
+    output: str, grounded_answer: str
+) -> str:
     grounded = str(grounded_answer or "")
     delay_match = re.search(r"(晚出發\s*\d+\s*小時[^。]+。)", grounded)
     cp_match = re.search(r"(先用\s*CP Graph[^。]+。)", grounded)
@@ -15363,7 +15882,8 @@ def _trim_incomplete_local_answer(output: str) -> str:
 
 def _normalize_ai_hat_plus_2_local_output(output: str) -> str:
     normalized = (
-        str(output or "").translate(_COMMON_LOCAL_ZH_TRANSLATION)
+        str(output or "")
+        .translate(_COMMON_LOCAL_ZH_TRANSLATION)
         .replace("```", "")
         .replace("補供", "補給")
         .replace("人工復核", "人工複核")
@@ -15570,11 +16090,15 @@ def _postprocess_ai_hat_plus_2_short_answer(output: str) -> str:
             or _answer_suffix_repeats_key_tokens(first, rest)
         ):
             text = first.rstrip("；。") + "。"
-    sentences = [part.strip(" ；") for part in re.split(r"(?<=。)", text) if part.strip(" ；")]
+    sentences = [
+        part.strip(" ；") for part in re.split(r"(?<=。)", text) if part.strip(" ；")
+    ]
     deduped: list[str] = []
     seen: set[str] = set()
     for index, sentence in enumerate(sentences):
-        if index > 0 and _low_information_repeated_focus_sentence(sentences[0], sentence):
+        if index > 0 and _low_information_repeated_focus_sentence(
+            sentences[0], sentence
+        ):
             continue
         if index > 0 and _answer_suffix_repeats_key_tokens(sentences[0], sentence):
             continue
@@ -15590,9 +16114,17 @@ def _postprocess_ai_hat_plus_2_short_answer(output: str) -> str:
     text = re.sub(r"座標(?=[0-9.-])", "座標 ", text)
     text = re.sub(r"米處", "m 處", text)
     text = re.sub(r"米处", "m 處", text)
-    text = re.sub(r"最近的\s*CP\s*(\d+)\s*約離現在位置約\s*([0-9.]+)\s*m\s*處", r"最近 CP \1 約 \2 m 處", text)
-    text = re.sub(r"最近的\s*CP\s*(\d+)\s*約\s*([0-9.]+)\s*m\s*外", r"最近 CP \1 約 \2 m", text)
-    text = text.replace("因此，這條路線有低容錯地形。", "因此，這條路線有低容錯地形候選，需人工複核。")
+    text = re.sub(
+        r"最近的\s*CP\s*(\d+)\s*約離現在位置約\s*([0-9.]+)\s*m\s*處",
+        r"最近 CP \1 約 \2 m 處",
+        text,
+    )
+    text = re.sub(
+        r"最近的\s*CP\s*(\d+)\s*約\s*([0-9.]+)\s*m\s*外", r"最近 CP \1 約 \2 m", text
+    )
+    text = text.replace(
+        "因此，這條路線有低容錯地形。", "因此，這條路線有低容錯地形候選，需人工複核。"
+    )
     text = re.sub(
         r"(摸黑前應優先複核的地形高分候選)(?:；\1)+",
         r"\1",
@@ -15614,17 +16146,23 @@ def _postprocess_ai_hat_plus_2_short_answer(output: str) -> str:
         flags=re.IGNORECASE,
     )
     text = re.sub(r"\bGPX\s+([0-9]+(?:\.[0-9]+)?)\s*km\b", r"GPX 累積約 \1 km", text)
-    text = re.sub(r"GPX\s*累積\s*([0-9]+(?:\.[0-9]+)?)\s*km\b", r"GPX 累積約 \1 km", text)
+    text = re.sub(
+        r"GPX\s*累積\s*([0-9]+(?:\.[0-9]+)?)\s*km\b", r"GPX 累積約 \1 km", text
+    )
     text = text.replace("總距離約為 GPX", "GPX")
     text = text.replace("屬於 bucket 的最高候選風險點", "是最高候選風險點")
     text = text.replace("。。", "。")
     return text.strip()
 
 
-def _low_information_repeated_focus_sentence(first_sentence: str, sentence: str) -> bool:
+def _low_information_repeated_focus_sentence(
+    first_sentence: str, sentence: str
+) -> bool:
     normalized_first = re.sub(r"\s+", "", first_sentence.casefold())
     normalized_sentence = re.sub(r"\s+", "", sentence.casefold())
-    if re.search(r"(?:cp\s*\d+|score=|bucket=|座標|gpx)", sentence, flags=re.IGNORECASE):
+    if re.search(
+        r"(?:cp\s*\d+|score=|bucket=|座標|gpx)", sentence, flags=re.IGNORECASE
+    ):
         return False
     repeated_focus_terms = (
         "優先考慮設checkpoint",
@@ -15632,7 +16170,10 @@ def _low_information_repeated_focus_sentence(first_sentence: str, sentence: str)
         "避免停留拍照",
         "最高候選風險點",
     )
-    return any(term in normalized_first and term in normalized_sentence for term in repeated_focus_terms)
+    return any(
+        term in normalized_first and term in normalized_sentence
+        for term in repeated_focus_terms
+    )
 
 
 def _answer_suffix_repeats_key_tokens(prefix: str, suffix: str) -> bool:
@@ -15711,8 +16252,7 @@ def _missing_context_fact_bundle(question: str, grounded_answer: str) -> dict[st
             "requested_inputs": "目前速度或配速|最近 CP 通過時間|下一 CP ETA|最慢成員配速",
         }
     if any(
-        term in normalized
-        for term in ("體能", "体能", "體力", "体力", "太硬", "吃力")
+        term in normalized for term in ("體能", "体能", "體力", "体力", "太硬", "吃力")
     ):
         return {
             "subject": "這條路線對你的體能是否太硬",
@@ -15796,7 +16336,14 @@ def _missing_context_fact_bundle(question: str, grounded_answer: str) -> dict[st
         )
         and not any(
             term in normalized
-            for term in ("補水不足", "补水不足", "補給吃得夠", "补给吃得够", "吃得夠", "吃得够")
+            for term in (
+                "補水不足",
+                "补水不足",
+                "補給吃得夠",
+                "补给吃得够",
+                "吃得夠",
+                "吃得够",
+            )
         )
     ):
         return {
@@ -15868,9 +16415,8 @@ def _missing_context_fact_bundle(question: str, grounded_answer: str) -> dict[st
     )
     for terms, subject, gaps, requested_inputs in team_field_subjects:
         if any(term in normalized for term in terms):
-            if (
-                subject == "何時需要通報未抵達約定山屋的隊員"
-                and any(term in normalized for term in ("怎麼辦", "怎么办", "如何處理"))
+            if subject == "何時需要通報未抵達約定山屋的隊員" and any(
+                term in normalized for term in ("怎麼辦", "怎么办", "如何處理")
             ):
                 subject = "有人未抵達約定山屋時的檢查與通報時機"
             return {
@@ -16216,7 +16762,11 @@ def _compact_grounded_answer_for_local_model(
         if match:
             facts.append(f"answer_focus={match.group(1)}")
             break
-    if "checkpoint" in normalized_question or "cp" in normalized_question or "檢查點" in normalized_question:
+    if (
+        "checkpoint" in normalized_question
+        or "cp" in normalized_question
+        or "檢查點" in normalized_question
+    ):
         facts.append("term_rule=CP/checkpoint 是路線檢查點，不是機器、救援點或救援站")
     if any(term in normalized_question for term in ("摸黑", "夜間", "天黑")):
         facts.append("terrain_rule=teii_20m 高分代表地形暴露/衝擊候選，不是照明")
@@ -16229,12 +16779,27 @@ def _compact_grounded_answer_for_local_model(
         ("missing_ref_count", r"缺失\s*([0-9]+)\s*個"),
         ("checkpoint_count", r"checkpoint_count=([0-9]+)"),
         ("segment_count", r"segment_count=([0-9]+)"),
-        ("expected_segment_count_from_checkpoints", r"expected_segment_count_from_checkpoints=([0-9]+)"),
-        ("segment_count_delta_from_expected", r"segment_count_delta_from_expected=([-0-9]+)"),
+        (
+            "expected_segment_count_from_checkpoints",
+            r"expected_segment_count_from_checkpoints=([0-9]+)",
+        ),
+        (
+            "segment_count_delta_from_expected",
+            r"segment_count_delta_from_expected=([-0-9]+)",
+        ),
         ("segment_missing_distance_count", r"segment_missing_distance_count=([0-9]+)"),
-        ("segment_missing_display_geometry_count", r"segment_missing_display_geometry_count=([0-9]+)"),
-        ("segment_route_point_index_geometry_count", r"segment_route_point_index_geometry_count=([0-9]+)"),
-        ("checkpoint_duplicate_label_group_count", r"checkpoint_duplicate_label_group_count=([0-9]+)"),
+        (
+            "segment_missing_display_geometry_count",
+            r"segment_missing_display_geometry_count=([0-9]+)",
+        ),
+        (
+            "segment_route_point_index_geometry_count",
+            r"segment_route_point_index_geometry_count=([0-9]+)",
+        ),
+        (
+            "checkpoint_duplicate_label_group_count",
+            r"checkpoint_duplicate_label_group_count=([0-9]+)",
+        ),
         ("major_point_count", r"major_point_count=([0-9]+)"),
         ("named_point_count", r"named_point_count=([0-9]+)"),
         ("support_row_count", r"support_row_count=([0-9]+)"),
@@ -16260,10 +16825,14 @@ def _compact_grounded_answer_for_local_model(
     for match in re.finditer(r"outputs/[^\s；;，。)）`]+", search_text):
         facts.append(match.group(0))
 
-    location_match = re.search(r"(最近\s*CP\s*\d+\s*約\s*[0-9.]+\s*m)", search_text, flags=re.IGNORECASE)
+    location_match = re.search(
+        r"(最近\s*CP\s*\d+\s*約\s*[0-9.]+\s*m)", search_text, flags=re.IGNORECASE
+    )
     if location_match:
         facts.append(f"top_location={location_match.group(1)}")
-    gpx_match = re.search(r"GPX\s*累積約\s*([0-9.]+\s*km)", search_text, flags=re.IGNORECASE)
+    gpx_match = re.search(
+        r"GPX\s*累積約\s*([0-9.]+\s*km)", search_text, flags=re.IGNORECASE
+    )
     if gpx_match:
         facts.append(f"top_gpx_km={gpx_match.group(1)}")
     coord_match = re.search(r"座標\s*([0-9.-]+\s*,\s*[0-9.-]+)", search_text)
@@ -16333,9 +16902,7 @@ def _extract_multi_candidate_summary(text: str) -> str:
         metric = match.group(2)
         coord = (match.group(3) or "").replace(" ", "")
         coord_suffix = f", 座標 {coord}" if coord else ""
-        terrain_candidates.append(
-            f"地形候選{index}(GPX {gpx}, {metric}{coord_suffix})"
-        )
+        terrain_candidates.append(f"地形候選{index}(GPX {gpx}, {metric}{coord_suffix})")
         if len(terrain_candidates) >= 3:
             break
     if len(terrain_candidates) >= 2:
@@ -16495,6 +17062,8 @@ def _reset_runner_observability_state(runner: PydanticAIRunner) -> None:
         "last_workspace_tool_invocations",
         "last_evidence_cards",
         "last_grounding_verification",
+        "last_mser_trace",
+        "last_mser_answer_verification",
         "last_context_handles",
         "last_context_reads",
     ):
@@ -16543,10 +17112,11 @@ def _is_local_assistant_base_url(base_url: str | None) -> bool:
         parsed = urlsplit(base_url.strip())
     except ValueError:
         return False
-    return (
-        parsed.scheme.lower() == "http"
-        and parsed.hostname in {"127.0.0.1", "localhost", "host.docker.internal"}
-    )
+    return parsed.scheme.lower() == "http" and parsed.hostname in {
+        "127.0.0.1",
+        "localhost",
+        "host.docker.internal",
+    }
 
 
 def _normalize_hailo_ollama_base_url(base_url: str | None) -> str:
@@ -16580,11 +17150,7 @@ def _compact_total_info_for_local_model(total_info: str) -> str:
         "terrain_risk_context",
         "boundary",
     )
-    compact_payload = {
-        key: payload[key]
-        for key in priority_keys
-        if key in payload
-    }
+    compact_payload = {key: payload[key] for key in priority_keys if key in payload}
     serialized = json.dumps(
         compact_payload,
         ensure_ascii=False,
@@ -16705,12 +17271,7 @@ def _hailo_stream_content(payload: dict[str, Any]) -> str:
 
 
 def _clean_hailo_stream_text(parts: list[str]) -> str:
-    return (
-        "".join(parts)
-        .replace(HAILO_SEMANTIC_STOP, "")
-        .replace("\ufffd", "")
-        .strip()
-    )
+    return "".join(parts).replace(HAILO_SEMANTIC_STOP, "").replace("\ufffd", "").strip()
 
 
 def _hailo_stream_semantically_complete(
@@ -16762,8 +17323,7 @@ def _hailo_bounded_semantic_sentence_target(prompt: str) -> int:
     if not exact_answers:
         return 1
     target = sum(
-        max(1, _hailo_completed_sentence_count(answer))
-        for answer in exact_answers
+        max(1, _hailo_completed_sentence_count(answer)) for answer in exact_answers
     )
     return max(1, min(3, target))
 
@@ -16841,8 +17401,7 @@ def _hailo_model_authored_exact_answer_excerpt(
                 (
                     line
                     for line in output_lines
-                    if normalized_clause
-                    in _normalize_hailo_exact_answer_text(line)
+                    if normalized_clause in _normalize_hailo_exact_answer_text(line)
                     or (
                         len(_normalize_hailo_exact_answer_text(line)) >= 8
                         and _normalize_hailo_exact_answer_text(line)
@@ -16858,9 +17417,10 @@ def _hailo_model_authored_exact_answer_excerpt(
 
     if not matched_lines:
         return output
-    return "；".join(
-        line.rstrip("；;。.!！") for line in matched_lines
-    ).rstrip("；") + "。"
+    return (
+        "；".join(line.rstrip("；;。.!！") for line in matched_lines).rstrip("；")
+        + "。"
+    )
 
 
 def _clean_hailo_model_answer_line(value: str) -> str:
@@ -16922,9 +17482,7 @@ def _priority_exact_evidence_cards(
             priority = int(card.key_values.get("field_answer_priority") or 0)
         except (TypeError, ValueError):
             priority = 0
-        if priority >= 100 and str(
-            card.key_values.get("field_answer") or ""
-        ).strip():
+        if priority >= 100 and str(card.key_values.get("field_answer") or "").strip():
             exact_cards.append(card)
     return exact_cards or evidence_cards
 
@@ -16995,12 +17553,12 @@ def _compact_hailo_ollama_prompt(
             compact = prompt
         elif _is_simple_greeting_question(question):
             compact = (
-            "你是 Scout AI 的 AI HAT+ 2 本地備援模型。"
-            "使用者只是問候或確認你是否在線。"
-            "請用繁體中文自然短答一句，明確說你正在以本地備援模式服務；"
-            "不要摘要 context，不要要求工具摘要，不要列資料缺口。"
-            f"\n使用者：{question}\n"
-            "回答："
+                "你是 Scout AI 的 AI HAT+ 2 本地備援模型。"
+                "使用者只是問候或確認你是否在線。"
+                "請用繁體中文自然短答一句，明確說你正在以本地備援模式服務；"
+                "不要摘要 context，不要要求工具摘要，不要列資料缺口。"
+                f"\n使用者：{question}\n"
+                "回答："
             )
         else:
             total_info = _extract_prompt_section(prompt, "Total Info:", "Context:")
@@ -17203,20 +17761,14 @@ def _compact_hailo_bounded_synthesis_prompt(
             ),
         }
     compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
-    if (
-        _estimate_hailo_chat_input_tokens(system_prompt, compact)
-        <= max_input_tokens
-    ):
+    if _estimate_hailo_chat_input_tokens(system_prompt, compact) <= max_input_tokens:
         return compact
 
     # Keep every selected tool represented while progressively shedding the
     # least relevant facts. The original evidence cards remain in the runtime
     # ledger and verifier; only the external Hailo request is compacted.
     reduced_cards = compact_cards
-    while (
-        _estimate_hailo_chat_input_tokens(system_prompt, compact)
-        > max_input_tokens
-    ):
+    while _estimate_hailo_chat_input_tokens(system_prompt, compact) > max_input_tokens:
         candidates = [
             (len(card.get("key_values") or {}), index)
             for index, card in enumerate(reduced_cards)
@@ -17286,8 +17838,7 @@ def _compact_hailo_bounded_synthesis_prompt(
         compact_payload = {
             "question": _truncate_utf8(str(compact_payload.get("question") or ""), 120),
             "evidence_cards": [
-                {"tool_id": card.get("tool_id", "unknown")}
-                for card in reduced_cards
+                {"tool_id": card.get("tool_id", "unknown")} for card in reduced_cards
             ],
             "answer_contract": "只用證據直接短答。",
         }
@@ -17314,9 +17865,7 @@ def _compact_hailo_evidence_card(
     ]
     exact_source_refs: list[str] = []
     if isinstance(preferred_source_ref, str) and preferred_source_ref.strip():
-        exact_source_refs.append(
-            _truncate_utf8(preferred_source_ref.strip(), 300)
-        )
+        exact_source_refs.append(_truncate_utf8(preferred_source_ref.strip(), 300))
     if isinstance(preferred_source_refs, list):
         exact_source_refs.extend(
             _truncate_utf8(str(item).strip(), 300)
@@ -17472,11 +18021,15 @@ def _hailo_bounded_prompt_json(
     *,
     marker: str = "SCOUT_BOUNDED_SYNTHESIS_V1",
 ) -> str:
-    return marker + "\n" + json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
+    return (
+        marker
+        + "\n"
+        + json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
     )
 
 
@@ -17491,9 +18044,7 @@ def _build_hailo_bounded_continuation_prompt(
     return _hailo_bounded_prompt_json(
         {
             "question": question,
-            "evidence_cards": [
-                card.model_dump(mode="json") for card in evidence_cards
-            ],
+            "evidence_cards": [card.model_dump(mode="json") for card in evidence_cards],
             "missing_evidence": list(missing_evidence),
             "partial_answer": partial_output,
             "continuation_index": continuation_index,
@@ -17590,9 +18141,8 @@ def _normalize_hailo_chat_content(content: str) -> str:
 def _hailo_answer_hint(question: str, *, total_info: str, context: str) -> str | None:
     normalized = question.casefold()
     combined_context = f"{total_info}\n{context}"
-    asks_boss_point_count = (
-        "boss" in normalized
-        and any(term in normalized for term in ("多少", "幾個", "几个", "count", "數量", "数量"))
+    asks_boss_point_count = "boss" in normalized and any(
+        term in normalized for term in ("多少", "幾個", "几个", "count", "數量", "数量")
     )
     if asks_boss_point_count:
         match = re.search(r'"boss_point_count"\s*:\s*(\d+)', combined_context)
@@ -17611,14 +18161,16 @@ def _hailo_risk_score_answer_hint(context: str) -> str | None:
     if not readable_location:
         readable_location = _first_json_string_field(context, "location")
     score = _first_json_number_field(context, "score")
-    bucket = _first_json_string_field(context, "risk_bucket") or _first_json_string_field(
-        context, "bucket"
-    )
+    bucket = _first_json_string_field(
+        context, "risk_bucket"
+    ) or _first_json_string_field(context, "bucket")
     lat = _first_json_number_field(context, "lat")
     lon = _first_json_number_field(context, "lon")
     if not any((readable_location, score, bucket, lat, lon)):
         return None
-    parts = ["下雨或雨後變危險的最高候選位置，應直接使用 Scout risk score tool evidence 回答"]
+    parts = [
+        "下雨或雨後變危險的最高候選位置，應直接使用 Scout risk score tool evidence 回答"
+    ]
     if readable_location:
         parts.append(f"位置：{readable_location}")
     if score:
@@ -17753,12 +18305,7 @@ def _workspace_tool_source_refs(
                     },
                 )
             )
-    return list(
-        {
-            (ref.source_id, ref.source_path): ref
-            for ref in refs
-        }.values()
-    )
+    return list({(ref.source_id, ref.source_path): ref for ref in refs}.values())
 
 
 def _public_assistant_sources(
@@ -17773,9 +18320,7 @@ def _public_assistant_sources(
         if source.source_id == TOTAL_INFO_SOURCE_ID:
             public_sources.append(
                 source.model_copy(
-                    update={
-                        "context_summary": _public_total_info_summary(summary)
-                    }
+                    update={"context_summary": _public_total_info_summary(summary)}
                 )
             )
             continue
@@ -17828,9 +18373,7 @@ def _public_assistant_sources(
             continue
         public_sources.append(
             source.model_copy(
-                update={
-                    "context_summary": _public_generic_source_summary(summary)
-                }
+                update={"context_summary": _public_generic_source_summary(summary)}
             )
         )
     return public_sources
@@ -17944,7 +18487,9 @@ def _without_workspace_tool_sources(
 
 def _project_json_matches_id(project_root: Path, project_id: str) -> bool:
     try:
-        payload = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+        payload = json.loads(
+            (project_root / "project.json").read_text(encoding="utf-8")
+        )
     except Exception:
         return False
     if not isinstance(payload, dict):
