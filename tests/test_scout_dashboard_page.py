@@ -602,10 +602,7 @@ def test_scout_dashboard_contains_requested_navigation_contract() -> None:
         "Import New Trip",
         "Trip Intake",
         "Country Material Pool",
-        "Admin Surfaces",
-        "Pre-trip",
-        "Admin",
-        "Debug",
+        "Debug Surface",
         "Agent",
         "Map",
         "Timeline Evidence",
@@ -623,8 +620,8 @@ def test_scout_dashboard_contains_requested_navigation_contract() -> None:
     assert 'data-route="features-workspace"' in html
     assert 'data-route="features-import-new-trip"' in html
     assert 'data-route="features-country-material-pool"' in html
-    assert 'data-route="surface-pretrip"' in html
-    assert 'data-route="surface-admin"' in html
+    assert 'data-route="surface-pretrip"' not in html
+    assert 'data-route="surface-admin"' not in html
     assert 'data-route="surface-debug"' in html
     assert 'data-route="outdoor-pace-fit-body-index"' in html
     assert 'data-route="emergency"' in html
@@ -637,27 +634,40 @@ def test_scout_dashboard_points_to_current_chilai_workspace() -> None:
     assert 'const PROJECT_ID = "chilai_nanhua_day1_scoutAI";' in html
     assert 'new URLSearchParams(window.location.search).get("projectId")' in html
     assert "^[A-Za-z0-9_.-]+$" in html
-    assert (
-        'const WORKSPACE_ROOT = "/Users/alexwang0315/workspace/'
-        'chilai_nanhua_day1_scoutAI";'
-    ) in html
+    assert "const WORKSPACE_ROOT =" not in html
+    assert 'fetchJson("/admin/dashboard/workspaces")' in html
+    assert "resolved_project_root" in html
     assert "chilai_nanhua_day1 route map" not in html
     assert "chilai_nanhua_day1_scoutAI route map" in html
 
 
-def test_scout_dashboard_embeds_existing_admin_surfaces() -> None:
+def test_scout_dashboard_embeds_only_the_debug_canonical_surface() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     assert "renderSurfaceFrame" in html
     assert 'id="surfaceFrame"' in html
     assert 'class="surface-frame"' in html
-    assert 'src: surfaceSrc("/admin/pretrip")' in html
-    assert 'src: surfaceSrc("/admin")' in html
+    assert 'src: surfaceSrc("/admin/pretrip")' not in html
+    assert 'src: surfaceSrc("/admin")' not in html
     assert 'src: surfaceSrc("/admin/debug")' in html
     assert "projectId=${encodeURIComponent(projectId())}" in html
-    assert "Admin Surfaces" in html
+    assert "Admin Surfaces" not in html
+    assert "Debug Surface" in html
     assert "Current Admin Surfaces" not in html
     assert "Open full page" in html
+
+
+def test_dashboard_removes_pretrip_and_admin_surface_route_contracts() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "surface-pretrip" not in html
+    assert "surface-admin" not in html
+    assert 'title: "Pre-trip Planning"' not in html
+    assert 'title: "Admin After-Action"' not in html
+    assert "Pre-trip、Admin 與 Debug canonical surface" not in html
+    assert 'title: "Debug canonical surface"' in html
+    assert 'const knownRoute = routeMeta[route] || SIX_FORCES.some' in html
+    assert '`${window.location.pathname}${window.location.search}#home`' in html
 
 
 def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
@@ -790,7 +800,7 @@ def test_scout_dashboard_agent_tab_posts_to_same_origin_assistant_api() -> None:
     assert "meta: [`project=${projectId()}`, \"surface=pretrip\"]" not in html
     assert "Same-origin Scout AI conversation through /assistant/query" in html
     assert "No live safety" in html
-    assert "SCOUT_AI_ASSISTANT_ENABLED=1" in html
+    assert "Dashboard Scout AI API · /assistant/query" in html
     assert "127.0.0.1:8765" not in html
     assert 'contentGrid?.classList.toggle("is-frame-wide", frameWide);' in html
     assert ".content-grid.is-frame-wide .evidence-drawer" in html
@@ -837,6 +847,14 @@ def test_scout_dashboard_workspace_tab_summarizes_project_stats() -> None:
 
 def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() -> None:
     html = PAGE.read_text(encoding="utf-8")
+    workspace_page = html.split("function renderWorkspacePage()", 1)[1].split(
+        "function renderWorkspaceStructurePanels()",
+        1,
+    )[0]
+    operation_console = html.split(
+        "function renderWorkspaceOperationConsole()",
+        1,
+    )[1].split("function countryMaterialPools()", 1)[0]
 
     for function_name in (
         "renderWorkspaceStructurePanels",
@@ -845,6 +863,9 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
         "workspaceCacheRows",
         "renderWorkspaceOperationConsole",
         "bindWorkspaceControls",
+        "loadWorkspaceCatalog",
+        "loadWorkspaceOperationRequests",
+        "resolvedWorkspaceRoot",
         "formatTtl",
         "formatBoolean",
     ):
@@ -884,13 +905,41 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     assert 'id="workspaceOperationStatus"' in html
     assert 'id="workspaceRedirectProjectInput"' in html
     assert 'id="workspaceSwitchProject"' in html
+    assert 'id="workspaceRefreshExternalEvidence"' in html
     assert "operator intent only" in html
-    assert "No filesystem mutation is performed by this dashboard." in html
+    assert "Only an append-only request record is written by this dashboard." in html
     assert "Delete requires an explicit destructive approval outside this dashboard." in html
+    assert 'fetchJson("/admin/dashboard/workspaces")' in html
+    assert "/operation-requests" in html
+    assert 'operation: operationName' in html
+    assert "confirm_record: true" in html
+    assert "triggerDashboardConnectedPreparation(\"workspace-operator-refresh\"" in html
+    assert "External refresh may use network services and update candidate evidence." in html
     assert 'localStorage.setItem("scout.dashboardProjectId", nextProjectId)' in html
     assert 'url.searchParams.set("projectId", nextProjectId)' in html
     assert 'url.hash = "features-workspace";' in html
-    assert "Workspace id must use letters, numbers, underscore, dash or dot only." in html
+    assert "validateWorkspaceSelection(nextProjectId)" in html
+    assert "const WORKSPACE_ROOT =" not in html
+    assert "void loadConnectedPreparationStatus();" in html
+    assert workspace_page.index("renderWorkspaceOperationConsole()") < workspace_page.index(
+        "renderWorkspaceStatsPanels(stats)"
+    )
+    assert 'renderMetricPanel("Importer"' not in workspace_page
+    assert 'renderMetricPanel("Workspace Edits"' not in workspace_page
+    assert 'renderMetricPanel("Runtime Handoff"' not in workspace_page
+    for label in (
+        "Clone",
+        "Transfer",
+        "Package",
+        "Restore",
+        "Delete review",
+        "Import trip",
+        "Refresh evidence",
+        "Open workspace",
+    ):
+        assert f">{label}</button>" in operation_console
+    assert "white-space: normal;" in html
+    assert "overflow-wrap: anywhere;" in html
 
 
 def test_scout_dashboard_import_new_trip_tab_contract() -> None:
@@ -919,7 +968,8 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
         "Defaults are used when this frame stays collapsed.",
         "Import Pipeline",
         "Validate Intake",
-        "Record stage-import request",
+        "Preview Import",
+        "Create Workspace",
         "Open Workspace",
         "operator-triggered",
         "no live safety",
@@ -952,7 +1002,8 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
         'id="importTargetNameInput"',
         'id="importTripStatus"',
         'data-import-trip-action="validate"',
-        'data-import-trip-action="stage"',
+        'data-import-trip-action="preview"',
+        'data-import-trip-action="create"',
         'data-import-trip-action="open"',
         'class="panel optional-parameters-frame"',
     ):
@@ -1038,6 +1089,13 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
     assert "countryMaterialPool: countryPoolInput.value || \"TW\"" in html
     assert "referenceGpxSources: fieldValue(\"importReferenceGpxSources\")" in html
     assert "targetName: targetNameValue()" in html
+    assert "/import-gpx-preview" in html
+    assert "/import-gpx`" in html
+    assert "confirm_import: true" in html
+    assert "validateWorkspaceSelection(nextProjectId)" in html
+    assert 'id="importWorkspaceRoot"' in html
+    assert 'placeholder="Load the server workspace catalog" readonly' in html
+    assert "workspace_root: workspaceRoot" not in html
     assert "workspaceRoot: workspaceRootValue()" in html
     assert "prepareWorkspaceRoot: workspaceRootValue()" in html
     assert "prepareProjectRoot: derivedProjectRoot()" in html
@@ -1352,6 +1410,7 @@ def test_dashboard_spatial_maps_share_the_canonical_map_navigation_contract() ->
     assert "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape" in html
     assert "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P Escape" in html
     assert 'data-map-mouse-zoom="${mouseZoomEnabled ? "true" : "false"}"' in html
+    assert 'data-map-wheel-zoom="${wheelZoomEnabled ? "true" : "false"}"' in html
     assert "data-dashboard-map-stage" in html
     assert "data-dashboard-map-selection" in html
     assert "drag down-right to zoom in; drag up-left to zoom out" in html
@@ -1418,7 +1477,7 @@ def test_weather_embedded_map_uses_only_rudy_tw_tiles_and_cwa_rainfall() -> None
     assert '"rudy-twmap"' in weather_layer_contract
     assert '"cwa-qpf"' in weather_layer_contract
     assert weather_layer_contract.count('"') == 4
-    assert "&mapOnly=1&initialLayers=${encodeURIComponent(" in weather_section
+    assert "&mapOnly=1&wheelZoom=0&initialLayers=${encodeURIComponent(" in weather_section
     assert "WEATHER_EMBEDDED_MAP_LAYER_IDS.join" in weather_section
     assert "SCOUT_LAYER_IDS.forEach(layerId =>" in weather_frame_adapter
     assert (
@@ -1457,9 +1516,10 @@ def test_scout_dashboard_map_route_removes_header_without_losing_mobile_navigati
     assert 'state.route === "map" ? "dashboardMapNavToggle"' in html
 
 
-def test_weather_hydrology_controls_default_only_cwa_rainfall() -> None:
+def test_weather_hydrology_controls_are_owned_by_six_axis_weather_not_map() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+
     weather_layer_ids = (
         "soil-moisture",
         "antecedent-rain",
@@ -1470,6 +1530,12 @@ def test_weather_hydrology_controls_default_only_cwa_rainfall() -> None:
     weather_layer_contract = html.split(
         "const WEATHER_LAYER_IDS = Object.freeze([", 1
     )[1].split("]);", 1)[0]
+    map_evidence_renderer = html.split(
+        "function renderMapEvidenceRail()", 1
+    )[1].split("function dashboardCwaDerivedStatus", 1)[0]
+    map_frame_adapter = html.split(
+        "function applyPretripMapOnlyFrame(frame)", 1
+    )[1].split("function projectCounts()", 1)[0]
     weather_renderer = html.split(
         "function renderWeatherIntersectionMap(snapshot)", 1
     )[1].split("function renderWeatherActions(snapshot)", 1)[0]
@@ -1488,8 +1554,11 @@ def test_weather_hydrology_controls_default_only_cwa_rainfall() -> None:
     assert "...WEATHER_LAYER_DEFAULTS" in html
     assert 'aria-label="Weather and hydrology layer controls"' in weather_renderer
     assert 'data-weather-layer-control="${escapeHtml(layer.id)}"' in weather_renderer
+    assert "renderDashboardCwaImageryControls()" not in map_evidence_renderer
+    assert "excludeWeatherLayersFromMapFrame(frame)" in map_frame_adapter
     assert "function setEmbeddedPretripLayerEnabled" in html
     assert "function syncWeatherLayerControls" in html
+    assert "function excludeWeatherLayersFromMapFrame" in html
 
     for marker in (
         'data-weather-cwa-product="true"',
@@ -1514,37 +1583,6 @@ def test_weather_hydrology_controls_default_only_cwa_rainfall() -> None:
         assert marker in html
 
     assert "window.scoutCwaImageryController" in pretrip_html
-    assert "SCOUT_CWA_API_KEY" not in html
-
-
-def test_scout_dashboard_map_exposes_cwa_imagery_bridge_and_controls() -> None:
-    html = PAGE.read_text(encoding="utf-8")
-    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
-
-    for marker in (
-        'id="dashboardCwaImagery"',
-        'data-dashboard-cwa-imagery-product',
-        'data-dashboard-cwa-imagery-window',
-        'data-dashboard-cwa-imagery-timeline',
-        'data-dashboard-cwa-imagery-opacity="radar"',
-        'data-dashboard-cwa-imagery-opacity="satellite"',
-        'data-dashboard-cwa-rainfall-product',
-        'data-dashboard-cwa-rainfall-opacity',
-        'data-dashboard-cwa-rainfall-legend',
-        'data-dashboard-cwa-rainfall-status',
-        'data-dashboard-cwa-imagery-play',
-        'data-dashboard-cwa-imagery-status',
-        'aria-label="CWA radar and satellite imagery controls"',
-        "bindDashboardCwaImageryBridge",
-        "syncDashboardCwaImageryControls",
-        "scoutCwaImageryController",
-        'scout:cwa-imagery-state',
-        "cache-only",
-        "candidate-only",
-    ):
-        assert marker in html
-
-    assert "window.scoutCwaImageryController" in pretrip_html
     assert "function cwaImageryStateSnapshot()" in pretrip_html
     assert 'new CustomEvent("scout:cwa-imagery-state"' in pretrip_html
     assert "/admin/pretrip/projects/${encodeURIComponent(projectId)}/weather-imagery" in pretrip_html
@@ -1556,12 +1594,12 @@ def test_scout_dashboard_cwa_imagery_documentation_contract() -> None:
     layer_doc = LAYER_CONTRACT_DOC.read_text(encoding="utf-8")
     weather_doc = WEATHER_DOC.read_text(encoding="utf-8")
 
-    assert "Dashboard MAP CWA imagery controls" in dashboard_doc
+    assert "Six Axis Weather owns weather and hydrology controls" in dashboard_doc
     assert "same-origin pretrip controller" in dashboard_doc
     assert "cache-only" in dashboard_doc
-    assert "Dashboard MAP" in layer_doc
+    assert "Six Axis Weather" in layer_doc
     assert "scoutCwaImageryController" in layer_doc
-    assert "Dashboard MAP" in weather_doc
+    assert "Exploring for Six Axis → Weather" in weather_doc
     assert "server-side" in weather_doc
 
 
@@ -1851,11 +1889,14 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "reference GPX 不自動升格成替代路線" in html
 
 
-def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_without_mouse_zoom() -> None:
+def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoom() -> None:
     html = PAGE.read_text(encoding="utf-8")
     navigation_map = html.split(
         "function renderNavigationWorkspaceMap", 1
     )[1].split("function renderNavigationFeatureExtraction", 1)[0]
+    navigation_training_map = html.split(
+        "function renderNavigationTerrainMap", 1
+    )[1].split("function renderNavigationTerrainDetail", 1)[0]
     map_controller = html.split(
         "function createDashboardMapViewportController", 1
     )[1].split("function bindDashboardMapViewports", 1)[0]
@@ -1885,15 +1926,165 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_without_mouse_zoom(
     assert "slope_shading" not in navigation_map
     assert "elevation_tint" not in navigation_map
     assert "mouseZoom: false" not in navigation_map
+    assert "mouseZoom: false" not in navigation_training_map
+    assert "wheelZoom: false" in navigation_map
+    assert "wheelZoom: false" in navigation_training_map
+    assert 'data-map-control="box-zoom"' in html
+    assert "drag down-right to zoom in; drag up-left to zoom out" in html
     assert (
         'const mouseZoomEnabled = viewport.dataset.mapMouseZoom !== "false";'
         in map_controller
     )
     assert (
-        'if (mouseZoomEnabled) viewport.addEventListener("wheel", onWheel, '
+        'const wheelZoomEnabled = viewport.dataset.mapWheelZoom !== "false";'
+        in map_controller
+    )
+    assert (
+        'if (wheelZoomEnabled) viewport.addEventListener("wheel", onWheel, '
         "{passive: false});"
         in map_controller
     )
+
+
+def test_map_navigation_weather_disable_wheel_zoom_but_keep_box_zoom() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+    map_frame_loader = html.split(
+        "function ensurePretripMapFrame()", 1
+    )[1].split("function ensureAgentChat()", 1)[0]
+    map_frame_retry = html.split(
+        "function retryPretripMapFrame(frame)", 1
+    )[1].split("function adoptPretripMapProjectBridge(frame)", 1)[0]
+    weather_map = html.split(
+        '<iframe class="weather-cwa-map-frame"', 1
+    )[1].split("</iframe>", 1)[0]
+    navigation_training_map = html.split(
+        "function renderNavigationTerrainMap", 1
+    )[1].split("function renderNavigationTerrainDetail", 1)[0]
+    navigation_workspace_map = html.split(
+        "function renderNavigationWorkspaceMap", 1
+    )[1].split("function renderNavigationFeatureExtraction", 1)[0]
+
+    assert "&mapOnly=1&wheelZoom=0" in map_frame_loader
+    assert "&mapOnly=1&wheelZoom=0" in map_frame_retry
+    assert "&mapOnly=1&wheelZoom=0&initialLayers=" in weather_map
+    assert "wheelZoom: false" in navigation_training_map
+    assert "wheelZoom: false" in navigation_workspace_map
+    assert "mouseZoom: false" not in navigation_training_map
+    assert "mouseZoom: false" not in navigation_workspace_map
+    assert "const MAP_WHEEL_ZOOM_ENABLED =" in pretrip_html
+    assert 'get("wheelZoom") !== "0"' in pretrip_html
+    assert (
+        'if (MAP_WHEEL_ZOOM_ENABLED) '
+        'svg.addEventListener("wheel", handleMapWheelZoom, {passive: false});'
+        in pretrip_html
+    )
+
+
+def test_map_navigation_weather_enforce_tile_vector_or_approved_single_image_policy() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+    pretrip_raster_tiles = pretrip_html.split(
+        "function renderRasterLayer(", 1
+    )[1].split("function renderOsmTileFallback(", 1)[0]
+    pretrip_osm_tiles = pretrip_html.split(
+        "function renderOsmTileFallback(", 1
+    )[1].split("function renderOsmPbfVector(", 1)[0]
+    pretrip_terrain_images = pretrip_html.split(
+        "function renderTerrainBitmapOverlays(", 1
+    )[1].split("function terrainCellSide(", 1)[0]
+    pretrip_cwa_images = pretrip_html.split(
+        "function renderCwaWeatherImagery(", 1
+    )[1].split("function cwaRainfallCoverageStatus(", 1)[0]
+    pretrip_tile_refresh = pretrip_html.split(
+        "function renderRasterBasemapLayers(", 1
+    )[1].split("function applyMapViewport(", 1)[0]
+    navigation_tiles = html.split(
+        "function navigationRudyTileImages(", 1
+    )[1].split("function renderNavigationRudyTileLayer(", 1)[0]
+    navigation_tile_refresh = html.split(
+        "function updateNavigationRudyTileLayer(", 1
+    )[1].split("function navigationTerrainPointPosition(", 1)[0]
+    navigation_training_map = html.split(
+        "function renderNavigationTerrainMap", 1
+    )[1].split("function renderNavigationTerrainDetail", 1)[0]
+    navigation_workspace_map = html.split(
+        "function renderNavigationWorkspaceMap", 1
+    )[1].split("function renderNavigationFeatureExtraction", 1)[0]
+
+    assert 'data-map-render-policy="tile-vector-approved-single-image"' in pretrip_html
+    assert "const MAP_APPROVED_SINGLE_IMAGE_THEMES = Object.freeze(new Set([" in pretrip_html
+    assert "function createApprovedSingleImage(" in pretrip_html
+    assert "function enforceMapRenderPolicy(" in pretrip_html
+    assert "enforceMapRenderPolicy(svg);" in pretrip_html
+    for theme in (
+        "satellite",
+        "radar",
+        "lidar",
+        "hillshade",
+        "elevation_tint",
+        "slope_shading",
+        "contours",
+        "thematic",
+    ):
+        assert f'"{theme}"' in pretrip_html
+
+    assert '"data-map-render-kind": "tile"' in pretrip_raster_tiles
+    assert '"data-map-tile-source": layerId' in pretrip_raster_tiles
+    assert '"data-map-render-kind": "tile"' in pretrip_osm_tiles
+    assert '"data-map-tile-source": "osm"' in pretrip_osm_tiles
+    assert "createApprovedSingleImage(" in pretrip_terrain_images
+    assert "if (!image) return;" in pretrip_terrain_images
+    assert "createApprovedSingleImage(" in pretrip_cwa_images
+    assert "enforceMapRenderPolicy(svg);" in pretrip_tile_refresh
+
+    assert 'data-map-render-kind="tile"' in navigation_tiles
+    assert 'data-map-tile-source="rudy-twmap"' in navigation_tiles
+    assert "const DASHBOARD_MAP_RENDER_POLICY =" in html
+    assert "function enforceDashboardMapRenderPolicy(" in html
+    assert "enforceDashboardMapRenderPolicy(viewport);" in html
+    assert "renderPolicy: DASHBOARD_MAP_RENDER_POLICY" in navigation_training_map
+    assert "renderPolicy: DASHBOARD_MAP_RENDER_POLICY" in navigation_workspace_map
+    assert "enforceDashboardMapRenderPolicy(viewport);" in navigation_tile_refresh
+
+
+def test_map_navigation_weather_share_hover_hints_and_keyboard_pan_contract() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    map_frame_adapter = html.split(
+        "function applyPretripMapOnlyFrame(frame)", 1
+    )[1].split("function projectCounts()", 1)[0]
+    weather_frame_adapter = html.split(
+        "function applyWeatherCwaMapFrame(frame, attempt = 0)", 1
+    )[1].split("function bindWeatherCwaMapFrame(frame)", 1)[0]
+    navigation_map = html.split(
+        "function renderNavigationWorkspaceMap", 1
+    )[1].split("function renderNavigationFeatureExtraction", 1)[0]
+
+    for marker in (
+        'id="dashboardMapHoverHint"',
+        'role="tooltip"',
+        "function bindDashboardMapHints(",
+        "function showDashboardMapHint(",
+        "function hideDashboardMapHint(",
+        "data-dashboard-map-hint-title",
+        "data-dashboard-map-hint-summary",
+        "bindDashboardMapHints();",
+        'setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape")',
+    ):
+        assert marker in html
+
+    assert "#hoverHint.is-hidden" in map_frame_adapter
+    assert "#hoverHint.is-hidden" in weather_frame_adapter
+    assert (
+        ".route-pane, .detail-pane, #hoverHint { display:none !important; }"
+        not in weather_frame_adapter
+    )
+    assert "#panMode," in map_frame_adapter
+    assert "#hoverHint {" in map_frame_adapter
+    assert "#hoverHint {" in weather_frame_adapter
+    assert 'data-navigation-structure-point-id="' in navigation_map
+    assert 'data-navigation-live-point-id="' in navigation_map
+    assert 'data-navigation-terrain-event-id="' in navigation_map
 
 
 def test_scout_dashboard_pace_fit_removes_low_information_blocks() -> None:
@@ -2388,15 +2579,15 @@ def test_dashboard_cwa_truth_state_play_guard_and_single_product_contract() -> N
         "zero_precipitation",
         "unavailable",
         "formatCwaTimestamp",
-        'data-dashboard-cwa-panel-toggle',
-        'data-dashboard-cwa-sheet-state',
+        'data-weather-cwa-rainfall-product="true"',
+        'data-weather-cwa-play="true"',
+        "weatherRainfallProduct",
     ):
         assert marker in html
 
-    assert 'productId: "radar"' in html
-    assert 'play.disabled = !bridgeReady || Number(snapshot.maxFrameIndex || 0) < 1;' in html
-    assert "freshness: snapshot.freshness" in html
-    assert "coverageStatus: snapshot.coverageStatus" in html
+    assert 'weatherCwaProduct: "radar"' in html
+    assert "play.disabled = Number(snapshot.maxFrameIndex || 0) < 1;" in html
+    assert "rainfallStatus.textContent = dashboardCwaRainfallStatusText" in html
 
     assert "function cwaDerivedStatus" in pretrip_html
     assert 'productId: "radar"' in pretrip_html
@@ -2466,7 +2657,8 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         'connectedPreparationActivityLabel(preparation.cwaApiRequestAttempted, preparation.status)',
         'connectedPreparationActivityLabel(preparation.externalApiCallsMade, preparation.status)',
         "/connected-preparation",
-            "loadConnectedPreparationStatus",
+            "function loadConnectedPreparationStatus",
+            'triggerDashboardConnectedPreparation("workspace-operator-refresh"',
         "connectedPreparation",
         "function weatherPercentLabel",
         "function requestAuthorizedRainfallTrend",
@@ -2475,9 +2667,9 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         "navigator.geolocation.getCurrentPosition",
         "confirmLocationAccess: true",
         'data-weather-location-trend="true"',
-    ):
-        assert marker in html
-
+        ):
+            assert marker in html
+    assert "void loadConnectedPreparationStatus();" in html
     assert 'const pastRainfall = rainfallProducts.find(item => item.gridKind === "qpe_past_1h")' in html
     assert 'const futureRainfall = rainfallProducts.find(item => item.gridKind === "qpf_next_1h")' in html
     assert '"Past 1h QPE"' in html
@@ -2485,6 +2677,7 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
     assert "no valid route-bbox values" in html
     assert "unknown, not zero" in html
     assert "No rainfall cells cover the route review bbox." not in html
+
     assert "weatherPercentLabel(features.convectiveCellScore)" in html
     assert "weatherPercentLabel(features.satelliteConvectiveCloudScore)" in html
     assert "weatherPercentLabel(features.confidence)" in html
@@ -2585,9 +2778,52 @@ def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_s
         assert marker in html
 
     project_scope = html.split("project: [", 1)[1].split("],", 1)[0]
+    assert '"map"' not in project_scope
     assert '"outdoor-navigation"' not in project_scope
     assert "const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;" in html
     assert "{timeoutMs: NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS}" in html
+
+
+def test_dashboard_map_reuses_pretrip_projection_and_reports_progressive_loading() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+
+    for marker in (
+        'id="dashboardMapLoading"',
+        'role="status"',
+        'aria-live="polite"',
+        "if (!scopes.length) return;",
+        "function updateDashboardMapLoading",
+        "function adoptPretripMapProjectBridge",
+        '&mapOnly=1',
+        "scoutPretripProjectBridge",
+        'frame.dataset.mapOnlyReady = "true"',
+        'frame.dataset.mapOnlyReady = "blocked"',
+    ):
+        assert marker in html
+
+    for marker in (
+        "window.scoutPretripProjectBridge = Object.freeze",
+        "function publishPretripProjectBridge",
+        'publishPretripProjectBridge("loading")',
+        'publishPretripProjectBridge("base_ready")',
+        'publishPretripProjectBridge("enhanced_ready")',
+        'publishPretripProjectBridge("degraded"',
+        "function renderProjectView",
+        "if (DASHBOARD_MAP_ONLY) return;",
+        "Promise.allSettled",
+    ):
+        assert marker in pretrip_html
+
+    reload_body = pretrip_html.split("async function reloadProjectView()", 1)[1].split(
+        "async function loadOsmPbfVectorLayer", 1
+    )[0]
+    assert reload_body.index("renderProjectView(view)") < reload_body.index(
+        "loadCwaRainfallGridOverlay(view)"
+    )
+    assert reload_body.index('publishPretripProjectBridge("base_ready")') < reload_body.index(
+        "Promise.allSettled"
+    )
 
 
 def test_dashboard_primary_information_architecture_and_mobile_shell_contract() -> None:
@@ -2747,7 +2983,6 @@ def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> Non
         "features-workspace",
         "features-import-new-trip",
         "features-country-material-pool",
-        "surface-pretrip",
         "map",
         "timeline",
         "features-lbs",
@@ -2757,10 +2992,10 @@ def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> Non
         "emergency",
         "outdoor-weather",
         "agent",
-        "surface-admin",
         "surface-debug",
         "debug",
         "settings",
+        "diagnostic",
         "outdoor-permission",
         "observer",
         "outdoor-architecture",
@@ -2847,8 +3082,9 @@ def test_dashboard_joint_review_information_architecture_and_qa_contract() -> No
         "Record package request",
         "Record restore request",
         "Request deletion review",
-        "Record stage-import request",
-        "Intent recorded. No filesystem mutation was performed.",
+        "Preview Import",
+        "Create Workspace",
+        "Only an append-only request record is written by this dashboard.",
         "32 canonical layers",
         "completed-track is after-action only",
         "Permission Class Selector Preview",
@@ -2878,7 +3114,8 @@ def test_dashboard_joint_review_information_architecture_and_qa_contract() -> No
     assert "pendingTabFocus" in html
     assert "focus({preventScroll: true})" in html
     assert 'id="agentAskButton" aria-describedby="agentComposerStatus"' in html
-    assert 'data-import-trip-action="stage" aria-describedby="importTripStatus"' in html
+    assert 'data-import-trip-action="preview" aria-describedby="importTripStatus"' in html
+    assert 'data-import-trip-action="create" aria-describedby="importTripStatus"' in html
     assert "Skip embedded surface" in html
     assert 'id="surfaceFrameExit"' in html
     assert 'focus({preventScroll: true})' in html
@@ -3031,7 +3268,7 @@ process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, fai
     assert payload["successReceipt"]["reloadDisabled"] is False
 
 
-def test_dashboard_diagnostic_page_runs_29_read_only_checks() -> None:
+def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     settings_nav = (
@@ -3046,15 +3283,15 @@ def test_dashboard_diagnostic_page_runs_29_read_only_checks() -> None:
     assert diagnostic_nav in html
     assert html.index(diagnostic_nav) > html.index(settings_nav)
     assert '"diagnostic": Object.freeze' in html
-    assert 'diagnostic: ["Diagnostic", "29 read-only Dashboard checks"]' in html
+    assert 'diagnostic: ["Diagnostic", "30 read-only Dashboard checks"]' in html
     assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
 
     case_source = html.split(
         "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
     )[1].split("]);", 1)[0]
-    for index in range(1, 30):
+    for index in range(1, 31):
         assert f'id: "DASH-{index:03d}"' in case_source
-    assert case_source.count('id: "DASH-') == 29
+    assert case_source.count('id: "DASH-') == 30
     assert "postJson(" not in case_source
 
     for marker in (
@@ -3062,12 +3299,18 @@ def test_dashboard_diagnostic_page_runs_29_read_only_checks() -> None:
         "async function diagnosticCheck027()",
         "async function diagnosticCheck028()",
         "async function diagnosticCheck029()",
+        "async function diagnosticCheck030()",
         "Map、Navigation、Weather evidence hover hint",
         "三圖框選縮放與鍵盤平移",
         "三圖圖磚、向量與單圖例外政策",
         "三圖基本 Zoom、Pan 與 Fit",
-        "DASHBOARD_MAP_SINGLE_IMAGE_ALLOWLIST",
+        "Evidence 是否有計數為 0 的類別",
+        "DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES",
         "diagnosticMapSurfaceSources",
+        "function diagnosticZeroCountEvidenceCategories(",
+        ".filter(group => Number(group.count) === 0)",
+        ".filter(item => Number(item.count) === 0)",
+        "Evidence categories count=0:",
     ):
         assert marker in html
 

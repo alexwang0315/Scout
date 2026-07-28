@@ -76,6 +76,36 @@ zoom fallback, and provider isolation. They must not be bulk pre-cut into
 important for NLSC and OSM: they are valuable runtime basemaps, but they are not
 the hiking POI authority in the current pretrip preparation design.
 
+### Dashboard Map Render Primitive Policy
+
+Dashboard Map, Exploring for Six Axis → Navigation, and Exploring for Six Axis
+→ Weather must render spatial context with map tiles and/or vector geometry.
+An ordinary basemap, route, evidence layer, or generic map fallback must never
+be replaced by one route-bbox screenshot or other unclassified single image.
+
+Every SVG `<image>` on these three surfaces must declare exactly one approved
+render role:
+
+- `data-map-render-kind="tile"` with an explicit tile source and tile address;
+- `data-map-render-kind="approved-single-image"` with one theme from the
+  explicit allowlist.
+
+The current single-image theme allowlist is `satellite`, `radar`, `lidar`,
+`hillshade`, `elevation_tint`, `slope_shading`, `contours`, and `thematic`.
+These are georeferenced presentation overlays, not replacement basemaps and not
+runtime safety truth. Any new single-image theme requires an explicit spec and
+renderer allowlist change plus a browser regression check. Merely naming an
+image file, setting an opacity, or placing it inside a known layer group does
+not approve it.
+
+The renderers must fail closed: an image without a valid role, tile source, or
+approved theme is removed before presentation and reported through the
+machine-readable render-policy status. A failed tile request may use its
+documented parent-tile/cache fallback, but it must not fall back to an
+unclassified full-map screenshot. Map and Weather enforce this policy in their
+shared canonical Pre-trip renderer; Navigation enforces the same policy in its
+Dashboard SVG viewport.
+
 Historical/reference GPX notes remain route-condition evidence. They may
 support hazard freshness, slow-passage interpretation, detour context, MCP/Boss
 pressure, and candidate explanations. They should not be the primary source for
@@ -203,12 +233,15 @@ start an upstream fetch, image decode, georeference, tile build, route sample,
 or motion estimate.
 
 The nested imagery controls are required on `/admin/pretrip`, `/admin/debug`,
-and `/admin`. Dashboard MAP reuses the `/admin/pretrip` renderer and mirrors
-the same state through the same-origin `scoutCwaImageryController`; it is not a
-fourth renderer and does not add a layer id. The controls remain usable when
-the main CWA layer is enabled and show an explicit unavailable state when no
-prepared manifest exists. Raw cache paths, ETags, CWA credentials, and upstream
-authorization data must not be returned to the browser.
+and `/admin`. Exploring for Six Axis → Weather reuses the `/admin/pretrip`
+renderer and mirrors the same state through the same-origin
+`scoutCwaImageryController`; it is not a fourth renderer and does not add a
+layer id. Dashboard MAP excludes the five Weather / 氣象與水文 controls so
+weather ownership is not duplicated across pages. The controls remain usable
+on Six Axis Weather when the main CWA layer is enabled and show an explicit
+unavailable state when no prepared manifest exists. Raw cache paths, ETags,
+CWA credentials, and upstream authorization data must not be returned to the
+browser.
 
 ### CWA Numeric Rainfall Grid Child Products
 
@@ -225,7 +258,7 @@ Admin GET reads are cache-only and may return compact route-grid cells but not
 the full numeric `values`, gzip data refs, raw provider payload, ETag, upstream
 URL, or credential. Position/target sampling is a typed POST over already
 prepared frames; its response omits submitted coordinates and cannot write
-Phase 1 safety truth. Dashboard MAP mirrors this state through the existing
+Phase 1 safety truth. Six Axis Weather mirrors this state through the existing
 same-origin `scoutCwaImageryController`, so there is still one canonical map
 renderer.
 

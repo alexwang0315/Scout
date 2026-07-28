@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+import admin_api
 from admin_api import (
     _compact_pretrip_project_view,
     _ensure_scout_src_on_path,
@@ -366,6 +367,56 @@ def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
         assert compact_payload["route_notes"]["candidates"][0]["runtime_safety_truth"] is False
     assert "checkpoint_candidates" not in compact_payload["gis_perception"]
     assert len(compact_response.content) < len(full_response.content)
+
+
+def test_pretrip_project_projection_cache_hits_and_invalidates_on_workspace_change(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "projection_cache_demo"
+    project_root = tmp_path / project_id
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": project_id}),
+        encoding="utf-8",
+    )
+    build_calls: list[str] = []
+
+    def fake_build(project: str, *, project_root: Path) -> dict[str, object]:
+        build_calls.append(project)
+        return {
+            "project_id": project,
+            "tabs": {
+                "pre_trip_planning": {"sections": []},
+                "review_workspace": {"sections": []},
+                "post_analysis": {"sections": []},
+                "agent_skills": {"sections": []},
+            },
+        }
+
+    monkeypatch.setattr(admin_api, "build_pretrip_admin_view", fake_build)
+    monkeypatch.setattr(
+        admin_api,
+        "_attach_energy_reserve_monitor",
+        lambda payload, **kwargs: None,
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    first = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+    second = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.headers["x-scout-projection-cache"] == "miss"
+    assert second.headers["x-scout-projection-cache"] == "hit"
+    assert build_calls == [project_id]
+
+    (project_root / "candidates.json").write_text("{}", encoding="utf-8")
+    changed = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+
+    assert changed.status_code == 200
+    assert changed.headers["x-scout-projection-cache"] == "miss"
+    assert build_calls == [project_id, project_id]
 
 
 def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
@@ -1682,6 +1733,107 @@ def test_pretrip_project_workspace_api_creates_metadata_only_tmp_copy(tmp_path):
         for path in workspace_project_root.rglob("*")
         if path.is_file()
     )
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_dashboard_workspace_catalog_resolves_server_owned_workspace_root(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get("/admin/dashboard/workspaces")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["workspace_parent_root"] == str(workspace_root.resolve())
+    project = next(
+        item for item in payload["projects"] if item["project_id"] == PROJECT_ID
+    )
+    assert project["workspace_backed"] is True
+    assert project["resolved_project_root"] == str(
+        (workspace_root / PROJECT_ID).resolve()
+    )
+    assert project["capabilities"]["switch"] is True
+    assert project["capabilities"]["record_operation_request"] is True
+
+
+def test_dashboard_workspace_context_rejects_unknown_project(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get("/admin/dashboard/workspaces/missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Dashboard workspace not found"
+
+
+def test_dashboard_workspace_operation_request_requires_explicit_confirmation(
+    tmp_path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    request_log = project_root / "reviews" / "workspace_operation_requests.jsonl"
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/operation-requests",
+        json={"operation": "package", "confirm_record": False},
+    )
+
+    assert response.status_code == 400
+    assert "confirm_record=true" in response.json()["detail"]
+    assert not request_log.exists()
+
+
+def test_dashboard_workspace_operation_request_is_append_only_intent_not_execution(
+    tmp_path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    request_log = project_root / "reviews" / "workspace_operation_requests.jsonl"
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/operation-requests",
+        json={
+            "operation": "delete_review",
+            "confirm_record": True,
+            "requested_by": "dashboard_operator",
+            "note": "Review whether this workspace can be retired.",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    request = payload["request"]
+    assert request["operation"] == "delete_review"
+    assert request["status"] == "requested"
+    assert request["destructive"] is True
+    assert request["execution_performed"] is False
+    assert request["runtime_safety_truth"] is False
+    assert request["candidate_only"] is True
+    assert project_root.is_dir()
+    persisted_lines = request_log.read_text(encoding="utf-8").splitlines()
+    assert len(persisted_lines) == 1
+    assert json.loads(persisted_lines[0])["request_id"] == request["request_id"]
+
+    listed = client.get(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/operation-requests"
+    )
+    assert listed.status_code == 200
+    assert listed.json()["requests"][0]["request_id"] == request["request_id"]
+
+
+def test_dashboard_workspace_operation_request_never_writes_repo_fixture():
+    original_fixture_bytes = _repo_fixture_bytes()
+    client = TestClient(create_admin_app())
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/operation-requests",
+        json={"operation": "clone", "confirm_record": True},
+    )
+
+    assert response.status_code == 409
+    assert "workspace-backed project" in response.json()["detail"]
     assert _repo_fixture_bytes() == original_fixture_bytes
 
 
