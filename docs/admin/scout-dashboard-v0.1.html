@@ -11258,6 +11258,38 @@
       if (!condition) throw new Error(message);
     }
 
+    function diagnosticMarkupRoot(markup) {
+      const template = document.createElement("template");
+      template.innerHTML = String(markup || "").trim();
+      return template.content;
+    }
+
+    function diagnosticRouteMarkup(route) {
+      if (route === "map") return document.getElementById("dashboardMap")?.outerHTML || '<section data-diagnostic-map-shell="missing"></section>';
+      if (route === "agent") return document.getElementById("dashboardAgent")?.outerHTML || '<section data-diagnostic-agent-shell="missing"></section>';
+      if (route.startsWith("outdoor-")) return renderOutdoorPage(route);
+      return renderStandardPage(route);
+    }
+
+    function diagnosticRenderWithState(overrides, renderMarkup) {
+      const previous = Object.fromEntries(
+        Object.keys(overrides).map(key => [key, state[key]]),
+      );
+      try {
+        for (const [key, value] of Object.entries(overrides)) state[key] = value;
+        return renderMarkup();
+      } finally {
+        for (const [key, value] of Object.entries(previous)) state[key] = value;
+      }
+    }
+
+    function diagnosticLayerControlIds(html) {
+      const parsed = new DOMParser().parseFromString(String(html || ""), "text/html");
+      return Array.from(parsed.querySelectorAll('input[data-layer]'))
+        .map(input => String(input.dataset.layer || "").trim())
+        .filter(Boolean);
+    }
+
     function diagnosticResource(key, loader) {
       if (diagnosticResourceCache.has(key)) return diagnosticResourceCache.get(key);
       const promise = Promise.resolve()
@@ -11277,6 +11309,26 @@
     function diagnosticFetchUrl(path) {
       if (/^https?:\/\//i.test(path)) return path;
       return `${apiBase()}${path}`;
+    }
+
+    async function diagnosticFetchStatus(path, {timeoutMs = 45000} = {}) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(diagnosticFetchUrl(path), {
+          method: "GET",
+          headers: {Accept: "application/json, text/html;q=0.9, */*;q=0.8"},
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        return {
+          ok: response.ok,
+          status: response.status,
+          contentType: response.headers.get("content-type") || "",
+        };
+      } finally {
+        window.clearTimeout(timeout);
+      }
     }
 
     function diagnosticEnvelope(path, {timeoutMs = 45000, text = false} = {}) {
@@ -11322,16 +11374,97 @@
       return diagnosticJson(bodyIndexWatchStatusPath(), BODY_INDEX_FETCH_TIMEOUT_MS);
     }
 
+    function diagnosticExerciseSharedMapController() {
+      const viewportId = "diagnostic-interaction-map";
+      const previousViewports = state.mapViewportById;
+      const host = document.createElement("div");
+      host.style.cssText = "position:fixed;left:-10000px;top:0;width:440px;height:320px;overflow:hidden;";
+      host.innerHTML = renderDashboardMapViewport(
+        viewportId,
+        "Diagnostic interaction map",
+        '<svg viewBox="0 0 440 320" width="440" height="320"><path d="M20 280 L220 40 L420 280"></path></svg>',
+        {renderPolicy: DASHBOARD_MAP_RENDER_POLICY, wheelZoom: false},
+      );
+      document.body.appendChild(host);
+      try {
+        const viewport = host.querySelector(`[data-dashboard-map-viewport="${viewportId}"]`);
+        diagnosticRequire(Boolean(viewport), "Diagnostic interaction viewport could not be rendered.");
+        viewport.style.width = "440px";
+        viewport.style.height = "320px";
+        const controller = createDashboardMapViewportController(viewport);
+        diagnosticRequire(Boolean(controller), "Shared map viewport controller could not be initialized.");
+
+        const initial = controller.getState();
+        viewport.querySelector('[data-map-control="zoom-in"]')?.click();
+        const zoomed = controller.getState();
+        diagnosticRequire(zoomed.zoom > initial.zoom, "Zoom in did not change the shared map viewport.");
+
+        const beforeKeyboardPan = controller.getState();
+        viewport.dispatchEvent(new KeyboardEvent("keydown", {key: "ArrowRight", bubbles: true}));
+        const afterKeyboardPan = controller.getState();
+        diagnosticRequire(afterKeyboardPan.x !== beforeKeyboardPan.x, "ArrowRight did not pan the shared map viewport.");
+
+        viewport.querySelector('[data-map-control="box-zoom"]')?.click();
+        diagnosticRequire(controller.getState().mode === "box", "Box zoom mode did not activate.");
+        viewport.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
+        diagnosticRequire(
+          viewport.querySelector("[data-dashboard-map-selection]")?.hidden === true,
+          "Escape did not clear the map selection.",
+        );
+
+        const beforeWheel = controller.getState();
+        viewport.dispatchEvent(new WheelEvent("wheel", {deltaY: -120, bubbles: true, cancelable: true}));
+        const afterWheel = controller.getState();
+        diagnosticRequire(afterWheel.zoom === beforeWheel.zoom, "Mouse wheel changed zoom while wheel zoom was disabled.");
+
+        viewport.querySelector('[data-map-control="reset"]')?.click();
+        const reset = controller.getState();
+        diagnosticRequire(reset.zoom === 1 && reset.x === 0 && reset.y === 0, "Fit/Reset did not restore the shared map viewport.");
+        return {
+          controls: Array.from(viewport.querySelectorAll("[data-map-control]"))
+            .map(control => control.dataset.mapControl),
+          keyboardPanChanged: afterKeyboardPan.x !== beforeKeyboardPan.x,
+          wheelZoomDisabled: afterWheel.zoom === beforeWheel.zoom,
+          reset,
+        };
+      } finally {
+        host.remove();
+        state.mapViewportById = previousViewports;
+      }
+    }
+
     async function diagnosticCheck001() {
-      const [catalog, context, project] = await Promise.all([
+      const project = encodeURIComponent(projectId());
+      const projectPath = `/admin/pretrip/projects/${project}`;
+      const [
+        catalog,
+        context,
+        projection,
+        debugProjection,
+        debugEvents,
+        weather,
+        navigation,
+        connectedPreparation,
+      ] = await Promise.all([
         diagnosticWorkspaceCatalog(),
         diagnosticWorkspaceContext(),
         diagnosticProjectProjection(),
+        diagnosticJson(`${projectPath}/debug-projection`),
+        diagnosticJson(`${projectPath}/debug-projection-events`),
+        diagnosticJson(`${projectPath}/weather-dashboard`),
+        diagnosticJson(`${projectPath}/navigation-terrain-intelligence`, 120000),
+        diagnosticJson(`${projectPath}/connected-preparation`),
       ]);
       diagnosticRequire(Array.isArray(catalog.projects), "Workspace catalog projects are unavailable.");
       diagnosticRequire(context.project_id === projectId(), "Workspace context Project ID does not match the Dashboard.");
-      diagnosticRequire(project && typeof project === "object", "Compact project projection is unavailable.");
-      return `Dashboard API ready · ${catalog.projects.length} workspaces · project=${projectId()}`;
+      diagnosticRequire(Boolean(context.resolved_project_root), "Resolved workspace root is unavailable.");
+      diagnosticRequire(projection?.project_id === projectId(), "Compact project projection resolved a different project.");
+      diagnosticRequire(debugProjection?.project_id === projectId(), "Debug projection resolved a different project.");
+      diagnosticRequire(debugEvents?.project_id === projectId() && Array.isArray(debugEvents.events), "Debug projection events are unavailable.");
+      diagnosticRequire(weather && typeof weather === "object", "Weather Dashboard API is unavailable.");
+      diagnosticRequire(navigation?.project_id === projectId(), "Navigation Terrain Intelligence resolved a different project.");
+      diagnosticRequire(connectedPreparation && typeof connectedPreparation === "object", "Connected preparation status is unavailable.");
+      return `8 required GET resources ready · ${catalog.projects.length} workspaces · project=${projectId()}`;
     }
 
     async function diagnosticCheck002() {
@@ -11343,13 +11476,26 @@
         "agent", "living", "surface-debug", "debug", "observer",
         "settings", "diagnostic",
       ];
-      const routeButtons = Array.from(document.querySelectorAll("[data-route]"));
+      const routeButtons = Array.from(document.querySelectorAll("#dashboardSidebar [data-route]"));
       const missing = expectedRoutes.filter(route => !routeButtons.some(button => button.dataset.route === route));
       diagnosticRequire(!missing.length, `Missing navigation routes: ${missing.join(", ")}`);
+      diagnosticRequire(
+        new Set(routeButtons.map(button => button.dataset.route)).size === expectedRoutes.length,
+        "Sidebar route IDs contain duplicates or unregistered entries.",
+      );
       const settingsButton = routeButtons.find(button => button.dataset.route === "settings");
       diagnosticRequire(settingsButton?.nextElementSibling?.dataset?.route === "diagnostic", "Diagnostic is not immediately after Settings.");
       diagnosticRequire(expectedRoutes.every(route => ROUTE_TRUTH[route]), "One or more routes have no truth contract.");
-      return `${expectedRoutes.length} routes present · Diagnostic follows Settings`;
+      for (const route of expectedRoutes) {
+        const markup = diagnosticRouteMarkup(route);
+        const truth = resolveRouteTruth(route);
+        diagnosticRequire(String(markup || "").trim().length >= 80, `${route} rendered an empty or incomplete page.`);
+        for (const field of ["surface", "data", "action", "verification", "provenance", "mode"]) {
+          diagnosticRequire(Boolean(String(truth?.[field] || "").trim()), `${route} truth contract is missing ${field}.`);
+        }
+      }
+      diagnosticRequire(document.querySelectorAll("[data-dashboard-nav-toggle]").length >= 2, "Desktop/map mobile navigation toggles are missing.");
+      return `${expectedRoutes.length} routes rendered · truth contracts complete · Diagnostic follows Settings`;
     }
 
     async function diagnosticCheck003() {
@@ -11359,9 +11505,27 @@
       ]);
       const listed = asArray(catalog.projects).find(item => item.project_id === projectId());
       diagnosticRequire(Boolean(listed), "Current project is missing from the server workspace catalog.");
+      diagnosticRequire(Boolean(catalog.workspace_parent_root), "Workspace parent root is missing from the server catalog.");
       diagnosticRequire(Boolean(context.resolved_project_root), "Resolved project root is missing.");
       diagnosticRequire(context.project_id === projectId(), "Workspace context resolved a different project.");
-      return `Workspace isolated · ${context.resolved_project_root}`;
+      diagnosticRequire(
+        context.resolved_project_root.startsWith(`${String(catalog.workspace_parent_root).replace(/\/+$/, "")}/`),
+        "Current workspace is outside the server-owned parent root.",
+      );
+      const invalid = await diagnosticFetchStatus(
+        "/admin/dashboard/workspaces/__diagnostic_missing_workspace__",
+      );
+      diagnosticRequire([400, 404, 422].includes(invalid.status), `Missing workspace unexpectedly returned HTTP ${invalid.status}.`);
+      const alternate = asArray(catalog.projects).find(item => item.project_id !== projectId());
+      if (alternate) {
+        diagnosticRequire(/^[A-Za-z0-9_.-]+$/.test(alternate.project_id), "Workspace catalog contains an unsafe Project ID.");
+        const alternateContext = await diagnosticJson(
+          `/admin/dashboard/workspaces/${encodeURIComponent(alternate.project_id)}`,
+        );
+        diagnosticRequire(alternateContext.project_id === alternate.project_id, "Alternate workspace context resolved the wrong Project ID.");
+        diagnosticRequire(alternateContext.resolved_project_root !== context.resolved_project_root, "Two workspace IDs resolved to the same project root.");
+      }
+      return `Workspace isolated · invalid ID rejected (${invalid.status}) · ${alternate ? "alternate context verified" : "single catalog entry"}`;
     }
 
     async function diagnosticCheck004() {
@@ -11370,7 +11534,25 @@
       diagnosticRequire(SCOUT_LAYER_IDS.includes("completed-track"), "completed-track is missing from the canonical contract.");
       diagnosticRequire(!WEATHER_EMBEDDED_MAP_LAYER_IDS.includes("completed-track"), "completed-track leaked into the Weather map.");
       diagnosticRequire(WEATHER_LAYER_IDS.length === 5, "Weather must own exactly five weather/hydrology controls.");
-      return "32 unique canonical layers · completed-track boundary retained";
+      const pretrip = await diagnosticEnvelope(
+        `/admin/pretrip?projectId=${encodeURIComponent(projectId())}`,
+        {text: true, timeoutMs: 60000},
+      );
+      const layerControls = diagnosticLayerControlIds(pretrip.data);
+      const uniqueLayerControls = [...new Set(layerControls)];
+      const expectedPretripLayers = SCOUT_LAYER_IDS.filter(layerId => layerId !== "completed-track");
+      diagnosticRequire(layerControls.length === 31, `Expected 31 pre-trip layer controls; found ${layerControls.length}.`);
+      diagnosticRequire(uniqueLayerControls.length === layerControls.length, "Pre-trip layer controls contain duplicate IDs.");
+      diagnosticRequire(
+        expectedPretripLayers.every(layerId => uniqueLayerControls.includes(layerId)),
+        "Pre-trip layer controls do not match the canonical contract.",
+      );
+      diagnosticRequire(!uniqueLayerControls.includes("completed-track"), "completed-track is exposed as pre-trip truth.");
+      diagnosticRequire(pretrip.data.includes("data-layer-group"), "Canonical map renderer has no layer render groups.");
+      const zOrder = ["imagery", "terrain", "route", "risk-ribbon", "checkpoints"]
+        .map(layerId => SCOUT_LAYER_IDS.indexOf(layerId));
+      diagnosticRequire(zOrder.every((value, index) => index === 0 || value > zOrder[index - 1]), "Canonical layer z-order is invalid.");
+      return `32 canonical IDs · 31 pre-trip controls · completed-track boundary retained`;
     }
 
     async function diagnosticCheck005() {
@@ -11382,7 +11564,11 @@
         diagnosticRequire(markup.includes(key), `Keyboard map control ${key} is missing.`);
       }
       diagnosticRequire(typeof createDashboardMapViewportController === "function", "Shared map viewport controller is unavailable.");
-      return "Pan · Box · Zoom · Fit · keyboard contract present";
+      const exercised = diagnosticExerciseSharedMapController();
+      diagnosticRequire(exercised.controls.length === 5, `Expected five map controls; found ${exercised.controls.length}.`);
+      diagnosticRequire(exercised.keyboardPanChanged, "Keyboard pan did not change the live diagnostic viewport.");
+      diagnosticRequire(exercised.wheelZoomDisabled, "Wheel zoom was not disabled in the live diagnostic viewport.");
+      return "Pan · Box · Zoom · Fit · keyboard behavior exercised in live DOM";
     }
 
     async function diagnosticCheck006() {
@@ -11393,17 +11579,37 @@
       diagnosticRequire(timelineGroups.length >= 8, `Expected at least 8 Timeline groups; found ${timelineGroups.length}.`);
       diagnosticRequire(mapGroups.length >= 31, `Expected at least 31 Map/Risk groups; found ${mapGroups.length}.`);
       diagnosticRequire(pretripEvidenceGroupOpen({}, 0) === false, "Evidence groups no longer default to collapsed.");
-      return `${timelineGroups.length} Timeline groups · ${mapGroups.length} Map/Risk groups`;
+      const pagedGroup = groups
+        .filter(group => asArray(group.items).length > EVIDENCE_PAGE_SIZE)
+        .sort((left, right) => right.items.length - left.items.length)[0];
+      diagnosticRequire(Boolean(pagedGroup), "No Evidence group is large enough to exercise page 2.");
+      const firstPage = paginateEvidenceGroup(pagedGroup, 1);
+      const secondPage = paginateEvidenceGroup(pagedGroup, 2);
+      const lastPage = paginateEvidenceGroup(pagedGroup, Number.MAX_SAFE_INTEGER);
+      diagnosticRequire(secondPage.page === 2 && secondPage.start > firstPage.end, "Evidence page 2 overlaps page 1.");
+      diagnosticRequire(lastPage.page === lastPage.pageCount && lastPage.end === pagedGroup.items.length, "Evidence last-page bounds are incorrect.");
+      const sourceIds = groups.flatMap(group => group.items.map(item => item.sourceId));
+      diagnosticRequire(new Set(sourceIds).size === sourceIds.length, "Evidence row source IDs contain duplicates.");
+      return `${timelineGroups.length} Timeline · ${mapGroups.length} Map/Risk groups · ${pagedGroup.title} ${lastPage.pageCount} pages`;
     }
 
     async function diagnosticCheck007() {
       const markup = renderImportNewTripPage();
+      const root = diagnosticMarkupRoot(markup);
       for (const action of ["validate", "preview", "create", "open"]) {
-        diagnosticRequire(markup.includes(`data-import-trip-action="${action}"`), `Trip Intake ${action} action is missing.`);
+        diagnosticRequire(Boolean(root.querySelector(`[data-import-trip-action="${action}"]`)), `Trip Intake ${action} action is missing.`);
       }
       diagnosticRequire(TRIP_INTAKE_VALIDATE_PATH === "/admin/dashboard/trip-intake/validate", "Trip Intake validate path changed unexpectedly.");
       diagnosticRequire(markup.includes("Validate Intake") && markup.includes("Preview Import") && markup.includes("Create Workspace"), "Trip Intake step labels are incomplete.");
-      return "Validate → Preview → Create → Open wiring present · no action executed";
+      diagnosticRequire(root.querySelector('[data-import-trip-action="preview"]')?.disabled === true, "Preview is enabled before server validation.");
+      diagnosticRequire(root.querySelector('[data-import-trip-action="create"]')?.disabled === true, "Create is enabled before preview.");
+      diagnosticRequire(root.querySelector('[data-import-trip-action="open"]')?.disabled === true, "Open is enabled before workspace creation.");
+      diagnosticRequire(importTripProjectId("diagnostic-trip") === "diagnostic-trip_scoutAI", "Trip Intake Project ID derivation is incorrect.");
+      const handler = diagnosticCompactSource(bindImportTripControls);
+      for (const marker of ["import-gpx-preview", "confirm_import: true", "Server GPX validation is required", "A matching import preview is required"]) {
+        diagnosticRequire(handler.includes(marker), `Trip Intake stage gate is missing ${marker}.`);
+      }
+      return "Validate → Preview → Create → Open gates verified · no workspace mutation";
     }
 
     async function diagnosticCheck008() {
@@ -11411,35 +11617,85 @@
       diagnosticRequire(WEATHER_LAYER_IDS.length === 5, "Weather layer control count is not five.");
       diagnosticRequire(weather && typeof weather === "object", "Weather Dashboard response is unavailable.");
       diagnosticRequire(Boolean(weather.status || weather.decision || weather.boundary), "Weather response has no status or boundary.");
-      return `Weather API=${weather.status || "response ready"} · five layer controls present`;
+      const root = diagnosticMarkupRoot(renderOutdoorPage("outdoor-weather"));
+      const layerControls = Array.from(root.querySelectorAll("[data-weather-layer-control]"));
+      diagnosticRequire(layerControls.length === 5, `Expected five rendered Weather controls; found ${layerControls.length}.`);
+      diagnosticRequire(
+        WEATHER_LAYER_IDS.every(layerId => layerControls.some(control => control.dataset.weatherLayerControl === layerId)),
+        "Rendered Weather controls do not match the five canonical IDs.",
+      );
+      for (const selector of [
+        '[data-weather-cwa-rainfall-product="true"]',
+        '[data-weather-cwa-product="true"]',
+        '[data-weather-cwa-window="true"]',
+        '[data-weather-cwa-timeline="true"]',
+        '[data-weather-cwa-opacity="radar"]',
+        '[data-weather-cwa-opacity="satellite"]',
+        '[data-weather-cwa-rainfall-opacity="true"]',
+        '[data-weather-cwa-play="true"]',
+      ]) {
+        diagnosticRequire(Boolean(root.querySelector(selector)), `Weather control ${selector} is missing.`);
+      }
+      const boundary = weather.boundary || weather.privacy || {};
+      diagnosticRequire(boundary.runtime_safety_truth !== true, "Weather response claims runtime safety truth.");
+      return `Weather API=${weather.status || "response ready"} · five layers and eight CWA controls rendered`;
     }
 
     async function diagnosticCheck009() {
       const status = await diagnosticJson(ASSISTANT_STATUS_PATH);
       const readiness = deriveAssistantReadiness({checked: true, raw: status, provider: status.provider});
+      const workflow = status.assistant_workflow || {};
+      const contextRegistry = status.assistant_context_registry || {};
+      diagnosticRequire(workflow.available === true, "Assistant workflow is unavailable.");
+      diagnosticRequire(asArray(workflow.missing).length === 0, `Assistant workflow is missing: ${asArray(workflow.missing).join(", ")}.`);
+      diagnosticRequire(contextRegistry.read_only === true, "Assistant context registry is not read-only.");
+      diagnosticRequire(contextRegistry.outbound_send_allowed === false, "Assistant context registry allows outbound sends.");
+      diagnosticRequire(contextRegistry.hardware_control_allowed === false, "Assistant context registry allows hardware control.");
+      diagnosticRequire(contextRegistry.runtime_safety_truth === false, "Assistant context registry claims runtime safety truth.");
+      const agentShell = document.getElementById("dashboardAgent");
+      diagnosticRequire(
+        Boolean(agentShell?.matches('[data-agent-query-path="/assistant/query"]') || agentShell?.querySelector('[data-agent-query-path="/assistant/query"]')),
+        "Assistant query shell is missing.",
+      );
       diagnosticRequire(readiness.level === "ready", `Assistant is not ready: ${readiness.label}.`);
-      return readiness.label;
+      return `${readiness.label} · read-only boundaries verified`;
     }
 
     async function diagnosticCheck010() {
-      const [debugState, debugMessages] = await Promise.all([
-        diagnosticJson("/debug/state"),
-        diagnosticJson("/debug/messages"),
+      const project = encodeURIComponent(projectId());
+      const [debugProjection, debugEvents] = await Promise.all([
+        diagnosticJson(`/admin/pretrip/projects/${project}/debug-projection`),
+        diagnosticJson(`/admin/pretrip/projects/${project}/debug-projection-events`),
       ]);
-      diagnosticRequire(debugState && typeof debugState === "object", "Debug state is unavailable.");
-      diagnosticRequire(debugMessages && typeof debugMessages === "object", "Debug messages are unavailable.");
-      diagnosticRequire(renderObserverPage().includes("no MQTT publish from dashboard"), "Observer no-publish boundary is missing.");
-      diagnosticRequire(renderEmergencyPage().includes("external_send_performed=false"), "Emergency no-send audit marker is missing.");
+      diagnosticRequire(debugProjection?.project_id === projectId(), "Debug projection resolved a different project.");
+      diagnosticRequire(debugEvents?.project_id === projectId() && Array.isArray(debugEvents.events), "Debug projection events are unavailable.");
+      const debugRoot = diagnosticMarkupRoot(renderDebugPage());
+      const observerRoot = diagnosticMarkupRoot(renderObserverPage());
+      const emergencyRoot = diagnosticMarkupRoot(renderEmergencyPage());
+      const settingsRoot = diagnosticMarkupRoot(renderSettingsPage());
+      diagnosticRequire(Boolean(debugRoot.querySelector("[data-debug-flow], [data-debug-detail], [data-debug-api-grid]")), "Debug page has no inspectable event/detail surface.");
+      diagnosticRequire(observerRoot.textContent.includes("no MQTT publish from dashboard"), "Observer no-publish boundary is missing.");
+      diagnosticRequire(emergencyRoot.textContent.includes("external_send_performed=false"), "Emergency no-send audit marker is missing.");
+      diagnosticRequire(settingsRoot.querySelectorAll("input").length === 2, "Settings should expose only API base and Project ID inputs.");
       diagnosticRequire(validateDashboardSettings("ftp://invalid.example", projectId()).ok === false, "Settings accepted an invalid API protocol.");
-      return "Debug GET APIs ready · Observer/Emergency/Settings boundaries present";
+      diagnosticRequire(validateDashboardSettings("https://user:secret@example.test", projectId()).ok === false, "Settings accepted credentials in the API base.");
+      diagnosticRequire(validateDashboardSettings("https://example.test?token=secret", projectId()).ok === false, "Settings accepted query values in the API base.");
+      return `${debugEvents.events.length} debug events · Observer/Emergency/Settings boundaries verified`;
     }
 
     async function diagnosticCheck011() {
       const markup = renderHomePage();
+      const root = diagnosticMarkupRoot(markup);
       for (const marker of ["Current Decision Brief", "workspace-identity", "current-decision", "blocking-truth", "next-action"]) {
         diagnosticRequire(markup.includes(marker), `Overview marker ${marker} is missing.`);
       }
-      return "Current Decision Brief and ordered truth markers present";
+      diagnosticRequire(root.textContent.includes(projectId()), "Overview does not identify the current workspace.");
+      diagnosticRequire(Boolean(root.querySelector('[data-route="outdoor-route-context"]')), "Overview route-context action is missing.");
+      diagnosticRequire(Boolean(root.querySelector('[data-route="outdoor-weather"]')), "Overview Weather action is missing.");
+      diagnosticRequire(Boolean(root.querySelector('[data-route="timeline"]')), "Overview Evidence action is missing.");
+      const truth = resolveRouteTruth("home");
+      diagnosticRequire(Boolean(truth.data && truth.verification), "Overview truth strip has no data/verification state.");
+      return "Current Decision Brief rendered from current workspace · ordered truth and actions present";
     }
 
     async function diagnosticCheck012() {
@@ -11449,7 +11705,15 @@
       diagnosticRequire(Array.isArray(payload.requests), "Workspace operation request list is unavailable.");
       const unsafe = payload.requests.find(request => request.execution_performed === true || request.runtime_safety_truth === true);
       diagnosticRequire(!unsafe, "An operation request claims execution or runtime safety truth.");
-      return `${payload.requests.length} intent receipts · execution_performed=false`;
+      const root = diagnosticMarkupRoot(renderWorkspacePage());
+      diagnosticRequire(Boolean(root.querySelector('[data-workspace-operations="true"]')), "Workspace Operations panel is missing.");
+      for (const action of ["clone", "transfer", "pack", "restore", "delete"]) {
+        diagnosticRequire(Boolean(root.querySelector(`[data-workspace-action="${action}"]`)), `Workspace operation ${action} is missing.`);
+      }
+      diagnosticRequire(Boolean(root.querySelector('[data-route="features-import-new-trip"]')), "Import trip action is missing.");
+      diagnosticRequire(Boolean(root.querySelector("#workspaceRefreshExternalEvidence")), "Refresh evidence action is missing.");
+      diagnosticRequire(Boolean(root.querySelector("#workspaceSwitchProject")), "Open workspace action is missing.");
+      return `${payload.requests.length} intent receipts · seven operation controls · execution_performed=false`;
     }
 
     async function diagnosticCheck013() {
@@ -11457,7 +11721,14 @@
       diagnosticRequire(status && typeof status === "object", "Connected preparation status is unavailable.");
       const stateLabel = status.status || status.state || status.job_status || "idle";
       diagnosticRequire(!["unsafe", "runtime_mutation"].includes(String(stateLabel)), "Connected preparation returned an unsafe state.");
-      return `Connected preparation status=${stateLabel} · no refresh POST sent`;
+      const workspaceRoot = diagnosticMarkupRoot(renderWorkspacePage());
+      diagnosticRequire(Boolean(workspaceRoot.querySelector("#workspaceRefreshExternalEvidence")), "Connected preparation Refresh control is missing.");
+      const statusLoader = diagnosticCompactSource(loadConnectedPreparationStatus);
+      diagnosticRequire(!statusLoader.includes("postJson("), "Connected preparation status loader performs a POST.");
+      const refreshHandler = diagnosticCompactSource(bindWorkspaceControls);
+      diagnosticRequire(refreshHandler.includes("workspaceRefreshExternalEvidence"), "Explicit connected preparation handler is missing.");
+      diagnosticRequire(refreshHandler.includes("postJson("), "Refresh control is not wired to an explicit POST.");
+      return `Connected preparation status=${stateLabel} · initial loader GET-only · explicit Refresh wired`;
     }
 
     async function diagnosticCheck014() {
@@ -11469,7 +11740,19 @@
       diagnosticRequire(taiwan.defaults?.weatherProvider === "CWA", "Taiwan weather provider is not CWA.");
       diagnosticRequire(!String(japan.defaults?.weatherProvider || "").includes("CWA"), "Japan incorrectly inherits CWA.");
       diagnosticRequire(!String(globalPool.defaults?.weatherProvider || "").includes("CWA"), "Global incorrectly inherits CWA.");
-      return `Country pools ready · ${codes.join(" / ")}`;
+      const poolRoot = diagnosticMarkupRoot(renderCountryMaterialPoolPage());
+      diagnosticRequire(Boolean(poolRoot.querySelector('[data-country-material-pool="true"]')), "Country Material Pool surface is missing.");
+      diagnosticRequire(poolRoot.querySelectorAll("[data-country-material-code]").length === 3, "Country Material Pool must render three country tabs.");
+      const importRoot = diagnosticMarkupRoot(renderImportNewTripPage());
+      for (const [fieldId, label] of [
+        ["importMaterialRoot", "materialRoot"],
+        ["importDtmDirs", "dtmDirs"],
+        ["importProfile", "importProfile"],
+        ["prepareOsmPbfSourceUrl", "osmPbfSourceUrl"],
+      ]) {
+        diagnosticRequire(Boolean(importRoot.querySelector(`#${fieldId}`)), `Trip Intake default ${label} is missing.`);
+      }
+      return `Country pools isolated · ${codes.join(" / ")} · Trip Intake defaults rendered`;
     }
 
     async function diagnosticCheck015() {
@@ -11478,7 +11761,13 @@
         {text: true, timeoutMs: 60000},
       );
       diagnosticRequire(debug.data.includes("Scout Phase 3.5 Runtime Debug"), "Debug canonical surface title is missing.");
-      return "Debug canonical surface returned HTTP 200";
+      const root = diagnosticMarkupRoot(renderStandardPage("surface-debug"));
+      const frame = root.querySelector('iframe[data-surface-route="surface-debug"]');
+      diagnosticRequire(Boolean(frame), "Debug canonical iframe is missing.");
+      diagnosticRequire(String(frame.getAttribute("src") || "").includes(`/admin/debug?projectId=${encodeURIComponent(projectId())}`), "Debug iframe has the wrong Project ID.");
+      diagnosticRequire(Boolean(root.querySelector("[data-surface-frame-skip]")), "Debug iframe skip control is missing.");
+      diagnosticRequire(Boolean(root.querySelector("#surfaceFrameExit")), "Debug iframe exit marker is missing.");
+      return "Debug canonical surface HTTP 200 · iframe, Project ID and skip controls verified";
     }
 
     async function diagnosticCheck016() {
@@ -11503,7 +11792,20 @@
       diagnosticRequire(riskCount > 0, "Current project has no risk ribbon/heat/delta evidence.");
       const segmentIds = segments.map(item => item.candidate_id || item.segment_id).filter(Boolean);
       diagnosticRequire(new Set(segmentIds).size === segmentIds.length, "Segment IDs contain duplicates.");
-      return `${segments.length} segments · ${checkpoints.length} checkpoints · ${riskCount} risk records`;
+      diagnosticRequire(segmentIds.length === segments.length, "One or more Segment records have no stable ID.");
+      const geometrySignatures = segments.map(segment => {
+        const coordinateSegments = asArray(segment.display_geometry?.coordinate_segments);
+        diagnosticRequire(coordinateSegments.length > 0, `Segment ${segment.candidate_id || segment.segment_id || "unknown"} has no display geometry.`);
+        diagnosticRequire(coordinateSegments.every(points => asArray(points).length >= 2), `Segment ${segment.candidate_id || segment.segment_id || "unknown"} contains an empty path.`);
+        return JSON.stringify(coordinateSegments);
+      });
+      diagnosticRequire(new Set(geometrySignatures).size > 1, "All Segment records reuse one generic geometry.");
+      const pretrip = await diagnosticEnvelope(
+        `/admin/pretrip?projectId=${encodeURIComponent(projectId())}`,
+        {text: true, timeoutMs: 60000},
+      );
+      diagnosticRequire(pretrip.data.includes("data-layer-preset"), "Canonical Map has no layer preset controls.");
+      return `${segments.length} unique Segment paths · ${checkpoints.length} checkpoints · ${riskCount} risk records`;
     }
 
     async function diagnosticCheck018() {
@@ -11524,11 +11826,28 @@
     }
 
     async function diagnosticCheck020() {
-      const markup = Function.prototype.toString.call(renderPaceFitPage);
+      const force = SIX_FORCES.find(item => item.route === "outdoor-pace-fit");
+      diagnosticRequire(Boolean(force), "Pace Fit route contract is unavailable.");
+      const project = await diagnosticProjectProjection();
+      const root = diagnosticMarkupRoot(diagnosticRenderWithState(
+        {project, adminProjection: project},
+        () => renderPaceFitPage(force),
+      ));
+      const markup = root.textContent || "";
       for (const marker of ["Pace Parameters", "Current CP Status", "Next Segment Risk", "CP Timeline", "Pace Output", "Read-only preview"]) {
         diagnosticRequire(markup.includes(marker), `Pace Dashboard marker ${marker} is missing.`);
       }
-      return "Pace parameters, CP status, risk, timeline and output contract present";
+      diagnosticRequire(Boolean(root.querySelector('[data-pace-fit-dashboard="true"]')), "Pace Dashboard shell is missing.");
+      diagnosticRequire(Boolean(root.querySelector('[data-dashboard-map-viewport="pace-fit-map"]')), "Pace synchronized map is missing.");
+      diagnosticRequire(!Array.from(root.querySelectorAll("h3")).some(node => ["Decision", "Confidence", "Next action"].includes(node.textContent.trim())), "Removed low-information Pace blocks returned.");
+      diagnosticRequire(markup.includes("advisory / dry-run") && markup.includes("no safety mutation"), "Pace advisory boundary is missing.");
+      diagnosticRequire(markup.includes("Static planning examples only"), "Pace preview does not disclose that its parameters are static examples.");
+      diagnosticRequire(
+        ROUTE_TRUTH["outdoor-pace-fit"]?.data === "Static pace parameters"
+          && ROUTE_TRUTH["outdoor-pace-fit"]?.provenance === "Synthetic projection",
+        "Pace truth contract does not identify the synthetic preview.",
+      );
+      return "Pace parameters, CP, risk, timeline, output and synchronized map · synthetic preview disclosed";
     }
 
     async function diagnosticCheck021() {
@@ -11538,7 +11857,16 @@
         diagnosticRequire(!serialized.includes(forbidden), `Body Index response contains forbidden raw field ${forbidden}.`);
       }
       diagnosticRequire(body && typeof body === "object", "Body Index response is unavailable.");
-      return `Body Index evidence=${body.evidence_status || body.status || "sanitized response"}`;
+      const root = diagnosticMarkupRoot(renderPaceFitBodyIndexPage());
+      diagnosticRequire(Boolean(root.querySelector('[data-body-index-dashboard="true"]')), "Body Index dashboard shell is missing.");
+      diagnosticRequire(root.querySelectorAll("[data-body-index-metric]").length === 9, "Body Index must render nine Pace Coefficient cards.");
+      diagnosticRequire(root.querySelectorAll("[data-body-index-health-signal]").length === 8, "Body Index must render eight Health Baseline Signals.");
+      diagnosticRequire(Boolean(root.querySelector("[data-body-index-provider-metrics]")), "Body Index provider-metrics drawer is missing.");
+      const evidenceStatus = body.evidence_status || body.status || "sanitized response";
+      if (["unavailable", "pending", "empty", "not_found"].includes(String(evidenceStatus).toLowerCase())) {
+        diagnosticRequire(root.textContent.includes("No Scout Pace Coefficient has been calculated"), "Body Index empty state invents a Pace Coefficient.");
+      }
+      return `Body Index evidence=${evidenceStatus} · 9 coefficient cards · 8 health signals`;
     }
 
     async function diagnosticCheck022() {
@@ -11546,15 +11874,28 @@
       diagnosticRequire(markup.includes("Import HealthExport"), "Body Index import control is missing.");
       diagnosticRequire(markup.includes("data-body-index-import"), "Body Index import binding is missing.");
       diagnosticRequire(BODY_INDEX_IMPORT_PATH === "/admin/dashboard/body-index/import", "Body Index import path changed unexpectedly.");
-      await diagnosticBodyIndex();
-      return "Synthetic import/dedup wiring ready · no private import executed";
+      const body = await diagnosticBodyIndex();
+      const importHandler = diagnosticCompactSource(bindBodyIndexControls);
+      diagnosticRequire(importHandler.includes("confirm_import: true"), "Body Index import does not require explicit confirmation.");
+      diagnosticRequire(importHandler.includes("BODY_INDEX_IMPORT_PATH"), "Body Index import control is not wired to the bounded endpoint.");
+      const serialized = JSON.stringify(body);
+      for (const forbidden of ["original_zip_filename", "\"coordinates\"", "heartRateData", "<gpx"]) {
+        diagnosticRequire(!serialized.includes(forbidden), `Body Index status exposes ${forbidden}.`);
+      }
+      return "Import confirmation and sanitized dedup status wiring verified · no private import executed";
     }
 
     async function diagnosticCheck023() {
       const watch = await diagnosticBodyIndexWatch();
       diagnosticRequire(typeof watch.running === "boolean", "Body Index watcher status has no running flag.");
       diagnosticRequire(watch.running === false, "Body Index watcher is running; stop it before diagnostics pass.");
-      return `Body Index watcher stopped · interval=${watch.interval_seconds || "not active"}`;
+      const root = diagnosticMarkupRoot(renderPaceFitBodyIndexPage());
+      diagnosticRequire(Boolean(root.querySelector("[data-body-index-watch-start]")), "Body Index Start Watch control is missing.");
+      diagnosticRequire(Boolean(root.querySelector("[data-body-index-watch-stop]")), "Body Index Stop Watch control is missing.");
+      const handler = diagnosticCompactSource(bindBodyIndexControls);
+      diagnosticRequire(handler.includes("confirm_watch: true"), "Body Index watcher start does not require explicit confirmation.");
+      diagnosticRequire(handler.includes("BODY_INDEX_WATCH_STOP_PATH"), "Body Index watcher Stop control is not wired.");
+      return `Body Index watcher stopped · explicit confirmation/stop lifecycle wired · interval=${watch.interval_seconds || "not active"}`;
     }
 
     async function diagnosticCheck024() {
@@ -11564,19 +11905,47 @@
       diagnosticRequire(Array.isArray(architecture.segment_demand_vectors), "Architecture segment demand vectors are unavailable.");
       const boundary = architecture.boundary || architecture.privacy || {};
       diagnosticRequire(boundary.runtime_safety_truth !== true, "Architecture projection claims runtime safety truth.");
-      return `Architecture status=${architecture.status || "ready"} · ${architecture.segment_demand_vectors.length} demand vectors`;
+      const root = diagnosticMarkupRoot(diagnosticRenderWithState(
+        {project, adminProjection: project},
+        () => renderOutdoorPage("outdoor-architecture"),
+      ));
+      diagnosticRequire(Boolean(root.querySelector('[data-route-architecture-intelligence="true"]')), "Architecture workbench shell is missing.");
+      diagnosticRequire(Boolean(root.querySelector("[data-route-fingerprint]")), "Route Fingerprint is missing.");
+      diagnosticRequire(Boolean(root.querySelector('[data-dashboard-map-viewport="architecture-map"]')), "Architecture map is missing.");
+      diagnosticRequire(root.querySelectorAll("[data-architecture-mode]").length === 4, "Architecture must render four reading modes.");
+      diagnosticRequire(root.querySelectorAll("button[data-architecture-lens]").length === 6, "Architecture must render Structure plus five map lenses.");
+      diagnosticRequire(root.querySelectorAll("[data-architecture-mobile-view]").length === 3, "Architecture mobile Spine/Map/Segment controls are incomplete.");
+      if (architecture.segment_demand_vectors.length) {
+        diagnosticRequire(Boolean(root.querySelector("[data-architecture-bin-id]")), "Architecture demand vectors did not render selectable bins.");
+        diagnosticRequire(Boolean(root.querySelector("[data-architecture-mobile-panel='segment']")), "Segment Microscope is missing.");
+      }
+      return `Architecture status=${architecture.status || "ready"} · ${architecture.segment_demand_vectors.length} demand vectors · modes/lenses rendered`;
     }
 
     async function diagnosticCheck025() {
-      const navigation = await diagnosticJson(
-        `/admin/pretrip/projects/${encodeURIComponent(projectId())}/navigation-terrain-intelligence`,
-        120000,
-      );
+      const [navigation, project] = await Promise.all([
+        diagnosticJson(
+          `/admin/pretrip/projects/${encodeURIComponent(projectId())}/navigation-terrain-intelligence`,
+          120000,
+        ),
+        diagnosticProjectProjection(),
+      ]);
       diagnosticRequire(navigation && typeof navigation === "object", "Navigation Terrain Intelligence is unavailable.");
       diagnosticRequire(navigation.boundary?.runtime_safety_truth === false, "Navigation projection boundary is not candidate-only.");
       diagnosticRequire(NAVIGATION_RUDY_TILE_SOURCE.wmtsLayer === "rudy_twmap", "Navigation basemap is not Rudy+TW.");
       const routeCount = Number(navigation.route_samples?.rendered_count || asArray(navigation.route_samples?.points).length || 0);
-      return `Navigation status=${navigation.status || "ready"} · ${routeCount} route points · Rudy+TW`;
+      const root = diagnosticMarkupRoot(diagnosticRenderWithState(
+        {project, adminProjection: project, navigationTerrainData: navigation},
+        () => renderOutdoorPage("outdoor-navigation"),
+      ));
+      const map = root.querySelector('[data-dashboard-map-viewport="navigation-workspace-map"]');
+      diagnosticRequire(Boolean(map), "Navigation workspace map is missing.");
+      diagnosticRequire(map.dataset.dashboardBasemapPolicy === "rudy-twmap-only", "Navigation map does not declare Rudy+TW-only policy.");
+      diagnosticRequire(map.dataset.mapWheelZoom === "false", "Navigation map does not disable wheel zoom.");
+      diagnosticRequire(root.querySelectorAll("[data-navigation-terrain-lens]").length >= 4, "Navigation terrain lens controls are incomplete.");
+      diagnosticRequire(Boolean(root.querySelector("[data-navigation-evidence-workbench], [data-navigation-terrain-intelligence]")), "Navigation evidence workbench is missing.");
+      diagnosticRequire(Boolean(root.querySelector("[data-terrain-reading-checklist]")), "Navigation Map Literacy Checklist is missing.");
+      return `Navigation status=${navigation.status || "ready"} · ${routeCount} route points · Rudy+TW-only map rendered`;
     }
 
     function diagnosticSourceText(value) {

@@ -18,6 +18,12 @@ const { chromium } = require("playwright");
 const baseUrl = process.env.SCOUT_DASHBOARD_DIAGNOSTIC_URL
   || "http://127.0.0.1:9099/admin/dashboard?projectId=chilai_nanhua_day1_scoutAI#diagnostic";
 const expectedDiagnosticCount = 30;
+const dataDependentDiagnosticIds = new Set([
+  "DASH-009",
+  "DASH-018",
+  "DASH-019",
+  "DASH-030",
+]);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -320,6 +326,16 @@ async function main() {
       snapshot.summary.passed + snapshot.summary.failed === expectedDiagnosticCount,
       "Diag all did not finish all cases.",
     );
+    for (let index = 1; index <= expectedDiagnosticCount; index += 1) {
+      const caseId = `DASH-${String(index).padStart(3, "0")}`;
+      const result = snapshot.results[caseId];
+      assert(result && ["passed", "failed"].includes(result.status), `${caseId} has no terminal result.`);
+      assert(Boolean(result.detail?.trim()), `${caseId} has no diagnostic evidence detail.`);
+      assert(!/\bis not defined\b|ReferenceError|TypeError:/i.test(result.detail), `${caseId} failed inside its checker: ${result.detail}`);
+      if (!dataDependentDiagnosticIds.has(caseId)) {
+        assert(result.status === "passed", `${caseId} implementation check failed: ${result.detail}`);
+      }
+    }
     for (const caseId of ["DASH-026", "DASH-027", "DASH-028", "DASH-029"]) {
       assert(snapshot.results[caseId]?.status === "passed", `${caseId} did not pass for every Dashboard map.`);
       assert(snapshot.results[caseId]?.detail.includes("8 Dashboard maps"), `${caseId} did not report the eight-map scope.`);
@@ -390,6 +406,7 @@ async function main() {
       dashboardMapSurfaces,
       browserMapChecks,
       zeroCountEvidenceCase: snapshot.results["DASH-030"],
+      dataDependentDiagnosticIds: [...dataDependentDiagnosticIds],
       postRequestCount: postRequests.length,
       mobileLayout,
       consoleErrors,

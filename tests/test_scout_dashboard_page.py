@@ -3463,6 +3463,63 @@ def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
     assert "performance.now()" in runner
 
 
+def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    browser_smoke = (
+        ROOT / "tools" / "dashboard_diagnostic_browser_smoke.js"
+    ).read_text(encoding="utf-8")
+    diagnostic_source = html.split(
+        "function diagnosticStatusLabel(", 1
+    )[1].split("function validateDashboardSettings(", 1)[0]
+
+    for helper in (
+        "function diagnosticMarkupRoot(",
+        "function diagnosticRouteMarkup(",
+        "function diagnosticLayerControlIds(",
+        "async function diagnosticFetchStatus(",
+        "function diagnosticExerciseSharedMapController(",
+    ):
+        assert helper in diagnostic_source
+
+    for endpoint in (
+        "/debug-projection-events",
+        "/debug-projection",
+        "/weather-dashboard",
+        "/navigation-terrain-intelligence",
+        "/connected-preparation",
+    ):
+        assert endpoint in diagnostic_source
+
+    assert "diagnosticFetchStatus(" in diagnostic_source
+    assert "__diagnostic_missing_workspace__" in diagnostic_source
+    assert "Expected 31 pre-trip layer controls" in diagnostic_source
+    assert "diagnosticExerciseSharedMapController()" in diagnostic_source
+    assert "paginateEvidenceGroup(pagedGroup, 2" in diagnostic_source
+    assert "renderPaceFitPage(force)" in diagnostic_source
+    assert 'renderOutdoorPage("outdoor-architecture")' in diagnostic_source
+    assert 'renderOutdoorPage("outdoor-navigation")' in diagnostic_source
+
+    check_010 = diagnostic_source.split(
+        "async function diagnosticCheck010()", 1
+    )[1].split("async function diagnosticCheck011()", 1)[0]
+    assert 'diagnosticJson("/debug/state")' not in check_010
+    assert 'diagnosticJson("/debug/messages")' not in check_010
+    assert "/debug-projection-events" in check_010
+    assert "/debug-projection" in check_010
+
+    check_020 = diagnostic_source.split(
+        "async function diagnosticCheck020()", 1
+    )[1].split("async function diagnosticCheck021()", 1)[0]
+    assert "Function.prototype.toString.call(renderPaceFitPage)" not in check_020
+    assert "() => renderPaceFitPage(force)" in check_020
+
+    for case_id in ("DASH-009", "DASH-018", "DASH-019", "DASH-030"):
+        assert f'"{case_id}"' in browser_smoke
+    assert "dataDependentDiagnosticIds" in browser_smoke
+    assert "implementation check failed" in browser_smoke
+    assert r"\bis not defined\b|ReferenceError|TypeError:" in browser_smoke
+
+
 def test_dashboard_route_context_variants_index_uses_canonical_file_query_links() -> None:
     source = (ROOT / "tools" / "scout_ai_route_context_briefing_variants.py").read_text(
         encoding="utf-8"
