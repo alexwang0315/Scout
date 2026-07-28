@@ -1281,9 +1281,10 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert "const MAX_RENDERED_SEGMENT_POINTS = 80;" in html
     assert "SCOUT_LAYER_IDS.map((layerId, index)" in html
     assert (
-        'layerEnabled: Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => '
+        "...Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => "
         '[layerId, layerId !== "osm"]))'
     ) in html
+    assert "...WEATHER_LAYER_DEFAULTS" in html
     assert 'data-layer="osm" checked' not in pretrip_html
     assert '<input type="checkbox" data-layer="osm"> OSM' in pretrip_html
     assert "function buildDashboardSegmentPaths(rawSegments, bounds)" in html
@@ -1393,6 +1394,50 @@ def test_weather_embedded_map_keeps_the_basic_map_view_controls_visible() -> Non
     assert "top: 58px;" in frame_state_rule
 
 
+def test_weather_embedded_map_uses_only_rudy_tw_tiles_and_cwa_rainfall() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+    weather_layer_contract = html.split(
+        "const WEATHER_EMBEDDED_MAP_LAYER_IDS = Object.freeze([", 1
+    )[1].split("]);", 1)[0]
+    weather_frame_adapter = html.split(
+        "function applyWeatherCwaMapFrame(frame, attempt = 0)", 1
+    )[1].split("function bindWeatherCwaMapFrame(frame)", 1)[0]
+    weather_section = html.split(
+        '<iframe class="weather-cwa-map-frame"', 1
+    )[1].split("</iframe>", 1)[0]
+    map_viewport_adapter = pretrip_html.split(
+        "function applyMapViewport()", 1
+    )[1].split("function mapLayerRank(", 1)[0]
+    pretrip_load = pretrip_html.split(
+        "async function load()", 1
+    )[1].split("load().catch", 1)[0]
+
+    assert '"rudy-twmap"' in weather_layer_contract
+    assert '"cwa-qpf"' in weather_layer_contract
+    assert weather_layer_contract.count('"') == 4
+    assert "&mapOnly=1&initialLayers=${encodeURIComponent(" in weather_section
+    assert "WEATHER_EMBEDDED_MAP_LAYER_IDS.join" in weather_section
+    assert "SCOUT_LAYER_IDS.forEach(layerId =>" in weather_frame_adapter
+    assert (
+        "WEATHER_EMBEDDED_MAP_LAYER_IDS.includes(layerId)"
+        in weather_frame_adapter
+    )
+    assert 'get("initialLayers")' in pretrip_html
+    assert "function applyInitialLayerSelection()" in pretrip_html
+    assert pretrip_load.index("applyInitialLayerSelection();") < pretrip_load.index(
+        "bindControls();"
+    )
+    assert (
+        'if (layerInputChecked("terrain")) '
+        "renderTerrainMetadata(terrainGroup, view, bounds);"
+        in pretrip_html
+    )
+    assert 'wmtsLayer: "rudy_twmap"' in pretrip_html
+    assert 'sourceKind: "wmts_kvp_tile"' in pretrip_html
+    assert "renderRasterBasemapLayers(state.view);" in map_viewport_adapter
+
+
 def test_scout_dashboard_map_route_removes_header_without_losing_mobile_navigation() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
@@ -1408,6 +1453,66 @@ def test_scout_dashboard_map_route_removes_header_without_losing_mobile_navigati
     assert html.count("data-dashboard-nav-toggle aria-controls") == 2
     assert 'document.querySelectorAll("[data-dashboard-nav-toggle]")' in html
     assert 'state.route === "map" ? "dashboardMapNavToggle"' in html
+
+
+def test_weather_hydrology_controls_default_only_cwa_rainfall() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+    weather_layer_ids = (
+        "soil-moisture",
+        "antecedent-rain",
+        "cwa-qpf",
+        "cwa-weather",
+        "weather-api",
+    )
+    weather_layer_contract = html.split(
+        "const WEATHER_LAYER_IDS = Object.freeze([", 1
+    )[1].split("]);", 1)[0]
+    weather_renderer = html.split(
+        "function renderWeatherIntersectionMap(snapshot)", 1
+    )[1].split("function renderWeatherActions(snapshot)", 1)[0]
+
+    for layer_id in weather_layer_ids:
+        assert f'"{layer_id}"' in weather_layer_contract
+
+    assert (
+        "const WEATHER_LAYER_DEFAULTS = Object.freeze(Object.fromEntries("
+        in html
+    )
+    assert (
+        'WEATHER_LAYER_IDS.map(layerId => [layerId, layerId === "cwa-qpf"])'
+        in html
+    )
+    assert "...WEATHER_LAYER_DEFAULTS" in html
+    assert 'aria-label="Weather and hydrology layer controls"' in weather_renderer
+    assert 'data-weather-layer-control="${escapeHtml(layer.id)}"' in weather_renderer
+    assert "function setEmbeddedPretripLayerEnabled" in html
+    assert "function syncWeatherLayerControls" in html
+
+    for marker in (
+        'data-weather-cwa-product="true"',
+        'data-weather-cwa-window="true"',
+        'data-weather-cwa-timeline="true"',
+        'data-weather-cwa-opacity="radar"',
+        'data-weather-cwa-opacity="satellite"',
+        'data-weather-cwa-rainfall-product="true"',
+        'data-weather-cwa-rainfall-opacity="true"',
+        'data-weather-cwa-rainfall-legend="true"',
+        'data-weather-cwa-rainfall-status="true"',
+        'data-weather-cwa-play="true"',
+        'data-weather-cwa-status="true"',
+        'aria-label="Weather CWA rainfall, radar and satellite controls"',
+        "bindWeatherCwaMapFrame",
+        "syncWeatherCwaBridgeState",
+        "scoutCwaImageryController",
+        'scout:cwa-imagery-state',
+        "cache-only",
+        "candidate-only",
+    ):
+        assert marker in html
+
+    assert "window.scoutCwaImageryController" in pretrip_html
+    assert "SCOUT_CWA_API_KEY" not in html
 
 
 def test_scout_dashboard_map_exposes_cwa_imagery_bridge_and_controls() -> None:
@@ -1708,7 +1813,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "不能單獨證明步道存在" in navigation
     assert "需要來源與人工複核" in navigation
     assert 'role="listitem"\n                class="navigation-event-card"' not in navigation
-    assert 'if (state.route !== "outdoor-navigation") {' in html
+    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in html
     assert 'const pageHeaderHidden = route === "outdoor-navigation";' in html
     assert (
         'dashboardShell?.classList.toggle("is-page-header-hidden", pageHeaderHidden);'
@@ -2326,6 +2431,13 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
     ):
         assert marker in html
 
+    assert 'const pastRainfall = rainfallProducts.find(item => item.gridKind === "qpe_past_1h")' in html
+    assert 'const futureRainfall = rainfallProducts.find(item => item.gridKind === "qpf_next_1h")' in html
+    assert '"Past 1h QPE"' in html
+    assert '"Next 1h QPF"' in html
+    assert "no valid route-bbox values" in html
+    assert "unknown, not zero" in html
+    assert "No rainfall cells cover the route review bbox." not in html
     assert "weatherPercentLabel(features.convectiveCellScore)" in html
     assert "weatherPercentLabel(features.satelliteConvectiveCloudScore)" in html
     assert "weatherPercentLabel(features.confidence)" in html
