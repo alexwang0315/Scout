@@ -1210,8 +1210,8 @@ def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> Non
         assert group_name in html
 
     assert 'data-evidence-tab="${escapeHtml(tab.id)}"' in html
-    assert "state.activeEvidenceTab = selectedTab;" in html
-    assert "state.activeMapEvidenceTab = selectedTab;" in html
+    assert 'rerenderEvidenceContext("timeline", selectedTab);' in html
+    assert 'rerenderEvidenceContext("map", selectedTab);' in html
 
 
 def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
@@ -1249,7 +1249,10 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert "map-evidence-rail.is-collapsed" in html
     assert "focusDashboardMapEvidence" in html
     assert "pretripEvidenceGroupOpen" in html
-    assert "renderPretripEvidenceGroup(group, index, {defaultOpen: false})" in html
+    assert (
+        'renderPretripEvidenceGroup(group, index, {context: "map", tabId: activeTab})'
+        in html
+    )
     assert 'add("map_risk", "Segments", view.segments' in html
     assert "scheduleMapEvidenceFocusRetry" in html
     assert "pretripMapHasRenderedTargets" in html
@@ -2643,11 +2646,24 @@ def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> Non
     assert "Transport" in html
 
     assert "const EVIDENCE_PAGE_SIZE = 100;" in html
-    assert "function paginateEvidenceGroups" in html
-    assert "function evidencePageForSource" in html
+    assert "function paginateEvidenceGroup" in html
+    assert "function evidenceGroupPageForSource" in html
+    assert "function evidenceGroupPage(context, tabId, groupTitle)" in html
+    assert "function setEvidenceGroupPage(context, tabId, groupTitle, page)" in html
+    assert "function evidenceOpenGroup(context, tabId)" in html
+    assert "function setEvidenceOpenGroup(context, tabId, groupTitle)" in html
     assert 'data-evidence-page-action="previous"' in html
     assert 'data-evidence-page-action="next"' in html
-    assert 'aria-label="Evidence pagination"' in html
+    assert "data-evidence-page-group=" in html
+    assert "data-evidence-page-current=" in html
+    assert 'aria-label="${escapeHtml(groupTitle)} pagination"' in html
+    assert "function paginateEvidenceGroups" not in html
+    assert "renderEvidencePagination(pagination" not in html
+    assert "Evidence exists in this category but is on another page." not in html
+    assert (
+        "activeGroups.map((group, index) => renderPretripEvidenceGroup(" in html
+    )
+    assert 'data-evidence-group-toggle="true"' in html
 
     group_open_policy = html.split(
         "function pretripEvidenceGroupOpen", 1
@@ -2656,12 +2672,11 @@ def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> Non
     assert "index < 2" not in group_open_policy
 
     pagination = html.split(
-        "function paginateEvidenceGroups", 1
-    )[1].split("function evidencePageForSource", 1)[0]
-    assert "const pageItems =" in pagination
-    assert "pageGroups.push({" in pagination
-    assert "Evidence exists in this category but is on another page." in pagination
-    assert "else if (!itemCount && page === 1)" not in pagination
+        "function paginateEvidenceGroup", 1
+    )[1].split("function evidenceGroupPageForSource", 1)[0]
+    assert "const items = asArray(group.items);" in pagination
+    assert "items: items.slice(startIndex, endIndex)" in pagination
+    assert "loadedItemCount: items.length" in pagination
 
 
 def test_dashboard_joint_review_information_architecture_and_qa_contract() -> None:
