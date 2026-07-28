@@ -78,6 +78,20 @@ The importer must distinguish:
 - **manual waypoint route**（手動畫航點路線）: route sections that do not have
   historical track support and therefore require `danger_review`.
 
+The selected golden route should be an operator-curated, complete point sequence
+for the intended start-to-finish trip. It defines the Architecture mileage axis
+from `0K` to finish. Downstream crowd coverage may mark bins
+`insufficient_evidence`, but must not trim a sparse prefix, move the origin, or
+replace this scope with a crowd-derived axis.
+
+Golden geometry and statistical observation are separate roles. The golden GPX
+also remains in `historical_gpx_source_index.json` as one equal-weight
+`scope_reference`. The reference pace/energy analyzer reads each complete staged
+source via `workspace_ref` and then evaluates every adjacent trackpoint pair with
+its actual `delta_t`. Its V0 statistical window is the strict open interval
+`1 < speed_kmh < 10`; an invalid pair removes only that pair. Whole-track or
+whole-`<trkseg>` average speed must never discard otherwise usable samples.
+
 When no GPX supports a section:
 
 - it remains a manual waypoint route candidate;
@@ -318,6 +332,14 @@ geometry, and map-preparation handoff are produced.
 These filters are planning-data hygiene, not runtime truth. They protect the
 pretrip workspace from obvious GPS artifacts while preserving evidence that may
 carry human meaning.
+
+These importer hygiene filters are not the Architecture statistical speed
+window. In particular, `1 < speed_kmh < 10` must not be implemented here as
+point deletion or whole-segment rejection. The importer preserves the raw staged
+source by path/hash; statistical analysis reads that complete source and applies
+its pairwise filter independently. A derived speed-filtered GPX remains a map/
+normalization artifact and a compatibility fallback, not the default statistical
+input.
 
 ### 1. Absolute Speed Outlier Filter（絕對速度離群點過濾）
 
