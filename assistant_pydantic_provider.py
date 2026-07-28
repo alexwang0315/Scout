@@ -1242,8 +1242,17 @@ def _public_tool_invocation_summary(
     *,
     project_root: Path | None,
 ) -> dict[str, object]:
-    safe_keys = {"tool_id", "status", "source_refs", "result_count", "digest"}
-    if set(invocation) == safe_keys and isinstance(invocation.get("digest"), str):
+    safe_keys = {
+        "tool_id",
+        "status",
+        "source_refs",
+        "result_count",
+        "digest",
+        "missing_fields",
+    }
+    if set(invocation).issubset(safe_keys) and isinstance(
+        invocation.get("digest"), str
+    ):
         return dict(invocation)
     serialized = json.dumps(
         invocation,
@@ -1255,7 +1264,7 @@ def _public_tool_invocation_summary(
     if not isinstance(result_count, int) or result_count < 0:
         results = invocation.get("results")
         result_count = len(results) if isinstance(results, list) else 0
-    return {
+    summary = {
         "tool_id": str(invocation.get("tool_id") or "unknown_tool"),
         "status": str(invocation.get("status") or "unknown")[:80],
         "source_refs": _public_source_refs(
@@ -1265,6 +1274,10 @@ def _public_tool_invocation_summary(
         "result_count": result_count,
         "digest": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
     }
+    missing_fields = _extract_missing_fields(invocation)
+    if missing_fields:
+        summary["missing_fields"] = missing_fields[:32]
+    return summary
 
 
 def _public_source_refs(
@@ -6814,10 +6827,21 @@ class PydanticAIAssistantProvider:
         runner: PydanticAIRunner,
         timeout_seconds: int | None = DEFAULT_TIMEOUT_SECONDS,
         max_context_chars: int | None = DEFAULT_MAX_CONTEXT_CHARS,
+        pretrip_workspace_root: Path | str | None = None,
     ):
         self.runner = runner
         self.timeout_seconds = timeout_seconds
         self.max_context_chars = max_context_chars
+        workspace_root_value = (
+            pretrip_workspace_root
+            if pretrip_workspace_root is not None
+            else os.environ.get("SCOUT_PRETRIP_WORKSPACE_ROOT")
+        )
+        self.pretrip_workspace_root = (
+            Path(workspace_root_value).expanduser()
+            if workspace_root_value
+            else None
+        )
         self.startup_connection_status: str = "not_checked"
 
     def connect(self) -> None:
@@ -6860,9 +6884,10 @@ class PydanticAIAssistantProvider:
             sources=resolved_sources,
             max_context_chars=self.max_context_chars,
         )
-        tool_context = ScoutWorkspaceToolContext.from_query_and_env(
-            query,
+        tool_context = ScoutWorkspaceToolContext(
+            query=query,
             sources=resolved_sources,
+            pretrip_workspace_root=self.pretrip_workspace_root,
         )
         requested_ai_hat_fallback = (
             query.runtime_preference
@@ -6973,6 +6998,13 @@ class PydanticAIAssistantProvider:
                 timeout_seconds=self.timeout_seconds,
                 tool_context=tool_context,
             )
+        connected_profile = getattr(self.runner, "last_profile", None) or getattr(
+            self.runner,
+            "profile_name",
+            None,
+        )
+        if connected_profile:
+            self.startup_connection_status = f"connected:{connected_profile}"
         if (
             requested_ai_hat_fallback
             and getattr(
@@ -7763,6 +7795,11 @@ class PydanticAIEnvRunner:
         clone.bounded_agent_runtime_enabled = self.bounded_agent_runtime_enabled
         return clone
 
+    def _resolved_chat_model_name(self) -> str:
+        if self.base_url:
+            return self.model_name
+        return self.model_policy.model_for_agent or self.model_name
+
     def connect(self, *, timeout_seconds: int | None) -> None:
         self.run(
             "Scout assistant connectivity check. Reply with OK.",
@@ -7927,7 +7964,7 @@ class PydanticAIEnvRunner:
 
         from pydantic_ai import Agent
 
-        chat_model_name = self.model_policy.model_for_agent or self.model_name
+        chat_model_name = self._resolved_chat_model_name()
         agent = Agent(
             build_chat_model(
                 model_name=chat_model_name,
@@ -7985,7 +8022,7 @@ class PydanticAIEnvRunner:
         request_timeout_seconds: int | None = None,
         allow_workspace_tools: bool = True,
     ) -> str:
-        chat_model_name = self.model_policy.model_for_agent or self.model_name
+        chat_model_name = self._resolved_chat_model_name()
         (
             bounded_runtime,
             selected_tool_ids,
@@ -9065,10 +9102,27 @@ class PydanticAIEnvRunner:
                 )
                 output = "目前沒有取得所選 Scout 工具的證據，因此不會提供未驗證答案。"
             elif validated_cards:
+                output = bounded_runtime.normalize_evidence_citations(
+                    output,
+                    evidence_cards=validated_cards,
+                )
                 verification = bounded_runtime.verify_synthesis(
                     output,
                     evidence_cards=validated_cards,
                 )
+                if not verification.passed:
+                    provenance_repaired_output = (
+                        bounded_runtime.attach_verified_source_refs(
+                            output,
+                            evidence_cards=validated_cards,
+                        )
+                    )
+                    if provenance_repaired_output != output:
+                        output = provenance_repaired_output
+                        verification = bounded_runtime.verify_synthesis(
+                            output,
+                            evidence_cards=validated_cards,
+                        )
                 partial_ledger = _finalize_agent_run_ledger(
                     bounded_runtime,
                     request_records,
@@ -9174,10 +9228,27 @@ class PydanticAIEnvRunner:
                         ),
                     )
                     output = str(pydantic_result_output(result))
+                    output = bounded_runtime.normalize_evidence_citations(
+                        output,
+                        evidence_cards=validated_cards,
+                    )
                     verification = bounded_runtime.verify_synthesis(
                         output,
                         evidence_cards=validated_cards,
                     )
+                    if not verification.passed:
+                        provenance_repaired_output = (
+                            bounded_runtime.attach_verified_source_refs(
+                                output,
+                                evidence_cards=validated_cards,
+                            )
+                        )
+                        if provenance_repaired_output != output:
+                            output = provenance_repaired_output
+                            verification = bounded_runtime.verify_synthesis(
+                                output,
+                                evidence_cards=validated_cards,
+                            )
                 if not verification.passed:
                     run_error = (
                         "grounding_verification_failed_after_repair"
@@ -9477,6 +9548,10 @@ class PydanticAIEnvRunner:
             continuation_ledger = runtime.record_request(
                 continuation_ledger,
                 request,
+            )
+            output = runtime.normalize_evidence_citations(
+                output,
+                evidence_cards=validated_cards,
             )
             verification = runtime.verify_synthesis(
                 output,
@@ -9917,6 +9992,10 @@ class PydanticAIEnvRunner:
             output,
             evidence_cards=evidence_cards,
         )
+        output = bounded_runtime.normalize_evidence_citations(
+            output,
+            evidence_cards=evidence_cards,
+        )
         verification = (
             bounded_runtime.verify_synthesis(
                 output,
@@ -10120,6 +10199,10 @@ class PydanticAIEnvRunner:
                 previous_output = output
                 output = _hailo_model_authored_exact_answer_excerpt(
                     repaired_output,
+                    evidence_cards=evidence_cards,
+                )
+                output = bounded_runtime.normalize_evidence_citations(
+                    output,
                     evidence_cards=evidence_cards,
                 )
                 verification = bounded_runtime.verify_synthesis(

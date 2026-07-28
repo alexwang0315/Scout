@@ -106,6 +106,7 @@ def assess_scout_weather_window(
     risk_summary = _risk_summary(filtered_segments)
     wx_alerts = _wx_alerts(filtered_segments, limit=resolved_limit)
     missing_fields = _missing_weather_fields(
+        query=query,
         route_package=route_package,
         weather_evidence=weather_evidence,
     )
@@ -140,11 +141,12 @@ def assess_scout_weather_window(
         reference_time=reference_datetime,
         stale_warnings=stale_warnings,
     )
+    route_scope_available = _route_weather_scope_available(route_package)
     answerability = (
         "route_weather_risk_available"
-        if route_segments and not missing_fields
+        if route_scope_available and not missing_fields
         else "route_weather_risk_partial"
-        if route_segments
+        if route_scope_available
         else "weather_placeholder_only"
         if weather_evidence
         else "weather_evidence_missing"
@@ -170,6 +172,7 @@ def assess_scout_weather_window(
         missing_fields=missing_fields,
         field_answer=field_answer,
     )
+    field_answer_source_refs = _loaded_source_refs(source_report)
 
     return {
         "tool_id": WEATHER_WINDOW_TOOL_ID,
@@ -187,6 +190,11 @@ def assess_scout_weather_window(
         "decision": weather_to_decision["decision"],
         "decision_output": decision_output,
         "field_answer": field_answer,
+        "field_answer_priority": 90,
+        "field_answer_source_ref": (
+            field_answer_source_refs[0] if field_answer_source_refs else None
+        ),
+        "field_answer_source_refs": field_answer_source_refs,
         "weather_to_decision": weather_to_decision,
         "external_api_calls_made": _bool_from_sources(
             "external_api_calls_made",
@@ -247,7 +255,393 @@ def _load_route_weather_package(
             "route_weather_package.json",
         ),
     )
-    return _load_first_json_object(candidates, source_kind="route_weather_package")
+    route_package, legacy_report = _load_first_json_object(
+        candidates,
+        source_kind="route_weather_package",
+    )
+    if route_package:
+        return route_package, legacy_report
+    fresh_package, fresh_report = _load_fresh_prepared_weather_package(root, project)
+    if fresh_package:
+        return fresh_package, [*fresh_report, *legacy_report[:1]]
+    return {}, legacy_report
+
+
+def _load_fresh_prepared_weather_package(
+    root: Path,
+    project: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    route_risk, route_risk_report = _load_first_json_object(
+        _candidate_paths(
+            root,
+            project,
+            explicit_path=None,
+            ref_keys=("route_weather_risk_package_ref",),
+            fallbacks=("outputs/route_weather_risk_package.json",),
+        ),
+        source_kind="route_weather_risk_package",
+    )
+    cwa_evidence, cwa_report = _load_first_json_object(
+        _candidate_paths(
+            root,
+            project,
+            explicit_path=None,
+            ref_keys=("cwa_weather_evidence_ref",),
+            fallbacks=(
+                "outputs/environment/cwa/cwa_weather_evidence.json",
+                "outputs/cwa_weather_evidence.json",
+            ),
+        ),
+        source_kind="cwa_weather_evidence",
+    )
+    qpf_summary, qpf_report = _load_first_json_object(
+        _candidate_paths(
+            root,
+            project,
+            explicit_path=None,
+            ref_keys=("cwa_qpf_corridor_summary_ref",),
+            fallbacks=("outputs/environment/cwa/qpf_corridor_summary.json",),
+        ),
+        source_kind="cwa_qpf_corridor_summary",
+    )
+    reports = [*route_risk_report, *cwa_report, *qpf_report]
+    if not any((route_risk, cwa_evidence, qpf_summary)):
+        return {}, reports
+    package = _normalize_fresh_prepared_weather_package(
+        project=project,
+        route_risk=route_risk,
+        cwa_evidence=cwa_evidence,
+        qpf_summary=qpf_summary,
+    )
+    loaded_refs = _loaded_source_refs(reports)
+    reports.append(
+        {
+            "source_kind": "fresh_weather_decision_adapter",
+            "status": "loaded",
+            "source_path": loaded_refs[0] if loaded_refs else None,
+            "source_paths": loaded_refs,
+            "loaded_count": 1,
+            "artifact_kind": package["artifact_kind"],
+            "source_status": package["status"],
+        }
+    )
+    return package, reports
+
+
+def _normalize_fresh_prepared_weather_package(
+    *,
+    project: dict[str, Any],
+    route_risk: dict[str, Any],
+    cwa_evidence: dict[str, Any],
+    qpf_summary: dict[str, Any],
+) -> dict[str, Any]:
+    issued_at = _first_present(
+        cwa_evidence,
+        "issued_at",
+        "api_fetched_at",
+        "fetched_at",
+        "request_timestamp",
+        "generated_at",
+        default=_first_present(route_risk, "generatedAt", "generated_at"),
+    )
+    valid_from = _first_present(
+        qpf_summary,
+        "forecast_valid_from",
+        "valid_from",
+        default=_first_present(
+            cwa_evidence,
+            "forecast_valid_from",
+            "valid_from",
+        ),
+    )
+    valid_to = _first_present(
+        qpf_summary,
+        "forecast_valid_until",
+        "valid_until",
+        "valid_to",
+        default=_first_present(
+            cwa_evidence,
+            "forecast_valid_until",
+            "valid_until",
+            "valid_to",
+        ),
+    )
+    external_calls = any(
+        source.get("external_api_calls_made") is True
+        or source.get("api_request_attempted") is True
+        for source in (cwa_evidence, qpf_summary)
+    )
+    return {
+        "artifact_kind": "route_weather_package",
+        "adapter_kind": "fresh_prepared_weather_decision_inputs",
+        "status": "candidate_only",
+        "routeId": str(
+            route_risk.get("routeId")
+            or project.get("route_id")
+            or project.get("project_id")
+            or ""
+        ),
+        "generatedAt": issued_at,
+        "issued_at": issued_at,
+        "valid_from": valid_from,
+        "valid_to": valid_to,
+        "validUntil": valid_to,
+        "ttl_s": _validity_ttl_seconds(issued_at, valid_to),
+        "provider": _first_present(cwa_evidence, "provider"),
+        "authoritative_weather_computed": external_calls,
+        "external_api_calls_made": external_calls,
+        "human_review_required": True,
+        "route_corridor_assessed": bool(route_risk or qpf_summary),
+        "direct_qpf_available": _direct_qpf_available(qpf_summary),
+        "weather_window": _fresh_weather_window(
+            route_risk=route_risk,
+            cwa_evidence=cwa_evidence,
+            qpf_summary=qpf_summary,
+            valid_from=valid_from,
+            valid_to=valid_to,
+        ),
+        "segments": _fresh_route_weather_segments(route_risk),
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "human_review_required": True,
+            "source_mutation_allowed": False,
+        },
+    }
+
+
+def _fresh_weather_window(
+    *,
+    route_risk: dict[str, Any],
+    cwa_evidence: dict[str, Any],
+    qpf_summary: dict[str, Any],
+    valid_from: Any,
+    valid_to: Any,
+) -> dict[str, Any]:
+    qpf = qpf_summary.get("qpf_corridor_summary")
+    qpf = {**qpf_summary, **qpf} if isinstance(qpf, dict) else qpf_summary
+    max_mm = _float_or_none(qpf.get("max_mm"))
+    mean_mm = _float_or_none(qpf.get("mean_mm"))
+    p95_mm = _float_or_none(qpf.get("p95_mm"))
+    probability = _float_or_none(qpf.get("max_rain_probability"))
+    if probability is None:
+        probability = _max_weather_point_rain_probability(cwa_evidence)
+    summary_parts: list[str] = []
+    if max_mm is not None:
+        qpf_values = [f"最大 {max_mm:g} mm"]
+        if p95_mm is not None:
+            qpf_values.append(f"p95 {p95_mm:g} mm")
+        if mean_mm is not None:
+            qpf_values.append(f"平均 {mean_mm:g} mm")
+        summary_parts.append("路線走廊 QPF：" + "、".join(qpf_values))
+    elif probability is not None:
+        summary_parts.append(
+            "路線走廊尚無 direct QPF 累積雨量；"
+            f"預報降雨機率峰值 {probability:g}%"
+        )
+    else:
+        summary_parts.append(
+            "fresh CWA preparation 已完成，但沒有路線走廊的累積雨量或降雨機率"
+        )
+    peak_window = _first_present(qpf, "peak_window")
+    if peak_window:
+        summary_parts.append(f"高峰時間窗={peak_window}")
+    features = route_risk.get("imageryFeatures")
+    features = features if isinstance(features, dict) else {}
+    if features.get("currentRainOnRoute") is True:
+        summary_parts.append("雷達候選證據顯示路線目前有雨")
+    elif features.get("rainBandApproaching") is True:
+        summary_parts.append("雷達候選證據顯示雨帶接近路線")
+    interactions = route_risk.get("weatherTerrainInteractions")
+    interaction_rows = (
+        [item for item in interactions if isinstance(item, dict)]
+        if isinstance(interactions, list)
+        else []
+    )
+    return {
+        "valid_from": valid_from,
+        "valid_to": valid_to,
+        "summary": "; ".join(summary_parts) + ".",
+        "precipitation_label": (
+            f"QPF 最大 {max_mm:g} mm"
+            if max_mm is not None
+            else f"降雨機率峰值 {probability:g}%"
+            if probability is not None
+            else "降水資料不可用"
+        ),
+        "source_status": "server_side_fresh_preparation",
+        "confidence": _float_or_none(features.get("confidence")),
+        "forecast_sources": _fresh_dataset_ids(cwa_evidence, qpf),
+        "notes": [
+            "路線走廊／bbox 證據僅供候選審查，仍需人工確認。",
+            "山區 QPF 不能精準預測單一坡面。",
+        ],
+        "hazard_notes": [
+            str(item.get("ruleCode"))
+            for item in interaction_rows
+            if item.get("ruleCode")
+        ][:6],
+    }
+
+
+def _fresh_route_weather_segments(
+    route_risk: dict[str, Any],
+) -> list[dict[str, Any]]:
+    raw_interactions = route_risk.get("weatherTerrainInteractions")
+    interactions = raw_interactions if isinstance(raw_interactions, list) else []
+    features = route_risk.get("imageryFeatures")
+    features = features if isinstance(features, dict) else {}
+    feature_risk = max(
+        (
+            value
+            for value in (
+                _float_or_none(features.get("confidence")),
+                _float_or_none(features.get("convectiveCellScore")),
+                _float_or_none(features.get("satelliteConvectiveCloudScore")),
+            )
+            if value is not None
+        ),
+        default=0.0,
+    )
+    segments: list[dict[str, Any]] = []
+    for index, raw in enumerate(interactions):
+        if not isinstance(raw, dict):
+            continue
+        rule_code = str(raw.get("ruleCode") or "WEATHER_TERRAIN").strip()
+        terrain_risk = _float_or_none(raw.get("teii_20m"))
+        if terrain_risk is not None and terrain_risk > 1:
+            terrain_risk = terrain_risk / 100.0
+        weather_risk = _float_or_none(raw.get("weatherConfidence"))
+        if weather_risk is None:
+            weather_risk = feature_risk
+        final_risk = _combine_risk(terrain_risk, weather_risk)
+        source_refs = _string_list(raw.get("terrainSourceRefs"))
+        segments.append(
+            {
+                "segment_id": str(
+                    raw.get("segmentId") or f"route.weather.interaction.{index:04d}"
+                ),
+                "terrain_risk": terrain_risk,
+                "weather_risk": weather_risk,
+                "final_risk": final_risk,
+                "risk_level": _risk_level(final_risk or 0.0),
+                "factors": [
+                    rule_code,
+                    _weather_interaction_label(rule_code),
+                ],
+                "message": (
+                    "Fresh server-side route weather interaction candidate: "
+                    f"{rule_code}."
+                ),
+                "source": {
+                    "source_status": "server_side_fresh_preparation",
+                    "source_refs": source_refs,
+                },
+            }
+        )
+    return segments
+
+
+def _weather_interaction_label(rule_code: str) -> str:
+    return {
+        "RAIN_DRY_CREEK": "rain and dry creek terrain interaction",
+        "RAIN_SCREE_CLIFF": "rain, scree, and cliff terrain interaction",
+        "THUNDER_RIDGE": "thunder ridge terrain interaction",
+        "STRONG_ECHO_STEEP_DESCENT": "strong echo and steep descent terrain interaction",
+    }.get(rule_code, "weather terrain interaction")
+
+
+def _fresh_dataset_ids(
+    cwa_evidence: dict[str, Any],
+    qpf_summary: dict[str, Any],
+) -> list[str]:
+    datasets: list[str] = []
+    for raw in (
+        cwa_evidence.get("datasets"),
+        qpf_summary.get("datasets"),
+        qpf_summary.get("dataset_ids"),
+    ):
+        if not isinstance(raw, list):
+            continue
+        for item in raw:
+            dataset_id = (
+                item.get("dataset_id") or item.get("source_dataset_id")
+                if isinstance(item, dict)
+                else item
+            )
+            text = str(dataset_id or "").strip()
+            if text:
+                datasets.append(text)
+    return _dedupe(datasets)
+
+
+def _max_weather_point_rain_probability(
+    cwa_evidence: dict[str, Any],
+) -> float | None:
+    raw_points = cwa_evidence.get("weather_points")
+    points = raw_points if isinstance(raw_points, list) else []
+    values = [
+        value
+        for item in points
+        if isinstance(item, dict)
+        and (
+            value := _float_or_none(
+                _first_present(item, "rainProbability", "rain_probability")
+            )
+        )
+        is not None
+    ]
+    return max(values) if values else None
+
+
+def _direct_qpf_available(qpf_summary: dict[str, Any]) -> bool:
+    qpf = qpf_summary.get("qpf_corridor_summary")
+    qpf = {**qpf_summary, **qpf} if isinstance(qpf, dict) else qpf_summary
+    if any(
+        _float_or_none(qpf.get(key)) is not None
+        for key in ("max_mm", "mean_mm", "p95_mm")
+    ):
+        return True
+    return any(
+        dataset.startswith("F-C0041-")
+        for dataset in _fresh_dataset_ids({}, qpf)
+    )
+
+
+def _validity_ttl_seconds(issued_at: Any, valid_to: Any) -> int | None:
+    issued = _parse_datetime(issued_at)
+    valid = _parse_datetime(valid_to)
+    if issued is None or valid is None or valid <= issued:
+        return None
+    return max(1, int((valid - issued).total_seconds()))
+
+
+def _loaded_source_refs(source_report: list[dict[str, Any]]) -> list[str]:
+    priority = {
+        "cwa_qpf_corridor_summary": 0,
+        "cwa_weather_evidence": 1,
+        "route_weather_risk_package": 2,
+        "route_weather_package": 3,
+        "weather_daylight_evidence": 4,
+        "planned_eta": 5,
+        "fresh_weather_decision_adapter": 6,
+    }
+    refs: list[tuple[int, str]] = []
+    for item in source_report:
+        if item.get("status") != "loaded":
+            continue
+        source_kind = str(item.get("source_kind") or "")
+        item_refs = [item.get("source_path")]
+        source_paths = item.get("source_paths")
+        if isinstance(source_paths, list):
+            item_refs.extend(source_paths)
+        for ref in item_refs:
+            text = str(ref or "").strip()
+            path = Path(text)
+            if not text or path.is_absolute() or ".." in path.parts:
+                continue
+            refs.append((priority.get(source_kind, 99), path.as_posix()))
+    return _dedupe([ref for _, ref in sorted(refs)])
 
 
 def _load_weather_daylight_evidence(
@@ -734,12 +1128,30 @@ def _weather_to_decision(
                     alert_codes.append(code)
         else:
             decision = "DELAY"
+            window_summary = str(weather_window.get("summary") or "").strip()
             main_reasons = [
-                "缺少新鮮且路線化的天氣證據。",
+                *([window_summary] if window_summary else []),
+                "缺少完整且路線化的天氣決策證據。",
                 "missing_fields=" + ",".join(missing_fields),
-            ]
-            action_limit = "不得用 placeholder 天氣授權出發、紮營、攻頂、曝露稜線或渡溪決策。"
-            next_action = "補齊 fresh provider、TTL、valid-time 與 route_weather_package；完成前採保守延後。"
+            ][:3]
+            if missing_fields == ["direct_qpf_accumulation_mm"]:
+                action_limit = (
+                    "不得把降雨機率當成累積雨量，也不得只靠機率授權出發、"
+                    "曝露稜線或渡溪決策。"
+                )
+                next_action = (
+                    "補齊 route-corridor direct QPF accumulation 後，"
+                    "重新疊加地形與行程時間窗。"
+                )
+            else:
+                action_limit = (
+                    "不得用不完整天氣證據授權出發、紮營、攻頂、"
+                    "曝露稜線或渡溪決策。"
+                )
+                next_action = (
+                    "補齊 fresh provider、TTL、valid-time 與 route weather "
+                    "evidence；完成前採保守延後。"
+                )
             alternatives = ["延後到新鮮路線天氣包完成審核", "改低曝露備援路線"]
     elif route_sensitive_delay:
         applied_weather_rule = route_sensitive_delay
@@ -859,7 +1271,15 @@ def _field_answer(
 ) -> str:
     decision_label = str(decision.get("decision") or "DELAY")
     reasons = decision.get("main_reasons")
-    reason_text = "；".join(str(reason) for reason in reasons[:2]) if isinstance(reasons, list) else ""
+    reason_text = (
+        "；".join(
+            str(reason).strip().rstrip("。；;")
+            for reason in reasons[:2]
+            if str(reason).strip().rstrip("。；;")
+        )
+        if isinstance(reasons, list)
+        else ""
+    )
     rule = decision.get("route_sensitive_weather_rule")
     query_reported = isinstance(rule, dict) and rule.get("query_reported") is True
     if decision.get("daylight_buffer_status"):
@@ -874,7 +1294,13 @@ def _field_answer(
             "此為 Weather-to-Decision / daylight buffer 候選判斷，不是 runtime safety truth；不得觸發 /safety、SOS、outbound send 或硬體控制。"
         )
     if missing_fields and not query_reported:
-        reason_text = f"缺少 {', '.join(missing_fields)}，不能只看降雨機率或 placeholder。"
+        missing_reason = (
+            f"缺少 {', '.join(missing_fields)}，"
+            "不能只看降雨機率或 placeholder。"
+        )
+        reason_text = (
+            f"{reason_text}；{missing_reason}" if reason_text else missing_reason
+        )
     elif missing_fields and query_reported:
         reason_text = (
             (reason_text + "；") if reason_text else ""
@@ -1789,6 +2215,7 @@ def _highest_risk_segment(segments: list[dict[str, Any]]) -> dict[str, Any] | No
 
 def _missing_weather_fields(
     *,
+    query: str,
     route_package: dict[str, Any],
     weather_evidence: dict[str, Any],
 ) -> list[str]:
@@ -1799,9 +2226,44 @@ def _missing_weather_fields(
             missing.append(field)
     if not route_package:
         missing.append("route_weather_package")
-    if route_package and not _route_weather_segments(route_package):
+    if route_package and not _route_weather_scope_available(route_package):
         missing.append("route_weather_segments")
+    if (
+        _is_precipitation_amount_question(query)
+        and route_package.get("adapter_kind")
+        == "fresh_prepared_weather_decision_inputs"
+        and route_package.get("direct_qpf_available") is not True
+    ):
+        missing.append("direct_qpf_accumulation_mm")
     return _dedupe(missing)
+
+
+def _route_weather_scope_available(route_package: dict[str, Any]) -> bool:
+    return bool(
+        route_package
+        and (
+            _route_weather_segments(route_package)
+            or route_package.get("route_corridor_assessed") is True
+        )
+    )
+
+
+def _is_precipitation_amount_question(query: str) -> bool:
+    normalized = str(query or "").replace(" ", "").casefold()
+    return any(
+        term in normalized
+        for term in (
+            "雨量",
+            "降雨量",
+            "累積雨",
+            "多少雨",
+            "幾毫米",
+            "多少毫米",
+            "rainfallamount",
+            "precipitationamount",
+            "qpf",
+        )
+    )
 
 
 def _warnings(

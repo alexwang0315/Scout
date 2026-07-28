@@ -1862,7 +1862,10 @@ class AssistantApiTests(unittest.TestCase):
 
     def test_provider_factory_enables_pydantic_ai_only_by_env(self):
         class FakeRunner:
+            last_profile = None
+
             def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                self.last_profile = "cloud"
                 return "safe pydantic response"
 
         mock_provider = create_assistant_provider_from_env({"SCOUT_AI_ASSISTANT_PROVIDER": "mock"})
@@ -1884,6 +1887,28 @@ class AssistantApiTests(unittest.TestCase):
         self.assertTrue(response.read_only)
         self.assertIsNone(pydantic_provider.timeout_seconds)
         self.assertIsNone(pydantic_provider.max_context_chars)
+        self.assertEqual(
+            pydantic_provider.startup_connection_status,
+            "connected:cloud",
+        )
+
+    def test_provider_factory_passes_workspace_root_to_pydantic_provider(self):
+        class FakeRunner:
+            def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                return "safe pydantic response"
+
+        with TemporaryDirectory() as tmpdir:
+            workspace_root = Path(tmpdir) / "pretrip-workspaces"
+            workspace_root.mkdir()
+            provider = create_assistant_provider_from_env(
+                {
+                    "SCOUT_AI_ASSISTANT_PROVIDER": "pydantic_ai",
+                    "SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root),
+                },
+                pydantic_runner=FakeRunner(),
+            )
+
+        self.assertEqual(provider.pretrip_workspace_root, workspace_root)
 
     def test_provider_factory_loads_external_model_config_and_connects_on_startup(self):
         class FakeRunner:

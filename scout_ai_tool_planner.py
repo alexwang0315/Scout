@@ -539,6 +539,9 @@ def classify_workspace_query_requirements(
             "大雨",
             "下雨",
             "降雨",
+            "雨量",
+            "累積雨量",
+            "累积雨量",
             "雨後",
             "風雨",
             "白牆",
@@ -547,6 +550,8 @@ def classify_workspace_query_requirements(
             "能見度",
             "風寒",
             "濕衣",
+            "qpf",
+            "forecast",
         ),
     ) or bool(re.search(r"weather|(?<!ter)rain", question))
     terrain = _has_any(
@@ -765,6 +770,13 @@ def classify_workspace_query_requirements(
         return (
             QuestionClass.STATIC_WORKSPACE_FACT,
             [WorkspaceQueryOperation.INSPECT],
+            False,
+            False,
+        )
+    if weather and _looks_like_weather_measurement_value_question(question):
+        return (
+            QuestionClass.STATIC_WORKSPACE_FACT,
+            [],
             False,
             False,
         )
@@ -3673,6 +3685,56 @@ def _looks_like_cwa_environment_question(text: str) -> bool:
             "海象",
             "tide",
             "marine",
+        ),
+    )
+
+
+def _looks_like_weather_measurement_value_question(text: str) -> bool:
+    if not _has_any(
+        text,
+        (
+            "多少",
+            "幾度",
+            "几度",
+            "幾毫米",
+            "几毫米",
+            "幾mm",
+            "几mm",
+            "幾公釐",
+            "几公厘",
+        ),
+    ):
+        return False
+    if re.search(
+        r"(?:多少|幾|几)(?:個|个|筆|笔|條|条|張|张|站|測站|测站|"
+        r"feature|features|event|events|資料點|数据点)",
+        text,
+    ):
+        return False
+    return _has_any(
+        text,
+        (
+            "雨量",
+            "降雨量",
+            "累積雨量",
+            "累积雨量",
+            "qpf",
+            "降雨機率",
+            "降雨概率",
+            "溫度",
+            "温度",
+            "氣溫",
+            "气温",
+            "風速",
+            "风速",
+            "陣風",
+            "阵风",
+            "濕度",
+            "湿度",
+            "能見度",
+            "能见度",
+            "風寒",
+            "风寒",
         ),
     )
 

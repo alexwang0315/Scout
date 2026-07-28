@@ -44,6 +44,12 @@ ROUTE_STRUCTURE_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
 WORKSPACE_QUERY_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
     provider_module.WORKSPACE_QUERY_TOOL_ID
 ]
+WEATHER_WINDOW_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
+    provider_module.WEATHER_WINDOW_TOOL_ID
+]
+CWA_ENVIRONMENT_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
+    provider_module.CWA_ENVIRONMENT_TOOL_ID
+]
 
 
 def _checkpoint_count_response(
@@ -186,6 +192,86 @@ def test_pydantic_agent_progressively_discloses_and_then_removes_tools(
     assert [item["tool_id"] for item in runner.last_workspace_tool_invocations] == [
         ROUTE_STRUCTURE_TOOL_ID,
         provider_module.WORKSPACE_QUERY_TOOL_ID,
+    ]
+
+
+def test_pydantic_agent_returns_weather_tool_evidence_without_spurious_count(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(PROJECT_ROOT.parent))
+
+    def model_function(_messages: list[object], info: AgentInfo) -> ModelResponse:
+        tool_names = {tool.name for tool in info.function_tools}
+        if WEATHER_WINDOW_TOOL_NAME in tool_names:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name=WEATHER_WINDOW_TOOL_NAME,
+                        args={"query": "今天的雨量預計是多少"},
+                    )
+                ]
+            )
+        if CWA_ENVIRONMENT_TOOL_NAME in tool_names:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name=CWA_ENVIRONMENT_TOOL_NAME,
+                        args={"query": "今天的雨量預計是多少"},
+                    )
+                ]
+            )
+        return ModelResponse(
+            parts=[
+                TextPart(
+                    "Direct QPF corridor summary：max 為 32.0 mm、"
+                    "mean 為 18.4 mm、p95 為 29.1 mm、peak window 為 "
+                    "2026-06-24T12:00:00Z/2026-06-24T18:00:00Z "
+                    "[evidence:1]。"
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        provider_module,
+        "build_chat_model",
+        lambda **_kwargs: FunctionModel(model_function),
+    )
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="今天的雨量預計是多少",
+        context_ref=PROJECT_ROOT.name,
+        project_id=PROJECT_ROOT.name,
+    )
+    tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
+    runner = PydanticAIEnvRunner(
+        model_name="test:model",
+        profile_name="cloud",
+        workspace_tools_enabled=True,
+    )
+
+    output = runner._run_model_with_workspace_tools(
+        build_bounded_assistant_prompt(query, sources=[], max_context_chars=2_000),
+        tool_context,
+        request_timeout_seconds=10,
+    )
+
+    assert "max 為 32.0 mm" in output
+    assert "[evidence:1]" not in output
+    assert "[outputs/environment/cwa/qpf_corridor_summary.json]" in output
+    assert "所選 Scout 工具的證據" not in output
+    assert runner.last_agent_run_ledger["selected_tool_ids"] == [
+        provider_module.WEATHER_WINDOW_TOOL_ID,
+        provider_module.CWA_ENVIRONMENT_TOOL_ID,
+    ]
+    assert runner.last_agent_run_ledger["executed_tool_ids"] == [
+        provider_module.WEATHER_WINDOW_TOOL_ID,
+        provider_module.CWA_ENVIRONMENT_TOOL_ID,
+    ]
+    assert [
+        item["tool_id"] for item in runner.last_workspace_tool_invocations
+    ] == [
+        provider_module.WEATHER_WINDOW_TOOL_ID,
+        provider_module.CWA_ENVIRONMENT_TOOL_ID,
     ]
 
 

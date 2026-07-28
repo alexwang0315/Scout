@@ -31,6 +31,21 @@ _TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u3400-\u9fff]")
 _CITATION_PATTERN = re.compile(
     r"\[([^\[\]]+)\]|【([^【】]+)】"
 )
+_EVIDENCE_CARD_INDEX_CITATION_PATTERN = re.compile(
+    r"\[\s*(?:evidence|evidence_card|card)\s*:\s*(\d+)\s*\]"
+    r"|【\s*(?:evidence|evidence_card|card)\s*:\s*(\d+)\s*】",
+    re.IGNORECASE,
+)
+_EVIDENCE_SOURCE_REF_CITATION_PATTERN = re.compile(
+    r"\[\s*evidence\s*:\s*([^\[\]]+?)\s*\]"
+    r"|【\s*evidence\s*:\s*([^【】]+?)\s*】",
+    re.IGNORECASE,
+)
+_LABELED_SOURCE_REF_CITATION_PATTERN = re.compile(
+    r"\[\s*(?:source_ref|source|ref|citation)\s*:\s*([^\[\]]+?)\s*\]"
+    r"|【\s*(?:source_ref|source|ref|citation)\s*:\s*([^【】]+?)\s*】",
+    re.IGNORECASE,
+)
 _NUMBER_PATTERN = re.compile(r"(?<![A-Za-z])\d+(?:\.\d+)?")
 _DATETIME_LIKE_PATTERN = re.compile(
     r"\b\d{4}-\d{2}-\d{2}[Tt][0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})?\b"
@@ -647,6 +662,67 @@ class BoundedAgentRuntime:
         )
 
     @staticmethod
+    def normalize_evidence_citations(
+        answer: str,
+        *,
+        evidence_cards: Sequence[EvidenceCard],
+    ) -> str:
+        """Resolve model-authored evidence-card indexes to real provenance.
+
+        Some OpenAI-compatible models cite the zero-based evidence-card
+        position exposed in the synthesis prompt instead of copying the
+        card's source ref. Only an in-range card with a verified source ref or
+        evidence record is resolved. Unknown aliases remain untouched so the
+        grounding verifier still rejects them.
+        """
+
+        valid_record_refs = {
+            f"evidence:{record.evidence_id}"
+            for card in evidence_cards
+            for record in card.evidence_records
+        }
+
+        def replace(match: re.Match[str]) -> str:
+            raw_index = match.group(1) or match.group(2)
+            exact_record_ref = f"evidence:{raw_index}"
+            if exact_record_ref in valid_record_refs:
+                return match.group(0)
+            index = int(raw_index)
+            if index >= len(evidence_cards):
+                return match.group(0)
+            card = evidence_cards[index]
+            preferred_refs = _priority_field_answer_source_refs(card)
+            if preferred_refs:
+                return f"[{preferred_refs[0]}]"
+            if card.evidence_records:
+                return f"[evidence:{card.evidence_records[0].evidence_id}]"
+            return match.group(0)
+
+        normalized = _EVIDENCE_CARD_INDEX_CITATION_PATTERN.sub(replace, answer)
+        valid_source_refs = {
+            source_ref
+            for card in evidence_cards
+            for source_ref in card.source_refs
+        }
+
+        def remove_redundant_prefix(match: re.Match[str]) -> str:
+            source_ref = (match.group(1) or match.group(2)).strip()
+            return (
+                f"[{source_ref}]"
+                if source_ref in valid_source_refs
+                else match.group(0)
+            )
+
+        normalized = _EVIDENCE_SOURCE_REF_CITATION_PATTERN.sub(
+            remove_redundant_prefix,
+            normalized,
+        )
+        return _LABELED_SOURCE_REF_CITATION_PATTERN.sub(
+            remove_redundant_prefix,
+            normalized,
+        )
+
+    @staticmethod
     def verify_synthesis(
         answer: str,
         *,
@@ -654,6 +730,10 @@ class BoundedAgentRuntime:
     ) -> GroundingVerification:
         """Reject factual sentences without valid evidence citations."""
 
+        answer = BoundedAgentRuntime.normalize_evidence_citations(
+            answer,
+            evidence_cards=evidence_cards,
+        )
         valid_refs = {
             ref for card in evidence_cards for ref in card.source_refs
         } | {
@@ -1446,6 +1526,7 @@ def _missing_priority_exact_field_facts(
     evidence_cards: Sequence[EvidenceCard],
 ) -> list[str]:
     answer_folded = answer.casefold()
+    answer_numbers = set(_NUMBER_PATTERN.findall(_strip_citations(answer)))
     required: list[str] = []
     for card in evidence_cards:
         priority = card.key_values.get("field_answer_priority")
@@ -1460,7 +1541,11 @@ def _missing_priority_exact_field_facts(
     return _dedupe(
         literal
         for literal in required
-        if literal.casefold() not in answer_folded
+        if not _priority_exact_literal_is_present(
+            literal,
+            answer_folded=answer_folded,
+            answer_numbers=answer_numbers,
+        )
     )
 
 
@@ -1498,13 +1583,45 @@ def _priority_exact_field_literals(value: str) -> list[str]:
         r"\b(?:seg|cp|mcp)\.[A-Za-z0-9_.-]+",
         r"\b[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+){2,}\b",
         r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b",
-        r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?(?:%|K|km|m)?\b",
+        r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?(?:%|K|km|m)?(?![A-Za-z0-9_])",
     )
     return _dedupe(
         match.group(0)
         for pattern in patterns
         for match in re.finditer(pattern, value, flags=re.IGNORECASE)
     )
+
+
+def _priority_exact_literal_is_present(
+    literal: str,
+    *,
+    answer_folded: str,
+    answer_numbers: set[str],
+) -> bool:
+    if literal.casefold() in answer_folded:
+        return True
+    match = re.fullmatch(
+        r"(?P<number>\d+(?:\.\d+)?)(?P<unit>%|K|km|m)?",
+        literal,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return False
+    number = match.group("number")
+    unit = match.group("unit")
+    if unit is None:
+        return _number_is_grounded(number, answer_numbers)
+    equivalent_values = {
+        found.group("number")
+        for found in re.finditer(
+            rf"(?<![A-Za-z0-9_.])"
+            rf"(?P<number>\d+(?:\.\d+)?)\s*{re.escape(unit)}"
+            rf"(?![A-Za-z0-9_])",
+            answer_folded,
+            flags=re.IGNORECASE,
+        )
+    }
+    return _number_is_grounded(number, equivalent_values)
 
 
 def _grounding_concepts(value: str) -> set[str]:

@@ -262,6 +262,25 @@ def test_cloud_runner_does_not_apply_local_default_token_limit(monkeypatch):
     assert request_settings["timeout"] == 29.0
 
 
+def test_provider_bound_runner_preserves_configured_openrouter_model_id():
+    runner = PydanticAIEnvRunner(
+        model_name="z-ai/glm-5.2",
+        base_url="https://openrouter.ai/api/v1",
+        profile_name="cloud",
+    )
+
+    assert runner._resolved_chat_model_name() == "z-ai/glm-5.2"
+
+
+def test_unbound_runner_keeps_model_policy_alias_resolution():
+    runner = PydanticAIEnvRunner(
+        model_name="z-ai/glm-5.2",
+        profile_name="cloud",
+    )
+
+    assert runner._resolved_chat_model_name() == "nvidia:z-ai/glm-5.2"
+
+
 def test_construction_runner_ignores_stale_cloud_token_override(monkeypatch):
     monkeypatch.setenv("SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE", "1")
     monkeypatch.setenv("SCOUT_AI_CLOUD_MODEL_MAX_TOKENS", "8192")
@@ -1722,6 +1741,36 @@ def test_tool_source_context_summary_omits_raw_invocation_payload():
     assert "raw model query must not escape" not in serialized
     assert "raw tool result must not escape" not in serialized
     assert "sk-raw-tool-secret" not in serialized
+
+
+def test_tool_source_context_summary_preserves_safe_missing_field_names():
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="今天的雨量預計是多少",
+            project_id="bounded-project",
+        ),
+        sources=[],
+    )
+    context.invocations.append(
+        {
+            "tool_id": CWA_ENVIRONMENT_TOOL_ID,
+            "status": "completed",
+            "missing_fields": ["direct_qpf_accumulation_mm"],
+            "field_answer": "raw model-facing answer must not escape",
+            "source_ref": "outputs/environment/cwa/qpf_corridor_summary.json",
+        }
+    )
+
+    ref = context.tool_source_ref(CWA_ENVIRONMENT_TOOL_ID)
+
+    assert ref is not None
+    latest = ref.context_summary["latest"]
+    assert latest["missing_fields"] == ["direct_qpf_accumulation_mm"]
+    assert latest["source_refs"] == [
+        "outputs/environment/cwa/qpf_corridor_summary.json"
+    ]
+    assert "field_answer" not in latest
 
 
 def test_context_reads_are_projected_as_public_response_sources() -> None:
