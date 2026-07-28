@@ -28,6 +28,7 @@ class SkillRegistryTests(unittest.TestCase):
                 "domain-grounded-agent-adaptation",
                 "field-state-short-answer",
                 "gee-environment-assess",
+                "historical-dem-gpx-route-inference",
                 "ins-dr-wearable-route-constrained",
                 "latest-team-position-check",
                 "local-grounded-short-answer",
@@ -139,13 +140,18 @@ class SkillRegistryTests(unittest.TestCase):
             layout.media_quality_gate.missing_visual_policy,
         )
         self.assertEqual(layout.safety_boundary.runtime_safety_truth, False)
+        self.assertIsNotNone(layout.professional_itinerary_gate)
+        assert layout.professional_itinerary_gate is not None
+        self.assertTrue(
+            layout.professional_itinerary_gate["required_when_source_present"]
+        )
         route_context_intelligence = registry.get("route-context-intelligence")
         self.assertEqual(route_context_intelligence.type, "analysis")
         self.assertEqual(route_context_intelligence.activation_gate.mode, "manual")
         self.assertFalse(
             route_context_intelligence.activation_gate.requires_human_approval
         )
-        self.assertEqual(route_context_intelligence.version, "0.1.3")
+        self.assertEqual(route_context_intelligence.version, "0.1.4")
         self.assertIn(
             "route-reference-point-lookup",
             route_context_intelligence.preflight.required_skill_ids,
@@ -246,6 +252,19 @@ class SkillRegistryTests(unittest.TestCase):
         assert route_context_intelligence.output_schema.layout_contract.safety_boundary
         self.assertFalse(
             route_context_intelligence.output_schema.layout_contract.safety_boundary.runtime_safety_truth
+        )
+        professional_gate = (
+            route_context_intelligence.output_schema.layout_contract.professional_itinerary_gate
+        )
+        self.assertIsNotNone(professional_gate)
+        assert professional_gate is not None
+        self.assertIn("route_summary", professional_gate["compare_against"])
+        historical_route = registry.get("historical-dem-gpx-route-inference")
+        self.assertIsNotNone(historical_route.output_schema.safety_boundary)
+        assert historical_route.output_schema.safety_boundary is not None
+        self.assertEqual(
+            historical_route.output_schema.safety_boundary.safe_or_walkable,
+            "not_determined",
         )
         self.assertIsNotNone(route_context_intelligence.application_routing)
         assert route_context_intelligence.application_routing is not None

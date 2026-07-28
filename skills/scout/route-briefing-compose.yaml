@@ -1,5 +1,5 @@
 id: route-briefing-compose
-version: 0.1.0
+version: 0.1.1
 status: experimental
 type: analysis
 priority: 48
@@ -62,6 +62,16 @@ output_schema:
     - visual_kit
     - map_atlas
     - source_tier_spine
+    - route_baseline
+    - permit_lodging_application
+    - segment_itinerary
+    - transport_access
+    - resource_points
+    - water_food_lodging
+    - equipment_readiness
+    - contingency_alternatives
+    - support_vendor_categories
+    - peer_timing_samples
   layout_contract:
     required_sections:
       - visual_agenda
@@ -75,6 +85,18 @@ output_schema:
       - terrain_layer
       - seasonal_layer
       - observation_points
+      - route_baseline
+      - permit_lodging_application
+      - daily_itinerary_options
+      - segment_time_distance_elevation
+      - resource_points
+      - transport_access
+      - water_food_lodging_services
+      - equipment_readiness
+      - contingency_alternatives
+      - support_vendor_categories
+      - peer_timing_samples
+      - professional_itinerary_gap_review
     source_tiers_required:
       - P0
       - P1
@@ -101,6 +123,27 @@ output_schema:
     safety_boundary:
       candidate_only: true
       runtime_safety_truth: false
+    professional_itinerary_gate:
+      required_when_source_present: true
+      section_inventory:
+        - headline route metrics and route grade
+        - summit/objective aliases and metadata
+        - trailhead and access points
+        - permit, lodging, and application windows
+        - 2D/3D or other daily itinerary options
+        - segment distance, time, elevation, and pressure
+        - water, toilet, meal, lodging, and resource points
+        - self-drive, public transport, shuttle, parking, and pre-night lodging
+        - equipment, water carry, navigation, and readiness profile
+        - cautions, closures, weather-shortened plans, and alternative routes
+        - support vendor categories without invented contact details
+        - public peer timing samples as reference evidence only
+      provenance_rule: Every section must carry P0/P1/P2 source refs or an explicit evidence gap.
+      conflict_rule: Fresher P0 official status, permit, lodging, and closure evidence overrides P1 itinerary pages; contradictions become leader review tasks.
+      forbidden_inference:
+        - invented prices, bed counts, permits, vendor names, Line IDs, phone numbers, shuttle availability, booking windows, or open/closed status
+        - converting peer timing samples into required pace or safety decisions
+        - treating itinerary guidance as Contextual Permissioning approval
 failure_policy:
   on_error: record_failure
   retry:

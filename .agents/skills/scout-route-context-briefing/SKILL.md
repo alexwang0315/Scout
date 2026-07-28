@@ -113,6 +113,28 @@ PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python tools/verify_pretrip_workspace_spec_
 
 Structure generated route context briefings around:
 
+- route baseline: route name aliases, route class/difficulty, distance,
+  ascent/descent, elevation range, route region, entry/exit trailheads, summit
+  or objective list, and recommended days.
+- permit/lodging/application layer: required permits, application windows,
+  lodging/campsite capacity, booking/opening windows, meal/water services,
+  official status page, and stale-status warnings.
+- itinerary operations layer: 2D/3D or other common itinerary options, daily
+  start times, segment distance/time/elevation, rest/resource points,
+  day-by-day pressure, and turnaround or shorten conditions.
+- access/transport layer: self-drive access, public transport limitations,
+  shuttle/taxi needs, trailhead parking, pre-night lodging town/settlement, and
+  post-trip recovery options when sourced.
+- equipment/readiness layer: water carry, food/meal plan, headlamp/mid-layer,
+  shelter/camp needs, weather/season gear, navigation level, and target hiker
+  profile.
+- contingency/business layer: alternative routes, route closure responses,
+  weather-shortened plans, vendor/shuttle/guide/lodging support categories, and
+  cancellation/refund or rescheduling notes when the source is an activity
+  provider page.
+- peer timing layer: public completed-trip time samples, pace coefficients,
+  route popularity, and completion distribution only when sourced and presented
+  as reference evidence, never as a normative pace requirement.
 - historical layer: old routes, guard roads, police posts, logging roads, old settlements, historical facilities.
 - cultural layer: indigenous place names, old communities, hunting trails, local stories, land-use changes.
 - natural layer: forest type, vegetation belt, plants, birds, streams, geology.
@@ -163,6 +185,10 @@ not fall back to a source table or engineering report:
 - map atlas: include a real route overview/map image when available, plus route scale, elevation range, bbox span, and P0/P1/P2 map evidence cards so the route feels broad and spatially grounded.
 - source tier spine: show P0 official baseline, P1 expansion evidence, and P2 Scout-owned review data as separate visible cards before the detailed source table.
 - six context layers: historical, cultural, natural, terrain, seasonal, and observation points must each have a briefing card or an explicit missing-evidence state.
+- professional itinerary spine: include sourced baseline metrics, permit/lodging
+  application status, daily itinerary options, segment time/distance/elevation,
+  transport/access, water/meal/lodging services, gear/readiness, contingency
+  choices, and peer timing samples when available.
 - color direction: use a bold expedition palette with dark ground, ember/red action accents, signal yellow, and high-contrast map/source panels. Keep Scout safety boundary text clear and do not hide candidate-only status.
 - public/share variants must redact private P2 details, but Scout-local/admin briefings should still show that P2 exists and what category/review state it has.
 
@@ -170,6 +196,54 @@ For product-visible labels, translate those internal slots into itinerary
 language: entry/ridge view, full-route direction map, lodging/intermediate
 points, terrain passage, short observation point, and weather/season
 conditions.
+
+## Professional Itinerary Intelligence Gate
+
+When comparing Scout Route Context output with a professional itinerary or route
+encyclopedia page, treat the following fields as first-class briefing coverage,
+not optional prose. The Samejan Travel Chilai Nanhua page is an example of this
+content shape: headline metrics, route grade, application rules, daily
+itinerary, segment details, resource points, transportation, cautions,
+highlights, alternatives, support vendors, and public completion samples.
+
+Required behavior:
+
+- Extract the professional page's section inventory before synthesis. At
+  minimum check for: route metrics, route grade, route aliases, summit/objective
+  metadata, trailheads, application/permit/lodging rules, itinerary variants,
+  segment-by-segment distance/time/elevation, water/resource/service points,
+  transportation/access, lodging/pre-night/post-trip logistics,
+  equipment/readiness, caution list, route highlights, alternative or shortened
+  routes, support vendor categories, and public completed-trip timing samples.
+- Compare that inventory against existing Scout artifacts:
+  `route_context_pack`, `route_context_points`, `source_manifest`,
+  `media_manifest`, route summary, P2 Scout-owned evidence, and rendered
+  briefing HTML.
+- Add missing professional-itinerary fields to the briefing as sourced
+  candidate sections or explicit evidence gaps. Do not hide gaps behind a fluent
+  route story.
+- Keep P0/P1/P2 provenance for each field. Official route status, permit,
+  lodging, closure, price, and booking-window facts should prefer P0 official
+  sources; P1 professional/community pages may supplement but must not override
+  fresher P0 evidence.
+- Never invent or normalize vendor names, Line IDs, phone numbers, prices,
+  booking windows, bed counts, shuttle availability, or public transport
+  details. If a source is login-gated or redacted, show the support category
+  and the review task, not fake contact details.
+- Distinguish activity planning from on-route permission. Itinerary sections may
+  say what operators commonly plan, but stopping, detouring, waiting, taking
+  photos, or continuing still requires Contextual Permissioning and current
+  conditions.
+- Treat public peer timing samples as evidence of route variability. They can
+  inform pace-fit review, but they cannot become a required pace, safety
+  decision, or user ranking.
+- For route-open/closed status, record retrieval date and source freshness. If a
+  professional P1 page conflicts with a newer P0 official status page, surface
+  the contradiction and require leader review.
+- For Scout-local/admin briefings, include a concise comparison table:
+  professional-itinerary field, Scout coverage status, source tier, evidence
+  ref, and next action. Public/share variants may collapse this into a leader
+  review checklist.
 
 ## Media Quality Gate
 
