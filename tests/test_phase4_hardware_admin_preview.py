@@ -928,6 +928,8 @@ def test_phase4_admin_dockerfile_runs_admin_app_not_field_runtime() -> None:
     assert "scout_cli.py" in source
     assert "scout_agent_cli.py" in source
     assert "scout_agent_runtime.py" in source
+    assert "assistant_weather_preparation.py" in source
+    assert "dashboard_connected_preparation.py" in source
     assert "tools/pi_wio_e5_lorawan_uplink_trial_plan.py" in source
     assert "tools/pi_wio_e5_lorawan_rf_trial.py" in source
     assert "tools/pi_wio_e5_chirpstack_join_audit.py" in source
@@ -990,6 +992,8 @@ def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets()
     assert "!scout_cli.py" in dockerignore
     assert "!scout_agent_cli.py" in dockerignore
     assert "!scout_agent_runtime.py" in dockerignore
+    assert "!assistant_weather_preparation.py" in dockerignore
+    assert "!dashboard_connected_preparation.py" in dockerignore
     assert "!scout_hardware_readiness_live_probe.py" in dockerignore
     assert "!scout_sx1303_gateway_observer.py" in dockerignore
     assert "!tools/pi_sx1303_gateway_smoke.py" in dockerignore

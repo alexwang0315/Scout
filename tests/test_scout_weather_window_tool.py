@@ -410,6 +410,80 @@ def test_weather_window_downgrades_expired_route_weather_package(
     assert any("past valid_until" in item for item in result["warnings"])
 
 
+def test_weather_window_tool_adapts_fresh_preparation_artifacts(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_fresh_prepared_weather_project(
+        tmp_path,
+        include_direct_qpf=True,
+        include_route_interaction=True,
+    )
+
+    result = assess_scout_weather_window(
+        project_root,
+        query="今天的雨量預計是多少，是否需要改變行程？",
+        reference_time="2099-06-07T09:00:00Z",
+    )
+
+    assert result["answerability"] == "route_weather_risk_available"
+    assert result["source_status"] == "candidate_only"
+    assert result["external_api_calls_made"] is True
+    assert result["missing_fields"] == []
+    assert result["decision"] == "NO_GO"
+    assert result["risk_summary"]["segment_count"] == 1
+    assert result["results"][0]["segment_id"] == "seg.ridge.001"
+    assert "THUNDER_RIDGE" in result["results"][0]["factors"]
+    assert "42.5 mm" in result["weather_window"]["summary"]
+    assert result["weather_window"]["source_status"] == (
+        "server_side_fresh_preparation"
+    )
+    assert result["field_answer_priority"] == 90
+    assert result["field_answer_source_ref"] == (
+        "outputs/environment/cwa/qpf_corridor_summary.json"
+    )
+    assert {
+        item["source_kind"]
+        for item in result["source_report"]
+        if item["status"] == "loaded"
+    } >= {
+        "route_weather_risk_package",
+        "cwa_weather_evidence",
+        "cwa_qpf_corridor_summary",
+        "fresh_weather_decision_adapter",
+    }
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_weather_window_tool_reports_fresh_qpf_gap_without_legacy_cache(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_fresh_prepared_weather_project(
+        tmp_path,
+        include_direct_qpf=False,
+        include_route_interaction=False,
+    )
+
+    result = assess_scout_weather_window(
+        project_root,
+        query="今天的雨量預計是多少，是否需要改變行程？",
+        reference_time="2099-06-07T09:00:00Z",
+    )
+
+    assert result["answerability"] == "route_weather_risk_partial"
+    assert result["external_api_calls_made"] is True
+    assert result["decision"] == "DELAY"
+    assert result["searched_segment_count"] == 0
+    assert result["missing_fields"] == ["direct_qpf_accumulation_mm"]
+    assert "route_weather_package" not in result["missing_fields"]
+    assert "route_weather_segments" not in result["missing_fields"]
+    assert "30%" in result["weather_window"]["summary"]
+    assert "direct QPF" in result["field_answer"]
+    assert result["field_answer_source_ref"] == (
+        "outputs/environment/cwa/qpf_corridor_summary.json"
+    )
+    assert result["boundary"]["runtime_safety_truth"] is False
+
+
 def _write_route_weather_project(
     tmp_path: Path,
     *,
@@ -467,6 +541,139 @@ def _write_route_weather_project(
             },
             ensure_ascii=False,
         ),
+        encoding="utf-8",
+    )
+    return project_root
+
+
+def _write_fresh_prepared_weather_project(
+    tmp_path: Path,
+    *,
+    include_direct_qpf: bool,
+    include_route_interaction: bool,
+) -> Path:
+    project_root = tmp_path / "fresh-prepared-weather-project"
+    cwa_root = project_root / "outputs" / "environment" / "cwa"
+    cwa_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "fresh_prepared_weather_project",
+                "route_weather_risk_package_ref": (
+                    "outputs/route_weather_risk_package.json"
+                ),
+                "cwa_weather_evidence_ref": (
+                    "outputs/environment/cwa/cwa_weather_evidence.json"
+                ),
+                "cwa_qpf_corridor_summary_ref": (
+                    "outputs/environment/cwa/qpf_corridor_summary.json"
+                ),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    interactions = (
+        [
+            {
+                "ruleCode": "THUNDER_RIDGE",
+                "segmentId": "seg.ridge.001",
+                "teii_20m": 91,
+                "weatherConfidence": 0.82,
+                "terrainSourceRefs": ["outputs/risk/risk_score_points.geojson"],
+                "candidateOnly": True,
+                "runtimeSafetyTruth": False,
+            }
+        ]
+        if include_route_interaction
+        else []
+    )
+    (project_root / "outputs" / "route_weather_risk_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "route_weather_risk_package",
+                "artifactVersion": "route_weather_risk_package.v1",
+                "routeId": "fixture-route",
+                "generatedAt": "2099-06-07T08:00:00Z",
+                "status": "candidate_only",
+                "imageryFeatures": {
+                    "currentRainOnRoute": include_route_interaction,
+                    "nearbyStrongEcho": include_route_interaction,
+                    "rainBandApproaching": include_route_interaction,
+                    "convectiveCellScore": 0.88 if include_route_interaction else 0.1,
+                    "confidence": 0.82,
+                },
+                "weatherTerrainInteractions": interactions,
+                "humanReviewRequired": True,
+                "boundary": {
+                    "candidateOnly": True,
+                    "runtimeSafetyTruth": False,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (cwa_root / "cwa_weather_evidence.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "cwa_weather_environment_evidence",
+                "status": "ready",
+                "provider": "cwa_opendata",
+                "fetched_at": "2099-06-07T08:00:00Z",
+                "valid_from": "2099-06-07T08:00:00Z",
+                "valid_to": "2099-06-08T08:00:00Z",
+                "valid_until": "2099-06-08T08:00:00Z",
+                "external_api_calls_made": True,
+                "datasets": [
+                    {"dataset_id": "F-C0032-001", "status": "ready"},
+                    *(
+                        [{"dataset_id": "F-C0041-001", "status": "ready"}]
+                        if include_direct_qpf
+                        else []
+                    ),
+                ],
+                "weather_points": [
+                    {
+                        "areaName": "南投縣",
+                        "rainProbability": 80 if include_direct_qpf else 30,
+                        "validFrom": "2099-06-07T12:00:00",
+                        "validTo": "2099-06-07T18:00:00",
+                        "weatherText": "午後短暫雷陣雨",
+                    }
+                ],
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    qpf_payload = {
+        "artifact_kind": "cwa_qpf_corridor_summary",
+        "status": "ready",
+        "fetched_at": "2099-06-07T08:00:00Z",
+        "valid_from": "2099-06-07T08:00:00Z",
+        "valid_to": "2099-06-08T08:00:00Z",
+        "valid_until": "2099-06-08T08:00:00Z",
+        "max_rain_probability": 80 if include_direct_qpf else 30,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    if include_direct_qpf:
+        qpf_payload.update(
+            {
+                "max_mm": 42.5,
+                "mean_mm": 18.2,
+                "p95_mm": 38.1,
+                "peak_window": "2099-06-07T12:00:00Z/2099-06-07T18:00:00Z",
+                "qpf_update_cadence": "regular_6h",
+            }
+        )
+    (cwa_root / "qpf_corridor_summary.json").write_text(
+        json.dumps(qpf_payload, ensure_ascii=False),
         encoding="utf-8",
     )
     return project_root

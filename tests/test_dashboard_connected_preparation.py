@@ -181,6 +181,49 @@ def test_connected_preparation_trigger_is_single_flight_and_schedules_refresh(
     assert _RecordedTimer.created[0].started is True
 
 
+def test_connected_preparation_refresh_for_assistant_completes_before_return(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+    _RecordedTimer.created.clear()
+    call_count = 0
+
+    def fake_runner(_: Any) -> dict[str, Any]:
+        nonlocal call_count
+        call_count += 1
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        cache_root=tmp_path / "outside-cache",
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        timer_factory=_RecordedTimer,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.refresh_for_assistant(
+        "fixture-route",
+        reason="scout-ai-weather-decision",
+    )
+
+    assert call_count == 1
+    assert status["status"] == "ready"
+    assert status["requestActivityState"] == "complete"
+    assert status["reason"] == "scout-ai-weather-decision"
+    assert status["runCount"] == 1
+    assert status["nextRunAt"] == "2026-07-23T03:10:00+00:00"
+    assert len(_RecordedTimer.created) == 1
+    assert _RecordedTimer.created[0].started is True
+
+
 def test_connected_preparation_reports_in_progress_without_false_call_results(
     tmp_path: Path,
 ) -> None:

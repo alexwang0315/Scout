@@ -550,6 +550,80 @@ def test_provenance_repair_prefers_high_priority_field_answer_source() -> None:
     )
 
 
+def test_evidence_card_index_citations_resolve_to_preferred_source_refs() -> None:
+    runtime = BoundedAgentRuntime()
+    weather = EvidenceCard(
+        tool_id="scout.ai.weather_window.assess.v0",
+        claim_summary="Weather package fields are unavailable.",
+        source_refs=["outputs/route_weather_package.reviewed.json"],
+    )
+    qpf_ref = "outputs/environment/cwa/qpf_corridor_summary.json"
+    cwa = EvidenceCard(
+        tool_id="scout.ai.cwa_environment.assess.v0",
+        claim_summary="Direct QPF corridor summary is available.",
+        key_values={
+            "field_answer": "QPF max is 32.0 mm.",
+            "field_answer_priority": 100,
+            "field_answer_source_ref": qpf_ref,
+        },
+        source_refs=["outputs/environment/cwa/evidence.json", qpf_ref],
+    )
+
+    normalized = runtime.normalize_evidence_citations(
+        "天氣套件欄位不完整 [evidence:0]；QPF max 為 32.0 mm 【card:1】。",
+        evidence_cards=[weather, cwa],
+    )
+    unresolved = runtime.normalize_evidence_citations(
+        "未知卡片 [evidence:9]。",
+        evidence_cards=[weather, cwa],
+    )
+
+    assert normalized == (
+        "天氣套件欄位不完整 [outputs/route_weather_package.reviewed.json]；"
+        f"QPF max 為 32.0 mm [{qpf_ref}]。"
+    )
+    assert unresolved == "未知卡片 [evidence:9]。"
+
+
+def test_redundant_evidence_source_prefix_and_equivalent_number_are_grounded() -> None:
+    runtime = BoundedAgentRuntime()
+    qpf_ref = "outputs/environment/cwa/qpf_corridor_summary.json"
+    evidence = EvidenceCard(
+        tool_id="scout.ai.cwa_environment.assess.v0",
+        claim_summary="Direct QPF is unavailable; peak rain probability is 30.0%.",
+        key_values={
+            "field_answer": (
+                "Direct QPF is unavailable; peak rain probability is 30.0%."
+            ),
+            "field_answer_priority": 100,
+            "field_answer_source_ref": qpf_ref,
+        },
+        source_refs=[qpf_ref],
+    )
+    answer = (
+        "直接 QPF 不可用；降雨機率峰值為 30% "
+        f"[evidence:{qpf_ref}]。"
+    )
+
+    normalized = runtime.normalize_evidence_citations(
+        answer,
+        evidence_cards=[evidence],
+    )
+    labeled = runtime.normalize_evidence_citations(
+        f"降雨機率峰值為 30% [source_ref:{qpf_ref}]。",
+        evidence_cards=[evidence],
+    )
+    verification = runtime.verify_synthesis(
+        normalized,
+        evidence_cards=[evidence],
+    )
+
+    assert normalized.endswith(f"[{qpf_ref}]。")
+    assert labeled.endswith(f"[{qpf_ref}]。")
+    assert verification.passed is True
+    assert verification.repair_items == []
+
+
 def test_provenance_repair_cites_all_lines_of_one_priority_exact_answer() -> None:
     runtime = BoundedAgentRuntime()
     direct_ref = (

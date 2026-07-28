@@ -106,6 +106,7 @@ class DashboardConnectedPreparationManager:
         self.timer_factory = timer_factory
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self._lock = threading.RLock()
+        self._state_changed = threading.Condition(self._lock)
         self._states: dict[str, dict[str, Any]] = {}
         self._timers: dict[str, Any] = {}
         self._stopped = False
@@ -162,16 +163,69 @@ class DashboardConnectedPreparationManager:
         self._validated_project_root(project_id)
         return self._execute(project_id, reason=reason)
 
+    def refresh_for_assistant(
+        self,
+        project_id: str,
+        *,
+        reason: str = "scout-ai-weather-decision",
+    ) -> dict[str, Any]:
+        """Synchronously join or run one fresh preparation before AI answering."""
+
+        self._validated_project_root(project_id)
+        with self._state_changed:
+            if self._stopped:
+                raise RuntimeError("connected preparation manager is stopped")
+            current = self._states.get(project_id)
+            if current and current.get("status") in {"queued", "running"}:
+                self._state_changed.wait_for(
+                    lambda: self._stopped
+                    or (
+                        self._states.get(project_id, {}).get("status")
+                        not in {"queued", "running"}
+                    )
+                )
+                if self._stopped:
+                    raise RuntimeError("connected preparation manager is stopped")
+                return {
+                    **self.snapshot(project_id),
+                    "joinedExistingRun": True,
+                }
+            timer = self._timers.pop(project_id, None)
+            if timer is not None:
+                timer.cancel()
+            queued_at = self._now().isoformat()
+            self._states[project_id] = {
+                **self._base_status(project_id),
+                **(current or {}),
+                "status": "queued",
+                "requestActivityState": "in-progress",
+                "cwaApiRequestAttempted": None,
+                "externalApiCallsMade": None,
+                "networkCallsMade": None,
+                "reason": _safe_reason(reason),
+                "queuedAt": queued_at,
+                "completedAt": None,
+                "lastError": None,
+                "nextRunAt": None,
+            }
+        self._execute(project_id, reason=reason)
+        self._schedule_next(project_id)
+        return {
+            **self.snapshot(project_id),
+            "joinedExistingRun": False,
+        }
+
     def snapshot(self, project_id: str) -> dict[str, Any]:
         self._validated_project_root(project_id)
         with self._lock:
             return dict(self._states.get(project_id) or self._base_status(project_id))
 
     def stop(self) -> None:
-        with self._lock:
+        with self._state_changed:
             self._stopped = True
             timers = list(self._timers.values())
             self._timers.clear()
+            self._state_changed.notify_all()
         for timer in timers:
             timer.cancel()
 
@@ -223,9 +277,10 @@ class DashboardConnectedPreparationManager:
                     "message": "Connected preparation failed; inspect redacted server diagnostics.",
                 },
             }
-        with self._lock:
+        with self._state_changed:
             prior_runs = int((self._states.get(project_id) or {}).get("runCount") or 0)
             self._states[project_id] = {**result, "runCount": prior_runs + 1}
+            self._state_changed.notify_all()
             return dict(self._states[project_id])
 
     def _schedule_next(self, project_id: str) -> None:

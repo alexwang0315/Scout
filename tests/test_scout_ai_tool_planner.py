@@ -580,6 +580,20 @@ def test_planner_adds_cwa_environment_for_natural_weather_questions() -> None:
     assert GEE_ENVIRONMENT_TOOL_ID not in tool_ids
 
 
+def test_planner_treats_expected_rainfall_as_weather_value_not_record_count() -> None:
+    plan = plan_scout_ai_tools(
+        _query("今天的雨量預計是多少"),
+        project_root=PROJECT_ROOT,
+    )
+
+    tool_ids = _tool_ids(plan)
+    assert WEATHER_WINDOW_TOOL_ID in tool_ids
+    assert CWA_ENVIRONMENT_TOOL_ID in tool_ids
+    assert WORKSPACE_QUERY_TOOL_ID not in tool_ids
+    assert plan.question_class == QuestionClass.STATIC_WORKSPACE_FACT
+    assert plan.expected_operations == []
+
+
 def test_planner_adds_gee_for_rain_hydrology_weather_compound_questions() -> None:
     for question in (
         "溪水暴漲會不會阻斷路線？",

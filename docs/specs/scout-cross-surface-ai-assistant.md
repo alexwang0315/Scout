@@ -337,6 +337,26 @@ Startup behavior:
 - if provider startup or runtime execution fails, return a safe read-only
   assistant error response and leave the source surface unaffected.
 
+Provider-neutral execution rule:
+
+- Scout core, tool planning, evidence collection, verification, and shared eval
+  executors depend on a model-runner/adapter contract, not on Hailo, Ollama,
+  OpenRouter, NVIDIA, OpenAI, or another provider-specific interface;
+- cloud and local profiles may be configured and available on the same Scout
+  host. The request's runtime preference and failover policy select an explicit
+  execution target for each model request;
+- AI HAT+ 2 / Hailo Ollama is one explicit `local` adapter. It must never be the
+  hidden default of a shared executor, and its prompt packing or transport
+  constraints must remain inside that adapter;
+- OpenRouter, NVIDIA, direct OpenAI-compatible, and future providers use their
+  own adapters without passing through the Hailo adapter;
+- one request normally uses one selected target. Calling cloud and local for the
+  same answer requires an explicit dual-review policy rather than accidental
+  duplicate execution;
+- every response/eval trace records `model_adapter_id`, `model_profile`,
+  `provider`, and `model_transport`, plus failover provenance when failover
+  occurs. Provider secrets are never part of this metadata.
+
 ### 4.1. Milestone 10.2: Cloud-to-Local Assistant Failover Guardrail
 
 This follow-up guardrail connects the assistant provider contract to the Pi 5

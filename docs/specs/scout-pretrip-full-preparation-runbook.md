@@ -456,6 +456,59 @@ timer described above. It is intentionally not installed as a Login Item,
 LaunchAgent, cron job, Pi worker, or mobile worker; a durable OS-level schedule
 still requires a separate deployment review and approval.
 
+### Scout AI Weather-Decision Fresh Preparation
+
+Dashboard-mounted Scout AI queries now reuse the same server coordinator before
+Pydantic AI receives a weather-decision question. The assistant runs its normal
+registry-backed tool planner first; only plans containing
+`scout.ai.weather_window.assess.v0` enter this path.
+
+The order is fixed:
+
+```text
+weather-decision question
+-> synchronous single-flight connected preparation
+-> fresh CWA/GEE/route-weather artifacts
+-> assistant context resolution
+-> Weather-to-Decision tool execution
+-> grounded answer synthesis
+```
+
+An assistant request joins an already queued/running preparation rather than
+starting a second provider fetch. Otherwise it runs one fresh preparation and
+waits for its completed `ready`, `partial`, or `failed` status before tool
+execution. The public assistant source
+`assistant_context.weather_decision_fresh_preparation` exposes only redacted
+status, timestamps, component states, relative artifact refs, and
+candidate-only boundaries. It never exposes credential values, env contents,
+absolute cache paths, or provider request authorization.
+
+If preparation fails or completes without observed external calls, the source
+is marked unavailable or stale/unverified. Weather-to-Decision still executes
+against the workspace so it can report the precise evidence gap, but it must
+not treat the previous cache as fresh or infer zero rain. This path does not
+call `/safety/*`, send outbound messages, or control hardware.
+
+Weather-to-Decision must accept both the legacy `route_weather_package_ref` and
+the current preparation outputs:
+
+- `route_weather_risk_package_ref`;
+- `cwa_weather_evidence_ref`;
+- `cwa_qpf_corridor_summary_ref`.
+
+The current artifacts are normalized in memory into the Weather-to-Decision
+contract; the assistant does not duplicate or promote them into a new workspace
+truth artifact. Provider, issued/valid timestamps, TTL, external-call state,
+route-corridor summary, and weather-terrain interactions must retain their
+source refs. If preparation is fresh but only forecast rain probability exists,
+the tool reports `direct_qpf_accumulation_mm` as missing. It must not convert a
+30% probability into millimetres or treat it as zero rain.
+
+A synchronous assistant refresh also installs the coordinator's normal
+`nextRunAt` timer after completion. Without this step, a Dashboard poll can see
+an empty schedule and immediately launch a duplicate full preparation while
+the model is answering.
+
 Dashboard connected refresh requests only the provider-backed layers needed to
 refresh Overpass, CWA, and GEE evidence. Existing GPX, route, terrain, and TEII
 artifacts stay in the workspace and remain inputs to rainfall grids, imagery
@@ -2977,3 +3030,36 @@ New regression coverage reproduces stale embedded project ids, same-run
 alignment ordering, pair mixing, unregistered location approval, absolute /
 parent / symlink ref escape, debug-projection project mismatch, stale UI truth,
 project switching, mobile drawer accessibility, and fixture project aliasing.
+
+## Local Dashboard workspace binding check
+
+When `/admin/dashboard?projectId=<project_id>` renders its shell but Map,
+Timeline Evidence, Navigation, and Weather cannot load workspace data, check the
+server entrypoint before diagnosing the workspace artifacts.
+
+`admin_api:create_admin_app --factory` without an injected
+`pretrip_workspace_root` exposes repository fixtures only. A real workspace id
+will then return `404 Pre-trip project not found`, even when
+`<workspace_root>/<project_id>/project.json` exists. For a local prepared
+workspace preview, launch the Phase 4 runtime with the workspace parent root:
+
+```bash
+SCOUT_PRETRIP_WORKSPACE_ROOT=/Users/alexwang0315/workspace \
+  ./venv/bin/python -m uvicorn \
+  phase4_admin_runtime:create_phase4_admin_runtime_app \
+  --factory --host 127.0.0.1 --port 9099
+```
+
+Verify the binding before opening the Dashboard:
+
+```bash
+curl http://127.0.0.1:9099/admin/pretrip/projects
+curl "http://127.0.0.1:9099/admin/pretrip/projects/<project_id>?compact=1"
+```
+
+The first response must list the requested project and the second must return
+HTTP 200. A valid Dashboard URL is then:
+
+```text
+http://127.0.0.1:9099/admin/dashboard?projectId=<project_id>
+```

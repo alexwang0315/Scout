@@ -61,6 +61,8 @@ COPY \
     assistant_provider.py \
     assistant_readiness_check.py \
     assistant_skill_router.py \
+    assistant_weather_preparation.py \
+    dashboard_connected_preparation.py \
     assistant_workspace_total_info.py \
     checkpoint_manager.py \
     communication_provider.py \

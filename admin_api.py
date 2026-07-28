@@ -12,7 +12,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Mapping
 from urllib.parse import quote
 from xml.etree.ElementTree import ParseError
 
@@ -200,6 +200,9 @@ DEFAULT_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
 DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 DEFAULT_DEBUG_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
 DEFAULT_SCOUT_DASHBOARD_PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
+DEFAULT_DASHBOARD_ASSISTANT_CONFIG = (
+    ROOT / "configs" / "assistant-models.dashboard-aihat2.json"
+)
 DEFAULT_EMERGENCY_MOBILE_APPROVAL_PAGE = (
     ROOT / "docs" / "emergency" / "scout-emergency-mobile-approval-v0.html"
 )
@@ -2161,6 +2164,136 @@ def create_admin_app(
     if hasattr(resolved_connected_preparation_manager, "stop"):
         app.router.on_shutdown.append(resolved_connected_preparation_manager.stop)
     return app
+
+
+def create_dashboard_app(
+    *,
+    incident_store_path: Path | None = None,
+    pretrip_workspace_root: Path | None = None,
+    living_sandbox_store_root: Path | None = None,
+    alpha_sandbox_enabled: bool | None = None,
+    route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
+    route_context_briefing_variants_runner_factory: (
+        Callable[[str, int], Any] | None
+    ) = None,
+    now_factory: Callable[[], datetime] | None = None,
+    connected_preparation_manager: Any | None = None,
+    assistant_enabled: bool | None = None,
+    assistant_provider: Any | None = None,
+    assistant_environ: Mapping[str, str] | None = None,
+) -> FastAPI:
+    """Create the Mac/dashboard server with the real Scout Assistant API mounted."""
+
+    if assistant_environ is None:
+        load_scout_env_files(repo_root=ROOT)
+    resolved_environ = dict(os.environ if assistant_environ is None else assistant_environ)
+    resolved_workspace_root = _dashboard_workspace_root(
+        pretrip_workspace_root,
+        resolved_environ,
+    )
+    app = create_admin_app(
+        incident_store_path=incident_store_path,
+        pretrip_workspace_root=resolved_workspace_root,
+        living_sandbox_store_root=living_sandbox_store_root,
+        alpha_sandbox_enabled=alpha_sandbox_enabled,
+        route_context_briefing_ai_runner=route_context_briefing_ai_runner,
+        route_context_briefing_variants_runner_factory=(
+            route_context_briefing_variants_runner_factory
+        ),
+        now_factory=now_factory,
+        connected_preparation_manager=connected_preparation_manager,
+    )
+    resolved_assistant_enabled = (
+        assistant_enabled
+        if assistant_enabled is not None
+        else _true_like(resolved_environ.get("SCOUT_AI_ASSISTANT_ENABLED", "1"))
+    )
+    if not resolved_assistant_enabled:
+        app.state.assistant_api_mounted = False
+        return app
+
+    from assistant_api import (
+        create_assistant_provider_from_env,
+        create_assistant_provider_status,
+        create_assistant_router,
+    )
+    from assistant_context import create_assistant_context_resolver
+
+    provider_environ = dict(resolved_environ)
+    if resolved_workspace_root is not None:
+        provider_environ.setdefault(
+            "SCOUT_PRETRIP_WORKSPACE_ROOT",
+            str(resolved_workspace_root),
+        )
+    if assistant_provider is None:
+        provider_environ.setdefault("SCOUT_AI_ASSISTANT_PROVIDER", "pydantic_ai")
+        if (
+            "SCOUT_AI_ASSISTANT_CONFIG_PATH" not in provider_environ
+            and DEFAULT_DASHBOARD_ASSISTANT_CONFIG.exists()
+        ):
+            provider_environ["SCOUT_AI_ASSISTANT_CONFIG_PATH"] = str(
+                DEFAULT_DASHBOARD_ASSISTANT_CONFIG
+            )
+    provider = assistant_provider or create_assistant_provider_from_env(
+        provider_environ
+    )
+    resolved_connected_preparation_manager = getattr(
+        app.state,
+        "connected_preparation_manager",
+        None,
+    )
+    weather_query_preparation = None
+    if (
+        resolved_workspace_root is not None
+        and resolved_connected_preparation_manager is not None
+    ):
+        from assistant_weather_preparation import (
+            WeatherDecisionFreshPreparation,
+        )
+
+        weather_query_preparation = WeatherDecisionFreshPreparation(
+            manager=resolved_connected_preparation_manager,
+            workspace_root=resolved_workspace_root,
+        )
+    live_navigation_evidence_dir = provider_environ.get(
+        "SCOUT_SENSORLOGGER_MQTT_EVIDENCE_DIR"
+    )
+    app.include_router(
+        create_assistant_router(
+            provider=provider,
+            context_resolver=create_assistant_context_resolver(
+                pretrip_workspace_root=resolved_workspace_root,
+                live_navigation_evidence_dir=live_navigation_evidence_dir,
+            ),
+            provider_status=create_assistant_provider_status(
+                provider=provider,
+                environ=provider_environ,
+            ),
+            query_preparation=weather_query_preparation,
+        )
+    )
+    app.state.assistant_api_mounted = True
+    app.state.assistant_provider = provider
+    app.state.assistant_workspace_root = resolved_workspace_root
+    app.state.assistant_weather_query_preparation = weather_query_preparation
+    return app
+
+
+def _dashboard_workspace_root(
+    explicit_root: Path | None,
+    environ: Mapping[str, str],
+) -> Path | None:
+    if explicit_root is not None:
+        return Path(explicit_root).expanduser()
+    configured = str(environ.get("SCOUT_PRETRIP_WORKSPACE_ROOT") or "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    conventional_root = Path.home() / "workspace"
+    return conventional_root if conventional_root.exists() else None
+
+
+def _true_like(value: str | None) -> bool:
+    return str(value or "").strip().casefold() in {"1", "true", "yes", "y", "on"}
 
 
 def create_admin_router(

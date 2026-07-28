@@ -4,6 +4,7 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Callable
 from fastapi import APIRouter, FastAPI
 
 from assistant_context import AssistantContextResolver, query_source_refs
@@ -31,12 +32,18 @@ from assistant_skill_router import (
     resolve_assistant_query_with_skill,
 )
 
+AssistantQueryPreparation = Callable[
+    [ScoutAssistantQuery],
+    AssistantSourceRef | None,
+]
+
 
 def create_assistant_app(
     *,
     provider: ScoutAssistantProvider | None = None,
     context_resolver: AssistantContextResolver | None = None,
     provider_status: dict[str, object] | None = None,
+    query_preparation: AssistantQueryPreparation | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Scout Cross-Surface Assistant API")
     app.include_router(
@@ -44,6 +51,7 @@ def create_assistant_app(
             provider=provider,
             context_resolver=context_resolver,
             provider_status=provider_status,
+            query_preparation=query_preparation,
         )
     )
     return app
@@ -54,6 +62,7 @@ def create_assistant_router(
     provider: ScoutAssistantProvider | None = None,
     context_resolver: AssistantContextResolver | None = None,
     provider_status: dict[str, object] | None = None,
+    query_preparation: AssistantQueryPreparation | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/assistant", tags=["assistant"])
     resolved_provider = provider or MockAssistantProvider()
@@ -65,7 +74,12 @@ def create_assistant_router(
     @router.post("/query")
     def query_assistant(query: ScoutAssistantQuery) -> ScoutAssistantResponse:
         started_at = time.perf_counter()
+        preparation_source = (
+            query_preparation(query) if query_preparation is not None else None
+        )
         sources = resolved_context(query)
+        if preparation_source is not None:
+            sources = [preparation_source, *sources]
         return answer_assistant_query_safely(
             resolved_provider,
             query,
@@ -75,7 +89,13 @@ def create_assistant_router(
 
     @router.get("/status")
     def assistant_status() -> dict[str, object]:
-        return dict(resolved_provider_status)
+        status = dict(resolved_provider_status)
+        status["startup_connection_status"] = getattr(
+            resolved_provider,
+            "startup_connection_status",
+            status.get("startup_connection_status", "not_checked"),
+        )
+        return status
 
     return router
 
@@ -942,6 +962,10 @@ def create_assistant_provider_from_env(
     )
 
     config_path = resolved_environ.get("SCOUT_AI_ASSISTANT_CONFIG_PATH")
+    workspace_root_value = resolved_environ.get("SCOUT_PRETRIP_WORKSPACE_ROOT")
+    pretrip_workspace_root = (
+        Path(workspace_root_value).expanduser() if workspace_root_value else None
+    )
     if config_path:
         from assistant_model_config import load_assistant_model_config
 
@@ -955,6 +979,7 @@ def create_assistant_provider_from_env(
                 runner=runner,
                 timeout_seconds=model_config.effective_timeout_seconds(),
                 max_context_chars=model_config.effective_max_context_chars(),
+                pretrip_workspace_root=pretrip_workspace_root,
             )
             if model_config.connect_on_startup:
                 _connect_provider_safely(provider)
@@ -992,6 +1017,7 @@ def create_assistant_provider_from_env(
         runner=pydantic_runner or PydanticAIEnvRunner(),
         timeout_seconds=timeout_seconds,
         max_context_chars=max_context_chars,
+        pretrip_workspace_root=pretrip_workspace_root,
     )
     return provider
 

@@ -2,7 +2,7 @@
   "active_profile": "cloud",
   "cloud_model": {
     "profile": "cloud",
-    "model_name": "z-ai/glm-5.2",
+    "model_name": "deepseek/deepseek-v3.2",
     "base_url": "https://openrouter.ai/api/v1",
     "backend": "openai_compatible",
     "token_id": "operator-managed-openrouter-token",

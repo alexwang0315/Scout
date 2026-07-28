@@ -237,14 +237,6 @@ def assess_scout_cwa_environment(
         stale_after_hours=stale_hours,
         reference_time=reference_now,
     )
-    effective_missing_fields = [
-        *missing_fields,
-        *(["fresh_cwa_environment_evidence"] if stale_risks else []),
-    ]
-    warnings_list = _warnings(
-        missing_fields=effective_missing_fields,
-        stale_risks=stale_risks,
-    )
     route_points, route_geometry_ref = _load_route_points(root, project)
     cwa_summary = _cwa_summary(
         artifacts,
@@ -252,6 +244,27 @@ def assess_scout_cwa_environment(
         route_geometry_ref=route_geometry_ref,
         stale_after_hours=stale_hours,
         reference_time=reference_now,
+    )
+    qpf_summary = cwa_summary.get("qpf_corridor_summary")
+    query_specific_missing = []
+    if (
+        _is_precipitation_amount_query(query.casefold())
+        and isinstance(qpf_summary, dict)
+        and not qpf_summary.get("direct_qpf_available")
+    ):
+        query_specific_missing.append("direct_qpf_accumulation_mm")
+    effective_missing_fields = list(
+        dict.fromkeys(
+            [
+                *missing_fields,
+                *(["fresh_cwa_environment_evidence"] if stale_risks else []),
+                *query_specific_missing,
+            ]
+        )
+    )
+    warnings_list = _warnings(
+        missing_fields=effective_missing_fields,
+        stale_risks=stale_risks,
     )
     decision_output = _decision_output(
         summary=cwa_summary,
@@ -1433,7 +1446,10 @@ def _field_answer(
         )
     if _is_qpf_freshness_query(normalized_query) and isinstance(qpf, dict):
         return _qpf_freshness_answer(qpf)
-    if _is_qpf_metric_query(normalized_query) and isinstance(qpf, dict):
+    if (
+        _is_qpf_metric_query(normalized_query)
+        or _is_precipitation_amount_query(normalized_query)
+    ) and isinstance(qpf, dict):
         return _qpf_metric_answer(qpf)
     if _is_observation_query(normalized_query) and isinstance(observation, dict):
         return _observation_answer(observation)
@@ -1505,7 +1521,7 @@ def _field_answer_source_ref(query: str) -> str:
         return "outputs/environment/cwa/cwa_weather_evidence.json"
     if _is_imagery_manifest_query(normalized_query):
         return "outputs/environment/cwa/imagery/radar_frames_manifest.json"
-    if "qpf" in normalized_query:
+    if "qpf" in normalized_query or _is_precipitation_amount_query(normalized_query):
         return "outputs/environment/cwa/qpf_corridor_summary.json"
     return "outputs/environment/environment_evidence_package.json"
 
@@ -1565,6 +1581,51 @@ def _is_qpf_metric_query(query: str) -> bool:
     )
 
 
+def _is_precipitation_amount_query(query: str) -> bool:
+    if not any(
+        token in query
+        for token in (
+            "雨量",
+            "降雨量",
+            "累積雨量",
+            "累积雨量",
+            "rainfall",
+            "precipitation",
+        )
+    ):
+        return False
+    if any(
+        token in query
+        for token in (
+            "多少個",
+            "多少个",
+            "幾個",
+            "几个",
+            "多少站",
+            "幾站",
+            "几站",
+            "測站數",
+            "测站数",
+        )
+    ):
+        return False
+    return any(
+        token in query
+        for token in (
+            "多少",
+            "預計",
+            "预计",
+            "預測",
+            "预测",
+            "毫米",
+            "公釐",
+            "公厘",
+            " mm",
+            "qpf",
+        )
+    )
+
+
 def _is_qpf_freshness_query(query: str) -> bool:
     return "qpf" in query and any(
         token in query
@@ -1596,6 +1657,7 @@ def _is_exact_cwa_query(query: str) -> bool:
             _is_observation_query,
             _is_qpf_metric_query,
             _is_qpf_freshness_query,
+            _is_precipitation_amount_query,
         )
     )
 
@@ -1620,11 +1682,20 @@ def _qpf_metric_answer(qpf: dict[str, Any]) -> str:
             f"mean 為 {qpf.get('mean_mm')} mm、p95 為 {qpf.get('p95_mm')} mm、"
             f"peak window 為 {qpf.get('peak_window') or 'unavailable'}。"
         )
-    return (
+    answer = (
         "Direct QPF accumulation unavailable：max、mean、p95 與 peak window "
-        "皆為 None，不可估算。現有 forecast-derived rain probability "
-        "不是 direct QPF millimetres。"
+        "皆為 None，不可估算。"
     )
+    probability = qpf.get("forecast_derived_peak_probability_pct")
+    if probability is not None:
+        answer += (
+            f"目前只能確認 forecast-derived rain probability peak={probability}%"
+            f"，時間窗為 {qpf.get('forecast_derived_peak_window') or 'unavailable'}；"
+            "這不是 direct QPF millimetres。"
+        )
+    else:
+        answer += "現有 forecast-derived rain probability 也 unavailable。"
+    return answer
 
 
 def _qpf_freshness_answer(qpf: dict[str, Any]) -> str:

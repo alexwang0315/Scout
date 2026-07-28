@@ -182,6 +182,20 @@ def test_cwa_environment_tool_does_not_invent_direct_qpf_from_rain_probability(
         "outputs/environment/cwa/qpf_corridor_summary.json"
     )
 
+    natural_query = assess_scout_cwa_environment(
+        project_root,
+        query="今天的雨量預計是多少",
+        reference_time="2026-06-24T06:00:00Z",
+    )
+    assert natural_query["answerability"] == "cwa_environment_partial"
+    assert "direct_qpf_accumulation_mm" in natural_query["missing_fields"]
+    assert "Direct QPF accumulation unavailable" in natural_query["field_answer"]
+    assert "70.0%" in natural_query["field_answer"]
+    assert natural_query["field_answer_priority"] == 100
+    assert natural_query["field_answer_source_ref"] == (
+        "outputs/environment/cwa/qpf_corridor_summary.json"
+    )
+
     freshness = assess_scout_cwa_environment(
         project_root,
         query="CWA QPF evidence 的 issued time、valid time 與 stale risk 是什麼？",

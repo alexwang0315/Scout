@@ -61,6 +61,8 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !assistant_offline_fallback_contract.py
 !assistant_pydantic_provider.py
 !assistant_readiness_check.py
+!assistant_weather_preparation.py
+!dashboard_connected_preparation.py
 !assistant_workspace_total_info.py
 !debug_assistant_context.py
 !hardware_readiness_admin_view.py
