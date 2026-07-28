@@ -1,0 +1,1366 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>奇萊南華登山活動簡報</title>
+  <meta name="description" content="奇萊南華登山活動簡報：路線、天數、景點、歷史文化自然地形與季節觀察點。">
+  <style>
+    :root {
+      --surface-primary: #F7F3EA;
+      --surface-secondary: #EFE8D7;
+      --surface-elevated: #FFFDF6;
+      --text-primary: #1A2B24;
+      --text-secondary: #586B61;
+      --text-tertiary: #7C8B82;
+      --border-default: #CDBF9D;
+      --border-subtle: #E1D6B8;
+      --accent-primary: #B45D35;
+      --accent-secondary: #4F7F71;
+      --accent-tertiary: #D4A63A;
+      --status-warning: #9A6A16;
+      --status-error: #A23E34;
+      --status-info: #3E6F8F;
+      --shadow-subtle: 0 8px 24px rgba(26, 43, 36, 0.07);
+      --shadow-default: 0 20px 52px rgba(26, 43, 36, 0.12);
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --space-8: 32px;
+      --space-10: 40px;
+      --space-12: 48px;
+      --space-16: 64px;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --max-content: 1240px;
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+      color: var(--text-primary);
+      background: var(--surface-primary);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      color: var(--text-primary);
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--surface-secondary) 74%, transparent), transparent 54%),
+        radial-gradient(circle at 82% 12%, color-mix(in srgb, var(--accent-tertiary) 18%, transparent), transparent 28%),
+        var(--surface-primary);
+    }
+
+    a {
+      color: var(--status-info);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:focus-visible,
+    button:focus-visible {
+      outline: 2px solid var(--accent-primary);
+      outline-offset: 3px;
+    }
+
+    .deck {
+      min-height: 100dvh;
+      overflow: hidden;
+    }
+
+    .slide {
+      display: none;
+      min-height: 100dvh;
+      padding: var(--space-12) var(--space-6) calc(var(--space-16) + var(--space-8));
+      position: relative;
+    }
+
+    .slide.active {
+      display: grid;
+      align-items: center;
+      animation: slideIn 240ms ease-in-out;
+    }
+
+    .slide-inner {
+      width: min(100%, var(--max-content));
+      margin: 0 auto;
+    }
+
+    .hero-grid,
+    .two-col,
+    .three-col,
+    .context-grid,
+    .chart-grid,
+    .source-grid {
+      display: grid;
+      gap: var(--space-6);
+    }
+
+    .hero-grid {
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+      align-items: center;
+    }
+
+    .two-col {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: stretch;
+    }
+
+    .three-col {
+      grid-template-columns: 1.15fr 0.85fr 1fr;
+    }
+
+    .context-grid {
+      grid-template-columns: 0.82fr 1.18fr;
+    }
+
+    .chart-grid {
+      grid-template-columns: 1.08fr 0.92fr;
+      align-items: stretch;
+    }
+
+    .source-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin-bottom: var(--space-4);
+      color: var(--accent-primary);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 28px;
+      height: 2px;
+      background: var(--accent-primary);
+      border-radius: var(--radius-sm);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(36px, 7vw, 48px);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: 0;
+      max-width: 11em;
+    }
+
+    h2 {
+      margin-bottom: var(--space-6);
+      font-size: clamp(30px, 5vw, 40px);
+      font-weight: 760;
+      line-height: 1.12;
+      letter-spacing: 0;
+      max-width: 15em;
+    }
+
+    h3 {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin-top: var(--space-5);
+      color: var(--text-secondary);
+      font-size: 18px;
+      line-height: 1.65;
+      max-width: 34em;
+    }
+
+    .note {
+      color: var(--text-tertiary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-top: var(--space-6);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: var(--space-1) var(--space-3);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      background: color-mix(in srgb, var(--surface-elevated) 80%, transparent);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
+
+    .tag.official {
+      color: var(--status-info);
+      border-color: color-mix(in srgb, var(--status-info) 46%, var(--border-default));
+    }
+
+    .tag.warning {
+      color: var(--status-warning);
+      border-color: color-mix(in srgb, var(--status-warning) 46%, var(--border-default));
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-3);
+      margin-top: var(--space-8);
+    }
+
+    .metric {
+      min-height: 112px;
+      padding: var(--space-5);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-elevated);
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--text-primary);
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: var(--space-2);
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .visual-panel {
+      position: relative;
+      overflow: hidden;
+      min-height: 460px;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 96%, transparent), color-mix(in srgb, var(--surface-secondary) 82%, transparent)),
+        repeating-linear-gradient(0deg, transparent 0 31px, color-mix(in srgb, var(--border-subtle) 64%, transparent) 32px);
+      box-shadow: var(--shadow-default);
+    }
+
+    .summit-art {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .summit-label {
+      position: absolute;
+      display: grid;
+      gap: var(--space-1);
+      min-width: 118px;
+      padding: var(--space-3);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .summit-label strong {
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .summit-label.a {
+      top: 24%;
+      left: 12%;
+    }
+
+    .summit-label.b {
+      right: 8%;
+      top: 14%;
+    }
+
+    .summit-label.c {
+      left: 39%;
+      bottom: 18%;
+    }
+
+    .panel {
+      padding: var(--space-6);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--surface-elevated) 86%, transparent);
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .panel.tight {
+      padding: var(--space-5);
+    }
+
+    .panel h3 + p,
+    .panel h3 + ul,
+    .panel h3 + ol {
+      margin-top: var(--space-3);
+    }
+
+    .panel p,
+    li {
+      color: var(--text-secondary);
+      font-size: 16px;
+      line-height: 1.65;
+    }
+
+    ul,
+    ol {
+      margin: 0;
+      padding-left: var(--space-5);
+    }
+
+    li + li {
+      margin-top: var(--space-2);
+    }
+
+    .route-map {
+      min-height: 392px;
+      padding: var(--space-6);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      background: var(--surface-elevated);
+      box-shadow: var(--shadow-default);
+    }
+
+    .route-map svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9;
+    }
+
+    .chart-panel {
+      display: grid;
+      gap: var(--space-4);
+      padding: var(--space-5);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-elevated);
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .chart-panel.large {
+      min-height: 438px;
+    }
+
+    .chart-title {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: var(--space-4);
+    }
+
+    .chart-title small {
+      color: var(--text-tertiary);
+      font-family: SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+
+    .chart-panel svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .chart-note {
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .duration-chart {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .duration-row {
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr) 56px;
+      align-items: center;
+      gap: var(--space-3);
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .duration-track {
+      overflow: hidden;
+      height: 16px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-secondary);
+    }
+
+    .duration-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent-primary);
+    }
+
+    .duration-fill.secondary {
+      background: var(--accent-secondary);
+    }
+
+    .duration-fill.warning {
+      background: var(--status-warning);
+    }
+
+    .heat-grid {
+      display: grid;
+      grid-template-columns: 58px repeat(4, minmax(0, 1fr));
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-primary);
+    }
+
+    .heat-grid span {
+      min-height: 36px;
+      padding: var(--space-2);
+      border-right: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .heat-grid span:nth-child(5n) {
+      border-right: 0;
+    }
+
+    .heat-grid span:nth-last-child(-n + 5) {
+      border-bottom: 0;
+    }
+
+    .heat-grid .head {
+      color: var(--text-primary);
+      background: var(--surface-secondary);
+    }
+
+    .heat-grid .low {
+      background: color-mix(in srgb, var(--accent-secondary) 16%, var(--surface-elevated));
+    }
+
+    .heat-grid .mid {
+      background: color-mix(in srgb, var(--accent-tertiary) 24%, var(--surface-elevated));
+    }
+
+    .heat-grid .high {
+      color: var(--text-primary);
+      background: color-mix(in srgb, var(--status-warning) 36%, var(--surface-elevated));
+    }
+
+    .heat-grid .peak {
+      color: var(--text-primary);
+      background: color-mix(in srgb, var(--accent-primary) 30%, var(--surface-elevated));
+    }
+
+    .timeline {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .time-item {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: var(--space-4);
+      padding: var(--space-4);
+      border-left: 3px solid var(--accent-secondary);
+      background: color-mix(in srgb, var(--surface-elevated) 74%, transparent);
+    }
+
+    .time-item strong {
+      color: var(--accent-primary);
+      font-family: SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .time-item span {
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .layer-table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-elevated);
+    }
+
+    .layer-table th,
+    .layer-table td {
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--border-subtle);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .layer-table th {
+      color: var(--text-primary);
+      background: var(--surface-secondary);
+      font-weight: 700;
+    }
+
+    .layer-table td {
+      color: var(--text-secondary);
+    }
+
+    .layer-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .stop-list {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .stop {
+      display: grid;
+      grid-template-columns: minmax(116px, 0.36fr) minmax(0, 1fr);
+      gap: var(--space-4);
+      padding: var(--space-4);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--surface-elevated);
+      transition: transform 120ms ease-out, border-color 120ms ease-out;
+    }
+
+    .stop:hover {
+      transform: translateY(-1px);
+      border-color: var(--accent-secondary);
+    }
+
+    .stop strong {
+      color: var(--text-primary);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .stop p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .stop.pass {
+      border-color: color-mix(in srgb, var(--status-error) 34%, var(--border-subtle));
+    }
+
+    .season-band {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: var(--surface-elevated);
+    }
+
+    .season {
+      min-height: 228px;
+      padding: var(--space-5);
+      border-right: 1px solid var(--border-subtle);
+    }
+
+    .season:last-child {
+      border-right: 0;
+    }
+
+    .season strong {
+      display: block;
+      margin-bottom: var(--space-3);
+      color: var(--text-primary);
+      font-size: 18px;
+      line-height: 1.35;
+    }
+
+    .season p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .source {
+      min-height: 152px;
+    }
+
+    .source small {
+      display: block;
+      margin-bottom: var(--space-2);
+      color: var(--accent-primary);
+      font-family: SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .controls {
+      position: fixed;
+      top: var(--space-6);
+      right: var(--space-6);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
+      box-shadow: var(--shadow-subtle);
+    }
+
+    .controls button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 40px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      background: var(--surface-primary);
+      cursor: pointer;
+      transition: transform 120ms ease-out, border-color 120ms ease-out;
+    }
+
+    .controls button:hover {
+      border-color: var(--accent-primary);
+    }
+
+    .controls button:active {
+      transform: translateY(1px);
+    }
+
+    .counter {
+      min-width: 68px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .progress {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 12;
+      height: 4px;
+      background: var(--border-subtle);
+    }
+
+    .progress span {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: var(--accent-primary);
+      transition: width 240ms ease-in-out;
+    }
+
+    .print-note {
+      display: none;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .two-col,
+      .three-col,
+      .context-grid,
+      .chart-grid,
+      .source-grid,
+      .season-band {
+        grid-template-columns: 1fr;
+      }
+
+      .visual-panel {
+        min-height: 380px;
+      }
+
+      .metric-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .season {
+        min-height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+
+      .season:last-child {
+        border-bottom: 0;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .slide {
+        padding: var(--space-8) var(--space-4) calc(var(--space-16) + var(--space-6));
+      }
+
+      .metric-strip,
+      .stop,
+      .duration-row,
+      .time-item {
+        grid-template-columns: 1fr;
+      }
+
+      .heat-grid {
+        grid-template-columns: 52px repeat(4, minmax(66px, 1fr));
+        overflow-x: auto;
+      }
+
+      .controls {
+        right: var(--space-4);
+        top: var(--space-4);
+      }
+
+      .route-map {
+        min-height: 320px;
+        padding: var(--space-4);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      .slide.active,
+      .progress span,
+      .controls button,
+      .stop {
+        animation: none;
+        transition: none;
+      }
+    }
+
+    @media print {
+      body {
+        background: var(--surface-primary);
+      }
+
+      .deck {
+        overflow: visible;
+      }
+
+      .slide,
+      .slide.active {
+        display: block;
+        min-height: auto;
+        page-break-after: always;
+        padding: var(--space-8);
+      }
+
+      .controls,
+      .progress {
+        display: none;
+      }
+
+      .print-note {
+        display: block;
+        margin-top: var(--space-4);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck" aria-live="polite">
+    <section class="slide active" aria-labelledby="slide-title-1">
+      <div class="slide-inner hero-grid">
+        <div>
+          <div class="eyebrow">登山活動簡報</div>
+          <h1 id="slide-title-1">奇萊南華：從古道、保線路到黃金草原</h1>
+          <p class="lead">建議以 2 天 1 夜完成；若隊伍第一次走百岳、想把人文與自然觀察做完整，安排 3 天 2 夜會更穩。這份簡報以雲天宮進出、夜宿天池山莊、連走奇萊南峰與南華山為主線。</p>
+          <div class="tag-row" aria-label="資料狀態">
+            <span class="tag official">官方步道狀態查核：2026-07-03</span>
+            <span class="tag">標準行程：2D1N</span>
+            <span class="tag warning">出發前需複查天池與路況</span>
+          </div>
+          <div class="metric-strip" aria-label="路線快速指標">
+            <div class="metric"><strong>37-40 km</strong><span>常見估計總里程，依是否走光被八表 O 型與高繞線略有差異</span></div>
+            <div class="metric"><strong>3,358 m</strong><span>最高點：奇萊南峰，日出與金黃草坡主景</span></div>
+            <div class="metric"><strong>88 / 226</strong><span>奇萊南峰入園承載：平日 88、假日 226</span></div>
+            <div class="metric"><strong>1 晚</strong><span>多數隊伍需夜宿天池山莊或營地</span></div>
+          </div>
+        </div>
+        <div class="visual-panel" aria-label="奇萊南華路線視覺示意">
+          <svg class="summit-art" viewBox="0 0 800 560" role="img" aria-label="奇萊南華高山草原與路線示意圖">
+            <defs>
+              <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stop-color="var(--surface-secondary)"></stop>
+                <stop offset="1" stop-color="var(--surface-primary)"></stop>
+              </linearGradient>
+              <linearGradient id="ridge" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0" stop-color="var(--accent-secondary)"></stop>
+                <stop offset="0.62" stop-color="var(--accent-tertiary)"></stop>
+                <stop offset="1" stop-color="var(--accent-primary)"></stop>
+              </linearGradient>
+            </defs>
+            <rect width="800" height="560" fill="url(#sky)"></rect>
+            <path d="M0 374 C90 318 152 320 224 274 C296 228 334 164 402 190 C470 216 484 294 554 268 C620 244 674 192 800 172 L800 560 L0 560 Z" fill="color-mix(in srgb, var(--accent-secondary) 22%, var(--surface-secondary))"></path>
+            <path d="M0 436 C108 398 168 390 254 344 C340 298 386 262 458 304 C530 346 612 378 800 304 L800 560 L0 560 Z" fill="color-mix(in srgb, var(--accent-tertiary) 42%, var(--surface-secondary))"></path>
+            <path d="M54 500 C166 448 260 460 338 394 C418 328 516 312 608 354 C680 386 728 382 800 348" fill="none" stroke="var(--accent-primary)" stroke-width="7" stroke-linecap="round"></path>
+            <path d="M68 500 C180 458 256 458 338 404 C416 352 518 326 604 364 C676 396 728 392 790 360" fill="none" stroke="var(--surface-elevated)" stroke-width="2" stroke-linecap="round" stroke-dasharray="10 12"></path>
+            <g fill="var(--text-primary)">
+              <circle cx="150" cy="458" r="6"></circle>
+              <circle cx="408" cy="350" r="6"></circle>
+              <circle cx="608" cy="364" r="6"></circle>
+            </g>
+            <g fill="none" stroke="color-mix(in srgb, var(--border-default) 74%, transparent)" stroke-width="1">
+              <path d="M42 420 C148 386 214 384 306 330 C410 270 528 250 680 286"></path>
+              <path d="M24 456 C134 424 226 428 342 366 C464 300 560 306 764 320"></path>
+              <path d="M12 492 C116 466 248 478 374 414 C514 342 604 356 798 362"></path>
+            </g>
+          </svg>
+          <div class="summit-label a"><strong>雲海保線所</strong><span>歷史與展望</span></div>
+          <div class="summit-label b"><strong>奇萊南峰</strong><span>草坡日出</span></div>
+          <div class="summit-label c"><strong>天池山莊</strong><span>行程樞紐</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-2">
+      <div class="slide-inner">
+        <div class="eyebrow">行程結論</div>
+        <h2 id="slide-title-2">預計幾天可以完成</h2>
+        <div class="three-col">
+          <div class="panel">
+            <h3>推薦：2 天 1 夜</h3>
+            <p>最常見且效率高。Day 1 從雲天宮或屯原進入，走能高越嶺西段到天池山莊；Day 2 凌晨輕裝攻奇萊南峰、南華山，回山莊整裝後下撤。</p>
+            <div class="tag-row"><span class="tag official">適合有登山經驗隊伍</span><span class="tag">需抽中天池住宿</span></div>
+          </div>
+          <div class="panel">
+            <h3>更穩：3 天 2 夜</h3>
+            <p>給新手百岳隊、攝影隊、親子隊或希望分層觀察的人。可以把雲海保線所、松原遺址、三疊瀑布與天池周邊慢下來看，並保留天候緩衝。</p>
+            <div class="tag-row"><span class="tag">降低 Day 2 長工時</span><span class="tag warning">住宿名額更關鍵</span></div>
+          </div>
+          <div class="panel">
+            <h3>不建議：單日</h3>
+            <p>單日需要很強體能、很早出發、快速通過長距離林道與高山段，且失去觀察與備援空間。若是活動簡報或團體行程，不把單日當主方案。</p>
+            <div class="tag-row"><span class="tag warning">僅限高體能熟手</span><span class="tag">非本簡報主線</span></div>
+          </div>
+        </div>
+        <div class="chart-panel" style="margin-top: var(--space-6);">
+          <div class="chart-title">
+            <h3>天數選擇的壓力差</h3>
+            <small>planning chart</small>
+          </div>
+          <div class="duration-chart" aria-label="二天一夜、三天兩夜與單日行程壓力比較">
+            <div class="duration-row"><span>2D1N</span><div class="duration-track"><div class="duration-fill" style="width: 76%;"></div></div><span>標準</span></div>
+            <div class="duration-row"><span>3D2N</span><div class="duration-track"><div class="duration-fill secondary" style="width: 54%;"></div></div><span>穩定</span></div>
+            <div class="duration-row"><span>單日</span><div class="duration-track"><div class="duration-fill warning" style="width: 96%;"></div></div><span>高壓</span></div>
+          </div>
+          <p class="chart-note">這不是精算模型，而是活動規劃壓力圖：3D2N 多一天住宿成本，但換到較好的觀察時間與撤退緩衝。</p>
+        </div>
+        <p class="note print-note">列印版提示：每張投影片會分頁輸出。</p>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-3">
+      <div class="slide-inner two-col">
+        <div>
+          <div class="eyebrow">路線總覽</div>
+          <h2 id="slide-title-3">雲天宮到天池，再上兩座百岳</h2>
+          <p class="lead">官方能高越嶺西段資料列出雲天宮路線進入、至雲海保線所、松原駐在所、天池山莊，再續往光被八表；奇萊南華活動則從天池山莊分出，連接奇萊南峰與南華山。</p>
+          <div class="timeline" aria-label="二日行程大綱">
+            <div class="time-item"><strong>D1 AM</strong><span>屯原停車區或雲天宮登山口出發，先處理高繞爬升與林道節奏。</span></div>
+            <div class="time-item"><strong>D1 noon</strong><span>雲海保線所午休，觀察舊駐在所轉為保線路節點的歷史層。</span></div>
+            <div class="time-item"><strong>D1 PM</strong><span>通過崩壁、松原遺址與能高三疊瀑布，抵天池山莊。</span></div>
+            <div class="time-item"><strong>D2 dawn</strong><span>輕裝上奇萊南峰看日出與草坡，再接南華山、光被八表或折返。</span></div>
+            <div class="time-item"><strong>D2 PM</strong><span>回天池山莊整裝，循能高越嶺西段下撤。</span></div>
+          </div>
+        </div>
+        <div class="route-map" aria-label="路線節點圖">
+          <svg viewBox="0 0 960 540" role="img" aria-label="奇萊南華路線節點與海拔示意">
+            <rect width="960" height="540" rx="12" fill="var(--surface-elevated)"></rect>
+            <path d="M80 430 C168 382 192 334 274 336 C360 338 388 278 464 278 C542 278 572 206 654 196 C742 184 788 156 874 116" fill="none" stroke="var(--accent-primary)" stroke-width="10" stroke-linecap="round"></path>
+            <path d="M654 196 C610 146 624 106 700 78" fill="none" stroke="var(--accent-secondary)" stroke-width="8" stroke-linecap="round"></path>
+            <path d="M654 196 C704 226 770 222 822 182" fill="none" stroke="var(--accent-tertiary)" stroke-width="8" stroke-linecap="round"></path>
+            <g fill="var(--surface-primary)" stroke="var(--text-primary)" stroke-width="3">
+              <circle cx="80" cy="430" r="14"></circle>
+              <circle cx="274" cy="336" r="14"></circle>
+              <circle cx="464" cy="278" r="14"></circle>
+              <circle cx="654" cy="196" r="14"></circle>
+              <circle cx="700" cy="78" r="14"></circle>
+              <circle cx="822" cy="182" r="14"></circle>
+              <circle cx="874" cy="116" r="14"></circle>
+            </g>
+            <g font-family="Noto Sans TC, PingFang TC, Microsoft JhengHei, sans-serif" font-size="22" font-weight="700" fill="var(--text-primary)">
+              <text x="42" y="482">雲天宮</text>
+              <text x="222" y="390">雲海保線所</text>
+              <text x="410" y="334">松原遺址</text>
+              <text x="610" y="252">天池山莊</text>
+              <text x="636" y="48">奇萊南峰</text>
+              <text x="792" y="236">南華山</text>
+              <text x="826" y="88">光被八表</text>
+            </g>
+            <g font-family="SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="var(--text-secondary)">
+              <text x="42" y="508">起登</text>
+              <text x="222" y="416">約 4.5K</text>
+              <text x="410" y="360">約 8K</text>
+              <text x="610" y="278">約 13K</text>
+              <text x="636" y="24">3,358m</text>
+              <text x="792" y="262">3,184m</text>
+              <text x="826" y="64">15.5K</text>
+            </g>
+            <path d="M78 470 L880 470" stroke="var(--border-subtle)" stroke-width="2"></path>
+            <text x="80" y="512" font-family="SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="var(--text-tertiary)">schematic, not for navigation</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-charts">
+      <div class="slide-inner">
+        <div class="eyebrow">量化圖表</div>
+        <h2 id="slide-title-charts">把路線壓力視覺化</h2>
+        <div class="chart-grid">
+          <div class="chart-panel large">
+            <div class="chart-title">
+              <h3>高度剖面示意</h3>
+              <small>m / route</small>
+            </div>
+            <svg viewBox="0 0 780 420" role="img" aria-label="雲天宮、雲海保線所、天池山莊、奇萊南峰、南華山高度剖面圖">
+              <rect x="0" y="0" width="780" height="420" rx="8" fill="var(--surface-primary)"></rect>
+              <g stroke="var(--border-subtle)" stroke-width="1">
+                <path d="M70 332 H720"></path>
+                <path d="M70 258 H720"></path>
+                <path d="M70 184 H720"></path>
+                <path d="M70 110 H720"></path>
+              </g>
+              <g fill="var(--text-tertiary)" font-family="SFMono-Regular, Menlo, Consolas, monospace" font-size="13">
+                <text x="18" y="337">1800</text>
+                <text x="18" y="263">2300</text>
+                <text x="18" y="189">2800</text>
+                <text x="18" y="115">3300</text>
+              </g>
+              <path d="M86 324 C158 298 178 248 244 252 C314 256 358 188 438 184 C502 180 540 74 608 72 C646 72 670 102 708 98" fill="none" stroke="var(--accent-primary)" stroke-width="6" stroke-linecap="round"></path>
+              <path d="M86 332 C158 306 178 256 244 260 C314 264 358 196 438 192 C502 188 540 82 608 80 C646 80 670 110 708 106 L708 332 L86 332 Z" fill="color-mix(in srgb, var(--accent-tertiary) 22%, transparent)"></path>
+              <g fill="var(--surface-elevated)" stroke="var(--text-primary)" stroke-width="2">
+                <circle cx="86" cy="324" r="8"></circle>
+                <circle cx="244" cy="252" r="8"></circle>
+                <circle cx="438" cy="184" r="8"></circle>
+                <circle cx="608" cy="72" r="8"></circle>
+                <circle cx="708" cy="98" r="8"></circle>
+              </g>
+              <g fill="var(--text-primary)" font-family="Noto Sans TC, PingFang TC, Microsoft JhengHei, sans-serif" font-size="15" font-weight="700">
+                <text x="64" y="366">雲天宮</text>
+                <text x="200" y="236">雲海</text>
+                <text x="398" y="168">天池</text>
+                <text x="558" y="54">奇萊南峰</text>
+                <text x="670" y="128">南華山</text>
+              </g>
+              <g fill="var(--text-secondary)" font-family="SFMono-Regular, Menlo, Consolas, monospace" font-size="13">
+                <text x="62" y="386">~1,860m</text>
+                <text x="194" y="219">2,360m</text>
+                <text x="392" y="151">2,860m</text>
+                <text x="570" y="36">3,358m</text>
+                <text x="672" y="146">3,184m</text>
+              </g>
+            </svg>
+            <p class="chart-note">剖面圖用來說明體力壓力：D1 是長距離緩升，D2 是短時間上到 3,000 公尺以上稜線並承受風冷。</p>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">
+              <h3>二日版工時配置</h3>
+              <small>hours</small>
+            </div>
+            <div class="duration-chart" aria-label="二日版行程工時配置圖">
+              <div class="duration-row"><span>D1 進山</span><div class="duration-track"><div class="duration-fill secondary" style="width: 61%;"></div></div><span>8.75h</span></div>
+              <div class="duration-row"><span>D2 雙峰</span><div class="duration-track"><div class="duration-fill warning" style="width: 100%;"></div></div><span>14.3h</span></div>
+              <div class="duration-row"><span>攻頂段</span><div class="duration-track"><div class="duration-fill" style="width: 35%;"></div></div><span>5h</span></div>
+            </div>
+            <p class="chart-note">若採 2D1N，真正的壓力在第二天：凌晨出發、雙峰、回山莊整裝再下撤。</p>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">
+              <h3>季節風險熱度</h3>
+              <small>relative</small>
+            </div>
+            <div class="heat-grid" role="img" aria-label="春夏秋冬的低溫、午後雷雨、崩壁落石、雲海展望相對熱度">
+              <span class="head">季節</span><span class="head">低溫</span><span class="head">雷雨</span><span class="head">崩壁</span><span class="head">展望</span>
+              <span class="head">春</span><span class="mid">中</span><span class="mid">中</span><span class="mid">中</span><span class="low">穩</span>
+              <span class="head">夏</span><span class="low">低</span><span class="high">高</span><span class="high">高</span><span class="mid">變動</span>
+              <span class="head">秋</span><span class="mid">中</span><span class="low">低</span><span class="mid">中</span><span class="peak">佳</span>
+              <span class="head">冬</span><span class="high">高</span><span class="low">低</span><span class="mid">中</span><span class="mid">看天</span>
+            </div>
+            <p class="chart-note">熱度表示規劃時要優先檢查的項目，不代表固定結果；實際仍以出發前天氣與公告為準。</p>
+          </div>
+          <div class="chart-panel">
+            <div class="chart-title">
+              <h3>脈絡層簡報權重</h3>
+              <small>briefing</small>
+            </div>
+            <svg viewBox="0 0 360 280" role="img" aria-label="歷史、文化、自然、地形、季節、觀察點簡報權重雷達圖">
+              <g transform="translate(180 142)">
+                <g fill="none" stroke="var(--border-subtle)" stroke-width="1">
+                  <polygon points="0,-100 86,-50 86,50 0,100 -86,50 -86,-50"></polygon>
+                  <polygon points="0,-66 57,-33 57,33 0,66 -57,33 -57,-33"></polygon>
+                  <polygon points="0,-33 29,-17 29,17 0,33 -29,17 -29,-17"></polygon>
+                  <line x1="0" y1="0" x2="0" y2="-110"></line>
+                  <line x1="0" y1="0" x2="95" y2="-55"></line>
+                  <line x1="0" y1="0" x2="95" y2="55"></line>
+                  <line x1="0" y1="0" x2="0" y2="110"></line>
+                  <line x1="0" y1="0" x2="-95" y2="55"></line>
+                  <line x1="0" y1="0" x2="-95" y2="-55"></line>
+                </g>
+                <polygon points="0,-96 69,-40 82,48 0,68 -76,44 -82,-48" fill="color-mix(in srgb, var(--accent-secondary) 34%, transparent)" stroke="var(--accent-secondary)" stroke-width="3"></polygon>
+              </g>
+              <g fill="var(--text-primary)" font-family="Noto Sans TC, PingFang TC, Microsoft JhengHei, sans-serif" font-size="14" font-weight="700">
+                <text x="166" y="20">歷史</text>
+                <text x="286" y="80">文化</text>
+                <text x="286" y="206">自然</text>
+                <text x="166" y="272">地形</text>
+                <text x="26" y="206">季節</text>
+                <text x="18" y="80">觀察點</text>
+              </g>
+            </svg>
+            <p class="chart-note">這張圖可當講稿提示：歷史、自然與觀察點是主軸，季節層用來補安全與體驗差異。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-4">
+      <div class="slide-inner context-grid">
+        <div>
+          <div class="eyebrow">脈絡層</div>
+          <h2 id="slide-title-4">不要只把它當成兩座百岳</h2>
+          <p class="lead">這條線的精華，是同一條路徑在不同時代的用途疊加：社路、警備道、保線路、國家步道、百岳路線。簡報或帶隊時，可用「每一段停 3 分鐘」把隊員注意力從趕路拉回土地。</p>
+          <div class="tag-row">
+            <span class="tag official">原住民族社路</span>
+            <span class="tag official">日治警備道路</span>
+            <span class="tag official">台電保線路</span>
+            <span class="tag official">國家步道</span>
+          </div>
+        </div>
+        <div class="panel tight">
+          <table class="layer-table" aria-label="奇萊南華脈絡層整理">
+            <thead>
+              <tr>
+                <th>脈絡層</th>
+                <th>沿途可以講的重點</th>
+                <th>停 3 分鐘的位置</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>歷史層</td>
+                <td>能高越嶺道由社路、日治警備道、戰後保線路演變而來。</td>
+                <td>雲海保線所、松原駐在所遺址、天池山莊、光被八表。</td>
+              </tr>
+              <tr>
+                <td>文化層</td>
+                <td>路徑連接泰雅、賽德克、太魯閣等山區生活與遷徙記憶。</td>
+                <td>雲海保線所前後，講「道路用途如何改變土地」。</td>
+              </tr>
+              <tr>
+                <td>自然層</td>
+                <td>闊葉林、松林、鐵杉、冷杉、高山草原逐段轉換。</td>
+                <td>雲海前林相、鐵杉與頁岩地形、南華草坡。</td>
+              </tr>
+              <tr>
+                <td>地形層</td>
+                <td>塔羅灣溪谷、崩壁、鞍部、稜線、風口與展望點連續出現。</td>
+                <td>崩壁只觀察不逗留；展望點再停。</td>
+              </tr>
+              <tr>
+                <td>季節層</td>
+                <td>春夏草花與午後雷雨，秋季草坡與雲海，冬季低溫與結冰風險。</td>
+                <td>天池山莊傍晚、奇萊南峰日出前後。</td>
+              </tr>
+              <tr>
+                <td>觀察點</td>
+                <td>把安全與美感拆開：危險地形快過，穩定平台才停。</td>
+                <td>雲海、三疊瀑布、天池、南華山頂、光被八表。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-5">
+      <div class="slide-inner">
+        <div class="eyebrow">沿途景點</div>
+        <h2 id="slide-title-5">值得停 3 分鐘的地方</h2>
+        <div class="stop-list">
+          <div class="stop">
+            <strong>雲天宮高繞起點</strong>
+            <p>先建立今天的體感基準：這段比舊屯原入口更消耗體力，適合提醒配速、水量與隊伍間距。</p>
+          </div>
+          <div class="stop">
+            <strong>雲海保線所</strong>
+            <p>從尾上駐在所、戰後保線用途到今日休息點，是歷史層與文化層最容易講清楚的位置；視野開時可看群山與雲霧翻動。</p>
+          </div>
+          <div class="stop">
+            <strong>松原駐在所遺址</strong>
+            <p>用很短時間說明警備道路的節點邏輯，以及木炭窯、駐在所如何支撐山區治理與生活。</p>
+          </div>
+          <div class="stop pass">
+            <strong>崩壁地形</strong>
+            <p>只做遠觀與安全提醒，不在通過區拍照。重點是看岩壁、碎屑坡、排水與落石，而不是停留。</p>
+          </div>
+          <div class="stop">
+            <strong>能高三疊瀑布</strong>
+            <p>夏秋水量較有感，適合連結塔羅灣溪上游、地形切割與潮濕微環境；下切需依當日路況保守判斷。</p>
+          </div>
+          <div class="stop">
+            <strong>天池山莊</strong>
+            <p>從舊能高駐在所與天池保線所到現代山屋，這裡是全線故事的轉折點，也是 Day 2 高山段的安全基地。</p>
+          </div>
+          <div class="stop">
+            <strong>奇萊南峰草坡</strong>
+            <p>日出、箭竹草坡、風口與稜線視野是視覺高點；提醒保暖，山頂幾乎無遮蔽。</p>
+          </div>
+          <div class="stop">
+            <strong>南華山與光被八表</strong>
+            <p>南華山看能高安東軍方向與中央山脈縱深；光被八表則把戰後東西輸電工程的故事收束起來。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-6">
+      <div class="slide-inner two-col">
+        <div>
+          <div class="eyebrow">自然與地形</div>
+          <h2 id="slide-title-6">一路從森林走到草原</h2>
+          <p class="lead">能高越嶺道西段不是單一景觀。它的亮點是海拔推升後，植物帶、鳥獸活動痕跡、溪谷與岩壁同時變化。</p>
+          <div class="panel">
+            <h3>觀察引導</h3>
+            <ul>
+              <li>雲海以前：闊葉林與樟科、殼斗科為主，注意林下濕度與鳥聲。</li>
+              <li>中段：松針、鐵杉、頁岩崩壁與溪谷開口交替出現。</li>
+              <li>天池以上：高山草原、箭竹、風口與稜線視野成為主景。</li>
+              <li>溪谷與碎石堆：官方資料提到山椒魚棲地，觀察即可，不翻石、不干擾。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>帶隊提示</h3>
+          <ul>
+            <li>把「停 3 分鐘」安排在平台、山屋、穩定展望點。</li>
+            <li>崩壁、落石溝、狹窄邊坡只提醒快速通過。</li>
+            <li>Day 2 凌晨風冷明顯，奇萊南峰等待日出時要先穿保暖層。</li>
+            <li>若午後雷陣雨機率升高，縮短拍照與延伸路線，優先回到山屋或下撤。</li>
+          </ul>
+          <div class="tag-row">
+            <span class="tag warning">崩壁不逗留</span>
+            <span class="tag">風口先保暖</span>
+            <span class="tag official">觀察不干擾</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-7">
+      <div class="slide-inner">
+        <div class="eyebrow">季節層</div>
+        <h2 id="slide-title-7">不同季節看到不同的奇萊南華</h2>
+        <div class="season-band" aria-label="季節觀察摘要">
+          <div class="season">
+            <strong>春季</strong>
+            <p>高山植物開始有花況，清晨仍冷。若為賞花目的，出發前要查當年花況與步道開放狀態，不把固定花期當保證。</p>
+          </div>
+          <div class="season">
+            <strong>夏季</strong>
+            <p>午後雷陣雨與溪水、瀑布水量較需注意。行程要早出早收，崩壁與落石風險評估要更保守。</p>
+          </div>
+          <div class="season">
+            <strong>秋季</strong>
+            <p>草坡、雲海、展望與冷暖變化鮮明，是簡報視覺最容易成立的季節；仍需備低溫與強風。</p>
+          </div>
+          <div class="season">
+            <strong>冬季</strong>
+            <p>低溫、結霜、強風與可能積雪會改變難度。若遇寒流或降雪，需重新評估裝備、時間與撤退標準。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-8">
+      <div class="slide-inner two-col">
+        <div>
+          <div class="eyebrow">申請與安全</div>
+          <h2 id="slide-title-8">成行前的四個檢查</h2>
+          <div class="timeline">
+            <div class="time-item"><strong>Permit</strong><span>奇萊南峰需向太魯閣國家公園系統申請；南華山與天池周邊依官方說明不在太魯閣範圍。</span></div>
+            <div class="time-item"><strong>Sleep</strong><span>天池山莊住宿或營地依官方系統申請，通常是成行關鍵。</span></div>
+            <div class="time-item"><strong>Road</strong><span>出發前查能高越嶺西段與天池山莊最新公告；本簡報查核日顯示西段全線開放，但這類資訊會變。</span></div>
+            <div class="time-item"><strong>Weather</strong><span>颱風警報、豪雨標準或山區持續降雨時，官方可能暫停開放；行程需有撤退線。</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>活動版時間配置</h3>
+          <ul>
+            <li>D0：抵達埔里、清境或廬山周邊，檢查證件、住宿單、保險、糧食與共同裝備。</li>
+            <li>D1：雲天宮進入到天池山莊，控制午休與拍照時間，傍晚完成 Day 2 輕裝打包。</li>
+            <li>D2：日出前上奇萊南峰，接南華山；是否續走光被八表，依隊伍體能與天候決定。</li>
+            <li>3D2N 版本：第二天只做雙峰與光被八表，第三天從天池山莊下撤。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" aria-labelledby="slide-title-9">
+      <div class="slide-inner">
+        <div class="eyebrow">資料來源</div>
+        <h2 id="slide-title-9">查證來源與使用方式</h2>
+        <div class="source-grid">
+          <div class="panel source">
+            <small>S1 official</small>
+            <h3><a href="https://recreation.forest.gov.tw/Trail/RT?tr_id=064" target="_blank" rel="noopener">台灣山林悠遊網：能高越嶺道-西段</a></h3>
+            <p>用於步道狀態、歷史沿革、15.2 公里西段、雲天宮至天池山莊節點與行前安全提醒。</p>
+          </div>
+          <div class="panel source">
+            <small>S2 official</small>
+            <h3><a href="https://hike.taiwan.gov.tw/bed_5.aspx" target="_blank" rel="noopener">臺灣登山申請一站式服務網：太魯閣路線查詢</a></h3>
+            <p>用於奇萊南峰入園承載量，以及南華山與天池周邊不屬太魯閣入園範圍的說明。</p>
+          </div>
+          <div class="panel source">
+            <small>S3 official</small>
+            <h3><a href="https://tconline.forest.gov.tw/room/" target="_blank" rel="noopener">天池山莊：山屋及營地申請</a></h3>
+            <p>用於住宿申請時間、抽籤提醒、奇萊南峰另辦入園證，以及颱風豪雨暫停開放規則。</p>
+          </div>
+          <div class="panel source">
+            <small>S4 official article</small>
+            <h3><a href="https://www.moa.gov.tw/ws.php?id=2446808" target="_blank" rel="noopener">農業部：穿越時空的步道－能高越嶺道</a></h3>
+            <p>用於社路、警備道路、駐在所、台電保線路、林相變化、雲海保線所與松原遺址等脈絡。</p>
+          </div>
+          <div class="panel source">
+            <small>S5 field guide</small>
+            <h3><a href="https://www.klook.com/zh-TW/blog/Chilai-Nanhua-mountain/" target="_blank" rel="noopener">Klook：奇萊南華路線整理</a></h3>
+            <p>用於 40 公里級總路程、2 天 1 夜常見走法、天池至雙峰時間估計與山岳高度整理。</p>
+          </div>
+          <div class="panel source">
+            <small>S6 field report</small>
+            <h3><a href="https://www.lightliterlife.tw/chilai-nanhua/" target="_blank" rel="noopener">山輕野行：奇萊南華 2 天 1 夜攻略</a></h3>
+            <p>用於雲天宮高繞、崩壁提醒、三疊瀑布、Day 1/Day 2 活動時間配置與現場觀察點。</p>
+          </div>
+        </div>
+        <p class="note" style="margin-top: var(--space-5);">最後查核：2026-07-03。路況、天氣、山屋服務與入園規則可能變動，出發前應以官方公告為準。</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="controls" aria-label="簡報控制">
+    <button type="button" id="prev" aria-label="上一張">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M15 18L9 12L15 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
+    <div class="counter" id="counter">1 / 10</div>
+    <button type="button" id="next" aria-label="下一張">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 6L15 12L9 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
+  </nav>
+  <div class="progress" aria-hidden="true"><span id="progress"></span></div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const prev = document.getElementById("prev");
+    const next = document.getElementById("next");
+    const counter = document.getElementById("counter");
+    const progress = document.getElementById("progress");
+    let index = 0;
+
+    function render() {
+      slides.forEach((slide, slideIndex) => {
+        slide.classList.toggle("active", slideIndex === index);
+      });
+      counter.textContent = `${index + 1} / ${slides.length}`;
+      progress.style.width = `${((index + 1) / slides.length) * 100}%`;
+      window.location.hash = `slide-${index + 1}`;
+    }
+
+    function go(delta) {
+      index = (index + delta + slides.length) % slides.length;
+      render();
+    }
+
+    prev.addEventListener("click", () => go(-1));
+    next.addEventListener("click", () => go(1));
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+        event.preventDefault();
+        go(1);
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        go(-1);
+      }
+      if (event.key === "Home") {
+        index = 0;
+        render();
+      }
+      if (event.key === "End") {
+        index = slides.length - 1;
+        render();
+      }
+    });
+
+    const match = window.location.hash.match(/slide-(\d+)/);
+    if (match) {
+      const requested = Number(match[1]) - 1;
+      if (requested >= 0 && requested < slides.length) {
+        index = requested;
+      }
+    }
+    render();
+  </script>
+</body>
+</html>
