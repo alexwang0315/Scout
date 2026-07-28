@@ -72,6 +72,22 @@ def test_search_project_map_perception_exposes_layer_materials_without_vision_cl
     assert forest["candidate_only"] is True
 
 
+def test_search_project_map_perception_does_not_treat_confidence_as_query_match(
+    tmp_path: Path,
+) -> None:
+    workspace = _write_map_perception_workspace(tmp_path)
+
+    result = search_project_map_perception(
+        workspace,
+        query="這個谷地有沒有自然出口，還是三面封閉？",
+        limit=3,
+    )
+
+    assert result["answerability"] == "map_perception_no_matching_material"
+    assert result["result_count"] == 0
+    assert result["missing_fields"] == ["matching_map_perception_results"]
+
+
 def test_search_project_map_perception_cp_nearby_annotation_uses_named_point_distance(
     tmp_path: Path,
 ) -> None:
