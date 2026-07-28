@@ -50,14 +50,14 @@
 ## Dashboard Diagnostic UI
 
 Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前的
-`DASH-001～DASH-029`。
+`DASH-001～DASH-030`。
 
 - 尚未測試：灰燈。
 - 測試中：黃燈與 `測試中`。
 - 測試通過：綠燈與 `測試通過`。
 - 測試失敗：紅燈與 `測試失敗`，並顯示失敗原因。
 - 每題都有獨立的 `重新測試`。
-- 頁首 `Diag all` 依序執行 25 題，避免大型 project projection API
+- 頁首 `Diag all` 依序執行 30 題，避免大型 project projection API
   同時被大量呼叫。
 
 Diagnostic UI 是即時、read-only 的快速診斷層。它只使用 UI contract、
@@ -74,10 +74,10 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 | 頁面功能分類 | 已可驗收項目 |
 |---|---|
 | 全域與 Overview | DASH-001、DASH-002、DASH-011 |
-| Plan Trip、Workspace 與 canonical surfaces | DASH-003、DASH-007、DASH-012～DASH-015 |
-| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-029 |
+| Plan Trip 與 Workspace | DASH-003、DASH-007、DASH-012～DASH-014 |
+| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030 |
 | Exploring for Six Axis | DASH-008、DASH-018～DASH-025 |
-| Assistant、System 與 Safety / Emergency | DASH-009、DASH-010 |
+| Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015 |
 
 本版刻意不收錄仍屬 preview、placeholder 或未來規劃的功能。只有已存在
 可操作 UI、API／artifact、明確資料邊界，且能產生 PASS／FAIL 證據的功能
@@ -123,11 +123,11 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 檢查步驟：
 
-1. 依序開啟 Overview、Workspace、Trip Intake、Pre-trip Surface、
-   Country Material Pool、Map、Timeline Evidence、LBS、Route Context、
+1. 依序開啟 Overview、Workspace、Trip Intake、Country Material Pool、
+   Map、Timeline Evidence、LBS、Route Context、
    Pace Dashboard、Body Index、Permission、Architecture、Weather、
-   Navigation、Safety / Emergency、Assistant、Living、Admin Surface、
-   Debug Surface、Debug Message、MQTT / Observer、Settings。
+   Navigation、Safety / Emergency、Assistant、Living、Debug Surface、
+   Debug Message、MQTT / Observer、Settings。
 2. 每次切頁檢查 active 樣式、頁面標題、maturity、truth strip 與主要內容。
 3. 使用瀏覽器上一頁／下一頁，再重新整理目前 route。
 4. 在窄螢幕開關側邊選單，確認焦點與展開狀態正確。
@@ -137,6 +137,8 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 - 每個導覽入口都能到正確 route，沒有空白頁、錯頁或殘留上一頁資料。
 - active route、標題、truth strip 與實際內容一致。
 - 返回、前進與重新整理後仍保留 Project ID 和正確 route。
+- Plan Trip 不顯示 Pre-trip Surface，System 不顯示 Admin Surface；舊 hash
+  會安全返回 Overview。
 - preview／partial／live／sandbox 標示不會把候選功能誤標為已完成或安全真值。
 - 桌面與窄螢幕都能操作所有導覽項目，沒有被遮住或水平溢出。
 
@@ -177,7 +179,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 ### DASH-004 32 層圖層契約、來源與幾何內容
 
-- 頁面／範圍：Map、Weather、Pre-trip Surface、Debug Surface、Admin Surface。
+- 頁面／範圍：Map、Weather、Debug Surface。
 - 優先級：P0。
 - 契約基準：`scout_layer_contract.py`。
 
@@ -466,7 +468,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 ### DASH-012 Workspace Operations 與非執行型操作收據
 
 - 頁面／範圍：Plan Trip → Workspace → Workspace Operations。
-- 頁面分類：Plan Trip、Workspace 與 canonical surfaces。
+- 頁面分類：Plan Trip 與 Workspace。
 - 優先級：P0。
 
 檢查步驟：
@@ -497,7 +499,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 ### DASH-013 Connected Preparation 狀態與明確 Refresh
 
 - 頁面／範圍：Workspace、Weather 與 connected-preparation status。
-- 頁面分類：Plan Trip、Workspace 與 canonical surfaces。
+- 頁面分類：Plan Trip 與 Workspace。
 - 優先級：P0。
 
 檢查步驟：
@@ -528,7 +530,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 ### DASH-014 Country Material Pool 國別資料來源與預設值
 
 - 頁面／範圍：Plan Trip → Country Material Pool、Trip Intake。
-- 頁面分類：Plan Trip、Workspace 與 canonical surfaces。
+- 頁面分類：Plan Trip 與 Workspace。
 - 優先級：P1。
 
 檢查步驟：
@@ -557,28 +559,28 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 - 缺陷編號：
 - 備註：
 
-### DASH-015 Pre-trip、Admin 與 Debug canonical surface 嵌入
+### DASH-015 Debug canonical surface 嵌入
 
-- 頁面／範圍：Pre-trip Surface、Admin Surface、Debug Surface。
-- 頁面分類：Plan Trip、Workspace 與 canonical surfaces。
+- 頁面／範圍：System → Debug Surface。
+- 頁面分類：Assistant、System 與 Safety / Emergency。
 - 優先級：P0。
 
 檢查步驟：
 
-1. 依序開啟三個 embedded surface。
+1. 開啟 Debug Surface。
 2. 核對 iframe URL、標題、目前 Project ID 與 canonical page 的主要內容。
 3. 等待 `Inner surface ready - content verified` 或等價的 readiness 證據。
 4. 使用 `Skip embedded surface`，確認鍵盤焦點移至 frame 後方的 exit marker。
 5. 切換 route 再返回，檢查 frame 是否錯誤重載、失去 Project ID 或空白。
-6. 模擬一個 iframe 404／timeout，確認外層 Dashboard 可復原。
+6. 模擬 iframe 404／timeout，確認外層 Dashboard 可復原。
 
 通過條件：
 
-- 三個 iframe 都載入正確 canonical surface，而非複製或過期的靜態內容。
+- Debug iframe 載入正確 canonical surface，而非複製或過期的靜態內容。
 - 內層內容、外層 route、Project ID 與 truth strip 一致。
 - Readiness 必須驗證內層主要內容，不能只以 iframe load event 判定成功。
 - 鍵盤使用者可以跳過 iframe 並繼續操作 Dashboard。
-- 單一 embedded surface 失敗不會使側邊導覽或整個 Dashboard 無法使用。
+- Debug Surface 失敗不會使側邊導覽或整個 Dashboard 無法使用。
 
 證據／結果：
 
@@ -1012,9 +1014,41 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 - 缺陷編號：
 - 備註：
 
+### DASH-030 Evidence 是否有計數為 0 的類別
+
+- 頁面／範圍：Timeline Evidence、Map Evidence、System → Diagnostic。
+- 頁面分類：Map & Evidence。
+- 優先級：P0。
+
+檢查步驟：
+
+1. 載入目前 workspace 的 compact project projection。
+2. 建立 Dashboard 現行的 Evidence 群組清單，檢查每個群組顯示的 count。
+3. 另外展開 `Evidence Timeline`，逐一檢查其中每個子類別的 evidence count。
+4. 執行 `DASH-030`，比對紅燈訊息列出的類別與畫面上的 `0` 計數。
+
+通過條件：
+
+- 所有 Evidence 群組的 count 都大於 0。
+- `Evidence Timeline` 內所有子類別的 evidence count 都大於 0。
+- 若存在 count=0，Diagnostic 必須顯示紅燈，並列出可辨識的 tab／群組／
+  子類別名稱；不得只顯示籠統錯誤。
+- 檢測只讀取既有 projection，不觸發 preparation、import 或任何 POST。
+
+證據／結果：
+
+- 結果：`FAIL`（2026-07-28，`chilai_nanhua_day1_scoutAI`）
+- 證據：Chromium `Diag all` 完成 30/30，`DASH-030` 紅燈；全程 0 POST。
+- count=0 類別：共 13 類。畫面列出 Overpass Hiking Routes、Overpass
+  Shelters、Overpass Water Sources、Overpass Parking、Overpass Peaks、
+  Overpass Other POI、OSM Milestones、OSM Mobile，並標示另有 5 類。
+- 缺陷編號：
+- 備註：這是目前 workspace 的 Evidence coverage gap，不代表系統自動判定
+  這些類別必須存在真實地物。
+
 ## 後續項目收錄門檻
 
-下一個可用編號為 `DASH-030`。新項目只有在功能已實作，且具備可操作 UI、
+下一個可用編號為 `DASH-031`。新項目只有在功能已實作，且具備可操作 UI、
 API／artifact、測試資料與明確 PASS／FAIL 條件時才加入。未完成、未接線、
 preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
@@ -1022,6 +1056,7 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
+| 2026-07-28 | 新增 DASH-030，檢查 Evidence 群組與 Evidence Timeline 子類別是否存在 count=0，紅燈時列出類別名稱。 |
 | 2026-07-28 | 新增 DASH-026～029，驗證 Map／Navigation／Weather 的 hover hint、框選與鍵盤、圖磚／向量政策及基本地圖操作一致性。 |
 | 2026-07-28 | 將 DASH-001～025 接入 System → Diagnostic；加入三色狀態、單題重測與 Diag all。 |
 | 2026-07-28 | 依頁面功能建立分類索引；只採用現有可驗收能力，擴充至 DASH-025。 |

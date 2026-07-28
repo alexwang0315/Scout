@@ -1778,7 +1778,15 @@
         </div>
       </div>
       <div class="map-wrap">
-        <svg id="map" role="img" aria-label="Scout pre-trip planning evidence map"></svg>
+        <svg
+          id="map"
+          role="img"
+          aria-label="Scout pre-trip planning evidence map"
+          data-map-render-policy="tile-vector-approved-single-image"
+          data-map-vector-surface="svg"
+          data-map-render-policy-status="pending"
+          data-map-render-policy-blocked-image-count="0"
+        ></svg>
       </div>
     </main>
 
@@ -2164,6 +2172,7 @@
       ? PROJECT_ID_PARAM
       : DEFAULT_PROJECT_ID;
     const DASHBOARD_MAP_ONLY = new URLSearchParams(window.location.search).get("mapOnly") === "1";
+    const MAP_WHEEL_ZOOM_ENABLED = new URLSearchParams(window.location.search).get("wheelZoom") !== "0";
     const INITIAL_LAYER_IDS_PARAM = new URLSearchParams(window.location.search).get("initialLayers");
     const INITIAL_LAYER_IDS = INITIAL_LAYER_IDS_PARAM === null
       ? null
@@ -2174,6 +2183,17 @@
     }
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
+    const MAP_RENDER_POLICY = "tile-vector-approved-single-image";
+    const MAP_APPROVED_SINGLE_IMAGE_THEMES = Object.freeze(new Set([
+      "satellite",
+      "radar",
+      "lidar",
+      "hillshade",
+      "elevation_tint",
+      "slope_shading",
+      "contours",
+      "thematic",
+    ]));
     const MAP_VISUAL_PADDING = 56;
     const MAP_MIN_ZOOM = 0.6;
     const MAP_MAX_ZOOM = 12000;
@@ -2465,6 +2485,59 @@
       Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
       if (text) node.textContent = text;
       return node;
+    }
+    function normalizeMapSingleImageTheme(value) {
+      return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
+    }
+    function createApprovedSingleImage(attrs, theme, elementFn = el) {
+      const approvedTheme = normalizeMapSingleImageTheme(theme);
+      if (!MAP_APPROVED_SINGLE_IMAGE_THEMES.has(approvedTheme)) return null;
+      return elementFn("image", {
+        ...attrs,
+        "data-map-render-kind": "approved-single-image",
+        "data-single-image-theme": approvedTheme,
+      });
+    }
+    function mapImageConformsToRenderPolicy(image) {
+      const renderKind = image.getAttribute("data-map-render-kind");
+      if (renderKind === "tile") {
+        return Boolean(
+          image.getAttribute("data-map-tile-source")
+          && (image.hasAttribute("data-raster-tile") || image.hasAttribute("data-osm-tile"))
+        );
+      }
+      if (renderKind !== "approved-single-image") return false;
+      return MAP_APPROVED_SINGLE_IMAGE_THEMES.has(
+        normalizeMapSingleImageTheme(image.getAttribute("data-single-image-theme"))
+      );
+    }
+    function enforceMapRenderPolicy(root) {
+      let blockedImageCount = 0;
+      [...root.querySelectorAll("image")].forEach(image => {
+        if (mapImageConformsToRenderPolicy(image)) return;
+        image.remove();
+        blockedImageCount += 1;
+      });
+      const retainedImages = [...root.querySelectorAll("image")];
+      root.setAttribute("data-map-render-policy", MAP_RENDER_POLICY);
+      root.setAttribute(
+        "data-map-render-policy-status",
+        blockedImageCount ? "blocked-unapproved-images" : "verified"
+      );
+      root.setAttribute("data-map-render-policy-blocked-image-count", String(blockedImageCount));
+      root.setAttribute(
+        "data-map-render-tile-count",
+        String(retainedImages.filter(image => image.getAttribute("data-map-render-kind") === "tile").length)
+      );
+      root.setAttribute(
+        "data-map-render-approved-single-image-count",
+        String(retainedImages.filter(image => image.getAttribute("data-map-render-kind") === "approved-single-image").length)
+      );
+      root.setAttribute(
+        "data-map-render-vector-count",
+        String(root.querySelectorAll("path, polyline, polygon, circle, line").length)
+      );
+      return {blockedImageCount};
     }
     function selectorValue(value) {
       const raw = String(value || "");
@@ -3034,6 +3107,8 @@
           preserveAspectRatio: "none",
           "data-raster-tile": `${tile.z}/${tile.x}/${tile.y}`,
           "data-map-ref": layerId,
+          "data-map-render-kind": "tile",
+          "data-map-tile-source": layerId,
           "data-source-id": layer.imagery_source_id || layer.source_id || "",
           "data-source-kind": layer.source_kind || "local_geotiff",
           opacity: Number.isFinite(opacity) ? opacity.toFixed(2) : "0.92"
@@ -3059,7 +3134,9 @@
           href: tile.href,
           class: "osm-tile",
           preserveAspectRatio: "none",
-          "data-osm-tile": `${tile.z}/${tile.x}/${tile.y}`
+          "data-osm-tile": `${tile.z}/${tile.x}/${tile.y}`,
+          "data-map-render-kind": "tile",
+          "data-map-tile-source": "osm"
         });
         positionTileImage(image, bounds, tile);
         attachTileFallback(image, bounds, tile, fallbackTile => osmTileUrl(fallbackTile.z, fallbackTile.x, fallbackTile.y), OSM_MIN_ZOOM, "data-osm-tile");
@@ -3176,11 +3253,12 @@
     function renderTerrainBitmapOverlays(group, view, bounds) {
       const overlays = terrainRasterOverlays(view)
         .filter(overlay => overlay.default_visible && boundsIntersect(bounds, normalizeRasterBounds(overlay.bbox_wgs84)));
+      let renderedCount = 0;
       overlays.forEach(overlay => {
         const overlayBounds = normalizeRasterBounds(overlay.bbox_wgs84);
         const [x1, y1] = project(bounds, overlayBounds.north, overlayBounds.west);
         const [x2, y2] = project(bounds, overlayBounds.south, overlayBounds.east);
-        const image = el("image", {
+        const image = createApprovedSingleImage({
           href: rasterTileCacheBustedUrl(apiUrlTemplate(overlay.runtime_href)),
           x: Math.min(x1, x2).toFixed(2),
           y: Math.min(y1, y2).toFixed(2),
@@ -3193,7 +3271,8 @@
           "data-terrain-cell-resolution-m": overlay.cell_resolution_m ?? "",
           "data-terrain-corridor-half-width-m": overlay.corridor_half_width_m ?? "",
           "data-terrain-sha256": overlay.sha256 || ""
-        });
+        }, overlay.mode || overlay.overlay_id);
+        if (!image) return;
         attachEvidence(image, {
           ...overlay,
           evidence_type: "pretrip_terrain_visualization_bitmap_overlay",
@@ -3203,8 +3282,9 @@
           runtime_safety_truth: false
         });
         group.appendChild(image);
+        renderedCount += 1;
       });
-      return overlays.length;
+      return renderedCount;
     }
     function terrainCellSide(bounds, widthMeters = TERRAIN_FALLBACK_CELL_WIDTH_M) {
       const centerLat = (bounds.north + bounds.south) / 2;
@@ -4085,6 +4165,7 @@
         osmGroup.replaceChildren();
         if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
       }
+      enforceMapRenderPolicy(svg);
     }
     function applyMapViewport() {
       svg.setAttribute("viewBox", mapViewBox());
@@ -6660,6 +6741,7 @@
       svg.appendChild(weatherApiGroup);
       orderMapLayerGroups();
       updateLayers();
+      enforceMapRenderPolicy(svg);
       applyMapViewport();
       highlightMapFor(state.selected);
     }
@@ -7481,7 +7563,7 @@
         finishMapPointerPan(event, clickEvent => setSelectedMapCoordinate(coordinateFromMapPointerEvent(clickEvent)));
       });
       svg.addEventListener("pointercancel", cancelMapPointerPan);
-      svg.addEventListener("wheel", handleMapWheelZoom, {passive: false});
+      if (MAP_WHEEL_ZOOM_ENABLED) svg.addEventListener("wheel", handleMapWheelZoom, {passive: false});
       setMapInteractionMode("pan");
     }
     function closeLayerMenus(exceptMenu = null) {
@@ -7605,7 +7687,7 @@
         const bbox = frame.bboxWgs84;
         const [x1, y1] = projectFn(bounds, bbox.north, bbox.west);
         const [x2, y2] = projectFn(bounds, bbox.south, bbox.east);
-        group.appendChild(elementFn("image", {
+        const image = createApprovedSingleImage({
           href: frame.assetUrl.startsWith("/") ? `${apiBase()}${frame.assetUrl}` : frame.assetUrl,
           x: Math.min(x1, x2), y: Math.min(y1, y2),
           width: Math.abs(x2 - x1), height: Math.abs(y2 - y1),
@@ -7614,7 +7696,9 @@
           "aria-hidden": "true",
           "data-cwa-imagery-family": family,
           "data-cwa-imagery-frame": frame.frameId
-        }));
+        }, family, elementFn);
+        if (!image) return;
+        group.appendChild(image);
       });
     }
     function cwaRainfallCoverageStatus(rainfall) {

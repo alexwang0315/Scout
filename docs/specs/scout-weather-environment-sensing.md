@@ -311,10 +311,13 @@ source georeferencing for map and eligible route sampling. True-color is
 visual/corroborating only and uses the configured source's `Last-Modified`
 timestamp.
 
-Dashboard MAP embeds the canonical pretrip map and controls `cwa-weather`
-through a same-origin state bridge. It exposes product, 3/6/9/12-hour window,
-frame, radar/satellite opacity, play/pause, timestamp, and delay without
-duplicating projection or image-processing code. The browser path remains
+Exploring for Six Axis → Weather embeds the canonical pretrip map and owns the
+five Weather / 氣象與水文 layer controls: `soil-moisture`,
+`antecedent-rain`, `cwa-qpf`, `cwa-weather`, and `weather-api`. Its same-origin
+state bridge exposes QPE/QPF selection, rainfall opacity and status,
+radar/satellite product and opacity, 3/6/9/12-hour window, frame, play/pause,
+timestamp, and delay without duplicating projection or image-processing code.
+Dashboard MAP excludes these weather controls. The browser path remains
 cache-only; all fetch, decode, georeference, route sampling, and motion work is
 server-side, while Pi/mobile surfaces consume only prepared display assets and
 compact candidate features.

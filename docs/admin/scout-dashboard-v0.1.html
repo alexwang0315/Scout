@@ -431,6 +431,73 @@
       display: block;
     }
 
+    .dashboard-map-loading {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      z-index: 87;
+      width: min(420px, calc(100% - 116px));
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 11px;
+      padding: 10px 12px;
+      border: 1px solid rgba(98, 181, 196, .48);
+      border-radius: 8px;
+      background: rgba(7, 17, 20, .94);
+      color: var(--text);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, .34);
+      backdrop-filter: blur(10px);
+      transform: translateX(-50%);
+    }
+
+    .dashboard-map-loading[hidden] {
+      display: none !important;
+    }
+
+    .dashboard-map-loading[data-status="blocked"] {
+      border-color: rgba(208, 99, 99, .68);
+    }
+
+    .dashboard-map-loading-indicator {
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(98, 181, 196, .32);
+      border-top-color: var(--accent);
+      border-radius: 999px;
+      animation: dashboard-map-loading-spin .8s linear infinite;
+    }
+
+    .dashboard-map-loading[data-status="blocked"] .dashboard-map-loading-indicator {
+      border-color: var(--bad);
+      animation: none;
+    }
+
+    .dashboard-map-loading-copy {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .dashboard-map-loading-copy strong {
+      font-size: 13px;
+    }
+
+    .dashboard-map-loading-copy span {
+      color: var(--muted);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .dashboard-map-loading button {
+      min-height: 32px;
+      padding: 5px 9px;
+    }
+
+    @keyframes dashboard-map-loading-spin {
+      to { transform: rotate(360deg); }
+    }
+
     .map-evidence-rail {
       position: absolute;
       top: 14px;
@@ -484,113 +551,6 @@
       color: var(--muted);
       font-size: 12px;
       overflow-wrap: anywhere;
-    }
-
-    .dashboard-cwa-imagery {
-      display: grid;
-      gap: 9px;
-      padding: 10px;
-      border: 1px solid rgba(76, 199, 223, .34);
-      border-radius: 7px;
-      background: rgba(11, 28, 34, .88);
-    }
-
-    .dashboard-cwa-imagery-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .dashboard-cwa-panel-toggle {
-      min-width: 44px;
-      min-height: 44px;
-      padding: 7px 10px;
-    }
-
-    .dashboard-cwa-imagery-header strong {
-      color: #f3f7f8;
-      font-size: 13px;
-    }
-
-    .dashboard-cwa-imagery-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .dashboard-cwa-imagery label {
-      display: grid;
-      gap: 4px;
-      min-width: 0;
-      color: #9fb7bd;
-      font-size: 11px;
-      font-weight: 700;
-    }
-
-    .dashboard-cwa-imagery input,
-    .dashboard-cwa-imagery select,
-    .dashboard-cwa-imagery button {
-      min-width: 0;
-      min-height: 44px;
-      border: 1px solid rgba(122, 151, 160, .5);
-      border-radius: 5px;
-      background: #111f24;
-      color: #edf5f6;
-      font: inherit;
-    }
-
-    .dashboard-cwa-imagery input:focus-visible,
-    .dashboard-cwa-imagery select:focus-visible,
-    .dashboard-cwa-imagery button:focus-visible {
-      outline: 2px solid #ffd36a;
-      outline-offset: 2px;
-    }
-
-    .dashboard-cwa-layer-toggle {
-      grid-template-columns: 24px minmax(0, 1fr);
-      align-items: center;
-      grid-column: 1 / -1;
-      min-height: 28px;
-    }
-
-    .dashboard-cwa-layer-toggle input {
-      width: 44px;
-      min-height: 44px;
-      margin: 0;
-      accent-color: #4cc7df;
-    }
-
-    .dashboard-cwa-imagery .cwa-rainfall-legend {
-      grid-column: 1 / -1;
-      display: grid;
-      grid-template-columns: repeat(9, minmax(24px, 1fr));
-      gap: 2px;
-      color: #9fb7bd;
-      font-size: 9px;
-      text-align: center;
-    }
-
-    .dashboard-cwa-imagery .cwa-rainfall-legend span::before {
-      content: "";
-      display: block;
-      height: 7px;
-      border: 1px solid rgba(15, 23, 42, .2);
-      border-radius: 2px;
-      background: var(--rain-color);
-    }
-
-    .dashboard-cwa-imagery output {
-      min-height: 32px;
-      color: #c9d8dc;
-      font-size: 11px;
-      line-height: 1.4;
-      overflow-wrap: anywhere;
-    }
-
-    .dashboard-cwa-imagery-boundary {
-      color: #78959d;
-      font-size: 10px;
     }
 
     .map-evidence-toggle {
@@ -4081,9 +4041,31 @@
       gap: 12px;
     }
 
+    .workspace-command-panel {
+      position: relative;
+      overflow: hidden;
+      border-color: rgba(98, 181, 196, .5);
+      background:
+        linear-gradient(135deg, rgba(98, 181, 196, .09), transparent 42%),
+        var(--surface);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+    }
+
+    .workspace-command-panel::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--accent), var(--warn));
+    }
+
+    .workspace-command-panel .panel-header {
+      background: rgba(4, 15, 15, .34);
+    }
+
     .workspace-action-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr));
       gap: 8px;
     }
 
@@ -4092,7 +4074,22 @@
     .import-trip-actions button {
       min-width: 0;
       padding: 0 9px;
-      white-space: nowrap;
+    }
+
+    .workspace-action-grid button {
+      min-height: 46px;
+      height: auto;
+      justify-content: flex-start;
+      padding: 8px 10px;
+      text-align: left;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.15;
+    }
+
+    .workspace-switch-row button {
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
 
     .workspace-action-grid button[data-danger="true"] {
@@ -4456,7 +4453,8 @@
       accent-color: var(--accent);
     }
 
-    .import-trip-actions button[data-import-trip-action="stage"] {
+    .import-trip-actions button[data-import-trip-action="preview"],
+    .import-trip-actions button[data-import-trip-action="create"] {
       border-color: rgba(213, 166, 66, .48);
       color: #f2dfae;
     }
@@ -4634,7 +4632,6 @@
       .body-index-health-grid,
       .body-index-pressure-timeline,
       .body-index-provider-grid,
-      .workspace-action-grid,
       .workspace-switch-row {
         grid-template-columns: 1fr;
       }
@@ -4709,6 +4706,12 @@
     @media (max-width: 620px) {
       .workspace {
         padding: 10px;
+      }
+      .workspace-action-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .workspace-action-grid button {
+        min-height: 50px;
       }
       .dashboard-map-controls {
         top: 6px;
@@ -4811,26 +4814,6 @@
         left: auto;
         width: min(304px, calc(100vw - 20px));
         max-height: none;
-      }
-      .dashboard-cwa-imagery[data-dashboard-cwa-sheet-state="peek"] .dashboard-cwa-imagery-grid,
-      .dashboard-cwa-imagery[data-dashboard-cwa-sheet-state="peek"] [data-dashboard-cwa-rainfall-status],
-      .dashboard-cwa-imagery[data-dashboard-cwa-sheet-state="peek"] .dashboard-cwa-imagery-boundary {
-        display: none;
-      }
-      .dashboard-cwa-imagery[data-dashboard-cwa-sheet-state="expanded"] {
-        max-height: calc(var(--cwa-mobile-rail-height) - 96px);
-        overflow: auto;
-        overscroll-behavior: contain;
-        padding-bottom: max(10px, env(safe-area-inset-bottom));
-      }
-      .dashboard-cwa-imagery-grid {
-        grid-template-columns: 1fr;
-      }
-      .dashboard-cwa-imagery-header {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        background: rgba(11, 28, 34, .96);
       }
     }
     .living-hero {
@@ -6968,6 +6951,7 @@
     @media (prefers-reduced-motion: reduce) {
       .field-instrument-theme .workspace > * { animation: none; }
       .terrain-feature-target .terrain-feature-halo { transition: none; }
+      .dashboard-map-loading-indicator { animation: none; }
     }
   </style>
 </head>
@@ -6985,7 +6969,6 @@
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="features-workspace" data-route-truth="partial"><span class="mark"></span><span>Workspace</span></button>
             <button class="nav-item" type="button" data-route="features-import-new-trip" data-route-truth="partial"><span class="mark"></span><span>Trip Intake</span></button>
-            <button class="nav-item" type="button" data-route="surface-pretrip" data-route-truth="live"><span class="mark"></span><span>Pre-trip Surface</span></button>
             <button class="nav-item" type="button" data-route="features-country-material-pool" data-route-truth="preview"><span class="mark"></span><span>Country Material Pool</span></button>
           </div>
         </details>
@@ -7020,7 +7003,6 @@
           <summary><span class="mark"></span><span>System</span></summary>
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="living" data-route-truth="sandbox"><span class="mark"></span><span>Living</span></button>
-            <button class="nav-item" type="button" data-route="surface-admin" data-route-truth="live"><span class="mark"></span><span>Admin Surface</span></button>
             <button class="nav-item" type="button" data-route="surface-debug" data-route-truth="live"><span class="mark"></span><span>Debug Surface</span></button>
             <button class="nav-item" type="button" data-route="debug" data-route-truth="partial"><span class="mark"></span><span>Debug Message</span></button>
             <button class="nav-item" type="button" data-route="observer" data-route-truth="preview"><span class="mark"></span><span>MQTT / Observer</span></button>
@@ -7056,6 +7038,14 @@
         <section class="pretrip-map-only-shell" id="dashboardMap" data-map-source="/admin/pretrip" data-map-mode="pretrip-map-only" hidden aria-hidden="true" tabindex="-1">
           <button class="dashboard-nav-toggle dashboard-map-nav-toggle" type="button" id="dashboardMapNavToggle" data-dashboard-nav-toggle aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Open dashboard navigation">☰</button>
           <span class="sr-only" id="dashboardMapStatus" data-map-connected="true">pre-trip map only</span>
+          <div class="dashboard-map-loading" id="dashboardMapLoading" data-status="loading" role="status" aria-live="polite">
+            <span class="dashboard-map-loading-indicator" aria-hidden="true"></span>
+            <span class="dashboard-map-loading-copy">
+              <strong id="dashboardMapLoadingTitle">Preparing route map</strong>
+              <span id="dashboardMapLoadingDetail">Loading this workspace projection once. Evidence will follow the same source.</span>
+            </span>
+            <button type="button" id="dashboardMapRetry" hidden>Retry</button>
+          </div>
           <iframe class="pretrip-map-only-frame" id="pretripMapFrame" title="Pre-trip map" loading="eager"></iframe>
           <aside class="map-evidence-rail" id="dashboardMapEvidence" aria-label="Map evidence and timeline context"></aside>
         </section>
@@ -7080,7 +7070,7 @@
             <div class="agent-app-actions">
               <span class="chip info" id="agentProviderChip">provider checking</span>
               <span class="chip warn">No live safety</span>
-              <span class="chip info">SCOUT_AI_ASSISTANT_ENABLED=1 still requires a readiness probe</span>
+              <span class="chip info">Dashboard Scout AI API · /assistant/query</span>
               <span class="chip warn" id="agentStatusChip" role="status" aria-live="polite"><span class="agent-status-dot" id="agentStatusDot" aria-hidden="true"></span> <span id="agentStatusText">checking</span></span>
             </div>
           </div>
@@ -7111,7 +7101,6 @@
 
     const PROJECT_ID = "chilai_nanhua_day1_scoutAI";
     const PRETRIP_DATA_PROJECT_ID = "chilai_nanhua_day1";
-    const WORKSPACE_ROOT = "/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI";
     const ASSISTANT_STATUS_PATH = "/assistant/status";
     const ASSISTANT_QUERY_PATH = "/assistant/query";
     const ASSISTANT_QUERY_TIMEOUT_MS = 240000;
@@ -7150,7 +7139,6 @@
       "features-workspace": Object.freeze({maturity: "partial", surface: "Operational", data: "Workspace projection", action: "Intent-only · no mutation", verification: "Intent capture verified", provenance: "Local workspace metadata", mode: "Operational"}),
       "features-import-new-trip": Object.freeze({maturity: "partial", surface: "Operational", data: "GPX validation required", action: "Intent-only · no mutation", verification: "Awaiting server validation", provenance: "Operator-selected local GPX", mode: "Operational"}),
       "features-country-material-pool": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Projected provider defaults", action: "Read-only selector", verification: "UI verified", provenance: "Country material registry", mode: "Product Preview"}),
-      "surface-pretrip": Object.freeze({maturity: "live", surface: "Operational", data: "Workspace candidate evidence", action: "Embedded controls · verify inner receipt", verification: "Full page + layer toggle verified", provenance: "Pre-trip admin surface", mode: "Operational"}),
       "map": Object.freeze({maturity: "live", surface: "Operational", data: "Loading map evidence", action: "Read-only layer controls", verification: "Layer toggle verified", provenance: "Pre-trip + cache-only CWA", mode: "Operational"}),
       "timeline": Object.freeze({maturity: "partial", surface: "Operational", data: "Paginated evidence", action: "Read-only focus", verification: "Tabs + focus verified", provenance: "Pre-trip evidence tree", mode: "Operational"}),
       "features-lbs": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Projected location context", action: "Read-only · no tracking", verification: "Layer controls verified", provenance: "Candidate map projection", mode: "Product Preview"}),
@@ -7160,18 +7148,17 @@
       "emergency": Object.freeze({maturity: "partial", surface: "Preview UI", data: "Sample packet", action: "Read-only · no outbound", verification: "No-outbound boundary verified", provenance: "Fixture sample", mode: "Product Preview"}),
       "outdoor-weather": Object.freeze({maturity: "partial", surface: "Operational", data: "Cache-only loading", action: "Read-only", verification: "State handling verified", provenance: "CWA prepared cache", mode: "Operational"}),
       "agent": Object.freeze({maturity: "partial", surface: "Degraded", data: "Local evidence context", action: "Operator-triggered model request", verification: "Connection not checked", provenance: "Provider configured · readiness unknown", mode: "Operational"}),
-      "surface-admin": Object.freeze({maturity: "live", surface: "Operational", data: "After-action evidence", action: "Embedded controls · verify inner receipt", verification: "Full page verified", provenance: "Admin after-action surface", mode: "Operational"}),
       "surface-debug": Object.freeze({maturity: "live", surface: "Operational", data: "Runtime + replay evidence", action: "Diagnostics · projected clear is explicit", verification: "Full page verified", provenance: "Per-event provenance", mode: "Operational"}),
       "debug": Object.freeze({maturity: "partial", surface: "Operational", data: "Runtime + replay evidence", action: "Read-only · retry", verification: "Endpoints + tabs verified", provenance: "Per-event provenance", mode: "Technical Prototype"}),
       "settings": Object.freeze({maturity: "live", surface: "Operational", data: "Browser-local settings", action: "Local browser mutation only", verification: "Validation + save path", provenance: "Browser settings", mode: "Operational"}),
-      "diagnostic": Object.freeze({maturity: "live", surface: "Ready", data: "29 checks not run", action: "Read-only diagnostics", verification: "Awaiting Diag all", provenance: "Dashboard UI + same-origin GET APIs", mode: "Operational"}),
+      "diagnostic": Object.freeze({maturity: "live", surface: "Ready", data: "30 checks not run", action: "Read-only diagnostics", verification: "Awaiting Diag all", provenance: "Dashboard UI + same-origin GET APIs", mode: "Operational"}),
       "outdoor-permission": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Static class descriptions", action: "Read-only selector", verification: "No runtime decision", provenance: "Static rule set", mode: "Static rule set"}),
       "observer": Object.freeze({maturity: "preview", surface: "Technical prototype", data: "Projected ingress · broker unverified", action: "Read-only · no publish", verification: "Connection/data lifecycle unverified", provenance: "Debug ingress references", mode: "Technical Prototype"}),
       "outdoor-architecture": Object.freeze({maturity: "partial", surface: "Operational analysis", data: "Loading route architecture evidence", action: "Read-only candidate analysis", verification: "Awaiting route topology projection", provenance: "Pretrip workspace + historical GPX aggregates", mode: "Candidate analysis"}),
       "outdoor-navigation": Object.freeze({maturity: "partial", surface: "Terrain reading workbench", data: "Workspace DEM + candidate morphology", action: "Read-only feature inspection", verification: "Workspace API + UX verified", provenance: "Prepared DTM + GPX source ledger", mode: "Operational analysis"}),
     });
     const ROUTE_DATA_SCOPES = Object.freeze({
-      project: ["home", "map", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-pretrip", "surface-admin", "surface-debug", "emergency", "outdoor-route-context", "outdoor-architecture", "outdoor-weather"],
+      project: ["home", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-debug", "emergency", "outdoor-route-context", "outdoor-architecture", "outdoor-weather"],
       briefing: ["outdoor-route-context"],
       body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index"],
       weather: ["home", "outdoor-weather"],
@@ -7195,7 +7182,7 @@
       {id: "DASH-012", category: "Plan Trip / Workspace", title: "Workspace Operations 與非執行型收據", description: "讀取 operation requests 與 intent-only capability。", run: diagnosticCheck012},
       {id: "DASH-013", category: "Plan Trip / Workspace", title: "Connected Preparation 狀態與明確 Refresh", description: "只讀取 job status；不觸發 refresh POST。", run: diagnosticCheck013},
       {id: "DASH-014", category: "Plan Trip / Workspace", title: "Country Material Pool 國別來源與預設值", description: "確認 Taiwan、Japan、Global registry 彼此隔離。", run: diagnosticCheck014},
-      {id: "DASH-015", category: "Plan Trip / Workspace", title: "Pre-trip、Admin 與 Debug canonical surface", description: "以安全 GET 確認三個 canonical HTML surface 可用。", run: diagnosticCheck015},
+      {id: "DASH-015", category: "System", title: "Debug canonical surface", description: "以安全 GET 確認保留的 Debug canonical HTML surface 可用。", run: diagnosticCheck015},
       {id: "DASH-016", category: "Map & Evidence", title: "Map 單次 projection、漸進載入與 Retry", description: "確認 compact projection、cache header 與 bridge contract。", run: diagnosticCheck016},
       {id: "DASH-017", category: "Map & Evidence", title: "Map Segment、風險覆蓋與 layer preset", description: "確認目前 project 的 Segment 與風險 evidence 非空。", run: diagnosticCheck017},
       {id: "DASH-018", category: "Exploring for Six Axis", title: "Route Context canonical briefing", description: "讀取目前 project briefing；不重新生成。", run: diagnosticCheck018},
@@ -7210,6 +7197,7 @@
       {id: "DASH-027", category: "Map & Evidence", title: "三圖框選縮放與鍵盤平移", description: "確認三張圖都支援矩形框選放大／縮小，以及方向鍵平移。", run: diagnosticCheck027},
       {id: "DASH-028", category: "Map & Evidence", title: "三圖圖磚、向量與單圖例外政策", description: "確認底圖／圖層使用圖磚或向量；單一圖片僅限明確允許的主題 overlay。", run: diagnosticCheck028},
       {id: "DASH-029", category: "Map & Evidence", title: "三圖基本 Zoom、Pan 與 Fit", description: "確認三張圖都具備放大、縮小、滑鼠平移與 Fit／Reset。", run: diagnosticCheck029},
+      {id: "DASH-030", category: "Map & Evidence", title: "Evidence 是否有計數為 0 的類別", description: "確認 Evidence 群組與 Evidence Timeline 子類別沒有 count=0；若有則列出類別名稱。", run: diagnosticCheck030},
     ]);
     const loadedDataScopes = new Set();
     const dataScopePromises = new Map();
@@ -7403,11 +7391,15 @@
       "rudy-twmap",
       "cwa-qpf",
     ]);
-    const DASHBOARD_MAP_SINGLE_IMAGE_ALLOWLIST = Object.freeze([
+    const DASHBOARD_MAP_RENDER_POLICY = "tile-vector-approved-single-image";
+    const DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES = Object.freeze([
       "satellite",
       "radar",
       "lidar",
       "hillshade",
+      "elevation_tint",
+      "slope_shading",
+      "contours",
       "thematic",
     ]);
 
@@ -7742,28 +7734,6 @@
       selectedMapEvidenceSourceId: "",
       pendingMapEvidenceFocusId: "",
       mapEvidenceRetryTimer: null,
-      dashboardCwaImagery: {
-        bridgeReady: false,
-        status: "loading",
-        layerEnabled: false,
-        rainfallLayerEnabled: false,
-        rainfallProduct: "qpf_next_1h",
-        rainfallProducts: [],
-        rainfallOpacityPercent: 56,
-        rainfallCurrent: null,
-        productId: "radar",
-        products: [],
-        windowId: "12h",
-        frameIndex: 0,
-        maxFrameIndex: 0,
-        radarOpacityPercent: 62,
-        satelliteOpacityPercent: 48,
-        playing: false,
-        current: null,
-        freshness: "unknown_freshness",
-        coverageStatus: "unavailable",
-      },
-      dashboardCwaSheetExpanded: false,
       evidenceItemsBySource: {},
       pretripDataProjectId: PROJECT_ID,
       briefingFrameVersion: "",
@@ -7811,7 +7781,7 @@
         referenceGpxSources: "",
         targetName: "new_trip_scoutAI",
         targetWorkspace: "new_trip_scoutAI",
-        workspaceRoot: "/Users/alexwang0315/workspace",
+        workspaceRoot: "",
         templateProjectRoot: "",
         materialRoot: "",
         dtmDirs: "",
@@ -7824,7 +7794,7 @@
         maxPreviousGpxSpeedRatio: "8",
         overwrite: false,
         prepareLayers: "osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp",
-        prepareWorkspaceRoot: "/Users/alexwang0315/workspace",
+        prepareWorkspaceRoot: "",
         prepareProjectRoot: "",
         prepareBBox: "",
         routeEvidenceBundle: "normalized/routes/route_evidence_bundle.json",
@@ -7852,6 +7822,8 @@
         projectId: "",
         goldenRouteGpx: "",
       },
+      importTripPreview: null,
+      importTripResult: null,
       layerEnabled: {
         ...Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, layerId !== "osm"])),
         ...WEATHER_LAYER_DEFAULTS,
@@ -7865,8 +7837,6 @@
       "features-workspace": ["Features / Workspace", "pretrip project, importer, edits, export and load tooling"],
       "features-import-new-trip": ["Features / Import New Trip", "operator-triggered GPX intake for a new pretrip workspace"],
       "features-country-material-pool": ["Features / Country Material Pool", "country-scoped material and API provider defaults"],
-      "surface-pretrip": ["Pre-trip Surface", "full existing /admin/pretrip workspace embedded in dashboard frame"],
-      "surface-admin": ["Admin Surface", "full existing /admin after-action surface embedded in dashboard frame"],
       "surface-debug": ["Debug Surface", "full existing /admin/debug runtime console embedded in dashboard frame"],
       agent: ["Agent", "same-origin Scout AI conversation"],
       map: ["Map", "32-layer Scout map contract preview"],
@@ -7876,7 +7846,7 @@
       debug: ["Debug Message", "read-only runtime and projection messages"],
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
-      diagnostic: ["Diagnostic", "29 read-only Dashboard checks"],
+      diagnostic: ["Diagnostic", "30 read-only Dashboard checks"],
     };
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -8536,7 +8506,15 @@
 
     function routeFromHash() {
       const raw = (window.location.hash || "#home").slice(1);
-      return raw || "home";
+      const route = raw || "home";
+      const knownRoute = routeMeta[route] || SIX_FORCES.some(item => item.route === route);
+      if (knownRoute) return route;
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}#home`,
+      );
+      return "home";
     }
 
     function truthTone(value) {
@@ -8612,10 +8590,15 @@
         truth.provenance = readiness.label;
         truth.mode = readiness.level === "ready" ? "Operational" : "Not operational";
       }
-      if (route === "map" || route === "outdoor-weather") {
-        const status = route === "outdoor-weather"
-          ? dashboardWeatherDerivedStatus()
-          : dashboardCwaDerivedStatus(state.dashboardCwaImagery || {});
+      if (route === "map") {
+        const mapData = buildMapData();
+        truth.data = mapData.connected ? "Projection geometry" : "Fallback geometry";
+        truth.surface = mapData.connected ? "Operational" : "Degraded";
+        truth.provenance = mapData.connected ? mapData.sourceId : "fallback geometry";
+        truth.mode = truth.surface;
+      }
+      if (route === "outdoor-weather") {
+        const status = dashboardWeatherDerivedStatus();
         const dataLabels = {
           ready: "Live prepared cache",
           stale_data: "Stale · cache-only",
@@ -8626,18 +8609,9 @@
           error: "Source failure",
           unavailable: "Fallback · data unavailable",
         };
-        if (route === "map") {
-          const mapData = buildMapData();
-          const geometryMode = mapData.connected ? "Projection geometry" : "Fallback geometry";
-          truth.data = `${geometryMode} · ${dataLabels[status] || "Unknown prepared cache"}`;
-          truth.surface = mapData.connected && ["ready", "zero_precipitation"].includes(status) ? "Operational" : "Degraded";
-          truth.provenance = `${mapData.connected ? mapData.sourceId : "fallback geometry"} · cache-only CWA`;
-          truth.mode = truth.surface === "Operational" ? "Operational" : "Degraded";
-        } else {
-          truth.data = dataLabels[status] || "Unknown prepared cache";
-          truth.surface = ["ready", "zero_precipitation"].includes(status) ? "Operational" : "Degraded";
-          truth.mode = truth.surface === "Operational" ? "Operational" : "Degraded";
-        }
+        truth.data = dataLabels[status] || "Unknown prepared cache";
+        truth.surface = ["ready", "zero_precipitation"].includes(status) ? "Operational" : "Degraded";
+        truth.mode = truth.surface === "Operational" ? "Operational" : "Degraded";
       }
       if (route.startsWith("surface-")) {
         const frameHealth = state.surfaceFrameHealth?.[route] || {status: "loading", detail: "Inner surface loading"};
@@ -8851,22 +8825,6 @@
       if (route === "features-workspace") return renderWorkspacePage();
       if (route === "features-import-new-trip") return renderImportNewTripPage();
       if (route === "features-country-material-pool") return renderCountryMaterialPoolPage();
-      if (route === "surface-pretrip") {
-        return renderSurfaceFrame({
-          route,
-          title: "Pre-trip Planning",
-          src: surfaceSrc("/admin/pretrip"),
-          summary: "Import, edits, layers, review, handoff.",
-        });
-      }
-      if (route === "surface-admin") {
-        return renderSurfaceFrame({
-          route,
-          title: "Admin After-Action",
-          src: surfaceSrc("/admin"),
-          summary: "Map, evidence, narrative, review state.",
-        });
-      }
       if (route === "surface-debug") {
         return renderSurfaceFrame({
           route,
@@ -8931,7 +8889,7 @@
             <div class="panel-body">
               <div class="metric-line">
                 <div class="metric-row"><span>Project</span><span class="mono">${escapeHtml(projectId())}</span></div>
-                <div class="metric-row"><span>Workspace root</span><span class="mono">${escapeHtml(WORKSPACE_ROOT)}</span></div>
+                <div class="metric-row"><span>Workspace root</span><span class="mono">${escapeHtml(resolvedWorkspaceRoot())}</span></div>
                 <div class="metric-row"><span>Runtime</span><span>handoff/export/load is operator-triggered only</span></div>
               </div>
             </div>
@@ -8959,11 +8917,9 @@
         </details>
         <div style="height:12px"></div>
         <details class="panel optional-parameters-frame">
-          <summary><span>Admin Surfaces</span><small>technical drill down</small></summary>
+          <summary><span>Debug Surface</span><small>technical drill down</small></summary>
           <div class="panel-body">
             <div class="force-list">
-              ${renderSurfaceRow("Pre-trip", surfaceSrc("/admin/pretrip"), "Import, workspace edits, layer preparation, review queues, handoff/export/load tooling.", "surface-pretrip")}
-              ${renderSurfaceRow("Admin", surfaceSrc("/admin"), "After-action map, evidence drawer, mission narrative and review state.", "surface-admin")}
               ${renderSurfaceRow("Debug", surfaceSrc("/admin/debug"), "Runtime/debug timeline, projection messages, observer boundaries and diagnostics.", "surface-debug")}
             </div>
           </div>
@@ -9013,15 +8969,18 @@
     function ensurePretripMapFrame() {
       const frame = document.getElementById("pretripMapFrame");
       if (!frame) return;
-      const src = surfaceSrc("/admin/pretrip");
+      const src = `${surfaceSrc("/admin/pretrip")}&mapOnly=1&wheelZoom=0`;
       const currentProjectId = projectId();
       if (frame.dataset.projectId === currentProjectId && frame.getAttribute("src")) {
         bindPretripMapOnlyFrame(frame);
+        adoptPretripMapProjectBridge(frame);
         return;
       }
       frame.dataset.mapOnlyReady = "loading";
       frame.dataset.mapOnlyPoll = "";
+      frame.dataset.mapOnlyStartedAt = String(Date.now());
       frame.dataset.projectId = currentProjectId;
+      updateDashboardMapLoading("loading");
       frame.src = src;
       bindPretripMapOnlyFrame(frame);
     }
@@ -9613,32 +9572,13 @@
     function renderWorkspacePage() {
       const stats = workspaceStats();
       return `
+        ${renderWorkspaceOperationConsole()}
+        <div style="height:12px"></div>
         ${renderWorkspaceStatsPanels(stats)}
         <div style="height:12px"></div>
         ${renderWorkspaceStructurePanels()}
         <div style="height:12px"></div>
         ${renderWorkspaceCachePanels()}
-        <div style="height:12px"></div>
-        ${renderWorkspaceOperationConsole()}
-        <div style="height:12px"></div>
-        <div class="grid-3">
-          ${renderMetricPanel("Importer", [
-            ["GPX import", "preview/run operator action"],
-            ["Checkpoint policy", "candidate spacing and review"],
-            ["Raw payloads", "summaries only"],
-            ["Workspace root", WORKSPACE_ROOT],
-          ])}
-          ${renderMetricPanel("Workspace Edits", [
-            ["Review decisions", "accepted/corrected/rejected"],
-            ["Route notes", "promote_hint, promote_warning, ignore, field_verify"],
-            ["Expert contribution", "apply plan and workspace result refs"],
-          ])}
-          ${renderMetricPanel("Runtime Handoff", [
-            ["Export", "runtime package candidate"],
-            ["Load tooling", "operator-triggered alpha flow"],
-            ["Boundary", "artifact metadata required"],
-          ])}
-        </div>
         <div style="height:12px"></div>
         ${renderTimelinePanel()}
       `;
@@ -9703,8 +9643,13 @@
     }
 
     function renderWorkspaceOperationConsole() {
+      const context = state.workspaceContext || workspaceContextForProject(projectId());
+      const projects = state.workspaceCatalog?.projects || [];
+      const requestCount = state.workspaceOperationRequests.length;
+      const latestRequest = state.workspaceOperationRequests[0] || null;
+      const operationDisabled = context?.capabilities?.record_operation_request ? "" : "disabled";
       return `
-        <section class="panel" data-workspace-operations="true">
+        <section class="panel workspace-command-panel" data-workspace-operations="true">
           <div class="panel-header">
             <h3>Workspace Operations</h3>
             <span class="chip warn">operator intent only</span>
@@ -9712,22 +9657,32 @@
           <div class="panel-body">
             <div class="workspace-ops">
               <div class="workspace-action-grid" aria-label="Workspace operation actions">
-                <button type="button" data-workspace-action="clone">Record clone request</button>
-                <button type="button" data-workspace-action="transfer">Record transfer request</button>
-                <button type="button" data-workspace-action="pack">Record package request</button>
-                <button type="button" data-workspace-action="restore">Record restore request</button>
-                <button type="button" data-workspace-action="delete" data-danger="true">Request deletion review</button>
-                <button type="button" data-route="features-import-new-trip">Import New Trip</button>
+                <button type="button" data-workspace-action="clone" aria-label="Record clone request" title="Record clone request" ${operationDisabled}>Clone</button>
+                <button type="button" data-workspace-action="transfer" aria-label="Record transfer request" title="Record transfer request" ${operationDisabled}>Transfer</button>
+                <button type="button" data-workspace-action="pack" aria-label="Record package request" title="Record package request" ${operationDisabled}>Package</button>
+                <button type="button" data-workspace-action="restore" aria-label="Record restore request" title="Record restore request" ${operationDisabled}>Restore</button>
+                <button type="button" data-workspace-action="delete" data-danger="true" aria-label="Request deletion review" title="Request deletion review" ${operationDisabled}>Delete review</button>
+                <button type="button" data-route="features-import-new-trip" aria-label="Import New Trip" title="Import New Trip">Import trip</button>
+                <button type="button" id="workspaceRefreshExternalEvidence" aria-label="Refresh external evidence" title="Refresh external evidence" ${context?.capabilities?.connected_preparation_refresh ? "" : "disabled"}>Refresh evidence</button>
               </div>
               <div class="workspace-switch-row">
                 <label class="workspace-field" for="workspaceRedirectProjectInput">
                   <span>Switch dashboard workspace</span>
-                  <input id="workspaceRedirectProjectInput" value="${escapeHtml(projectId())}" placeholder="chilai_nanhua_day1_scoutAI">
+                  <select id="workspaceRedirectProjectInput">
+                    ${projects.map((project) => `
+                      <option value="${escapeHtml(project.project_id)}" ${project.project_id === projectId() ? "selected" : ""}>
+                        ${escapeHtml(project.name)} · ${escapeHtml(project.project_id)}
+                      </option>
+                    `).join("")}
+                  </select>
                 </label>
-                <button type="button" id="workspaceSwitchProject">Switch workspace</button>
+                <button type="button" id="workspaceSwitchProject">Open workspace</button>
               </div>
               <p class="workspace-status" id="workspaceOperationStatus">
-                Intent capture only. No filesystem mutation is performed by this dashboard. Destructive requests still require approval in external operator tooling.
+                Only an append-only request record is written by this dashboard. It does not execute the operation or change runtime safety truth. ${requestCount} request${requestCount === 1 ? "" : "s"} recorded${latestRequest ? `; latest ${escapeHtml(latestRequest.operation)} · ${escapeHtml(latestRequest.request_id)}` : ""}. Delete requires an explicit destructive approval outside this dashboard.
+              </p>
+              <p class="workspace-status">
+                External refresh may use network services and update candidate evidence. It runs only after pressing “Refresh external evidence”.
               </p>
             </div>
           </div>
@@ -9958,8 +9913,8 @@
                   <input id="importGoldenRouteGpxPath" value="${escapeHtml(draft.goldenRouteGpx || "")}" placeholder="/path/to/new_trip.gpx">
                 </label>
                 <label class="workspace-field" for="importWorkspaceRoot">
-                  <span>Workspace root</span>
-                  <input id="importWorkspaceRoot" value="${escapeHtml(workspaceRoot)}" placeholder="/Users/alexwang0315/workspace">
+                  <span>Workspace root · server resolved</span>
+                  <input id="importWorkspaceRoot" value="${escapeHtml(workspaceRoot)}" placeholder="Load the server workspace catalog" readonly>
                 </label>
                 <label class="workspace-field" for="importTargetNameInput">
                   <span>Target name</span>
@@ -9973,8 +9928,9 @@
                 )}
                 <div class="import-trip-actions" aria-label="Import new trip actions">
                   <button type="button" data-import-trip-action="validate">Validate Intake</button>
-                  <button type="button" data-import-trip-action="stage" aria-describedby="importTripStatus" ${state.importTripValidation?.status === "validated" ? "" : "disabled"} title="Server GPX validation is required first">Record stage-import request</button>
-                  <button type="button" data-import-trip-action="open">Open Workspace</button>
+                  <button type="button" data-import-trip-action="preview" aria-describedby="importTripStatus" ${state.importTripValidation?.status === "validated" ? "" : "disabled"} title="Server GPX validation is required first">Preview Import</button>
+                  <button type="button" data-import-trip-action="create" aria-describedby="importTripStatus" ${state.importTripPreview ? "" : "disabled"} title="Import preview is required first">Create Workspace</button>
+                  <button type="button" data-import-trip-action="open" ${state.importTripResult ? "" : "disabled"}>Open Workspace</button>
                   <button type="button" data-route="features-country-material-pool">Material Pool</button>
                 </div>
               </div>
@@ -10001,7 +9957,7 @@
               </div>
             </div>
             <p class="workspace-status" id="importTripStatus">
-              Provide a trip id and Golden route GPX path, then run server validation. The stage-import request records intent only and never mutates the filesystem; execution stays in approved operator tooling.
+              Provide a trip id and Golden route GPX path, validate it, preview the exact import, then explicitly create the workspace. Preview is read-only; Create Workspace writes only inside the server-resolved workspace root.
             </p>
           </div>
         </section>
@@ -10232,7 +10188,7 @@
       const project = state.project || {};
       const counts = projectCounts();
       return {
-        projectRoot: WORKSPACE_ROOT,
+        projectRoot: resolvedWorkspaceRoot(),
         projectManifest: "project.json",
         sourceInbox: project.source_inbox_manifest_ref || project.summary?.source_inbox_manifest_ref || "inbox/source_manifest.json",
         candidates: project.skill_config_manifest_ref || project.summary?.skill_config_manifest_ref || "candidates/skill_config_manifest.json",
@@ -11359,10 +11315,10 @@
     async function diagnosticCheck002() {
       const expectedRoutes = [
         "home", "features-workspace", "features-import-new-trip", "features-country-material-pool",
-        "surface-pretrip", "map", "timeline", "features-lbs", "outdoor-route-context",
+        "map", "timeline", "features-lbs", "outdoor-route-context",
         "outdoor-pace-fit", "outdoor-pace-fit-body-index", "outdoor-permission",
         "outdoor-architecture", "outdoor-weather", "outdoor-navigation", "emergency",
-        "agent", "living", "surface-admin", "surface-debug", "debug", "observer",
+        "agent", "living", "surface-debug", "debug", "observer",
         "settings", "diagnostic",
       ];
       const routeButtons = Array.from(document.querySelectorAll("[data-route]"));
@@ -11495,15 +11451,12 @@
     }
 
     async function diagnosticCheck015() {
-      const [pretrip, admin, debug] = await Promise.all([
-        diagnosticEnvelope(`/admin/pretrip?projectId=${encodeURIComponent(projectId())}`, {text: true, timeoutMs: 60000}),
-        diagnosticEnvelope(`/admin?projectId=${encodeURIComponent(projectId())}`, {text: true, timeoutMs: 60000}),
-        diagnosticEnvelope(`/admin/debug?projectId=${encodeURIComponent(projectId())}`, {text: true, timeoutMs: 60000}),
-      ]);
-      diagnosticRequire(pretrip.data.includes("Scout Phase 4 Pre-Trip Planning"), "Pre-trip canonical surface title is missing.");
-      diagnosticRequire(admin.data.includes("Scout Phase 1 Admin"), "Admin canonical surface title is missing.");
+      const debug = await diagnosticEnvelope(
+        `/admin/debug?projectId=${encodeURIComponent(projectId())}`,
+        {text: true, timeoutMs: 60000},
+      );
       diagnosticRequire(debug.data.includes("Scout Phase 3.5 Runtime Debug"), "Debug canonical surface title is missing.");
-      return "Pre-trip / Admin / Debug canonical surfaces returned HTTP 200";
+      return "Debug canonical surface returned HTTP 200";
     }
 
     async function diagnosticCheck016() {
@@ -11628,6 +11581,7 @@
               diagnosticSourceText(renderNavigationWorkspaceMap),
               diagnosticSourceText(renderNavigationRudyTileLayer),
               diagnosticSourceText(navigationRudyTileImages),
+              diagnosticSourceText(enforceDashboardMapRenderPolicy),
             ].join("\n"),
             controller: diagnosticSourceText(createDashboardMapViewportController),
             controls: renderDashboardMapViewport("diagnostic-navigation-contract", "Navigation diagnostic map", "<svg></svg>"),
@@ -11700,21 +11654,32 @@
       const surfaces = await diagnosticMapSurfaceSources();
       const pretrip = diagnosticCompactSource(surfaces.Map.renderer);
       for (const marker of [
+        'data-map-render-policy="tile-vector-approved-single-image"',
         "function renderRasterLayer(",
         'data-raster-tile',
         "function renderOsmPbfVector(",
         "function renderCwaWeatherImagery(",
+        "function createApprovedSingleImage(",
+        "function enforceMapRenderPolicy(",
+        '"data-map-render-kind": "tile"',
+        '"data-map-render-kind": "approved-single-image"',
       ]) {
         diagnosticRequire(pretrip.includes(marker), `Map/Weather renderer is missing ${marker}.`);
       }
       const navigation = diagnosticCompactSource(surfaces.Navigation.renderer);
       diagnosticRequire(navigation.includes("data-navigation-rudy-tile"), "Navigation Rudy+TW tile rendering is missing.");
       diagnosticRequire(navigation.includes("<svg") && navigation.includes("<path"), "Navigation vector rendering is missing.");
+      diagnosticRequire(navigation.includes('data-map-render-kind="tile"'), "Navigation tile provenance marker is missing.");
       diagnosticRequire(
-        ["satellite", "radar", "lidar", "hillshade", "thematic"].every(kind => DASHBOARD_MAP_SINGLE_IMAGE_ALLOWLIST.includes(kind)),
+        navigation.includes("function enforceDashboardMapRenderPolicy("),
+        "Navigation render-policy enforcement is missing.",
+      );
+      diagnosticRequire(
+        ["satellite", "radar", "lidar", "hillshade", "elevation_tint", "slope_shading", "contours", "thematic"]
+          .every(kind => DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES.includes(kind)),
         "Single-image overlay allowlist is incomplete.",
       );
-      return `All three maps use tiled/vector rendering · single-image exceptions=${DASHBOARD_MAP_SINGLE_IMAGE_ALLOWLIST.join(", ")}`;
+      return `All three maps enforce tiled/vector rendering · approved single-image themes=${DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES.join(", ")}`;
     }
 
     async function diagnosticCheck029() {
@@ -11738,6 +11703,31 @@
       diagnosticRequire(controller.includes("const reset = () =>"), "Navigation Fit/Reset behavior is missing.");
       diagnosticRequire(controller.includes("const panBy = ("), "Navigation pan behavior is missing.");
       return "Map / Navigation / Weather Zoom in · Zoom out · Pan · Fit contracts present";
+    }
+
+    function diagnosticZeroCountEvidenceCategories(project) {
+      const groups = pretripEvidenceGroups(project);
+      const groupGaps = groups
+        .filter(group => Number(group.count) === 0)
+        .map(group => `${group.tabId} / ${group.title}`);
+      const timelineGaps = asArray(project.evidence_timeline?.categories)
+        .filter(item => Number(item.count) === 0)
+        .map(item => `default / Evidence Timeline / ${item.label || item.category_id || "unnamed category"}`);
+      return [...new Set([...groupGaps, ...timelineGaps])];
+    }
+
+    async function diagnosticCheck030() {
+      const project = await diagnosticProjectProjection();
+      const groups = pretripEvidenceGroups(project);
+      diagnosticRequire(groups.length > 0, "No Evidence categories were returned.");
+      const zeroCountCategories = diagnosticZeroCountEvidenceCategories(project);
+      const visibleNames = zeroCountCategories.slice(0, 8).join(", ");
+      const remaining = Math.max(0, zeroCountCategories.length - 8);
+      diagnosticRequire(
+        zeroCountCategories.length === 0,
+        `${zeroCountCategories.length} Evidence categories count=0: ${visibleNames}${remaining ? ` (+${remaining} more)` : ""}`,
+      );
+      return `${groups.length} Evidence groups checked · no count=0 categories`;
     }
 
     function updateDiagnosticDom(caseId = null) {
@@ -12430,7 +12420,7 @@
             <div class="weather-cwa-control-status"><output data-weather-cwa-status="true">${escapeHtml(selectedFrame ? `${selectedIndex + 1}/${frames.length} · ${formatCwaTimestamp(selectedFrame.sourceTimestamp)}` : `No cached ${state.weatherCwaProduct} frame`)}</output><span>${escapeHtml(state.weatherCwaWindowId)} · cache-only</span></div>
           </div>
           <div class="weather-intersection-map weather-cwa-frame-shell">
-            <iframe class="weather-cwa-map-frame" data-weather-cwa-map-frame="true" title="Canonical Pre-trip CWA weather map" src="${escapeHtml(`${surfaceSrc("/admin/pretrip")}&mapOnly=1&initialLayers=${encodeURIComponent(WEATHER_EMBEDDED_MAP_LAYER_IDS.join(","))}`)}" loading="eager"></iframe>
+            <iframe class="weather-cwa-map-frame" data-weather-cwa-map-frame="true" title="Canonical Pre-trip CWA weather map" src="${escapeHtml(`${surfaceSrc("/admin/pretrip")}&mapOnly=1&wheelZoom=0&initialLayers=${encodeURIComponent(WEATHER_EMBEDDED_MAP_LAYER_IDS.join(","))}`)}" loading="eager"></iframe>
             <span class="weather-cwa-frame-state" data-weather-cwa-frame-state="loading">CWA MAP BRIDGE · LOADING</span>
             <div class="weather-map-route-callout" data-weather-intersection-callout="true">
               <strong>${escapeHtml(callout.title)}</strong>
@@ -12503,7 +12493,7 @@
             <strong>${escapeHtml(posture.label)}</strong>
             <p>${escapeHtml(posture.summary)}</p>
           </div>
-          <div class="weather-decision-metric"><small>Affected route</small><strong>${escapeHtml(routeCoverage)}</strong><span>Segment impact requires Map intersection review.</span></div>
+          <div class="weather-decision-metric"><small>Affected route</small><strong>${escapeHtml(routeCoverage)}</strong><span>Segment impact is reviewed in the Weather map below.</span></div>
           <div class="weather-decision-metric"><small>Critical window</small><strong>${escapeHtml(criticalWindow)}</strong><span>Selected rainfall evidence validity boundary.</span></div>
           <div class="weather-decision-metric"><small>Latest radar</small><strong>${escapeHtml(radarTime)}</strong><span>Recheck when a newer cached frame arrives.</span></div>
         </section>
@@ -12746,6 +12736,8 @@
         {
           className: "navigation-terrain-map",
           attributes: 'data-terrain-contour-map="true"',
+          renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
+          wheelZoom: false,
         },
       );
     }
@@ -12939,6 +12931,8 @@
               height="${tileHeight.toFixed(3)}"
               preserveAspectRatio="none"
               data-navigation-rudy-tile="${zoom}/${x}/${y}"
+              data-map-render-kind="tile"
+              data-map-tile-source="rudy-twmap"
             ></image>
           `);
         }
@@ -13036,6 +13030,7 @@
         effectiveZoom,
       );
       tileLayer.dataset.navigationRudyTileKey = tileKey;
+      enforceDashboardMapRenderPolicy(viewport);
     }
 
     function navigationTerrainPointPosition(point, bounds, width = 1000, height = 392) {
@@ -13278,6 +13273,8 @@
           className: "navigation-workspace-map",
           attributes: `data-navigation-workspace-map="true" data-navigation-basemap-layer="rudy-twmap" data-navigation-tile-zoom="${baseZoom}"`,
           overlayHtml: mapOverlay,
+          renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
+          wheelZoom: false,
         },
       );
     }
@@ -15067,6 +15064,48 @@
       });
     }
 
+    function normalizeDashboardSingleImageTheme(value) {
+      return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
+    }
+
+    function dashboardMapImageConformsToRenderPolicy(image) {
+      const renderKind = image.getAttribute("data-map-render-kind");
+      if (renderKind === "tile") {
+        return Boolean(
+          image.getAttribute("data-map-tile-source")
+          && (image.hasAttribute("data-navigation-rudy-tile") || image.hasAttribute("data-map-tile-id"))
+        );
+      }
+      if (renderKind !== "approved-single-image") return false;
+      return DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES.includes(
+        normalizeDashboardSingleImageTheme(image.getAttribute("data-single-image-theme"))
+      );
+    }
+
+    function enforceDashboardMapRenderPolicy(viewport) {
+      if (viewport.dataset.mapRenderPolicy !== DASHBOARD_MAP_RENDER_POLICY) return;
+      let blockedImageCount = 0;
+      viewport.querySelectorAll("svg image").forEach(image => {
+        if (dashboardMapImageConformsToRenderPolicy(image)) return;
+        image.remove();
+        blockedImageCount += 1;
+      });
+      const retainedImages = [...viewport.querySelectorAll("svg image")];
+      viewport.dataset.mapRenderPolicyStatus = blockedImageCount
+        ? "blocked-unapproved-images"
+        : "verified";
+      viewport.dataset.mapRenderPolicyBlockedImageCount = String(blockedImageCount);
+      viewport.dataset.mapRenderTileCount = String(
+        retainedImages.filter(image => image.getAttribute("data-map-render-kind") === "tile").length
+      );
+      viewport.dataset.mapRenderApprovedSingleImageCount = String(
+        retainedImages.filter(image => image.getAttribute("data-map-render-kind") === "approved-single-image").length
+      );
+      viewport.dataset.mapRenderVectorCount = String(
+        viewport.querySelectorAll("svg path, svg polyline, svg polygon, svg circle, svg line").length
+      );
+    }
+
     function renderDashboardMapControls(viewportId, mode = "pan", mouseZoomEnabled = true) {
       const panActive = mode !== "box";
       return `
@@ -15084,10 +15123,14 @@
     function renderDashboardMapViewport(viewportId, label, content, options = {}) {
       const saved = state.mapViewportById?.[viewportId] || {};
       const mouseZoomEnabled = options.mouseZoom !== false;
+      const wheelZoomEnabled = options.wheelZoom !== false;
+      const renderPolicy = options.renderPolicy === DASHBOARD_MAP_RENDER_POLICY
+        ? DASHBOARD_MAP_RENDER_POLICY
+        : "";
       const mode = mouseZoomEnabled && saved.mode === "box" ? "box" : "pan";
       const className = ["dashboard-map-viewport", options.className || ""].filter(Boolean).join(" ");
       const interactionLabel = mouseZoomEnabled
-        ? "Use mouse drag or arrow keys to pan; plus, minus, point zoom, or rectangle drag to zoom."
+        ? `Use mouse drag or arrow keys to pan; plus, minus, point zoom, or rectangle drag to zoom. Mouse wheel zoom is ${wheelZoomEnabled ? "enabled" : "disabled"}.`
         : "Use mouse drag or arrow keys to pan; use plus, minus, or keyboard shortcuts to zoom.";
       return `
         <div
@@ -15096,6 +15139,8 @@
           data-map-mode="${mode}"
           data-map-zoom="1.000"
           data-map-mouse-zoom="${mouseZoomEnabled ? "true" : "false"}"
+          data-map-wheel-zoom="${wheelZoomEnabled ? "true" : "false"}"
+          ${renderPolicy ? `data-map-render-policy="${renderPolicy}" data-map-vector-surface="svg" data-map-render-policy-status="pending" data-map-render-policy-blocked-image-count="0"` : ""}
           ${options.attributes || ""}
           role="region"
           tabindex="0"
@@ -15121,6 +15166,7 @@
 
       const saved = state.mapViewportById?.[viewportId] || {};
       const mouseZoomEnabled = viewport.dataset.mapMouseZoom !== "false";
+      const wheelZoomEnabled = viewport.dataset.mapWheelZoom !== "false";
       let viewState = {
         zoom: Math.max(1, Math.min(12, Number(saved.zoom) || 1)),
         x: Number(saved.x) || 0,
@@ -15340,7 +15386,6 @@
         const tag = String(event.target?.tagName || "").toLowerCase();
         if (["input", "select", "textarea"].includes(tag) || event.target?.isContentEditable) return;
         const key = event.key;
-        const lowerKey = key.toLowerCase();
         let handled = true;
         if (event.key === "ArrowUp") panBy(0, 64, "Map panned up.");
         else if (event.key === "ArrowDown") panBy(0, -64, "Map panned down.");
@@ -15375,7 +15420,7 @@
       viewport.addEventListener("pointermove", onPointerMove);
       viewport.addEventListener("pointerup", event => finishPointer(event));
       viewport.addEventListener("pointercancel", event => finishPointer(event, true));
-      if (mouseZoomEnabled) viewport.addEventListener("wheel", onWheel, {passive: false});
+      if (wheelZoomEnabled) viewport.addEventListener("wheel", onWheel, {passive: false});
       viewport.addEventListener("keydown", onKeyDown);
       viewport.addEventListener("click", (event) => {
         if (!suppressNextClick) return;
@@ -15398,6 +15443,7 @@
       document.querySelectorAll("[data-dashboard-map-viewport]").forEach(viewport => {
         if (viewport.dataset.dashboardMapBound === "true") return;
         viewport.dataset.dashboardMapBound = "true";
+        enforceDashboardMapRenderPolicy(viewport);
         viewport.dashboardMapController = createDashboardMapViewportController(viewport);
       });
     }
@@ -15988,7 +16034,6 @@
             ${collapsed ? "" : `<p id="dashboardMapEvidenceStatus">Loading pre-trip timeline evidence for map focus.</p>`}
           </div>
           ${collapsed ? "" : `<div class="map-evidence-body" id="dashboardMapEvidenceBody">
-            ${renderDashboardCwaImageryControls()}
             <div class="evidence-empty">Timeline evidence will appear here when the pre-trip project payload is ready.</div>
           </div>`}
         `;
@@ -16010,7 +16055,6 @@
           ${collapsed ? "" : `<p id="dashboardMapEvidenceStatus">${escapeHtml(focusStatus)}</p>`}
         </div>
         ${collapsed ? "" : `<div class="map-evidence-body" id="dashboardMapEvidenceBody">
-          ${renderDashboardCwaImageryControls()}
           <div class="evidence-tabs" role="tablist" aria-label="Map evidence categories">
             ${EVIDENCE_TREE_TABS.map((tab) => `
               <button
@@ -16104,89 +16148,7 @@
       return `${prefix}${formatted} Asia/Taipei`;
     }
 
-    function renderDashboardCwaImageryControls() {
-      const imagery = state.dashboardCwaImagery || {};
-      const derivedStatus = dashboardCwaDerivedStatus(imagery);
-      const statusMeta = CWA_UI_STATUSES[derivedStatus] || CWA_UI_STATUSES.unavailable;
-      const sheetState = state.dashboardCwaSheetExpanded ? "expanded" : "peek";
-      const productOptions = [
-        {id: "radar", label: "Radar latest"},
-        {id: "satellite", label: "Satellite latest"},
-        {id: "all", label: "All prepared (compare)"},
-        ...asArray(imagery.products),
-      ];
-      return `
-        <section class="dashboard-cwa-imagery" id="dashboardCwaImagery" aria-label="CWA radar and satellite imagery controls" data-dashboard-cwa-sheet-state="${sheetState}">
-          <div class="dashboard-cwa-imagery-header">
-            <strong>CWA rainfall / radar / satellite</strong>
-            <span class="chip ${statusMeta.tone}" data-dashboard-cwa-imagery-state>${escapeHtml(statusMeta.label)}</span>
-            <button class="dashboard-cwa-panel-toggle" type="button" data-dashboard-cwa-panel-toggle aria-expanded="${state.dashboardCwaSheetExpanded ? "true" : "false"}">${state.dashboardCwaSheetExpanded ? "Peek" : "Expand"}</button>
-          </div>
-          <div class="dashboard-cwa-imagery-grid">
-            <label class="dashboard-cwa-layer-toggle">
-              <input type="checkbox" data-dashboard-cwa-imagery-layer ${imagery.layerEnabled ? "checked" : ""}>
-              <span>Show CWA imagery overlay</span>
-            </label>
-            <label class="dashboard-cwa-layer-toggle">
-              <input type="checkbox" data-dashboard-cwa-rainfall-layer ${imagery.rainfallLayerEnabled ? "checked" : ""}>
-              <span>Show rainfall grid</span>
-            </label>
-            <label>Rain grid
-              <select data-dashboard-cwa-rainfall-product>
-                ${(asArray(imagery.rainfallProducts).length ? imagery.rainfallProducts : [{id: "qpe_past_1h", label: "Past 1h QPE"}, {id: "qpf_next_1h", label: "Next 1h QPF"}]).map(option => `<option value="${escapeHtml(option.id)}" ${option.id === imagery.rainfallProduct ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
-              </select>
-            </label>
-            <label>Rain opacity
-              <input type="range" min="0" max="100" value="${Number(imagery.rainfallOpacityPercent ?? 56)}" data-dashboard-cwa-rainfall-opacity>
-            </label>
-            <div class="cwa-rainfall-legend" data-dashboard-cwa-rainfall-legend aria-label="Rainfall millimetre legend"><span style="--rain-color:#fff">0</span><span style="--rain-color:#77edf1">0.3</span><span style="--rain-color:#00a8f3">1</span><span style="--rain-color:#1ba500">1.5</span><span style="--rain-color:#f4f500">3</span><span style="--rain-color:#ff9800">6</span><span style="--rain-color:#f50000">10</span><span style="--rain-color:#8f0000">17</span><span style="--rain-color:#eb00dc">25+ mm</span></div>
-            <label>Product
-              <select data-dashboard-cwa-imagery-product>
-                ${productOptions.map(option => `<option value="${escapeHtml(option.id)}" ${option.id === imagery.productId ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
-              </select>
-            </label>
-            <label>Window
-              <select data-dashboard-cwa-imagery-window>
-                ${["3h", "6h", "9h", "12h"].map(value => `<option value="${value}" ${value === imagery.windowId ? "selected" : ""}>${value}</option>`).join("")}
-              </select>
-            </label>
-            <label>Frame
-              <input type="range" min="0" max="${Number(imagery.maxFrameIndex || 0)}" value="${Number(imagery.frameIndex || 0)}" data-dashboard-cwa-imagery-timeline>
-            </label>
-            <label>Radar opacity
-              <input type="range" min="0" max="100" value="${Number(imagery.radarOpacityPercent ?? 62)}" data-dashboard-cwa-imagery-opacity="radar">
-            </label>
-            <label>Satellite opacity
-              <input type="range" min="0" max="100" value="${Number(imagery.satelliteOpacityPercent ?? 48)}" data-dashboard-cwa-imagery-opacity="satellite">
-            </label>
-            <button type="button" data-dashboard-cwa-imagery-play aria-pressed="${imagery.playing ? "true" : "false"}" ${Number(imagery.maxFrameIndex || 0) < 1 ? "disabled" : ""}>${imagery.playing ? "Pause" : "Play"}</button>
-          </div>
-          <output data-dashboard-cwa-rainfall-status role="status" aria-live="polite">${escapeHtml(dashboardCwaRainfallStatusText(imagery))}</output>
-          <output data-dashboard-cwa-imagery-status role="status" aria-live="polite">${escapeHtml(dashboardCwaImageryStatusText(imagery))}</output>
-          <span class="dashboard-cwa-imagery-boundary">cache-only · candidate-only · image processing stays server-side</span>
-        </section>
-      `;
-    }
-
-    function dashboardCwaImageryStatusText(imagery = state.dashboardCwaImagery || {}) {
-      if (!imagery.bridgeReady) return "Connecting to the same-origin pretrip map controller.";
-      const derivedStatus = dashboardCwaDerivedStatus(imagery);
-      if (derivedStatus === "stale_data") return `STALE · ${dashboardCwaRainfallStatusText(imagery)}`;
-      if (derivedStatus === "no_coverage") return "NO COVERAGE · prepared grid has no valid route-bbox cells; this is unknown, not zero rain.";
-      if (derivedStatus === "zero_precipitation") return "ZERO PRECIPITATION · valid covered cells report 0 mm for the selected product.";
-      if (derivedStatus === "error" || derivedStatus === "unavailable") return "Prepared CWA rainfall/imagery unavailable for this project.";
-      const current = imagery.current;
-      if (!current && imagery.rainfallCurrent) {
-        const cells = Number(imagery.rainfallCurrent.availableCellCount || 0);
-        const coverage = cells > 0 ? `${cells} route-bbox cells` : "no valid route-bbox cells (unknown, not zero)";
-        const semantic = imagery.rainfallCurrent.gridKind === "qpe_past_1h" ? "觀測截至" : "預報基準";
-        return `${imagery.rainfallCurrent.gridKind === "qpe_past_1h" ? "Past 1h QPE" : "Next 1h QPF"} · ${formatCwaTimestamp(imagery.rainfallCurrent.sourceTimestamp, semantic)} · 目前資料延遲 ${imagery.rainfallCurrent.dataDelayMinutes ?? "n/a"}m · ${coverage}`;
-      }
-      if (!current) return "Prepared CWA rainfall/imagery unavailable for this project.";
-      return `${formatCwaTimestamp(current.sourceTimestamp, "影像時間")} · ${formatCwaTimestamp(current.fetchedAt, "快取擷取時間")} · 目前資料延遲 ${current.dataDelayMinutes ?? "n/a"}m · ${current.imageType || "imagery"} · ${current.extent || "unknown extent"}`;
-    }
-
-    function dashboardCwaRainfallStatusText(imagery = state.dashboardCwaImagery || {}) {
+    function dashboardCwaRainfallStatusText(imagery = {}) {
       if (!imagery.bridgeReady) return "Connecting to prepared rainfall grids.";
       const rainfall = imagery.rainfallCurrent;
       if (!rainfall) return "Prepared rainfall grid unavailable for this project.";
@@ -16962,7 +16924,7 @@
           <h3>${escapeHtml(bodyTitle)}</h3>
           <div class="drawer-list">
             <div class="item"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
-            <div class="item"><strong>Workspace root</strong><span class="mono">${escapeHtml(WORKSPACE_ROOT)}</span></div>
+            <div class="item"><strong>Workspace root</strong><span class="mono">${escapeHtml(resolvedWorkspaceRoot())}</span></div>
             <div class="item"><strong>Boundary</strong><span class="mono">candidate-only / no outbound</span></div>
           </div>
         </section>
@@ -17226,6 +17188,30 @@
         button.setAttribute("aria-pressed", enabled ? "true" : "false");
         const status = button.querySelector("[data-weather-layer-state]");
         if (status) status.textContent = enabled ? "ON" : "OFF";
+      });
+    }
+
+    function excludeWeatherLayersFromMapFrame(frame) {
+      let doc;
+      try {
+        doc = frame?.contentDocument;
+      } catch (_error) {
+        return;
+      }
+      if (!doc) return;
+      WEATHER_LAYER_IDS.forEach(layerId => {
+        const input = embeddedPretripLayerInput(frame, layerId);
+        if (!input) return;
+        input.disabled = true;
+        input.closest("label")?.setAttribute("data-dashboard-weather-layer-hidden", "true");
+        setEmbeddedPretripLayerEnabled(frame, layerId, false);
+      });
+      if (frame.dashboardMapWeatherBoundaryDocument === doc) return;
+      frame.dashboardMapWeatherBoundaryDocument = doc;
+      doc.querySelectorAll("[data-layer-preset]").forEach(button => {
+        button.addEventListener("click", () => {
+          window.setTimeout(() => excludeWeatherLayersFromMapFrame(frame), 0);
+        });
       });
     }
 
@@ -17866,8 +17852,9 @@
     }
 
     function importTripWorkspaceRoot(rawWorkspaceRoot) {
-      const root = String(rawWorkspaceRoot || "/Users/alexwang0315/workspace").trim();
-      return (root || "/Users/alexwang0315/workspace").replace(/\/+$/, "");
+      const serverRoot = state.workspaceCatalog?.workspace_parent_root || "";
+      const root = String(rawWorkspaceRoot || serverRoot).trim();
+      return (root || serverRoot).replace(/\/+$/, "");
     }
 
     function importTripProjectRoot(rawWorkspaceRoot, rawTargetName) {
@@ -17895,13 +17882,23 @@
     }
 
     function updateImportStageButton(projectIdValue, gpxPath) {
-      const stageButton = document.querySelector('[data-import-trip-action="stage"]');
-      if (!stageButton) return;
+      const previewButton = document.querySelector('[data-import-trip-action="preview"]');
+      const createButton = document.querySelector('[data-import-trip-action="create"]');
+      const openButton = document.querySelector('[data-import-trip-action="open"]');
       const valid = importTripValidationMatches(projectIdValue, gpxPath);
-      stageButton.disabled = !valid;
-      stageButton.title = valid
-        ? "Records intent only; no filesystem mutation"
-        : "Server GPX validation is required first";
+      if (previewButton) {
+        previewButton.disabled = !valid;
+        previewButton.title = valid
+          ? "Build a read-only import preview"
+          : "Server GPX validation is required first";
+      }
+      if (createButton) {
+        createButton.disabled = !valid || state.importTripPreview?.projectId !== projectIdValue;
+        createButton.title = createButton.disabled
+          ? "Import preview is required first"
+          : "Explicitly create this workspace";
+      }
+      if (openButton) openButton.disabled = state.importTripResult?.projectId !== projectIdValue;
     }
 
     function splitImportReferenceGpxSources(rawValue) {
@@ -17960,7 +17957,7 @@
       const workspaceRootValue = () => importTripWorkspaceRoot(workspaceRootInput.value);
       const derivedProjectRoot = () => importTripProjectRoot(workspaceRootValue(), targetNameValue());
 
-      const updateDraft = () => {
+      const updateDraft = ({invalidatePreview = false} = {}) => {
         const currentPoolDefaults = countryMaterialPoolDefaults(countryPoolInput.value);
         state.importTripDraft = {
           tripId: tripInput.value.trim(),
@@ -18013,6 +18010,10 @@
             goldenRouteGpx: goldenRouteInput.value.trim(),
           };
         }
+        if (invalidatePreview) {
+          state.importTripPreview = null;
+          state.importTripResult = null;
+        }
         updateImportStageButton(targetNameValue(), goldenRouteInput.value);
         renderTruthStrip(state.route);
       };
@@ -18020,7 +18021,7 @@
       const syncWorkspace = () => {
         const nextProjectId = importTripProjectId(tripInput.value);
         if (nextProjectId) targetNameInput.value = nextProjectId;
-        updateDraft();
+        updateDraft({invalidatePreview: true});
         return nextProjectId;
       };
 
@@ -18039,8 +18040,8 @@
         render();
       });
       document.querySelectorAll("[data-import-new-trip] input, [data-import-trip-parameters] input, [data-import-trip-parameters] textarea").forEach((input) => {
-        input.addEventListener("input", updateDraft);
-        input.addEventListener("change", updateDraft);
+        input.addEventListener("input", () => updateDraft({invalidatePreview: true}));
+        input.addEventListener("change", () => updateDraft({invalidatePreview: true}));
       });
 
       document.querySelectorAll("[data-import-trip-action]").forEach((button) => {
@@ -18058,6 +18059,7 @@
           const layers = (fieldValue("prepareLayersList") || importTripDefaultLayerIds()).split(",").map((layer) => layer.trim()).filter(Boolean);
           const checkpointSpacing = Number(fieldValue("importCheckpointSpacingM"));
           const maxDisplayPoints = Number(fieldValue("importMaxReferenceDisplayPoints"));
+          const maxReasonableSpeed = Number(fieldValue("importMaxReasonableGpxSpeedKmh"));
           const routeCorridor = Number(fieldValue("prepareRouteCorridorM"));
           const referenceTrackCorridor = Number(fieldValue("prepareReferenceTrackCorridorM"));
           if (!tripId || !/^[A-Za-z0-9_.-]+$/.test(tripId)) {
@@ -18080,7 +18082,7 @@
             setImportTripStatus("At least one map preparation layer id is required.", "warn");
             return;
           }
-          if (!Number.isFinite(checkpointSpacing) || checkpointSpacing <= 0 || !Number.isFinite(maxDisplayPoints) || maxDisplayPoints <= 0) {
+          if (!Number.isFinite(checkpointSpacing) || checkpointSpacing <= 0 || !Number.isFinite(maxDisplayPoints) || maxDisplayPoints <= 0 || !Number.isFinite(maxReasonableSpeed) || maxReasonableSpeed <= 0) {
             setImportTripStatus("GPX import numeric parameters must be greater than 0.", "warn");
             return;
           }
@@ -18089,6 +18091,8 @@
             return;
           }
           if (action === "validate") {
+            state.importTripPreview = null;
+            state.importTripResult = null;
             state.importTripValidation = {
               status: "validating",
               projectId: nextProjectId,
@@ -18125,21 +18129,100 @@
             }
             return;
           }
-          if (action === "stage") {
+
+          const requestedProfile = fieldValue("importProfile") || materialPool.defaults?.importProfile || "pi-offline";
+          const importPayload = {
+            golden_route_gpx: goldenRouteGpx,
+            profile: ["mac-workstation", "pi-offline", "pi-online-explicit"].includes(requestedProfile)
+              ? requestedProfile
+              : "pi-offline",
+            checkpoint_spacing_m: checkpointSpacing,
+            max_reference_display_points: maxDisplayPoints,
+            max_reasonable_gpx_speed_kmh: maxReasonableSpeed,
+            import_stage: "pretrip",
+            overwrite: fieldChecked("importOverwriteWorkspace"),
+          };
+          const templateProjectRoot = fieldValue("importTemplateProjectRoot");
+          if (templateProjectRoot) importPayload.template_project_root = templateProjectRoot;
+          if (referenceSources.mode === "directory") {
+            importPayload.reference_dir = referenceSources.entries[0];
+          } else if (referenceSources.mode === "explicit_gpx_paths") {
+            importPayload.reference_gpx_paths = referenceSources.entries;
+          }
+
+          if (action === "preview") {
             if (!importTripValidationMatches(nextProjectId, goldenRouteGpx)) {
-              setImportTripStatus("Server GPX validation is required before recording the stage-import request.", "warn");
+              setImportTripStatus("Server GPX validation is required before previewing import.", "warn");
               updateImportStageButton(nextProjectId, goldenRouteGpx);
               return;
             }
-            setImportTripStatus(`Intent recorded. No filesystem mutation was performed. Stage-import request recorded for ${nextProjectId}; execute only in approved operator tooling.`, "warn");
+            button.disabled = true;
+            setImportTripStatus(`Building read-only import preview for ${nextProjectId}...`, "info");
+            try {
+              const preview = await postJson(
+                `/admin/pretrip/projects/${encodeURIComponent(nextProjectId)}/import-gpx-preview`,
+                importPayload,
+                {timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS},
+              );
+              state.importTripPreview = {
+                projectId: nextProjectId,
+                goldenRouteGpx,
+                payload: importPayload,
+                preview,
+              };
+              state.importTripResult = null;
+              setImportTripStatus(`Import preview ready for ${nextProjectId}. No workspace files were written. Review the target ${projectRoot}, then press Create Workspace.`, "ok");
+            } catch (error) {
+              state.importTripPreview = null;
+              setImportTripStatus(`Import preview failed: ${error.message || error}`, "bad");
+            } finally {
+              button.disabled = false;
+              updateImportStageButton(nextProjectId, goldenRouteGpx);
+              renderTruthStrip(state.route);
+            }
+            return;
+          }
+          if (action === "create") {
+            if (
+              state.importTripPreview?.projectId !== nextProjectId
+              || state.importTripPreview?.goldenRouteGpx !== goldenRouteGpx
+            ) {
+              setImportTripStatus("A matching import preview is required before creating the workspace.", "warn");
+              updateImportStageButton(nextProjectId, goldenRouteGpx);
+              return;
+            }
+            button.disabled = true;
+            setImportTripStatus(`Creating ${nextProjectId} inside the server-resolved workspace root...`, "warn");
+            try {
+              const result = await postJson(
+                `/admin/pretrip/projects/${encodeURIComponent(nextProjectId)}/import-gpx`,
+                {...importPayload, confirm_import: true},
+                {timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS},
+              );
+              state.importTripResult = {projectId: nextProjectId, result};
+              await loadWorkspaceCatalog();
+              setImportTripStatus(`Workspace ${nextProjectId} created. Import manifest persisted; no layer preparation, external refresh or runtime load was started.`, "ok");
+            } catch (error) {
+              state.importTripResult = null;
+              setImportTripStatus(`Workspace creation failed: ${error.message || error}`, "bad");
+            } finally {
+              button.disabled = false;
+              updateImportStageButton(nextProjectId, goldenRouteGpx);
+              renderTruthStrip(state.route);
+            }
             return;
           }
           if (action === "open") {
-            localStorage.setItem("scout.dashboardProjectId", nextProjectId);
-            const url = new URL(window.location.href);
-            url.searchParams.set("projectId", nextProjectId);
-            url.hash = "features-workspace";
-            window.location.href = url.toString();
+            try {
+              await validateWorkspaceSelection(nextProjectId);
+              localStorage.setItem("scout.dashboardProjectId", nextProjectId);
+              const url = new URL(window.location.href);
+              url.searchParams.set("projectId", nextProjectId);
+              url.hash = "features-workspace";
+              window.location.href = url.toString();
+            } catch (error) {
+              setImportTripStatus(`Workspace cannot be opened: ${error.message || error}`, "bad");
+            }
           }
         });
       });
@@ -18162,7 +18245,7 @@
     function bindWorkspaceControls() {
       const status = document.getElementById("workspaceOperationStatus");
       document.querySelectorAll("[data-workspace-action]").forEach((button) => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           const action = button.dataset.workspaceAction || "workspace";
           const labels = {
             clone: "Record clone request",
@@ -18171,9 +18254,38 @@
             restore: "Record restore request",
             delete: "Request deletion review",
           };
+          const operationName = {
+            clone: "clone",
+            transfer: "transfer",
+            pack: "package",
+            restore: "restore",
+            delete: "delete_review",
+          }[action];
           const destructiveNote = action === "delete" ? " Delete requires an explicit destructive approval outside this dashboard." : "";
-          if (status) {
-            status.textContent = `Intent recorded. No filesystem mutation was performed. ${labels[action] || action} for ${projectId()} at ${WORKSPACE_ROOT}; use approved operator tooling to execute it.${destructiveNote}`;
+          if (!operationName) return;
+          button.disabled = true;
+          if (status) status.textContent = `Recording ${labels[action] || action}...`;
+          try {
+            const result = await postJson(
+              `/admin/dashboard/workspaces/${encodeURIComponent(projectId())}/operation-requests`,
+              {
+                operation: operationName,
+                confirm_record: true,
+                requested_by: "dashboard_operator",
+              },
+            );
+            await loadWorkspaceOperationRequests();
+            if (status) {
+              status.textContent = `Request ${result.request?.request_id || "recorded"} appended. The operation was not executed and runtime safety truth was not changed.${destructiveNote}`;
+              status.dataset.status = "ok";
+            }
+          } catch (error) {
+            if (status) {
+              status.textContent = `Request could not be recorded: ${error.message || error}`;
+              status.dataset.status = "bad";
+            }
+          } finally {
+            button.disabled = false;
           }
         });
       });
@@ -18181,17 +18293,45 @@
       const switchButton = document.getElementById("workspaceSwitchProject");
       const input = document.getElementById("workspaceRedirectProjectInput");
       if (switchButton && input) {
-        switchButton.addEventListener("click", () => {
+        switchButton.addEventListener("click", async () => {
           const nextProjectId = input.value.trim();
-          if (!/^[A-Za-z0-9_.-]+$/.test(nextProjectId)) {
-            if (status) status.textContent = "Workspace id must use letters, numbers, underscore, dash or dot only.";
-            return;
+          switchButton.disabled = true;
+          if (status) status.textContent = `Validating ${nextProjectId} with the Dashboard server...`;
+          try {
+            await validateWorkspaceSelection(nextProjectId);
+            localStorage.setItem("scout.dashboardProjectId", nextProjectId);
+            const url = new URL(window.location.href);
+            url.searchParams.set("projectId", nextProjectId);
+            url.hash = "features-workspace";
+            window.location.href = url.toString();
+          } catch (error) {
+            if (status) {
+              status.textContent = `Workspace switch cancelled; current workspace is unchanged. ${error.message || error}`;
+              status.dataset.status = "bad";
+            }
+            switchButton.disabled = false;
           }
-          localStorage.setItem("scout.dashboardProjectId", nextProjectId);
-          const url = new URL(window.location.href);
-          url.searchParams.set("projectId", nextProjectId);
-          url.hash = "features-workspace";
-          window.location.href = url.toString();
+        });
+      }
+
+      const refreshButton = document.getElementById("workspaceRefreshExternalEvidence");
+      if (refreshButton) {
+        refreshButton.addEventListener("click", async () => {
+          refreshButton.disabled = true;
+          if (status) {
+            status.textContent = "Starting explicit connected preparation. Network services may be used and candidate evidence may be updated.";
+            status.dataset.status = "warn";
+          }
+          const result = await triggerDashboardConnectedPreparation("workspace-operator-refresh", {force: true});
+          const refreshedStatus = document.getElementById("workspaceOperationStatus");
+          if (refreshedStatus) {
+            refreshedStatus.textContent = result?.status === "error"
+              ? `External refresh failed to start: ${result.lastError?.message || "unknown error"}`
+              : `External refresh ${result?.status || "requested"}. This is separate from workspace switching.`;
+            refreshedStatus.dataset.status = result?.status === "error" ? "bad" : "ok";
+          }
+          const refreshedButton = document.getElementById("workspaceRefreshExternalEvidence");
+          if (refreshedButton) refreshedButton.disabled = false;
         });
       }
     }
@@ -18290,209 +18430,8 @@
       document.querySelectorAll("[data-map-evidence-source]").forEach((button) => {
         button.addEventListener("click", () => focusDashboardMapEvidence(button.dataset.mapEvidenceSource || ""));
       });
-      bindDashboardCwaImageryControls();
+      bindDashboardMapHints(document.getElementById("dashboardMapEvidence") || document);
       bindRovingTablists();
-    }
-
-    function dashboardCwaImageryController() {
-      const frame = document.getElementById("pretripMapFrame");
-      try {
-        return frame?.contentWindow?.scoutCwaImageryController || null;
-      } catch (_error) {
-        return null;
-      }
-    }
-
-    function normalizeDashboardCwaImageryState(snapshot = {}) {
-      const products = asArray(snapshot.products)
-        .filter(item => item && typeof item.id === "string")
-        .map(item => ({id: item.id, label: String(item.label || item.id)}));
-      const current = snapshot.current && typeof snapshot.current === "object" ? {
-        frameId: snapshot.current.frameId || null,
-        sourceTimestamp: snapshot.current.sourceTimestamp || null,
-        fetchedAt: snapshot.current.fetchedAt || null,
-        dataDelayMinutes: snapshot.current.dataDelayMinutes ?? null,
-        expectedDelayMinutes: snapshot.current.expectedDelayMinutes ?? null,
-        imageType: snapshot.current.imageType || null,
-        extent: snapshot.current.extent || null,
-      } : null;
-      return {
-        bridgeReady: true,
-        status: CWA_UI_STATUSES[snapshot.status] ? snapshot.status : "unavailable",
-        freshness: snapshot.freshness || snapshot.rainfallCurrent?.freshness?.status || "unknown_freshness",
-        coverageStatus: snapshot.coverageStatus || "unavailable",
-        layerEnabled: Boolean(snapshot.layerEnabled),
-        rainfallLayerEnabled: Boolean(snapshot.rainfallLayerEnabled),
-        rainfallProduct: ["qpe_past_1h", "qpf_next_1h"].includes(snapshot.rainfallProduct)
-          ? snapshot.rainfallProduct
-          : "qpf_next_1h",
-        rainfallProducts: asArray(snapshot.rainfallProducts)
-          .filter(item => item && typeof item.id === "string")
-          .map(item => ({id: item.id, label: String(item.label || item.id)})),
-        rainfallOpacityPercent: Math.max(0, Math.min(100, Number(snapshot.rainfallOpacityPercent) || 0)),
-        rainfallCurrent: snapshot.rainfallCurrent && typeof snapshot.rainfallCurrent === "object"
-          ? snapshot.rainfallCurrent
-          : null,
-        productId: String(snapshot.productId || "radar"),
-        products,
-        windowId: ["3h", "6h", "9h", "12h"].includes(snapshot.windowId) ? snapshot.windowId : "12h",
-        frameIndex: Math.max(0, Number(snapshot.frameIndex) || 0),
-        maxFrameIndex: Math.max(0, Number(snapshot.maxFrameIndex) || 0),
-        radarOpacityPercent: Math.max(0, Math.min(100, Number(snapshot.radarOpacityPercent) || 0)),
-        satelliteOpacityPercent: Math.max(0, Math.min(100, Number(snapshot.satelliteOpacityPercent) || 0)),
-        playing: Boolean(snapshot.playing),
-        current,
-      };
-    }
-
-    function syncDashboardCwaImageryControls(snapshot = state.dashboardCwaImagery) {
-      state.dashboardCwaImagery = snapshot;
-      const panel = document.getElementById("dashboardCwaImagery");
-      if (!panel) return;
-      const bridgeReady = Boolean(snapshot.bridgeReady);
-      const layer = panel.querySelector("[data-dashboard-cwa-imagery-layer]");
-      if (layer) layer.checked = Boolean(snapshot.layerEnabled);
-      const rainfallLayer = panel.querySelector("[data-dashboard-cwa-rainfall-layer]");
-      if (rainfallLayer) rainfallLayer.checked = Boolean(snapshot.rainfallLayerEnabled);
-      const rainfallProduct = panel.querySelector("[data-dashboard-cwa-rainfall-product]");
-      if (rainfallProduct) {
-        const options = asArray(snapshot.rainfallProducts).length
-          ? snapshot.rainfallProducts
-          : [{id: "qpe_past_1h", label: "Past 1h QPE"}, {id: "qpf_next_1h", label: "Next 1h QPF"}];
-        rainfallProduct.replaceChildren(...options.map(item => {
-          const option = document.createElement("option");
-          option.value = item.id; option.textContent = item.label;
-          return option;
-        }));
-        rainfallProduct.value = snapshot.rainfallProduct || "qpf_next_1h";
-      }
-      const rainfallOpacity = panel.querySelector("[data-dashboard-cwa-rainfall-opacity]");
-      if (rainfallOpacity) rainfallOpacity.value = String(snapshot.rainfallOpacityPercent ?? 56);
-      const product = panel.querySelector("[data-dashboard-cwa-imagery-product]");
-      if (product) {
-        const options = [
-          {id: "radar", label: "Radar latest"},
-          {id: "satellite", label: "Satellite latest"},
-          {id: "all", label: "All prepared (compare)"},
-          ...asArray(snapshot.products),
-        ];
-        product.replaceChildren(...options.map(item => {
-          const option = document.createElement("option");
-          option.value = String(item.id || "all");
-          option.textContent = String(item.label || item.id || "All prepared");
-          return option;
-        }));
-        product.value = options.some(item => item.id === snapshot.productId) ? snapshot.productId : "radar";
-      }
-      const windowControl = panel.querySelector("[data-dashboard-cwa-imagery-window]");
-      if (windowControl) windowControl.value = snapshot.windowId || "12h";
-      const timeline = panel.querySelector("[data-dashboard-cwa-imagery-timeline]");
-      if (timeline) {
-        timeline.max = String(snapshot.maxFrameIndex || 0);
-        timeline.value = String(Math.min(snapshot.frameIndex || 0, snapshot.maxFrameIndex || 0));
-      }
-      panel.querySelectorAll("[data-dashboard-cwa-imagery-opacity]").forEach(input => {
-        input.value = String(input.dataset.dashboardCwaImageryOpacity === "radar"
-          ? snapshot.radarOpacityPercent ?? 62
-          : snapshot.satelliteOpacityPercent ?? 48);
-      });
-      const play = panel.querySelector("[data-dashboard-cwa-imagery-play]");
-      if (play) {
-        play.textContent = snapshot.playing ? "Pause" : "Play";
-        play.setAttribute("aria-pressed", snapshot.playing ? "true" : "false");
-      }
-      panel.querySelectorAll("input,select,button:not([data-dashboard-cwa-panel-toggle])").forEach(control => { control.disabled = !bridgeReady; });
-      if (timeline) timeline.disabled = !bridgeReady || Number(snapshot.maxFrameIndex || 0) < 1;
-      if (play) play.disabled = !bridgeReady || Number(snapshot.maxFrameIndex || 0) < 1;
-      const status = panel.querySelector("[data-dashboard-cwa-imagery-status]");
-      if (status) {
-        status.setAttribute("aria-live", snapshot.playing ? "off" : "polite");
-        status.textContent = dashboardCwaImageryStatusText(snapshot);
-      }
-      const rainfallStatus = panel.querySelector("[data-dashboard-cwa-rainfall-status]");
-      if (rainfallStatus) rainfallStatus.textContent = dashboardCwaRainfallStatusText(snapshot);
-      const stateChip = panel.querySelector("[data-dashboard-cwa-imagery-state]");
-      if (stateChip) {
-        const derivedStatus = dashboardCwaDerivedStatus(snapshot);
-        const statusMeta = CWA_UI_STATUSES[derivedStatus] || CWA_UI_STATUSES.unavailable;
-        stateChip.textContent = statusMeta.label;
-        stateChip.className = `chip ${statusMeta.tone}`;
-      }
-    }
-
-    function invokeDashboardCwaImagery(method, ...args) {
-      const controller = dashboardCwaImageryController();
-      if (!controller || typeof controller[method] !== "function") return;
-      const snapshot = controller[method](...args);
-      syncDashboardCwaImageryControls(normalizeDashboardCwaImageryState(snapshot));
-    }
-
-    function bindDashboardCwaImageryControls() {
-      const panel = document.getElementById("dashboardCwaImagery");
-      if (!panel || panel.dataset.bound === "true") return;
-      panel.dataset.bound = "true";
-      panel.querySelector("[data-dashboard-cwa-panel-toggle]")?.addEventListener("click", event => {
-        state.dashboardCwaSheetExpanded = !state.dashboardCwaSheetExpanded;
-        panel.dataset.dashboardCwaSheetState = state.dashboardCwaSheetExpanded ? "expanded" : "peek";
-        event.currentTarget.setAttribute("aria-expanded", state.dashboardCwaSheetExpanded ? "true" : "false");
-        event.currentTarget.textContent = state.dashboardCwaSheetExpanded ? "Peek" : "Expand";
-      });
-      panel.querySelector("[data-dashboard-cwa-imagery-layer]")?.addEventListener("change", event => {
-        invokeDashboardCwaImagery("setLayerEnabled", event.currentTarget.checked);
-      });
-      panel.querySelector("[data-dashboard-cwa-rainfall-layer]")?.addEventListener("change", event => {
-        invokeDashboardCwaImagery("setRainfallLayerEnabled", event.currentTarget.checked);
-      });
-      panel.querySelector("[data-dashboard-cwa-rainfall-product]")?.addEventListener("change", event => {
-        invokeDashboardCwaImagery("setRainfallProduct", event.currentTarget.value);
-      });
-      panel.querySelector("[data-dashboard-cwa-rainfall-opacity]")?.addEventListener("input", event => {
-        invokeDashboardCwaImagery("setRainfallOpacity", Number(event.currentTarget.value || 0));
-      });
-      panel.querySelector("[data-dashboard-cwa-imagery-product]")?.addEventListener("change", event => {
-        invokeDashboardCwaImagery("setProduct", event.currentTarget.value);
-      });
-      panel.querySelector("[data-dashboard-cwa-imagery-window]")?.addEventListener("change", event => {
-        invokeDashboardCwaImagery("setWindow", event.currentTarget.value);
-      });
-      panel.querySelector("[data-dashboard-cwa-imagery-timeline]")?.addEventListener("input", event => {
-        invokeDashboardCwaImagery("setFrameIndex", Number(event.currentTarget.value || 0));
-      });
-      panel.querySelectorAll("[data-dashboard-cwa-imagery-opacity]").forEach(input => {
-        input.addEventListener("input", event => {
-          invokeDashboardCwaImagery("setOpacity", event.currentTarget.dataset.dashboardCwaImageryOpacity, Number(event.currentTarget.value || 0));
-        });
-      });
-      panel.querySelector("[data-dashboard-cwa-imagery-play]")?.addEventListener("click", () => {
-        invokeDashboardCwaImagery("setPlaying", !state.dashboardCwaImagery.playing);
-      });
-      syncDashboardCwaImageryControls(state.dashboardCwaImagery);
-    }
-
-    function bindDashboardCwaImageryBridge(frame) {
-      let childWindow;
-      try {
-        childWindow = frame?.contentWindow;
-        if (!childWindow) return;
-        if (frame.dashboardCwaBridgeWindow && frame.dashboardCwaBridgeHandler) {
-          frame.dashboardCwaBridgeWindow.removeEventListener("scout:cwa-imagery-state", frame.dashboardCwaBridgeHandler);
-        }
-        const handler = event => {
-          if (!event?.detail) return;
-          syncDashboardCwaImageryControls(normalizeDashboardCwaImageryState(event.detail));
-        };
-        childWindow.addEventListener("scout:cwa-imagery-state", handler);
-        frame.dashboardCwaBridgeWindow = childWindow;
-        frame.dashboardCwaBridgeHandler = handler;
-        const controller = childWindow.scoutCwaImageryController;
-        if (!controller || typeof controller.getState !== "function") {
-          window.setTimeout(() => bindDashboardCwaImageryBridge(frame), 150);
-          return;
-        }
-        syncDashboardCwaImageryControls(normalizeDashboardCwaImageryState(controller.getState()));
-      } catch (_error) {
-        syncDashboardCwaImageryControls({...state.dashboardCwaImagery, bridgeReady: false, status: "loading"});
-      }
     }
 
     function focusDashboardMapEvidence(sourceId, attempt = 0) {
@@ -18585,11 +18524,89 @@
       });
     }
 
+    function updateDashboardMapLoading(status, detail = "") {
+      const loading = document.getElementById("dashboardMapLoading");
+      const title = document.getElementById("dashboardMapLoadingTitle");
+      const detailNode = document.getElementById("dashboardMapLoadingDetail");
+      const retry = document.getElementById("dashboardMapRetry");
+      const screenReaderStatus = document.getElementById("dashboardMapStatus");
+      if (!loading || !title || !detailNode || !retry) return;
+      const blocked = status === "blocked";
+      const ready = ["base_ready", "enhanced_ready", "degraded_ready"].includes(status);
+      loading.dataset.status = blocked ? "blocked" : "loading";
+      loading.hidden = ready;
+      retry.hidden = !blocked;
+      title.textContent = blocked ? "Map could not finish loading" : "Preparing route map";
+      detailNode.textContent = detail || (blocked
+        ? "The workspace projection did not become available. Retry keeps the current workspace."
+        : "Loading this workspace projection once. Evidence will follow the same source.");
+      if (screenReaderStatus) {
+        screenReaderStatus.textContent = ready
+          ? (status === "degraded_ready" ? "pre-trip map ready with optional layer gaps" : "pre-trip map ready")
+          : title.textContent;
+      }
+    }
+
+    function retryPretripMapFrame(frame) {
+      frame.dataset.mapOnlyReady = "loading";
+      frame.dataset.mapOnlyPoll = "";
+      frame.dataset.mapOnlyStartedAt = String(Date.now());
+      state.project = null;
+      renderMapEvidenceRail();
+      bindMapEvidenceControls();
+      updateDashboardMapLoading("loading", "Retrying the current workspace projection.");
+      const retryUrl = new URL(`${surfaceSrc("/admin/pretrip")}&mapOnly=1&wheelZoom=0`, window.location.origin);
+      retryUrl.searchParams.set("mapRetry", String(Date.now()));
+      frame.src = retryUrl.toString();
+    }
+
+    function adoptPretripMapProjectBridge(frame) {
+      try {
+        const bridge = frame.contentWindow?.scoutPretripProjectBridge;
+        const snapshot = bridge?.getSnapshot?.();
+        if (!snapshot || snapshot.projectId !== projectId()) return false;
+        const usableView = snapshot.view && typeof snapshot.view === "object";
+        if (usableView && state.project !== snapshot.view) {
+          state.project = snapshot.view;
+          state.pretripDataProjectId = snapshot.projectId;
+          const renderToken = ++mapBridgeEvidenceRenderToken;
+          window.requestAnimationFrame(() => {
+            window.setTimeout(() => {
+              if (
+                renderToken !== mapBridgeEvidenceRenderToken
+                || state.route !== "map"
+                || state.project !== snapshot.view
+              ) return;
+              renderMapEvidenceRail();
+              bindMapEvidenceControls();
+            }, 0);
+          });
+        }
+        if (usableView && snapshot.status === "degraded") {
+          updateDashboardMapLoading("degraded_ready", snapshot.error || "Map ready; one or more optional overlays are unavailable.");
+        } else if (usableView && ["base_ready", "enhanced_ready"].includes(snapshot.status)) {
+          updateDashboardMapLoading(snapshot.status);
+        } else if (snapshot.status === "degraded") {
+          updateDashboardMapLoading("blocked", snapshot.error || "Workspace projection failed.");
+        } else {
+          updateDashboardMapLoading("loading", "Building the route projection and evidence index.");
+        }
+        return Boolean(usableView);
+      } catch (_error) {
+        return false;
+      }
+    }
+
     function bindPretripMapOnlyFrame(frame) {
       const apply = () => applyPretripMapOnlyFrame(frame);
       if (frame.dataset.mapOnlyBound !== "true") {
         frame.dataset.mapOnlyBound = "true";
         frame.addEventListener("load", apply);
+      }
+      const retry = document.getElementById("dashboardMapRetry");
+      if (retry && retry.dataset.mapRetryBound !== "true") {
+        retry.dataset.mapRetryBound = "true";
+        retry.addEventListener("click", () => retryPretripMapFrame(frame));
       }
       window.setTimeout(apply, 0);
       window.setTimeout(apply, 150);
@@ -18764,6 +18781,9 @@
             .filters input[type="checkbox"] {
               accent-color: #4cc7df !important;
             }
+            label[data-dashboard-weather-layer-hidden="true"] {
+              display: none !important;
+            }
             .tool-button,
             .zoom-level,
             .map-pan-controls {
@@ -18859,13 +18879,23 @@
         doc.querySelector(".layer-menu")?.setAttribute("open", "");
         doc.querySelector(".layer-advanced")?.setAttribute("open", "");
         doc.documentElement.dataset.dashboardMapOnly = "true";
-        bindDashboardCwaImageryBridge(frame);
+        excludeWeatherLayersFromMapFrame(frame);
+        const bridgeReady = adoptPretripMapProjectBridge(frame);
         const hasRenderedMap = Boolean(doc.querySelector("#map[viewBox] [data-layer-group]"));
         if (hasRenderedMap) {
           frame.dataset.mapOnlyReady = "true";
           frame.dataset.mapOnlyPoll = "";
+          if (!bridgeReady) updateDashboardMapLoading("base_ready");
         } else {
           frame.dataset.mapOnlyReady = "loading";
+          const startedAt = Number(frame.dataset.mapOnlyStartedAt || Date.now());
+          if (Date.now() - startedAt > 45000) {
+            frame.dataset.mapOnlyReady = "blocked";
+            frame.dataset.mapOnlyPoll = "";
+            updateDashboardMapLoading("blocked", "The workspace projection exceeded 45 seconds. You can retry without changing workspaces.");
+            return;
+          }
+          updateDashboardMapLoading("loading", "Building the route projection and evidence index.");
           if (frame.dataset.mapOnlyPoll !== "active") {
             frame.dataset.mapOnlyPoll = "active";
             window.setTimeout(() => {
@@ -18876,6 +18906,7 @@
         }
       } catch (error) {
         frame.dataset.mapOnlyReady = "blocked";
+        updateDashboardMapLoading("blocked", `The embedded map could not be inspected: ${error.message || error}`);
       }
     }
 

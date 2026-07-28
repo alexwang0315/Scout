@@ -55,6 +55,11 @@ from dashboard_connected_preparation import (
     DashboardConnectedPreparationManager,
     create_dashboard_connected_preparation_manager,
 )
+from dashboard_workspace_operations import (
+    WORKSPACE_OPERATION_REQUESTS_REF,
+    append_workspace_operation_request,
+    load_workspace_operation_requests,
+)
 from navigation_terrain_projection import (
     NavigationTerrainProjectionError,
     build_navigation_terrain_projection,
@@ -1500,6 +1505,34 @@ class PreTripImportGpxRunRequest(PreTripImportGpxRequest):
     confirm_import: bool = False
 
 
+class DashboardWorkspaceOperationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: Literal[
+        "clone",
+        "transfer",
+        "package",
+        "restore",
+        "delete_review",
+    ]
+    confirm_record: bool = False
+    requested_by: str = Field(
+        default="dashboard_operator",
+        min_length=1,
+        max_length=80,
+    )
+    note: str | None = Field(default=None, max_length=500)
+    target_project_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @field_validator("requested_by", "note", "target_project_id")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+
 class PreTripPrepareLayersRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -2296,6 +2329,38 @@ def _true_like(value: str | None) -> bool:
     return str(value or "").strip().casefold() in {"1", "true", "yes", "y", "on"}
 
 
+def _pretrip_project_projection_signature(project_root: Path) -> str:
+    """Fingerprint workspace metadata so cached projections fail fresh on edits."""
+    digest = hashlib.sha256()
+    for path in sorted(project_root.rglob("*")):
+        try:
+            if not path.is_file():
+                continue
+            stat = path.stat()
+        except OSError:
+            continue
+        digest.update(path.relative_to(project_root).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(stat.st_mtime_ns).encode("ascii"))
+        digest.update(b":")
+        digest.update(str(stat.st_size).encode("ascii"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _pretrip_view_request_copy(view: dict[str, Any]) -> dict[str, Any]:
+    """Copy only nodes decorated per request; leave the cached projection immutable."""
+    request_view = dict(view)
+    tabs = view.get("tabs")
+    if isinstance(tabs, dict):
+        request_tabs = dict(tabs)
+        pretrip_tab = tabs.get("pre_trip_planning")
+        if isinstance(pretrip_tab, dict):
+            request_tabs["pre_trip_planning"] = dict(pretrip_tab)
+        request_view["tabs"] = request_tabs
+    return request_view
+
+
 def create_admin_router(
     *,
     incident_store_path: Path | None = None,
@@ -2311,6 +2376,8 @@ def create_admin_router(
 ) -> APIRouter:
     load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
+    pretrip_view_cache_lock = threading.Lock()
+    pretrip_view_cache: dict[str, tuple[str, dict[str, Any]]] = {}
     router.include_router(
         create_emergency_mobile_closed_loop_router(
             store_root=(
@@ -2404,6 +2471,148 @@ def create_admin_router(
             media_type="application/json",
             headers={"Cache-Control": "no-store"},
         )
+
+    def dashboard_workspace_context(project_id: str) -> dict[str, Any]:
+        safe_project_id = project_id.strip()
+        try:
+            _validate_pretrip_import_project_id(safe_project_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=safe_project_id,
+        )
+        catalog_record = next(
+            (
+                record
+                for record in list_pretrip_admin_projects(
+                    workspace_root=pretrip_workspace_root,
+                )
+                if record["project_id"] == safe_project_id
+            ),
+            None,
+        )
+        if catalog_record is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Dashboard workspace not found",
+            )
+        workspace_backed = project_root is not None
+        return {
+            **catalog_record,
+            "resolved_project_root": (
+                str(project_root.resolve()) if project_root is not None else None
+            ),
+            "workspace_backed": workspace_backed,
+            "operation_request_ref": (
+                str(WORKSPACE_OPERATION_REQUESTS_REF)
+                if workspace_backed
+                else None
+            ),
+            "capabilities": {
+                "switch": True,
+                "read": True,
+                "record_operation_request": workspace_backed,
+                "import_preview": True,
+                "connected_preparation_refresh": workspace_backed,
+            },
+        }
+
+    @router.get("/dashboard/workspaces")
+    def scout_dashboard_workspaces() -> dict[str, Any]:
+        projects = [
+            dashboard_workspace_context(record["project_id"])
+            for record in list_pretrip_admin_projects(
+                workspace_root=pretrip_workspace_root,
+            )
+        ]
+        return {
+            "workspace_parent_root": (
+                str(Path(pretrip_workspace_root).expanduser().resolve())
+                if pretrip_workspace_root is not None
+                else None
+            ),
+            "projects": projects,
+            "boundary": {
+                "server_resolved_paths": True,
+                "browser_supplied_workspace_root": False,
+                "runtime_safety_truth": False,
+            },
+        }
+
+    @router.get("/dashboard/workspaces/{project_id}")
+    def scout_dashboard_workspace(project_id: str) -> dict[str, Any]:
+        return dashboard_workspace_context(project_id)
+
+    @router.get("/dashboard/workspaces/{project_id}/operation-requests")
+    def scout_dashboard_workspace_operation_requests(
+        project_id: str,
+    ) -> dict[str, Any]:
+        context = dashboard_workspace_context(project_id)
+        if not context["workspace_backed"]:
+            return {
+                "project_id": context["project_id"],
+                "requests": [],
+                "source_ref": None,
+                "boundary": {
+                    "workspace_write_available": False,
+                    "execution_performed": False,
+                },
+            }
+        requests = load_workspace_operation_requests(
+            Path(context["resolved_project_root"]),
+            project_id=context["project_id"],
+        )
+        return {
+            "project_id": context["project_id"],
+            "requests": requests,
+            "source_ref": str(WORKSPACE_OPERATION_REQUESTS_REF),
+            "boundary": {
+                "workspace_write_available": True,
+                "execution_performed": False,
+            },
+        }
+
+    @router.post(
+        "/dashboard/workspaces/{project_id}/operation-requests",
+        status_code=201,
+    )
+    def scout_dashboard_workspace_operation_request(
+        project_id: str,
+        request: DashboardWorkspaceOperationRequest,
+    ) -> dict[str, Any]:
+        if not request.confirm_record:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "confirm_record=true is required to append a workspace "
+                    "operation request"
+                ),
+            )
+        context = dashboard_workspace_context(project_id)
+        if not context["workspace_backed"]:
+            raise HTTPException(
+                status_code=409,
+                detail="operation requests require a workspace-backed project",
+            )
+        try:
+            record = append_workspace_operation_request(
+                Path(context["resolved_project_root"]),
+                project_id=context["project_id"],
+                operation=request.operation,
+                requested_by=request.requested_by or "dashboard_operator",
+                note=request.note,
+                target_project_id=request.target_project_id,
+            )
+        except (FileNotFoundError, ValueError, OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {
+            "project_id": context["project_id"],
+            "request": record,
+            "persisted": True,
+            "executed": False,
+            "source_ref": str(WORKSPACE_OPERATION_REQUESTS_REF),
+        }
 
     @router.post("/dashboard/body-index/import")
     def scout_dashboard_body_index_import(
@@ -3703,18 +3912,45 @@ def create_admin_router(
         }
 
     @router.get("/pretrip/projects/{project_id}")
-    def pretrip_project(project_id: str, compact: bool = False) -> dict[str, Any]:
+    def pretrip_project(
+        project_id: str,
+        response: Response,
+        compact: bool = False,
+    ) -> dict[str, Any]:
         try:
             project_root = _pretrip_workspace_project_root(
                 pretrip_workspace_root,
                 project_id=project_id,
             )
-            view = build_pretrip_admin_view(project_id, project_root=project_root)
+            projection_root = (
+                project_root
+                if project_root is not None
+                else ROOT / "tests" / "fixtures" / "pretrip" / "projects" / project_id
+            )
+            cache_key = str(projection_root.resolve())
+            signature = _pretrip_project_projection_signature(projection_root)
+            cache_status = "miss"
+            with pretrip_view_cache_lock:
+                cached = pretrip_view_cache.get(cache_key)
+                if cached is not None and cached[0] == signature:
+                    cached_view = cached[1]
+                    cache_status = "hit"
+                else:
+                    cached_view = build_pretrip_admin_view(
+                        project_id,
+                        project_root=project_root,
+                    )
+                    pretrip_view_cache.pop(cache_key, None)
+                    pretrip_view_cache[cache_key] = (signature, cached_view)
+                    while len(pretrip_view_cache) > 8:
+                        pretrip_view_cache.pop(next(iter(pretrip_view_cache)))
+            view = _pretrip_view_request_copy(cached_view)
             _attach_energy_reserve_monitor(
                 view,
                 inventory_root=resolved_wearable_inventory_root,
                 surface="pretrip",
             )
+            response.headers["X-Scout-Projection-Cache"] = cache_status
             return _compact_pretrip_project_view(view) if compact else view
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc

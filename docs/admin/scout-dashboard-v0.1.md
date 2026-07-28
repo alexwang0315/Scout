@@ -33,7 +33,8 @@ Each entry should include:
 ## Current Boundary
 
 - The dashboard is a session-local operator UI shell.
-- `Import New Trip` validates and records operator intent only.
+- `Import New Trip` validates, previews, and creates a workspace only after an
+  explicit operator confirmation through the existing bounded import API.
 - No dashboard action performs live safety automation.
 - No dashboard action mutates Phase 1 runtime safety truth.
 - No dashboard action sends outbound transport.
@@ -44,6 +45,49 @@ Each entry should include:
   path, expected result, and actual result.
 
 ## Implementation Record
+
+### 2026-07-28 - Add zero-count Evidence category diagnostic
+
+User request:
+
+- Add a Diagnostic item that reports whether any Evidence category is showing
+  a count of `0`.
+
+Implementation:
+
+- Added `DASH-030` under Map & Evidence and extended `Diag all` to 30 checks.
+- The check reads the current compact project projection and evaluates both:
+  - every Dashboard Evidence group produced by `pretripEvidenceGroups`;
+  - every child category inside `Evidence Timeline`.
+- A zero count produces a red result containing the tab, group or child
+  category name. The message lists the first eight names and the number of
+  additional zero-count categories, so large gaps remain readable.
+- Updated the persistent 100-item checklist, focused contract test and
+  Chromium smoke count. The next available identifier is `DASH-031`.
+
+Boundary:
+
+- The check is read-only. It reuses the existing project projection GET and
+  does not run preparation, import, external refresh, POST, outbound transport
+  or runtime safety mutation.
+- A zero count is reported as an Evidence coverage gap requiring review; the
+  Diagnostic does not invent evidence or decide that an empty category is
+  operationally safe.
+
+Verification:
+
+- Focused `DASH-030` contract: passed.
+- Full Dashboard page suite: `58 passed`.
+- Real Chromium `Diag all` completed all 30 checks with zero idle/running cases
+  and zero POST requests.
+- `DASH-030` correctly failed on the current workspace and reported 13
+  zero-count categories. The visible result named Overpass Hiking Routes,
+  Shelters, Water Sources, Parking, Peaks, Other POI, OSM Milestones and OSM
+  Mobile, then reported five additional categories.
+- Current aggregate result: `25 passed / 5 failed`; the new fifth failure is
+  the intended Evidence coverage-gap signal.
+- Mobile Chromium remained free of page-level horizontal overflow at 390×844
+  (`clientWidth=scrollWidth=390`).
 
 ### 2026-07-28 - Extend Diagnostic with three-map behavior parity checks
 
@@ -71,8 +115,8 @@ Implementation:
 - Updated the Diagnostic title, total, individual retest coverage and `Diag
   all` browser smoke to 29 cases.
 - Added the four stable cases to
-  `scout-dashboard-100-item-functional-verification-checklist.md`; the next
-  available identifier is `DASH-030`.
+  `scout-dashboard-100-item-functional-verification-checklist.md`; at that
+  point the next available identifier was `DASH-030`.
 
 Boundary:
 
@@ -225,6 +269,327 @@ Verification:
   attempt observed transient optional weather-overlay `422/500` responses;
   they did not reproduce after the Dashboard runtime and workspace catalog
   were reverified.
+
+### 2026-07-28 - Expand the functional verification checklist to 25 current capabilities
+
+User request:
+
+- Reclassify the verification checklist by Dashboard page function using this
+  implementation record as the source.
+- Expand the checklist from 10 to 25 items.
+- Include only functionality that already has an executable UI, API or
+  artifact path; do not list unfinished future work.
+
+Implementation:
+
+- Updated
+  `docs/admin/scout-dashboard-100-item-functional-verification-checklist.md`
+  to 25 stable cases and added a page-function execution index.
+- Added executable checks for Overview, Workspace operation receipts,
+  explicit connected preparation, Country Material Pool, canonical embedded
+  surfaces, Map projection reuse and layer evidence, Route Context briefings
+  and existing variants, Pace, sanitized Body Index flows, Architecture, and
+  Navigation Terrain Intelligence.
+- Excluded preview or future-only capabilities such as unfinished LBS,
+  Permission decisioning and the proposed sender lane.
+
+Boundary:
+
+- This change extends the verification specification only. It does not execute
+  connected preparation, imports, HealthExport monitoring, model generation,
+  outbound transport, hardware control or safety-state mutation.
+- Body Index import and watch cases explicitly require synthetic fixtures and
+  a stopped watcher at test completion.
+
+Verification:
+
+- Every added item maps to an implemented capability and recorded executable
+  evidence in this document.
+- At that point the next available identifier was `DASH-026`; the current
+  next identifier is recorded by the newer entry above.
+- Checklist structure verification found exactly 25 unique identifiers from
+  `DASH-001` through `DASH-025`; scoped whitespace validation passed.
+- Current worktree Dashboard contract run completed with `52 passed, 1 failed`.
+  The remaining failure expects
+  `state.activeEvidenceTab = selectedTab;` in the actively modified Dashboard
+  HTML and is unrelated to this documentation-only checklist change.
+
+### 2026-07-28 - Start the 100-item Dashboard functional verification checklist
+
+User request:
+
+- Create one persistent document for a one-pass verification of 100 major
+  Dashboard functions.
+- Record the first ten necessary checks and continue appending items requested
+  in this conversation.
+
+Implementation:
+
+- Added
+  `docs/admin/scout-dashboard-100-item-functional-verification-checklist.md`.
+- Defined stable `DASH-001` through `DASH-010` identifiers, PASS/FAIL/BLOCKED/N/A
+  result rules, minimum evidence requirements and a reusable execution header.
+- Grounded the first batch in the current runtime, navigation, workspace,
+  32-layer contract, map interactions, timeline, GPX intake, Weather,
+  Assistant and safety-effect boundaries.
+- Recorded that the canonical contract contains 32 layers, while Dashboard,
+  Pre-trip and Debug verify 31 because `completed-track` is After-action only.
+
+Boundary:
+
+- This change creates a verification specification only. It does not execute
+  Dashboard controls, external refreshes, imports, outbound sends, hardware
+  actions or runtime safety mutations.
+- Existing checklist identifiers will not be reordered or reused. New items
+  from this conversation will be appended to the same document.
+
+Verification:
+
+- The checklist was reviewed against `scout_layer_contract.py`, the current
+  Dashboard navigation, the layer-contract test and the existing browser
+  smoke entrypoint.
+- No runtime test was executed because this change defines the checklist rather
+  than claiming that its items currently pass.
+
+### 2026-07-28 - Promote and simplify Workspace Operations
+
+User request:
+
+- Move Workspace Operations to the beginning of the Workspace page.
+- Fix operation-button labels overflowing their bounds.
+- Hide or remove the technical Importer, Workspace Edits and Runtime Handoff
+  summary panels.
+
+Design direction:
+
+- Treated Workspace Operations as a compact field-operations command deck
+  rather than another passive metrics panel.
+- Kept the established dark outdoor-intelligence palette, with a restrained
+  cyan-to-amber command edge that distinguishes the primary operator surface
+  without introducing a separate visual language.
+
+Implementation:
+
+- `renderWorkspaceOperationConsole()` is now the first rendered Workspace
+  section, before route statistics, structure, cache and timeline evidence.
+- Replaced long visible labels with `Clone`, `Transfer`, `Package`, `Restore`,
+  `Delete review`, `Import trip`, `Refresh evidence` and `Open workspace`.
+  Full descriptions remain available through accessible labels and tooltips.
+- Changed the command grid to responsive bounded columns. Buttons allow safe
+  wrapping, use `overflow-wrap:anywhere`, and retain a minimum touch target.
+  Mobile uses two equal columns while the workspace switch remains full width.
+- Removed the three bottom technical summary panels: Importer, Workspace Edits
+  and Runtime Handoff. Their underlying routes, APIs and operator capabilities
+  were not removed.
+
+Boundary:
+
+- This is an information-architecture and presentation change only.
+- Workspace operation request persistence, explicit connected-preparation
+  refresh, import workflow, deletion approval boundary and runtime safety
+  semantics are unchanged.
+
+Verification:
+
+- Focused Workspace and joint-review page contracts: `2 passed`.
+- Dashboard JavaScript parse and scoped whitespace checks: passed.
+- Live `127.0.0.1:9099` Chromium checks passed at 1440×1000 and 390×844.
+- At both widths, Workspace Operations appeared above statistics, every button
+  fit its own client bounds, the three technical panels were absent, document
+  horizontal overflow was zero, initial-load POST count was zero, and browser
+  error count was zero.
+
+### 2026-07-28 - Dashboard runtime and workspace discovery handoff contract
+
+User request:
+
+- Record the runtime checks that must happen before giving the user a Dashboard
+  URL.
+- Record whether the Workspace selector can still discover projects when the
+  server starts without an explicit workspace argument.
+
+Runtime incident and correction:
+
+- A Dashboard URL was previously handed off while port `9099` had no listening
+  server. The HTML and workspace data were not the cause; the runtime process
+  was absent, so Dashboard, Map, Evidence, Weather and Navigation all appeared
+  unavailable.
+- The server was restarted with the Dashboard factory and the workspace root,
+  then the page, catalog, current workspace and dependent APIs were verified
+  before the URL was handed off again.
+- A URL alone is no longer considered a valid Dashboard handoff.
+
+Workspace root resolution:
+
+`create_dashboard_app` resolves the root in this order:
+
+1. The explicit Python `pretrip_workspace_root` argument.
+2. The `SCOUT_PRETRIP_WORKSPACE_ROOT` environment variable.
+3. The current user's conventional `~/workspace` directory, if it exists.
+4. `None` when none of the preceding sources exists.
+
+Consequences:
+
+- On the current Mac, starting
+  `uvicorn admin_api:create_dashboard_app --factory` without an explicit
+  workspace argument still discovers `/Users/alexwang0315/workspace` through
+  the conventional-directory fallback.
+- The Workspace catalog scans `project.json` under that resolved directory. At
+  the time of verification it returned five projects and included
+  `chilai_nanhua_day1_scoutAI`.
+- Starting `create_admin_app` or `create_admin_router` directly without
+  `pretrip_workspace_root` does not use the Dashboard fallback. In that case,
+  only the built-in pretrip fixture is listed.
+- A machine without `~/workspace` also falls back to the built-in fixture
+  unless an explicit root or environment variable is configured.
+- The implicit home-directory fallback is convenient for this workstation but
+  is not portable. Normal Dashboard startup should set
+  `SCOUT_PRETRIP_WORKSPACE_ROOT` explicitly.
+
+Recommended local startup:
+
+```bash
+SCOUT_PRETRIP_WORKSPACE_ROOT=/Users/alexwang0315/workspace \
+  ./venv/bin/python -m uvicorn admin_api:create_dashboard_app \
+  --factory --host 127.0.0.1 --port 9099
+```
+
+Required checks before providing a Dashboard URL:
+
+1. Confirm a process is listening on `127.0.0.1:9099`.
+2. Confirm `/admin/dashboard` returns HTTP `200`.
+3. Confirm `/admin/dashboard/workspaces` returns HTTP `200`, reports the
+   expected `workspace_parent_root`, and includes the requested project.
+4. Confirm `/admin/dashboard/workspaces/{project_id}` and
+   `/admin/pretrip/projects/{project_id}` both return HTTP `200`.
+5. For a full workspace handoff, confirm admin projection, debug projection
+   events, Weather Dashboard, Navigation Terrain Intelligence and connected
+   preparation status endpoints return successfully.
+6. Load the exact URL in a real browser, confirm the Workspace selector and
+   resolved project root are visible, confirm there are no JavaScript errors,
+   and confirm opening the page does not issue an automatic connected-
+   preparation POST.
+7. Only after these checks pass, provide the clickable Dashboard URL.
+
+Verification evidence:
+
+- Runtime listener: `127.0.0.1:9099`.
+- Dashboard, catalog, current workspace and current project: HTTP `200`.
+- Admin projection, debug projection events, Weather Dashboard, Navigation
+  Terrain Intelligence and connected preparation status: HTTP `200`.
+- Browser selected `chilai_nanhua_day1_scoutAI`, displayed
+  `/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI`, issued zero POSTs
+  during initial load, and reported no JavaScript errors.
+
+Known remaining gap:
+
+- Workspace root provenance is returned as `workspace_parent_root`, but the
+  catalog response does not yet label whether it came from an explicit
+  argument, environment variable or `~/workspace` fallback. Operators must
+  still infer that source from startup configuration.
+
+### 2026-07-28 - Complete Workspace Operations items 1 through 6
+
+User request:
+
+- Complete the six Workspace recommendations: server catalog, dynamic root,
+  split switching from external refresh, durable operation requests, real GPX
+  preview/import, and browser behavior coverage.
+
+Implementation:
+
+- Added server-owned Workspace catalog and context endpoints. The browser now
+  receives the resolved project root and capabilities instead of embedding one
+  user-specific absolute path.
+- Replaced free-text switching with a catalog selector. A switch is committed
+  to local storage and the URL only after the server validates the target;
+  failure keeps the current workspace.
+- Removed the Dashboard-open connected-preparation POST. Initial load performs
+  a read-only status GET; the network-capable refresh is a separate,
+  explicitly labelled operator button.
+- Clone, transfer, package, restore, and deletion-review controls now append
+  bounded records to `reviews/workspace_operation_requests.jsonl`. These
+  records are durable intent receipts; they never execute the requested
+  operation.
+- Wired Import New Trip to the existing server validation,
+  `import-gpx-preview`, and confirmed `import-gpx` endpoints. The sequence is
+  now Validate Intake → Preview Import → Create Workspace → Open Workspace.
+  Creation does not automatically prepare layers, refresh external sources, or
+  load runtime state.
+- Added `tools/dashboard_workspace_browser_smoke.js` and the
+  `dashboard:workspace-smoke` package command. The smoke test uses a temporary
+  copied workspace and a real Chromium session.
+
+Boundary:
+
+- Operation requests are candidate-only, append-only, and explicitly report
+  `execution_performed=false` and `runtime_safety_truth=false`.
+- Deletion remains a review request and requires separate destructive approval.
+- The browser cannot select an arbitrary filesystem root for the active
+  workspace. Import writes only after explicit confirmation and remains inside
+  the server-resolved temporary/test root during browser smoke.
+- Opening or switching Workspace does not start network work.
+
+Verification:
+
+- Dashboard and pretrip API suites: `141 passed`.
+- Focused new API coverage: `5 passed`; focused Workspace/Import page contract:
+  `2 passed`.
+- `pnpm lint`: passed. Package typecheck scaffold: `1 passed`.
+- Dashboard JavaScript parse, Python compile, and scoped whitespace checks:
+  passed.
+- Real Chromium smoke: all 10 checks passed, including no automatic connected
+  preparation POST, invalid-switch rollback, durable non-executing operation
+  request, explicit refresh POST, and complete GPX validate/preview/create
+  flow. No browser console errors were observed.
+
+### 2026-07-24 - Six Axis Weather owns weather and hydrology controls
+
+User request:
+
+- Remove the Weather / 氣象與水文 layer category from the Dashboard Map page.
+- Move all five controls—`soil-moisture`, `antecedent-rain`, `cwa-qpf`,
+  `cwa-weather`, and `weather-api`—to Exploring for Six Axis → Weather.
+- Reuse Weather's existing CWA controls where complete and remove the duplicate
+  Map controls.
+
+Implementation:
+
+- Added a five-layer Weather control deck that drives the canonical same-origin
+  pretrip map rather than a parallel mock renderer.
+- Completed the Weather CWA deck with QPE/QPF selection, rainfall legend and
+  status, rain-grid opacity, radar/satellite product and opacity, animation
+  window, frame, and play/pause controls.
+- The Dashboard Map adapter now disables and hides all five weather/hydrology
+  layer inputs and reapplies that boundary after a layer preset is selected.
+- Removed the Dashboard Map evidence rail's duplicated CWA control sheet and
+  removed CWA cache status from Map route readiness. Weather remains cache-only
+  candidate evidence and owns that readiness context.
+
+Boundary:
+
+- The canonical 32-layer contract is unchanged; this is control ownership and
+  presentation only.
+- CWA fetch, decode, georeference, route sampling, and imagery processing remain
+  server-side. The browser receives prepared display state only.
+- No Phase 1 safety truth, outbound action, or runtime automation is added.
+
+Verification:
+
+- Dashboard page suite: PASS (`50 passed`).
+- `pnpm lint`: PASS.
+- `pnpm typecheck`: PASS (`1 passed`).
+- Browser smoke on the live `127.0.0.1:9099` Dashboard: Map showed no
+  Dashboard CWA panel; all five embedded weather inputs were hidden, disabled,
+  unchecked, and remained excluded after selecting the Risk Review preset.
+- Browser smoke on Six Axis Weather: all five layer controls were visible and
+  directly changed the corresponding canonical pretrip inputs; QPE/QPF and
+  radar/satellite selectors changed and reset correctly.
+- Responsive smoke at 390×844: all five controls remained visible at 336 px
+  width and the document had zero horizontal overflow.
+- Package test aggregate retained two unrelated documentation failures
+  (`AGENTS.md` Phase 9 wording and the legacy generated-code-network phrase);
+  the other 15 package tests passed.
 
 ### 2026-07-23 - Keep Timeline Evidence categories collapsed and visible
 
@@ -1045,6 +1410,53 @@ Verification:
 - Dashboard page tests for same-origin Assistant API wiring.
 - Manual smoke should use the 9099 dashboard URL and confirm one visible
   assistant answer from `/assistant/query`.
+
+### 2026-07-28 - Dashboard Server Mounts Scout AI API
+
+Observed failure:
+
+- The Dashboard Agent frontend correctly called `/assistant/status` and
+  `/assistant/query`, but the local 9099 process was started with
+  `admin_api:create_admin_app`.
+- That compatibility factory intentionally serves admin routes only, so both
+  Assistant endpoints returned HTTP 404.
+
+Implementation:
+
+- Added `admin_api:create_dashboard_app`, which composes the existing admin
+  application with the real Scout Assistant router.
+- The dashboard factory defaults to the checked-in
+  `configs/assistant-models.dashboard-aihat2.json` provider profile. Secrets are
+  still read server-side from environment variables and are never returned to
+  the browser.
+- The active cloud profile uses OpenRouter model
+  `deepseek/deepseek-v3.2`; the AI HAT+2 local profile remains available as the
+  explicit fallback.
+- The context resolver uses `SCOUT_PRETRIP_WORKSPACE_ROOT` when configured and
+  otherwise discovers the conventional `~/workspace` root.
+- The resolved workspace root is also passed into the Pydantic AI provider, so
+  model-selected tools and deterministic context collection read the same
+  project.
+- Provider-bound model profiles preserve their configured provider model ID;
+  an OpenRouter profile is no longer rewritten into a NVIDIA-prefixed ID.
+- After a successful model request, `/assistant/status` reports the current
+  `connected:<profile>` state instead of retaining its startup snapshot.
+- `create_admin_app` remains unchanged for admin-only compatibility and tests.
+
+Local launch:
+
+```bash
+./venv/bin/python -m uvicorn admin_api:create_dashboard_app \
+  --factory --host 127.0.0.1 --port 9099
+```
+
+Verification:
+
+- `GET /assistant/status` must return HTTP 200 and a non-mock provider.
+- `POST /assistant/query` must return a Scout Assistant response with the
+  requested project and provider observability.
+- The Dashboard remains read-only: no `/safety/*`, outbound transport, or
+  hardware control is introduced.
 
 ### 2026-07-02 - Workspace Statistics, Cache, and Operations
 
@@ -3688,6 +4100,72 @@ The controller changes map presentation only. They do not add route approval,
 walkability proof, Phase 1 mutation, outbound transport, or runtime safety
 truth.
 
+## 2026-07-28 - Map single-load projection and progressive UX
+
+Observed failure:
+
+- A direct Dashboard Map open started two identical
+  `/admin/pretrip/projects/{project_id}?compact=1` requests: one from the outer
+  Dashboard data scope and one from the embedded canonical Pre-trip map.
+- The embedded map stayed visually empty for about 10 seconds and the outer
+  Map Evidence rail could remain in its loading state for about 20 seconds.
+  The requests returned 200 and the browser console stayed clean, so the
+  apparent failure was duplicated projection work plus missing progress UX,
+  not missing route geometry.
+
+Loading architecture:
+
+- Map no longer belongs to the outer Dashboard `project` data scope. A route
+  with no explicit data scope also no longer silently falls back to a full
+  project load.
+- The embedded same-origin Pre-trip map now publishes
+  `scoutPretripProjectBridge`. Dashboard adopts that exact in-memory projection
+  for Map Evidence instead of fetching or structured-cloning the same payload.
+- `mapOnly=1` renders the route map without building the hidden standalone
+  Pre-trip evidence/detail panes. The normal direct Pre-trip surface keeps its
+  complete UI.
+- Base map rendering and bridge publication happen before rainfall, CWA
+  imagery, weather overlay, OSM palette, and OSM PBF enhancement completion.
+  Optional enhancements load concurrently and republish either
+  `enhanced_ready` or an honest degraded state.
+- The API keeps up to eight in-process project projections. A deterministic
+  signature of project file paths, modification times, and sizes invalidates
+  the entry on any workspace file change. A lock prevents concurrent requests
+  from rebuilding the same projection. Per-request energy monitor decoration
+  is applied to a copy, not to the cached projection.
+- The API reports `X-Scout-Projection-Cache: miss|hit`; browser responses remain
+  `no-store`, so the cache is server-local and never treated as browser safety
+  truth.
+
+UX behavior:
+
+- Map opens with a visible, screen-reader-announced “Preparing route map”
+  status instead of an unexplained blank canvas.
+- The status clears as soon as the base projection is usable. Map Evidence is
+  populated from the bridge after the map receives a paint opportunity.
+- A 45-second timeout becomes an explicit degraded panel with a retry action
+  that preserves the selected workspace.
+- The hidden iframe-only `Pan` button was removed from the Dashboard adapter;
+  pan remains the default mode and the visible arrow controls continue to work.
+
+Executable evidence:
+
+- Cache verification against the real Chilai workspace: cold compact projection
+  `6.61s`, warm cache hit `0.21s`, with the second response reporting
+  `X-Scout-Projection-Cache: hit`.
+- Live 1440x1000 browser smoke on port 9099 observed one compact projection
+  request, visible loading status, rendered route map, bridge-backed 6,614-item
+  Map Evidence catalog, cleared loading status, zero failed responses, and zero
+  console errors.
+- The warm browser path reached bridge-ready at `4.49s`, rendered map at
+  `4.99s`, and rendered Map Evidence at `5.00s`.
+
+Boundary:
+
+- The projection and all evidence remain candidate/read-only context. This
+  change does not promote cache contents to runtime safety truth, mutate Phase
+  1, authorize route safety, or perform outbound actions.
+
 ## 2026-07-28 - Navigation Rudy+TW dynamic tile surface
 
 The `Exploring for Six Axis -> Navigation` workspace map now uses the same
@@ -3727,3 +4205,210 @@ Browser evidence:
 The tile surface is presentation evidence only. Rudy+TW coverage does not prove
 trail existence, current walkability, route safety, or suitability for solo
 hiking.
+
+## 2026-07-28 - Map, Navigation, and Weather interaction parity
+
+Observed inconsistency:
+
+- The canonical Pre-trip map already attached hover handlers to evidence, but
+  both Dashboard iframe adapters explicitly hid `#hoverHint`. Evidence was
+  selectable while its explanation stayed invisible.
+- Dashboard Map also hid its `Pan` mode button, so switching from Box back to
+  mouse pan depended on an undiscoverable keyboard shortcut.
+- Both Navigation renderers passed `mouseZoom: false` to the shared viewport
+  controller. Navigation therefore lacked the Box control and rectangle
+  selection even though Map and Weather supported it.
+- SVG `<title>` nodes on Navigation candidates were not an immediate,
+  consistent hint surface.
+
+Unified behavior:
+
+- Map and Weather preserve the canonical evidence hover hint and restyle it for
+  the Dashboard field-instrument theme. Map Evidence list rows also show the
+  evidence label and summary on pointer hover or keyboard focus.
+- Navigation hierarchy, pressure, structure, risk, and route-terrain event
+  candidates expose the same immediate pointer/focus hint contract.
+- Map, Navigation, and Weather all expose `Pan`, `Box`, `+`, `-`, and `Fit`.
+  In Box mode, a down-right rectangle zooms into the selected area and an
+  up-left rectangle zooms out. `Escape` cancels a gesture.
+- Each map is focusable and declares the same keyboard contract:
+  arrow keys pan, `+`/`-` zoom, `0` fits, `P` selects Pan, and `B` selects Box.
+
+Executable browser evidence at 1440x1000 on the live port 9099 runtime:
+
+- Map showed both the outer Map Evidence row hint and an embedded Overpass
+  evidence hint. Rectangle zoom changed `1.00x -> 6.67x -> 1.00x`; ArrowRight
+  changed the embedded SVG viewBox x-origin from `180.00` to `224.80`.
+- Navigation showed a terrain-structure evidence hint. Rectangle zoom changed
+  `1.000 -> 4.175 -> 1.000`; ArrowRight changed the stage translation from
+  `-234.84px` to `-298.84px`.
+- Weather showed the prepared CWA QPF evidence hint. Rectangle zoom changed
+  `1.00x -> 4.15x -> 1.00x`; ArrowRight changed the embedded SVG viewBox
+  x-origin from `180.00` to `224.80`.
+- All three replays displayed the selection rectangle during the drag and
+  produced zero console errors and zero failed same-origin responses.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py`: 55 passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: 1 passed.
+- Package-level `pnpm test`: 15 passed and retained two unrelated documentation
+  failures in `tests/test_scout_ai_os_docs.py` for legacy Phase 9 and generated
+  network-access wording.
+- The 32-layer GIS gate is not applicable: no layer ID, layer ordering,
+  preparation path, route projection, or shared layer contract changed.
+
+This entry supersedes the earlier notes that Dashboard Map intentionally hid
+the Pan button and that Navigation intentionally disabled point, wheel, and
+rectangle zoom. The change affects presentation and evidence inspection only;
+it does not create route approval, walkability proof, runtime safety truth,
+Phase 1 mutation, or outbound effects.
+
+## 2026-07-28 - Dashboard maps disable wheel zoom
+
+Map, Navigation, and Weather now ignore mouse-wheel and trackpad zoom gestures.
+This prevents accidental scale changes while scrolling the Dashboard without
+removing the deliberate map-navigation controls added in the preceding slice.
+
+Interaction contract:
+
+- `Pan`, `Box`, `+`, `-`, and `Fit` remain visible on all three maps.
+- A down-right Box drag still zooms into a selected rectangle; an up-left Box
+  drag still zooms out.
+- Arrow-key panning, `+`/`-` keyboard zoom, `0` fit, `P` Pan, and `B` Box remain
+  enabled.
+- Dashboard Map and Weather request the canonical Pre-trip surface with
+  `wheelZoom=0`. The standalone Pre-trip page keeps its existing default unless
+  that query parameter is supplied.
+- Navigation passes `wheelZoom: false` independently from its Box-zoom setting,
+  so disabling the wheel no longer disables rectangle selection.
+
+Executable browser evidence at 1440x1000 on the live port 9099 runtime:
+
+- Map, Navigation, and Weather were each raised to `1.25x` with the visible `+`
+  button. Wheel-up and wheel-down gestures both left every map at `1.25x`.
+- Each map displayed its selection rectangle and changed scale after a real Box
+  drag.
+- ArrowRight changed the pan state on every map after the wheel checks.
+- All three routes produced zero console errors and zero failed same-origin
+  responses.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py`: 56 passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: 1 passed.
+- Package-level `pnpm test`: 15 passed and retained the same two unrelated
+  documentation failures in `tests/test_scout_ai_os_docs.py` for legacy Phase 9
+  and generated network-access wording.
+- The 32-layer GIS gate is not applicable: this change does not alter layer
+  IDs, ordering, preparation, projection, or the shared layer contract.
+
+This remains a presentation-only interaction change. It does not modify
+evidence provenance, Phase 1 safety truth, route approval, or outbound effects.
+
+## 2026-07-28 - Enforce tile/vector map rendering
+
+Map, Navigation, and Weather now enforce one shared render-primitive policy:
+ordinary spatial content must be tiled or vector geometry. A single image is
+accepted only when it carries an explicitly approved thematic role.
+
+Enforcement:
+
+- The canonical Pre-trip renderer used by Dashboard Map and Weather marks WMTS,
+  XYZ, and raster-provider tiles as `tile`, and marks its SVG route/evidence
+  geometry as the vector surface.
+- Navigation marks every Rudy+TW WMTS image with its tile source and address;
+  its route, terrain, risk, and evidence shapes remain SVG vectors.
+- The approved single-image themes are `satellite`, `radar`, `lidar`,
+  `hillshade`, `elevation_tint`, `slope_shading`, `contours`, and `thematic`.
+  Current terrain bitmap products and CWA radar/satellite frames are created
+  only through this allowlist.
+- Both renderers perform a final DOM audit. An image without a valid tile role
+  or approved theme is removed and increments
+  `data-map-render-policy-blocked-image-count`; the policy state is exposed as
+  `verified` or `blocked-unapproved-images`.
+- This strengthens `DASH-028`: it now checks explicit provenance markers and
+  enforcement functions, rather than only finding generic tile/vector
+  renderer names in source.
+
+The policy does not treat an allowed thematic bitmap as safety truth. It also
+does not allow a route-bbox screenshot to replace a failed basemap: provider
+failure must use the documented tile/cache fallback or show an unavailable
+state.
+
+Executable evidence:
+
+- Live Map reported 54 tiles, four approved terrain images (`hillshade`,
+  `elevation_tint`, `slope_shading`, and `contours`), 6,172 vector elements,
+  zero blocked images, and zero policy violations.
+- Live Navigation reported 10 Rudy+TW tiles, 344 vector elements, zero blocked
+  images, and zero policy violations.
+- Live Weather reported 54 tiles, 6,172 vector elements, zero blocked images,
+  and zero policy violations. The selected CWA rainfall product remained
+  vector grid evidence; no unapproved full-map image was introduced.
+- After a real `+` zoom, Map and Weather refreshed from 54 to 48 visible tiles
+  and Navigation from 10 to 8; every refreshed surface remained `verified`,
+  reported zero blocked images, and matched its live DOM tile count.
+- `DASH-028` passed in the visible Diagnostic page in 147 ms with no console
+  errors or HTTP error responses.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py`: 57 passed.
+- `tests/test_scout_layer_contract.py`: 4 passed.
+- `tools/verify_scout_layer_contract.py`: PASS for all 32 layers.
+- `pnpm lint` and `pnpm typecheck`: passed.
+- Package-level `pnpm test`: 15 passed and retained the same two unrelated
+  documentation failures for legacy Phase 9 and generated network-access
+  wording.
+- `tests/test_pretrip_admin_page.py`: 23 passed with one unrelated existing
+  assertion about awaiting the OSM PBF enhancement promise; this slice does not
+  change `reloadProjectView`.
+
+## 2026-07-28 - Remove Pre-trip and Admin Dashboard surfaces
+
+The Dashboard no longer exposes the duplicate `Pre-trip Surface` under Plan
+Trip or `Admin Surface` under System.
+
+Removal scope:
+
+- Removed both sidebar entries, route truth records, data-scope entries,
+  route metadata, page-render branches, and Overview shortcuts.
+- Renamed the Overview drill-down panel to `Debug Surface`; Debug remains the
+  only canonical admin surface embedded as a standalone Dashboard route.
+- Changed `DASH-015` from a three-surface check to a Debug-only canonical
+  surface check and aligned the functional verification checklist.
+- Unknown and retired hashes now normalize to `#home` while preserving the
+  current workspace query string. Therefore old `#surface-pretrip` and
+  `#surface-admin` links cannot reopen hidden or orphaned pages.
+
+The canonical `/admin/pretrip` renderer remains in place as an internal
+dependency of Dashboard Map and Weather. This change removes the duplicate
+standalone Dashboard page, not the map renderer used by those two user-facing
+features. The canonical `/admin` endpoint may also continue to exist outside
+the Dashboard, but the Dashboard no longer links to or embeds it.
+
+Executable browser evidence at 1440x1100 on the live port 9099 runtime:
+
+- Overview contained zero `surface-pretrip` routes, zero `surface-admin`
+  routes, and retained two `surface-debug` entry points (sidebar and Overview).
+- Direct visits to `#surface-pretrip` and `#surface-admin` both normalized to
+  `#home`, rendered Home, and created no `surfaceFrame`.
+- Debug Surface loaded `/admin/debug` in its retained iframe.
+- Map and Weather continued to load their canonical `/admin/pretrip` map-only
+  frames.
+- The six-route replay produced zero console errors and zero same-origin HTTP
+  error responses.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py`: 58 passed.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: 1 passed.
+- Package-level `pnpm test`: 15 passed and retained the same two unrelated
+  documentation failures for legacy Phase 9 and generated network-access
+  wording.
+- The 32-layer GIS gate is not applicable: no layer ID, layer ordering,
+  preparation path, route projection, or shared map contract changed.
