@@ -1,11 +1,11 @@
 id: route-context-intelligence
-version: 0.1.3
+version: 0.1.4
 status: experimental
 type: analysis
 priority: 54
 triggers:
   - event: assistant.route_context_intelligence_requested
-    description: Answer Route Context Intelligence questions from docs/specs/scout-route-context-intelligence-implementation.md about route story, historical/cultural/natural/terrain/seasonal layers, observation stops, source gaps, and briefing-ready route context.
+    description: Answer Route Context Intelligence questions from docs/specs/scout-route-context-intelligence-implementation.md about route story, professional itinerary coverage, historical/cultural/natural/terrain/seasonal layers, observation stops, source gaps, and briefing-ready route context.
     required_refs:
       - pretrip.workspace.project
       - pretrip.workspace.normalized.context.route_context
@@ -55,6 +55,10 @@ activation_gate:
     - do not reuse previous route URLs, image choices, lodging points, or copy as route defaults; previous artifacts are structure examples only
     - reject website chrome, logos, SVG icons, tracking pixels, social widgets, and decorative placeholder images; missing visual slots become explicit visual evidence gaps
     - briefing-style answers should prefer visual agenda, photo essay, map atlas, source tier spine, six context layers, P2 Scout-owned layer, and leader review tasks over source-table or engineering-report prose
+    - when a professional itinerary, route encyclopedia, tour page, or planning page is provided, first inventory its activity-planning sections and compare them against Scout coverage; missing route metrics, permits, lodging, segment schedule, resources, transport, equipment/readiness, contingencies, support vendors, or peer timing samples must become sourced candidate sections or explicit evidence gaps
+    - official P0 sources should govern current route status, permits, lodging capacity, booking/application windows, closures, prices, and access constraints; P1 professional itinerary pages can enrich the briefing but must not override fresher P0 evidence
+    - never invent vendor contacts, Line IDs, phone numbers, shuttle availability, prices, bed counts, booking rules, or public transport details; login-gated or redacted professional page data becomes a support-category review task
+    - public completed-trip timing samples and pace coefficients can inform pace-fit review and route variability, but must not become user ranking, required pace, or runtime safety truth
     - output remains candidate-only and never grants on-route stopping, photographing, waiting, detouring, or go/no-go permission
     - distinguish worth observing from allowed to stop; any stopping, photographing, waiting, detouring, or route decision still needs Contextual Permissioning
     - no runtime safety mutation, outbound send, hardware control, or workspace write is allowed from this read-only skill
@@ -153,6 +157,16 @@ output_schema:
     - p2_privacy_review_state
     - product_copy_gate
     - visual_evidence_gaps
+    - professional_itinerary_coverage
+    - route_baseline
+    - permit_lodging_application
+    - segment_itinerary
+    - transport_access
+    - resource_points
+    - equipment_readiness
+    - contingency_alternatives
+    - support_vendor_categories
+    - peer_timing_samples
     - offline_regeneration_boundary
     - briefing_variants
     - variant_comparison
@@ -182,6 +196,17 @@ output_schema:
       - p2_scout_owned_layer
       - source_tier_summary
       - missing_evidence
+      - professional_itinerary_coverage
+      - route_baseline
+      - permit_lodging_application
+      - daily_itinerary_options
+      - segment_time_distance_elevation
+      - resource_points
+      - transport_access
+      - equipment_readiness
+      - contingency_alternatives
+      - support_vendor_categories
+      - peer_timing_samples
       - leader_review_tasks
       - variant_comparison
       - token_usage_audit
@@ -243,6 +268,32 @@ output_schema:
     safety_boundary:
       candidate_only: true
       runtime_safety_truth: false
+    professional_itinerary_gate:
+      detect_sources:
+        - professional route encyclopedia page
+        - commercial or community itinerary page
+        - route planning page with schedule, logistics, or support resources
+      compare_against:
+        - route_context_pack
+        - route_context_points
+        - source_manifest
+        - media_manifest
+        - route_summary
+        - p2_scout_owned_evidence_summary
+        - rendered_route_context_briefing
+      required_coverage:
+        - headline route metrics and grade
+        - route aliases, summit/objective metadata, and trailheads
+        - permits, lodging, application windows, and official status freshness
+        - itinerary variants and day-by-day schedule
+        - segment distance, time, elevation, and route pressure
+        - water, toilet, meal, lodging, and resource points
+        - self-drive, public transport, shuttle, parking, and pre-night lodging
+        - equipment, water carry, navigation level, and target hiker profile
+        - caution list, route highlights, alternatives, and shortened plans
+        - support vendor categories without fabricated private contacts
+        - public peer timing samples as non-normative reference evidence
+      output_rule: Report each coverage item as covered, partial, missing, conflicting, or stale, with source refs and next leader-review action.
 failure_policy:
   on_error: record_failure
   retry:

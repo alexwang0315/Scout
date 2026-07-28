@@ -47,6 +47,7 @@ class OutputSchema(StrictModel):
     artifact_kinds: list[str] = Field(default_factory=list)
     required_fields: list[str] = Field(default_factory=list)
     layout_contract: SkillLayoutContract | None = None
+    safety_boundary: SkillSafetyBoundary | None = None
 
 
 class VisualDirection(StrictModel):
@@ -65,6 +66,7 @@ class MediaQualityGate(StrictModel):
 class SkillSafetyBoundary(StrictModel):
     candidate_only: bool = True
     runtime_safety_truth: bool = False
+    safe_or_walkable: str | None = None
 
 
 class SkillLayoutContract(StrictModel):
@@ -73,6 +75,7 @@ class SkillLayoutContract(StrictModel):
     visual_direction: VisualDirection | None = None
     media_quality_gate: MediaQualityGate | None = None
     variant_generation_gate: dict[str, Any] | None = None
+    professional_itinerary_gate: dict[str, Any] | None = None
     safety_boundary: SkillSafetyBoundary | None = None
 
 
