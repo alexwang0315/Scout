@@ -1911,6 +1911,7 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     )[1].split("function bindDashboardMapViewports", 1)[0]
 
     for marker in (
+        "const DASHBOARD_RUDY_TILE_SOURCE",
         "const NAVIGATION_RUDY_TILE_SOURCE",
         'sourceKind: "wmts_kvp_tile"',
         'wmtsLayer: "rudy_twmap"',
@@ -1920,12 +1921,15 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
         "function navigationRudyTileUrl(",
         "function navigationRudyTileImages(",
         "function navigationRudyVisibleBounds(",
+        "function renderDashboardRudyTileLayer(",
+        "function updateDashboardRudyTileLayer(",
         "function updateNavigationRudyTileLayer(",
         "Math.log2(viewState.zoom)",
+        'data-dashboard-rudy-tile-layer="true"',
         'data-navigation-rudy-tile-layer="true"',
         'data-navigation-rudy-tile-zoom="',
         'data-navigation-basemap-layer="rudy-twmap"',
-        "updateNavigationRudyTileLayer(viewport, viewState)",
+        "updateDashboardRudyTileLayer(viewport, viewState)",
     ):
         assert marker in html
 
