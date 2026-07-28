@@ -6049,7 +6049,6 @@
         #050906;
     }
 
-    .navigation-workspace-map img,
     .navigation-workspace-map svg {
       position: absolute;
       inset: 0;
@@ -6057,29 +6056,13 @@
       height: 100%;
     }
 
-    .navigation-workspace-map img {
-      object-fit: fill;
+    .navigation-rudy-tile-layer,
+    .navigation-rudy-tile-layer image {
       pointer-events: none;
     }
 
-    .navigation-workspace-map img[data-terrain-overlay="hillshade"] {
-      opacity: .74;
-      filter: contrast(1.12) brightness(.72);
-    }
-
-    .navigation-workspace-map img[data-terrain-overlay="contours"] {
+    .navigation-rudy-tile-layer {
       opacity: .94;
-      filter: brightness(3.1) saturate(.35);
-    }
-
-    .navigation-workspace-map img[data-terrain-overlay="slope_shading"] {
-      opacity: .68;
-      mix-blend-mode: screen;
-    }
-
-    .navigation-workspace-map img[data-terrain-overlay="elevation_tint"] {
-      opacity: .64;
-      mix-blend-mode: screen;
     }
 
     .navigation-workspace-route {
@@ -7128,6 +7111,20 @@
       "rudy-twmap",
       "cwa-qpf",
     ]);
+
+    const NAVIGATION_RUDY_TILE_SOURCE = Object.freeze({
+      sourceKind: "wmts_kvp_tile",
+      wmtsEndpoint: "https://tile.happyman.idv.tw/mp/service",
+      wmtsLayer: "rudy_twmap",
+      wmtsStyle: "default",
+      wmtsTileMatrixSet: "gm_grid",
+      wmtsFormat: "image/png",
+      wmtsVersion: "1.0.0",
+      minZoom: 5,
+      maxZoom: 19,
+    });
+    const NAVIGATION_RUDY_VIEWBOX = Object.freeze({width: 1000, height: 392});
+    const NAVIGATION_RUDY_INITIAL_TILE_LIMIT = 24;
 
     const WEATHER_LAYER_DEFINITIONS = Object.freeze([
       {id: "soil-moisture", label: "Soil moisture", detail: "SMAP L4 hydrology context"},
@@ -11652,7 +11649,11 @@
       return renderDashboardMapViewport("navigation-training-map",
         "Navigation contour-reading training map",
         mapSvg,
-        {className: "navigation-terrain-map", attributes: 'data-terrain-contour-map="true"'},
+        {
+          className: "navigation-terrain-map",
+          attributes: 'data-terrain-contour-map="true"',
+          mouseZoom: false,
+        },
       );
     }
 
@@ -11728,19 +11729,239 @@
       };
     }
 
-    function navigationTerrainOverlay(snapshot, mode) {
-      return asArray(snapshot?.terrain_surface?.overlays)
-        .find(item => item?.mode === mode) || null;
+    function navigationRudyBounds(rawBounds) {
+      const bounds = {
+        west: Number(rawBounds?.west),
+        east: Number(rawBounds?.east),
+        north: Number(rawBounds?.north),
+        south: Number(rawBounds?.south),
+      };
+      if (!Object.values(bounds).every(Number.isFinite)) return null;
+      if (!(bounds.east > bounds.west) || !(bounds.north > bounds.south)) return null;
+      return bounds;
+    }
+
+    function navigationMercatorY(latitude) {
+      const clamped = Math.max(-85.05112878, Math.min(85.05112878, Number(latitude)));
+      const radians = clamped * Math.PI / 180;
+      return (1 - Math.log(Math.tan(radians) + (1 / Math.cos(radians))) / Math.PI) / 2;
+    }
+
+    function navigationMercatorLatitude(worldY) {
+      const n = Math.PI - (2 * Math.PI * Number(worldY));
+      return 180 / Math.PI * Math.atan(Math.sinh(n));
+    }
+
+    function navigationRudyTileRange(rawBounds, zoom) {
+      const bounds = navigationRudyBounds(rawBounds);
+      if (!bounds) return null;
+      const tileScale = 2 ** zoom;
+      const maxIndex = tileScale - 1;
+      const tileX = longitude => Math.floor(((longitude + 180) / 360) * tileScale);
+      const tileY = latitude => Math.floor(navigationMercatorY(latitude) * tileScale);
+      return {
+        xMin: Math.max(0, Math.min(maxIndex, tileX(bounds.west))),
+        xMax: Math.max(0, Math.min(maxIndex, tileX(bounds.east))),
+        yMin: Math.max(0, Math.min(maxIndex, tileY(bounds.north))),
+        yMax: Math.max(0, Math.min(maxIndex, tileY(bounds.south))),
+      };
+    }
+
+    function navigationRudyTileCount(bounds, zoom) {
+      const range = navigationRudyTileRange(bounds, zoom);
+      if (!range) return 0;
+      return (range.xMax - range.xMin + 1) * (range.yMax - range.yMin + 1);
+    }
+
+    function navigationRudyBaseZoom(bounds, maxTiles = NAVIGATION_RUDY_INITIAL_TILE_LIMIT) {
+      let zoom = NAVIGATION_RUDY_TILE_SOURCE.maxZoom;
+      while (
+        zoom > NAVIGATION_RUDY_TILE_SOURCE.minZoom
+        && navigationRudyTileCount(bounds, zoom) > maxTiles
+      ) zoom -= 1;
+      return zoom;
+    }
+
+    function navigationRudyTileUrl(zoom, x, y) {
+      const params = new URLSearchParams({
+        SERVICE: "WMTS",
+        REQUEST: "GetTile",
+        VERSION: NAVIGATION_RUDY_TILE_SOURCE.wmtsVersion,
+        LAYER: NAVIGATION_RUDY_TILE_SOURCE.wmtsLayer,
+        STYLE: NAVIGATION_RUDY_TILE_SOURCE.wmtsStyle,
+        TILEMATRIXSET: NAVIGATION_RUDY_TILE_SOURCE.wmtsTileMatrixSet,
+        TILEMATRIX: String(zoom).padStart(2, "0"),
+        TILEROW: String(y),
+        TILECOL: String(x),
+        FORMAT: NAVIGATION_RUDY_TILE_SOURCE.wmtsFormat,
+      });
+      return `${NAVIGATION_RUDY_TILE_SOURCE.wmtsEndpoint}?${params.toString()}`;
+    }
+
+    function navigationRudyTileLongitude(x, zoom) {
+      return x / (2 ** zoom) * 360 - 180;
+    }
+
+    function navigationRudyTileLatitude(y, zoom) {
+      return navigationMercatorLatitude(y / (2 ** zoom));
+    }
+
+    function navigationRudyTileKey(bounds, zoom) {
+      const range = navigationRudyTileRange(bounds, zoom);
+      return range
+        ? `${zoom}:${range.xMin}:${range.xMax}:${range.yMin}:${range.yMax}`
+        : `${zoom}:unavailable`;
+    }
+
+    function navigationRudyTileImages(
+      fullBounds,
+      visibleBounds,
+      zoom,
+      width = NAVIGATION_RUDY_VIEWBOX.width,
+      height = NAVIGATION_RUDY_VIEWBOX.height,
+    ) {
+      const range = navigationRudyTileRange(visibleBounds, zoom);
+      if (!range) return "";
+      const tiles = [];
+      for (let x = range.xMin; x <= range.xMax; x += 1) {
+        for (let y = range.yMin; y <= range.yMax; y += 1) {
+          const northwest = navigationTerrainPointPosition({
+            lon: navigationRudyTileLongitude(x, zoom),
+            lat: navigationRudyTileLatitude(y, zoom),
+          }, fullBounds, width, height);
+          const southeast = navigationTerrainPointPosition({
+            lon: navigationRudyTileLongitude(x + 1, zoom),
+            lat: navigationRudyTileLatitude(y + 1, zoom),
+          }, fullBounds, width, height);
+          if (!northwest || !southeast) continue;
+          const tileWidth = Math.max(.1, southeast.x - northwest.x);
+          const tileHeight = Math.max(.1, southeast.y - northwest.y);
+          tiles.push(`
+            <image
+              class="navigation-rudy-tile"
+              href="${escapeHtml(navigationRudyTileUrl(zoom, x, y))}"
+              x="${northwest.x.toFixed(3)}"
+              y="${northwest.y.toFixed(3)}"
+              width="${tileWidth.toFixed(3)}"
+              height="${tileHeight.toFixed(3)}"
+              preserveAspectRatio="none"
+              data-navigation-rudy-tile="${zoom}/${x}/${y}"
+            ></image>
+          `);
+        }
+      }
+      return tiles.join("");
+    }
+
+    function renderNavigationRudyTileLayer(bounds, baseZoom) {
+      const normalized = navigationRudyBounds(bounds);
+      if (!normalized) return "";
+      return `
+        <g
+          class="navigation-rudy-tile-layer"
+          data-navigation-rudy-tile-layer="true"
+          data-navigation-rudy-tile-zoom="${baseZoom}"
+          data-navigation-rudy-tile-key="${escapeHtml(navigationRudyTileKey(normalized, baseZoom))}"
+          data-rudy-base-zoom="${baseZoom}"
+          data-rudy-west="${normalized.west}"
+          data-rudy-east="${normalized.east}"
+          data-rudy-north="${normalized.north}"
+          data-rudy-south="${normalized.south}"
+          aria-hidden="true"
+        >${navigationRudyTileImages(normalized, normalized, baseZoom)}</g>
+      `;
+    }
+
+    function navigationRudyVisibleBounds(viewport, viewState, fullBounds) {
+      const stage = viewport.querySelector("[data-dashboard-map-stage]");
+      if (!stage) return fullBounds;
+      const stageWidth = Math.max(1, stage.offsetWidth || stage.scrollWidth || 0);
+      const stageHeight = Math.max(1, stage.offsetHeight || stage.scrollHeight || 0);
+      const viewportWidth = Math.max(1, viewport.clientWidth || 0);
+      const viewportHeight = Math.max(1, viewport.clientHeight || 0);
+      const zoom = Math.max(1, Number(viewState.zoom) || 1);
+      const left = Math.max(0, Math.min(stageWidth, -Number(viewState.x || 0) / zoom));
+      const top = Math.max(0, Math.min(stageHeight, -Number(viewState.y || 0) / zoom));
+      const right = Math.max(left, Math.min(
+        stageWidth,
+        (viewportWidth - Number(viewState.x || 0)) / zoom,
+      ));
+      const bottom = Math.max(top, Math.min(
+        stageHeight,
+        (viewportHeight - Number(viewState.y || 0)) / zoom,
+      ));
+      if (!(right > left) || !(bottom > top)) return fullBounds;
+      const horizontalPadding = Math.min(stageWidth * .04, (right - left) * .12);
+      const verticalPadding = Math.min(stageHeight * .04, (bottom - top) * .12);
+      const leftRatio = Math.max(0, (left - horizontalPadding) / stageWidth);
+      const rightRatio = Math.min(1, (right + horizontalPadding) / stageWidth);
+      const topRatio = Math.max(0, (top - verticalPadding) / stageHeight);
+      const bottomRatio = Math.min(1, (bottom + verticalPadding) / stageHeight);
+      const northWorldY = navigationMercatorY(fullBounds.north);
+      const southWorldY = navigationMercatorY(fullBounds.south);
+      return {
+        west: fullBounds.west + (fullBounds.east - fullBounds.west) * leftRatio,
+        east: fullBounds.west + (fullBounds.east - fullBounds.west) * rightRatio,
+        north: navigationMercatorLatitude(
+          northWorldY + (southWorldY - northWorldY) * topRatio,
+        ),
+        south: navigationMercatorLatitude(
+          northWorldY + (southWorldY - northWorldY) * bottomRatio,
+        ),
+      };
+    }
+
+    function updateNavigationRudyTileLayer(viewport, viewState) {
+      const tileLayer = viewport.querySelector('[data-navigation-rudy-tile-layer="true"]');
+      if (!tileLayer) return;
+      const fullBounds = navigationRudyBounds({
+        west: tileLayer.dataset.rudyWest,
+        east: tileLayer.dataset.rudyEast,
+        north: tileLayer.dataset.rudyNorth,
+        south: tileLayer.dataset.rudySouth,
+      });
+      if (!fullBounds) return;
+      const baseZoom = Number(tileLayer.dataset.rudyBaseZoom)
+        || navigationRudyBaseZoom(fullBounds);
+      const effectiveZoom = Math.max(
+        NAVIGATION_RUDY_TILE_SOURCE.minZoom,
+        Math.min(
+          NAVIGATION_RUDY_TILE_SOURCE.maxZoom,
+          baseZoom + Math.round(Math.log2(viewState.zoom)),
+        ),
+      );
+      const visibleBounds = navigationRudyVisibleBounds(viewport, viewState, fullBounds);
+      const tileKey = navigationRudyTileKey(visibleBounds, effectiveZoom);
+      tileLayer.dataset.navigationRudyTileZoom = String(effectiveZoom);
+      viewport.dataset.navigationTileZoom = String(effectiveZoom);
+      const zoomLabel = viewport.querySelector("[data-navigation-rudy-zoom-label]");
+      if (zoomLabel) zoomLabel.textContent = String(effectiveZoom);
+      if (tileLayer.dataset.navigationRudyTileKey === tileKey) return;
+      tileLayer.innerHTML = navigationRudyTileImages(
+        fullBounds,
+        visibleBounds,
+        effectiveZoom,
+      );
+      tileLayer.dataset.navigationRudyTileKey = tileKey;
     }
 
     function navigationTerrainPointPosition(point, bounds, width = 1000, height = 392) {
-      if (!bounds || !Number.isFinite(Number(point?.lon)) || !Number.isFinite(Number(point?.lat))) return null;
-      const longitudeSpan = Number(bounds.east) - Number(bounds.west);
-      const latitudeSpan = Number(bounds.north) - Number(bounds.south);
-      if (!(longitudeSpan > 0) || !(latitudeSpan > 0)) return null;
+      const normalizedBounds = navigationRudyBounds(bounds);
+      if (!normalizedBounds || !Number.isFinite(Number(point?.lon)) || !Number.isFinite(Number(point?.lat))) return null;
+      const longitudeSpan = normalizedBounds.east - normalizedBounds.west;
+      const northWorldY = navigationMercatorY(normalizedBounds.north);
+      const southWorldY = navigationMercatorY(normalizedBounds.south);
+      const mercatorSpan = southWorldY - northWorldY;
+      if (!(longitudeSpan > 0) || !(mercatorSpan > 0)) return null;
       return {
-        x: Math.max(0, Math.min(width, (Number(point.lon) - Number(bounds.west)) / longitudeSpan * width)),
-        y: Math.max(0, Math.min(height, (Number(bounds.north) - Number(point.lat)) / latitudeSpan * height)),
+        x: Math.max(0, Math.min(
+          width,
+          (Number(point.lon) - normalizedBounds.west) / longitudeSpan * width,
+        )),
+        y: Math.max(0, Math.min(
+          height,
+          (navigationMercatorY(point.lat) - northWorldY) / mercatorSpan * height,
+        )),
       };
     }
 
@@ -11811,12 +12032,7 @@
     function renderNavigationWorkspaceMap(snapshot, selectedPoint, selectedStructurePoint, selectedEvent) {
       const lens = state.navigationTerrainLens || "structure";
       const bounds = snapshot?.terrain_surface?.bbox_wgs84;
-      const hillshade = navigationTerrainOverlay(snapshot, "hillshade");
-      const contours = navigationTerrainOverlay(snapshot, "contours");
-      const activeOverlay = navigationTerrainOverlay(
-        snapshot,
-        lens === "pressure" ? "slope_shading" : lens === "structure" ? "contours" : "elevation_tint",
-      );
+      const baseZoom = navigationRudyBaseZoom(bounds);
       const routePath = navigationTerrainRoutePath(snapshot);
       const pressurePoints = asArray(snapshot?.route_samples?.points)
         .filter((_point, index) => index % 8 === 0)
@@ -11853,11 +12069,6 @@
           position: navigationTerrainPointPosition(event, bounds),
         }))
         .filter(event => event.position);
-      const overlayImages = [
-        hillshade,
-        activeOverlay && activeOverlay.mode !== "contours" ? activeOverlay : null,
-        contours,
-      ].filter((item, index, list) => item && list.findIndex(other => other?.mode === item.mode) === index);
       const structureGap = ["ridge", "valley", "saddle"]
         .filter(kind => !["candidate_vectors", "candidate_points"].includes(snapshot?.feature_extraction?.[kind]?.status));
       const statusText = lens === "structure" && hierarchyEdges.length
@@ -11865,18 +12076,19 @@
         : lens === "events"
           ? `${terrainEvents.length} 個 GPX × terrain events；紅圈是複核提示，不是安全判定。`
           : lens === "structure" && structureGap.length
-        ? `真實 contour raster；${structureGap.join(" / ")} vectors 尚未抽取。`
+        ? `Rudy+TW 圖磚；${structureGap.join(" / ")} vectors 尚未抽取。`
         : lens === "structure"
           ? `${structurePoints.length} 個 DEM morphology candidates；不是已確認地形線或步道。`
         : lens === "retreat"
           ? "反向路徑僅表示回看既有 route geometry；撤退可行性尚未審查。"
           : `${navigationTerrainLensLabel(lens)} · workspace candidate evidence。`;
       const mapContent = `
-          ${overlayImages.map(item => `<img src="${escapeHtml(item.runtime_href)}" alt="" aria-hidden="true" data-terrain-overlay="${escapeHtml(item.mode)}">`).join("")}
-          <svg viewBox="0 0 1000 392" role="img" aria-label="工作區 DTM 地形圖、路線取樣與人工複核地形風險候選">
+          <svg viewBox="0 0 1000 392" role="img" aria-label="Rudy+TW 動態圖磚底圖、路線取樣與人工複核地形候選">
             <defs>
               <marker id="navigationWorkspaceRetreatArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#62b8c6"></path></marker>
             </defs>
+            <rect width="1000" height="392" fill="#101813"></rect>
+            ${renderNavigationRudyTileLayer(bounds, baseZoom)}
             ${["structure", "events"].includes(lens) ? hierarchyEdges.map(edge => `
               <path
                 class="navigation-terrain-hierarchy-edge"
@@ -11942,16 +12154,17 @@
           </svg>
       `;
       const mapOverlay = `
-          <div class="navigation-workspace-map-status"><strong>Workspace DTM · ${escapeHtml(snapshot.status)}</strong>${escapeHtml(statusText)}</div>
-          <div class="navigation-workspace-scale">${escapeHtml(`${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m cells · ${formatInteger(snapshot?.terrain_surface?.source_dtm_tile_count)} DTM tiles`)}</div>
+          <div class="navigation-workspace-map-status"><strong>Rudy+TW · z<span data-navigation-rudy-zoom-label>${baseZoom}</span></strong>${escapeHtml(statusText)}</div>
+          <div class="navigation-workspace-scale">${escapeHtml(`dynamic WMTS · ${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m DEM analysis`)}</div>
       `;
       return renderDashboardMapViewport("navigation-workspace-map",
-        "Workspace DTM terrain intelligence map",
+        "Rudy+TW tiled terrain intelligence map",
         mapContent,
         {
           className: "navigation-workspace-map",
-          attributes: `data-navigation-workspace-map="true" data-navigation-overlay-mode="${escapeHtml(activeOverlay?.mode || contours?.mode || "unavailable")}"`,
+          attributes: `data-navigation-workspace-map="true" data-navigation-basemap-layer="rudy-twmap" data-navigation-tile-zoom="${baseZoom}"`,
           overlayHtml: mapOverlay,
+          mouseZoom: false,
         },
       );
     }
@@ -12253,8 +12466,8 @@
                     ? renderNavigationWorkspaceMap(snapshot, selectedLivePoint, selectedStructurePoint, selectedTerrainEvent)
                     : renderNavigationWorkspaceLoading(snapshot)}
                 <div class="navigation-terrain-legend" aria-label="Terrain map legend">
-                  ${sourceMode === "workspace" ? `
-                    <span><strong>DTM raster</strong><br>${escapeHtml(snapshot?.terrain_surface?.cell_resolution_m ? `${snapshot.terrain_surface.cell_resolution_m}m cells` : "unavailable")}</span>
+                ${sourceMode === "workspace" ? `
+                    <span><strong>Rudy+TW</strong><br>dynamic WMTS tiles</span>
                     <span><strong>白線</strong><br>bounded route samples</span>
                     <span><strong>綠線</strong><br>主稜／支稜候選</span>
                     <span><strong>藍線／紅圈</strong><br>谷線與 route-terrain event</span>
@@ -13661,7 +13874,7 @@
       `;
     }
 
-    function renderDashboardMapControls(viewportId, mode = "pan") {
+    function renderDashboardMapControls(viewportId, mode = "pan", mouseZoomEnabled = true) {
       const panActive = mode !== "box";
       return `
         <div class="dashboard-map-controls" data-dashboard-map-controls="${escapeHtml(viewportId)}" aria-label="Map view controls">
@@ -13669,7 +13882,7 @@
           <button type="button" data-map-control="zoom-out" aria-label="Zoom out" title="Zoom out (-)">−</button>
           <button type="button" data-map-control="reset" aria-label="Reset map view" title="Fit map (0)">Fit</button>
           <button type="button" data-map-control="pan" aria-label="Mouse drag pan" aria-pressed="${panActive ? "true" : "false"}" title="Mouse drag pan (P)">Pan</button>
-          <button type="button" data-map-control="box-zoom" aria-label="Point or rectangle zoom" aria-pressed="${panActive ? "false" : "true"}" title="Point zoom or rectangle drag: drag down-right to zoom in; drag up-left to zoom out (B)">▣</button>
+          ${mouseZoomEnabled ? `<button type="button" data-map-control="box-zoom" aria-label="Point or rectangle zoom" aria-pressed="${panActive ? "false" : "true"}" title="Point zoom or rectangle drag: drag down-right to zoom in; drag up-left to zoom out (B)">▣</button>` : ""}
           <output data-map-zoom-level aria-label="Map zoom level">100%</output>
         </div>
       `;
@@ -13677,23 +13890,28 @@
 
     function renderDashboardMapViewport(viewportId, label, content, options = {}) {
       const saved = state.mapViewportById?.[viewportId] || {};
-      const mode = saved.mode === "box" ? "box" : "pan";
+      const mouseZoomEnabled = options.mouseZoom !== false;
+      const mode = mouseZoomEnabled && saved.mode === "box" ? "box" : "pan";
       const className = ["dashboard-map-viewport", options.className || ""].filter(Boolean).join(" ");
+      const interactionLabel = mouseZoomEnabled
+        ? "Use mouse drag or arrow keys to pan; plus, minus, point zoom, or rectangle drag to zoom."
+        : "Use mouse drag or arrow keys to pan; use plus, minus, or keyboard shortcuts to zoom.";
       return `
         <div
           class="${escapeHtml(className)}"
           data-dashboard-map-viewport="${escapeHtml(viewportId)}"
           data-map-mode="${mode}"
           data-map-zoom="1.000"
+          data-map-mouse-zoom="${mouseZoomEnabled ? "true" : "false"}"
           ${options.attributes || ""}
           role="region"
           tabindex="0"
-          aria-label="${escapeHtml(`${label}. Use mouse drag or arrow keys to pan; plus, minus, point zoom, or rectangle drag to zoom.`)}"
-          aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape"
+          aria-label="${escapeHtml(`${label}. ${interactionLabel}`)}"
+          aria-keyshortcuts="${mouseZoomEnabled ? "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape" : "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P Escape"}"
         >
           <div class="dashboard-map-stage" data-dashboard-map-stage>${content}</div>
           <div class="dashboard-map-selection" data-dashboard-map-selection hidden aria-hidden="true"></div>
-          ${renderDashboardMapControls(viewportId, mode)}
+          ${renderDashboardMapControls(viewportId, mode, mouseZoomEnabled)}
           <span class="sr-only" data-dashboard-map-live role="status" aria-live="polite"></span>
           ${options.overlayHtml || ""}
         </div>
@@ -13709,11 +13927,12 @@
       if (!stage || !selection || !controls) return null;
 
       const saved = state.mapViewportById?.[viewportId] || {};
+      const mouseZoomEnabled = viewport.dataset.mapMouseZoom !== "false";
       let viewState = {
         zoom: Math.max(1, Math.min(12, Number(saved.zoom) || 1)),
         x: Number(saved.x) || 0,
         y: Number(saved.y) || 0,
-        mode: saved.mode === "box" ? "box" : "pan",
+        mode: mouseZoomEnabled && saved.mode === "box" ? "box" : "pan",
       };
       let pointerState = null;
       let suppressNextClick = false;
@@ -13764,6 +13983,7 @@
         controls.querySelector('[data-map-control="box-zoom"]')?.setAttribute("aria-pressed", viewState.mode === "box" ? "true" : "false");
         const zoomLevel = controls.querySelector("[data-map-zoom-level]");
         if (zoomLevel) zoomLevel.textContent = `${Math.round(viewState.zoom * 100)}%`;
+        updateNavigationRudyTileLayer(viewport, viewState);
         persist();
         if (message) announce(message);
       };
@@ -13802,7 +14022,10 @@
       };
 
       const setMode = (mode) => {
-        viewState = {...viewState, mode: mode === "box" ? "box" : "pan"};
+        viewState = {
+          ...viewState,
+          mode: mouseZoomEnabled && mode === "box" ? "box" : "pan",
+        };
         pointerState = null;
         selection.hidden = true;
         viewport.dataset.mapDragging = "false";
@@ -13934,7 +14157,7 @@
         else if (event.key === "-") zoomAt(0.8);
         else if (event.key === "0") reset();
         else if (event.key.toLowerCase() === "p") setMode("pan");
-        else if (event.key.toLowerCase() === "b") setMode("box");
+        else if (mouseZoomEnabled && event.key.toLowerCase() === "b") setMode("box");
         else if (event.key === "Escape") {
           pointerState = null;
           selection.hidden = true;
@@ -13959,7 +14182,7 @@
       viewport.addEventListener("pointermove", onPointerMove);
       viewport.addEventListener("pointerup", event => finishPointer(event));
       viewport.addEventListener("pointercancel", event => finishPointer(event, true));
-      viewport.addEventListener("wheel", onWheel, {passive: false});
+      if (mouseZoomEnabled) viewport.addEventListener("wheel", onWheel, {passive: false});
       viewport.addEventListener("keydown", onKeyDown);
       viewport.addEventListener("click", (event) => {
         if (!suppressNextClick) return;

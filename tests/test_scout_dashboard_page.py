@@ -1349,7 +1349,9 @@ def test_dashboard_spatial_maps_share_the_canonical_map_navigation_contract() ->
     assert "mapViewportById: {}" in html
     assert 'role="region"' in html
     assert 'tabindex="0"' in html
-    assert 'aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape"' in html
+    assert "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape" in html
+    assert "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P Escape" in html
+    assert 'data-map-mouse-zoom="${mouseZoomEnabled ? "true" : "false"}"' in html
     assert "data-dashboard-map-stage" in html
     assert "data-dashboard-map-selection" in html
     assert "drag down-right to zoom in; drag up-left to zoom out" in html
@@ -1847,6 +1849,52 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "尚未由目前 terrain pipeline 抽取" in html
     assert "P0、P1、P2 不合併成一個安全分數" in html
     assert "reference GPX 不自動升格成替代路線" in html
+
+
+def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_without_mouse_zoom() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    navigation_map = html.split(
+        "function renderNavigationWorkspaceMap", 1
+    )[1].split("function renderNavigationFeatureExtraction", 1)[0]
+    map_controller = html.split(
+        "function createDashboardMapViewportController", 1
+    )[1].split("function bindDashboardMapViewports", 1)[0]
+
+    for marker in (
+        "const NAVIGATION_RUDY_TILE_SOURCE",
+        'sourceKind: "wmts_kvp_tile"',
+        'wmtsLayer: "rudy_twmap"',
+        "function navigationMercatorY(",
+        "function navigationRudyTileRange(",
+        "function navigationRudyBaseZoom(",
+        "function navigationRudyTileUrl(",
+        "function navigationRudyTileImages(",
+        "function navigationRudyVisibleBounds(",
+        "function updateNavigationRudyTileLayer(",
+        "Math.log2(viewState.zoom)",
+        'data-navigation-rudy-tile-layer="true"',
+        'data-navigation-rudy-tile-zoom="',
+        'data-navigation-basemap-layer="rudy-twmap"',
+        "updateNavigationRudyTileLayer(viewport, viewState)",
+    ):
+        assert marker in html
+
+    assert "runtime_href" not in navigation_map
+    assert 'data-terrain-overlay="' not in navigation_map
+    assert "hillshade" not in navigation_map
+    assert "slope_shading" not in navigation_map
+    assert "elevation_tint" not in navigation_map
+    assert "mouseZoom: false" in navigation_map
+    assert html.count("mouseZoom: false") >= 2
+    assert (
+        'const mouseZoomEnabled = viewport.dataset.mapMouseZoom !== "false";'
+        in map_controller
+    )
+    assert (
+        'if (mouseZoomEnabled) viewport.addEventListener("wheel", onWheel, '
+        "{passive: false});"
+        in map_controller
+    )
 
 
 def test_scout_dashboard_pace_fit_removes_low_information_blocks() -> None:
