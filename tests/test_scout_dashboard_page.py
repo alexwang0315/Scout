@@ -672,11 +672,11 @@ def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
     assert "window.clearTimeout(timer)" in html
     assert "{ timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS }" in html
     assert "setRoute(routeFromHash());" in html
-    assert "loadData().finally(() =>" in html
+    assert "loadWorkspaceCatalog().finally(() => loadData()).finally(() =>" in html
     assert "routeUsesEmbeddedFrame(state.route)" in html
     assert 'return route === "map" || route === "agent" || route.startsWith("surface-");' in html
     assert "routeUsesWideFrame(route)" in html
-    assert 'return route === "agent" || route === "debug" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
+    assert 'return route === "agent" || route === "debug" || route === "diagnostic" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
     assert "routeUsesFullFrame(route)" in html
     assert 'return route === "map";' in html
     assert "/debug-projection`" not in html
@@ -1815,7 +1815,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "不能單獨證明步道存在" in navigation
     assert "需要來源與人工複核" in navigation
     assert 'role="listitem"\n                class="navigation-event-card"' not in navigation
-    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in html
+    assert "void loadConnectedPreparationStatus();" in html
     assert 'const pageHeaderHidden = route === "outdoor-navigation";' in html
     assert (
         'dashboardShell?.classList.toggle("is-page-header-hidden", pageHeaderHidden);'
@@ -1884,8 +1884,7 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_without_mouse_zoom(
     assert "hillshade" not in navigation_map
     assert "slope_shading" not in navigation_map
     assert "elevation_tint" not in navigation_map
-    assert "mouseZoom: false" in navigation_map
-    assert html.count("mouseZoom: false") >= 2
+    assert "mouseZoom: false" not in navigation_map
     assert (
         'const mouseZoomEnabled = viewport.dataset.mapMouseZoom !== "false";'
         in map_controller
@@ -2146,7 +2145,7 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "function routeContextBriefingSrc()" in html
     assert "function renderRouteBriefingMetaBlock" in html
     assert "return candidate || PRETRIP_DATA_PROJECT_ID;" in html
-    assert 'return route === "agent" || route === "debug" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
+    assert 'return route === "agent" || route === "debug" || route === "diagnostic" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
     assert 'decisionBand(force.decision, "Scout AI route-context trip briefing loaded"' not in html
     assert "/admin/pretrip/projects/${project}/briefings/route-context" in html
     assert "data-route-context-briefing=\"true\"" in html
@@ -2467,7 +2466,7 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         'connectedPreparationActivityLabel(preparation.cwaApiRequestAttempted, preparation.status)',
         'connectedPreparationActivityLabel(preparation.externalApiCallsMade, preparation.status)',
         "/connected-preparation",
-        'triggerDashboardConnectedPreparation("dashboard-open")',
+            "loadConnectedPreparationStatus",
         "connectedPreparation",
         "function weatherPercentLabel",
         "function requestAuthorizedRainfallTrend",
@@ -3030,6 +3029,78 @@ process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, fai
     assert payload["successReceipt"]["result"] is True
     assert payload["successReceipt"]["tone"] == "ok"
     assert payload["successReceipt"]["reloadDisabled"] is False
+
+
+def test_dashboard_diagnostic_page_runs_29_read_only_checks() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    settings_nav = (
+        '<button class="nav-item" type="button" data-route="settings" '
+        'data-route-truth="live"'
+    )
+    diagnostic_nav = (
+        '<button class="nav-item" type="button" data-route="diagnostic" '
+        'data-route-truth="live"'
+    )
+    assert settings_nav in html
+    assert diagnostic_nav in html
+    assert html.index(diagnostic_nav) > html.index(settings_nav)
+    assert '"diagnostic": Object.freeze' in html
+    assert 'diagnostic: ["Diagnostic", "29 read-only Dashboard checks"]' in html
+    assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
+
+    case_source = html.split(
+        "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
+    )[1].split("]);", 1)[0]
+    for index in range(1, 30):
+        assert f'id: "DASH-{index:03d}"' in case_source
+    assert case_source.count('id: "DASH-') == 29
+    assert "postJson(" not in case_source
+
+    for marker in (
+        "async function diagnosticCheck026()",
+        "async function diagnosticCheck027()",
+        "async function diagnosticCheck028()",
+        "async function diagnosticCheck029()",
+        "Map、Navigation、Weather evidence hover hint",
+        "三圖框選縮放與鍵盤平移",
+        "三圖圖磚、向量與單圖例外政策",
+        "三圖基本 Zoom、Pan 與 Fit",
+        "DASHBOARD_MAP_SINGLE_IMAGE_ALLOWLIST",
+        "diagnosticMapSurfaceSources",
+    ):
+        assert marker in html
+
+    for marker in (
+        "function renderDiagnosticPage()",
+        "function renderDiagnosticCase(",
+        "async function runDashboardDiagnostic(",
+        "async function runAllDashboardDiagnostics()",
+        "function bindDiagnosticControls()",
+        'data-diagnostic-action="all"',
+        'data-diagnostic-action="retest"',
+        'data-diagnostic-status="running"',
+        'data-diagnostic-status="passed"',
+        'data-diagnostic-status="failed"',
+        "測試中",
+        "測試通過",
+        "測試失敗",
+        "重新測試",
+        "Diag all",
+        "Read-only diagnostics",
+        "does not replace the full acceptance checklist",
+        "window.scoutDashboardDiagnostics",
+    ):
+        assert marker in html
+
+    runner = html.split(
+        "async function runDashboardDiagnostic(", 1
+    )[1].split("async function runAllDashboardDiagnostics()", 1)[0]
+    assert "postJson(" not in runner
+    assert 'status: "running"' in runner
+    assert 'status: "passed"' in runner
+    assert 'status: "failed"' in runner
+    assert "performance.now()" in runner
 
 
 def test_dashboard_route_context_variants_index_uses_canonical_file_query_links() -> None:

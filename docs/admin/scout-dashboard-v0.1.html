@@ -1468,6 +1468,44 @@
       display: none;
     }
 
+    .dashboard-map-hover-hint {
+      position: fixed;
+      z-index: 10020;
+      width: max-content;
+      max-width: min(340px, calc(100vw - 24px));
+      padding: 9px 11px;
+      border: 1px solid rgba(98, 184, 198, .62);
+      border-radius: 8px;
+      color: var(--text);
+      background: rgba(7, 16, 18, .96);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .42);
+      pointer-events: none;
+    }
+
+    .dashboard-map-hover-hint[hidden] {
+      display: none;
+    }
+
+    .dashboard-map-hover-hint strong,
+    .dashboard-map-hover-hint span {
+      display: block;
+    }
+
+    .dashboard-map-hover-hint strong {
+      color: #eafcff;
+      font: 800 12px/1.35 var(--sans);
+    }
+
+    .dashboard-map-hover-hint span {
+      margin-top: 3px;
+      color: var(--muted);
+      font: 600 11px/1.45 var(--sans);
+    }
+
+    [data-dashboard-map-hint-title] {
+      cursor: help;
+    }
+
     .architecture-map-surface {
       min-height: 490px;
     }
@@ -3833,6 +3871,211 @@
     #settingsStatus[data-tone="ok"] { color: var(--ok); }
     #settingsStatus[data-tone="bad"] { color: var(--bad); }
 
+    .diagnostic-page {
+      display: grid;
+      gap: 14px;
+    }
+
+    .diagnostic-command {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 16px;
+      border: 1px solid rgba(98, 181, 196, .48);
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(98, 181, 196, .1), transparent 48%),
+        var(--surface);
+    }
+
+    .diagnostic-command h3,
+    .diagnostic-category h3,
+    .diagnostic-case h4 {
+      margin: 0;
+    }
+
+    .diagnostic-command p {
+      max-width: 760px;
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .diagnostic-command button {
+      min-width: 128px;
+      min-height: 46px;
+      border-color: rgba(98, 181, 196, .68);
+      color: var(--paper);
+      font-weight: 700;
+    }
+
+    .diagnostic-summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .diagnostic-summary-card {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .diagnostic-summary-card span {
+      display: block;
+      color: var(--muted);
+      font: 10px/1.2 var(--mono);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .diagnostic-summary-card strong {
+      display: block;
+      margin-top: 5px;
+      color: var(--paper);
+      font: 600 22px/1 var(--mono);
+    }
+
+    .diagnostic-category {
+      display: grid;
+      gap: 8px;
+    }
+
+    .diagnostic-category-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 4px 2px;
+    }
+
+    .diagnostic-category-header span {
+      color: var(--muted);
+      font: 10px/1.2 var(--mono);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .diagnostic-case-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .diagnostic-case {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(170px, .42fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-width: 0;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(6, 17, 19, .72);
+    }
+
+    .diagnostic-case-copy {
+      min-width: 0;
+    }
+
+    .diagnostic-case-id {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--accent);
+      font: 10px/1.2 var(--mono);
+      letter-spacing: .06em;
+    }
+
+    .diagnostic-case h4 {
+      color: var(--paper);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .diagnostic-case-copy p,
+    .diagnostic-result-detail {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .diagnostic-result {
+      min-width: 0;
+    }
+
+    .diagnostic-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font: 600 12px/1.2 var(--mono);
+    }
+
+    .diagnostic-light {
+      width: 11px;
+      height: 11px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255, 255, 255, .24);
+      border-radius: 50%;
+      background: #687175;
+      box-shadow: 0 0 0 3px rgba(104, 113, 117, .12);
+    }
+
+    .diagnostic-case[data-diagnostic-status="running"] {
+      border-color: rgba(213, 166, 66, .5);
+    }
+
+    .diagnostic-case[data-diagnostic-status="running"] .diagnostic-status {
+      color: var(--warn);
+    }
+
+    .diagnostic-case[data-diagnostic-status="running"] .diagnostic-light {
+      background: var(--warn);
+      box-shadow: 0 0 0 4px rgba(213, 166, 66, .13), 0 0 16px rgba(213, 166, 66, .34);
+      animation: diagnostic-pulse 1s ease-in-out infinite;
+    }
+
+    .diagnostic-case[data-diagnostic-status="passed"] {
+      border-color: rgba(77, 201, 135, .48);
+    }
+
+    .diagnostic-case[data-diagnostic-status="passed"] .diagnostic-status {
+      color: var(--ok);
+    }
+
+    .diagnostic-case[data-diagnostic-status="passed"] .diagnostic-light {
+      background: var(--ok);
+      box-shadow: 0 0 0 4px rgba(77, 201, 135, .12), 0 0 14px rgba(77, 201, 135, .28);
+    }
+
+    .diagnostic-case[data-diagnostic-status="failed"] {
+      border-color: rgba(208, 99, 99, .58);
+    }
+
+    .diagnostic-case[data-diagnostic-status="failed"] .diagnostic-status {
+      color: var(--bad);
+    }
+
+    .diagnostic-case[data-diagnostic-status="failed"] .diagnostic-light {
+      background: var(--bad);
+      box-shadow: 0 0 0 4px rgba(208, 99, 99, .12), 0 0 14px rgba(208, 99, 99, .28);
+    }
+
+    .diagnostic-case button {
+      min-width: 98px;
+      min-height: 40px;
+      white-space: nowrap;
+    }
+
+    @keyframes diagnostic-pulse {
+      0%, 100% { opacity: .62; transform: scale(.9); }
+      50% { opacity: 1; transform: scale(1.08); }
+    }
+
     .workspace-ops {
       display: grid;
       gap: 12px;
@@ -4367,6 +4610,8 @@
       .grid-2,
       .grid-3,
       .settings-grid,
+      .diagnostic-command,
+      .diagnostic-case,
       .debug-telemetry-bar,
       .debug-console-grid,
       .debug-detail-grid,
@@ -4392,6 +4637,14 @@
       .workspace-action-grid,
       .workspace-switch-row {
         grid-template-columns: 1fr;
+      }
+
+      .diagnostic-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .diagnostic-case button {
+        width: 100%;
       }
       .safety-emergency-frame-toolbar {
         align-items: flex-start;
@@ -6772,6 +7025,7 @@
             <button class="nav-item" type="button" data-route="debug" data-route-truth="partial"><span class="mark"></span><span>Debug Message</span></button>
             <button class="nav-item" type="button" data-route="observer" data-route-truth="preview"><span class="mark"></span><span>MQTT / Observer</span></button>
             <button class="nav-item" type="button" data-route="settings" data-route-truth="live"><span class="mark"></span><span>Settings</span></button>
+            <button class="nav-item" type="button" data-route="diagnostic" data-route-truth="live"><span class="mark"></span><span>Diagnostic</span></button>
           </div>
         </details>
       </nav>
@@ -6847,6 +7101,10 @@
       </div>
     </main>
   </div>
+  <div class="dashboard-map-hover-hint" id="dashboardMapHoverHint" role="tooltip" hidden>
+    <strong></strong>
+    <span></span>
+  </div>
 
   <script>
     "use strict";
@@ -6906,6 +7164,7 @@
       "surface-debug": Object.freeze({maturity: "live", surface: "Operational", data: "Runtime + replay evidence", action: "Diagnostics · projected clear is explicit", verification: "Full page verified", provenance: "Per-event provenance", mode: "Operational"}),
       "debug": Object.freeze({maturity: "partial", surface: "Operational", data: "Runtime + replay evidence", action: "Read-only · retry", verification: "Endpoints + tabs verified", provenance: "Per-event provenance", mode: "Technical Prototype"}),
       "settings": Object.freeze({maturity: "live", surface: "Operational", data: "Browser-local settings", action: "Local browser mutation only", verification: "Validation + save path", provenance: "Browser settings", mode: "Operational"}),
+      "diagnostic": Object.freeze({maturity: "live", surface: "Ready", data: "29 checks not run", action: "Read-only diagnostics", verification: "Awaiting Diag all", provenance: "Dashboard UI + same-origin GET APIs", mode: "Operational"}),
       "outdoor-permission": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Static class descriptions", action: "Read-only selector", verification: "No runtime decision", provenance: "Static rule set", mode: "Static rule set"}),
       "observer": Object.freeze({maturity: "preview", surface: "Technical prototype", data: "Projected ingress · broker unverified", action: "Read-only · no publish", verification: "Connection/data lifecycle unverified", provenance: "Debug ingress references", mode: "Technical Prototype"}),
       "outdoor-architecture": Object.freeze({maturity: "partial", surface: "Operational analysis", data: "Loading route architecture evidence", action: "Read-only candidate analysis", verification: "Awaiting route topology projection", provenance: "Pretrip workspace + historical GPX aggregates", mode: "Candidate analysis"}),
@@ -6921,8 +7180,41 @@
       hardware: ["debug"],
       living: ["living"],
     });
+    const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([
+      {id: "DASH-001", category: "Global / Overview", title: "Dashboard 啟動、入口與必要 API", description: "確認 Dashboard、workspace 與 project read APIs 可用。", run: diagnosticCheck001},
+      {id: "DASH-002", category: "Global / Overview", title: "全站導覽、路由與返回狀態", description: "確認現有 route contract 與 Diagnostic 導覽位置。", run: diagnosticCheck002},
+      {id: "DASH-003", category: "Plan Trip / Workspace", title: "Workspace 清單、切換與資料隔離", description: "確認目前 project 由 server catalog 正確解析。", run: diagnosticCheck003},
+      {id: "DASH-004", category: "Map & Evidence", title: "32 層圖層契約、來源與幾何內容", description: "確認 32 個 canonical layer ID 與 surface 邊界。", run: diagnosticCheck004},
+      {id: "DASH-005", category: "Map & Evidence", title: "地圖基本操作、鍵盤操作與圖徵選取", description: "確認共用 Pan、Box、Zoom、Fit 與鍵盤控制契約。", run: diagnosticCheck005},
+      {id: "DASH-006", category: "Map & Evidence", title: "Timeline Evidence 分類、分頁與地圖連動", description: "從目前 project 建立 timeline 與 Map/Risk 分類。", run: diagnosticCheck006},
+      {id: "DASH-007", category: "Plan Trip / Workspace", title: "Trip Intake GPX 驗證、預覽與建立流程", description: "只檢查安全 UI/API wiring；不建立 workspace。", run: diagnosticCheck007},
+      {id: "DASH-008", category: "Exploring for Six Axis", title: "Weather 五圖層、CWA 控制與候選決策", description: "確認 Weather read API 與五個 canonical 控制。", run: diagnosticCheck008},
+      {id: "DASH-009", category: "Assistant / System / Safety", title: "Assistant 狀態、提問、證據與錯誤復原", description: "只讀取 Assistant readiness；不送出模型問題。", run: diagnosticCheck009},
+      {id: "DASH-010", category: "Assistant / System / Safety", title: "Debug、Observer、Emergency 與設定安全邊界", description: "確認 debug GET APIs 與 no-outbound UI boundary。", run: diagnosticCheck010},
+      {id: "DASH-011", category: "Global / Overview", title: "Overview Current Decision Brief 與狀態摘要", description: "確認 Overview 優先資訊結構與 truth markers。", run: diagnosticCheck011},
+      {id: "DASH-012", category: "Plan Trip / Workspace", title: "Workspace Operations 與非執行型收據", description: "讀取 operation requests 與 intent-only capability。", run: diagnosticCheck012},
+      {id: "DASH-013", category: "Plan Trip / Workspace", title: "Connected Preparation 狀態與明確 Refresh", description: "只讀取 job status；不觸發 refresh POST。", run: diagnosticCheck013},
+      {id: "DASH-014", category: "Plan Trip / Workspace", title: "Country Material Pool 國別來源與預設值", description: "確認 Taiwan、Japan、Global registry 彼此隔離。", run: diagnosticCheck014},
+      {id: "DASH-015", category: "Plan Trip / Workspace", title: "Pre-trip、Admin 與 Debug canonical surface", description: "以安全 GET 確認三個 canonical HTML surface 可用。", run: diagnosticCheck015},
+      {id: "DASH-016", category: "Map & Evidence", title: "Map 單次 projection、漸進載入與 Retry", description: "確認 compact projection、cache header 與 bridge contract。", run: diagnosticCheck016},
+      {id: "DASH-017", category: "Map & Evidence", title: "Map Segment、風險覆蓋與 layer preset", description: "確認目前 project 的 Segment 與風險 evidence 非空。", run: diagnosticCheck017},
+      {id: "DASH-018", category: "Exploring for Six Axis", title: "Route Context canonical briefing", description: "讀取目前 project briefing；不重新生成。", run: diagnosticCheck018},
+      {id: "DASH-019", category: "Exploring for Six Axis", title: "Route Context variants 與 reference gate", description: "讀取現有 variants metadata 與安全 artifact refs。", run: diagnosticCheck019},
+      {id: "DASH-020", category: "Exploring for Six Axis", title: "Pace Dashboard 資訊與 read-only 控制", description: "確認 Pace 頁面資料區塊與 read-only boundary。", run: diagnosticCheck020},
+      {id: "DASH-021", category: "Exploring for Six Axis", title: "Body Index sanitized overview 與空狀態", description: "讀取 sanitized snapshot 並掃描敏感欄位。", run: diagnosticCheck021},
+      {id: "DASH-022", category: "Exploring for Six Axis", title: "Body Index import、merge 與 dedup contract", description: "只檢查 synthetic import wiring；不讀私人資料。", run: diagnosticCheck022},
+      {id: "DASH-023", category: "Exploring for Six Axis", title: "Body Index directory watch lifecycle boundary", description: "只讀 watcher status，並要求 live watcher 為 stopped。", run: diagnosticCheck023},
+      {id: "DASH-024", category: "Exploring for Six Axis", title: "Architecture workbench 與 Segment Microscope", description: "確認 route architecture projection 與 candidate boundary。", run: diagnosticCheck024},
+      {id: "DASH-025", category: "Exploring for Six Axis", title: "Navigation Terrain Intelligence 與 Rudy+TW", description: "確認 bounded terrain projection 與唯一 Rudy+TW basemap contract。", run: diagnosticCheck025},
+      {id: "DASH-026", category: "Map & Evidence", title: "Map、Navigation、Weather evidence hover hint", description: "確認三張圖的 evidence 在滑鼠移入與鍵盤 focus 時都能顯示內容提示。", run: diagnosticCheck026},
+      {id: "DASH-027", category: "Map & Evidence", title: "三圖框選縮放與鍵盤平移", description: "確認三張圖都支援矩形框選放大／縮小，以及方向鍵平移。", run: diagnosticCheck027},
+      {id: "DASH-028", category: "Map & Evidence", title: "三圖圖磚、向量與單圖例外政策", description: "確認底圖／圖層使用圖磚或向量；單一圖片僅限明確允許的主題 overlay。", run: diagnosticCheck028},
+      {id: "DASH-029", category: "Map & Evidence", title: "三圖基本 Zoom、Pan 與 Fit", description: "確認三張圖都具備放大、縮小、滑鼠平移與 Fit／Reset。", run: diagnosticCheck029},
+    ]);
     const loadedDataScopes = new Set();
     const dataScopePromises = new Map();
+    const diagnosticResourceCache = new Map();
+    let mapBridgeEvidenceRenderToken = 0;
     const EVIDENCE_TREE_TABS = [
       { id: "default", label: "CP / Timeline", category: "checkpoint" },
       { id: "map_risk", label: "Map / Risk", category: "risk" },
@@ -7110,6 +7402,13 @@
     const WEATHER_EMBEDDED_MAP_LAYER_IDS = Object.freeze([
       "rudy-twmap",
       "cwa-qpf",
+    ]);
+    const DASHBOARD_MAP_SINGLE_IMAGE_ALLOWLIST = Object.freeze([
+      "satellite",
+      "radar",
+      "lidar",
+      "hillshade",
+      "thematic",
     ]);
 
     const NAVIGATION_RUDY_TILE_SOURCE = Object.freeze({
@@ -7338,11 +7637,25 @@
       "outdoor-architecture",
       "outdoor-weather",
       "outdoor-navigation",
+      "diagnostic",
     ]));
 
     const state = {
       route: "home",
       project: null,
+      workspaceCatalog: null,
+      workspaceContext: null,
+      workspaceCatalogStatus: "idle",
+      workspaceOperationRequests: [],
+      diagnosticResults: Object.fromEntries(
+        DASHBOARD_DIAGNOSTIC_CASES.map(item => [item.id, {
+          status: "idle",
+          detail: "尚未測試",
+          durationMs: null,
+          checkedAt: null,
+        }]),
+      ),
+      diagnosticBatchRunning: false,
       adminProjection: null,
       debugProjection: null,
       debugEvents: [],
@@ -7563,6 +7876,7 @@
       debug: ["Debug Message", "read-only runtime and projection messages"],
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
+      diagnostic: ["Diagnostic", "29 read-only Dashboard checks"],
     };
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -7570,8 +7884,8 @@
       bindMobileNavigation();
       bindAgentChatControls();
       setRoute(routeFromHash());
-      void triggerDashboardConnectedPreparation("dashboard-open");
-      loadData().finally(() => {
+      void loadConnectedPreparationStatus();
+      loadWorkspaceCatalog().finally(() => loadData()).finally(() => {
         if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
       });
       window.addEventListener("hashchange", () => setRoute(routeFromHash(), {loadRouteData: true}));
@@ -7586,6 +7900,66 @@
       const paramProjectId = new URLSearchParams(window.location.search).get("projectId") || "";
       if (/^[A-Za-z0-9_.-]+$/.test(paramProjectId)) return paramProjectId;
       return localStorage.getItem("scout.dashboardProjectId") || localStorage.getItem("scout.emergencyProjectId") || PROJECT_ID;
+    }
+
+    function workspaceContextForProject(candidateProjectId = projectId()) {
+      const projects = state.workspaceCatalog?.projects || [];
+      return projects.find((item) => item.project_id === candidateProjectId) || null;
+    }
+
+    function resolvedWorkspaceRoot(candidateProjectId = projectId()) {
+      const context = candidateProjectId === projectId()
+        ? (state.workspaceContext || workspaceContextForProject(candidateProjectId))
+        : workspaceContextForProject(candidateProjectId);
+      return context?.resolved_project_root || "server context unavailable";
+    }
+
+    async function loadWorkspaceCatalog() {
+      state.workspaceCatalogStatus = "loading";
+      try {
+        state.workspaceCatalog = await fetchJson("/admin/dashboard/workspaces");
+        state.workspaceContext = workspaceContextForProject(projectId());
+        state.workspaceCatalogStatus = state.workspaceContext ? "ready" : "missing";
+        if (state.workspaceCatalog?.workspace_parent_root) {
+          state.importTripDraft = {
+            ...(state.importTripDraft || {}),
+            workspaceRoot: state.workspaceCatalog.workspace_parent_root,
+            prepareWorkspaceRoot: state.workspaceCatalog.workspace_parent_root,
+          };
+        }
+        await loadWorkspaceOperationRequests();
+      } catch (error) {
+        state.workspaceCatalogStatus = "error";
+        state.workspaceCatalog = null;
+        state.workspaceContext = null;
+        state.workspaceOperationRequests = [];
+      }
+      return state.workspaceCatalog;
+    }
+
+    async function validateWorkspaceSelection(candidateProjectId) {
+      const safeProjectId = String(candidateProjectId || "").trim();
+      if (!/^[A-Za-z0-9_.-]+$/.test(safeProjectId)) {
+        throw new Error("Workspace id must use letters, numbers, underscore, dash or dot only.");
+      }
+      return fetchJson(`/admin/dashboard/workspaces/${encodeURIComponent(safeProjectId)}`);
+    }
+
+    async function loadWorkspaceOperationRequests() {
+      const context = state.workspaceContext || workspaceContextForProject(projectId());
+      if (!context?.capabilities?.record_operation_request) {
+        state.workspaceOperationRequests = [];
+        return [];
+      }
+      try {
+        const payload = await fetchJson(
+          `/admin/dashboard/workspaces/${encodeURIComponent(projectId())}/operation-requests`,
+        );
+        state.workspaceOperationRequests = payload.requests || [];
+      } catch {
+        state.workspaceOperationRequests = [];
+      }
+      return state.workspaceOperationRequests;
     }
 
     function routeContextBriefingProjectId() {
@@ -7728,7 +8102,20 @@
       }, 3000);
     }
 
-    async function triggerDashboardConnectedPreparation(reason = "dashboard-open", {force = false} = {}) {
+    async function loadConnectedPreparationStatus() {
+      const project = encodeURIComponent(projectId());
+      try {
+        state.connectedPreparation = await fetchJson(
+          `/admin/pretrip/projects/${project}/connected-preparation`,
+        );
+        scheduleConnectedPreparationPolling();
+      } catch {
+        state.connectedPreparation = null;
+      }
+      return state.connectedPreparation;
+    }
+
+    async function triggerDashboardConnectedPreparation(reason, {force = false} = {}) {
       const project = encodeURIComponent(projectId());
       try {
         state.connectedPreparation = await postJson(
@@ -8052,7 +8439,7 @@
 
     async function loadData() {
       const scopes = dataScopesForRoute(state.route);
-      if (!scopes.length) return loadDataScope("project", {force: true});
+      if (!scopes.length) return;
       return loadDataForRoute(state.route, {force: true});
     }
 
@@ -8077,7 +8464,7 @@
     function routeUsesWideFrame(route) {
       if (route === "outdoor-architecture") return true;
       if (route === "outdoor-navigation") return true;
-      return route === "agent" || route === "debug" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";
+      return route === "agent" || route === "debug" || route === "diagnostic" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";
     }
 
     function routeUsesFullFrame(route) {
@@ -8279,6 +8666,26 @@
         if (saveState.status === "failed") truth.surface = "Degraded";
         if (saveState.status === "failed") truth.mode = "Degraded";
       }
+      if (route === "diagnostic") {
+        const results = Object.values(state.diagnosticResults || {});
+        const running = results.filter(result => result.status === "running").length;
+        const passed = results.filter(result => result.status === "passed").length;
+        const failed = results.filter(result => result.status === "failed").length;
+        truth.surface = failed
+          ? "Failures detected"
+          : running
+            ? "Diagnostics running"
+            : passed === DASHBOARD_DIAGNOSTIC_CASES.length
+              ? "Operational"
+              : "Ready";
+        truth.data = `${passed} passed · ${failed} failed · ${running} running`;
+        truth.verification = state.diagnosticBatchRunning
+          ? `Diag all running · ${passed + failed}/${DASHBOARD_DIAGNOSTIC_CASES.length} complete`
+          : passed + failed
+            ? `${passed + failed}/${DASHBOARD_DIAGNOSTIC_CASES.length} checked`
+            : "Awaiting Diag all";
+        truth.mode = failed ? "Needs attention" : running ? "Running" : "Read-only";
+      }
       if (route === "living") {
         const projection = state.livingProjection || {};
         const available = projection.status && projection.status !== "unavailable";
@@ -8474,6 +8881,7 @@
       if (route === "debug") return renderDebugPage();
       if (route === "observer") return renderObserverPage();
       if (route === "settings") return renderSettingsPage();
+      if (route === "diagnostic") return renderDiagnosticPage();
       return renderHomePage();
     }
 
@@ -10745,11 +11153,694 @@
             ["No mutation", "does not modify workspace or runtime"],
             ["Default port", "http://127.0.0.1:9099"],
             ["Project", PROJECT_ID],
-            ["Workspace root", WORKSPACE_ROOT],
+            ["Workspace root", resolvedWorkspaceRoot()],
           ])}
         </div>
       `;
     }
+
+    function diagnosticStatusLabel(status) {
+      if (status === "running") return "測試中";
+      if (status === "passed") return "測試通過";
+      if (status === "failed") return "測試失敗";
+      return "尚未測試";
+    }
+
+    function diagnosticResult(caseId) {
+      return state.diagnosticResults?.[caseId] || {
+        status: "idle",
+        detail: "尚未測試",
+        durationMs: null,
+        checkedAt: null,
+      };
+    }
+
+    function diagnosticSummary() {
+      const results = DASHBOARD_DIAGNOSTIC_CASES.map(item => diagnosticResult(item.id));
+      return {
+        total: results.length,
+        idle: results.filter(result => result.status === "idle").length,
+        running: results.filter(result => result.status === "running").length,
+        passed: results.filter(result => result.status === "passed").length,
+        failed: results.filter(result => result.status === "failed").length,
+      };
+    }
+
+    function renderDiagnosticCase(item) {
+      const result = diagnosticResult(item.id);
+      const duration = Number.isFinite(result.durationMs) ? ` · ${Math.round(result.durationMs)} ms` : "";
+      const checkedAt = result.checkedAt ? ` · ${new Date(result.checkedAt).toLocaleTimeString()}` : "";
+      const buttonDisabled = result.status === "running" || state.diagnosticBatchRunning;
+      return `
+        <article
+          class="diagnostic-case"
+          data-diagnostic-case="${escapeHtml(item.id)}"
+          data-diagnostic-status="${escapeHtml(result.status)}"
+        >
+          <div class="diagnostic-case-copy">
+            <span class="diagnostic-case-id">${escapeHtml(item.id)}</span>
+            <h4>${escapeHtml(item.title)}</h4>
+            <p>${escapeHtml(item.description)}</p>
+          </div>
+          <div class="diagnostic-result">
+            <div class="diagnostic-status" role="status" aria-live="polite">
+              <span class="diagnostic-light" aria-hidden="true"></span>
+              <span data-diagnostic-status-label>${escapeHtml(diagnosticStatusLabel(result.status))}</span>
+            </div>
+            <p class="diagnostic-result-detail" data-diagnostic-result-detail>${escapeHtml(result.detail || diagnosticStatusLabel(result.status))}${escapeHtml(duration)}${escapeHtml(checkedAt)}</p>
+          </div>
+          <button
+            type="button"
+            data-diagnostic-action="retest"
+            data-diagnostic-id="${escapeHtml(item.id)}"
+            ${buttonDisabled ? "disabled" : ""}
+          >${result.status === "running" ? "測試中…" : "重新測試"}</button>
+        </article>
+      `;
+    }
+
+    function renderDiagnosticPage() {
+      const summary = diagnosticSummary();
+      const categories = [...new Set(DASHBOARD_DIAGNOSTIC_CASES.map(item => item.category))];
+      return `
+        <div class="diagnostic-page" data-diagnostic-page="true">
+          <section class="diagnostic-command">
+            <div>
+              <h3>Dashboard Diagnostic</h3>
+              <p><strong>Read-only diagnostics.</strong> These ${DASHBOARD_DIAGNOSTIC_CASES.length} checks use the current UI contract, same-origin GET APIs and existing artifacts. They do not run imports, connected preparation, HealthExport watch, model generation, MQTT publish, Emergency send or hardware actions, and this page does not replace the full acceptance checklist.</p>
+            </div>
+            <button type="button" data-diagnostic-action="all" ${state.diagnosticBatchRunning ? "disabled" : ""}>${state.diagnosticBatchRunning ? "Diag all running…" : "Diag all"}</button>
+          </section>
+          <section class="diagnostic-summary" aria-label="Diagnostic summary">
+            ${[
+              ["total", "Total", summary.total],
+              ["passed", "Passed", summary.passed],
+              ["failed", "Failed", summary.failed],
+              ["running", "Running", summary.running],
+              ["idle", "Not run", summary.idle],
+            ].map(([key, label, value]) => `
+              <div class="diagnostic-summary-card">
+                <span>${escapeHtml(label)}</span>
+                <strong data-diagnostic-summary="${escapeHtml(key)}">${escapeHtml(value)}</strong>
+              </div>
+            `).join("")}
+          </section>
+          ${categories.map(category => {
+            const items = DASHBOARD_DIAGNOSTIC_CASES.filter(item => item.category === category);
+            return `
+              <section class="diagnostic-category">
+                <div class="diagnostic-category-header">
+                  <h3>${escapeHtml(category)}</h3>
+                  <span>${items.length} checks</span>
+                </div>
+                <div class="diagnostic-case-list">${items.map(renderDiagnosticCase).join("")}</div>
+              </section>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function diagnosticSetResult(caseId, nextResult) {
+      state.diagnosticResults = {
+        ...(state.diagnosticResults || {}),
+        [caseId]: {
+          ...diagnosticResult(caseId),
+          ...nextResult,
+        },
+      };
+    }
+
+    function diagnosticSafeDetail(value) {
+      const text = String(value || "check completed").replace(/\s+/g, " ").trim();
+      return text.length > 280 ? `${text.slice(0, 277)}…` : text;
+    }
+
+    function diagnosticRequire(condition, message) {
+      if (!condition) throw new Error(message);
+    }
+
+    function diagnosticResource(key, loader) {
+      if (diagnosticResourceCache.has(key)) return diagnosticResourceCache.get(key);
+      const promise = Promise.resolve()
+        .then(loader)
+        .catch(error => {
+          diagnosticResourceCache.delete(key);
+          throw error;
+        });
+      diagnosticResourceCache.set(key, promise);
+      return promise;
+    }
+
+    function diagnosticJson(path, timeoutMs = 45000) {
+      return diagnosticResource(`json:${path}`, () => fetchJson(path, {timeoutMs}));
+    }
+
+    function diagnosticFetchUrl(path) {
+      if (/^https?:\/\//i.test(path)) return path;
+      return `${apiBase()}${path}`;
+    }
+
+    function diagnosticEnvelope(path, {timeoutMs = 45000, text = false} = {}) {
+      return diagnosticResource(`envelope:${path}:${text ? "text" : "json"}`, async () => {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(diagnosticFetchUrl(path), {
+            method: "GET",
+            headers: {Accept: text ? "text/html, text/plain;q=0.9, */*;q=0.8" : "application/json"},
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          if (!response.ok) throw new Error(`GET ${path} returned HTTP ${response.status}`);
+          return {
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            data: text ? await response.text() : await response.json(),
+          };
+        } finally {
+          window.clearTimeout(timeout);
+        }
+      });
+    }
+
+    function diagnosticWorkspaceCatalog() {
+      return diagnosticJson("/admin/dashboard/workspaces");
+    }
+
+    function diagnosticWorkspaceContext() {
+      return diagnosticJson(`/admin/dashboard/workspaces/${encodeURIComponent(projectId())}`);
+    }
+
+    function diagnosticProjectProjection() {
+      return diagnosticJson(`/admin/pretrip/projects/${encodeURIComponent(projectId())}?compact=1`, 180000);
+    }
+
+    function diagnosticBodyIndex() {
+      return diagnosticJson(bodyIndexStatusPath(), BODY_INDEX_FETCH_TIMEOUT_MS);
+    }
+
+    function diagnosticBodyIndexWatch() {
+      return diagnosticJson(bodyIndexWatchStatusPath(), BODY_INDEX_FETCH_TIMEOUT_MS);
+    }
+
+    async function diagnosticCheck001() {
+      const [catalog, context, project] = await Promise.all([
+        diagnosticWorkspaceCatalog(),
+        diagnosticWorkspaceContext(),
+        diagnosticProjectProjection(),
+      ]);
+      diagnosticRequire(Array.isArray(catalog.projects), "Workspace catalog projects are unavailable.");
+      diagnosticRequire(context.project_id === projectId(), "Workspace context Project ID does not match the Dashboard.");
+      diagnosticRequire(project && typeof project === "object", "Compact project projection is unavailable.");
+      return `Dashboard API ready · ${catalog.projects.length} workspaces · project=${projectId()}`;
+    }
+
+    async function diagnosticCheck002() {
+      const expectedRoutes = [
+        "home", "features-workspace", "features-import-new-trip", "features-country-material-pool",
+        "surface-pretrip", "map", "timeline", "features-lbs", "outdoor-route-context",
+        "outdoor-pace-fit", "outdoor-pace-fit-body-index", "outdoor-permission",
+        "outdoor-architecture", "outdoor-weather", "outdoor-navigation", "emergency",
+        "agent", "living", "surface-admin", "surface-debug", "debug", "observer",
+        "settings", "diagnostic",
+      ];
+      const routeButtons = Array.from(document.querySelectorAll("[data-route]"));
+      const missing = expectedRoutes.filter(route => !routeButtons.some(button => button.dataset.route === route));
+      diagnosticRequire(!missing.length, `Missing navigation routes: ${missing.join(", ")}`);
+      const settingsButton = routeButtons.find(button => button.dataset.route === "settings");
+      diagnosticRequire(settingsButton?.nextElementSibling?.dataset?.route === "diagnostic", "Diagnostic is not immediately after Settings.");
+      diagnosticRequire(expectedRoutes.every(route => ROUTE_TRUTH[route]), "One or more routes have no truth contract.");
+      return `${expectedRoutes.length} routes present · Diagnostic follows Settings`;
+    }
+
+    async function diagnosticCheck003() {
+      const [catalog, context] = await Promise.all([
+        diagnosticWorkspaceCatalog(),
+        diagnosticWorkspaceContext(),
+      ]);
+      const listed = asArray(catalog.projects).find(item => item.project_id === projectId());
+      diagnosticRequire(Boolean(listed), "Current project is missing from the server workspace catalog.");
+      diagnosticRequire(Boolean(context.resolved_project_root), "Resolved project root is missing.");
+      diagnosticRequire(context.project_id === projectId(), "Workspace context resolved a different project.");
+      return `Workspace isolated · ${context.resolved_project_root}`;
+    }
+
+    async function diagnosticCheck004() {
+      diagnosticRequire(SCOUT_LAYER_IDS.length === 32, `Expected 32 canonical layers; found ${SCOUT_LAYER_IDS.length}.`);
+      diagnosticRequire(new Set(SCOUT_LAYER_IDS).size === 32, "Canonical layer IDs contain duplicates.");
+      diagnosticRequire(SCOUT_LAYER_IDS.includes("completed-track"), "completed-track is missing from the canonical contract.");
+      diagnosticRequire(!WEATHER_EMBEDDED_MAP_LAYER_IDS.includes("completed-track"), "completed-track leaked into the Weather map.");
+      diagnosticRequire(WEATHER_LAYER_IDS.length === 5, "Weather must own exactly five weather/hydrology controls.");
+      return "32 unique canonical layers · completed-track boundary retained";
+    }
+
+    async function diagnosticCheck005() {
+      const markup = renderDashboardMapViewport("diagnostic-contract", "Diagnostic map", "<svg></svg>");
+      for (const control of ["zoom-in", "zoom-out", "reset", "pan", "box-zoom"]) {
+        diagnosticRequire(markup.includes(`data-map-control="${control}"`), `Map control ${control} is missing.`);
+      }
+      for (const key of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "+", "-", "0", "P", "B", "Escape"]) {
+        diagnosticRequire(markup.includes(key), `Keyboard map control ${key} is missing.`);
+      }
+      diagnosticRequire(typeof createDashboardMapViewportController === "function", "Shared map viewport controller is unavailable.");
+      return "Pan · Box · Zoom · Fit · keyboard contract present";
+    }
+
+    async function diagnosticCheck006() {
+      const project = await diagnosticProjectProjection();
+      const groups = pretripEvidenceGroups(project);
+      const timelineGroups = groups.filter(group => group.tabId === "default");
+      const mapGroups = groups.filter(group => group.tabId === "map_risk");
+      diagnosticRequire(timelineGroups.length >= 8, `Expected at least 8 Timeline groups; found ${timelineGroups.length}.`);
+      diagnosticRequire(mapGroups.length >= 31, `Expected at least 31 Map/Risk groups; found ${mapGroups.length}.`);
+      diagnosticRequire(pretripEvidenceGroupOpen({}, 0) === false, "Evidence groups no longer default to collapsed.");
+      return `${timelineGroups.length} Timeline groups · ${mapGroups.length} Map/Risk groups`;
+    }
+
+    async function diagnosticCheck007() {
+      const markup = renderImportNewTripPage();
+      for (const action of ["validate", "preview", "create", "open"]) {
+        diagnosticRequire(markup.includes(`data-import-trip-action="${action}"`), `Trip Intake ${action} action is missing.`);
+      }
+      diagnosticRequire(TRIP_INTAKE_VALIDATE_PATH === "/admin/dashboard/trip-intake/validate", "Trip Intake validate path changed unexpectedly.");
+      diagnosticRequire(markup.includes("Validate Intake") && markup.includes("Preview Import") && markup.includes("Create Workspace"), "Trip Intake step labels are incomplete.");
+      return "Validate → Preview → Create → Open wiring present · no action executed";
+    }
+
+    async function diagnosticCheck008() {
+      const weather = await diagnosticJson(`/admin/pretrip/projects/${encodeURIComponent(projectId())}/weather-dashboard`);
+      diagnosticRequire(WEATHER_LAYER_IDS.length === 5, "Weather layer control count is not five.");
+      diagnosticRequire(weather && typeof weather === "object", "Weather Dashboard response is unavailable.");
+      diagnosticRequire(Boolean(weather.status || weather.decision || weather.boundary), "Weather response has no status or boundary.");
+      return `Weather API=${weather.status || "response ready"} · five layer controls present`;
+    }
+
+    async function diagnosticCheck009() {
+      const status = await diagnosticJson(ASSISTANT_STATUS_PATH);
+      const readiness = deriveAssistantReadiness({checked: true, raw: status, provider: status.provider});
+      diagnosticRequire(readiness.level === "ready", `Assistant is not ready: ${readiness.label}.`);
+      return readiness.label;
+    }
+
+    async function diagnosticCheck010() {
+      const [debugState, debugMessages] = await Promise.all([
+        diagnosticJson("/debug/state"),
+        diagnosticJson("/debug/messages"),
+      ]);
+      diagnosticRequire(debugState && typeof debugState === "object", "Debug state is unavailable.");
+      diagnosticRequire(debugMessages && typeof debugMessages === "object", "Debug messages are unavailable.");
+      diagnosticRequire(renderObserverPage().includes("no MQTT publish from dashboard"), "Observer no-publish boundary is missing.");
+      diagnosticRequire(renderEmergencyPage().includes("external_send_performed=false"), "Emergency no-send audit marker is missing.");
+      diagnosticRequire(validateDashboardSettings("ftp://invalid.example", projectId()).ok === false, "Settings accepted an invalid API protocol.");
+      return "Debug GET APIs ready · Observer/Emergency/Settings boundaries present";
+    }
+
+    async function diagnosticCheck011() {
+      const markup = renderHomePage();
+      for (const marker of ["Current Decision Brief", "workspace-identity", "current-decision", "blocking-truth", "next-action"]) {
+        diagnosticRequire(markup.includes(marker), `Overview marker ${marker} is missing.`);
+      }
+      return "Current Decision Brief and ordered truth markers present";
+    }
+
+    async function diagnosticCheck012() {
+      const context = await diagnosticWorkspaceContext();
+      diagnosticRequire(context.capabilities?.record_operation_request === true, "Workspace operation request capability is unavailable.");
+      const payload = await diagnosticJson(`/admin/dashboard/workspaces/${encodeURIComponent(projectId())}/operation-requests`);
+      diagnosticRequire(Array.isArray(payload.requests), "Workspace operation request list is unavailable.");
+      const unsafe = payload.requests.find(request => request.execution_performed === true || request.runtime_safety_truth === true);
+      diagnosticRequire(!unsafe, "An operation request claims execution or runtime safety truth.");
+      return `${payload.requests.length} intent receipts · execution_performed=false`;
+    }
+
+    async function diagnosticCheck013() {
+      const status = await diagnosticJson(`/admin/pretrip/projects/${encodeURIComponent(projectId())}/connected-preparation`);
+      diagnosticRequire(status && typeof status === "object", "Connected preparation status is unavailable.");
+      const stateLabel = status.status || status.state || status.job_status || "idle";
+      diagnosticRequire(!["unsafe", "runtime_mutation"].includes(String(stateLabel)), "Connected preparation returned an unsafe state.");
+      return `Connected preparation status=${stateLabel} · no refresh POST sent`;
+    }
+
+    async function diagnosticCheck014() {
+      const codes = countryMaterialPools().map(pool => pool.code);
+      diagnosticRequire(["TW", "JP", "GLOBAL"].every(code => codes.includes(code)), `Country pools are incomplete: ${codes.join(", ")}.`);
+      const taiwan = countryMaterialPoolByCode("TW");
+      const japan = countryMaterialPoolByCode("JP");
+      const globalPool = countryMaterialPoolByCode("GLOBAL");
+      diagnosticRequire(taiwan.defaults?.weatherProvider === "CWA", "Taiwan weather provider is not CWA.");
+      diagnosticRequire(!String(japan.defaults?.weatherProvider || "").includes("CWA"), "Japan incorrectly inherits CWA.");
+      diagnosticRequire(!String(globalPool.defaults?.weatherProvider || "").includes("CWA"), "Global incorrectly inherits CWA.");
+      return `Country pools ready · ${codes.join(" / ")}`;
+    }
+
+    async function diagnosticCheck015() {
+      const [pretrip, admin, debug] = await Promise.all([
+        diagnosticEnvelope(`/admin/pretrip?projectId=${encodeURIComponent(projectId())}`, {text: true, timeoutMs: 60000}),
+        diagnosticEnvelope(`/admin?projectId=${encodeURIComponent(projectId())}`, {text: true, timeoutMs: 60000}),
+        diagnosticEnvelope(`/admin/debug?projectId=${encodeURIComponent(projectId())}`, {text: true, timeoutMs: 60000}),
+      ]);
+      diagnosticRequire(pretrip.data.includes("Scout Phase 4 Pre-Trip Planning"), "Pre-trip canonical surface title is missing.");
+      diagnosticRequire(admin.data.includes("Scout Phase 1 Admin"), "Admin canonical surface title is missing.");
+      diagnosticRequire(debug.data.includes("Scout Phase 3.5 Runtime Debug"), "Debug canonical surface title is missing.");
+      return "Pre-trip / Admin / Debug canonical surfaces returned HTTP 200";
+    }
+
+    async function diagnosticCheck016() {
+      const path = `/admin/pretrip/projects/${encodeURIComponent(projectId())}?compact=1`;
+      const envelope = await diagnosticEnvelope(path, {timeoutMs: 180000});
+      const cacheState = envelope.headers["x-scout-projection-cache"] || "unreported";
+      diagnosticRequire(envelope.data && typeof envelope.data === "object", "Compact projection response is unavailable.");
+      diagnosticRequire(["hit", "miss"].includes(cacheState), "Projection cache header is missing or invalid.");
+      diagnosticRequire(typeof renderMapEvidenceRail === "function" && typeof ensurePretripMapFrame === "function", "Map bridge functions are unavailable.");
+      return `Compact projection ready · X-Scout-Projection-Cache=${cacheState}`;
+    }
+
+    async function diagnosticCheck017() {
+      const project = await diagnosticProjectProjection();
+      const segments = asArray(project.segments);
+      const checkpoints = asArray(project.checkpoints);
+      const riskCount = asArray(project.risk_ribbon?.segments).length
+        + asArray(project.risk_heatmap?.segments).length
+        + asArray(project.risk_delta?.segments).length;
+      diagnosticRequire(segments.length > 0, "Current project has no Segment evidence.");
+      diagnosticRequire(checkpoints.length > 0, "Current project has no checkpoint evidence.");
+      diagnosticRequire(riskCount > 0, "Current project has no risk ribbon/heat/delta evidence.");
+      const segmentIds = segments.map(item => item.candidate_id || item.segment_id).filter(Boolean);
+      diagnosticRequire(new Set(segmentIds).size === segmentIds.length, "Segment IDs contain duplicates.");
+      return `${segments.length} segments · ${checkpoints.length} checkpoints · ${riskCount} risk records`;
+    }
+
+    async function diagnosticCheck018() {
+      const briefing = await diagnosticEnvelope(routeContextBriefingSrc(), {text: true, timeoutMs: 60000});
+      diagnosticRequire(briefing.data.length > 500, "Route Context briefing is empty.");
+      diagnosticRequire(/路線|route/i.test(briefing.data), "Route Context briefing content is not recognizable.");
+      return `Canonical briefing ready · ${Math.round(briefing.data.length / 1024)} KiB`;
+    }
+
+    async function diagnosticCheck019() {
+      const variants = await diagnosticJson(routeContextBriefingVariantsPath(), 60000);
+      const records = asArray(variants.variants);
+      diagnosticRequire(records.length === 5 || Number(variants.variant_count) === 5, `Expected five variants; found ${records.length || variants.variant_count || 0}.`);
+      const unsafeRef = records.find(record => String(record.file_ref || record.ref || "").includes(".."));
+      diagnosticRequire(!unsafeRef, "A Route Context variant contains an unsafe artifact ref.");
+      const gate = variants.reference_similarity_gate?.status || variants.reference_gate?.status || "recorded";
+      return `Five existing variants · reference gate=${gate}`;
+    }
+
+    async function diagnosticCheck020() {
+      const markup = Function.prototype.toString.call(renderPaceFitPage);
+      for (const marker of ["Pace Parameters", "Current CP Status", "Next Segment Risk", "CP Timeline", "Pace Output", "Read-only preview"]) {
+        diagnosticRequire(markup.includes(marker), `Pace Dashboard marker ${marker} is missing.`);
+      }
+      return "Pace parameters, CP status, risk, timeline and output contract present";
+    }
+
+    async function diagnosticCheck021() {
+      const body = await diagnosticBodyIndex();
+      const serialized = JSON.stringify(body);
+      for (const forbidden of ["heartRateData", "<gpx", "\"coordinates\"", "original_zip_filename"]) {
+        diagnosticRequire(!serialized.includes(forbidden), `Body Index response contains forbidden raw field ${forbidden}.`);
+      }
+      diagnosticRequire(body && typeof body === "object", "Body Index response is unavailable.");
+      return `Body Index evidence=${body.evidence_status || body.status || "sanitized response"}`;
+    }
+
+    async function diagnosticCheck022() {
+      const markup = renderPaceFitBodyIndexPage();
+      diagnosticRequire(markup.includes("Import HealthExport"), "Body Index import control is missing.");
+      diagnosticRequire(markup.includes("data-body-index-import"), "Body Index import binding is missing.");
+      diagnosticRequire(BODY_INDEX_IMPORT_PATH === "/admin/dashboard/body-index/import", "Body Index import path changed unexpectedly.");
+      await diagnosticBodyIndex();
+      return "Synthetic import/dedup wiring ready · no private import executed";
+    }
+
+    async function diagnosticCheck023() {
+      const watch = await diagnosticBodyIndexWatch();
+      diagnosticRequire(typeof watch.running === "boolean", "Body Index watcher status has no running flag.");
+      diagnosticRequire(watch.running === false, "Body Index watcher is running; stop it before diagnostics pass.");
+      return `Body Index watcher stopped · interval=${watch.interval_seconds || "not active"}`;
+    }
+
+    async function diagnosticCheck024() {
+      const project = await diagnosticProjectProjection();
+      const architecture = project.route_architecture_intelligence;
+      diagnosticRequire(architecture && typeof architecture === "object", "Route Architecture Intelligence projection is unavailable.");
+      diagnosticRequire(Array.isArray(architecture.segment_demand_vectors), "Architecture segment demand vectors are unavailable.");
+      const boundary = architecture.boundary || architecture.privacy || {};
+      diagnosticRequire(boundary.runtime_safety_truth !== true, "Architecture projection claims runtime safety truth.");
+      return `Architecture status=${architecture.status || "ready"} · ${architecture.segment_demand_vectors.length} demand vectors`;
+    }
+
+    async function diagnosticCheck025() {
+      const navigation = await diagnosticJson(
+        `/admin/pretrip/projects/${encodeURIComponent(projectId())}/navigation-terrain-intelligence`,
+        120000,
+      );
+      diagnosticRequire(navigation && typeof navigation === "object", "Navigation Terrain Intelligence is unavailable.");
+      diagnosticRequire(navigation.boundary?.runtime_safety_truth === false, "Navigation projection boundary is not candidate-only.");
+      diagnosticRequire(NAVIGATION_RUDY_TILE_SOURCE.wmtsLayer === "rudy_twmap", "Navigation basemap is not Rudy+TW.");
+      const routeCount = Number(navigation.route_samples?.rendered_count || asArray(navigation.route_samples?.points).length || 0);
+      return `Navigation status=${navigation.status || "ready"} · ${routeCount} route points · Rudy+TW`;
+    }
+
+    function diagnosticSourceText(value) {
+      return typeof value === "function" ? Function.prototype.toString.call(value) : String(value || "");
+    }
+
+    function diagnosticCompactSource(value) {
+      return diagnosticSourceText(value).replace(/\s+/g, " ").trim();
+    }
+
+    function diagnosticMapSurfaceSources() {
+      return diagnosticResource("map-surface-sources", async () => {
+        const pretrip = await diagnosticEnvelope(
+          `/admin/pretrip?projectId=${encodeURIComponent(projectId())}`,
+          {text: true, timeoutMs: 60000},
+        );
+        return {
+          Map: {
+            renderer: pretrip.data,
+            adapter: diagnosticSourceText(applyPretripMapOnlyFrame),
+          },
+          Navigation: {
+            renderer: [
+              diagnosticSourceText(renderNavigationWorkspaceMap),
+              diagnosticSourceText(renderNavigationRudyTileLayer),
+              diagnosticSourceText(navigationRudyTileImages),
+            ].join("\n"),
+            controller: diagnosticSourceText(createDashboardMapViewportController),
+            controls: renderDashboardMapViewport("diagnostic-navigation-contract", "Navigation diagnostic map", "<svg></svg>"),
+          },
+          Weather: {
+            renderer: pretrip.data,
+            adapter: [
+              diagnosticSourceText(renderWeatherIntersectionMap),
+              diagnosticSourceText(applyWeatherCwaMapFrame),
+            ].join("\n"),
+          },
+        };
+      });
+    }
+
+    async function diagnosticCheck026() {
+      const surfaces = await diagnosticMapSurfaceSources();
+      const gaps = [];
+      for (const surfaceName of ["Map", "Weather"]) {
+        const source = diagnosticCompactSource(surfaces[surfaceName].renderer);
+        const adapter = diagnosticCompactSource(surfaces[surfaceName].adapter);
+        if (!source.includes('id="hoverHint"')
+          || !source.includes("function showHint(")
+          || !source.includes('addEventListener("mouseenter"')) {
+          gaps.push(`${surfaceName} has no evidence hover/focus hint contract`);
+        }
+        if (adapter.includes("#hoverHint { display: none !important")) {
+          gaps.push(`${surfaceName} adapter hides #hoverHint`);
+        }
+      }
+      const navigation = diagnosticCompactSource(surfaces.Navigation.renderer);
+      if (!navigation.includes("<title>")
+        || !navigation.includes("data-navigation-structure-point-id")
+        || !navigation.includes("data-navigation-live-point-id")) {
+        gaps.push("Navigation evidence has no native SVG hint contract");
+      }
+      diagnosticRequire(!gaps.length, gaps.join(" · "));
+      return "Map / Navigation / Weather evidence hover and focus hints remain visible";
+    }
+
+    async function diagnosticCheck027() {
+      const surfaces = await diagnosticMapSurfaceSources();
+      const pretrip = diagnosticCompactSource(surfaces.Map.renderer);
+      for (const marker of [
+        'id="boxZoomMode"',
+        "function beginMapRectangleZoom(",
+        "function finishMapRectangleZoom(",
+        "function handleMapKeyboardPan(",
+        'event.key === "ArrowUp"',
+        'event.key === "ArrowDown"',
+        'event.key === "ArrowLeft"',
+        'event.key === "ArrowRight"',
+      ]) {
+        diagnosticRequire(pretrip.includes(marker), `Map/Weather shared renderer is missing ${marker}.`);
+      }
+      for (const surfaceName of ["Map", "Weather"]) {
+        const adapter = diagnosticCompactSource(surfaces[surfaceName].adapter);
+        diagnosticRequire(!adapter.includes("#boxZoomMode { display: none !important"), `${surfaceName} adapter hides rectangle zoom.`);
+      }
+      const controls = surfaces.Navigation.controls;
+      const controller = diagnosticCompactSource(surfaces.Navigation.controller);
+      diagnosticRequire(controls.includes('data-map-control="box-zoom"'), "Navigation rectangle zoom control is missing.");
+      for (const key of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) {
+        diagnosticRequire(controller.includes(`event.key === "${key}"`), `Navigation keyboard pan ${key} is missing.`);
+      }
+      return "Map / Navigation / Weather rectangle zoom and keyboard pan contracts present";
+    }
+
+    async function diagnosticCheck028() {
+      const surfaces = await diagnosticMapSurfaceSources();
+      const pretrip = diagnosticCompactSource(surfaces.Map.renderer);
+      for (const marker of [
+        "function renderRasterLayer(",
+        'data-raster-tile',
+        "function renderOsmPbfVector(",
+        "function renderCwaWeatherImagery(",
+      ]) {
+        diagnosticRequire(pretrip.includes(marker), `Map/Weather renderer is missing ${marker}.`);
+      }
+      const navigation = diagnosticCompactSource(surfaces.Navigation.renderer);
+      diagnosticRequire(navigation.includes("data-navigation-rudy-tile"), "Navigation Rudy+TW tile rendering is missing.");
+      diagnosticRequire(navigation.includes("<svg") && navigation.includes("<path"), "Navigation vector rendering is missing.");
+      diagnosticRequire(
+        ["satellite", "radar", "lidar", "hillshade", "thematic"].every(kind => DASHBOARD_MAP_SINGLE_IMAGE_ALLOWLIST.includes(kind)),
+        "Single-image overlay allowlist is incomplete.",
+      );
+      return `All three maps use tiled/vector rendering · single-image exceptions=${DASHBOARD_MAP_SINGLE_IMAGE_ALLOWLIST.join(", ")}`;
+    }
+
+    async function diagnosticCheck029() {
+      const surfaces = await diagnosticMapSurfaceSources();
+      const pretrip = diagnosticCompactSource(surfaces.Map.renderer);
+      for (const marker of [
+        'id="zoomIn"',
+        'id="zoomOut"',
+        'id="fitRoute"',
+        'id="panMode"',
+        "function beginMapPointerPan(",
+        "function resetMapView(",
+      ]) {
+        diagnosticRequire(pretrip.includes(marker), `Map/Weather shared renderer is missing ${marker}.`);
+      }
+      const controls = surfaces.Navigation.controls;
+      const controller = diagnosticCompactSource(surfaces.Navigation.controller);
+      for (const control of ["zoom-in", "zoom-out", "reset", "pan"]) {
+        diagnosticRequire(controls.includes(`data-map-control="${control}"`), `Navigation ${control} control is missing.`);
+      }
+      diagnosticRequire(controller.includes("const reset = () =>"), "Navigation Fit/Reset behavior is missing.");
+      diagnosticRequire(controller.includes("const panBy = ("), "Navigation pan behavior is missing.");
+      return "Map / Navigation / Weather Zoom in · Zoom out · Pan · Fit contracts present";
+    }
+
+    function updateDiagnosticDom(caseId = null) {
+      const item = caseId ? DASHBOARD_DIAGNOSTIC_CASES.find(candidate => candidate.id === caseId) : null;
+      if (item) {
+        const current = document.querySelector(`[data-diagnostic-case="${cssEscape(item.id)}"]`);
+        if (current) current.outerHTML = renderDiagnosticCase(item);
+      }
+      const summary = diagnosticSummary();
+      Object.entries(summary).forEach(([key, value]) => {
+        const target = document.querySelector(`[data-diagnostic-summary="${cssEscape(key)}"]`);
+        if (target) target.textContent = String(value);
+      });
+      const allButton = document.querySelector('[data-diagnostic-action="all"]');
+      if (allButton) {
+        allButton.disabled = state.diagnosticBatchRunning;
+        allButton.textContent = state.diagnosticBatchRunning ? "Diag all running…" : "Diag all";
+      }
+      document.querySelectorAll('[data-diagnostic-action="retest"]').forEach(button => {
+        const result = diagnosticResult(button.dataset.diagnosticId);
+        button.disabled = state.diagnosticBatchRunning || result.status === "running";
+      });
+      renderTruthStrip("diagnostic");
+      bindDiagnosticControls();
+    }
+
+    async function runDashboardDiagnostic(caseId, {reuseCache = false} = {}) {
+      const item = DASHBOARD_DIAGNOSTIC_CASES.find(candidate => candidate.id === caseId);
+      if (!item) throw new Error(`Unknown diagnostic case: ${caseId}`);
+      if (!reuseCache) diagnosticResourceCache.clear();
+      const startedAt = performance.now();
+      diagnosticSetResult(caseId, {
+        status: "running",
+        detail: "正在執行 read-only diagnostic…",
+        durationMs: null,
+        checkedAt: null,
+      });
+      updateDiagnosticDom(caseId);
+      try {
+        const detail = await item.run();
+        diagnosticSetResult(caseId, {
+          status: "passed",
+          detail: diagnosticSafeDetail(detail),
+          durationMs: performance.now() - startedAt,
+          checkedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        diagnosticSetResult(caseId, {
+          status: "failed",
+          detail: diagnosticSafeDetail(error?.message || error || "Diagnostic failed."),
+          durationMs: performance.now() - startedAt,
+          checkedAt: new Date().toISOString(),
+        });
+      }
+      updateDiagnosticDom(caseId);
+      return {...diagnosticResult(caseId)};
+    }
+
+    async function runAllDashboardDiagnostics() {
+      if (state.diagnosticBatchRunning) return diagnosticSummary();
+      state.diagnosticBatchRunning = true;
+      diagnosticResourceCache.clear();
+      state.diagnosticResults = Object.fromEntries(
+        DASHBOARD_DIAGNOSTIC_CASES.map(item => [item.id, {
+          status: "idle",
+          detail: "等待批次測試",
+          durationMs: null,
+          checkedAt: null,
+        }]),
+      );
+      updateDiagnosticDom();
+      for (const item of DASHBOARD_DIAGNOSTIC_CASES) {
+        await runDashboardDiagnostic(item.id, {reuseCache: true});
+      }
+      state.diagnosticBatchRunning = false;
+      updateDiagnosticDom();
+      return diagnosticSummary();
+    }
+
+    function bindDiagnosticControls() {
+      const allButton = document.querySelector('[data-diagnostic-action="all"]');
+      if (allButton && allButton.dataset.diagnosticBound !== "true") {
+        allButton.dataset.diagnosticBound = "true";
+        allButton.addEventListener("click", () => { void runAllDashboardDiagnostics(); });
+      }
+      document.querySelectorAll('[data-diagnostic-action="retest"]').forEach(button => {
+        if (button.dataset.diagnosticBound === "true") return;
+        button.dataset.diagnosticBound = "true";
+        button.addEventListener("click", () => {
+          void runDashboardDiagnostic(button.dataset.diagnosticId || "");
+        });
+      });
+    }
+
+    window.scoutDashboardDiagnostics = Object.freeze({
+      cases: DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description}) => ({id, category, title, description})),
+      run: caseId => runDashboardDiagnostic(caseId),
+      runAll: () => runAllDashboardDiagnostics(),
+      snapshot: () => ({
+        summary: diagnosticSummary(),
+        results: JSON.parse(JSON.stringify(state.diagnosticResults || {})),
+      }),
+    });
 
     function validateDashboardSettings(apiBaseValue, projectValue) {
       const normalizedProject = String(projectValue || "").trim();
@@ -11602,6 +12693,9 @@
             data-terrain-feature-id="${escapeHtml(feature.id)}"
             data-terrain-feature-selected="${selectedFeature ? "true" : "false"}"
             data-lens-match="${lensMatch ? "true" : "false"}"
+            data-dashboard-map-hint-source="navigation-training-evidence"
+            data-dashboard-map-hint-title="${escapeHtml(`${feature.index} · ${feature.label}`)}"
+            data-dashboard-map-hint-summary="${escapeHtml(`${feature.meaning} 下一步：${feature.nextCheck}`)}"
             style="--feature-color:${feature.color}"
           >
             <circle class="terrain-feature-halo" cx="${feature.x}" cy="${feature.y}" r="15"></circle>
@@ -11652,7 +12746,6 @@
         {
           className: "navigation-terrain-map",
           attributes: 'data-terrain-contour-map="true"',
-          mouseZoom: false,
         },
       );
     }
@@ -12094,6 +13187,9 @@
                 class="navigation-terrain-hierarchy-edge"
                 data-navigation-terrain-edge-kind="${escapeHtml(edge.kind)}"
                 data-navigation-terrain-edge-id="${escapeHtml(edge.id)}"
+                data-dashboard-map-hint-source="navigation-hierarchy-evidence"
+                data-dashboard-map-hint-title="${escapeHtml(navigationTerrainHierarchyLabel(edge.kind))}"
+                data-dashboard-map-hint-summary="${escapeHtml(`${formatDistanceKm(edge.length_m)} · candidate only · terrain branch is not a trail junction`)}"
                 d="${edge.path}"
                 style="--terrain-edge-color:${navigationTerrainHierarchyColor(edge.kind)}"
               >
@@ -12102,7 +13198,16 @@
             `).join("") : ""}
             ${routePath ? `<path class="navigation-workspace-route" data-navigation-route-path="true" d="${routePath}" ${lens === "retreat" ? 'marker-start="url(#navigationWorkspaceRetreatArrow)"' : ""}></path>` : ""}
             ${lens === "pressure" ? pressurePoints.map(point => `
-              <circle class="navigation-route-pressure-dot" cx="${point.position.x.toFixed(1)}" cy="${point.position.y.toFixed(1)}" r="4.5" fill="${navigationPressureColor(point.teii_20m ?? point.pretrip_risk ?? point.tri)}">
+              <circle
+                class="navigation-route-pressure-dot"
+                cx="${point.position.x.toFixed(1)}"
+                cy="${point.position.y.toFixed(1)}"
+                r="4.5"
+                fill="${navigationPressureColor(point.teii_20m ?? point.pretrip_risk ?? point.tri)}"
+                data-dashboard-map-hint-source="navigation-pressure-evidence"
+                data-dashboard-map-hint-title="${escapeHtml(`Route pressure · ${formatDistanceKm(point.distance_m)}`)}"
+                data-dashboard-map-hint-summary="${escapeHtml(`TEII ${valueOrDash(point.teii_20m)} · pretrip risk ${valueOrDash(point.pretrip_risk)} · candidate evidence`)}"
+              >
                 <title>${escapeHtml(`${formatDistanceKm(point.distance_m)} · TEII ${valueOrDash(point.teii_20m)}`)}</title>
               </circle>
             `).join("") : ""}
@@ -12114,6 +13219,9 @@
                 data-navigation-structure-point-id="${escapeHtml(point.id)}"
                 data-navigation-structure-kind="${escapeHtml(point.feature_kind)}"
                 data-navigation-structure-selected="${point.id === selectedStructurePoint?.id ? "true" : "false"}"
+                data-dashboard-map-hint-source="navigation-structure-evidence"
+                data-dashboard-map-hint-title="${escapeHtml(`${navigationStructureLabel(point.feature_kind)}候選 ${point.index}`)}"
+                data-dashboard-map-hint-summary="${escapeHtml(`TPI ${valueOrDash(point.tpi_m)}m · local relief ${valueOrDash(point.local_relief_m)}m · score ${valueOrDash(point.score)}`)}"
                 aria-label="${escapeHtml(`${navigationStructureLabel(point.feature_kind)}候選 ${point.index}, score ${point.score}`)}"
                 style="--structure-color:${navigationStructureColor(point.feature_kind)}"
               >
@@ -12129,6 +13237,9 @@
                 tabindex="${point.id === selectedPoint?.id ? "0" : "-1"}"
                 data-navigation-live-point-id="${escapeHtml(point.id)}"
                 data-navigation-live-selected="${point.id === selectedPoint?.id ? "true" : "false"}"
+                data-dashboard-map-hint-source="navigation-risk-evidence"
+                data-dashboard-map-hint-title="${escapeHtml(`Terrain pressure candidate ${point.index}`)}"
+                data-dashboard-map-hint-summary="${escapeHtml(point.reason || "Terrain pressure candidate requires review")}"
                 aria-label="${escapeHtml(`Terrain pressure candidate ${point.index}, display pressure ${point.display_pressure}`)}"
                 style="${lens === "risk" ? "" : "display:none"}"
               >
@@ -12144,6 +13255,9 @@
                 tabindex="${event.id === selectedEvent?.id ? "0" : "-1"}"
                 data-navigation-terrain-event-id="${escapeHtml(event.id)}"
                 data-navigation-terrain-event-selected="${event.id === selectedEvent?.id ? "true" : "false"}"
+                data-dashboard-map-hint-source="navigation-event-evidence"
+                data-dashboard-map-hint-title="${escapeHtml(`${event.sequence} · ${navigationTerrainEventLabel(event.event_type)}`)}"
+                data-dashboard-map-hint-summary="${escapeHtml(`${formatDistanceKm(event.route_distance_m)} · ${event.terrain_relation || "candidate terrain relation"}`)}"
                 aria-label="${escapeHtml(`${event.sequence} ${navigationTerrainEventLabel(event.event_type)}, ${formatDistanceKm(event.route_distance_m)}`)}"
               >
                 <circle cx="${event.position.x.toFixed(1)}" cy="${event.position.y.toFixed(1)}" r="${event.id === selectedEvent?.id ? "9" : "6"}"></circle>
@@ -12164,7 +13278,6 @@
           className: "navigation-workspace-map",
           attributes: `data-navigation-workspace-map="true" data-navigation-basemap-layer="rudy-twmap" data-navigation-tile-zoom="${baseZoom}"`,
           overlayHtml: mapOverlay,
-          mouseZoom: false,
         },
       );
     }
@@ -13874,6 +14987,86 @@
       `;
     }
 
+    function dashboardMapHintNode() {
+      return document.getElementById("dashboardMapHoverHint");
+    }
+
+    function positionDashboardMapHint(event, target) {
+      const hint = dashboardMapHintNode();
+      if (!hint || hint.hidden) return;
+      const targetRect = target?.getBoundingClientRect?.() || {
+        left: window.innerWidth / 2,
+        right: window.innerWidth / 2,
+        top: window.innerHeight / 2,
+        bottom: window.innerHeight / 2,
+      };
+      const pointerX = Number(event?.clientX);
+      const pointerY = Number(event?.clientY);
+      const anchorX = Number.isFinite(pointerX) && pointerX > 0
+        ? pointerX
+        : (targetRect.left + targetRect.right) / 2;
+      const anchorY = Number.isFinite(pointerY) && pointerY > 0
+        ? pointerY
+        : targetRect.bottom;
+      const margin = 12;
+      const gap = 14;
+      const hintWidth = hint.offsetWidth || 320;
+      const hintHeight = hint.offsetHeight || 72;
+      const left = Math.max(
+        margin,
+        Math.min(window.innerWidth - hintWidth - margin, anchorX + gap),
+      );
+      const preferredTop = anchorY + gap;
+      const top = preferredTop + hintHeight + margin <= window.innerHeight
+        ? preferredTop
+        : Math.max(margin, anchorY - hintHeight - gap);
+      hint.style.left = `${left}px`;
+      hint.style.top = `${top}px`;
+    }
+
+    function showDashboardMapHint(event, target) {
+      const hint = dashboardMapHintNode();
+      const title = String(target?.dataset?.dashboardMapHintTitle || "").trim();
+      if (!hint || !title) return;
+      const summary = String(target.dataset.dashboardMapHintSummary || "").trim();
+      const titleNode = hint.querySelector("strong");
+      const summaryNode = hint.querySelector("span");
+      if (titleNode) titleNode.textContent = title;
+      if (summaryNode) {
+        summaryNode.textContent = summary;
+        summaryNode.hidden = !summary;
+      }
+      hint.hidden = false;
+      hint.dataset.hintSource = target.dataset.dashboardMapHintSource || "evidence";
+      target.setAttribute("aria-describedby", hint.id);
+      positionDashboardMapHint(event, target);
+    }
+
+    function hideDashboardMapHint(target = null) {
+      const hint = dashboardMapHintNode();
+      if (!hint) return;
+      hint.hidden = true;
+      hint.removeAttribute("data-hint-source");
+      if (target?.getAttribute("aria-describedby") === hint.id) {
+        target.removeAttribute("aria-describedby");
+      }
+    }
+
+    function bindDashboardMapHints(root = document) {
+      root.querySelectorAll("[data-dashboard-map-hint-title]").forEach(target => {
+        if (target.dataset.dashboardMapHintBound === "true") return;
+        target.dataset.dashboardMapHintBound = "true";
+        target.addEventListener("pointerenter", event => showDashboardMapHint(event, target));
+        target.addEventListener("pointermove", event => positionDashboardMapHint(event, target));
+        target.addEventListener("pointerleave", () => hideDashboardMapHint(target));
+        target.addEventListener("focus", event => showDashboardMapHint(event, target));
+        target.addEventListener("blur", () => hideDashboardMapHint(target));
+        target.addEventListener("keydown", event => {
+          if (event.key === "Escape") hideDashboardMapHint(target);
+        });
+      });
+    }
+
     function renderDashboardMapControls(viewportId, mode = "pan", mouseZoomEnabled = true) {
       const panActive = mode !== "box";
       return `
@@ -15047,6 +16240,9 @@
                   data-map-evidence-source="${escapeHtml(item.sourceId)}"
                   data-pretrip-source-id="${escapeHtml(item.pretripSourceId)}"
                   data-map-target-ids="${escapeHtml(item.mapTargetIds.join(" "))}"
+                  data-dashboard-map-hint-source="timeline-evidence"
+                  data-dashboard-map-hint-title="${escapeHtml(item.label)}"
+                  data-dashboard-map-hint-summary="${escapeHtml(item.sublabel)}"
                 >
                   <strong>${escapeHtml(item.label)}</strong>
                   <span>${escapeHtml(item.sublabel)}</span>
@@ -16179,7 +17375,7 @@
         style.textContent = `
           html, body { width:100% !important; height:100% !important; min-height:100% !important; overflow:hidden !important; }
           body { display:block !important; }
-          #readinessStrip, .toolbar-title, .toolbar .layer-menu, .toolbar .map-pan-controls, .toolbar .tool-disclosure, .route-pane, .detail-pane, #hoverHint { display:none !important; }
+          #readinessStrip, .toolbar-title, .toolbar .layer-menu, .toolbar .map-pan-controls, .toolbar .tool-disclosure, .route-pane, .detail-pane { display:none !important; }
           .shell { display:grid !important; grid-template-columns:minmax(0,1fr) !important; grid-template-areas:"map" !important; grid-template-rows:minmax(0,1fr) !important; width:100vw !important; height:100vh !important; min-height:0 !important; overflow:hidden !important; }
           .map-pane { grid-area:map !important; display:block !important; position:relative !important; width:100vw !important; height:100vh !important; min-height:0 !important; border:0 !important; overflow:hidden !important; }
           .toolbar { display:block !important; position:absolute !important; z-index:60 !important; top:8px !important; right:8px !important; width:auto !important; max-width:calc(100% - 16px) !important; padding:0 !important; border:0 !important; background:transparent !important; overflow:visible !important; pointer-events:none !important; }
@@ -16189,7 +17385,18 @@
           .toolbar-row[aria-label="Map tools"] { display:flex !important; justify-content:flex-end !important; gap:4px !important; padding:5px !important; border:1px solid rgba(42,64,74,.7) !important; border-radius:8px !important; background:rgba(247,250,252,.94) !important; box-shadow:0 8px 24px rgba(0,0,0,.25) !important; pointer-events:auto !important; }
           .map-wrap { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; min-height:0 !important; }
           #map { display:block !important; width:100% !important; height:100% !important; min-height:100% !important; }
+          #hoverHint {
+            max-width:min(330px, calc(100vw - 24px)) !important;
+            border:1px solid rgba(98,184,198,.62) !important;
+            background:rgba(7,16,18,.96) !important;
+            color:#eafcff !important;
+            box-shadow:0 12px 32px rgba(0,0,0,.42) !important;
+          }
+          #hoverHint strong { color:#eafcff !important; }
+          #hoverHint span { margin-top:3px !important; color:#9eb1b6 !important; }
+          #hoverHint.is-hidden { display:none !important; }
         `;
+        doc.querySelector("#map")?.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape");
         const childWindow = frame.contentWindow;
         if (childWindow && frame.weatherCwaBridgeWindow !== childWindow) {
           if (frame.weatherCwaBridgeWindow && frame.weatherCwaBridgeHandler) {
@@ -16307,11 +17514,13 @@
     }
 
     function bindRenderedControls() {
+      bindDiagnosticControls();
       bindLivingControls();
       bindArchitectureControls();
       bindNavigationTerrainControls();
       bindWeatherCwaControls();
       bindDashboardMapViewports();
+      bindDashboardMapHints();
       const pretripMapFrame = document.getElementById("pretripMapFrame");
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
       const surfaceFrame = document.getElementById("surfaceFrame");
@@ -17415,8 +18624,7 @@
             .tool-disclosure,
             [data-cwa-imagery-controls],
             .route-pane,
-            .detail-pane,
-            #hoverHint {
+            .detail-pane {
               display: none !important;
             }
             .shell {
@@ -17482,6 +18690,7 @@
             }
             .layer-menu,
             .map-pan-controls,
+            #panMode,
             #zoomIn,
             #zoomOut,
             #fitRoute,
@@ -17573,6 +18782,7 @@
               font-size: 15px !important;
               font-weight: 800 !important;
             }
+            #panMode.is-active,
             #boxZoomMode.is-active,
             .tool-button:hover,
             .tool-button:focus-visible {
@@ -17583,6 +18793,7 @@
             #fitRoute {
               font-size: 12px !important;
             }
+            #panMode,
             #zoomIn,
             #zoomOut,
             #fitRoute,
@@ -17593,12 +18804,13 @@
               right: 14px !important;
               z-index: 74 !important;
             }
-            #boxZoomMode { top: 14px !important; }
-            #fitRoute { top: 56px !important; }
-            #zoomIn { top: 98px !important; }
-            #zoomOut { top: 140px !important; }
+            #panMode { top: 14px !important; }
+            #boxZoomMode { top: 56px !important; }
+            #fitRoute { top: 98px !important; }
+            #zoomIn { top: 140px !important; }
+            #zoomOut { top: 182px !important; }
             #zoomLevel {
-              top: 182px !important;
+              top: 224px !important;
               width: 56px !important;
               min-width: 56px !important;
               min-height: 28px !important;
@@ -17607,7 +18819,7 @@
               text-align: center !important;
             }
             .map-pan-controls {
-              top: 222px !important;
+              top: 264px !important;
               display: inline-grid !important;
               grid-template-columns: repeat(3, 28px) !important;
               grid-template-rows: repeat(3, 28px) !important;
@@ -17622,6 +18834,7 @@
               background: rgba(18, 29, 34, .9) !important;
             }
             @media (min-width: 760px) {
+              #panMode,
               #zoomIn,
               #zoomOut,
               #fitRoute,
@@ -17631,7 +18844,18 @@
                 right: ${mapToolRight} !important;
               }
             }
+            #hoverHint {
+              max-width: min(330px, calc(100vw - 24px)) !important;
+              border: 1px solid rgba(98, 184, 198, .62) !important;
+              background: rgba(7, 16, 18, .96) !important;
+              color: #eafcff !important;
+              box-shadow: 0 12px 32px rgba(0, 0, 0, .42) !important;
+            }
+            #hoverHint strong { color: #eafcff !important; }
+            #hoverHint span { margin-top: 3px !important; color: #9eb1b6 !important; }
+            #hoverHint.is-hidden { display: none !important; }
           `;
+        doc.querySelector("#map")?.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape");
         doc.querySelector(".layer-menu")?.setAttribute("open", "");
         doc.querySelector(".layer-advanced")?.setAttribute("open", "");
         doc.documentElement.dataset.dashboardMapOnly = "true";
