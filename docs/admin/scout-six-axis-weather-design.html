@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Six Axis · Weather Decision Instrument</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #e9eadc;
+      --muted: #9ca996;
+      --night: #08100e;
+      --panel: #101a17;
+      --panel-2: #15221d;
+      --line: #34443a;
+      --lichen: #b7cf63;
+      --amber: #f0ae3b;
+      --storm: #62b8c6;
+      --danger: #ff6b4a;
+      --safe: #79c58c;
+      --shadow: 0 22px 70px rgba(0, 0, 0, .35);
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--night); }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 74% 12%, rgba(98, 184, 198, .14), transparent 31rem),
+        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px), var(--night);
+      background-size: auto, 28px 28px, 28px 28px, auto;
+      font: 15px/1.45 "Avenir Next", Avenir, sans-serif;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--lichen); outline-offset: 3px; }
+    .shell { min-height: 100vh; display: grid; grid-template-columns: 218px minmax(0, 1fr); }
+    .rail { position: sticky; top: 0; height: 100vh; padding: 26px 18px; border-right: 1px solid var(--line); background: rgba(6,13,11,.91); backdrop-filter: blur(18px); }
+    .brand { font: 700 22px/1 Georgia, serif; letter-spacing: .04em; }
+    .brand span { color: var(--lichen); }
+    .context { margin: 12px 0 30px; color: var(--muted); font: 11px/1.5 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .11em; }
+    .axis-nav { display: grid; gap: 5px; }
+    .axis-nav button { border: 0; padding: 10px 11px; border-radius: 3px; background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
+    .axis-nav button[aria-current="page"] { color: var(--ink); background: linear-gradient(90deg, rgba(183,207,99,.16), transparent); box-shadow: inset 2px 0 var(--lichen); }
+    .rail-foot { position: absolute; inset: auto 18px 22px; border-top: 1px solid var(--line); padding-top: 16px; color: var(--muted); font-size: 11px; }
+    main { min-width: 0; padding: 26px clamp(18px, 3.4vw, 52px) 56px; }
+    .topline { display: flex; justify-content: space-between; gap: 16px; align-items: start; margin-bottom: 28px; }
+    .eyebrow { margin: 0 0 6px; color: var(--lichen); font: 700 11px ui-monospace, monospace; letter-spacing: .15em; text-transform: uppercase; }
+    h1 { margin: 0; font: 500 clamp(31px, 5vw, 62px)/.96 Georgia, serif; letter-spacing: -.04em; }
+    h1 em { display: block; color: var(--muted); font-weight: 400; }
+    .boundary { max-width: 360px; padding: 10px 13px; border: 1px solid rgba(240,174,59,.45); color: #f4ca7c; background: rgba(240,174,59,.06); font-size: 12px; }
+    .boundary strong { display: block; margin-bottom: 3px; font: 700 10px ui-monospace, monospace; letter-spacing: .12em; }
+    .decision-strip { display: grid; grid-template-columns: 1.25fr repeat(3, .75fr); border: 1px solid var(--line); background: rgba(13,23,19,.82); box-shadow: var(--shadow); }
+    .verdict { min-height: 174px; padding: 22px; border-right: 1px solid var(--line); background: linear-gradient(145deg, rgba(255,107,74,.18), transparent 70%); }
+    .verdict small, .metric small, .section-label { display: block; color: var(--muted); font: 700 10px ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; }
+    .decision-word { margin: 12px 0 7px; color: var(--danger); font: 800 clamp(29px, 4vw, 48px)/1 ui-monospace, monospace; letter-spacing: -.07em; }
+    .decision-copy { max-width: 50ch; color: #d9d9cb; }
+    .metric { padding: 22px 18px; border-right: 1px solid var(--line); }
+    .metric:last-child { border-right: 0; }
+    .metric strong { display: block; margin: 17px 0 5px; font: 500 23px Georgia, serif; }
+    .metric span { color: var(--muted); font-size: 12px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 22px; }
+    .scenario { border: 1px solid var(--line); border-radius: 999px; padding: 8px 13px; background: var(--panel); cursor: pointer; }
+    .scenario[aria-pressed="true"] { border-color: var(--storm); color: #bceaf0; background: rgba(98,184,198,.14); }
+    .recheck { margin-left: auto; border: 1px solid var(--lichen); padding: 8px 14px; background: var(--lichen); color: #15200f; font-weight: 800; cursor: pointer; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, .74fr); gap: 14px; }
+    .card { border: 1px solid var(--line); background: rgba(16,26,23,.91); box-shadow: 0 12px 38px rgba(0,0,0,.18); }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+    .card-head h2, .card-head h3 { margin: 0; font: 500 17px Georgia, serif; }
+    .tag { border: 1px solid var(--line); padding: 4px 7px; color: var(--muted); font: 700 9px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .map { position: relative; min-height: 430px; overflow: hidden; background: #0b1615; }
+    .map svg { display: block; width: 100%; height: 430px; }
+    .map::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 45% 48%, transparent 15%, rgba(4,10,8,.46) 100%); }
+    .layer-control { position: absolute; z-index: 2; top: 14px; left: 14px; display: grid; gap: 6px; }
+    .layer-control button { border: 1px solid rgba(233,234,220,.24); padding: 7px 9px; background: rgba(8,16,14,.86); cursor: pointer; font: 700 10px ui-monospace, monospace; }
+    .layer-control button[aria-pressed="true"] { border-color: var(--storm); color: #b9edf2; }
+    .map-note { position: absolute; z-index: 2; right: 14px; bottom: 14px; width: min(286px, calc(100% - 28px)); padding: 12px; border-left: 3px solid var(--danger); background: rgba(8,16,14,.92); font-size: 12px; }
+    .map-note strong { color: var(--danger); }
+    .route { fill: none; stroke: #f1e1a1; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 2 9; filter: drop-shadow(0 0 4px #000); }
+    .rain { opacity: .72; transition: opacity .2s; }
+    .radar { opacity: .9; transition: opacity .2s; }
+    .hidden-layer { opacity: 0 !important; }
+    .timeline { padding: 16px 18px 19px; }
+    .time-labels { display: flex; justify-content: space-between; color: var(--muted); font: 10px ui-monospace, monospace; }
+    input[type="range"] { width: 100%; accent-color: var(--storm); }
+    .window { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 11px; border: 1px solid var(--line); }
+    .window div { padding: 10px; border-right: 1px solid var(--line); }
+    .window div:last-child { border: 0; }
+    .window strong { display: block; font: 13px ui-monospace, monospace; }
+    .window span { color: var(--muted); font-size: 11px; }
+    .window .hot { background: rgba(255,107,74,.11); box-shadow: inset 0 -3px var(--danger); }
+    .side { display: grid; gap: 14px; align-content: start; }
+    .action-list { margin: 0; padding: 0; list-style: none; }
+    .action-list li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 13px 15px; border-bottom: 1px solid var(--line); }
+    .action-list li:last-child { border: 0; }
+    .action-list b { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--danger); color: var(--danger); font: 700 11px ui-monospace, monospace; }
+    .action-list strong { display: block; margin-bottom: 3px; font-size: 13px; }
+    .action-list span { color: var(--muted); font-size: 12px; }
+    .evidence { padding: 14px; }
+    .evidence-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px dotted var(--line); }
+    .evidence-row:last-child { border: 0; }
+    .evidence-row span { color: var(--muted); font-size: 12px; }
+    .evidence-row strong { font: 700 11px ui-monospace, monospace; text-align: right; }
+    .ok { color: var(--safe); } .warn { color: var(--amber); } .bad { color: var(--danger); }
+    .source-split { margin: 12px -14px -14px; padding: 12px 14px; border-top: 1px solid var(--line); background: rgba(240,174,59,.06); color: #e8c37f; font-size: 12px; }
+    .trigger { padding: 14px; }
+    .trigger p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+    .trigger button { width: 100%; border: 1px solid var(--line); padding: 9px; background: var(--panel-2); text-align: left; cursor: pointer; }
+    .trigger button + button { margin-top: 7px; }
+    .trigger button:hover { border-color: var(--lichen); }
+    .toast { position: fixed; z-index: 5; right: 22px; bottom: 22px; max-width: 350px; padding: 13px 16px; border: 1px solid var(--storm); background: #0d1c1a; box-shadow: var(--shadow); transform: translateY(150%); transition: transform .25s ease; }
+    .toast.show { transform: translateY(0); }
+    .toast strong { display: block; color: #bceaf0; }
+    .prototype-note { margin-top: 18px; color: var(--muted); font-size: 11px; }
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: 1fr; }
+      .rail { position: static; height: auto; padding: 16px 18px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .rail .context, .rail-foot { display: none; }
+      .axis-nav { display: flex; overflow-x: auto; margin-top: 14px; }
+      .axis-nav button { white-space: nowrap; }
+      .decision-strip { grid-template-columns: 1fr 1fr 1fr; }
+      .verdict { grid-column: 1 / -1; border-right: 0; border-bottom: 1px solid var(--line); }
+      .workspace { grid-template-columns: 1fr; }
+      .side { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      main { padding: 20px 12px 42px; }
+      .topline { display: block; }
+      .boundary { margin-top: 18px; }
+      .decision-strip { grid-template-columns: 1fr; }
+      .metric { border-right: 0; border-bottom: 1px solid var(--line); }
+      .side { grid-template-columns: 1fr; }
+      .map, .map svg { min-height: 360px; height: 360px; }
+      .window { grid-template-columns: 1fr 1fr; }
+      .window div:nth-child(2) { border-right: 0; }
+      .window div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .recheck { width: 100%; margin-left: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand">SCOUT<span>/OS</span></div>
+      <div class="context">Exploring for Six Axis<br>Chilai–Nanhua · Day 1</div>
+      <nav class="axis-nav" aria-label="Six Axis navigation">
+        <button type="button">Preparation</button><button type="button">Team</button>
+        <button type="button" aria-current="page">Weather</button><button type="button">Navigation</button>
+        <button type="button">Terrain</button><button type="button">Emergency</button>
+      </nav>
+      <div class="rail-foot">Decision instrument prototype<br>Route evidence / 2026-07-17</div>
+    </aside>
+    <main>
+      <header class="topline">
+        <div><p class="eyebrow">Weather → route decision</p><h1>Weather is not a forecast.<em>It is a route constraint.</em></h1></div>
+        <div class="boundary"><strong>CANDIDATE EVIDENCE ONLY</strong>Cache-only weather layers support exploration. They do not mutate or represent runtime safety truth.</div>
+      </header>
+
+      <section class="decision-strip" aria-label="Current route decision">
+        <div class="verdict"><small>Route-specific advisory</small><div class="decision-word" id="decisionWord">CHANGE PLAN</div><div class="decision-copy" id="decisionCopy">Leave the exposed ridge before 13:00. Move the summit stop to the return window; if the 11:30 radar update expands west, delay departure 24–48 hours.</div></div>
+        <div class="metric"><small>Affected route</small><strong id="affectedSegment">CP087 → CP093</strong><span>exposed ridge · 4.8 km</span></div>
+        <div class="metric"><small>Critical window</small><strong id="criticalWindow">12:40–15:20</strong><span>convective overlap</span></div>
+        <div class="metric"><small>Recheck by</small><strong id="recheckTime">11:30</strong><span>new radar frame + QPF grid</span></div>
+      </section>
+
+      <div class="toolbar" aria-label="Weather scenarios">
+        <button class="scenario" type="button" data-scenario="current" aria-pressed="true">Current · afternoon storm</button>
+        <button class="scenario" type="button" data-scenario="rain" aria-pressed="false">24h rainfall</button>
+        <button class="scenario" type="button" data-scenario="wind" aria-pressed="false">Ridge wind + cold</button>
+        <button class="scenario" type="button" data-scenario="disagree" aria-pressed="false">Source disagreement</button>
+        <button class="recheck" type="button" id="recheck">Recheck candidate evidence</button>
+      </div>
+
+      <div class="workspace">
+        <div>
+          <section class="card">
+            <div class="card-head"><h2>Route-weather intersection</h2><span class="tag">route bbox · not live runtime</span></div>
+            <div class="map" aria-label="Stylized route map with rainfall and radar evidence">
+              <svg viewBox="0 0 800 430" role="img" aria-labelledby="mapTitle mapDesc">
+                <title id="mapTitle">Chilai Nanhua route weather evidence</title><desc id="mapDesc">A stylized ridge route crossing rainfall and radar cells, with CP087 to CP093 highlighted.</desc>
+                <defs>
+                  <pattern id="contours" width="100" height="74" patternUnits="userSpaceOnUse"><path d="M-20 60 Q25 4 112 44" fill="none" stroke="#2e433a" stroke-width="1"/><path d="M-30 74 Q30 14 120 54" fill="none" stroke="#263b34" stroke-width="1"/></pattern>
+                  <linearGradient id="stormCell" x1="0" x2="1"><stop stop-color="#287a88"/><stop offset=".55" stop-color="#e4bd42"/><stop offset="1" stop-color="#f06d42"/></linearGradient>
+                </defs>
+                <rect width="800" height="430" fill="#0c1815"/><rect width="800" height="430" fill="url(#contours)"/>
+                <g class="rain"><rect x="470" y="45" width="110" height="105" fill="#184e59"/><rect x="580" y="45" width="110" height="105" fill="#286d71"/><rect x="470" y="150" width="110" height="105" fill="#305e57"/><rect x="580" y="150" width="110" height="105" fill="#755d34"/><rect x="690" y="150" width="110" height="105" fill="#813b2e"/></g>
+                <g class="radar"><path d="M522 33 C647 23 758 94 775 202 C733 238 668 243 596 209 C528 177 477 105 522 33Z" fill="url(#stormCell)" opacity=".24"/><path d="M590 74 C675 54 740 113 739 175 C692 201 626 177 590 139 C573 121 568 93 590 74Z" fill="none" stroke="#62b8c6" stroke-width="2" stroke-dasharray="6 7"/></g>
+                <path class="route" d="M80 348 C159 319 195 364 256 303 S344 240 408 264 S485 217 538 199 S630 164 721 113"/>
+                <g fill="#08100e" stroke="#e9eadc" stroke-width="2"><circle cx="80" cy="348" r="6"/><circle cx="256" cy="303" r="6"/><circle cx="408" cy="264" r="7"/><circle cx="538" cy="199" r="7"/><circle cx="721" cy="113" r="7"/></g>
+                <g fill="#e9eadc" font-family="ui-monospace,monospace" font-size="11"><text x="60" y="375">START</text><text x="235" y="329">CP085</text><text x="376" y="292">CP087</text><text x="508" y="229">CP093</text><text x="685" y="98">SUMMIT</text></g>
+                <path d="M397 251 C450 223 497 224 548 186" fill="none" stroke="#ff6b4a" stroke-width="11" opacity=".7"/>
+              </svg>
+              <div class="layer-control" aria-label="Evidence layers"><button type="button" data-layer="radar" aria-pressed="true">RADAR</button><button type="button" data-layer="rain" aria-pressed="true">RAINFALL GRID</button><button type="button" aria-pressed="true">ROUTE</button></div>
+              <div class="map-note"><strong>CP087 → CP093 intersects the storm edge.</strong><br>Estimated ridge arrival is 36 minutes after the conservative leave-by threshold.</div>
+            </div>
+            <div class="timeline">
+              <div class="section-label">Evidence timeline · <span id="frameTime">13:00</span></div>
+              <input id="timeline" type="range" min="0" max="3" step="1" value="2" aria-label="Weather evidence time">
+              <div class="time-labels"><span>09:00</span><span>11:00</span><span>13:00</span><span>15:00</span></div>
+              <div class="window"><div><strong>09:00</strong><span>depart · monitored</span></div><div><strong>11:00</strong><span>last safe branch</span></div><div class="hot"><strong>13:00</strong><span>ridge exposure</span></div><div class="hot"><strong>15:00</strong><span>storm overlap</span></div></div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="side">
+          <section class="card"><div class="card-head"><h3>Do next</h3><span class="tag">actionable</span></div><ol class="action-list"><li><b>1</b><div><strong>Move ridge leave-by to 12:20</strong><span>Preserves 40 min uncertainty buffer.</span></div></li><li><b>2</b><div><strong>Use Branch A at CP087</strong><span>If thunder is heard or radar edge reaches route bbox.</span></div></li><li><b>3</b><div><strong>Recheck at 11:30</strong><span>Require fresh radar + next-1h QPF before continuing.</span></div></li></ol></section>
+          <section class="card"><div class="card-head"><h3>Evidence integrity</h3><span class="tag">cache-only</span></div><div class="evidence"><div class="evidence-row"><span>Radar frame</span><strong class="ok">10:52 · 8m old</strong></div><div class="evidence-row"><span>QPF next 1h</span><strong class="warn">10:00 · 60m old</strong></div><div class="evidence-row"><span>Route coverage</span><strong class="ok">38 / 38 cells</strong></div><div class="evidence-row"><span>Source agreement</span><strong class="bad">LOW</strong></div><div class="source-split"><strong>CWA vs ECMWF split:</strong> storm arrival differs by 55 minutes. Conservative route decision uses the earlier edge.</div></div></section>
+          <section class="card"><div class="card-head"><h3>Recheck triggers</h3><span class="tag">explicit</span></div><div class="trigger"><p>A decision changes only after new candidate evidence is reviewed. No automated runtime mutation.</p><button type="button" data-trigger>Thunder heard at CP085</button><button type="button" data-trigger>Radar edge within 10 km</button><button type="button" data-trigger>QPF freshness exceeds 90 min</button></div></section>
+        </aside>
+      </div>
+      <p class="prototype-note">Standalone design prototype · fictionalized route timings for interaction design · weather evidence remains advisory, candidate-only, and cache-only.</p>
+    </main>
+  </div>
+  <div class="toast" role="status" aria-live="polite" id="toast"><strong>Candidate evidence recheck queued</strong><span>No external request was sent and no runtime safety state changed.</span></div>
+  <script>
+    const scenarios = {
+      current: ["CHANGE PLAN", "Leave the exposed ridge before 13:00. Move the summit stop to the return window; if the 11:30 radar update expands west, delay departure 24–48 hours.", "CP087 → CP093", "12:40–15:20", "11:30"],
+      rain: ["DELAY", "The prior 24-hour rainfall raises crossing, wet-slope and loose-ground uncertainty. Wait 48 hours, then recheck water level and trail-condition evidence.", "CP081 crossings", "now → +48h", "+24h"],
+      wind: ["CHANGE PLAN", "Avoid the exposed ridge camp. Strong wind plus low temperature shortens the safe stationary window and increases hypothermia pressure.", "CP093 → Summit", "02:00–08:30", "20:00"],
+      disagree: ["NO-GO", "Forecast sources disagree beyond the route buffer. Until the timing split narrows, use the earlier storm arrival and do not enter the exposed segment.", "CP087 gate", "11:40–15:20", "11:30"]
+    };
+    document.querySelectorAll('[data-scenario]').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('[data-scenario]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      const [decision, copy, segment, windowText, recheck] = scenarios[button.dataset.scenario];
+      decisionWord.textContent = decision; decisionCopy.textContent = copy; affectedSegment.textContent = segment; criticalWindow.textContent = windowText; recheckTime.textContent = recheck;
+    }));
+    document.querySelectorAll('[data-layer]').forEach(button => button.addEventListener('click', () => {
+      const next = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', next); document.querySelector('.' + button.dataset.layer).classList.toggle('hidden-layer', !next);
+    }));
+    const times = ['09:00', '11:00', '13:00', '15:00'];
+    timeline.addEventListener('input', () => frameTime.textContent = times[Number(timeline.value)]);
+    function showToast(title) { toast.querySelector('strong').textContent = title; toast.classList.add('show'); window.setTimeout(() => toast.classList.remove('show'), 2800); }
+    recheck.addEventListener('click', () => showToast('Candidate evidence recheck queued'));
+    document.querySelectorAll('[data-trigger]').forEach(button => button.addEventListener('click', () => showToast('Trigger marked for human review')));
+  </script>
+</body>
+</html>

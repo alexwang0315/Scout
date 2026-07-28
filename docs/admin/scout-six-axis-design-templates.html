@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Six Axis UI Studies</title>
+  <style>
+    :root {
+      --ink: #16221f;
+      --paper: #f2efe5;
+      --paper-deep: #e4dece;
+      --moss: #1d5b4f;
+      --moss-dark: #123c36;
+      --signal: #e85234;
+      --sun: #f1bb43;
+      --sky: #80b9bd;
+      --line: rgba(22, 34, 31, .18);
+      --muted: #61706b;
+      --shadow: 0 26px 70px rgba(22, 34, 31, .13);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 3%, rgba(128, 185, 189, .22), transparent 28rem),
+        repeating-linear-gradient(96deg, transparent 0 46px, rgba(22, 34, 31, .018) 47px),
+        var(--paper);
+      font-family: "Avenir Next", "Gill Sans", sans-serif;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .34;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+    }
+
+    button, a { font: inherit; }
+    button { color: inherit; }
+
+    .masthead {
+      min-height: 68vh;
+      padding: 34px clamp(24px, 5vw, 78px) 64px;
+      color: #f7f1e5;
+      overflow: hidden;
+      position: relative;
+      background:
+        linear-gradient(118deg, rgba(10, 35, 31, .98), rgba(20, 65, 56, .93)),
+        var(--moss-dark);
+    }
+
+    .masthead::after {
+      content: "六";
+      position: absolute;
+      right: -2vw;
+      bottom: -22vh;
+      color: rgba(255, 255, 255, .035);
+      font: 700 min(70vw, 720px)/1 "Bodoni 72", Didot, serif;
+      transform: rotate(-8deg);
+    }
+
+    .topline, .hero, .chapter { position: relative; z-index: 1; }
+
+    .topline {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: center;
+      padding-bottom: 22px;
+      border-bottom: 1px solid rgba(255, 255, 255, .2);
+    }
+
+    .brand {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .edition { color: rgba(255, 255, 255, .62); font: 13px/1.4 ui-monospace, monospace; }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
+      gap: clamp(36px, 7vw, 100px);
+      align-items: end;
+      padding-top: clamp(62px, 10vw, 132px);
+    }
+
+    .eyebrow {
+      color: var(--sun);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      max-width: 900px;
+      margin: 16px 0 20px;
+      font: 500 clamp(58px, 8.6vw, 132px)/.83 "Bodoni 72", Didot, "Times New Roman", serif;
+      letter-spacing: -.055em;
+    }
+
+    h1 em { color: var(--sun); font-style: italic; }
+
+    .hero-copy {
+      max-width: 480px;
+      margin-bottom: 4px;
+      color: rgba(255, 255, 255, .72);
+      font-size: clamp(16px, 1.7vw, 21px);
+      line-height: 1.65;
+    }
+
+    .hero-note {
+      padding: 22px 0 6px 24px;
+      border-left: 3px solid var(--signal);
+    }
+
+    .hero-note strong { display: block; margin-bottom: 9px; font-size: 22px; }
+    .hero-note span { color: rgba(255, 255, 255, .64); line-height: 1.6; }
+
+    .chapter {
+      padding: 92px clamp(20px, 5vw, 76px) 110px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .chapter-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, .55fr);
+      gap: 40px;
+      align-items: end;
+      margin-bottom: 42px;
+    }
+
+    .chapter-index { color: var(--signal); font: 700 12px/1 ui-monospace, monospace; letter-spacing: .16em; }
+    h2 { margin: 10px 0 0; font: 500 clamp(40px, 5vw, 70px)/.95 "Bodoni 72", Didot, serif; letter-spacing: -.035em; }
+    .chapter-head p { margin: 0; color: var(--muted); line-height: 1.65; }
+
+    .prototype {
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      background: #faf8f1;
+    }
+
+    .prototype-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 56px;
+      padding: 12px 18px;
+      color: rgba(255, 255, 255, .72);
+      background: #122b27;
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .prototype-bar strong { color: #fff; }
+    .live-dot::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #71d7a6; box-shadow: 0 0 0 5px rgba(113, 215, 166, .12); }
+
+    /* Study 01 — Decision Ridge */
+    .ridge-shell { padding: clamp(24px, 4vw, 56px); background: #efe9da; }
+
+    .decision-strip {
+      display: grid;
+      grid-template-columns: 1.3fr repeat(3, minmax(120px, .55fr));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, .54);
+    }
+
+    .decision-cell { min-height: 82px; padding: 15px 18px; border-right: 1px solid var(--line); }
+    .decision-cell:last-child { border-right: 0; }
+    .decision-cell small { display: block; margin-bottom: 8px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .decision-cell strong { font: 600 17px/1.2 "Avenir Next", sans-serif; }
+    .decision-cell.primary { color: white; background: var(--signal); }
+    .decision-cell.primary small { color: rgba(255, 255, 255, .7); }
+
+    .ridge-track {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+      min-height: 320px;
+      padding: 84px 8px 28px;
+    }
+
+    .ridge-track::before {
+      content: "";
+      position: absolute;
+      left: 6%; right: 6%; top: 45%;
+      height: 44%;
+      background: var(--moss);
+      clip-path: polygon(0 88%, 14% 62%, 29% 70%, 45% 16%, 61% 49%, 76% 23%, 100% 70%, 100% 100%, 0 100%);
+      opacity: .12;
+    }
+
+    .axis-picket {
+      --lift: 0px;
+      position: relative;
+      z-index: 1;
+      min-height: 174px;
+      padding: 17px 14px;
+      border: 1px solid rgba(22, 34, 31, .2);
+      border-radius: 14px 14px 5px 5px;
+      text-align: left;
+      background: rgba(250, 248, 241, .88);
+      cursor: pointer;
+      transform: translateY(var(--lift));
+      transition: transform .25s ease, color .25s ease, background .25s ease, box-shadow .25s ease;
+    }
+
+    .axis-picket:nth-child(2), .axis-picket:nth-child(5) { --lift: -32px; }
+    .axis-picket:nth-child(4) { --lift: -72px; }
+    .axis-picket:hover, .axis-picket[aria-pressed="true"] { color: white; background: var(--moss); box-shadow: 0 20px 36px rgba(29, 91, 79, .22); transform: translateY(calc(var(--lift) - 8px)); }
+    .axis-number { color: var(--signal); font: 700 11px/1 ui-monospace, monospace; }
+    .axis-picket[aria-pressed="true"] .axis-number { color: var(--sun); }
+    .axis-picket b { display: block; margin: 36px 0 5px; font-family: "Bodoni 72", Didot, serif; font-size: 25px; font-weight: 500; }
+    .axis-picket span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .axis-picket:hover span, .axis-picket[aria-pressed="true"] span { color: rgba(255,255,255,.7); }
+
+    .axis-detail {
+      display: grid;
+      grid-template-columns: minmax(190px, .65fr) 1.4fr minmax(170px, .55fr);
+      gap: 22px;
+      align-items: center;
+      padding: 24px;
+      border-radius: 14px;
+      color: white;
+      background: #142c28;
+    }
+
+    .axis-detail small { color: var(--sun); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .axis-detail h3 { margin: 6px 0 0; font: 500 29px/1 "Bodoni 72", Didot, serif; }
+    .axis-detail p { margin: 0; color: rgba(255,255,255,.7); line-height: 1.55; }
+    .axis-detail button { padding: 12px 15px; border: 0; border-radius: 999px; color: #142c28; background: var(--sun); font-weight: 800; cursor: pointer; }
+
+    /* Study 02 — Six Lens */
+    .lens-shell { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 600px; background: #111b1a; }
+    .lens-aside { padding: 32px; color: white; background: #1d5b4f; }
+    .lens-aside h3 { margin: 16px 0 12px; font: 500 38px/1 "Bodoni 72", Didot, serif; }
+    .lens-aside p { color: rgba(255,255,255,.66); line-height: 1.6; }
+    .lens-verdict { margin-top: 42px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.22); }
+    .lens-verdict strong { display: block; margin-top: 7px; color: var(--sun); font-size: 21px; }
+
+    .lens-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+    .lens-card {
+      position: relative;
+      min-height: 300px;
+      padding: 28px;
+      border: 0;
+      border-right: 1px solid rgba(255,255,255,.12);
+      border-bottom: 1px solid rgba(255,255,255,.12);
+      color: #f9f4e8;
+      text-align: left;
+      background: transparent;
+      cursor: pointer;
+      overflow: hidden;
+    }
+
+    .lens-card::after { content: ""; position: absolute; width: 150px; height: 150px; right: -70px; bottom: -70px; border: 1px solid rgba(255,255,255,.15); border-radius: 50%; transition: .35s ease; }
+    .lens-card:hover::after { width: 280px; height: 280px; right: -90px; bottom: -100px; background: rgba(241,187,67,.1); }
+    .lens-card:nth-child(3n) { border-right: 0; }
+    .lens-card .axis-number { color: var(--sun); }
+    .lens-card h3 { margin: 58px 0 10px; font: 500 29px/1 "Bodoni 72", Didot, serif; }
+    .lens-card p { max-width: 26ch; color: rgba(255,255,255,.58); font-size: 13px; line-height: 1.55; }
+    .lens-state { position: absolute; bottom: 24px; left: 28px; color: #9ee0bd; font: 700 11px/1 ui-monospace, monospace; letter-spacing: .08em; }
+
+    /* Study 03 — Field Compass */
+    .compass-shell { display: grid; grid-template-columns: minmax(340px, .85fr) 1.15fr; gap: 0; min-height: 580px; background: #f7f3e8; }
+    .compass-visual { display: grid; place-items: center; min-height: 580px; padding: 36px; background: var(--paper-deep); }
+    .compass {
+      position: relative;
+      width: min(40vw, 420px);
+      aspect-ratio: 1;
+      border: 1px solid var(--ink);
+      border-radius: 50%;
+      background: repeating-radial-gradient(circle, transparent 0 45px, rgba(22,34,31,.08) 46px 47px);
+      animation: arrive .9s cubic-bezier(.2,.8,.2,1) both;
+    }
+
+    .compass::before, .compass::after { content: ""; position: absolute; left: 50%; top: 8%; bottom: 8%; width: 1px; background: rgba(22,34,31,.18); }
+    .compass::after { transform: rotate(60deg); }
+    .compass-core { position: absolute; inset: 28%; display: grid; place-items: center; border-radius: 50%; color: white; text-align: center; background: var(--signal); box-shadow: 0 18px 40px rgba(232,82,52,.25); }
+    .compass-core span { display: block; font-size: 11px; letter-spacing: .1em; }
+    .compass-core strong { display: block; margin-top: 5px; font: 500 23px/1 "Bodoni 72", Didot, serif; }
+
+    .compass-axis { position: absolute; width: 96px; margin: -26px -48px; border: 0; text-align: center; background: transparent; cursor: pointer; }
+    .compass-axis b { display: block; font-family: "Bodoni 72", Didot, serif; font-size: 18px; }
+    .compass-axis span { color: var(--muted); font-size: 10px; }
+    .compass-axis:nth-of-type(1) { left: 50%; top: 6%; }
+    .compass-axis:nth-of-type(2) { left: 88%; top: 28%; }
+    .compass-axis:nth-of-type(3) { left: 88%; top: 72%; }
+    .compass-axis:nth-of-type(4) { left: 50%; top: 94%; }
+    .compass-axis:nth-of-type(5) { left: 12%; top: 72%; }
+    .compass-axis:nth-of-type(6) { left: 12%; top: 28%; }
+    .compass-axis:hover b { color: var(--signal); }
+
+    .field-brief { padding: clamp(34px, 5vw, 68px); }
+    .field-brief h3 { max-width: 12ch; margin: 12px 0 30px; font: 500 clamp(38px, 5vw, 62px)/.95 "Bodoni 72", Didot, serif; }
+    .brief-line { display: grid; grid-template-columns: 100px 1fr; gap: 18px; padding: 18px 0; border-top: 1px solid var(--line); }
+    .brief-line small { color: var(--muted); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .brief-line strong { line-height: 1.45; }
+    .field-action { display: inline-flex; margin-top: 24px; padding: 13px 19px; border: 1px solid var(--ink); border-radius: 999px; background: transparent; font-weight: 800; cursor: pointer; }
+    .field-action:hover { color: white; background: var(--ink); }
+
+    .recommendation { padding: 54px clamp(24px, 5vw, 76px); color: white; background: var(--signal); }
+    .recommendation strong { display: block; max-width: 1000px; font: 500 clamp(30px, 4vw, 55px)/1.03 "Bodoni 72", Didot, serif; }
+    .recommendation span { display: block; margin-top: 18px; color: rgba(255,255,255,.75); }
+
+    @keyframes arrive { from { opacity: 0; transform: scale(.88) rotate(-8deg); } to { opacity: 1; transform: none; } }
+
+    @media (max-width: 900px) {
+      .hero, .chapter-head, .lens-shell, .compass-shell { grid-template-columns: 1fr; }
+      .decision-strip { grid-template-columns: 1fr 1fr; }
+      .decision-cell:nth-child(2) { border-right: 0; }
+      .ridge-track { grid-template-columns: repeat(3, 1fr); gap: 18px 10px; }
+      .axis-picket { --lift: 0px !important; }
+      .axis-detail { grid-template-columns: 1fr; }
+      .lens-grid { grid-template-columns: repeat(2, 1fr); }
+      .lens-card:nth-child(3n) { border-right: 1px solid rgba(255,255,255,.12); }
+      .lens-card:nth-child(2n) { border-right: 0; }
+      .compass { width: min(78vw, 420px); }
+    }
+
+    @media (max-width: 560px) {
+      .masthead { min-height: auto; }
+      .topline { align-items: flex-start; flex-direction: column; }
+      .decision-strip, .ridge-track, .lens-grid { grid-template-columns: 1fr; }
+      .decision-cell, .lens-card { border-right: 0; }
+      .ridge-track { padding-top: 32px; }
+      .axis-picket { min-height: 128px; }
+      .axis-picket b { margin-top: 20px; }
+      .compass-visual { min-height: 420px; padding: 12px; }
+      .compass-axis { width: 76px; margin-left: -38px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="topline">
+      <span class="brand">Scout AI · Interface Field Studies</span>
+      <span class="edition">STANDARD 0.1 / SIX AXIS / 2026</span>
+    </div>
+    <div class="hero">
+      <div>
+        <span class="eyebrow">Exploring for Six Axis</span>
+        <h1>六力不是成績，<br>是<em>下一步。</em></h1>
+        <p class="hero-copy">三種 Dashboard 設計，把探索、自信、勇氣、路線、天氣與地圖，從六張資訊卡轉化為可下鑽、可解釋、可執行的決策介面。</p>
+      </div>
+      <aside class="hero-note">
+        <strong>Design rule 01</strong>
+        <span>先呈現 Scout 的保守判斷，再揭露是哪一力、哪一份證據與哪一個限制改變了決策。</span>
+      </aside>
+    </div>
+  </header>
+
+  <main>
+    <section class="chapter" id="decision-ridge">
+      <div class="chapter-head">
+        <div><span class="chapter-index">STUDY 01 / RECOMMENDED</span><h2>Decision Ridge</h2></div>
+        <p>適合桌面 Dashboard 首頁。六力沿著「行程稜線」排列，能力不是平分版面，而是依目前任務風險形成高低節奏。點選任一力，立即看到問題、判斷與下一步。</p>
+      </div>
+      <div class="prototype">
+        <div class="prototype-bar"><strong>奇萊南華 · Day 1</strong><span class="live-dot">candidate evidence · reviewed 08:40</span></div>
+        <div class="ridge-shell">
+          <div class="decision-strip">
+            <div class="decision-cell primary"><small>Scout decision</small><strong>CHANGE PLAN</strong></div>
+            <div class="decision-cell"><small>Main pressure</small><strong>Weather × Pace</strong></div>
+            <div class="decision-cell"><small>Turnaround</small><strong>11:30 · CP4</strong></div>
+            <div class="decision-cell"><small>Residual risk</small><strong>午後稜線強風</strong></div>
+          </div>
+          <div class="ridge-track" data-axis-controls>
+            <button class="axis-picket" type="button" aria-pressed="true" data-axis="explore"><span class="axis-number">01</span><b>探索力</b><span>Route Context</span></button>
+            <button class="axis-picket" type="button" aria-pressed="false" data-axis="pace"><span class="axis-number">02</span><b>自信力</b><span>Pace Fit</span></button>
+            <button class="axis-picket" type="button" aria-pressed="false" data-axis="permission"><span class="axis-number">03</span><b>勇氣力</b><span>Permission</span></button>
+            <button class="axis-picket" type="button" aria-pressed="false" data-axis="route"><span class="axis-number">04</span><b>路線力</b><span>Architecture</span></button>
+            <button class="axis-picket" type="button" aria-pressed="false" data-axis="weather"><span class="axis-number">05</span><b>天氣力</b><span>Weather</span></button>
+            <button class="axis-picket" type="button" aria-pressed="false" data-axis="map"><span class="axis-number">06</span><b>地圖力</b><span>Navigation</span></button>
+          </div>
+          <div class="axis-detail" aria-live="polite">
+            <div><small id="ridge-role">Experience Guide</small><h3 id="ridge-title">哪裡值得停？</h3></div>
+            <p id="ridge-copy">把歷史、自然、地形與季節觀察點投影到 CP Graph；值得停不等於現在可以停。</p>
+            <button type="button" id="ridge-action">開啟 Route Context →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter" id="six-lens">
+      <div class="chapter-head">
+        <div><span class="chapter-index">STUDY 02 / ANALYTICAL</span><h2>Six-Lens Console</h2></div>
+        <p>適合管理者與 evidence review。六力成為六個「判讀鏡頭」，每一格只顯示一個關鍵問題與目前狀態；技術證據保持第二層，不再佔據主要視線。</p>
+      </div>
+      <div class="prototype">
+        <div class="prototype-bar"><strong>Six-Lens review</strong><span>selected trip / chialai-nanhua-d1</span></div>
+        <div class="lens-shell">
+          <aside class="lens-aside">
+            <span class="eyebrow">Cross-axis synthesis</span>
+            <h3>今天適不適合這隊人走？</h3>
+            <p>Scout AI 不平均六力分數；它找出彼此牽制的能力與最先耗盡的 buffer。</p>
+            <div class="lens-verdict"><small>Current answer</small><strong>改走低風險短版</strong></div>
+          </aside>
+          <div class="lens-grid">
+            <button class="lens-card" type="button"><span class="axis-number">01 · 探索力</span><h3>沿途值得什麼？</h3><p>文化、自然與觀察價值，降低只為攻頂的壓力。</p><span class="lens-state">READY · 8 sources</span></button>
+            <button class="lens-card" type="button"><span class="axis-number">02 · 自信力</span><h3>隊伍跟得上嗎？</h3><p>最慢成員、休息節奏與後段衰退共同形成 pace gate。</p><span class="lens-state">REVIEW · −40 min</span></button>
+            <button class="lens-card" type="button"><span class="axis-number">03 · 勇氣力</span><h3>此刻可以做嗎？</h3><p>回答能不能停、拍、等、攻頂或撤退，以及最晚離開時間。</p><span class="lens-state">CONDITIONAL · 6 min</span></button>
+            <button class="lens-card" type="button"><span class="axis-number">04 · 路線力</span><h3>哪裡失去容錯？</h3><p>CP Graph、難點、撤退點、補給點與 turnaround window。</p><span class="lens-state">READY · CP4 gate</span></button>
+            <button class="lens-card" type="button"><span class="axis-number">05 · 天氣力</span><h3>天氣改變什麼？</h3><p>不只顯示預報，而是指出受影響路段與替代行動。</p><span class="lens-state">PRESSURE · 13:00</span></button>
+            <button class="lens-card" type="button"><span class="axis-number">06 · 地圖力</span><h3>撤退方向清楚嗎？</h3><p>離線地圖、GPX、等高線、岔路與 terrain risk 的可用性。</p><span class="lens-state">GAP · 1 layer</span></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter" id="field-compass">
+      <div class="chapter-head">
+        <div><span class="chapter-index">STUDY 03 / FIELD COMPACT</span><h2>Field Compass</h2></div>
+        <p>適合窄螢幕、Wearable 或現場模式。六力環繞 Scout AI 決策核心；使用者不需要讀完整 Dashboard，只要知道目前判斷、限制與改判條件。</p>
+      </div>
+      <div class="prototype">
+        <div class="prototype-bar"><strong>Field brief · CP3</strong><span class="live-dot">offline package available</span></div>
+        <div class="compass-shell">
+          <div class="compass-visual">
+            <div class="compass">
+              <button class="compass-axis" type="button" data-field="explore"><b>探索</b><span>值得停</span></button>
+              <button class="compass-axis" type="button" data-field="pace"><b>自信</b><span>慢 18m</span></button>
+              <button class="compass-axis" type="button" data-field="permission"><b>勇氣</b><span>可停 6m</span></button>
+              <button class="compass-axis" type="button" data-field="route"><b>路線</b><span>CP4 gate</span></button>
+              <button class="compass-axis" type="button" data-field="weather"><b>天氣</b><span>風增強</span></button>
+              <button class="compass-axis" type="button" data-field="map"><b>地圖</b><span>離線 OK</span></button>
+              <div class="compass-core"><div><span>SCOUT AI</span><strong>條件式前進</strong></div></div>
+            </div>
+          </div>
+          <div class="field-brief">
+            <span class="eyebrow">Next safe action</span>
+            <h3>可以停，但最多 6 分鐘。</h3>
+            <div class="brief-line"><small>Leave by</small><strong>13:42 前離開此觀察點</strong></div>
+            <div class="brief-line"><small>Cost</small><strong>消耗 6 分鐘 daylight buffer</strong></div>
+            <div class="brief-line"><small>Recheck if</small><strong>能見度下降、風勢再升級或隊尾落後超過 25 分鐘</strong></div>
+            <button class="field-action" type="button">查看判斷依據 →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="recommendation">
+    <strong>建議 Dashboard 採用 Decision Ridge；Evidence review 採用 Six-Lens；現場窄螢幕採用 Field Compass。</strong>
+    <span>同一份六力資料契約，三種資訊密度，不把 preview evidence 誤當 runtime safety truth。</span>
+  </footer>
+
+  <script>
+    const axisContent = Object.freeze({
+      explore: ["Experience Guide", "哪裡值得停？", "把歷史、自然、地形與季節觀察點投影到 CP Graph；值得停不等於現在可以停。", "開啟 Route Context →"],
+      pace: ["Pace Guardian", "隊伍跟得上嗎？", "用最慢成員、休息頻率、後段衰退與 Route Boss Demand 判斷腳程匹配。", "開啟 Pace Fit →"],
+      permission: ["Micro-Decision Agent", "此刻可以做嗎？", "把目前 CP、時間差、風險預算與撤退窗口，收斂成可停多久與最晚離開時間。", "開啟 Permission →"],
+      route: ["Route Planner", "哪裡失去容錯？", "用 CP Graph 標示難點、撤退點、補給點與 turnaround gate，不只展示距離與爬升。", "開啟 Architecture →"],
+      weather: ["Risk Sentinel", "天氣改變什麼？", "把 CWA、QPF、前期降雨、風與能見度，轉成受影響路段及 Go / Delay / Change Plan。", "開啟 Weather →"],
+      map: ["Terrain Navigator", "撤退方向清楚嗎？", "檢查離線地圖、GPX、等高線、岔路與地形風險圖層是否足以支持撤退。", "開啟 Navigation →"]
+    });
+
+    document.querySelectorAll("[data-axis-controls] [data-axis]").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll("[data-axis-controls] [data-axis]").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+        const [role, title, copy, action] = axisContent[button.dataset.axis];
+        document.querySelector("#ridge-role").textContent = role;
+        document.querySelector("#ridge-title").textContent = title;
+        document.querySelector("#ridge-copy").textContent = copy;
+        document.querySelector("#ridge-action").textContent = action;
+      });
+    });
+  </script>
+</body>
+</html>
