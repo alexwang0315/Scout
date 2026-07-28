@@ -1,0 +1,367 @@
+{
+  "schema_version": "case-study-addition.v0.1",
+  "case_id": "tangmadan_butterfly_valley_rockfall_seepage_2026",
+  "case_slug": "tangmadan-butterfly-valley-rockfall-seepage-2026",
+  "status": "draft",
+  "created_at": "2026-06-29T00:00:00+08:00",
+  "sources": [
+    {
+      "source_id": "src_001",
+      "type": "url",
+      "title": "唐麻丹山蝴蝶谷步道落石意外 4死1傷",
+      "url": "https://www.cna.com.tw/news/asoc/202606280090.aspx",
+      "publisher": "Central News Agency",
+      "published_date": "2026-06-28",
+      "accessed_at": "2026-06-29",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_002",
+      "type": "url",
+      "title": "唐麻丹山步道 - 山林悠遊網",
+      "url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=054",
+      "publisher": "Forestry and Nature Conservation Agency",
+      "published_date": null,
+      "accessed_at": "2026-06-29",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_003",
+      "type": "url",
+      "title": "唐麻丹山蝴蝶谷步道5/1重開 1.4K處封閉改道",
+      "url": "https://www.cna.com.tw/news/aloc/202604300065.aspx",
+      "publisher": "Central News Agency",
+      "published_date": "2026-04-30",
+      "accessed_at": "2026-06-29",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_004",
+      "type": "attachment_image",
+      "title": "User-provided Google Earth satellite screenshot near Tangmadan Shan and Butterfly Valley Waterfall",
+      "url": null,
+      "publisher": "user_attachment",
+      "published_date": null,
+      "accessed_at": "2026-06-29",
+      "reliability": "assumption",
+      "attachment_path": "/tmp/codex-remote-attachments/019e2084-0bea-7420-8f08-091154b354d8/AF537AF9-2C58-4CEF-8588-4CB4E9993981/1-貼上的圖片-1.jpg",
+      "text_summary": "Satellite screenshot shows the Tangmadan Shan route, Butterfly Valley Waterfall area, red-marked slope or drainage-looking features, and visible coordinate labels. It is not an official survey layer."
+    },
+    {
+      "source_id": "src_005",
+      "type": "pasted_text",
+      "title": "User-provided seepage and rockfall risk interpretation",
+      "url": null,
+      "publisher": "pasted_text",
+      "published_date": null,
+      "accessed_at": "2026-06-29",
+      "reliability": "assumption",
+      "text_summary": "User supplied a hydrology and geology interpretation linking hidden catchments, groundwater seepage, fractured rock, antecedent rain lag, and rapid passage strategy."
+    },
+    {
+      "source_id": "src_006",
+      "type": "url",
+      "title": "SPL4SMGP.008 SMAP L4 Global 3-hourly 9-km Surface and Root Zone Soil Moisture",
+      "url": "https://developers.google.com/earth-engine/datasets/catalog/NASA_SMAP_SPL4SMGP_008",
+      "publisher": "Google Earth Engine Data Catalog",
+      "published_date": null,
+      "accessed_at": "2026-06-29",
+      "reliability": "reported_fact",
+      "collection_id": "NASA/SMAP/SPL4SMGP/008",
+      "text_summary": "Official Earth Engine catalog entry for SMAP L4 surface and root-zone soil moisture used as candidate hydrologic context."
+    }
+  ],
+  "quotes": [
+    {
+      "quote_id": "q_001",
+      "source_id": "src_001",
+      "text": "唐麻丹山蝴蝶谷步道上發生落石意外，共造成4死1傷。",
+      "reason": "reported incident severity",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_002",
+      "source_id": "src_001",
+      "text": "梨山雨量站27日累積雨量75.6毫米",
+      "reason": "reported same-day rainfall context",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_003",
+      "source_id": "src_002",
+      "text": "6月27日至8月30日暫停開放",
+      "reason": "official trail closure context",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_004",
+      "source_id": "src_002",
+      "text": "流水終年不歇",
+      "reason": "official perennial-waterfall route context",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_005",
+      "source_id": "src_003",
+      "text": "右側邊坡不穩、時有落石",
+      "reason": "reported earlier slope instability on related trail section",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_006",
+      "source_id": "src_004",
+      "text": "N24°09'34.56\"",
+      "reason": "visible coordinate label in user-provided screenshot",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_007",
+      "source_id": "src_005",
+      "text": "破碎岩層且有持續水跡",
+      "reason": "user-provided risk framing",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_008",
+      "source_id": "src_005",
+      "text": "快速通過、不逗留",
+      "reason": "user-provided field behavior framing",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_009",
+      "source_id": "src_006",
+      "text": "global 3-hourly data on surface and root-zone soil moisture",
+      "reason": "official GEE SMAP L4 soil-moisture availability",
+      "copyright_check": "short_excerpt"
+    }
+  ],
+  "source_facts": [
+    {
+      "fact_id": "fact_001",
+      "summary": "CNA reported a 2026-06-27 rockfall incident on Tangmadan Shan Butterfly Valley trail causing four deaths and one injury.",
+      "source_refs": [
+        "q_001"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_002",
+      "summary": "The Forestry and Nature Conservation Agency trail page showed the Tangmadan Shan trail closed from 2026-06-27 to 2026-08-30 after the incident.",
+      "source_refs": [
+        "q_003"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_003",
+      "summary": "The official trail page describes the Butterfly Valley Waterfall route as having perennial flowing water, supporting the need to distinguish current rainfall from persistent local water features.",
+      "source_refs": [
+        "q_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_004",
+      "summary": "CNA reported same-day rainfall context from Lishan station; this does not by itself prove the accident site's local hydrology, but it is relevant antecedent-water context.",
+      "source_refs": [
+        "q_002"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_005",
+      "summary": "A 2026-04-30 CNA report on the trail reopening cited earlier right-slope instability and rockfall at a related Butterfly Valley trail section that was bypassed by rerouting.",
+      "source_refs": [
+        "q_005"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_006",
+      "summary": "The user-provided screenshot shows a Google Earth satellite view around Tangmadan Shan and Butterfly Valley Waterfall with red markings over steep terrain near the route; this is image context, not official GIS evidence.",
+      "source_refs": [
+        "q_006"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "fact_id": "fact_007",
+      "summary": "The pasted interpretation hypothesizes hidden catchment drainage, subsurface seepage, fractured rock, and antecedent-rain lag as possible reasons for water presence without obvious rain or visible upstream stream.",
+      "source_refs": [
+        "q_007"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "fact_id": "fact_008",
+      "summary": "The Google Earth Engine Data Catalog lists SMAP L4 surface and root-zone soil moisture collection NASA/SMAP/SPL4SMGP/008, which Scout can use as candidate hydrologic background rather than site-scale proof.",
+      "source_refs": [
+        "q_009"
+      ],
+      "confidence": "reported_fact"
+    }
+  ],
+  "timeline": [
+    {
+      "time_ref": "2026-04-30",
+      "event": "related_butterfly_valley_trail_reopening_report_noted_prior_slope_instability_and_rockfall",
+      "source_refs": [
+        "q_005"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-27",
+      "event": "tangmadan_butterfly_valley_trail_rockfall_incident_reportedly_caused_four_deaths_and_one_injury",
+      "source_refs": [
+        "q_001"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-27",
+      "event": "same_day_rainfall_context_reported_from_lishan_station",
+      "source_refs": [
+        "q_002"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-27 to 2026-08-30",
+      "event": "official_trail_page_showed_tangmadan_shan_trail_temporarily_closed",
+      "source_refs": [
+        "q_003"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "case-study interpretation",
+      "event": "user_connected_visible_or_reported_water_features_to_rockfall_exposure_and_fast_passage_strategy",
+      "source_refs": [
+        "q_007",
+        "q_008"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "time_ref": "case-study data-source review",
+      "event": "gee_smap_l4_identified_as_candidate_soil_moisture_context_source",
+      "source_refs": [
+        "q_009"
+      ],
+      "confidence": "reported_fact"
+    }
+  ],
+  "taxonomy_keys": [
+    "low_tolerance_terrain",
+    "terrain_feature_checkpoint_planning",
+    "near_route_fall_hazard",
+    "route_blocked_waiting",
+    "incident_package_for_guardian",
+    "field_actions",
+    "cold_wet_risk",
+    "descent_attention_risk"
+  ],
+  "scout_implications": [
+    {
+      "implication_id": "imp_001",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "terrain_features.seepage_rockfall_checkpoint",
+      "type": "case_study_signal",
+      "summary": "Scout should flag routes where official sources, recent incidents, or local observations indicate wet rock faces, seepage, fractured slopes, waterfalls, or prior rockfall as terrain checkpoints requiring human review.",
+      "source_refs": [
+        "q_001",
+        "q_004",
+        "q_005",
+        "q_007"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_002",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "weather_context.antecedent_rain_lag",
+      "type": "case_study_signal",
+      "summary": "Scout should keep antecedent rainfall, official closure state, and persistent-water terrain separate from the user's immediate weather impression; clear weather at the moment should not erase wet-slope exposure prompts.",
+      "source_refs": [
+        "q_002",
+        "q_003",
+        "q_004",
+        "q_009"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_003",
+      "phase": "case_study_corpus",
+      "hook": "field_decision.wet_rockfall_passage",
+      "type": "case_study_signal",
+      "summary": "A field prompt could advise humans to minimize exposure time, avoid resting or photographing under wet fractured slopes, pass one at a time if appropriate, or turn around when official closures or active rockfall signs are present.",
+      "source_refs": [
+        "q_001",
+        "q_003",
+        "q_008"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_004",
+      "phase": "case_study_corpus",
+      "hook": "source_quality.satellite_hydrology_boundary",
+      "type": "case_study_signal",
+      "summary": "Scout should treat satellite-image drainage and seepage interpretation as a hypothesis unless confirmed by field observation, official GIS layers, terrain models, rainfall data, or geologic mapping.",
+      "source_refs": [
+        "q_006",
+        "q_007"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_005",
+      "phase": "case_study_corpus",
+      "hook": "incident_package.rockfall_exposure_context",
+      "type": "case_study_signal",
+      "summary": "If rockfall occurs, Scout should help humans package location, trail section, closure status, visible water or seepage, rainfall context, injury count, exposure zone, and official source references for approved rescue communication.",
+      "source_refs": [
+        "q_001",
+        "q_002",
+        "q_003",
+        "q_006"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_006",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "gee_environment.smap_l4_soil_moisture_candidate",
+      "type": "case_study_signal",
+      "summary": "Scout can use GEE SMAP L4 soil moisture as route-corridor hydrologic background, but should label it coarse candidate evidence and combine it with terrain, geology, rainfall, closure, and field-observation evidence.",
+      "source_refs": [
+        "q_006",
+        "q_007",
+        "q_009"
+      ],
+      "confidence": "assumption"
+    }
+  ],
+  "boundaries": {
+    "medical": "not_diagnosis",
+    "legal": "no_fault_assignment",
+    "rescue": "not_official_sop",
+    "phase_change": "requires_human_review"
+  },
+  "discussion_questions": [
+    "Should Scout treat persistent water stains, seepage, waterfall corridors, and prior rockfall reports as a combined terrain checkpoint before a route is accepted?",
+    "How should Scout present antecedent rainfall and hidden catchment uncertainty without implying it has proven subsurface hydrology?",
+    "When a wet fractured slope is already on route, should Scout prompt for quick passage, one-at-a-time exposure reduction, no lingering, or turnaround review?",
+    "Which official layers or data sources are required before a satellite-image drainage hypothesis can become accepted Scout route evidence?",
+    "Should GEE SMAP L4 soil moisture appear as a route-corridor background layer, a pre-trip risk matrix factor, or both?"
+  ],
+  "promotion": {
+    "recommended_target": "docs/case_studies/accepted/",
+    "phase_1_patch_required": false,
+    "phase_2_patch_required": false,
+    "fixture_required": false
+  }
+}
