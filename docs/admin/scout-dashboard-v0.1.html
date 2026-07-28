@@ -1362,6 +1362,12 @@
       will-change: transform;
     }
 
+    .dashboard-map-stage > svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
     .dashboard-map-controls {
       position: absolute;
       z-index: 30;
@@ -6292,11 +6298,14 @@
       height: 100%;
     }
 
+    .dashboard-rudy-tile-layer,
+    .dashboard-rudy-tile-layer image,
     .navigation-rudy-tile-layer,
     .navigation-rudy-tile-layer image {
       pointer-events: none;
     }
 
+    .dashboard-rudy-tile-layer,
     .navigation-rudy-tile-layer {
       opacity: .94;
     }
@@ -7193,10 +7202,10 @@
       {id: "DASH-023", category: "Exploring for Six Axis", title: "Body Index directory watch lifecycle boundary", description: "只讀 watcher status，並要求 live watcher 為 stopped。", run: diagnosticCheck023},
       {id: "DASH-024", category: "Exploring for Six Axis", title: "Architecture workbench 與 Segment Microscope", description: "確認 route architecture projection 與 candidate boundary。", run: diagnosticCheck024},
       {id: "DASH-025", category: "Exploring for Six Axis", title: "Navigation Terrain Intelligence 與 Rudy+TW", description: "確認 bounded terrain projection 與唯一 Rudy+TW basemap contract。", run: diagnosticCheck025},
-      {id: "DASH-026", category: "Map & Evidence", title: "Map、Navigation、Weather evidence hover hint", description: "確認三張圖的 evidence 在滑鼠移入與鍵盤 focus 時都能顯示內容提示。", run: diagnosticCheck026},
-      {id: "DASH-027", category: "Map & Evidence", title: "三圖框選縮放與鍵盤平移", description: "確認三張圖都支援矩形框選放大／縮小，以及方向鍵平移。", run: diagnosticCheck027},
-      {id: "DASH-028", category: "Map & Evidence", title: "三圖圖磚、向量與單圖例外政策", description: "確認底圖／圖層使用圖磚或向量；單一圖片僅限明確允許的主題 overlay。", run: diagnosticCheck028},
-      {id: "DASH-029", category: "Map & Evidence", title: "三圖基本 Zoom、Pan 與 Fit", description: "確認三張圖都具備放大、縮小、滑鼠平移與 Fit／Reset。", run: diagnosticCheck029},
+      {id: "DASH-026", category: "Map & Evidence", title: "所有 Dashboard 地圖 evidence hover hint", description: "確認目前 registry 內每張地圖的 evidence 在滑鼠移入與鍵盤 focus 時都能顯示內容提示。", run: diagnosticCheck026},
+      {id: "DASH-027", category: "Map & Evidence", title: "所有 Dashboard 地圖框選縮放與鍵盤平移", description: "確認目前 registry 內每張地圖都支援矩形框選放大／縮小，以及方向鍵平移。", run: diagnosticCheck027},
+      {id: "DASH-028", category: "Map & Evidence", title: "所有 Dashboard 地圖圖磚、向量與單圖例外政策", description: "確認目前 registry 內每張地圖使用圖磚或向量；單一圖片僅限明確允許的主題 overlay。", run: diagnosticCheck028},
+      {id: "DASH-029", category: "Map & Evidence", title: "所有 Dashboard 地圖基本 Zoom、Pan 與 Fit", description: "確認目前 registry 內每張地圖都具備放大、縮小、滑鼠平移與 Fit／Reset。", run: diagnosticCheck029},
       {id: "DASH-030", category: "Map & Evidence", title: "Evidence 是否有計數為 0 的類別", description: "確認 Evidence 群組與 Evidence Timeline 子類別沒有 count=0；若有則列出類別名稱。", run: diagnosticCheck030},
     ]);
     const loadedDataScopes = new Set();
@@ -7402,8 +7411,18 @@
       "contours",
       "thematic",
     ]);
+    const DASHBOARD_MAP_SURFACES = Object.freeze([
+      {id: "overview-map", route: "home", label: "Overview Map preview", family: "dashboard-preview", basemapPolicy: "rudy-twmap-only"},
+      {id: "lbs-map", route: "features-lbs", label: "LBS Map", family: "dashboard-preview", basemapPolicy: "rudy-twmap-only"},
+      {id: "permission-map", route: "outdoor-permission", label: "Permission Map", family: "dashboard-preview", basemapPolicy: "rudy-twmap-only"},
+      {id: "map", route: "map", label: "Map", family: "canonical-pretrip", basemapPolicy: "full-canonical"},
+      {id: "weather-map", route: "outdoor-weather", label: "Weather Map", family: "canonical-pretrip", basemapPolicy: "rudy-twmap-only"},
+      {id: "navigation-map", route: "outdoor-navigation", label: "Navigation Map", family: "navigation", basemapPolicy: "rudy-twmap-only"},
+      {id: "architecture-map", route: "outdoor-architecture", label: "Architecture Map", family: "architecture", basemapPolicy: "rudy-twmap-only"},
+      {id: "pace-fit-map", route: "outdoor-pace-fit", label: "Pace Fit Map", family: "pace-fit", basemapPolicy: "rudy-twmap-only"},
+    ]);
 
-    const NAVIGATION_RUDY_TILE_SOURCE = Object.freeze({
+    const DASHBOARD_RUDY_TILE_SOURCE = Object.freeze({
       sourceKind: "wmts_kvp_tile",
       wmtsEndpoint: "https://tile.happyman.idv.tw/mp/service",
       wmtsLayer: "rudy_twmap",
@@ -7414,8 +7433,11 @@
       minZoom: 5,
       maxZoom: 19,
     });
-    const NAVIGATION_RUDY_VIEWBOX = Object.freeze({width: 1000, height: 392});
-    const NAVIGATION_RUDY_INITIAL_TILE_LIMIT = 24;
+    const DASHBOARD_RUDY_VIEWBOX = Object.freeze({width: 1000, height: 392});
+    const DASHBOARD_RUDY_INITIAL_TILE_LIMIT = 24;
+    const NAVIGATION_RUDY_TILE_SOURCE = DASHBOARD_RUDY_TILE_SOURCE;
+    const NAVIGATION_RUDY_VIEWBOX = DASHBOARD_RUDY_VIEWBOX;
+    const NAVIGATION_RUDY_INITIAL_TILE_LIMIT = DASHBOARD_RUDY_INITIAL_TILE_LIMIT;
 
     const WEATHER_LAYER_DEFINITIONS = Object.freeze([
       {id: "soil-moisture", label: "Soil moisture", detail: "SMAP L4 hydrology context"},
@@ -8927,7 +8949,7 @@
         <div style="height:12px"></div>
         <details class="panel optional-parameters-frame">
           <summary><span>Map preview</span><small>technical drill down</small></summary>
-          <div class="panel-body">${renderMapPanel()}</div>
+          <div class="panel-body">${renderMapPanel("overview")}</div>
         </details>
       `;
     }
@@ -9565,7 +9587,7 @@
           ])}
         </div>
         <div style="height:12px"></div>
-        ${renderMapPanel()}
+        ${renderMapPanel("lbs")}
       `;
     }
 
@@ -11571,138 +11593,209 @@
           `/admin/pretrip?projectId=${encodeURIComponent(projectId())}`,
           {text: true, timeoutMs: 60000},
         );
-        return {
-          Map: {
+        const sharedControls = renderDashboardMapViewport(
+          "diagnostic-shared-map-contract",
+          "Dashboard diagnostic map",
+          "<svg><path></path></svg>",
+          {renderPolicy: DASHBOARD_MAP_RENDER_POLICY},
+        );
+        const sharedController = diagnosticSourceText(createDashboardMapViewportController);
+        const sharedPolicy = diagnosticSourceText(enforceDashboardMapRenderPolicy);
+        const rudyRenderer = [
+          diagnosticSourceText(renderDashboardRudyTileLayer),
+          diagnosticSourceText(navigationRudyTileImages),
+        ].join("\n");
+        const families = {
+          "canonical-pretrip": {
             renderer: pretrip.data,
-            adapter: diagnosticSourceText(applyPretripMapOnlyFrame),
+            controls: pretrip.data,
+            controller: pretrip.data,
+            policy: pretrip.data,
           },
-          Navigation: {
+          "dashboard-preview": {
+            renderer: [
+              diagnosticSourceText(renderMapPanel),
+              rudyRenderer,
+            ].join("\n"),
+            controls: sharedControls,
+            controller: sharedController,
+            policy: sharedPolicy,
+          },
+          navigation: {
             renderer: [
               diagnosticSourceText(renderNavigationWorkspaceMap),
               diagnosticSourceText(renderNavigationRudyTileLayer),
-              diagnosticSourceText(navigationRudyTileImages),
-              diagnosticSourceText(enforceDashboardMapRenderPolicy),
+              rudyRenderer,
             ].join("\n"),
-            controller: diagnosticSourceText(createDashboardMapViewportController),
-            controls: renderDashboardMapViewport("diagnostic-navigation-contract", "Navigation diagnostic map", "<svg></svg>"),
+            controls: sharedControls,
+            controller: sharedController,
+            policy: sharedPolicy,
           },
-          Weather: {
-            renderer: pretrip.data,
-            adapter: [
-              diagnosticSourceText(renderWeatherIntersectionMap),
-              diagnosticSourceText(applyWeatherCwaMapFrame),
+          architecture: {
+            renderer: [
+              diagnosticSourceText(renderArchitectureMap),
+              diagnosticSourceText(architectureMapSlices),
+              diagnosticSourceText(architectureMapCheckpointPoints),
+              rudyRenderer,
             ].join("\n"),
+            controls: sharedControls,
+            controller: sharedController,
+            policy: sharedPolicy,
+          },
+          "pace-fit": {
+            renderer: [
+              diagnosticSourceText(renderPaceFitMiniMap),
+              rudyRenderer,
+            ].join("\n"),
+            controls: sharedControls,
+            controller: sharedController,
+            policy: sharedPolicy,
           },
         };
+        return DASHBOARD_MAP_SURFACES.map(surface => ({
+          ...surface,
+          ...families[surface.family],
+          adapter: surface.id === "map"
+            ? [
+                diagnosticSourceText(ensurePretripMapFrame),
+                diagnosticSourceText(retryPretripMapFrame),
+                diagnosticSourceText(applyPretripMapOnlyFrame),
+              ].join("\n")
+            : surface.id === "weather-map"
+              ? [
+                  diagnosticSourceText(renderWeatherIntersectionMap),
+                  diagnosticSourceText(applyWeatherCwaMapFrame),
+                ].join("\n")
+              : "",
+        }));
       });
     }
 
     async function diagnosticCheck026() {
       const surfaces = await diagnosticMapSurfaceSources();
       const gaps = [];
-      for (const surfaceName of ["Map", "Weather"]) {
-        const source = diagnosticCompactSource(surfaces[surfaceName].renderer);
-        const adapter = diagnosticCompactSource(surfaces[surfaceName].adapter);
-        if (!source.includes('id="hoverHint"')
-          || !source.includes("function showHint(")
-          || !source.includes('addEventListener("mouseenter"')) {
-          gaps.push(`${surfaceName} has no evidence hover/focus hint contract`);
+      for (const surface of surfaces) {
+        const source = diagnosticCompactSource(surface.renderer);
+        const adapter = diagnosticCompactSource(surface.adapter);
+        if (surface.family === "canonical-pretrip") {
+          if (!source.includes('id="hoverHint"')
+            || !source.includes("function showHint(")
+            || !source.includes('addEventListener("mouseenter"')) {
+            gaps.push(`${surface.label} has no evidence hover/focus hint contract`);
+          }
+          if (adapter.includes("#hoverHint { display: none !important")) {
+            gaps.push(`${surface.label} adapter hides #hoverHint`);
+          }
+          continue;
         }
-        if (adapter.includes("#hoverHint { display: none !important")) {
-          gaps.push(`${surfaceName} adapter hides #hoverHint`);
+        if (!source.includes("data-dashboard-map-hint-title")
+          || !source.includes("data-dashboard-map-hint-summary")
+          || !source.includes("tabindex=")) {
+          gaps.push(`${surface.label} has no pointer/focus evidence hint contract`);
         }
-      }
-      const navigation = diagnosticCompactSource(surfaces.Navigation.renderer);
-      if (!navigation.includes("<title>")
-        || !navigation.includes("data-navigation-structure-point-id")
-        || !navigation.includes("data-navigation-live-point-id")) {
-        gaps.push("Navigation evidence has no native SVG hint contract");
       }
       diagnosticRequire(!gaps.length, gaps.join(" · "));
-      return "Map / Navigation / Weather evidence hover and focus hints remain visible";
+      return `${surfaces.length} Dashboard maps expose evidence hover and focus hints`;
     }
 
     async function diagnosticCheck027() {
       const surfaces = await diagnosticMapSurfaceSources();
-      const pretrip = diagnosticCompactSource(surfaces.Map.renderer);
-      for (const marker of [
-        'id="boxZoomMode"',
-        "function beginMapRectangleZoom(",
-        "function finishMapRectangleZoom(",
-        "function handleMapKeyboardPan(",
-        'event.key === "ArrowUp"',
-        'event.key === "ArrowDown"',
-        'event.key === "ArrowLeft"',
-        'event.key === "ArrowRight"',
-      ]) {
-        diagnosticRequire(pretrip.includes(marker), `Map/Weather shared renderer is missing ${marker}.`);
+      for (const surface of surfaces) {
+        const renderer = diagnosticCompactSource(surface.renderer);
+        const adapter = diagnosticCompactSource(surface.adapter);
+        const controls = diagnosticCompactSource(surface.controls);
+        const controller = diagnosticCompactSource(surface.controller);
+        if (surface.family === "canonical-pretrip") {
+          for (const marker of [
+            'id="boxZoomMode"',
+            "function beginMapRectangleZoom(",
+            "function finishMapRectangleZoom(",
+            "function handleMapKeyboardPan(",
+          ]) {
+            diagnosticRequire(renderer.includes(marker), `${surface.label} is missing ${marker}.`);
+          }
+          diagnosticRequire(!adapter.includes("#boxZoomMode { display: none !important"), `${surface.label} adapter hides rectangle zoom.`);
+          diagnosticRequire(adapter.includes("wheelZoom=0"), `${surface.label} does not disable mouse-wheel zoom.`);
+        } else {
+          diagnosticRequire(controls.includes('data-map-control="box-zoom"'), `${surface.label} rectangle zoom control is missing.`);
+          diagnosticRequire(controls.includes('data-map-wheel-zoom="false"'), `${surface.label} does not disable mouse-wheel zoom.`);
+        }
+        for (const key of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) {
+          diagnosticRequire(controller.includes(`event.key === "${key}"`), `${surface.label} keyboard pan ${key} is missing.`);
+        }
       }
-      for (const surfaceName of ["Map", "Weather"]) {
-        const adapter = diagnosticCompactSource(surfaces[surfaceName].adapter);
-        diagnosticRequire(!adapter.includes("#boxZoomMode { display: none !important"), `${surfaceName} adapter hides rectangle zoom.`);
-      }
-      const controls = surfaces.Navigation.controls;
-      const controller = diagnosticCompactSource(surfaces.Navigation.controller);
-      diagnosticRequire(controls.includes('data-map-control="box-zoom"'), "Navigation rectangle zoom control is missing.");
-      for (const key of ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) {
-        diagnosticRequire(controller.includes(`event.key === "${key}"`), `Navigation keyboard pan ${key} is missing.`);
-      }
-      return "Map / Navigation / Weather rectangle zoom and keyboard pan contracts present";
+      return `${surfaces.length} Dashboard maps expose rectangle zoom and keyboard pan · wheel zoom disabled`;
     }
 
     async function diagnosticCheck028() {
       const surfaces = await diagnosticMapSurfaceSources();
-      const pretrip = diagnosticCompactSource(surfaces.Map.renderer);
-      for (const marker of [
-        'data-map-render-policy="tile-vector-approved-single-image"',
-        "function renderRasterLayer(",
-        'data-raster-tile',
-        "function renderOsmPbfVector(",
-        "function renderCwaWeatherImagery(",
-        "function createApprovedSingleImage(",
-        "function enforceMapRenderPolicy(",
-        '"data-map-render-kind": "tile"',
-        '"data-map-render-kind": "approved-single-image"',
-      ]) {
-        diagnosticRequire(pretrip.includes(marker), `Map/Weather renderer is missing ${marker}.`);
+      for (const surface of surfaces) {
+        const renderer = diagnosticCompactSource(surface.renderer);
+        const controls = diagnosticCompactSource(surface.controls);
+        const policy = diagnosticCompactSource(surface.policy);
+        if (surface.basemapPolicy === "full-canonical") {
+          for (const marker of [
+            'data-map-render-policy="tile-vector-approved-single-image"',
+            "function renderRasterLayer(",
+            'data-raster-tile',
+            "function renderOsmPbfVector(",
+            "function createApprovedSingleImage(",
+            "function enforceMapRenderPolicy(",
+          ]) {
+            diagnosticRequire(renderer.includes(marker), `${surface.label} is missing ${marker}.`);
+          }
+          continue;
+        }
+        if (surface.id === "weather-map") {
+          diagnosticRequire(adapter.includes("WEATHER_EMBEDDED_MAP_LAYER_IDS"), "Weather basemap allowlist is missing.");
+          diagnosticRequire(adapter.includes("wheelZoom=0&initialLayers="), "Weather does not request its Rudy+TW-only basemap preset.");
+          diagnosticRequire(WEATHER_EMBEDDED_MAP_LAYER_IDS.length === 2, "Weather embedded layer preset has unexpected layers.");
+          diagnosticRequire(WEATHER_EMBEDDED_MAP_LAYER_IDS[0] === "rudy-twmap", "Weather basemap is not Rudy+TW.");
+          continue;
+        }
+        diagnosticRequire(renderer.includes("<svg") && (renderer.includes("<path") || renderer.includes("<circle")), `${surface.label} vector rendering is missing.`);
+        diagnosticRequire(controls.includes('data-map-render-policy="tile-vector-approved-single-image"'), `${surface.label} render policy marker is missing.`);
+        diagnosticRequire(policy.includes("function enforceDashboardMapRenderPolicy("), `${surface.label} render-policy enforcement is missing.`);
+        diagnosticRequire(renderer.includes("renderDashboardRudyTileLayer"), `${surface.label} Rudy+TW tile rendering is missing.`);
+        diagnosticRequire(renderer.includes('data-dashboard-rudy-tile'), `${surface.label} Rudy+TW tile identity is missing.`);
+        diagnosticRequire(renderer.includes('data-map-render-kind="tile"'), `${surface.label} tile provenance marker is missing.`);
+        diagnosticRequire(renderer.includes('data-map-tile-source="rudy-twmap"'), `${surface.label} basemap tile source is not Rudy+TW.`);
+        diagnosticRequire(!renderer.includes('data-map-tile-source="osm"'), `${surface.label} includes a forbidden OSM basemap tile source.`);
       }
-      const navigation = diagnosticCompactSource(surfaces.Navigation.renderer);
-      diagnosticRequire(navigation.includes("data-navigation-rudy-tile"), "Navigation Rudy+TW tile rendering is missing.");
-      diagnosticRequire(navigation.includes("<svg") && navigation.includes("<path"), "Navigation vector rendering is missing.");
-      diagnosticRequire(navigation.includes('data-map-render-kind="tile"'), "Navigation tile provenance marker is missing.");
-      diagnosticRequire(
-        navigation.includes("function enforceDashboardMapRenderPolicy("),
-        "Navigation render-policy enforcement is missing.",
-      );
       diagnosticRequire(
         ["satellite", "radar", "lidar", "hillshade", "elevation_tint", "slope_shading", "contours", "thematic"]
           .every(kind => DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES.includes(kind)),
         "Single-image overlay allowlist is incomplete.",
       );
-      return `All three maps enforce tiled/vector rendering · approved single-image themes=${DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES.join(", ")}`;
+      return `${surfaces.length} Dashboard maps enforce tiled/vector rendering · approved single-image themes=${DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES.join(", ")}`;
     }
 
     async function diagnosticCheck029() {
       const surfaces = await diagnosticMapSurfaceSources();
-      const pretrip = diagnosticCompactSource(surfaces.Map.renderer);
-      for (const marker of [
-        'id="zoomIn"',
-        'id="zoomOut"',
-        'id="fitRoute"',
-        'id="panMode"',
-        "function beginMapPointerPan(",
-        "function resetMapView(",
-      ]) {
-        diagnosticRequire(pretrip.includes(marker), `Map/Weather shared renderer is missing ${marker}.`);
+      for (const surface of surfaces) {
+        const renderer = diagnosticCompactSource(surface.renderer);
+        const controls = diagnosticCompactSource(surface.controls);
+        const controller = diagnosticCompactSource(surface.controller);
+        if (surface.family === "canonical-pretrip") {
+          for (const marker of [
+            'id="zoomIn"',
+            'id="zoomOut"',
+            'id="fitRoute"',
+            'id="panMode"',
+            "function beginMapPointerPan(",
+            "function resetMapView(",
+          ]) {
+            diagnosticRequire(renderer.includes(marker), `${surface.label} is missing ${marker}.`);
+          }
+        } else {
+          for (const control of ["zoom-in", "zoom-out", "reset", "pan"]) {
+            diagnosticRequire(controls.includes(`data-map-control="${control}"`), `${surface.label} ${control} control is missing.`);
+          }
+          diagnosticRequire(controller.includes("const reset = () =>"), `${surface.label} Fit/Reset behavior is missing.`);
+          diagnosticRequire(controller.includes("const panBy = ("), `${surface.label} pan behavior is missing.`);
+        }
       }
-      const controls = surfaces.Navigation.controls;
-      const controller = diagnosticCompactSource(surfaces.Navigation.controller);
-      for (const control of ["zoom-in", "zoom-out", "reset", "pan"]) {
-        diagnosticRequire(controls.includes(`data-map-control="${control}"`), `Navigation ${control} control is missing.`);
-      }
-      diagnosticRequire(controller.includes("const reset = () =>"), "Navigation Fit/Reset behavior is missing.");
-      diagnosticRequire(controller.includes("const panBy = ("), "Navigation pan behavior is missing.");
-      return "Map / Navigation / Weather Zoom in · Zoom out · Pan · Fit contracts present";
+      return `${surfaces.length} Dashboard maps expose Zoom in · Zoom out · Pan · Fit`;
     }
 
     function diagnosticZeroCountEvidenceCategories(project) {
@@ -11824,6 +11917,15 @@
 
     window.scoutDashboardDiagnostics = Object.freeze({
       cases: DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description}) => ({id, category, title, description})),
+      mapSurfaces: DASHBOARD_MAP_SURFACES.map(
+        ({id, route, label, family, basemapPolicy}) => ({
+          id,
+          route,
+          label,
+          family,
+          basemapPolicy,
+        }),
+      ),
       run: caseId => runDashboardDiagnostic(caseId),
       runAll: () => runAllDashboardDiagnostics(),
       snapshot: () => ({
@@ -12816,14 +12918,27 @@
 
     function navigationRudyBounds(rawBounds) {
       const bounds = {
-        west: Number(rawBounds?.west),
-        east: Number(rawBounds?.east),
-        north: Number(rawBounds?.north),
-        south: Number(rawBounds?.south),
+        west: Number(rawBounds?.west ?? rawBounds?.minLon ?? rawBounds?.min_lon),
+        east: Number(rawBounds?.east ?? rawBounds?.maxLon ?? rawBounds?.max_lon),
+        north: Number(rawBounds?.north ?? rawBounds?.maxLat ?? rawBounds?.max_lat),
+        south: Number(rawBounds?.south ?? rawBounds?.minLat ?? rawBounds?.min_lat),
       };
       if (!Object.values(bounds).every(Number.isFinite)) return null;
       if (!(bounds.east > bounds.west) || !(bounds.north > bounds.south)) return null;
       return bounds;
+    }
+
+    function dashboardRudyPaddedBounds(rawBounds, paddingRatio = .055) {
+      const bounds = navigationRudyBounds(rawBounds);
+      if (!bounds) return null;
+      const longitudePadding = Math.max(.0008, (bounds.east - bounds.west) * paddingRatio);
+      const latitudePadding = Math.max(.0008, (bounds.north - bounds.south) * paddingRatio);
+      return {
+        west: Math.max(-180, bounds.west - longitudePadding),
+        east: Math.min(180, bounds.east + longitudePadding),
+        north: Math.min(85.05112878, bounds.north + latitudePadding),
+        south: Math.max(-85.05112878, bounds.south - latitudePadding),
+      };
     }
 
     function navigationMercatorY(latitude) {
@@ -12904,9 +13019,11 @@
       zoom,
       width = NAVIGATION_RUDY_VIEWBOX.width,
       height = NAVIGATION_RUDY_VIEWBOX.height,
+      surfaceId = "navigation-map",
     ) {
       const range = navigationRudyTileRange(visibleBounds, zoom);
       if (!range) return "";
+      const navigationSurface = surfaceId.startsWith("navigation");
       const tiles = [];
       for (let x = range.xMin; x <= range.xMax; x += 1) {
         for (let y = range.yMin; y <= range.yMax; y += 1) {
@@ -12923,14 +13040,16 @@
           const tileHeight = Math.max(.1, southeast.y - northwest.y);
           tiles.push(`
             <image
-              class="navigation-rudy-tile"
+              class="dashboard-rudy-tile${navigationSurface ? " navigation-rudy-tile" : ""}"
               href="${escapeHtml(navigationRudyTileUrl(zoom, x, y))}"
               x="${northwest.x.toFixed(3)}"
               y="${northwest.y.toFixed(3)}"
               width="${tileWidth.toFixed(3)}"
               height="${tileHeight.toFixed(3)}"
               preserveAspectRatio="none"
-              data-navigation-rudy-tile="${zoom}/${x}/${y}"
+              data-dashboard-rudy-tile="${zoom}/${x}/${y}"
+              data-dashboard-map-surface="${escapeHtml(surfaceId)}"
+              ${navigationSurface ? `data-navigation-rudy-tile="${zoom}/${x}/${y}"` : ""}
               data-map-render-kind="tile"
               data-map-tile-source="rudy-twmap"
             ></image>
@@ -12940,23 +13059,39 @@
       return tiles.join("");
     }
 
-    function renderNavigationRudyTileLayer(bounds, baseZoom) {
+    function renderDashboardRudyTileLayer(bounds, baseZoom, options = {}) {
       const normalized = navigationRudyBounds(bounds);
       if (!normalized) return "";
+      const surfaceId = String(options.surfaceId || "dashboard-map");
+      const width = Math.max(1, Number(options.width) || DASHBOARD_RUDY_VIEWBOX.width);
+      const height = Math.max(1, Number(options.height) || DASHBOARD_RUDY_VIEWBOX.height);
+      const navigationSurface = surfaceId.startsWith("navigation");
       return `
         <g
-          class="navigation-rudy-tile-layer"
-          data-navigation-rudy-tile-layer="true"
-          data-navigation-rudy-tile-zoom="${baseZoom}"
-          data-navigation-rudy-tile-key="${escapeHtml(navigationRudyTileKey(normalized, baseZoom))}"
+          class="dashboard-rudy-tile-layer${navigationSurface ? " navigation-rudy-tile-layer" : ""}"
+          data-dashboard-rudy-tile-layer="true"
+          data-dashboard-rudy-tile-zoom="${baseZoom}"
+          data-dashboard-rudy-tile-key="${escapeHtml(navigationRudyTileKey(normalized, baseZoom))}"
+          data-dashboard-map-surface="${escapeHtml(surfaceId)}"
+          ${navigationSurface ? `data-navigation-rudy-tile-layer="true" data-navigation-rudy-tile-zoom="${baseZoom}" data-navigation-rudy-tile-key="${escapeHtml(navigationRudyTileKey(normalized, baseZoom))}"` : ""}
           data-rudy-base-zoom="${baseZoom}"
           data-rudy-west="${normalized.west}"
           data-rudy-east="${normalized.east}"
           data-rudy-north="${normalized.north}"
           data-rudy-south="${normalized.south}"
+          data-rudy-viewbox-width="${width}"
+          data-rudy-viewbox-height="${height}"
           aria-hidden="true"
-        >${navigationRudyTileImages(normalized, normalized, baseZoom)}</g>
+        >${navigationRudyTileImages(normalized, normalized, baseZoom, width, height, surfaceId)}</g>
       `;
+    }
+
+    function renderNavigationRudyTileLayer(bounds, baseZoom) {
+      return renderDashboardRudyTileLayer(bounds, baseZoom, {
+        surfaceId: "navigation-map",
+        width: NAVIGATION_RUDY_VIEWBOX.width,
+        height: NAVIGATION_RUDY_VIEWBOX.height,
+      });
     }
 
     function navigationRudyVisibleBounds(viewport, viewState, fullBounds) {
@@ -12998,8 +13133,8 @@
       };
     }
 
-    function updateNavigationRudyTileLayer(viewport, viewState) {
-      const tileLayer = viewport.querySelector('[data-navigation-rudy-tile-layer="true"]');
+    function updateDashboardRudyTileLayer(viewport, viewState) {
+      const tileLayer = viewport.querySelector('[data-dashboard-rudy-tile-layer="true"]');
       if (!tileLayer) return;
       const fullBounds = navigationRudyBounds({
         west: tileLayer.dataset.rudyWest,
@@ -13019,21 +13154,43 @@
       );
       const visibleBounds = navigationRudyVisibleBounds(viewport, viewState, fullBounds);
       const tileKey = navigationRudyTileKey(visibleBounds, effectiveZoom);
+      const surfaceId = tileLayer.dataset.dashboardMapSurface
+        || viewport.dataset.dashboardMapViewport
+        || "dashboard-map";
+      const width = Math.max(
+        1,
+        Number(tileLayer.dataset.rudyViewboxWidth) || DASHBOARD_RUDY_VIEWBOX.width,
+      );
+      const height = Math.max(
+        1,
+        Number(tileLayer.dataset.rudyViewboxHeight) || DASHBOARD_RUDY_VIEWBOX.height,
+      );
+      tileLayer.dataset.dashboardRudyTileZoom = String(effectiveZoom);
+      viewport.dataset.dashboardTileZoom = String(effectiveZoom);
       tileLayer.dataset.navigationRudyTileZoom = String(effectiveZoom);
       viewport.dataset.navigationTileZoom = String(effectiveZoom);
-      const zoomLabel = viewport.querySelector("[data-navigation-rudy-zoom-label]");
-      if (zoomLabel) zoomLabel.textContent = String(effectiveZoom);
-      if (tileLayer.dataset.navigationRudyTileKey === tileKey) return;
+      viewport.querySelectorAll(
+        "[data-dashboard-rudy-zoom-label], [data-navigation-rudy-zoom-label]",
+      ).forEach(zoomLabel => { zoomLabel.textContent = String(effectiveZoom); });
+      if (tileLayer.dataset.dashboardRudyTileKey === tileKey) return;
       tileLayer.innerHTML = navigationRudyTileImages(
         fullBounds,
         visibleBounds,
         effectiveZoom,
+        width,
+        height,
+        surfaceId,
       );
+      tileLayer.dataset.dashboardRudyTileKey = tileKey;
       tileLayer.dataset.navigationRudyTileKey = tileKey;
       enforceDashboardMapRenderPolicy(viewport);
     }
 
-    function navigationTerrainPointPosition(point, bounds, width = 1000, height = 392) {
+    function updateNavigationRudyTileLayer(viewport, viewState) {
+      updateDashboardRudyTileLayer(viewport, viewState);
+    }
+
+    function dashboardMapPointPosition(point, bounds, width = 1000, height = 392) {
       const normalizedBounds = navigationRudyBounds(bounds);
       if (!normalizedBounds || !Number.isFinite(Number(point?.lon)) || !Number.isFinite(Number(point?.lat))) return null;
       const longitudeSpan = normalizedBounds.east - normalizedBounds.west;
@@ -13051,6 +13208,38 @@
           (navigationMercatorY(point.lat) - northWorldY) / mercatorSpan * height,
         )),
       };
+    }
+
+    function navigationTerrainPointPosition(point, bounds, width = 1000, height = 392) {
+      return dashboardMapPointPosition(point, bounds, width, height);
+    }
+
+    function dashboardMapPathFromSegments(
+      segments,
+      bounds,
+      width,
+      height,
+      maxPoints = MAX_RENDERED_ROUTE_POINTS,
+    ) {
+      if (!navigationRudyBounds(bounds) || !Array.isArray(segments)) return "";
+      const totalPoints = Math.max(
+        1,
+        segments.reduce((sum, segment) => sum + asArray(segment).length, 0),
+      );
+      return segments.map(segment => {
+        const normalized = normalizeCoordinates(segment);
+        if (normalized.length < 2) return "";
+        const pointBudget = Math.max(
+          2,
+          Math.round(maxPoints * normalized.length / totalPoints),
+        );
+        return sampleCoordinates(normalized, pointBudget).map((point, index) => {
+          const position = dashboardMapPointPosition(point, bounds, width, height);
+          return position
+            ? `${index === 0 ? "M" : "L"}${position.x.toFixed(1)} ${position.y.toFixed(1)}`
+            : "";
+        }).filter(Boolean).join(" ");
+      }).filter(Boolean).join(" ");
     }
 
     function navigationTerrainRoutePath(snapshot, width = 1000, height = 392) {
@@ -13967,7 +14156,7 @@
       return "#6d796f";
     }
 
-    function architectureMapSlices(mapData, bins, selectedBin, routeDistance) {
+    function architectureMapSlices(mapData, bins, selectedBin, routeDistance, displayBounds) {
       if (!mapData.connected || !bins.length) return "";
       const sourcePointCount = Math.max(1, mapData.coordinateSegments.reduce((sum, segment) => sum + segment.length, 0));
       const sampledSegments = mapData.coordinateSegments.map(segment => {
@@ -13986,8 +14175,19 @@
           const bin = bins.find(item => routeDistanceAtPoint >= Number(item.start_distance_m) && routeDistanceAtPoint <= Number(item.end_distance_m));
           const selected = Boolean(bin && bin.route_bin_id === selectedBin?.route_bin_id);
           const key = `${bin?.route_bin_id || "missing"}:${selected ? "selected" : "normal"}`;
-          const start = projectCoordinate(segment[index], mapData.bounds);
-          const end = projectCoordinate(point, mapData.bounds);
+          const start = dashboardMapPointPosition(
+            segment[index],
+            displayBounds,
+            MAP_WIDTH,
+            MAP_HEIGHT,
+          );
+          const end = dashboardMapPointPosition(
+            point,
+            displayBounds,
+            MAP_WIDTH,
+            MAP_HEIGHT,
+          );
+          if (!start || !end) return;
           if (!current || current.key !== key) {
             if (current) groups.push(current);
             current = {key, bin, selected, points: [start, end]};
@@ -14005,19 +14205,25 @@
           ? `${bin.distance_label || bin.route_bin_id} · ${architectureLensLabel()}`
           : "No observed mobility bin at this golden-route distance; geometry remains in scope";
         const path = group.points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
-        return `<path d="${path}"${binData} data-architecture-selected="${group.selected ? "true" : "false"}" fill="none" stroke="${color}" stroke-width="${group.selected ? 12 : 7}" stroke-linecap="round" stroke-linejoin="round" opacity="${group.selected ? 1 : bin ? .78 : .34}"><title>${escapeHtml(title)}</title></path>`;
+        return `<path d="${path}"${binData} data-architecture-selected="${group.selected ? "true" : "false"}" role="button" tabindex="0" data-dashboard-map-hint-source="architecture-segment-evidence" data-dashboard-map-hint-title="${escapeHtml(bin?.distance_label || bin?.route_bin_id || "Architecture route segment")}" data-dashboard-map-hint-summary="${escapeHtml(title)}" fill="none" stroke="${color}" stroke-width="${group.selected ? 12 : 7}" stroke-linecap="round" stroke-linejoin="round" opacity="${group.selected ? 1 : bin ? .78 : .34}"><title>${escapeHtml(title)}</title></path>`;
       }).join("");
     }
 
-    function architectureMapCheckpointPoints(mapData) {
+    function architectureMapCheckpointPoints(mapData, displayBounds) {
       if (!mapData.connected) return "";
       const points = asArray(state.project?.checkpoints)
         .map(item => ({lat: Number(item?.lat), lon: Number(item?.lon), label: item?.label || item?.candidate_id || "CP"}))
         .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon));
       const sampled = sampleCoordinates(points, 24);
       return sampled.map((point, index) => {
-        const projected = projectCoordinate(point, mapData.bounds);
-        return `<circle cx="${projected.x.toFixed(1)}" cy="${projected.y.toFixed(1)}" r="${index === 0 || index === sampled.length - 1 ? 5.5 : 3.2}" fill="#e9eadc" stroke="#0a1512" stroke-width="2"><title>${escapeHtml(point.label)}</title></circle>`;
+        const projected = dashboardMapPointPosition(
+          point,
+          displayBounds,
+          MAP_WIDTH,
+          MAP_HEIGHT,
+        );
+        if (!projected) return "";
+        return `<circle cx="${projected.x.toFixed(1)}" cy="${projected.y.toFixed(1)}" r="${index === 0 || index === sampled.length - 1 ? 5.5 : 3.2}" role="img" tabindex="0" data-dashboard-map-hint-source="architecture-checkpoint-evidence" data-dashboard-map-hint-title="${escapeHtml(point.label)}" data-dashboard-map-hint-summary="Workspace checkpoint · candidate evidence" fill="#e9eadc" stroke="#0a1512" stroke-width="2"><title>${escapeHtml(point.label)}</title></circle>`;
       }).join("");
     }
 
@@ -14026,6 +14232,16 @@
       const bins = architectureBins(snapshot);
       const selected = architectureSelectedBin(snapshot);
       const routeDistance = Math.max(1, Number(snapshot.route_spine?.distance_m || snapshot.architecture_summary?.route_distance_m || bins.at(-1)?.end_distance_m || 1));
+      const displayBounds = dashboardRudyPaddedBounds(mapData.bounds);
+      const baseZoom = displayBounds ? navigationRudyBaseZoom(displayBounds) : null;
+      const architectureRoutePath = displayBounds
+        ? dashboardMapPathFromSegments(
+            mapData.coordinateSegments,
+            displayBounds,
+            MAP_WIDTH,
+            MAP_HEIGHT,
+          )
+        : "";
       const lensButtons = [
         ["structure", "Structure"],
         ["terrain_demand", "Terrain"],
@@ -14036,23 +14252,29 @@
       ];
       const architectureMapSvg = `
         <svg viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="Route architecture lens map">
-          <defs>
-            <pattern id="architectureTopoGrid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M0 24 Q12 5 24 24 T48 24 M0 40 Q12 21 24 40 T48 40" fill="none" stroke="#6e8b78" stroke-opacity=".11" stroke-width="1"></path></pattern>
-          </defs>
           <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="#0b1713"></rect>
-          <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="url(#architectureTopoGrid)"></rect>
-          <g data-layer-group="terrain"><path d="${mapData.routePath}" fill="none" stroke="#b7cf63" stroke-width="30" opacity=".055" stroke-linecap="round"></path></g>
-          <g data-layer-group="segments" data-architecture-lens="${escapeHtml(state.architectureLens)}">${architectureMapSlices(mapData, bins, selected, routeDistance)}</g>
-          <g data-layer-group="checkpoints">${architectureMapCheckpointPoints(mapData)}</g>
+          ${displayBounds && Number.isFinite(baseZoom) ? renderDashboardRudyTileLayer(displayBounds, baseZoom, {
+            surfaceId: "architecture-map",
+            width: MAP_WIDTH,
+            height: MAP_HEIGHT,
+          }) : ""}
+          <g data-layer-group="terrain"><path d="${architectureRoutePath}" fill="none" stroke="#b7cf63" stroke-width="30" opacity=".055" stroke-linecap="round"></path></g>
+          <g data-layer-group="segments" data-architecture-lens="${escapeHtml(state.architectureLens)}">${architectureMapSlices(mapData, bins, selected, routeDistance, displayBounds)}</g>
+          <g data-layer-group="checkpoints">${architectureMapCheckpointPoints(mapData, displayBounds)}</g>
         </svg>
       `;
       const mapContent = mapData.connected && bins.length ? `
-        ${renderDashboardMapViewport("architecture-map", "Route architecture lens map", architectureMapSvg, {className: "architecture-map-surface"})}
+        ${renderDashboardMapViewport("architecture-map", "Route architecture lens map", architectureMapSvg, {
+          className: "architecture-map-surface",
+          attributes: `data-dashboard-basemap-layer="rudy-twmap" data-dashboard-basemap-policy="rudy-twmap-only" data-dashboard-tile-zoom="${baseZoom}"`,
+          renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
+          wheelZoom: false,
+        })}
         <div class="architecture-map-legend" data-architecture-legend="${escapeHtml(state.architectureLens)}" aria-label="Architecture lens color legend">
           <div class="architecture-map-legend-head"><strong>${escapeHtml(architectureLensLabel())}</strong><span>${escapeHtml(architectureLensLegendSubtitle())}</span></div>
           ${renderArchitectureLensLegend()}
           <div class="architecture-map-legend-symbols"><span class="architecture-map-legend-symbol is-selected">Amber glow · selected segment</span><span class="architecture-map-legend-symbol is-checkpoint">White point · checkpoint</span></div>
-          <div class="architecture-map-legend-meta">${formatInteger(mapData.coordinateSegments.length)} workspace segment geometries from <span class="mono">${escapeHtml(mapData.sourcePath)}</span> · full golden-route scope retained; crowd gaps render as no observed bin · page-local styling over the existing <span class="mono">segments</span> data group · no 33rd Scout layer.</div>
+          <div class="architecture-map-legend-meta">Rudy+TW WMTS basemap · ${formatInteger(mapData.coordinateSegments.length)} workspace segment geometries from <span class="mono">${escapeHtml(mapData.sourcePath)}</span> · full golden-route scope retained; crowd gaps render as no observed bin · page-local styling over the existing <span class="mono">segments</span> data group · no 33rd Scout layer.</div>
         </div>
       ` : `<div class="architecture-empty"><div><strong>Route map projection unavailable.</strong>${bins.length ? "The demand vectors are loaded, but display geometry is missing." : "Load both route geometry and mobility bins."}</div></div>`;
       return `
@@ -15073,7 +15295,11 @@
       if (renderKind === "tile") {
         return Boolean(
           image.getAttribute("data-map-tile-source")
-          && (image.hasAttribute("data-navigation-rudy-tile") || image.hasAttribute("data-map-tile-id"))
+          && (
+            image.hasAttribute("data-dashboard-rudy-tile")
+            || image.hasAttribute("data-navigation-rudy-tile")
+            || image.hasAttribute("data-map-tile-id")
+          )
         );
       }
       if (renderKind !== "approved-single-image") return false;
@@ -15123,7 +15349,7 @@
     function renderDashboardMapViewport(viewportId, label, content, options = {}) {
       const saved = state.mapViewportById?.[viewportId] || {};
       const mouseZoomEnabled = options.mouseZoom !== false;
-      const wheelZoomEnabled = options.wheelZoom !== false;
+      const wheelZoomEnabled = options.wheelZoom === true;
       const renderPolicy = options.renderPolicy === DASHBOARD_MAP_RENDER_POLICY
         ? DASHBOARD_MAP_RENDER_POLICY
         : "";
@@ -15222,7 +15448,7 @@
         controls.querySelector('[data-map-control="box-zoom"]')?.setAttribute("aria-pressed", viewState.mode === "box" ? "true" : "false");
         const zoomLevel = controls.querySelector("[data-map-zoom-level]");
         if (zoomLevel) zoomLevel.textContent = `${Math.round(viewState.zoom * 100)}%`;
-        updateNavigationRudyTileLayer(viewport, viewState);
+        updateDashboardRudyTileLayer(viewport, viewState);
         persist();
         if (message) announce(message);
       };
@@ -15449,35 +15675,89 @@
     }
 
     function renderPaceFitMiniMap() {
+      const mapData = buildMapData();
+      const width = 420;
+      const height = 240;
+      const displayBounds = dashboardRudyPaddedBounds(mapData.bounds);
+      const baseZoom = displayBounds ? navigationRudyBaseZoom(displayBounds) : null;
+      const routePath = displayBounds
+        ? dashboardMapPathFromSegments(
+            mapData.coordinateSegments,
+            displayBounds,
+            width,
+            height,
+            720,
+          )
+        : "";
+      const workspaceCheckpoints = normalizeCoordinates(asArray(state.project?.checkpoints));
+      const checkpointPoints = workspaceCheckpoints.length
+        ? sampleCoordinates(workspaceCheckpoints, 18)
+        : fallbackRoutePoints(mapData, 8);
+      const checkpointMarkup = checkpointPoints.map((point, index) => {
+        const position = dashboardMapPointPosition(point, displayBounds, width, height);
+        if (!position) return "";
+        const label = point.label || `Route sample ${index + 1}`;
+        const current = String(label).replace(/\s+/g, "").toUpperCase() === "CP087";
+        return `
+          <g
+            role="img"
+            tabindex="0"
+            data-dashboard-map-hint-source="pace-checkpoint-evidence"
+            data-dashboard-map-hint-title="${escapeHtml(label)}"
+            data-dashboard-map-hint-summary="${escapeHtml(`${current ? "Current pace checkpoint" : "Workspace route checkpoint"} · candidate evidence`)}"
+          >
+            <circle
+              cx="${position.x.toFixed(1)}"
+              cy="${position.y.toFixed(1)}"
+              r="${current ? "7" : index === 0 || index === checkpointPoints.length - 1 ? "5" : "3.2"}"
+              fill="${current ? "#69aef4" : "#f0f2e7"}"
+              stroke="#0a1512"
+              stroke-width="${current ? "2.5" : "1.5"}"
+            ></circle>
+            ${current ? `<text x="${(position.x + 9).toFixed(1)}" y="${(position.y - 8).toFixed(1)}" fill="#eafcff" font-size="11" font-family="monospace">${escapeHtml(label)}</text>` : ""}
+            <title>${escapeHtml(`${label} · candidate checkpoint evidence`)}</title>
+          </g>
+        `;
+      }).join("");
       const mapSvg = `
         <svg viewBox="0 0 420 240" role="img" aria-label="CP087 pace fit mini map">
-          <defs>
-            <pattern id="paceGrid" width="24" height="24" patternUnits="userSpaceOnUse">
-              <path d="M24 0H0V24" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="1"></path>
-            </pattern>
-          </defs>
           <rect width="420" height="240" fill="#0b1519"></rect>
-          <rect width="420" height="240" fill="url(#paceGrid)"></rect>
-          <path d="M24 190 C74 154 102 160 146 126 C190 93 226 88 268 72 C317 53 353 40 396 28" fill="none" stroke="#4ed3d8" stroke-width="4" stroke-linecap="round"></path>
-          <path d="M247 82 C223 113 206 139 188 176" fill="none" stroke="#f0b85c" stroke-width="2" stroke-dasharray="6 5"></path>
-          <path d="M228 58 L285 42 L308 88 L262 124 L218 108 Z" fill="rgba(98,181,196,.15)" stroke="rgba(98,181,196,.55)" stroke-width="1.5"></path>
-          <circle cx="24" cy="190" r="5" fill="#78bf75"></circle>
-          <circle cx="146" cy="126" r="5" fill="#78bf75"></circle>
-          <circle cx="246" cy="80" r="11" fill="rgba(105,174,244,.38)" stroke="#69aef4" stroke-width="3"></circle>
-          <circle cx="268" cy="72" r="5" fill="#f0b85c"></circle>
-          <circle cx="396" cy="28" r="5" fill="#d06363"></circle>
-          <text x="232" y="58" fill="#dff8fb" font-size="13" font-family="monospace">CP087</text>
-          <text x="262" y="136" fill="#f0b85c" font-size="12" font-family="monospace">shorter line</text>
-          <text x="20" y="220" fill="#a8b5bd" font-size="11" font-family="monospace">0</text>
-          <path d="M42 218H112" stroke="#dff8fb" stroke-width="3"></path>
-          <text x="118" y="222" fill="#a8b5bd" font-size="11" font-family="monospace">1 km</text>
+          ${displayBounds && Number.isFinite(baseZoom) ? renderDashboardRudyTileLayer(displayBounds, baseZoom, {
+            surfaceId: "pace-fit-map",
+            width,
+            height,
+          }) : ""}
+          <path
+            d="${routePath}"
+            role="img"
+            tabindex="0"
+            data-dashboard-map-hint-source="pace-route-evidence"
+            data-dashboard-map-hint-title="Pace Fit route"
+            data-dashboard-map-hint-summary="Workspace route geometry · advisory candidate context"
+            fill="none"
+            stroke="#4ed3d8"
+            stroke-width="4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          ><title>Pace Fit synchronized workspace route</title></path>
+          ${checkpointMarkup}
         </svg>
       `;
       return `
         <section class="pace-fit-card">
-          <div class="pace-fit-card-head"><h3>Synchronized Map</h3><span class="chip info">CP087</span></div>
+          <div class="pace-fit-card-head"><h3>Synchronized Map</h3><span class="chip info">Rudy+TW</span></div>
           <div class="pace-fit-card-body">
-            ${renderDashboardMapViewport("pace-fit-map", "Pace Fit synchronized route map", mapSvg, {className: "pace-mini-map"})}
+            ${mapData.connected && displayBounds ? renderDashboardMapViewport(
+              "pace-fit-map",
+              "Pace Fit synchronized route map",
+              mapSvg,
+              {
+                className: "pace-mini-map",
+                attributes: `data-dashboard-basemap-layer="rudy-twmap" data-dashboard-basemap-policy="rudy-twmap-only" data-dashboard-tile-zoom="${baseZoom}"`,
+                renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
+                wheelZoom: false,
+              },
+            ) : '<div class="architecture-empty"><div><strong>Route map projection unavailable.</strong>Load workspace route geometry to render Rudy+TW tiles and synchronized pace evidence.</div></div>'}
           </div>
         </section>
       `;
@@ -15646,32 +15926,127 @@
       `;
     }
 
-    function renderMapPanel(mode = "default") {
-      const compact = mode !== "default" && mode !== "weather" && mode !== "navigation";
+    function renderMapPanel(mode = "overview") {
+      const surface = {
+        overview: {
+          id: "overview-map",
+          title: "Route overview map",
+          label: "Overview route context",
+          pointLabel: "Route checkpoint",
+          pointSource: "overview-checkpoint-evidence",
+        },
+        lbs: {
+          id: "lbs-map",
+          title: "LBS route context map",
+          label: "Location evidence",
+          pointLabel: "Location evidence point",
+          pointSource: "lbs-location-evidence",
+        },
+        permission: {
+          id: "permission-map",
+          title: "Permission route context map",
+          label: "Permission evidence context",
+          pointLabel: "Permission context point",
+          pointSource: "permission-context-evidence",
+        },
+      }[mode] || {
+        id: "overview-map",
+        title: "Route overview map",
+        label: "Overview route context",
+        pointLabel: "Route checkpoint",
+        pointSource: "overview-checkpoint-evidence",
+      };
       const mapData = buildMapData();
       const sourceLabel = mapData.connected ? "projection connected" : "fallback geometry";
-      const toolbarLayerIds = mode === "weather" ? WEATHER_MAP_LAYER_IDS : SCOUT_LAYER_IDS;
+      const displayBounds = dashboardRudyPaddedBounds(mapData.bounds);
+      const baseZoom = displayBounds ? navigationRudyBaseZoom(displayBounds) : null;
+      const routePath = displayBounds
+        ? dashboardMapPathFromSegments(
+            mapData.coordinateSegments,
+            displayBounds,
+            MAP_WIDTH,
+            MAP_HEIGHT,
+          )
+        : "";
+      const workspaceCheckpoints = normalizeCoordinates(asArray(state.project?.checkpoints));
+      const locationCandidates = pointsFromProjection([
+        "major_critical_points",
+        "preview_candidates",
+      ]);
+      const preferredPoints = mode === "lbs" && locationCandidates.length
+        ? locationCandidates
+        : workspaceCheckpoints;
+      const evidencePoints = preferredPoints.length
+        ? sampleCoordinates(preferredPoints, 24)
+        : fallbackRoutePoints(mapData, mode === "overview" ? 10 : 7);
+      const pointMarkup = evidencePoints.map((point, index) => {
+        const position = dashboardMapPointPosition(
+          point,
+          displayBounds,
+          MAP_WIDTH,
+          MAP_HEIGHT,
+        );
+        if (!position) return "";
+        const title = point.label || `${surface.pointLabel} ${index + 1}`;
+        return `
+          <circle
+            cx="${position.x.toFixed(1)}"
+            cy="${position.y.toFixed(1)}"
+            r="${index === 0 || index === evidencePoints.length - 1 ? "6" : "4"}"
+            role="img"
+            tabindex="0"
+            data-dashboard-map-hint-source="${escapeHtml(surface.pointSource)}"
+            data-dashboard-map-hint-title="${escapeHtml(title)}"
+            data-dashboard-map-hint-summary="${escapeHtml(`${surface.label} · workspace candidate evidence`)}"
+            fill="${mode === "permission" ? "#d5a642" : mode === "lbs" ? "#62b5c4" : "#f0f2e7"}"
+            stroke="#0a1512"
+            stroke-width="2"
+          ><title>${escapeHtml(`${title} · candidate evidence`)}</title></circle>
+        `;
+      }).join("");
+      const mapSvg = `
+        <svg id="${escapeHtml(`${surface.id}-svg`)}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="${escapeHtml(surface.title)}">
+          <rect width="${MAP_WIDTH}" height="${MAP_HEIGHT}" fill="#101813"></rect>
+          ${displayBounds && Number.isFinite(baseZoom) ? renderDashboardRudyTileLayer(displayBounds, baseZoom, {
+            surfaceId: surface.id,
+            width: MAP_WIDTH,
+            height: MAP_HEIGHT,
+          }) : ""}
+          <path
+            d="${routePath}"
+            role="img"
+            tabindex="0"
+            data-dashboard-map-hint-source="${escapeHtml(`${mode}-route-evidence`)}"
+            data-dashboard-map-hint-title="${escapeHtml(surface.title)}"
+            data-dashboard-map-hint-summary="${escapeHtml(`Workspace route vector · ${mapData.sourcePath} · candidate context`)}"
+            fill="none"
+            stroke="#75d5df"
+            stroke-width="8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          ><title>${escapeHtml(`${surface.title} · workspace route vector`)}</title></path>
+          <g data-dashboard-context-points="${escapeHtml(mode)}">${pointMarkup}</g>
+        </svg>
+      `;
       return `
-        <section class="panel map-panel ${mode === "weather" ? "weather-map-panel" : ""}">
+        <section class="panel map-panel" data-dashboard-context-map="${escapeHtml(mode)}">
           <div class="panel-header">
-            <h3>${mode === "weather" ? "Route-weather intersection" : "Scout Map"}</h3>
-            <span class="chip ${mapData.connected ? "ok" : "warn"}" id="dashboardMapPreviewStatus" data-map-connected="${mapData.connected ? "true" : "false"}">${sourceLabel}</span>
-            <span class="chip info">${mode === "weather" ? `${WEATHER_MAP_LAYER_IDS.length} weather layers` : "32 canonical layers"}</span>
+            <h3>${escapeHtml(surface.title)}</h3>
+            <span class="chip ${mapData.connected ? "ok" : "warn"}" id="${escapeHtml(`${surface.id}-status`)}" data-map-connected="${mapData.connected ? "true" : "false"}">${sourceLabel}</span>
+            <span class="chip info">Rudy+TW · route vectors</span>
           </div>
-          <p class="small-note" style="padding:0 12px 10px">${mode === "weather" ? "Route-bbox overlays are cache-only candidate evidence; inspect freshness before using them in a route decision." : "Pre-trip and Debug expose 31; completed-track is after-action only."}</p>
-          <div class="map-toolbar" id="layerToolbar">
-            ${toolbarLayerIds.map((layerId) => `
-              <label class="layer-control">
-                <input type="checkbox" data-layer="${escapeHtml(layerId)}" ${state.layerEnabled[layerId] ? "checked" : ""}>
-                <span>${escapeHtml(layerId)}</span>
-              </label>
-            `).join("")}
-          </div>
-          ${renderDashboardMapViewport("dashboard-map-preview", "Scout dashboard map preview", `
-            <svg id="dashboardMapPreview" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}" role="img" aria-label="chilai_nanhua_day1_scoutAI route map">
-              ${SCOUT_LAYER_IDS.map((layerId, index) => mapLayerSvg(layerId, index, mode, compact, mapData)).join("")}
-            </svg>
-          `, {className: "scout-map"})}
+          <p class="small-note" style="padding:0 12px 10px">Rudy+TW is the only basemap on this supporting view. Page-specific evidence stays as inspectable candidate vectors; use the main Map for the complete layer contract.</p>
+          ${mapData.connected && displayBounds ? renderDashboardMapViewport(
+            surface.id,
+            surface.title,
+            mapSvg,
+            {
+              className: "scout-map",
+              attributes: `data-dashboard-basemap-layer="rudy-twmap" data-dashboard-basemap-policy="rudy-twmap-only" data-dashboard-tile-zoom="${baseZoom}"`,
+              renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
+              wheelZoom: false,
+            },
+          ) : '<div class="architecture-empty"><div><strong>Route map projection unavailable.</strong>Load workspace route geometry to render Rudy+TW tiles and page evidence.</div></div>'}
         </section>
       `;
     }

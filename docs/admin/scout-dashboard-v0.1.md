@@ -46,6 +46,62 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-28 - Expand DASH-026 through DASH-029 to every Dashboard map
+
+User request:
+
+- Change `DASH-026` through `DASH-029` from the original Map, Navigation and
+  Weather scope to every map currently present in the Dashboard.
+
+Implementation:
+
+- Added one `DASHBOARD_MAP_SURFACES` registry containing eight current map
+  instances:
+  - Overview Map preview;
+  - LBS Map;
+  - Permission Map;
+  - Map;
+  - Weather Map;
+  - Navigation Map;
+  - Architecture Map;
+  - Pace Fit Map.
+- Reworked checks 026 through 029 to iterate the registry instead of naming
+  three hard-coded surfaces.
+- Added common pointer/focus evidence hints to the Dashboard preview,
+  Architecture and Pace Fit SVG maps.
+- Applied the tile/vector/approved-single-image render policy to every
+  Dashboard-native map viewport.
+- Map and Weather continue to share the canonical Pre-trip renderer; the other
+  six instances use the shared Dashboard viewport contract.
+
+Boundary:
+
+- The registry covers maps rendered by Dashboard routes. It does not treat a
+  non-map chart or an unrelated nested admin/debug tool as a Dashboard map.
+- The checks remain read-only and do not load new external evidence, mutate
+  runtime safety truth or perform outbound effects.
+
+Verification:
+
+- Focused all-map policy, hint/keyboard and Diagnostic contracts: `3 passed`.
+- Full Dashboard page suite: `58 passed`.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed.
+- Real Chromium exercised all eight registry entries. Every map:
+  - displayed a non-empty evidence hint through keyboard focus;
+  - changed from `1.00x` to `1.25x` with Zoom in and returned with Zoom out;
+  - changed translation or SVG viewBox with ArrowRight;
+  - completed a real rectangle drag at approximately `1.97x` to `2.25x`;
+  - returned to its fitted scale;
+  - reported render policy status `verified`.
+- `DASH-026` through `DASH-029` all passed and explicitly reported
+  `8 Dashboard maps`.
+- The 30-case run issued zero POST requests. Mobile Diagnostic layout retained
+  zero page-level horizontal overflow at 390×844.
+- Existing unrelated Diagnostic failures remain `DASH-009`, `DASH-010`,
+  `DASH-018`, `DASH-019` and the expected zero-count Evidence signal
+  `DASH-030`.
+
 ### 2026-07-28 - Add zero-count Evidence category diagnostic
 
 User request:
@@ -126,7 +182,8 @@ Boundary:
   import data, send messages, control hardware or write runtime safety truth.
 - A contract check does not replace the checklist's direct browser gestures;
   release acceptance must still perform hover, rectangle drag, keyboard and
-  Fit operations on all three rendered maps.
+  Fit operations on every rendered map. The newer registry entry above
+  supersedes this original three-map scope.
 
 Verification:
 

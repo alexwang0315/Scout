@@ -638,7 +638,8 @@ def test_scout_dashboard_points_to_current_chilai_workspace() -> None:
     assert 'fetchJson("/admin/dashboard/workspaces")' in html
     assert "resolved_project_root" in html
     assert "chilai_nanhua_day1 route map" not in html
-    assert "chilai_nanhua_day1_scoutAI route map" in html
+    assert "Route overview map" in html
+    assert 'basemapPolicy: "full-canonical"' in html
 
 
 def test_scout_dashboard_embeds_only_the_debug_canonical_surface() -> None:
@@ -1285,8 +1286,9 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert 'id="dashboardMap"' in html
     assert html.count('id="dashboardMap"') == 1
     assert html.count('id="dashboardMapStatus"') == 1
-    assert 'id="dashboardMapPreview"' in html
-    assert 'id="dashboardMapPreviewStatus"' in html
+    for preview_id in ("overview-map", "lbs-map", "permission-map"):
+        assert f'id: "{preview_id}"' in html
+    assert 'data-dashboard-context-map="${escapeHtml(mode)}"' in html
     assert 'id="pretripMapFrame"' in html
     assert 'data-map-mode="pretrip-map-only"' in html
     assert 'data-map-source="/admin/pretrip"' in html
@@ -1337,7 +1339,9 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert ".detail-pane" in html
 
     assert "const MAX_RENDERED_SEGMENT_POINTS = 80;" in html
-    assert "SCOUT_LAYER_IDS.map((layerId, index)" in html
+    assert 'basemapPolicy: "full-canonical"' in html
+    assert "const RASTER_SOURCE_LAYER_DEFINITIONS = [" in pretrip_html
+    assert "const MAP_LAYER_RANKS = {" in pretrip_html
     assert (
         "...Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => "
         '[layerId, layerId !== "osm"]))'
@@ -1396,13 +1400,18 @@ def test_dashboard_spatial_maps_share_the_canonical_map_navigation_contract() ->
         assert marker in html
 
     for viewport_id in (
-        "dashboard-map-preview",
+        "overview-map",
+        "lbs-map",
+        "permission-map",
         "pace-fit-map",
         "architecture-map",
         "navigation-training-map",
         "navigation-workspace-map",
     ):
-        assert f'renderDashboardMapViewport("{viewport_id}"' in html
+        assert (
+            f'renderDashboardMapViewport("{viewport_id}"' in html
+            or f'id: "{viewport_id}"' in html
+        )
 
     assert "mapViewportById: {}" in html
     assert 'role="region"' in html
@@ -1981,7 +1990,66 @@ def test_map_navigation_weather_disable_wheel_zoom_but_keep_box_zoom() -> None:
     )
 
 
-def test_map_navigation_weather_enforce_tile_vector_or_approved_single_image_policy() -> None:
+def test_non_main_dashboard_maps_use_only_rudy_tw_basemap_and_disable_wheel_zoom() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    surface_contract = html.split(
+        "const DASHBOARD_MAP_SURFACES = Object.freeze([", 1
+    )[1].split("]);", 1)[0]
+    architecture_map = html.split(
+        "function renderArchitectureMap", 1
+    )[1].split("function renderArchitectureEvidenceLedger", 1)[0]
+    pace_map = html.split(
+        "function renderPaceFitMiniMap", 1
+    )[1].split("function renderRouteContextPage", 1)[0]
+    dashboard_preview_map = html.split(
+        "function renderMapPanel", 1
+    )[1].split("function buildMapData", 1)[0]
+    shared_viewport = html.split(
+        "function renderDashboardMapViewport", 1
+    )[1].split("function createDashboardMapViewportController", 1)[0]
+
+    assert surface_contract.count('basemapPolicy: "full-canonical"') == 1
+    assert (
+        '{id: "map", route: "map", label: "Map", '
+        'family: "canonical-pretrip", basemapPolicy: "full-canonical"}'
+        in surface_contract
+    )
+    assert surface_contract.count('basemapPolicy: "rudy-twmap-only"') == 7
+
+    for marker in (
+        "const DASHBOARD_RUDY_TILE_SOURCE",
+        "function renderDashboardRudyTileLayer(",
+        "function updateDashboardRudyTileLayer(",
+        'data-dashboard-rudy-tile-layer="true"',
+        'data-map-tile-source="rudy-twmap"',
+    ):
+        assert marker in html
+
+    assert "renderDashboardRudyTileLayer(" in architecture_map
+    assert "architectureTopoGrid" not in architecture_map
+    assert 'data-dashboard-basemap-policy="rudy-twmap-only"' in architecture_map
+    assert "wheelZoom: false" in architecture_map
+
+    assert "renderDashboardRudyTileLayer(" in pace_map
+    assert "paceGrid" not in pace_map
+    assert 'data-dashboard-basemap-policy="rudy-twmap-only"' in pace_map
+    assert "wheelZoom: false" in pace_map
+
+    for viewport_id in ("overview-map", "lbs-map", "permission-map"):
+        assert f'"{viewport_id}"' in dashboard_preview_map
+    assert "renderDashboardRudyTileLayer(" in dashboard_preview_map
+    assert "SCOUT_LAYER_IDS.map" not in dashboard_preview_map
+    assert 'class="map-toolbar"' not in dashboard_preview_map
+    assert 'data-dashboard-basemap-policy="rudy-twmap-only"' in dashboard_preview_map
+    assert "wheelZoom: false" in dashboard_preview_map
+    assert 'renderMapPanel("overview")' in html
+    assert 'renderMapPanel("lbs")' in html
+    assert 'renderMapPanel("permission")' in html
+
+    assert "const wheelZoomEnabled = options.wheelZoom === true;" in shared_viewport
+
+
+def test_all_dashboard_maps_enforce_tile_vector_or_approved_single_image_policy() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
     pretrip_raster_tiles = pretrip_html.split(
@@ -2002,15 +2070,24 @@ def test_map_navigation_weather_enforce_tile_vector_or_approved_single_image_pol
     navigation_tiles = html.split(
         "function navigationRudyTileImages(", 1
     )[1].split("function renderNavigationRudyTileLayer(", 1)[0]
-    navigation_tile_refresh = html.split(
-        "function updateNavigationRudyTileLayer(", 1
-    )[1].split("function navigationTerrainPointPosition(", 1)[0]
+    dashboard_tile_refresh = html.split(
+        "function updateDashboardRudyTileLayer(", 1
+    )[1].split("function updateNavigationRudyTileLayer(", 1)[0]
     navigation_training_map = html.split(
         "function renderNavigationTerrainMap", 1
     )[1].split("function renderNavigationTerrainDetail", 1)[0]
     navigation_workspace_map = html.split(
         "function renderNavigationWorkspaceMap", 1
     )[1].split("function renderNavigationFeatureExtraction", 1)[0]
+    architecture_map = html.split(
+        "function renderArchitectureMap", 1
+    )[1].split("function renderArchitectureEvidenceLedger", 1)[0]
+    pace_map = html.split(
+        "function renderPaceFitMiniMap", 1
+    )[1].split("function renderRouteContextPage", 1)[0]
+    dashboard_preview_map = html.split(
+        "function renderMapPanel", 1
+    )[1].split("function buildMapData", 1)[0]
 
     assert 'data-map-render-policy="tile-vector-approved-single-image"' in pretrip_html
     assert "const MAP_APPROVED_SINGLE_IMAGE_THEMES = Object.freeze(new Set([" in pretrip_html
@@ -2045,10 +2122,13 @@ def test_map_navigation_weather_enforce_tile_vector_or_approved_single_image_pol
     assert "enforceDashboardMapRenderPolicy(viewport);" in html
     assert "renderPolicy: DASHBOARD_MAP_RENDER_POLICY" in navigation_training_map
     assert "renderPolicy: DASHBOARD_MAP_RENDER_POLICY" in navigation_workspace_map
-    assert "enforceDashboardMapRenderPolicy(viewport);" in navigation_tile_refresh
+    assert "renderPolicy: DASHBOARD_MAP_RENDER_POLICY" in architecture_map
+    assert "renderPolicy: DASHBOARD_MAP_RENDER_POLICY" in pace_map
+    assert "renderPolicy: DASHBOARD_MAP_RENDER_POLICY" in dashboard_preview_map
+    assert "enforceDashboardMapRenderPolicy(viewport);" in dashboard_tile_refresh
 
 
-def test_map_navigation_weather_share_hover_hints_and_keyboard_pan_contract() -> None:
+def test_all_dashboard_maps_share_hover_hints_and_keyboard_pan_contract() -> None:
     html = PAGE.read_text(encoding="utf-8")
     map_frame_adapter = html.split(
         "function applyPretripMapOnlyFrame(frame)", 1
@@ -2059,6 +2139,15 @@ def test_map_navigation_weather_share_hover_hints_and_keyboard_pan_contract() ->
     navigation_map = html.split(
         "function renderNavigationWorkspaceMap", 1
     )[1].split("function renderNavigationFeatureExtraction", 1)[0]
+    architecture_map = html.split(
+        "function architectureMapSlices", 1
+    )[1].split("function renderArchitectureEvidenceLedger", 1)[0]
+    pace_map = html.split(
+        "function renderPaceFitMiniMap", 1
+    )[1].split("function renderRouteContextPage", 1)[0]
+    dashboard_preview_map = html.split(
+        "function renderMapPanel", 1
+    )[1].split("function buildMapData", 1)[0]
 
     for marker in (
         'id="dashboardMapHoverHint"',
@@ -2085,6 +2174,10 @@ def test_map_navigation_weather_share_hover_hints_and_keyboard_pan_contract() ->
     assert 'data-navigation-structure-point-id="' in navigation_map
     assert 'data-navigation-live-point-id="' in navigation_map
     assert 'data-navigation-terrain-event-id="' in navigation_map
+    for source in (architecture_map, pace_map, dashboard_preview_map):
+        assert "data-dashboard-map-hint-title" in source
+        assert "data-dashboard-map-hint-summary" in source
+        assert 'tabindex="' in source
 
 
 def test_scout_dashboard_pace_fit_removes_low_information_blocks() -> None:
@@ -2399,6 +2492,7 @@ def test_scout_dashboard_emergency_boundary_and_mobile_independence_contract() -
 
 def test_scout_dashboard_layer_contract_ids_are_present() -> None:
     html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
 
     expected_layers = (
         "imagery",
@@ -2437,7 +2531,9 @@ def test_scout_dashboard_layer_contract_ids_are_present() -> None:
     for layer_id in expected_layers:
         assert f'"{layer_id}"' in html
     assert "SCOUT_LAYER_IDS" in html
-    assert "input type=\"checkbox\" data-layer" in html
+    assert "input type=\"checkbox\" data-layer" not in html
+    assert "input type=\"checkbox\" data-layer" in pretrip_html
+    assert "use the main Map for the complete layer contract" in html
     assert "data-layer-group" in html
 
 
@@ -3300,12 +3396,13 @@ def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
         "async function diagnosticCheck028()",
         "async function diagnosticCheck029()",
         "async function diagnosticCheck030()",
-        "Map、Navigation、Weather evidence hover hint",
-        "三圖框選縮放與鍵盤平移",
-        "三圖圖磚、向量與單圖例外政策",
-        "三圖基本 Zoom、Pan 與 Fit",
+        "所有 Dashboard 地圖 evidence hover hint",
+        "所有 Dashboard 地圖框選縮放與鍵盤平移",
+        "所有 Dashboard 地圖圖磚、向量與單圖例外政策",
+        "所有 Dashboard 地圖基本 Zoom、Pan 與 Fit",
         "Evidence 是否有計數為 0 的類別",
         "DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES",
+        "const DASHBOARD_MAP_SURFACES = Object.freeze([",
         "diagnosticMapSurfaceSources",
         "function diagnosticZeroCountEvidenceCategories(",
         ".filter(group => Number(group.count) === 0)",
@@ -3313,6 +3410,22 @@ def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
         "Evidence categories count=0:",
     ):
         assert marker in html
+
+    surface_source = html.split(
+        "const DASHBOARD_MAP_SURFACES = Object.freeze([", 1
+    )[1].split("]);", 1)[0]
+    for surface_id in (
+        "overview-map",
+        "lbs-map",
+        "permission-map",
+        "map",
+        "weather-map",
+        "navigation-map",
+        "architecture-map",
+        "pace-fit-map",
+    ):
+        assert f'id: "{surface_id}"' in surface_source
+    assert surface_source.count("{id:") == 8
 
     for marker in (
         "function renderDiagnosticPage()",

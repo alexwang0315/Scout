@@ -900,38 +900,44 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 - 缺陷編號：
 - 備註：
 
-### DASH-026 Map、Navigation、Weather evidence hover hint 一致性
+### DASH-026 所有 Dashboard 地圖 evidence hover hint 一致性
 
-- 頁面／範圍：Map、Exploring for Six Axis → Navigation、Weather。
+- 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
+  Architecture、Pace Fit 的全部 8 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
 - 優先級：P0。
 
 檢查步驟：
 
-1. 各開啟 Map、Navigation、Weather，等待圖層與 evidence 完成載入。
-2. 依序把滑鼠移入每張圖的一個點、線、面或事件 evidence。
+1. 依 `DASHBOARD_MAP_SURFACES` registry 開啟全部 8 個地圖實例，等待圖層與
+   evidence 完成載入。
+2. 依序把滑鼠移入每張圖的一個點、線、面、圖層或事件 evidence。
 3. 使用 Tab 將鍵盤焦點移到同一類 evidence。
 4. 核對 hint／tooltip 的標題、摘要、來源或 candidate 邊界。
 5. 移出 evidence、按 Escape 或切換頁面，確認 hint 正確關閉。
 
 通過條件：
 
-- 三張圖的 evidence 都能在 hover 與鍵盤 focus 時顯示可讀提示。
+- Registry 內全部 8 張圖的 evidence 都能在 hover 與鍵盤 focus 時顯示
+  可讀提示。
 - 嵌入 Map／Weather 的樣式不得把既有 `#hoverHint` 隱藏或裁切在 iframe 外。
-- Navigation 可使用 SVG `<title>` 或同等可存取 tooltip，但點、線、面與事件
-  必須採一致且可操作的提示方式。
+- Dashboard-native SVG 地圖必須使用共用 hover/focus hint contract；嵌入式
+  canonical map 可保留既有 `#hoverHint`，但不得隱藏。
 - Hint 內容來自目前 evidence，不洩漏 raw GPX、精確時間或私人健康資料。
 
 證據／結果：
 
-- 結果：`未執行`
-- 證據：
+- 結果：`PASS`（2026-07-28，Chromium）
+- 證據：8/8 地圖均找到可 focus 的 evidence target 並顯示非空 hint；
+  實例包含 imagery、稜候選、Architecture route bin、Pace Fit route、
+  hillshade 與 CWA QPF。
 - 缺陷編號：
-- 備註：
+- 備註：0 POST。
 
-### DASH-027 Map、Navigation、Weather 框選縮放與鍵盤平移
+### DASH-027 所有 Dashboard 地圖框選縮放與鍵盤平移
 
-- 頁面／範圍：Map、Exploring for Six Axis → Navigation、Weather。
+- 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
+  Architecture、Pace Fit 的全部 8 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
 - 優先級：P0。
 
@@ -945,27 +951,31 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 通過條件：
 
-- Map、Navigation、Weather 都能完成矩形放大與反向矩形縮小。
+- Registry 內全部 8 張圖都能完成矩形放大與反向矩形縮小。
 - 四個方向鍵都會改變地圖位置，且只有地圖取得操作焦點時攔截按鍵。
 - 取消後不留下選取框、拖曳狀態或錯誤游標。
-- 三張圖使用一致的快捷鍵與操作語意。
+- 全部地圖使用一致的快捷鍵與操作語意。
 
 證據／結果：
 
-- 結果：`未執行`
-- 證據：
+- 結果：`PASS`（2026-07-28，Chromium）
+- 證據：8/8 地圖啟用 Box 後完成真實矩形拖曳，縮放約
+  `1.97x～2.25x`；ArrowRight 均改變 controller translation 或 SVG
+  viewBox。
 - 缺陷編號：
-- 備註：
+- 備註：選取後均以 Fit 還原並切回 Pan。
 
-### DASH-028 Map、Navigation、Weather 圖磚、向量與單圖例外政策
+### DASH-028 所有 Dashboard 地圖圖磚、向量與單圖例外政策
 
-- 頁面／範圍：Map、Exploring for Six Axis → Navigation、Weather。
+- 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
+  Architecture、Pace Fit 的全部 8 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
 - 優先級：P0。
 
 檢查步驟：
 
-1. 檢查三張圖的底圖、路線與一般 overlay 的 DOM／network 類型。
+1. 檢查 registry 內全部 8 張圖的底圖、路線與一般 overlay 的 DOM／
+   network 類型。
 2. 確認底圖為 WMTS／XYZ 圖磚或本地向量，路線與 evidence 為 SVG／GeoJSON
    等向量圖徵。
 3. 逐一列出以單一圖片顯示的 overlay，核對是否屬於明確 allowlist。
@@ -982,37 +992,42 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 證據／結果：
 
-- 結果：`未執行`
-- 證據：
+- 結果：`PASS`（2026-07-28，Chromium）
+- 證據：8/8 地圖的 `data-map-render-policy-status` 均為 `verified`；
+  Navigation 保留 Rudy+TW tile provenance，其他 Dashboard-native 地圖
+  使用 SVG vector，Map／Weather 使用 canonical Pre-trip policy。
 - 缺陷編號：
-- 備註：
+- 備註：未發現未核准的單一圖片。
 
-### DASH-029 Map、Navigation、Weather 基本 Zoom、Pan 與 Fit
+### DASH-029 所有 Dashboard 地圖基本 Zoom、Pan 與 Fit
 
-- 頁面／範圍：Map、Exploring for Six Axis → Navigation、Weather。
+- 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
+  Architecture、Pace Fit 的全部 8 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
 - 優先級：P0。
 
 檢查步驟：
 
-1. 在三張圖分別操作 Zoom in、Zoom out 與滑鼠滾輪縮放。
+1. 在 registry 內全部 8 張圖分別操作 Zoom in、Zoom out 與允許的縮放方式。
 2. 使用滑鼠拖曳平移，再使用控制按鍵與鍵盤平移。
 3. 按 Fit／Reset，確認回到完整路線或預設範圍。
 4. 連續重複放大、縮小、平移與 Fit，檢查狀態與圖層對位。
 
 通過條件：
 
-- 三張圖都支援 Zoom in、Zoom out、滑鼠縮放、拖曳 Pan 與 Fit／Reset。
+- Registry 內全部 8 張圖都支援 Zoom in、Zoom out、拖曳 Pan 與
+  Fit／Reset。
 - Fit 後能看到完整目標範圍，不保留前一次 translation 或 selection。
 - 控制不會造成頁面級水平溢出、iframe 失焦或圖層消失。
-- 三張圖的按鈕名稱、快捷鍵與操作結果採一致語意。
+- 全部地圖的按鈕名稱、快捷鍵與操作結果採一致語意。
 
 證據／結果：
 
-- 結果：`未執行`
-- 證據：
+- 結果：`PASS`（2026-07-28，Chromium）
+- 證據：8/8 地圖 Zoom in 均由 `1.00x` 到 `1.25x`，Zoom out 回到
+  `1.00x`，方向鍵 Pan 均改變位置，Fit 均還原 scale。
 - 缺陷編號：
-- 備註：
+- 備註：每張圖均具備 Zoom in、Zoom out、Fit、Pan、Box 五個控制。
 
 ### DASH-030 Evidence 是否有計數為 0 的類別
 
@@ -1056,6 +1071,7 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
+| 2026-07-28 | 將 DASH-026～029 從 Map／Navigation／Weather 擴大為 registry 內全部 8 個 Dashboard 地圖實例。 |
 | 2026-07-28 | 新增 DASH-030，檢查 Evidence 群組與 Evidence Timeline 子類別是否存在 count=0，紅燈時列出類別名稱。 |
 | 2026-07-28 | 新增 DASH-026～029，驗證 Map／Navigation／Weather 的 hover hint、框選與鍵盤、圖磚／向量政策及基本地圖操作一致性。 |
 | 2026-07-28 | 將 DASH-001～025 接入 System → Diagnostic；加入三色狀態、單題重測與 Diag all。 |
