@@ -948,6 +948,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 3. 由右下往左上拖曳矩形，確認支援局部縮小。
 4. 聚焦地圖後依序按方向鍵，確認四個方向均能平移。
 5. 使用 `B`、`P` 與 Escape 切換或取消操作，確認不影響頁面捲動與表單。
+6. 在每張圖上轉動滑鼠滾輪，確認地圖 zoom 不變且頁面可正常捲動。
 
 通過條件：
 
@@ -955,13 +956,14 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 - 四個方向鍵都會改變地圖位置，且只有地圖取得操作焦點時攔截按鍵。
 - 取消後不留下選取框、拖曳狀態或錯誤游標。
 - 全部地圖使用一致的快捷鍵與操作語意。
+- 全部地圖停用滑鼠滾輪縮放；縮放只由按鈕、鍵盤與 Box 操作觸發。
 
 證據／結果：
 
 - 結果：`PASS`（2026-07-28，Chromium）
 - 證據：8/8 地圖啟用 Box 後完成真實矩形拖曳，縮放約
   `1.97x～2.25x`；ArrowRight 均改變 controller translation 或 SVG
-  viewBox。
+  viewBox；wheel event 前後 zoom／viewBox 不變。
 - 缺陷編號：
 - 備註：選取後均以 Fit 還原並切回 Pan。
 
@@ -976,14 +978,17 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 1. 檢查 registry 內全部 8 張圖的底圖、路線與一般 overlay 的 DOM／
    network 類型。
-2. 確認底圖為 WMTS／XYZ 圖磚或本地向量，路線與 evidence 為 SVG／GeoJSON
-   等向量圖徵。
+2. 確認主 Map 是唯一 `full-canonical` surface；另外 7 張圖的唯一 basemap
+   都是 Rudy+TW WMTS，路線與 evidence 為 SVG／GeoJSON 等向量圖徵。
 3. 逐一列出以單一圖片顯示的 overlay，核對是否屬於明確 allowlist。
 4. 平移與縮放後檢查圖磚更新、向量對位與單圖 georeference。
 
 通過條件：
 
 - 一般底圖與圖層使用圖磚或向量，不以任意單張圖片冒充可縮放地圖。
+- 主 Map 保留完整 canonical 圖層；Overview、LBS、Permission、Weather、
+  Navigation、Architecture、Pace Fit 只使用 Rudy+TW 作為底圖，不得混入
+  OSM 或裝飾性假底圖。
 - 單一圖片只允許明確標記的 satellite、radar、LiDAR、hillshade 或 thematic
   overlay，且必須具備範圍、來源與時間／版本資訊。
 - 圖磚與向量在縮放、平移後保持同一座標位置，沒有漂移或錯位。
@@ -994,8 +999,9 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 - 結果：`PASS`（2026-07-28，Chromium）
 - 證據：8/8 地圖的 `data-map-render-policy-status` 均為 `verified`；
-  Navigation 保留 Rudy+TW tile provenance，其他 Dashboard-native 地圖
-  使用 SVG vector，Map／Weather 使用 canonical Pre-trip policy。
+  registry 為 1 個 `full-canonical` 與 7 個 `rudy-twmap-only`；六個
+  Dashboard-native supporting maps 的 tile source 都只有 `rudy-twmap`，
+  Weather 只有 Rudy+TW basemap 並保留 CWA thematic overlays。
 - 缺陷編號：
 - 備註：未發現未核准的單一圖片。
 
@@ -1012,6 +1018,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 2. 使用滑鼠拖曳平移，再使用控制按鍵與鍵盤平移。
 3. 按 Fit／Reset，確認回到完整路線或預設範圍。
 4. 連續重複放大、縮小、平移與 Fit，檢查狀態與圖層對位。
+5. 轉動滑鼠滾輪，確認不會觸發縮放。
 
 通過條件：
 
@@ -1020,12 +1027,14 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 - Fit 後能看到完整目標範圍，不保留前一次 translation 或 selection。
 - 控制不會造成頁面級水平溢出、iframe 失焦或圖層消失。
 - 全部地圖的按鈕名稱、快捷鍵與操作結果採一致語意。
+- 滑鼠滾輪不屬於允許的地圖縮放方式。
 
 證據／結果：
 
 - 結果：`PASS`（2026-07-28，Chromium）
 - 證據：8/8 地圖 Zoom in 均由 `1.00x` 到 `1.25x`，Zoom out 回到
-  `1.00x`，方向鍵 Pan 均改變位置，Fit 均還原 scale。
+  `1.00x`，方向鍵 Pan 均改變位置，Fit 均還原 scale，wheel event 不改變
+  zoom。
 - 缺陷編號：
 - 備註：每張圖均具備 Zoom in、Zoom out、Fit、Pan、Box 五個控制。
 
@@ -1071,6 +1080,7 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
+| 2026-07-28 | 主 Map 保留完整 canonical layers；其餘 7 張 Dashboard 地圖統一為 Rudy+TW-only basemap、page-local vectors、停用 wheel zoom，並以 Chromium 驗證 8/8 操作一致。 |
 | 2026-07-28 | 將 DASH-026～029 從 Map／Navigation／Weather 擴大為 registry 內全部 8 個 Dashboard 地圖實例。 |
 | 2026-07-28 | 新增 DASH-030，檢查 Evidence 群組與 Evidence Timeline 子類別是否存在 count=0，紅燈時列出類別名稱。 |
 | 2026-07-28 | 新增 DASH-026～029，驗證 Map／Navigation／Weather 的 hover hint、框選與鍵盤、圖磚／向量政策及基本地圖操作一致性。 |

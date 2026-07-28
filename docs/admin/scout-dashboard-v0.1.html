@@ -7203,9 +7203,9 @@
       {id: "DASH-024", category: "Exploring for Six Axis", title: "Architecture workbench 與 Segment Microscope", description: "確認 route architecture projection 與 candidate boundary。", run: diagnosticCheck024},
       {id: "DASH-025", category: "Exploring for Six Axis", title: "Navigation Terrain Intelligence 與 Rudy+TW", description: "確認 bounded terrain projection 與唯一 Rudy+TW basemap contract。", run: diagnosticCheck025},
       {id: "DASH-026", category: "Map & Evidence", title: "所有 Dashboard 地圖 evidence hover hint", description: "確認目前 registry 內每張地圖的 evidence 在滑鼠移入與鍵盤 focus 時都能顯示內容提示。", run: diagnosticCheck026},
-      {id: "DASH-027", category: "Map & Evidence", title: "所有 Dashboard 地圖框選縮放與鍵盤平移", description: "確認目前 registry 內每張地圖都支援矩形框選放大／縮小，以及方向鍵平移。", run: diagnosticCheck027},
-      {id: "DASH-028", category: "Map & Evidence", title: "所有 Dashboard 地圖圖磚、向量與單圖例外政策", description: "確認目前 registry 內每張地圖使用圖磚或向量；單一圖片僅限明確允許的主題 overlay。", run: diagnosticCheck028},
-      {id: "DASH-029", category: "Map & Evidence", title: "所有 Dashboard 地圖基本 Zoom、Pan 與 Fit", description: "確認目前 registry 內每張地圖都具備放大、縮小、滑鼠平移與 Fit／Reset。", run: diagnosticCheck029},
+      {id: "DASH-027", category: "Map & Evidence", title: "所有 Dashboard 地圖框選縮放與鍵盤平移", description: "確認目前 registry 內每張地圖都支援矩形框選放大／縮小、方向鍵平移，並停用滑鼠滾輪縮放。", run: diagnosticCheck027},
+      {id: "DASH-028", category: "Map & Evidence", title: "所有 Dashboard 地圖圖磚、向量與單圖例外政策", description: "確認主 Map 保留完整圖層，其餘 7 張圖只用 Rudy+TW basemap；單一圖片僅限明確允許的主題 overlay。", run: diagnosticCheck028},
+      {id: "DASH-029", category: "Map & Evidence", title: "所有 Dashboard 地圖基本 Zoom、Pan 與 Fit", description: "確認目前 registry 內每張地圖都具備按鈕／框選縮放、滑鼠平移與 Fit／Reset。", run: diagnosticCheck029},
       {id: "DASH-030", category: "Map & Evidence", title: "Evidence 是否有計數為 0 的類別", description: "確認 Evidence 群組與 Evidence Timeline 子類別沒有 count=0；若有則列出類別名稱。", run: diagnosticCheck030},
     ]);
     const loadedDataScopes = new Set();
@@ -11731,6 +11731,7 @@
       const surfaces = await diagnosticMapSurfaceSources();
       for (const surface of surfaces) {
         const renderer = diagnosticCompactSource(surface.renderer);
+        const adapter = diagnosticCompactSource(surface.adapter);
         const controls = diagnosticCompactSource(surface.controls);
         const policy = diagnosticCompactSource(surface.policy);
         if (surface.basemapPolicy === "full-canonical") {
@@ -13460,7 +13461,7 @@
         mapContent,
         {
           className: "navigation-workspace-map",
-          attributes: `data-navigation-workspace-map="true" data-navigation-basemap-layer="rudy-twmap" data-navigation-tile-zoom="${baseZoom}"`,
+          attributes: `data-navigation-workspace-map="true" data-navigation-basemap-layer="rudy-twmap" data-dashboard-basemap-layer="rudy-twmap" data-dashboard-basemap-policy="rudy-twmap-only" data-navigation-tile-zoom="${baseZoom}"`,
           overlayHtml: mapOverlay,
           renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
           wheelZoom: false,

@@ -46,6 +46,77 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-28 - Use Rudy+TW as the only supporting-map basemap
+
+User request:
+
+- Keep the main Map as the most complete layer surface.
+- Make Architecture / Route Architecture Intelligence and every other
+  supporting Dashboard map behave like Weather and Navigation.
+- Use Rudy+TW tiles as the only basemap outside the main Map.
+
+Implementation:
+
+- Extended `DASHBOARD_MAP_SURFACES` with an explicit basemap policy:
+  - `map` is the sole `full-canonical` surface;
+  - Overview, LBS, Permission, Weather, Navigation, Architecture and Pace Fit
+    are `rudy-twmap-only`.
+- Promoted Navigation's Rudy WMTS renderer into a shared dynamic Dashboard
+  tile renderer. It refreshes the visible tile range as the shared viewport
+  pans or zooms and keeps tile provenance on every SVG image.
+- Replaced the Architecture decorative topographic grid with real Rudy+TW
+  tiles. Route architecture bins and checkpoints remain page-local,
+  focusable candidate vectors aligned in Web Mercator.
+- Replaced the Pace Fit decorative grid, hard-coded route and ungeoreferenced
+  risk shapes with the current workspace route and checkpoint vectors over
+  Rudy+TW.
+- Replaced Overview, LBS and Permission's shared 32-layer preview with three
+  independent Rudy+TW context maps. The complete 32-layer controls now remain
+  on the main Map instead of being duplicated in supporting views.
+- Kept Weather's CWA rainfall, radar and satellite products as thematic
+  overlays over Rudy+TW. They are not additional basemaps.
+- Made wheel zoom opt-in in the shared viewport, leaving it disabled on every
+  Dashboard map. Zoom buttons, Fit, Pan, rectangle zoom, keyboard arrows,
+  hover/focus hints and Escape cancellation remain available.
+- Updated `DASH-027` and `DASH-028` to verify wheel-lock and the one-main /
+  seven-Rudy basemap contract. The public Diagnostic registry now exports each
+  surface's `basemapPolicy`.
+
+Boundary:
+
+- Supporting pages render only their own page-specific evidence as candidate
+  vectors; they do not gain or claim additional canonical Scout layers.
+- The main Map remains the authoritative complete layer-control surface.
+- CWA imagery remains an approved, source-bounded thematic overlay and does
+  not become a basemap or runtime safety truth.
+- No runtime safety state, workspace artifact, outbound effect or provider
+  credential was changed.
+
+Verification:
+
+- Full focused Dashboard page suite: `59 passed`.
+- The inline Dashboard script parsed successfully as JavaScript.
+- Real Chromium exercised all eight registered maps:
+  - all eight exposed hover/focus evidence hints, rectangle zoom, arrow-key
+    pan, Zoom in/out, Pan and Fit;
+  - wheel events left zoom unchanged on all eight;
+  - the six Dashboard-native supporting maps reported only
+    `tileSources=["rudy-twmap"]`;
+  - Weather showed Rudy+TW as its sole checked basemap while retaining CWA
+    overlays;
+  - the main Map retained `full-canonical`;
+  - every map reported render-policy status `verified`.
+- Architecture rendered 10 Rudy+TW tiles and 117 visible route-architecture
+  vector sections in the tested workspace, with matching SVG and viewport
+  bounds.
+- `DASH-026` through `DASH-029` passed for all eight maps. The read-only
+  30-case run issued zero POST requests and retained zero mobile page-level
+  overflow at 390×844.
+- Five unrelated existing Diagnostic failures remain: Assistant readiness
+  (`DASH-009`), missing debug endpoints (`DASH-010`), missing Route Context
+  briefing/variants (`DASH-018`, `DASH-019`) and 13 zero-count Evidence
+  categories (`DASH-030`).
+
 ### 2026-07-28 - Expand DASH-026 through DASH-029 to every Dashboard map
 
 User request:

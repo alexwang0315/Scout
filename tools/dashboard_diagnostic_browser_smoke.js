@@ -50,6 +50,18 @@ async function inspectNativeDashboardMap(page, surface) {
   }
   const policyStatus = await viewport.getAttribute("data-map-render-policy-status");
   assert(policyStatus === "verified", `${surface.label} render policy is ${policyStatus || "missing"}.`);
+  assert(
+    await viewport.getAttribute("data-map-wheel-zoom") === "false",
+    `${surface.label} mouse-wheel zoom is not disabled.`,
+  );
+  assert(
+    await viewport.getAttribute("data-dashboard-basemap-policy") === "rudy-twmap-only",
+    `${surface.label} is not using the Rudy+TW-only basemap policy.`,
+  );
+  const tileSources = await viewport.locator('svg image[data-map-render-kind="tile"]').evaluateAll(nodes => (
+    [...new Set(nodes.map(node => node.getAttribute("data-map-tile-source")).filter(Boolean))]
+  ));
+  assert(tileSources.length === 1 && tileSources[0] === "rudy-twmap", `${surface.label} tile sources are ${tileSources.join(", ") || "missing"}.`);
   const hintTarget = viewport.locator('[data-dashboard-map-hint-title][tabindex="0"]').first();
   assert(await hintTarget.count() === 1, `${surface.label} has no focusable evidence hint target.`);
   await hintTarget.focus();
@@ -59,6 +71,11 @@ async function inspectNativeDashboardMap(page, surface) {
   await viewport.locator('[data-map-control="zoom-in"]').click();
   const zoomAfterClick = Number(await viewport.getAttribute("data-map-zoom"));
   assert(zoomAfterClick > 1, `${surface.label} Zoom in did not change scale.`);
+  await viewport.dispatchEvent("wheel", {deltaY: -120});
+  assert(
+    Number(await viewport.getAttribute("data-map-zoom")) === zoomAfterClick,
+    `${surface.label} mouse wheel changed map zoom.`,
+  );
   await viewport.locator('[data-map-control="zoom-out"]').click();
   const zoomAfterOut = Number(await viewport.getAttribute("data-map-zoom"));
   assert(zoomAfterOut < zoomAfterClick, `${surface.label} Zoom out did not reduce scale.`);
@@ -99,6 +116,8 @@ async function inspectNativeDashboardMap(page, surface) {
     rectangleZoom: boxZoomState.zoom,
     keyboardPanChanged: panStateAfter.x !== panStateBefore.x,
     renderPolicyStatus: policyStatus,
+    tileSources,
+    wheelZoomDisabled: true,
   };
 }
 
@@ -119,6 +138,21 @@ async function inspectEmbeddedDashboardMap(page, surface) {
   const hintTitle = await frame.locator("#hoverHint strong").textContent();
   assert(Boolean(hintTitle?.trim()), `${surface.label} hint has no title.`);
   const zoomBefore = await frame.locator("#zoomLevel").textContent();
+  const viewBoxBeforeWheel = await map.getAttribute("viewBox");
+  await map.dispatchEvent("wheel", {deltaY: -120});
+  assert(
+    await map.getAttribute("viewBox") === viewBoxBeforeWheel,
+    `${surface.label} mouse wheel changed map zoom.`,
+  );
+  if (surface.basemapPolicy === "rudy-twmap-only") {
+    const checkedBasemaps = await frame.locator(
+      '[data-layer="imagery"]:checked, [data-layer="rudy"]:checked, [data-layer="rudy-twmap"]:checked, [data-layer="relief"]:checked, [data-layer="geology"]:checked, [data-layer="topo-5k"]:checked, [data-layer="forest"]:checked, [data-layer="osm"]:checked',
+    ).evaluateAll(nodes => nodes.map(node => node.getAttribute("data-layer")));
+    assert(
+      checkedBasemaps.length === 1 && checkedBasemaps[0] === "rudy-twmap",
+      `${surface.label} checked basemaps are ${checkedBasemaps.join(", ") || "missing"}.`,
+    );
+  }
   await frame.locator("#zoomIn").click();
   const zoomAfter = await frame.locator("#zoomLevel").textContent();
   assert(zoomAfter !== zoomBefore, `${surface.label} Zoom in did not change scale.`);
@@ -160,6 +194,8 @@ async function inspectEmbeddedDashboardMap(page, surface) {
     rectangleZoom: zoomAfterBox,
     keyboardPanChanged: viewBoxAfterPan !== viewBoxBeforePan,
     renderPolicyStatus: await map.getAttribute("data-map-render-policy-status"),
+    basemapPolicy: surface.basemapPolicy,
+    wheelZoomDisabled: true,
   };
 }
 
@@ -237,6 +273,14 @@ async function main() {
     for (const surfaceId of expectedMapSurfaceIds) {
       assert(dashboardMapSurfaces.some(surface => surface.id === surfaceId), `Dashboard map registry is missing ${surfaceId}.`);
     }
+    assert(
+      dashboardMapSurfaces.filter(surface => surface.basemapPolicy === "full-canonical").length === 1,
+      "Dashboard map registry must have exactly one full-canonical map.",
+    );
+    assert(
+      dashboardMapSurfaces.filter(surface => surface.basemapPolicy === "rudy-twmap-only").length === 7,
+      "Dashboard map registry must have seven Rudy+TW-only maps.",
+    );
 
     const dash001 = page.locator('[data-diagnostic-case="DASH-001"]');
     workspaceRouteMode = "delay";
@@ -310,9 +354,9 @@ async function main() {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const browserMapChecks = [];
     for (const surface of [
-      {id: "overview-map", route: "home", label: "Overview Map preview", viewportId: "dashboard-map-preview"},
-      {id: "lbs-map", route: "features-lbs", label: "LBS Map", viewportId: "dashboard-map-preview"},
-      {id: "permission-map", route: "outdoor-permission", label: "Permission Map", viewportId: "dashboard-map-preview"},
+      {id: "overview-map", route: "home", label: "Overview Map preview", viewportId: "overview-map"},
+      {id: "lbs-map", route: "features-lbs", label: "LBS Map", viewportId: "lbs-map"},
+      {id: "permission-map", route: "outdoor-permission", label: "Permission Map", viewportId: "permission-map"},
       {id: "navigation-map", route: "outdoor-navigation", label: "Navigation Map", viewportId: "navigation-workspace-map"},
       {id: "architecture-map", route: "outdoor-architecture", label: "Architecture Map", viewportId: "architecture-map"},
       {id: "pace-fit-map", route: "outdoor-pace-fit", label: "Pace Fit Map", viewportId: "pace-fit-map"},
@@ -320,8 +364,8 @@ async function main() {
       browserMapChecks.push(await inspectNativeDashboardMap(page, surface));
     }
     for (const surface of [
-      {id: "map", route: "map", label: "Map", frameSelector: "#pretripMapFrame"},
-      {id: "weather-map", route: "outdoor-weather", label: "Weather Map", frameSelector: '[data-weather-cwa-map-frame="true"]'},
+      {id: "map", route: "map", label: "Map", frameSelector: "#pretripMapFrame", basemapPolicy: "full-canonical"},
+      {id: "weather-map", route: "outdoor-weather", label: "Weather Map", frameSelector: '[data-weather-cwa-map-frame="true"]', basemapPolicy: "rudy-twmap-only"},
     ]) {
       browserMapChecks.push(await inspectEmbeddedDashboardMap(page, surface));
     }
