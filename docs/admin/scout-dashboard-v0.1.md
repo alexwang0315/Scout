@@ -45,6 +45,133 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-28 - Extend Diagnostic with three-map behavior parity checks
+
+User request:
+
+- Treat Map, Navigation and Weather as three maps that must expose consistent
+  interaction behavior.
+- Add checks for evidence hover hints, rectangle zoom and keyboard pan,
+  tile/vector rendering with explicitly allowed single-image overlays, and
+  basic Zoom/Pan/Fit.
+
+Implementation:
+
+- Extended System → Diagnostic from 25 to 29 read-only checks.
+- Added:
+  - `DASH-026`: evidence hover and keyboard-focus hint visibility across Map,
+    Navigation and Weather;
+  - `DASH-027`: rectangle zoom-in/zoom-out and four-direction keyboard pan;
+  - `DASH-028`: tiled/vector rendering plus an explicit single-image overlay
+    allowlist for satellite, radar, LiDAR, hillshade and thematic imagery;
+  - `DASH-029`: Zoom in, Zoom out, drag Pan and Fit/Reset.
+- The checks inspect the canonical Pre-trip map renderer used by Map and
+  Weather, the Dashboard embed adapters, and Navigation's shared map viewport
+  and Rudy+TW tile renderer.
+- Updated the Diagnostic title, total, individual retest coverage and `Diag
+  all` browser smoke to 29 cases.
+- Added the four stable cases to
+  `scout-dashboard-100-item-functional-verification-checklist.md`; the next
+  available identifier is `DASH-030`.
+
+Boundary:
+
+- These checks are read-only and make only the existing same-origin GET used
+  to inspect the canonical Pre-trip surface.
+- They do not fetch new external imagery, mutate layer state, run preparation,
+  import data, send messages, control hardware or write runtime safety truth.
+- A contract check does not replace the checklist's direct browser gestures;
+  release acceptance must still perform hover, rectangle drag, keyboard and
+  Fit operations on all three rendered maps.
+
+Verification:
+
+- Seven focused Dashboard contracts passed, including the shared map control,
+  embedded map, Weather control visibility, Rudy+TW/CWA media, Navigation
+  box-zoom and cross-map hover/keyboard contracts.
+- The Diagnostic contract test passed with exactly 29 unique cases.
+- Real Chromium `Diag all` completed all 29 checks with no idle or running
+  case and zero POST requests.
+- Current live result: `25 passed / 4 failed`. All four new checks
+  (`DASH-026` through `DASH-029`) passed; the four red cases remain the
+  pre-existing Assistant readiness, Debug 404, Route Context briefing 404 and
+  missing Route Context variants gaps.
+- Mobile Chromium remained free of page-level horizontal overflow at 390×844
+  (`clientWidth=scrollWidth=390`).
+
+### 2026-07-28 - Add the 25-check System Diagnostic page
+
+User request:
+
+- Add `Diagnostic` as the last System navigation item, immediately after
+  Settings.
+- Put the current 25 Dashboard checks on that page.
+- Show yellow while a test is running, green when it passes and red when it
+  fails.
+- Give every check an independent `重新測試` button and add a top-level
+  `Diag all` action.
+
+Implementation:
+
+- Added the `diagnostic` route, truth contract, wide page layout and final
+  System navigation entry.
+- Added 25 stable diagnostic cases matching `DASH-001` through `DASH-025`,
+  grouped by the same five page-function categories as the checklist.
+- Added in-memory `idle`, `running`, `passed` and `failed` result state,
+  accessible status text, status lights, duration, checked time and bounded
+  error detail.
+- Added independent `重新測試` controls and a sequential `Diag all` runner.
+  Sequential execution lets expensive compact project and terrain reads share
+  one bounded cache without creating a request burst.
+- Exposed a read-only `window.scoutDashboardDiagnostics` surface for focused
+  browser verification and later automation.
+- Added `tools/dashboard_diagnostic_browser_smoke.js` for the real Chromium
+  yellow/green/red, independent retest, batch completion, no-POST and
+  responsive checks.
+- Replaced the stale Dashboard-open connected-preparation POST with the current
+  intended status GET. Explicit `Refresh evidence` remains the only Dashboard
+  control that starts connected preparation.
+
+Diagnostic boundary:
+
+- Diagnostic checkers use the current UI contract, same-origin GET APIs and
+  existing artifacts only.
+- They do not run workspace operations, connected preparation, GPX or
+  HealthExport import, Body Index watch start/stop, model generation, MQTT
+  publish, Emergency send, hardware control, `/safety/*` or runtime safety
+  mutation.
+- For side-effecting features, a green result means the safe wiring,
+  sanitized response and inactive boundary are present. It does not replace
+  the synthetic/private-data/full acceptance procedure in
+  `scout-dashboard-100-item-functional-verification-checklist.md`.
+
+Executable evidence:
+
+- Focused Diagnostic and adjacent route contracts: `4 passed`.
+- Full Dashboard page suite: `54 passed`.
+- `pnpm lint`: passed.
+- `pnpm typecheck`: passed (`1 passed` scaffold import).
+- Real Chromium at 1440×1000 proved:
+  - 25 cases and 25 independent retest buttons;
+  - the visible running state before completion;
+  - yellow-to-green success and synthetic yellow-to-red failure;
+  - all 25 cases complete after `Diag all`;
+  - zero cases left running or idle;
+  - zero POST requests.
+- The current live workspace result was `21 passed / 4 failed`. The red checks
+  truthfully expose existing runtime gaps:
+  - `DASH-009`: Assistant provider connection not checked and repository not
+    ready;
+  - `DASH-010`: `/debug/state` and `/debug/messages` return HTTP 404;
+  - `DASH-018`: the current `_scoutAI` Route Context canonical briefing returns
+    HTTP 404;
+  - `DASH-019`: the current project exposes zero existing variants.
+- Mobile Chromium at 390×844 had `scrollWidth=clientWidth=390`, a 366px case
+  card and a 336px retest button with no page-level horizontal overflow.
+- `pnpm test`: `15 passed, 2 failed`; both failures are the existing unrelated
+  AI OS documentation-token expectations for the removed Phase 9 marker and a
+  legacy generated-code-network phrase.
+
 ### 2026-07-28 - Paginate Evidence inside each category
 
 User request:
