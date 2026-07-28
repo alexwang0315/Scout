@@ -713,6 +713,9 @@ def build_pretrip_admin_view(
     compiled_mission_graph = _load_optional_json(
         artifacts.get("compiled_mission_graph")
     )
+    candidate_mission_graph = _load_optional_json(
+        artifacts.get("compiled_mission_graph_candidate")
+    )
     reference_segment_timing = _load_optional_json(
         artifacts.get("reference_segment_timing")
     )
@@ -1134,6 +1137,7 @@ def build_pretrip_admin_view(
             boss_points=boss_points,
             normalized_route_architecture=normalized_route_architecture,
             compiled_mission_graph=compiled_mission_graph,
+            candidate_mission_graph=candidate_mission_graph,
             eta=eta,
             weather_daylight=weather_daylight,
             source_refs=source_refs,
@@ -1660,6 +1664,9 @@ def resolve_pretrip_project_artifacts(
         "reference_pace_energy_analysis": "reference_pace_energy_analysis_ref",
         "route_architecture": "route_architecture_ref",
         "compiled_mission_graph": "compiled_mission_graph_ref",
+        "compiled_mission_graph_candidate": (
+            "compiled_mission_graph_candidate_ref"
+        ),
         "spatial_imprint_candidates": "spatial_imprint_candidates_ref",
         "spatial_imprint_reviews": "spatial_imprint_reviews_ref",
         "spatial_imprint_set": "spatial_imprint_set_ref",
@@ -1691,6 +1698,9 @@ def resolve_pretrip_project_artifacts(
             "normalized/architecture/route_architecture.json"
         ),
         "compiled_mission_graph": "outputs/compiled_mission_graph.json",
+        "compiled_mission_graph_candidate": (
+            "outputs/compiled_mission_graph.candidate.json"
+        ),
     }.items():
         artifacts.setdefault(artifact_key, resolved_project_root / default_ref)
     resolved_root = resolved_project_root.resolve()
