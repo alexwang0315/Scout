@@ -3560,3 +3560,43 @@ Verification:
 The controller changes map presentation only. They do not add route approval,
 walkability proof, Phase 1 mutation, outbound transport, or runtime safety
 truth.
+
+## 2026-07-28 - Navigation Rudy+TW dynamic tile surface
+
+The `Exploring for Six Axis -> Navigation` workspace map now uses the same
+Happyman WMTS contract as the canonical Pre-trip map, with only the
+`rudy_twmap` source enabled.
+
+Behavior:
+
+- The former hillshade, contour, slope-shading, and elevation-tint image stack
+  is no longer loaded by this map.
+- Initial zoom is selected from the workspace bounds with a bounded tile
+  count. Zoom and pan recompute the visible tile range, and the WMTS matrix
+  level follows the effective map scale so enlarged views receive higher
+  resolution tiles.
+- Route samples, terrain hierarchy candidates, pressure points, and ordered
+  terrain events remain SVG analysis overlays. They are not additional
+  basemap layers and remain candidate-only.
+- Navigation disables mouse wheel, point, and rectangle zoom gestures. Mouse
+  drag remains available for pan; `+`, `-`, `Fit`, and the matching keyboard
+  shortcuts remain available for zoom and reset.
+
+Browser evidence:
+
+- A 1440x1050 Chromium replay loaded 12 `rudy_twmap` tiles at matrix 13; every
+  tile returned HTTP 200 and no second basemap source appeared.
+- Two `+` actions changed map scale from `1.000` to `1.563`, replaced the
+  visible set with 16 matrix-14 tiles, and kept the console clean.
+- Mouse drag changed translation without changing zoom. A trusted wheel event
+  remained unprevented and left map zoom unchanged.
+- At 390x844, document width remained 390px, controls stayed within the
+  364px-wide map, and the map returned to 12 matrix-13 tiles after `Fit`.
+- The live Chilai terrain projection did not respond within a bounded
+  100-second browser wait. The UI verification therefore intercepted only that
+  JSON endpoint with a deterministic candidate fixture; Dashboard code and
+  Rudy WMTS requests still ran against the live 9099 runtime.
+
+The tile surface is presentation evidence only. Rudy+TW coverage does not prove
+trail existence, current walkability, route safety, or suitability for solo
+hiking.
