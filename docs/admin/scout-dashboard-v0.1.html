@@ -1584,6 +1584,18 @@
       gap: 6px;
     }
 
+    .evidence-group-pagination {
+      flex-wrap: wrap;
+      margin: 0;
+      border-width: 1px 0 0;
+      border-radius: 0;
+      background: rgba(98, 181, 196, .045);
+    }
+
+    .evidence-group-pagination .evidence-pagination-actions {
+      margin-left: auto;
+    }
+
     .pretrip-evidence-group {
       border: 1px solid var(--line);
       border-left: 3px solid var(--category-color, var(--accent));
@@ -7287,7 +7299,11 @@
       activeDebugDetail: "state",
       activeEvidenceTab: "default",
       activeMapEvidenceTab: "default",
-      evidencePageByContext: {
+      evidenceGroupPageByContext: {
+        timeline: {},
+        map: {},
+      },
+      evidenceOpenGroupByContext: {
         timeline: {},
         map: {},
       },
@@ -14367,8 +14383,6 @@
       const activeTab = EVIDENCE_TREE_TABS.some((tab) => tab.id === state.activeEvidenceTab) ? state.activeEvidenceTab : "default";
       const tabCounts = evidenceTabCounts(groups);
       const activeGroups = groups.filter((group) => group.tabId === activeTab);
-      const pagination = paginateEvidenceGroups(activeGroups, evidencePage("timeline", activeTab));
-      const visibleGroups = pagination.groups;
       const totalItems = groups.reduce((sum, group) => sum + group.count, 0);
       const sourceProject = state.pretripDataProjectId || projectId();
       return `
@@ -14393,9 +14407,8 @@
                 </button>
               `).join("")}
             </div>
-            ${renderEvidencePagination(pagination, "timeline", activeTab)}
             <div class="pretrip-evidence-groups" id="dashboardTimeline">
-              ${visibleGroups.length ? visibleGroups.map((group, index) => renderPretripEvidenceGroup(group, index)).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
+              ${activeGroups.length ? activeGroups.map((group, index) => renderPretripEvidenceGroup(group, index, {context: "timeline", tabId: activeTab})).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
             </div>
           </div>
         </section>
@@ -14429,8 +14442,6 @@
       const activeTab = EVIDENCE_TREE_TABS.some((tab) => tab.id === state.activeMapEvidenceTab) ? state.activeMapEvidenceTab : "default";
       const tabCounts = evidenceTabCounts(groups);
       const activeGroups = groups.filter((group) => group.tabId === activeTab);
-      const pagination = paginateEvidenceGroups(activeGroups, evidencePage("map", activeTab));
-      const visibleGroups = pagination.groups;
       const totalItems = groups.reduce((sum, group) => sum + group.count, 0);
       const focusStatus = state.selectedMapEvidenceSourceId ? "Evidence focus ready" : "Select an item to focus the map.";
       rail.innerHTML = `
@@ -14459,9 +14470,8 @@
               </button>
             `).join("")}
           </div>
-          ${renderEvidencePagination(pagination, "map", activeTab)}
           <div class="pretrip-evidence-groups" id="dashboardMapEvidenceTimeline">
-            ${visibleGroups.length ? visibleGroups.map((group, index) => renderPretripEvidenceGroup(group, index, {defaultOpen: false})).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
+            ${activeGroups.length ? activeGroups.map((group, index) => renderPretripEvidenceGroup(group, index, {context: "map", tabId: activeTab})).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
           </div>
         </div>`}
       `;
@@ -14630,17 +14640,43 @@
     }
 
     function renderPretripEvidenceGroup(group, index, options = {}) {
-      const defaultOpen = options.defaultOpen ?? pretripEvidenceGroupOpen(group, index);
-      const visibleItemCount = asArray(group.items).length;
-      const countLabel = visibleItemCount === Number(group.count)
+      const context = options.context === "map" ? "map" : "timeline";
+      const tabId = options.tabId || group.tabId || "default";
+      const isOpen = evidenceOpenGroup(context, tabId) === group.title
+        || pretripEvidenceGroupOpen(group, index);
+      const pagination = paginateEvidenceGroup(
+        group,
+        evidenceGroupPage(context, tabId, group.title),
+      );
+      const visibleItemCount = pagination.loadedItemCount;
+      const baseCountLabel = visibleItemCount === Number(group.count)
         ? `${group.count} items`
-        : `${visibleItemCount} shown · ${group.count} total`;
+        : `${visibleItemCount} loaded · ${group.count} total`;
+      const countLabel = pagination.pageCount > 1
+        ? `${baseCountLabel} · page ${pagination.page}/${pagination.pageCount}`
+        : baseCountLabel;
+      const emptyNote = group.emptyNote
+        || (Number(group.count) > 0
+          ? `${group.count} items are declared by the source, but their row payload is not loaded on this surface.`
+          : "No evidence loaded for this category.");
       return `
-        <details class="pretrip-evidence-group" style="--category-color:${categoryColor(group.category)}" ${defaultOpen ? "open" : ""}>
-          <summary>${escapeHtml(group.title)} <span>${escapeHtml(countLabel)}</span></summary>
-          ${group.items.length ? `
+        <details
+          class="pretrip-evidence-group"
+          style="--category-color:${categoryColor(group.category)}"
+          data-evidence-group-context="${escapeHtml(context)}"
+          data-evidence-group-tab="${escapeHtml(tabId)}"
+          data-evidence-group-title="${escapeHtml(group.title)}"
+          ${isOpen ? "open" : ""}
+        >
+          <summary
+            data-evidence-group-toggle="true"
+            data-evidence-group-context="${escapeHtml(context)}"
+            data-evidence-group-tab="${escapeHtml(tabId)}"
+            data-evidence-group-title="${escapeHtml(group.title)}"
+          >${escapeHtml(group.title)} <span>${escapeHtml(countLabel)}</span></summary>
+          ${isOpen && pagination.items.length ? `
             <div class="pretrip-evidence-items">
-              ${group.items.map((item) => `
+              ${pagination.items.map((item) => `
                 <button
                   type="button"
                   class="pretrip-evidence-item ${item.sourceId === state.selectedMapEvidenceSourceId ? "is-selected" : ""}"
@@ -14654,7 +14690,8 @@
                 </button>
               `).join("")}
             </div>
-          ` : `<div class="evidence-empty">${escapeHtml(group.emptyNote || "No evidence in this group.")}</div>`}
+            ${renderEvidenceGroupPagination(pagination, context, tabId, group.title)}
+          ` : isOpen ? `<div class="evidence-empty">${escapeHtml(emptyNote)}</div>` : ""}
         </details>
       `;
     }
@@ -14813,75 +14850,71 @@
       }, {});
     }
 
-    function paginateEvidenceGroups(groups, requestedPage = 1, pageSize = EVIDENCE_PAGE_SIZE) {
+    function paginateEvidenceGroup(group, requestedPage = 1, pageSize = EVIDENCE_PAGE_SIZE) {
+      const items = asArray(group.items);
       const safePageSize = Math.max(1, Number(pageSize) || EVIDENCE_PAGE_SIZE);
-      const itemCount = groups.reduce((sum, group) => sum + asArray(group.items).length, 0);
-      const pageCount = Math.max(1, Math.ceil(itemCount / safePageSize));
+      const pageCount = Math.max(1, Math.ceil(items.length / safePageSize));
       const page = Math.min(pageCount, Math.max(1, Number(requestedPage) || 1));
       const startIndex = (page - 1) * safePageSize;
-      const endIndex = Math.min(itemCount, startIndex + safePageSize);
-      let cursor = 0;
-      const pageGroups = [];
-      groups.forEach((group) => {
-        const items = asArray(group.items);
-        const groupStart = cursor;
-        const groupEnd = groupStart + items.length;
-        const sliceStart = Math.max(0, startIndex - groupStart);
-        const sliceEnd = Math.min(items.length, endIndex - groupStart);
-        const pageItems = sliceStart < sliceEnd
-          ? items.slice(sliceStart, sliceEnd)
-          : [];
-        const emptyNote = pageItems.length
-          ? group.emptyNote
-          : items.length
-            ? "Evidence exists in this category but is on another page."
-            : group.emptyNote || "No evidence loaded for this category.";
-        pageGroups.push({...group, items: pageItems, emptyNote});
-        cursor = groupEnd;
-      });
+      const endIndex = Math.min(items.length, startIndex + safePageSize);
       return {
-        groups: pageGroups,
-        itemCount,
+        ...group,
+        items: items.slice(startIndex, endIndex),
+        loadedItemCount: items.length,
         page,
         pageCount,
-        start: itemCount ? startIndex + 1 : 0,
+        start: items.length ? startIndex + 1 : 0,
         end: endIndex,
         pageSize: safePageSize,
       };
     }
 
-    function evidencePageForSource(groups, sourceId, pageSize = EVIDENCE_PAGE_SIZE) {
-      let itemIndex = 0;
-      for (const group of groups) {
-        for (const item of asArray(group.items)) {
-          if (item.sourceId === sourceId) return Math.floor(itemIndex / pageSize) + 1;
-          itemIndex += 1;
-        }
-      }
-      return null;
+    function evidenceGroupPageForSource(group, sourceId, pageSize = EVIDENCE_PAGE_SIZE) {
+      const itemIndex = asArray(group.items).findIndex((item) => item.sourceId === sourceId);
+      return itemIndex >= 0 ? Math.floor(itemIndex / pageSize) + 1 : null;
     }
 
-    function evidencePage(context, tabId) {
-      return Number(state.evidencePageByContext?.[context]?.[tabId] || 1);
+    function evidenceGroupPage(context, tabId, groupTitle) {
+      return Number(
+        state.evidenceGroupPageByContext?.[context]?.[tabId]?.[groupTitle] || 1,
+      );
     }
 
-    function setEvidencePage(context, tabId, page) {
-      state.evidencePageByContext = {
-        ...(state.evidencePageByContext || {}),
+    function setEvidenceGroupPage(context, tabId, groupTitle, page) {
+      state.evidenceGroupPageByContext = {
+        ...(state.evidenceGroupPageByContext || {}),
         [context]: {
-          ...(state.evidencePageByContext?.[context] || {}),
-          [tabId]: Math.max(1, Number(page) || 1),
+          ...(state.evidenceGroupPageByContext?.[context] || {}),
+          [tabId]: {
+            ...(state.evidenceGroupPageByContext?.[context]?.[tabId] || {}),
+            [groupTitle]: Math.max(1, Number(page) || 1),
+          },
         },
       };
     }
 
-    function renderEvidencePagination(pagination, context, tabId) {
+    function evidenceOpenGroup(context, tabId) {
+      return String(state.evidenceOpenGroupByContext?.[context]?.[tabId] || "");
+    }
+
+    function setEvidenceOpenGroup(context, tabId, groupTitle) {
+      state.evidenceOpenGroupByContext = {
+        ...(state.evidenceOpenGroupByContext || {}),
+        [context]: {
+          ...(state.evidenceOpenGroupByContext?.[context] || {}),
+          [tabId]: groupTitle || "",
+        },
+      };
+    }
+
+    function renderEvidenceGroupPagination(pagination, context, tabId, groupTitle) {
+      if (pagination.pageCount <= 1) return "";
       return `
-        <nav class="evidence-pagination" aria-label="Evidence pagination">
-          <span>Showing ${pagination.start.toLocaleString()}–${pagination.end.toLocaleString()} of ${pagination.itemCount.toLocaleString()} loaded items · page ${pagination.page} of ${pagination.pageCount}</span>
+        <nav class="evidence-pagination evidence-group-pagination" aria-label="${escapeHtml(groupTitle)} pagination">
+          <span>Items ${pagination.start.toLocaleString()}–${pagination.end.toLocaleString()} of ${pagination.loadedItemCount.toLocaleString()} · page ${pagination.page} of ${pagination.pageCount}</span>
           <div class="evidence-pagination-actions">
-            <button type="button" data-evidence-page-action="previous" data-evidence-page-context="${escapeHtml(context)}" data-evidence-page-tab="${escapeHtml(tabId)}" ${pagination.page <= 1 ? "disabled" : ""}>Previous</button>
-            <button type="button" data-evidence-page-action="next" data-evidence-page-context="${escapeHtml(context)}" data-evidence-page-tab="${escapeHtml(tabId)}" ${pagination.page >= pagination.pageCount ? "disabled" : ""}>Next</button>
+            <button type="button" data-evidence-page-action="previous" data-evidence-page-context="${escapeHtml(context)}" data-evidence-page-tab="${escapeHtml(tabId)}" data-evidence-page-group="${escapeHtml(groupTitle)}" data-evidence-page-current="${pagination.page}" ${pagination.page <= 1 ? "disabled" : ""}>Previous</button>
+            <button type="button" data-evidence-page-action="next" data-evidence-page-context="${escapeHtml(context)}" data-evidence-page-tab="${escapeHtml(tabId)}" data-evidence-page-group="${escapeHtml(groupTitle)}" data-evidence-page-current="${pagination.page}" ${pagination.page >= pagination.pageCount ? "disabled" : ""}>Next</button>
           </div>
         </nav>
       `;
@@ -16530,6 +16563,46 @@
       }
     }
 
+    function rerenderEvidenceContext(
+      context,
+      tabId,
+      focusGroupTitle = "",
+      {scrollToGroup = false} = {},
+    ) {
+      const scrollContainerId = context === "map"
+        ? "dashboardMapEvidenceBody"
+        : "workspace";
+      const previousScrollTop = document.getElementById(scrollContainerId)?.scrollTop || 0;
+      if (context === "map") {
+        state.activeMapEvidenceTab = tabId;
+        renderMapEvidenceRail();
+        bindMapEvidenceControls();
+      } else {
+        state.activeEvidenceTab = tabId;
+        render();
+      }
+      window.requestAnimationFrame(() => {
+        const scrollContainer = document.getElementById(scrollContainerId);
+        const summary = [...document.querySelectorAll('[data-evidence-group-toggle="true"]')]
+          .find((candidate) => (
+            candidate.dataset.evidenceGroupContext === context
+            && candidate.dataset.evidenceGroupTab === tabId
+            && candidate.dataset.evidenceGroupTitle === focusGroupTitle
+          ));
+        const group = summary?.closest(".pretrip-evidence-group");
+        if (scrollContainer && scrollToGroup && group) {
+          const groupTop = group.getBoundingClientRect().top
+            - scrollContainer.getBoundingClientRect().top
+            + scrollContainer.scrollTop;
+          scrollContainer.scrollTop = Math.max(0, groupTop - 8);
+        } else if (scrollContainer) {
+          scrollContainer.scrollTop = previousScrollTop;
+        }
+        if (!focusGroupTitle) return;
+        summary?.focus({preventScroll: true});
+      });
+    }
+
     function bindMapEvidenceControls() {
       document.querySelectorAll("[data-map-evidence-toggle]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -16543,38 +16616,42 @@
       document.querySelectorAll("[data-evidence-tab]").forEach((button) => {
         button.addEventListener("click", () => {
           const selectedTab = button.dataset.evidenceTab || "default";
-          const tabGroups = state.project
-            ? pretripEvidenceGroups(state.project).filter((group) => group.tabId === selectedTab)
-            : [];
-          const selectedPage = state.selectedMapEvidenceSourceId
-            ? evidencePageForSource(tabGroups, state.selectedMapEvidenceSourceId) || 1
-            : 1;
           if (state.route === "map") {
-            state.activeMapEvidenceTab = selectedTab;
-            setEvidencePage("map", selectedTab, selectedPage);
-            renderMapEvidenceRail();
-            bindMapEvidenceControls();
+            rerenderEvidenceContext("map", selectedTab);
           } else {
-            state.activeEvidenceTab = selectedTab;
-            setEvidencePage("timeline", selectedTab, selectedPage);
-            render();
+            rerenderEvidenceContext("timeline", selectedTab);
           }
+        });
+      });
+      document.querySelectorAll('[data-evidence-group-toggle="true"]').forEach((summary) => {
+        summary.addEventListener("click", (event) => {
+          event.preventDefault();
+          const context = summary.dataset.evidenceGroupContext === "map" ? "map" : "timeline";
+          const tabId = summary.dataset.evidenceGroupTab || "default";
+          const groupTitle = summary.dataset.evidenceGroupTitle || "";
+          const nextOpenGroup = evidenceOpenGroup(context, tabId) === groupTitle
+            ? ""
+            : groupTitle;
+          setEvidenceOpenGroup(context, tabId, nextOpenGroup);
+          rerenderEvidenceContext(context, tabId, groupTitle);
         });
       });
       document.querySelectorAll("[data-evidence-page-action]").forEach((button) => {
         button.addEventListener("click", () => {
           const context = button.dataset.evidencePageContext === "map" ? "map" : "timeline";
           const tabId = button.dataset.evidencePageTab || "default";
+          const groupTitle = button.dataset.evidencePageGroup || "";
+          if (!groupTitle) return;
           const delta = button.dataset.evidencePageAction === "previous" ? -1 : 1;
-          setEvidencePage(context, tabId, evidencePage(context, tabId) + delta);
-          if (context === "map") {
-            state.activeMapEvidenceTab = tabId;
-            renderMapEvidenceRail();
-            bindMapEvidenceControls();
-          } else {
-            state.activeEvidenceTab = tabId;
-            render();
-          }
+          const currentPage = Math.max(1, Number(button.dataset.evidencePageCurrent) || 1);
+          setEvidenceGroupPage(
+            context,
+            tabId,
+            groupTitle,
+            currentPage + delta,
+          );
+          setEvidenceOpenGroup(context, tabId, groupTitle);
+          rerenderEvidenceContext(context, tabId, groupTitle, {scrollToGroup: true});
         });
       });
       document.querySelectorAll("[data-map-evidence-source]").forEach((button) => {
@@ -16790,13 +16867,20 @@
         const groups = pretripEvidenceGroups(state.project || {});
         const sourceGroup = groups.find((group) => asArray(group.items).some((item) => item.sourceId === sourceId));
         if (sourceGroup) {
-          const tabGroups = groups.filter((group) => group.tabId === sourceGroup.tabId);
-          const sourcePage = evidencePageForSource(tabGroups, sourceId) || 1;
-          if (state.activeMapEvidenceTab !== sourceGroup.tabId || evidencePage("map", sourceGroup.tabId) !== sourcePage) {
-            state.activeMapEvidenceTab = sourceGroup.tabId;
-            setEvidencePage("map", sourceGroup.tabId, sourcePage);
-            renderMapEvidenceRail();
-            bindMapEvidenceControls();
+          const sourcePage = evidenceGroupPageForSource(sourceGroup, sourceId) || 1;
+          if (
+            state.activeMapEvidenceTab !== sourceGroup.tabId
+            || evidenceGroupPage("map", sourceGroup.tabId, sourceGroup.title) !== sourcePage
+            || evidenceOpenGroup("map", sourceGroup.tabId) !== sourceGroup.title
+          ) {
+            setEvidenceGroupPage("map", sourceGroup.tabId, sourceGroup.title, sourcePage);
+            setEvidenceOpenGroup("map", sourceGroup.tabId, sourceGroup.title);
+            rerenderEvidenceContext(
+              "map",
+              sourceGroup.tabId,
+              sourceGroup.title,
+              {scrollToGroup: true},
+            );
           }
         }
       }
@@ -17176,7 +17260,7 @@
       assistantReadiness: (status) => deriveAssistantReadiness(status),
       cwaStatus: (snapshot) => dashboardCwaDerivedStatus(snapshot),
       weatherStatus: (weather, project) => dashboardWeatherDerivedStatus(weather, project),
-      evidencePage: (groups, requestedPage, pageSize) => paginateEvidenceGroups(groups, requestedPage, pageSize),
+      evidenceGroupPage: (group, requestedPage, pageSize) => paginateEvidenceGroup(group, requestedPage, pageSize),
     });
   </script>
 </body>

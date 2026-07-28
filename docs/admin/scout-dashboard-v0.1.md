@@ -45,6 +45,60 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-28 - Paginate Evidence inside each category
+
+User request:
+
+- Replace the tab-wide Evidence pager with independent pagination inside each
+  category.
+- Keep every category title visible and initially collapsed.
+
+Implementation:
+
+- Removed the shared 100-row page that split one tab across unrelated
+  categories. Each category now owns its page number, page count and
+  Previous/Next controls.
+- Kept category shells visible while rendering row controls only for the one
+  open category. This bounds the live DOM to at most 100 evidence rows without
+  making later categories appear empty.
+- Preserved page state independently by surface, tab and category. Switching
+  categories or tabs no longer consumes or resets another category's page.
+- Map source focus now opens the source category and moves directly to that
+  category's page.
+- Removed the misleading “Evidence exists in this category but is on another
+  page” state. A declared category with no loaded row payload now states that
+  distinction directly.
+
+Boundary:
+
+- This is a read-only information-architecture change. It does not add,
+  infer, accept or mutate evidence or Phase 1 runtime safety truth.
+- The previous tab-wide pagination record below remains historical and is
+  superseded by this category-local model.
+
+Verification:
+
+- Isolated commit worktree Dashboard suite: `50 passed`; the integrated dirty
+  worktree also passed its then-current Dashboard suite.
+- `pnpm lint`: passed. The package typecheck smoke passed (`1 passed`).
+- The package test aggregate retained two unrelated documentation-token
+  failures (`AGENTS.md` Phase 9 wording and the legacy generated-code-network
+  phrase); the other 15 package tests passed.
+- Live Chromium against `http://127.0.0.1:9099/admin/dashboard#map` confirmed
+  zero initially open categories, all 31 Map/Risk category shells, five Boss
+  Point rows, and no legacy “another page” message.
+- Baseline Risk rendered exactly 100 controls from 1,825 rows. Its local pager
+  moved from items 1–100 / page 1 of 19 to items 101–200 / page 2 of 19,
+  changed the first row, and kept that category open; only 100 evidence row
+  controls existed in the rail. Page changes positioned the category header
+  eight pixels below the rail viewport instead of leaving the user at the
+  bottom of the previous page.
+- Final browser verification reported zero JavaScript exceptions, console
+  errors, failed requests or HTTP error responses. An earlier cold-runtime
+  attempt observed transient optional weather-overlay `422/500` responses;
+  they did not reproduce after the Dashboard runtime and workspace catalog
+  were reverified.
+
 ### 2026-07-23 - Keep Timeline Evidence categories collapsed and visible
 
 User request:
