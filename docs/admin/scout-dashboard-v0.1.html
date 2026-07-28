@@ -2242,6 +2242,84 @@
 
     .weather-cwa-control-deck input[type="range"] { accent-color: var(--candidate); }
 
+    .weather-layer-control-deck {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(11, 24, 20, .96);
+    }
+
+    .weather-layer-control-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .weather-layer-control-heading strong {
+      color: var(--paper);
+      font: 500 17px/1.1 Georgia, "Times New Roman", serif;
+    }
+
+    .weather-layer-control-heading span {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .weather-layer-control-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(118px, 1fr));
+      gap: 8px;
+    }
+
+    .weather-layer-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 8px;
+      align-items: center;
+      min-height: 58px;
+      padding: 9px 10px;
+      border: 1px solid rgba(98, 184, 198, .54);
+      color: #dff7f4;
+      background: rgba(18, 42, 35, .9);
+      text-align: left;
+    }
+
+    .weather-layer-control strong {
+      overflow: hidden;
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .weather-layer-control small {
+      grid-column: 1 / -1;
+      color: #9baca1;
+      font-family: var(--mono);
+      font-size: 9px;
+      line-height: 1.35;
+    }
+
+    .weather-layer-control [data-weather-layer-state] {
+      color: #7de1e9;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: .08em;
+    }
+
+    .weather-layer-control[aria-pressed="false"] {
+      border-color: rgba(86, 106, 99, .55);
+      color: #8e9d96;
+      background: rgba(12, 22, 19, .82);
+    }
+
+    .weather-layer-control[aria-pressed="false"] [data-weather-layer-state] {
+      color: #7d8983;
+    }
+
     .weather-cwa-control-status {
       grid-column: 1 / -1;
       display: flex;
@@ -4409,7 +4487,8 @@
       .weather-decision-evidence-grid,
       .weather-risk-feature-grid,
       .weather-route-trend-grid,
-      .weather-cwa-control-deck {
+      .weather-cwa-control-deck,
+      .weather-layer-control-grid {
         grid-template-columns: 1fr;
       }
       .weather-intersection-header {
@@ -7033,6 +7112,31 @@
       "weather-api",
     ]);
 
+    const WEATHER_LAYER_IDS = Object.freeze([
+      "soil-moisture",
+      "antecedent-rain",
+      "cwa-qpf",
+      "cwa-weather",
+      "weather-api",
+    ]);
+
+    const WEATHER_LAYER_DEFAULTS = Object.freeze(Object.fromEntries(
+      WEATHER_LAYER_IDS.map(layerId => [layerId, layerId === "cwa-qpf"]),
+    ));
+
+    const WEATHER_EMBEDDED_MAP_LAYER_IDS = Object.freeze([
+      "rudy-twmap",
+      "cwa-qpf",
+    ]);
+
+    const WEATHER_LAYER_DEFINITIONS = Object.freeze([
+      {id: "soil-moisture", label: "Soil moisture", detail: "SMAP L4 hydrology context"},
+      {id: "antecedent-rain", label: "Antecedent rain", detail: "GPM IMERG prior rainfall"},
+      {id: "cwa-qpf", label: "CWA rainfall grid", detail: "QPE / QPF route-bbox cells"},
+      {id: "cwa-weather", label: "CWA imagery", detail: "Radar / satellite overlays"},
+      {id: "weather-api", label: "Weather API", detail: "Forecast and observation evidence"},
+    ]);
+
     const COUNTRY_MATERIAL_POOLS = [
       {
         code: "TW",
@@ -7291,6 +7395,7 @@
       weatherTimelineIndex: 0,
       weatherCwaProduct: "radar",
       weatherCwaWindowId: "12h",
+      weatherRainfallProduct: "qpf_next_1h",
       weatherRadarOpacityPercent: 62,
       weatherSatelliteOpacityPercent: 48,
       weatherRainfallOpacityPercent: 56,
@@ -7437,7 +7542,10 @@
         projectId: "",
         goldenRouteGpx: "",
       },
-      layerEnabled: Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, layerId !== "osm"])),
+      layerEnabled: {
+        ...Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, layerId !== "osm"])),
+        ...WEATHER_LAYER_DEFAULTS,
+      },
     };
 
     const routeMeta = {
@@ -7465,9 +7573,7 @@
       bindMobileNavigation();
       bindAgentChatControls();
       setRoute(routeFromHash());
-      if (state.route !== "outdoor-navigation") {
-        void triggerDashboardConnectedPreparation("dashboard-open");
-      }
+      void triggerDashboardConnectedPreparation("dashboard-open");
       loadData().finally(() => {
         if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
       });
@@ -10811,7 +10917,9 @@
             ...product,
           }))
         : compactRainfallProducts;
-      const preferredRainfall = rainfallProducts.find(item => item.gridKind === "qpf_next_1h") || rainfallProducts[0] || null;
+      const pastRainfall = rainfallProducts.find(item => item.gridKind === "qpe_past_1h") || null;
+      const futureRainfall = rainfallProducts.find(item => item.gridKind === "qpf_next_1h") || null;
+      const preferredRainfall = futureRainfall || pastRainfall || rainfallProducts[0] || null;
       const imageryFamilies = ["radar", "satellite"].map(family => {
         const overlay = weather.imagery?.childOverlays?.[family] || {};
         const frames = asArray(overlay.frames);
@@ -10831,6 +10939,8 @@
         freshness,
         imageryFamilies,
         loading: weather.status === "idle" || weather.status === "loading",
+        pastRainfall,
+        futureRainfall,
         preferredRainfall,
         decision: weather.decision || null,
         routeRisk: weather.routeRisk || null,
@@ -11136,25 +11246,41 @@
       `;
     }
 
+    function weatherRainfallCoverageSummary(product, label) {
+      if (!product) return `${label}: unavailable.`;
+      const availableCells = Number(product.availableCellCount || 0);
+      if (availableCells > 0) return `${label}: ${availableCells} valid route-bbox cells.`;
+      const missingValueMeaning = label === "Next 1h QPF"
+        ? " (unknown, not zero)"
+        : "";
+      return `${label}: no valid route-bbox values${missingValueMeaning}.`;
+    }
+
     function weatherIntersectionCallout(snapshot, mapData) {
       const routeDetail = mapData.connected
         ? "Route geometry is projected from the current admin route source."
         : "Route geometry is a labeled visual fallback; load the project route before segment review.";
+      const rainfallCoverageDetail = [
+        weatherRainfallCoverageSummary(snapshot.pastRainfall, "Past 1h QPE"),
+        weatherRainfallCoverageSummary(snapshot.futureRainfall, "Next 1h QPF"),
+      ].join(" ");
       if (snapshot.loading) return {
         title: "Route-weather intersection is loading.",
         detail: `Waiting for cache-only CWA evidence. ${routeDetail}`,
       };
       if (snapshot.coverageStatus === "covered") return {
         title: `${snapshot.availableCells} rainfall cells are inside the route review bbox.`,
-        detail: `Inspect the candidate grid against exposed route segments; bbox coverage is not a safety decision. ${routeDetail}`,
+        detail: `${rainfallCoverageDetail} Inspect the candidate grid against exposed route segments; bbox coverage is not a safety decision. ${routeDetail}`,
       };
       if (snapshot.coverageStatus === "no_coverage") return {
-        title: "No rainfall cells cover the route review bbox.",
-        detail: `Missing coverage is unknown, never zero rainfall. Recheck the CWA cache before route review. ${routeDetail}`,
+        title: snapshot.futureRainfall
+          ? "Next 1h QPF has no valid route-bbox values."
+          : "Rainfall grid has no valid route-bbox values.",
+        detail: `${rainfallCoverageDetail} Recheck after connected preparation before route review. ${routeDetail}`,
       };
       return {
         title: "Route-weather intersection is unresolved.",
-        detail: `Cached route-bbox rainfall evidence is unavailable. ${routeDetail}`,
+        detail: `${rainfallCoverageDetail} Cached route-bbox rainfall evidence is unavailable. ${routeDetail}`,
       };
     }
 
@@ -11189,9 +11315,21 @@
         <section class="panel weather-intersection-panel" data-weather-intersection-map="true">
           <div class="weather-intersection-header">
             <div><h3>Canonical Pre-trip Map</h3><p class="small-note">The Weather page reuses the MAP renderer and its prepared CWA overlays; no browser image processing is added.</p></div>
-            <button type="button" data-weather-open-map="true">Open full MAP page</button>
           </div>
-          <div class="weather-cwa-control-deck" aria-label="Weather CWA imagery controls">
+          <div class="weather-layer-control-deck">
+            <div class="weather-layer-control-heading">
+              <strong>Weather / 氣象與水文 layers</strong>
+              <span>owned by Six Axis Weather</span>
+            </div>
+            <div class="weather-layer-control-grid" aria-label="Weather and hydrology layer controls">
+              ${WEATHER_LAYER_DEFINITIONS.map(layer => {
+                const enabled = state.layerEnabled[layer.id] !== false;
+                return `<button type="button" class="weather-layer-control" data-weather-layer-control="${escapeHtml(layer.id)}" aria-pressed="${enabled ? "true" : "false"}"><strong>${escapeHtml(layer.label)}</strong><span data-weather-layer-state>${enabled ? "ON" : "OFF"}</span><small>${escapeHtml(layer.detail)}</small></button>`;
+              }).join("")}
+            </div>
+          </div>
+          <div class="weather-cwa-control-deck" aria-label="Weather CWA rainfall, radar and satellite controls">
+            <label>Rain grid<select data-weather-cwa-rainfall-product="true"><option value="qpe_past_1h" ${state.weatherRainfallProduct === "qpe_past_1h" ? "selected" : ""}>Past 1h QPE</option><option value="qpf_next_1h" ${state.weatherRainfallProduct === "qpf_next_1h" ? "selected" : ""}>Next 1h QPF</option></select></label>
             <label>Product<select data-weather-cwa-product="true"><option value="radar" ${state.weatherCwaProduct === "radar" ? "selected" : ""}>Radar echo</option><option value="satellite" ${state.weatherCwaProduct === "satellite" ? "selected" : ""}>Satellite cloud</option></select></label>
             <label>Window<select data-weather-cwa-window="true">${animationWindows.map(hours => `<option value="${Number(hours)}h" ${state.weatherCwaWindowId === `${Number(hours)}h` ? "selected" : ""}>${Number(hours)} hours</option>`).join("")}</select></label>
             <label>Frame<input type="range" min="0" max="${maxIndex}" value="${selectedIndex}" step="1" data-weather-cwa-timeline="true" ${frames.length < 2 ? "disabled" : ""}></label>
@@ -11199,10 +11337,12 @@
             <label>Satellite opacity<input type="range" min="0" max="100" value="${Number(state.weatherSatelliteOpacityPercent)}" data-weather-cwa-opacity="satellite"></label>
             <label>Rain-grid opacity<input type="range" min="0" max="100" value="${Number(state.weatherRainfallOpacityPercent)}" data-weather-cwa-rainfall-opacity="true"></label>
             <button type="button" data-weather-cwa-play="true" aria-pressed="${state.weatherCwaPlaying ? "true" : "false"}" ${frames.length < 2 ? "disabled" : ""}>${state.weatherCwaPlaying ? "Pause" : "Play"}</button>
+            <div class="cwa-rainfall-legend" data-weather-cwa-rainfall-legend="true" aria-label="Rainfall millimetre legend"><span style="--rain-color:#fff">0</span><span style="--rain-color:#77edf1">0.3</span><span style="--rain-color:#00a8f3">1</span><span style="--rain-color:#1ba500">1.5</span><span style="--rain-color:#f4f500">3</span><span style="--rain-color:#ff9800">6</span><span style="--rain-color:#f50000">10</span><span style="--rain-color:#8f0000">17</span><span style="--rain-color:#eb00dc">25+ mm</span></div>
+            <output class="weather-cwa-control-status" data-weather-cwa-rainfall-status="true" role="status" aria-live="polite">Connecting to prepared rainfall grids.</output>
             <div class="weather-cwa-control-status"><output data-weather-cwa-status="true">${escapeHtml(selectedFrame ? `${selectedIndex + 1}/${frames.length} · ${formatCwaTimestamp(selectedFrame.sourceTimestamp)}` : `No cached ${state.weatherCwaProduct} frame`)}</output><span>${escapeHtml(state.weatherCwaWindowId)} · cache-only</span></div>
           </div>
           <div class="weather-intersection-map weather-cwa-frame-shell">
-            <iframe class="weather-cwa-map-frame" data-weather-cwa-map-frame="true" title="Canonical Pre-trip CWA weather map" src="${escapeHtml(surfaceSrc("/admin/pretrip"))}" loading="eager"></iframe>
+            <iframe class="weather-cwa-map-frame" data-weather-cwa-map-frame="true" title="Canonical Pre-trip CWA weather map" src="${escapeHtml(`${surfaceSrc("/admin/pretrip")}&mapOnly=1&initialLayers=${encodeURIComponent(WEATHER_EMBEDDED_MAP_LAYER_IDS.join(","))}`)}" loading="eager"></iframe>
             <span class="weather-cwa-frame-state" data-weather-cwa-frame-state="loading">CWA MAP BRIDGE · LOADING</span>
             <div class="weather-map-route-callout" data-weather-intersection-callout="true">
               <strong>${escapeHtml(callout.title)}</strong>
@@ -15636,6 +15776,40 @@
       });
     }
 
+    function embeddedPretripLayerInput(frame, layerId) {
+      if (!SCOUT_LAYER_IDS.includes(layerId)) return null;
+      try {
+        return frame?.contentDocument?.querySelector(`input[data-layer="${cssEscape(layerId)}"]`) || null;
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function setEmbeddedPretripLayerEnabled(frame, layerId, enabled) {
+      const input = embeddedPretripLayerInput(frame, layerId);
+      if (!input) return false;
+      const nextEnabled = Boolean(enabled);
+      const changed = input.checked !== nextEnabled;
+      input.checked = nextEnabled;
+      if (changed) input.dispatchEvent(new Event("change", {bubbles: true}));
+      return true;
+    }
+
+    function syncWeatherLayerControls(frame = document.querySelector('[data-weather-cwa-map-frame="true"]')) {
+      const nextLayerState = {};
+      WEATHER_LAYER_IDS.forEach(layerId => {
+        const input = embeddedPretripLayerInput(frame, layerId);
+        nextLayerState[layerId] = input ? Boolean(input.checked) : state.layerEnabled[layerId] !== false;
+      });
+      state.layerEnabled = {...state.layerEnabled, ...nextLayerState};
+      document.querySelectorAll("[data-weather-layer-control]").forEach(button => {
+        const enabled = nextLayerState[button.dataset.weatherLayerControl] !== false;
+        button.setAttribute("aria-pressed", enabled ? "true" : "false");
+        const status = button.querySelector("[data-weather-layer-state]");
+        if (status) status.textContent = enabled ? "ON" : "OFF";
+      });
+    }
+
     function weatherCwaMapController(frame = document.querySelector('[data-weather-cwa-map-frame="true"]')) {
       try {
         return frame?.contentWindow?.scoutCwaImageryController || null;
@@ -15651,12 +15825,16 @@
       state.weatherCwaWindowId = ["3h", "6h", "9h", "12h"].includes(snapshot.windowId)
         ? snapshot.windowId
         : state.weatherCwaWindowId;
+      state.weatherRainfallProduct = ["qpe_past_1h", "qpf_next_1h"].includes(snapshot.rainfallProduct)
+        ? snapshot.rainfallProduct
+        : state.weatherRainfallProduct;
       state.weatherTimelineIndex = Math.max(0, Number(snapshot.frameIndex) || 0);
       state.weatherRadarOpacityPercent = Math.max(0, Math.min(100, Number(snapshot.radarOpacityPercent) || 0));
       state.weatherSatelliteOpacityPercent = Math.max(0, Math.min(100, Number(snapshot.satelliteOpacityPercent) || 0));
       state.weatherRainfallOpacityPercent = Math.max(0, Math.min(100, Number(snapshot.rainfallOpacityPercent) || 0));
       state.weatherCwaPlaying = Boolean(snapshot.playing);
       const product = document.querySelector('[data-weather-cwa-product="true"]');
+      const rainfallProduct = document.querySelector('[data-weather-cwa-rainfall-product="true"]');
       const windowSelect = document.querySelector('[data-weather-cwa-window="true"]');
       const timeline = document.querySelector('[data-weather-cwa-timeline="true"]');
       const evidenceTimeline = document.querySelector('[data-weather-evidence-timeline="true"]');
@@ -15665,6 +15843,18 @@
       const rainfallOpacity = document.querySelector('[data-weather-cwa-rainfall-opacity="true"]');
       const play = document.querySelector('[data-weather-cwa-play="true"]');
       if (product) product.value = state.weatherCwaProduct;
+      if (rainfallProduct) {
+        const options = asArray(snapshot.rainfallProducts).length
+          ? snapshot.rainfallProducts
+          : [{id: "qpe_past_1h", label: "Past 1h QPE"}, {id: "qpf_next_1h", label: "Next 1h QPF"}];
+        rainfallProduct.replaceChildren(...options.map(item => {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = item.label;
+          return option;
+        }));
+        rainfallProduct.value = state.weatherRainfallProduct;
+      }
       if (windowSelect) windowSelect.value = state.weatherCwaWindowId;
       if (timeline) {
         timeline.max = String(Math.max(0, Number(snapshot.maxFrameIndex) || 0));
@@ -15703,6 +15893,13 @@
         status.textContent = current
           ? `${state.weatherTimelineIndex + 1}/${Number(snapshot.maxFrameIndex || 0) + 1} · ${formatCwaTimestamp(current.sourceTimestamp)} · delay ${current.dataDelayMinutes ?? "?"} min`
           : `No cached ${state.weatherCwaProduct} frame`;
+      }
+      const rainfallStatus = document.querySelector('[data-weather-cwa-rainfall-status="true"]');
+      if (rainfallStatus) {
+        rainfallStatus.textContent = dashboardCwaRainfallStatusText({
+          ...snapshot,
+          bridgeReady: true,
+        });
       }
       const frameState = document.querySelector("[data-weather-cwa-frame-state]");
       if (frameState) {
@@ -15793,10 +15990,14 @@
           return;
         }
         if (frame.dataset.weatherCwaInitialState !== "applied") {
-          controller.setLayerEnabled(true);
-          controller.setRainfallLayerEnabled(true);
+          SCOUT_LAYER_IDS.forEach(layerId => {
+            const enabled = WEATHER_EMBEDDED_MAP_LAYER_IDS.includes(layerId)
+              && (layerId !== "cwa-qpf" || state.layerEnabled[layerId] !== false);
+            setEmbeddedPretripLayerEnabled(frame, layerId, enabled);
+          });
           controller.setProduct(state.weatherCwaProduct);
           controller.setWindow(state.weatherCwaWindowId);
+          controller.setRainfallProduct(state.weatherRainfallProduct);
           controller.setFrameIndex(state.weatherTimelineIndex);
           controller.setOpacity("radar", state.weatherRadarOpacityPercent);
           controller.setOpacity("satellite", state.weatherSatelliteOpacityPercent);
@@ -15809,6 +16010,7 @@
           return;
         }
         syncWeatherCwaBridgeState(bridgeSnapshot);
+        syncWeatherLayerControls(frame);
       } catch (_error) {
         scheduleWeatherCwaBridgeRetry(frame, attempt);
       }
@@ -15825,6 +16027,24 @@
     function bindWeatherCwaControls() {
       const frame = document.querySelector('[data-weather-cwa-map-frame="true"]');
       if (frame) bindWeatherCwaMapFrame(frame);
+      document.querySelectorAll("[data-weather-layer-control]").forEach(button => {
+        button.addEventListener("click", () => {
+          const layerId = button.dataset.weatherLayerControl || "";
+          if (!WEATHER_LAYER_IDS.includes(layerId)) return;
+          const enabled = button.getAttribute("aria-pressed") !== "true";
+          state.layerEnabled = {...state.layerEnabled, [layerId]: enabled};
+          if (layerId === "cwa-weather") invokeWeatherCwaMap("setLayerEnabled", enabled);
+          else if (layerId === "cwa-qpf") invokeWeatherCwaMap("setRainfallLayerEnabled", enabled);
+          else setEmbeddedPretripLayerEnabled(frame, layerId, enabled);
+          syncWeatherLayerControls(frame);
+        });
+      });
+      document.querySelector('[data-weather-cwa-rainfall-product="true"]')?.addEventListener("change", event => {
+        state.weatherRainfallProduct = event.currentTarget.value === "qpe_past_1h"
+          ? "qpe_past_1h"
+          : "qpf_next_1h";
+        invokeWeatherCwaMap("setRainfallProduct", state.weatherRainfallProduct);
+      });
       document.querySelector('[data-weather-cwa-product="true"]')?.addEventListener("change", event => {
         state.weatherCwaProduct = event.currentTarget.value === "satellite" ? "satellite" : "radar";
         state.weatherTimelineIndex = 0;
@@ -15926,25 +16146,6 @@
       bindRouteContextBriefingControls();
       bindBodyIndexControls();
       bindRovingTablists();
-      document.querySelector("[data-weather-open-map]")?.addEventListener("click", () => {
-        window.location.hash = "map";
-      });
-      document.querySelectorAll("[data-weather-map-layer]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const layerGroups = {
-            radar: ["cwa-weather"],
-            rainfall: ["cwa-qpf", "antecedent-rain"],
-            route: ["route", "segments", "checkpoints"],
-          };
-          const layerIds = layerGroups[button.dataset.weatherMapLayer] || [];
-          const enabled = button.getAttribute("aria-pressed") !== "true";
-          state.layerEnabled = {
-            ...state.layerEnabled,
-            ...Object.fromEntries(layerIds.map(layerId => [layerId, enabled])),
-          };
-          render();
-        });
-      });
       document.querySelector("[data-weather-evidence-timeline]")?.addEventListener("input", (event) => {
         state.weatherTimelineIndex = Number(event.currentTarget.value || 0);
         invokeWeatherCwaMap("setFrameIndex", state.weatherTimelineIndex);

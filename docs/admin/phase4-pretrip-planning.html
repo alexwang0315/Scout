@@ -2163,6 +2163,11 @@
     const PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PROJECT_ID_PARAM)
       ? PROJECT_ID_PARAM
       : DEFAULT_PROJECT_ID;
+    const DASHBOARD_MAP_ONLY = new URLSearchParams(window.location.search).get("mapOnly") === "1";
+    const INITIAL_LAYER_IDS_PARAM = new URLSearchParams(window.location.search).get("initialLayers");
+    const INITIAL_LAYER_IDS = INITIAL_LAYER_IDS_PARAM === null
+      ? null
+      : new Set(INITIAL_LAYER_IDS_PARAM.split(",").map(value => value.trim()).filter(Boolean));
     const routeContextBriefingLink = document.getElementById("routeContextBriefingLink");
     if (routeContextBriefingLink) {
       routeContextBriefingLink.href = `/admin/pretrip/projects/${encodeURIComponent(PROJECT_ID)}/briefings/route-context`;
@@ -2258,6 +2263,28 @@
       osmPbfVectorStatus: "not_loaded",
       osmCartoPaletteStatus: "not_loaded"
     };
+    let pretripProjectBridgeSnapshot = Object.freeze({
+      status: "idle",
+      projectId: PROJECT_ID,
+      view: null,
+      error: ""
+    });
+    function publishPretripProjectBridge(status, error = "") {
+      pretripProjectBridgeSnapshot = Object.freeze({
+        status,
+        projectId: PROJECT_ID,
+        view: state.view,
+        error: String(error || "")
+      });
+      window.dispatchEvent(new CustomEvent("scout:pretrip-project-state", {
+        detail: Object.freeze({status, projectId: PROJECT_ID, error: String(error || "")})
+      }));
+      return pretripProjectBridgeSnapshot;
+    }
+    window.scoutPretripProjectBridge = Object.freeze({
+      getSnapshot: () => pretripProjectBridgeSnapshot,
+      getProjectView: () => pretripProjectBridgeSnapshot.view
+    });
     const svg = document.getElementById("map");
     const hoverHint = document.getElementById("hoverHint");
     let treeClickFocusTimer = null;
@@ -3125,6 +3152,12 @@
     function layerInputChecked(layerId) {
       const input = document.querySelector(`input[data-layer="${selectorValue(layerId)}"]`);
       return !input || input.checked;
+    }
+    function applyInitialLayerSelection() {
+      if (INITIAL_LAYER_IDS === null) return;
+      document.querySelectorAll("input[data-layer]").forEach(input => {
+        input.checked = INITIAL_LAYER_IDS.has(input.dataset.layer);
+      });
     }
     function segmentTerrainMetadata(view) {
       return view?.tabs?.post_analysis?.segment_terrain?.segment_metadata || [];
@@ -6516,7 +6549,7 @@
       svg.appendChild(cwaWeatherGroup);
 
       const terrainGroup = el("g", {"data-layer-group": "terrain"});
-      renderTerrainMetadata(terrainGroup, view, bounds);
+      if (layerInputChecked("terrain")) renderTerrainMetadata(terrainGroup, view, bounds);
       svg.appendChild(terrainGroup);
 
       // Preserve the canonical layer rank; high-contrast Segment styling keeps
@@ -7937,16 +7970,11 @@
         return cwaImageryStateSnapshot();
       }
     });
-    async function reloadProjectView() {
+    function renderProjectView(view) {
       const selectedSourceId = evidenceSourceId(state.selected);
-      const response = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`);
-      let view = await response.json();
-      state.weatherOverlay = null;
-      state.view = view;
-      view = await loadCwaRainfallGridOverlay(view);
-      await loadCwaWeatherImagery(PROJECT_ID);
       updateMetrics(view);
       renderMap(view);
+      if (DASHBOARD_MAP_ONLY) return;
       renderEvidenceTree(view);
       renderAgentSkillsPanel(view);
       renderTabSummary(view);
@@ -7954,13 +7982,52 @@
       syncActiveTabChrome();
       syncActiveTabPanels();
       selectEvidence(findEvidenceBySourceId(view, selectedSourceId) || view.summary);
+    }
+    async function reloadProjectView() {
+      publishPretripProjectBridge("loading");
+      const response = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`);
+      if (!response.ok) throw new Error(`Project projection HTTP ${response.status}`);
+      let view = await response.json();
+      state.weatherOverlay = null;
+      state.view = view;
+      renderProjectView(view);
+      publishPretripProjectBridge("base_ready");
+
+      const rainfallPromise = loadCwaRainfallGridOverlay(view).then(nextView => {
+        view = nextView;
+        state.view = nextView;
+        renderMap(nextView);
+        publishPretripProjectBridge("base_ready");
+        return nextView;
+      });
+      const imageryPromise = loadCwaWeatherImagery(PROJECT_ID).then(result => {
+        renderMap(state.view || view);
+        return result;
+      });
       const osmCartoPalettePromise = loadOsmCartoPalette();
       const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);
-      const weatherOverlayResponse = await fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/weather-overlay`);
-      state.weatherOverlay = weatherOverlayResponse.ok ? await weatherOverlayResponse.json() : null;
-      renderMap(view);
-      await osmCartoPalettePromise;
-      await osmPbfVectorPromise;
+      const weatherOverlayPromise = fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/weather-overlay`)
+        .then(async weatherOverlayResponse => {
+          if (!weatherOverlayResponse.ok) throw new Error(`Weather overlay HTTP ${weatherOverlayResponse.status}`);
+          state.weatherOverlay = await weatherOverlayResponse.json();
+          renderMap(state.view || view);
+          return state.weatherOverlay;
+        });
+      const enhancementResults = await Promise.allSettled([
+        rainfallPromise,
+        imageryPromise,
+        osmCartoPalettePromise,
+        osmPbfVectorPromise,
+        weatherOverlayPromise
+      ]);
+      const failedEnhancements = enhancementResults.filter(result => result.status === "rejected");
+      renderMap(state.view || view);
+      if (failedEnhancements.length) {
+        publishPretripProjectBridge("degraded", `${failedEnhancements.length} optional map enhancement(s) unavailable`);
+      } else {
+        publishPretripProjectBridge("enhanced_ready");
+      }
+      return state.view || view;
     }
     async function loadOsmPbfVectorLayer(view) {
       const url = localOsmPbfVectorUrl(view);
@@ -7975,19 +8042,21 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         state.osmPbfVector = await response.json();
         state.osmPbfVectorStatus = "ready";
-        renderMap(view);
+        renderMap(state.view || view);
       } catch (error) {
         state.osmPbfVector = null;
         state.osmPbfVectorStatus = `failed: ${error.message}`;
       }
     }
     async function load() {
+      applyInitialLayerSelection();
       bindControls();
       bindCwaWeatherImageryControls();
       loadAssistantStatus();
       await reloadProjectView();
     }
     load().catch(error => {
+      publishPretripProjectBridge("degraded", error.message || error);
       document.getElementById("detailTitle").textContent = "Failed to load pre-trip project";
       document.getElementById("detailJson").textContent = String(error.stack || error);
     });
