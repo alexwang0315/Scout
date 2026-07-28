@@ -271,7 +271,10 @@ _BUDGET_ACTIONS = {
     OutdoorAction.ENTER_EXPOSED_SECTION,
 }
 
-_LOCATION_SENSITIVE_ACTIONS = _BUDGET_ACTIONS | {OutdoorAction.CONTINUE}
+_LOCATION_SENSITIVE_ACTIONS = _BUDGET_ACTIONS | {
+    OutdoorAction.CONTINUE,
+    OutdoorAction.RETREAT,
+}
 
 _EXPOSED_MEDIA_PRESSURE_ACTIONS = {
     OutdoorAction.STOP,
@@ -1693,6 +1696,8 @@ def _resolve_action(action: str | None, query: str) -> OutdoorAction:
         ("分隊", "分開", "split", "走得快的人先去", "快的人先去", "先去山頂"),
     ):
         return OutdoorAction.SPLIT_TEAM
+    if _has_any(text, ("多留", "留在這裡", "留在此處")):
+        return OutdoorAction.STOP
     if _has_any(text, ("攻頂", "山頂", "summit")):
         return OutdoorAction.SUMMIT
     if _has_any(text, ("撤退", "折返", "下撤", "retreat")):
@@ -1766,7 +1771,7 @@ def _looks_like_buffer_cost_question(text: str) -> bool:
 def _requested_duration_from_query(query: str) -> float | None:
     text = str(query or "").strip().lower().replace(" ", "")
     action_prefix = (
-        "多停|多停留|停留|停|拍照|拍攝|拍影片|拍片|多拍|等待|等|休息|午餐|吃午餐"
+        "多停|多停留|多留|停留|停|拍照|拍攝|拍影片|拍片|多拍|等待|等|休息|午餐|吃午餐"
     )
     match = re.search(
         rf"(?:{action_prefix})(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
@@ -1774,7 +1779,36 @@ def _requested_duration_from_query(query: str) -> float | None:
     )
     if match:
         return float(match.group(1))
+    chinese_match = re.search(
+        rf"(?:{action_prefix})([零〇一二兩三四五六七八九十]+)(?:分鐘|分)",
+        text,
+    )
+    if chinese_match:
+        return float(_chinese_integer(chinese_match.group(1)))
     return None
+
+
+def _chinese_integer(value: str) -> int:
+    digits = {
+        "零": 0,
+        "〇": 0,
+        "一": 1,
+        "二": 2,
+        "兩": 2,
+        "三": 3,
+        "四": 4,
+        "五": 5,
+        "六": 6,
+        "七": 7,
+        "八": 8,
+        "九": 9,
+    }
+    if "十" not in value:
+        return digits.get(value, 0)
+    left, _, right = value.partition("十")
+    tens = digits.get(left, 1) if left else 1
+    ones = digits.get(right, 0) if right else 0
+    return tens * 10 + ones
 
 
 def _requested_duration_cost(
@@ -2056,9 +2090,39 @@ def _looks_like_exposed_lunch_context(
 ) -> bool:
     if terrain_risk_level in _HIGH_RISK_LEVELS:
         return True
+    query_text = str(query or "").lower()
+    if _has_any(
+        query_text,
+        (
+            "風口",
+            "強風",
+            "陣風",
+            "風寒",
+            "失溫",
+            "曝露",
+            "暴露",
+            "稜線",
+            "ridge",
+            "windy",
+            "windchill",
+            "exposed",
+            "cold exposure",
+        ),
+    ):
+        return True
+    context_text = f"{location_constraint or ''} {weather_window_impact or ''}".lower()
+    if _has_any(
+        context_text,
+        (
+            "sheltered",
+            "背風",
+            "避風",
+        ),
+    ):
+        return False
     text = " ".join(
         str(part or "")
-        for part in (query, location_constraint, weather_window_impact)
+        for part in (location_constraint, weather_window_impact)
     ).lower()
     return _has_any(
         text,

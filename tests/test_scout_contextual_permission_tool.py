@@ -379,6 +379,54 @@ def test_contextual_permission_blocks_wind_exposed_lunch_even_with_buffer() -> N
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
+def test_contextual_permission_allows_bounded_lunch_in_sheltered_moderate_wind() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="我們可以在這裡吃午餐嗎？",
+        current_time="2026-06-07T12:00:00+08:00",
+        remaining_safety_buffer_minutes=70,
+        requested_duration_minutes=20,
+        next_segment_uncertainty_minutes=4,
+        weather_reserve_minutes=5,
+        daylight_reserve_minutes=5,
+        retreat_reserve_minutes=4,
+        slowest_member_reserve_minutes=4,
+        weather_window_impact="moderate_wind_sheltered",
+        retreat_impact="retreat_option_preserved",
+        location_constraint="flat_sheltered_candidate",
+        terrain_risk_level="low",
+        communication_status="ok",
+        equipment_status="ok",
+    )
+
+    assert result["decision"] == "CONDITIONAL_GO"
+    assert result["allowed"] is True
+    assert result["max_duration_minutes"] == 20
+    assert "flat_sheltered_candidate" in result["field_answer"]
+
+
+def test_contextual_permission_parses_extra_summit_stay_as_stop_not_summit() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="我可以在山頂多留十五分鐘嗎？",
+        current_time="2026-06-07T12:00:00+08:00",
+        remaining_safety_buffer_minutes=70,
+        next_segment_uncertainty_minutes=4,
+        weather_reserve_minutes=5,
+        daylight_reserve_minutes=5,
+        retreat_reserve_minutes=4,
+        slowest_member_reserve_minutes=4,
+        weather_window_impact="moderate_wind_sheltered",
+        retreat_impact="retreat_option_preserved",
+        location_constraint="flat_sheltered_candidate",
+        terrain_risk_level="low",
+    )
+
+    assert result["action"] == "stop"
+    assert result["decision"] == "CONDITIONAL_GO"
+    assert result["max_duration_minutes"] == 15
+
+
 def test_contextual_permission_missing_buffer_is_conservative_no_go() -> None:
     result = assess_scout_contextual_permission(
         PROJECT_ROOT,
@@ -603,6 +651,23 @@ def test_contextual_permission_allows_direct_retreat_for_tired_teammate() -> Non
     )
     assert result["decision_output"]["runtimeSafetyTruth"] is False
     assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_contextual_permission_delays_route_retreat_when_location_is_stale() -> None:
+    result = assess_scout_contextual_permission(
+        PROJECT_ROOT,
+        query="目前還允許我們沿原路撤退嗎？",
+        retreat_impact="location_unknown",
+        location_constraint="GNSS stale; current location unknown",
+        terrain_risk_level="unknown",
+        confidence="low",
+    )
+
+    assert result["action"] == "retreat"
+    assert result["decision"] == "DELAY"
+    assert result["allowed"] is False
+    assert "重新取得 GNSS/GPS 定位" in result["field_answer"]
+    assert "前往最近安全點" not in result["field_answer"]
 
 
 def test_contextual_permission_derives_candidate_buffer_from_planned_eta() -> None:

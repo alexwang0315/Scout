@@ -485,6 +485,16 @@ def plan_scout_ai_tools(
         for tool_id, reason in adjacent_verification_tools:
             if not _has_tool(selected, tool_id):
                 selected.append((tool_id, reason))
+    if (
+        _looks_like_local_terrain_shape_question(normalized_question)
+        and not _has_tool(selected, MAP_PERCEPTION_TOOL_ID)
+    ):
+        selected.append(
+            (
+                MAP_PERCEPTION_TOOL_ID,
+                "Question asks for local terrain-shape evidence that may be visible in map/OCR perception artifacts.",
+            )
+        )
 
     items = [
         _plan_item(
@@ -586,7 +596,6 @@ def classify_workspace_query_requirements(
             True,
             False,
         )
-
     route_forward = _has_any(
         question,
         ("前方", "往前", "下一個", "下個", "還有多遠", "forward", "ahead"),
@@ -1982,6 +1991,8 @@ def _contextual_permission_action_override(normalized_question: str) -> str | No
         ("分隊", "分開", "split", "走得快的人先去", "快的人先去", "先去山頂"),
     ):
         return "split_team"
+    if _has_any(normalized_question, ("多留", "留在這裡", "留在此處")):
+        return "stop"
     if _has_any(normalized_question, ("攻頂", "山頂", "完登", "不攻頂", "summit")):
         return "summit"
     if _has_any(
@@ -2070,7 +2081,7 @@ def _contextual_permission_action_override(normalized_question: str) -> str | No
 
 def _extract_requested_action_minutes(normalized_question: str) -> float | None:
     action_prefix = (
-        "多停|多停留|停留|停|拍照|拍攝|拍影片|拍片|多拍|架腳架|腳架|等待隊友|等隊友|等待|等|休息|午餐|吃午餐"
+        "多停|多停留|多留|停留|停|拍照|拍攝|拍影片|拍片|多拍|架腳架|腳架|等待隊友|等隊友|等待|等|休息|午餐|吃午餐"
     )
     match = re.search(
         rf"(?:{action_prefix})(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
@@ -2078,7 +2089,36 @@ def _extract_requested_action_minutes(normalized_question: str) -> float | None:
     )
     if match:
         return float(match.group(1))
+    chinese_match = re.search(
+        rf"(?:{action_prefix})([零〇一二兩三四五六七八九十]+)(?:分鐘|分)",
+        normalized_question,
+    )
+    if chinese_match:
+        return float(_chinese_integer(chinese_match.group(1)))
     return None
+
+
+def _chinese_integer(value: str) -> int:
+    digits = {
+        "零": 0,
+        "〇": 0,
+        "一": 1,
+        "二": 2,
+        "兩": 2,
+        "三": 3,
+        "四": 4,
+        "五": 5,
+        "六": 6,
+        "七": 7,
+        "八": 8,
+        "九": 9,
+    }
+    if "十" not in value:
+        return digits.get(value, 0)
+    left, _, right = value.partition("十")
+    tens = digits.get(left, 1) if left else 1
+    ones = digits.get(right, 0) if right else 0
+    return tens * 10 + ones
 
 
 def _extract_safety_buffer_minutes(normalized_question: str) -> float | None:
@@ -3476,6 +3516,31 @@ def _looks_like_map_perception_question(text: str) -> bool:
             "容易被发现",
             "救援可見性",
             "救援可见性",
+        ),
+    )
+
+
+def _looks_like_local_terrain_shape_question(text: str) -> bool:
+    return _has_any(
+        text,
+        (
+            "等高線",
+            "contour",
+            "稜谷",
+            "谷地",
+            "山谷",
+            "自然出口",
+            "三面封閉",
+            "鞍部",
+            "風口",
+            "崩塌缺口",
+            "乾溪溝",
+            "崩溝",
+            "哪一側",
+            "暴露",
+            "滑墜",
+            "崖邊",
+            "坡面",
         ),
     )
 

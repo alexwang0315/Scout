@@ -659,6 +659,8 @@ def _match_score(item: dict[str, Any], terms: set[str], query: str) -> float:
         score += 1.5
     if evidence_type == "map_layer_material" and re.search(r"layer|圖層|material|材料|forest|草原|森林", lowered_query):
         score += 1.0
+    if score <= 0:
+        return 0.0
     confidence = _optional_float(item.get("confidence"))
     if confidence is not None:
         score += min(confidence, 1.0)

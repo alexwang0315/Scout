@@ -413,6 +413,18 @@ def test_planner_routes_deictic_terrain_questions_to_live_navigation() -> None:
         assert LIVE_NAVIGATION_STATE_TOOL_ID in _tool_ids(plan), question
 
 
+def test_planner_routes_local_terrain_shape_questions_to_map_perception() -> None:
+    questions = (
+        "這個谷地有沒有自然出口，還是三面封閉？",
+        "請用等高線、稜谷、海拔和方位解釋眼前地形。",
+        "哪一側具有較高的暴露或滑墜後果？",
+    )
+
+    for question in questions:
+        plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+        assert MAP_PERCEPTION_TOOL_ID in _tool_ids(plan), question
+
+
 def test_planner_routes_dry_gully_question_to_risk_and_terrain_tools() -> None:
     plan = plan_scout_ai_tools(
         _query("這條乾溝可以走嗎？"),
