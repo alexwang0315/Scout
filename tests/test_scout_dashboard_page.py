@@ -3548,6 +3548,7 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
         "Evidence ledger",
         "function architectureSnapshot()",
         "function renderRouteFingerprint",
+        'data-route-fingerprint="partial"',
         "function architecturePassageTimingNodes",
         "function architecturePassageDurationLabel",
         "CP/MCP PASSAGE · 500M WINDOW",
@@ -3558,6 +3559,8 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
         "named_places",
         "const sourceRouteDistance = Math.max(",
         "function renderArchitectureMap",
+        'data-architecture-mobility-status="${bins.length ? "ready" : "pending"}"',
+        'data-layer-group="route-structure"',
         "function architectureLensLegendItems",
         "function architectureLensLegendSubtitle",
         "function renderArchitectureLensLegend",
@@ -3618,3 +3621,8 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
     assert "fetch(" not in html.split("function architectureSnapshot", 1)[1].split(
         "function renderPaceFitPage", 1
     )[0]
+    map_renderer = html.split("function renderArchitectureMap", 1)[1].split(
+        "function architectureReasonLabel", 1
+    )[0]
+    assert "const mapContent = mapData.connected ?" in map_renderer
+    assert "mapData.connected && bins.length ?" not in map_renderer

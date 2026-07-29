@@ -5,16 +5,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parents[1]
-VERIFIER = ROOT / "tools" / "verify_pretrip_workspace_spec_alignment.py"
-
+from pretrip_architecture_preparation import prepare_route_architecture_intelligence
 from tools.verify_pretrip_workspace_spec_alignment import (
+    _check_architecture_preparation,
     _check_layer_preparation,
     _check_layer_projection,
     _check_required_project_refs,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
+VERIFIER = ROOT / "tools" / "verify_pretrip_workspace_spec_alignment.py"
 
 def test_runtime_session_layout_contract_accepts_black_box_recorder(tmp_path: Path) -> None:
     session_root = tmp_path / "runtime" / "sessions"
@@ -132,6 +132,15 @@ def test_pretrip_verifier_accepts_wmts_runtime_imagery_contract(
         "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
         "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
         "calibrated_risk_heatmap_ref": "outputs/risk/calibrated_risk_heatmap.geojson",
+        "reference_pace_energy_analysis_ref": (
+            "outputs/reference_pace_energy_analysis.json"
+        ),
+        "reference_pace_energy_map_geojson_ref": (
+            "outputs/reference_pace_energy_map.geojson"
+        ),
+        "architecture_preparation_manifest_ref": (
+            "outputs/architecture_preparation_manifest.json"
+        ),
     }.items():
         project[ref_key] = ref
         (project_root / ref).parent.mkdir(parents=True, exist_ok=True)
@@ -203,6 +212,112 @@ def test_pretrip_verifier_accepts_wmts_runtime_imagery_contract(
 
     errors = []
     _check_layer_projection({"layers": [imagery_layer]}, errors)
+    assert not errors
+
+
+def test_pretrip_verifier_accepts_fresh_enriched_architecture_artifacts(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    filtered_path = (
+        project_root
+        / "normalized/routes/filtered/primary.demo.speed_filtered.gpx"
+    )
+    raw_path = project_root / "inbox/gpx/primary.gpx"
+    source_index_path = project_root / "sources/historical_gpx_source_index.json"
+    risk_path = project_root / "outputs/risk/risk_score_points.geojson"
+    pressure_path = project_root / "outputs/route_pressure_profile.json"
+    for path in (filtered_path, raw_path, source_index_path, risk_path, pressure_path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    gpx = """<?xml version="1.0" encoding="utf-8"?>
+<gpx version="1.1"><trk><trkseg>
+<trkpt lat="23.95" lon="121.0000"><ele>1000</ele><time>2026-01-01T00:00:00Z</time></trkpt>
+<trkpt lat="23.95" lon="121.0005"><ele>1005</ele><time>2026-01-01T00:01:00Z</time></trkpt>
+<trkpt lat="23.95" lon="121.0010"><ele>1010</ele><time>2026-01-01T00:02:00Z</time></trkpt>
+</trkseg></trk></gpx>"""
+    filtered_path.write_text(gpx, encoding="utf-8")
+    raw_path.write_text(gpx, encoding="utf-8")
+    source_index_path.write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "source_id": "gpx.source.demo",
+                        "route_role": "golden_route",
+                        "workspace_ref": "inbox/gpx/primary.gpx",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    risk_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.0 + index * 0.0005, 23.95],
+                        },
+                        "properties": {
+                            "distance_m": index * 50.0,
+                            "rs": 30.0,
+                        },
+                    }
+                    for index in range(3)
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    pressure_path.write_text(
+        json.dumps(
+            {
+                "samples": [
+                    {
+                        "start_distance_m": 0.0,
+                        "end_distance_m": 100.0,
+                        "terrain": {
+                            "distance_m": 100.0,
+                            "elevation_gain_m": 10.0,
+                            "elevation_loss_m": 0.0,
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "demo",
+                "historical_gpx_source_index_ref": (
+                    "sources/historical_gpx_source_index.json"
+                ),
+                "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
+                "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = prepare_route_architecture_intelligence(
+        project_root,
+        generated_at="2026-07-29T00:00:00+00:00",
+    )
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    errors: list[str] = []
+
+    summary = _check_architecture_preparation(project_root, project, errors)
+
+    assert result["status"] == "ready"
+    assert summary["status"] == "ready"
+    assert summary["fresh"] is True
+    assert summary["observed_route_bin_count"] > 0
     assert not errors
 
 

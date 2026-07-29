@@ -1,3 +1,4 @@
+import inspect
 import json
 import os
 import shutil
@@ -120,6 +121,7 @@ def test_connected_refresh_skips_non_weather_post_layer_enrichments(
         "_run_raster_label_preparation_after_layer_preparation",
         "_run_boss_point_synthesis_after_layer_preparation",
         "_run_mileage_tag_alignment_after_layer_preparation",
+        "_run_architecture_preparation_after_layer_preparation",
         "_write_map_preparation_spec_artifacts",
     ):
         monkeypatch.setattr(
@@ -143,9 +145,73 @@ def test_connected_refresh_skips_non_weather_post_layer_enrichments(
         "raster_label_preparation",
         "boss_point_synthesis",
         "mileage_tag_alignment",
+        "architecture_preparation",
         "map_preparation_spec_artifacts",
     ):
         assert manifest[key]["status"] == "skipped_connected_refresh"
+
+
+def test_layer_preparation_architecture_stage_follows_mileage_and_projects_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pretrip_architecture_preparation
+
+    source = inspect.getsource(pretrip_layer_preparation.run_layer_preparation)
+    assert source.index(
+        "_run_mileage_tag_alignment_after_layer_preparation"
+    ) < source.index("_run_architecture_preparation_after_layer_preparation")
+
+    def fake_prepare(project_root: Path, **_kwargs):
+        assert project_root == tmp_path
+        return {
+            "status": "ready",
+            "preparation_stage": "enriched",
+            "reused": False,
+            "fresh": True,
+            "browseable": True,
+            "input_sha256": "a" * 64,
+            "observed_route_bin_count": 12,
+            "guidance_eligible_route_bin_count": 9,
+            "checkpoint_passage_timing_node_count": 4,
+            "output_refs": {
+                "reference_pace_energy_analysis_ref": (
+                    "outputs/reference_pace_energy_analysis.json"
+                ),
+                "reference_pace_energy_map_geojson_ref": (
+                    "outputs/reference_pace_energy_map.geojson"
+                ),
+                "architecture_preparation_manifest_ref": (
+                    "outputs/architecture_preparation_manifest.json"
+                ),
+            },
+            "data_quality": {"status": "medium"},
+            "boundary": {
+                "candidate_only": True,
+                "phase1_runtime_safety_truth": False,
+            },
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        pretrip_architecture_preparation,
+        "prepare_route_architecture_intelligence",
+        fake_prepare,
+    )
+
+    result = (
+        pretrip_layer_preparation._run_architecture_preparation_after_layer_preparation(
+            project_root=tmp_path,
+            manifest={"finished_at": "2026-07-29T00:00:00+00:00"},
+        )
+    )
+
+    assert result["status"] == "ready"
+    assert result["preparation_stage"] == "enriched"
+    assert result["observed_route_bin_count"] == 12
+    assert result["output_refs"]["architecture_preparation_manifest_ref"] == (
+        "outputs/architecture_preparation_manifest.json"
+    )
 
 
 def test_project_source_refs_accept_directory_refs(tmp_path: Path) -> None:

@@ -706,6 +706,45 @@ privacy.precise_activity_timestamps_embedded=false
 Projection 只包含聚合路段指標，不嵌入 raw GPX、raw health payload、精確活動
 timestamps 或 home/work traces。
 
+#### 9.6.1 Preparation / Freshness Contract
+
+Architecture mobility evidence 必須是 full pretrip preparation 的正式 stage，
+不能依賴人工先跑一次分析器。Canonical outputs 為：
+
+```text
+outputs/reference_pace_energy_analysis.json
+outputs/reference_pace_energy_map.geojson
+outputs/architecture_preparation_manifest.json
+```
+
+分析分兩階段：
+
+- `core`：只要求 historical GPX source index 與 primary/golden filtered GPX
+  route axis；可建立完整路線軸、route geometry 與可用的群眾 mobility bins。
+- `enriched`：在 core 上加入 risk-score source values 與 route-pressure terrain
+  samples；risk/provider values 仍不是 Scout truth。
+
+Risk 與 route pressure 是 enrichment，不得成為新 workspace 顯示 Architecture
+幾何的硬依賴。Preparation manifest 必須以所有相關 project-local inputs 與分析
+policy 產生 deterministic fingerprint，並區分：
+
+- `ready`：enriched、fresh、browseable；
+- `partial`：core 產物可瀏覽，但 enrichment 尚未到位；
+- `stale`：outputs 仍可供有標示的暫時瀏覽，但 input fingerprint 已改變；
+- `blocked` / `failed`：缺 source index/route axis，或 preparation 失敗。
+
+`project.json` 必須保存三個 canonical refs、stage、status、input SHA-256 與聚合
+bin/passage counts。完整 preparation verifier 要求 `ready + enriched + fresh`；
+Dashboard 本身則必須 graceful degradation：mobility bins 尚未產生時仍顯示
+golden-route geometry、CP 與 route axis，並停用無證據的 demand lenses，不得
+把整張地圖替換成空白錯誤畫面。
+
+Connected weather refresh 不得重算 Architecture；它以
+`skipped_connected_refresh` 保留上一輪正式 preparation 的產物。這裡的 artifact
+readiness 與下節整體 projection readiness 不同：即使 mobility preparation
+`ready`，若 reviewed topology 或 compiled mission graph 缺失，整體
+`route_architecture_intelligence` 仍可維持 `partial`。
+
 ### 9.7 Readiness / Partial Semantics
 
 - `ready`：historical mobility bins、project-selected reviewed normalized route

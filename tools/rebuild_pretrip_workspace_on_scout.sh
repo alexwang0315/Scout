@@ -239,12 +239,6 @@ PY
     echo "No prior or explicit durable admin evidence source found."
   fi
 
-  echo "Building reference segment timing evidence..."
-  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" \
-    -m pretrip_reference_segment_timing \
-    --project-root "${PROJECT_ROOT}" \
-    --project-id "${PROJECT_ID}"
-
   echo "Running pretrip layer preparation..."
   LAYER_ARGS=(
     -m pretrip_layer_preparation
@@ -321,6 +315,19 @@ summary = restore_durable_admin_evidence_refs(
 print(json.dumps({"durable_admin_evidence_final_restore": summary}, ensure_ascii=False, sort_keys=True))
 PY
   fi
+
+  echo "Preparing Route Architecture Intelligence artifacts..."
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" \
+    -m pretrip_architecture_preparation \
+    --project-root "${PROJECT_ROOT}" \
+    --require-enriched \
+    --json
+
+  echo "Building workspace-specific reference segment timing evidence..."
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" \
+    -m pretrip_reference_segment_timing \
+    --project-root "${PROJECT_ROOT}" \
+    --project-id "${PROJECT_ID}"
 
   echo "Running spec alignment verifier..."
   VERIFY_ARGS=(

@@ -5,6 +5,10 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from pretrip_architecture_preparation import (
+    inspect_architecture_readiness,
+    prepare_route_architecture_intelligence,
+)
 from pretrip_reference_pace_energy_analysis import (
     _crowd_supported_axis,
     build_reference_pace_energy_analysis,
@@ -231,6 +235,98 @@ def test_reference_pace_energy_writer_emits_dashboard_ready_artifacts(tmp_path: 
         "outputs/reference_pace_energy_analysis.json"
     )
     assert pace_map["metadata"]["privacy"]["precise_timestamps_embedded"] is False
+
+
+def test_reference_analysis_core_stage_uses_primary_route_without_enrichments(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_workspace(tmp_path)
+    (project_root / "outputs/risk/risk_score_points.geojson").unlink()
+    (project_root / "outputs/route_pressure_profile.json").unlink()
+
+    report, pace_map = build_reference_pace_energy_analysis(
+        project_root,
+        generated_at="2026-07-29T00:00:00+00:00",
+        route_bin_m=250.0,
+        min_tracks_for_guidance=3,
+    )
+
+    assert report["status"] == "completed"
+    assert report["preparation_stage"] == "core"
+    assert report["policy"]["route_centerline"] == "primary_speed_filtered_gpx"
+    assert report["policy"]["slope_source"] == "unavailable_in_core_stage"
+    assert report["source_refs"]["risk_score_points"]["status"] == "missing"
+    assert report["source_refs"]["route_pressure_profile"]["status"] == "missing"
+    assert report["source_refs"]["route_axis"]["status"] == "available"
+    assert report["counts"]["canonical_route_sample_count"] == 13
+    assert report["counts"]["observed_route_bin_count"] > 0
+    assert report["data_quality"]["risk_enrichment_available"] is False
+    assert report["data_quality"]["terrain_enrichment_available"] is False
+    assert pace_map["features"]
+
+
+def test_architecture_preparation_writes_readiness_refs_and_reuses_fresh_outputs(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_workspace(tmp_path)
+
+    first = prepare_route_architecture_intelligence(
+        project_root,
+        generated_at="2026-07-29T00:00:00+00:00",
+    )
+    second = prepare_route_architecture_intelligence(
+        project_root,
+        generated_at="2026-07-29T00:05:00+00:00",
+    )
+
+    assert first["status"] == "ready"
+    assert first["preparation_stage"] == "enriched"
+    assert first["reused"] is False
+    assert first["observed_route_bin_count"] > 0
+    assert second["status"] == "ready"
+    assert second["reused"] is True
+    assert second["input_sha256"] == first["input_sha256"]
+
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    assert project["reference_pace_energy_analysis_ref"] == (
+        "outputs/reference_pace_energy_analysis.json"
+    )
+    assert project["reference_pace_energy_map_geojson_ref"] == (
+        "outputs/reference_pace_energy_map.geojson"
+    )
+    assert project["architecture_preparation_manifest_ref"] == (
+        "outputs/architecture_preparation_manifest.json"
+    )
+    assert project["architecture_preparation_status"] == "ready"
+    assert project["architecture_preparation_stage"] == "enriched"
+    assert project["architecture_preparation_input_sha256"] == first["input_sha256"]
+
+    readiness = inspect_architecture_readiness(project_root)
+    assert readiness["status"] == "ready"
+    assert readiness["fresh"] is True
+    assert readiness["browseable"] is True
+
+
+def test_architecture_readiness_detects_changed_historical_source_index(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_workspace(tmp_path)
+    prepared = prepare_route_architecture_intelligence(
+        project_root,
+        generated_at="2026-07-29T00:00:00+00:00",
+    )
+    source_index_path = project_root / "sources/historical_gpx_source_index.json"
+    source_index = json.loads(source_index_path.read_text(encoding="utf-8"))
+    source_index["preparation_test_revision"] = 2
+    _write_json(source_index_path, source_index)
+
+    readiness = inspect_architecture_readiness(project_root)
+
+    assert prepared["status"] == "ready"
+    assert readiness["status"] == "stale"
+    assert readiness["fresh"] is False
+    assert readiness["browseable"] is True
+    assert readiness["input_sha256"] != prepared["input_sha256"]
 
 
 def test_reference_analysis_treats_golden_route_as_equal_crowd_evidence(

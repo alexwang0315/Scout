@@ -559,6 +559,18 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             outputs,
             manifest["finished_at"],
         )
+    architecture_preparation = (
+        _run_architecture_preparation_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+        )
+        if request.run_post_layer_enrichments
+        else _skipped_connected_refresh_post_enrichment(
+            "architecture_preparation"
+        )
+    )
+    manifest["architecture_preparation"] = architecture_preparation
+    outputs.update(architecture_preparation.get("output_refs", {}))
     summary = _summary_from_manifest(manifest)
     map_preparation_summary = _map_preparation_summary_from_manifest(manifest)
     adapter_manifest = _adapter_manifest_from_manifest(manifest)
@@ -5350,6 +5362,41 @@ def _run_mileage_tag_alignment_after_layer_preparation(
             "mileage_tag_alignment_geojson_ref": MILEAGE_TAG_ALIGNMENT_GEOJSON_REF,
         },
         "boundary": result.get("boundary") or boundary,
+    }
+
+
+def _run_architecture_preparation_after_layer_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    from pretrip_architecture_preparation import (
+        prepare_route_architecture_intelligence,
+    )
+
+    result = prepare_route_architecture_intelligence(
+        project_root,
+        generated_at=str(manifest.get("finished_at") or _utc_now()),
+    )
+    return {
+        "name": "architecture_preparation",
+        "status": result["status"],
+        "preparation_stage": result["preparation_stage"],
+        "reused": result["reused"],
+        "fresh": result["fresh"],
+        "browseable": result["browseable"],
+        "input_sha256": result["input_sha256"],
+        "observed_route_bin_count": result["observed_route_bin_count"],
+        "guidance_eligible_route_bin_count": result[
+            "guidance_eligible_route_bin_count"
+        ],
+        "checkpoint_passage_timing_node_count": result[
+            "checkpoint_passage_timing_node_count"
+        ],
+        "output_refs": result["output_refs"],
+        "data_quality": result["data_quality"],
+        "boundary": result["boundary"],
+        "error": result["error"],
     }
 
 

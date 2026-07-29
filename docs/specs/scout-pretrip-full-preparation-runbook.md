@@ -293,7 +293,37 @@ This command is the main orchestrator. It should update:
 - route context points and route mileage K anchors;
 - Boss points;
 - mileage tag alignment;
+- Route Architecture Intelligence mobility artifacts and deterministic readiness
+  manifest:
+  - `outputs/reference_pace_energy_analysis.json`;
+  - `outputs/reference_pace_energy_map.geojson`;
+  - `outputs/architecture_preparation_manifest.json`;
 - layer manifests and admin/debug projections.
+
+Architecture preparation runs after risk/route-pressure and mileage
+enrichments. Its `core` stage needs only the historical GPX source index plus
+the primary/golden filtered GPX route axis, so a newly imported workspace can
+render route structure even before terrain/risk enrichment exists. Its
+`enriched` stage adds risk-source and route-pressure evidence. The preparation
+manifest hashes every relevant project-local input, records `ready`, `partial`,
+`blocked`, or `stale`, and writes the three canonical refs plus aggregate counts
+back to `project.json`. Re-running the same inputs reuses the existing
+artifacts.
+
+The full rebuild wrapper runs the Architecture command once more after the
+final durable-evidence restore and before the spec verifier:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python \
+  -m pretrip_architecture_preparation \
+  --project-root "$PROJECT_ROOT" \
+  --require-enriched \
+  --json
+```
+
+`--require-enriched` is a full-preparation acceptance gate. A `core/partial`
+artifact remains valid for graceful Dashboard browsing, but it does not pass a
+completed full rebuild.
 
 ### Optional One-Shot CWA Numeric Rainfall Grid Worker
 
@@ -514,10 +544,11 @@ refresh Overpass, CWA, and GEE evidence. Existing GPX, route, terrain, and TEII
 artifacts stay in the workspace and remain inputs to rainfall grids, imagery
 route sampling, motion, risk-package extraction, and the LoRa preview; they are
 not regenerated every ten minutes. The refresh also sets
-`run_post_layer_enrichments=false`. Raster-label OCR, Boss-point synthesis, and
-mileage-tag alignment are route-enrichment jobs, not time-sensitive API
-refreshes; their manifest status is `skipped_connected_refresh`, and they remain
-available through the normal full preparation path. Connected refresh also sets
+`run_post_layer_enrichments=false`. Raster-label OCR, Boss-point synthesis,
+mileage-tag alignment, and Route Architecture preparation are route-enrichment
+jobs, not time-sensitive API refreshes; their manifest status is
+`skipped_connected_refresh`, and they remain available through the normal full
+preparation path. Connected refresh also sets
 `run_map_preparation_spec_artifacts=false`: it reuses existing terrain route
 samples/visualizations instead of spending minutes regenerating them after the
 provider data is already ready. The manifest records the same
