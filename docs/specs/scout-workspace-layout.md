@@ -272,6 +272,11 @@ evidence. Current examples include:
   "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
   "mileage_tag_alignment_ref": "outputs/mileage_tag_alignment.json",
   "mileage_tag_alignment_geojson_ref": "outputs/mileage_tag_alignment.geojson",
+  "reference_pace_energy_analysis_ref": "outputs/reference_pace_energy_analysis.json",
+  "reference_pace_energy_map_geojson_ref": "outputs/reference_pace_energy_map.geojson",
+  "architecture_preparation_manifest_ref": "outputs/architecture_preparation_manifest.json",
+  "architecture_preparation_status": "ready",
+  "architecture_preparation_stage": "enriched",
   "raster_label_ocr_output_ref": "outputs/layers/raster_label_ocr_output.json",
   "raster_label_evidence_ref": "outputs/layers/normalized/raster_label_evidence.geojson",
   "osm_pbf_source_ref": "/data/scout/caches/osm_pbf/taiwan-latest.osm.pbf",
@@ -288,6 +293,14 @@ evidence. Current examples include:
 Consumers should prefer these refs over hardcoded paths, tolerate missing
 optional refs, and avoid embedding large OCR, mileage alignment, OSM JSON, or
 PBF payloads in admin or AI responses.
+
+Route Architecture has a two-stage preparation contract. `core` uses the
+historical GPX source index and primary/golden filtered route geometry;
+`enriched` additionally uses risk-score points and route-pressure terrain
+samples. `outputs/architecture_preparation_manifest.json` records the input
+fingerprint, freshness, browseability, stage, aggregate counts, privacy, and
+candidate-only boundary. `project.json` mirrors only refs, readiness fields,
+and aggregate counts; it must not embed raw GPX or precise activity timestamps.
 
 ### Emergency Approval Workspace Consumption
 

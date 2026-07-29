@@ -121,6 +121,48 @@ class _RouteSpatialIndex:
         ]
         return cls(samples, cell_size_m=cell_size_m)
 
+    @classmethod
+    def from_track_segments(
+        cls,
+        track_segments: list[list[_TrackPoint]],
+        *,
+        cell_size_m: float,
+    ) -> _RouteSpatialIndex:
+        route_points: list[tuple[_TrackPoint, float]] = []
+        total_m = 0.0
+        for segment in track_segments:
+            previous: _TrackPoint | None = None
+            for point in segment:
+                if previous is not None:
+                    total_m += haversine_m(
+                        previous.lat,
+                        previous.lon,
+                        point.lat,
+                        point.lon,
+                    )
+                route_points.append((point, total_m))
+                previous = point
+        mean_lat = (
+            statistics.fmean(point.lat for point, _ in route_points)
+            if route_points
+            else 0.0
+        )
+        lon_scale = 111_320.0 * math.cos(math.radians(mean_lat))
+        return cls(
+            [
+                _RouteSample(
+                    lat=point.lat,
+                    lon=point.lon,
+                    route_distance_m=route_distance_m,
+                    risk_score=None,
+                    x_m=point.lon * lon_scale,
+                    y_m=point.lat * 111_320.0,
+                )
+                for point, route_distance_m in route_points
+            ],
+            cell_size_m=cell_size_m,
+        )
+
     def nearest(
         self,
         lat: float,
@@ -225,10 +267,9 @@ def build_reference_pace_energy_analysis(
     )
     source_index_path = _resolve_project_ref(root, source_index_ref)
     risk_path = _resolve_project_ref(root, risk_ref)
-    pressure_path = _resolve_project_ref(root, pressure_ref)
     source_index = _load_json(source_index_path)
-    risk_payload = _load_json(risk_path)
-    pressure_payload = _load_json(pressure_path)
+    risk_payload = _load_optional_json_value(root, risk_ref) or {}
+    pressure_payload = _load_optional_json_value(root, pressure_ref) or {}
     route_bin_m = max(100.0, float(route_bin_m))
     match_radius_m = max(25.0, float(match_radius_m))
     min_tracks_for_guidance = max(1, int(min_tracks_for_guidance))
@@ -237,7 +278,7 @@ def build_reference_pace_energy_analysis(
     if normal_walking_min_kmh < 0.0 or normal_walking_max_kmh <= normal_walking_min_kmh:
         raise ValueError("normal walking speed bounds must satisfy 0 <= min < max")
 
-    spatial_index = _RouteSpatialIndex.from_geojson(
+    risk_spatial_index = _RouteSpatialIndex.from_geojson(
         risk_payload,
         cell_size_m=match_radius_m,
     )
@@ -255,6 +296,33 @@ def build_reference_pace_energy_analysis(
         in {"golden_route", "golden_route_reference"}
     ]
     source_records = [*reference_records, *scope_reference_records]
+    route_axis_path, route_axis_ref = _route_axis_gpx_path(
+        root,
+        scope_reference_records,
+    )
+    if risk_spatial_index.samples:
+        spatial_index = risk_spatial_index
+        route_centerline = "overpass_risk_score_points"
+        route_axis_source_ref = risk_ref
+    else:
+        route_segments = (
+            _parse_gpx_track_segments(route_axis_path)
+            if route_axis_path is not None and route_axis_path.is_file()
+            else []
+        )
+        spatial_index = _RouteSpatialIndex.from_track_segments(
+            route_segments,
+            cell_size_m=match_radius_m,
+        )
+        route_centerline = "primary_speed_filtered_gpx"
+        route_axis_source_ref = route_axis_ref
+    risk_enrichment_available = bool(risk_spatial_index.samples)
+    terrain_enrichment_available = bool(pressure_index.samples)
+    preparation_stage = (
+        "enriched"
+        if risk_enrichment_available and terrain_enrichment_available
+        else "core"
+    )
 
     track_reports: list[dict[str, Any]] = []
     traversals: list[dict[str, Any]] = []
@@ -366,6 +434,7 @@ def build_reference_pace_energy_analysis(
         "project_id": project_id,
         "generated_at": collected_at,
         "status": "completed" if source_records and spatial_index.samples else "missing_input",
+        "preparation_stage": preparation_stage,
         "source_provider": "historical_gpx_reference_corpus",
         "source_path": source_index_ref,
         "sha256": source_sha256,
@@ -375,12 +444,27 @@ def build_reference_pace_energy_analysis(
                 "sha256": source_sha256,
             },
             "risk_score_points": {
-                "source_path": risk_ref,
-                "sha256": _sha256_file(risk_path),
+                **_artifact_source_ref(root, risk_ref),
             },
             "route_pressure_profile": {
-                "source_path": pressure_ref,
-                "sha256": _sha256_file(pressure_path),
+                **_artifact_source_ref(root, pressure_ref),
+            },
+            "route_axis": {
+                "source_path": route_axis_source_ref,
+                "sha256": (
+                    _sha256_file(risk_path)
+                    if risk_spatial_index.samples
+                    else (
+                        _sha256_file(route_axis_path)
+                        if route_axis_path is not None and route_axis_path.is_file()
+                        else None
+                    )
+                ),
+                "status": (
+                    "available"
+                    if spatial_index.samples
+                    else "missing"
+                ),
             },
         },
         "output_refs": {
@@ -453,7 +537,7 @@ def build_reference_pace_energy_analysis(
         "crowd_axis": crowd_axis,
         "policy": {
             "route_bin_m": _round(route_bin_m),
-            "route_centerline": "overpass_risk_score_points",
+            "route_centerline": route_centerline,
             "gpx_projection": (
                 "sequence_continuity_centerline_match_with_transition_jump_rejection"
             ),
@@ -473,7 +557,11 @@ def build_reference_pace_energy_analysis(
             "min_traversal_distance_m": _round(min_traversal_distance_m),
             "min_tracks_for_guidance": min_tracks_for_guidance,
             "sampling_bias_control": "one_record_per_contiguous_track_route_bin_traversal",
-            "slope_source": "route_pressure_profile_terrain_not_raw_gpx_elevation",
+            "slope_source": (
+                "route_pressure_profile_terrain_not_raw_gpx_elevation"
+                if terrain_enrichment_available
+                else "unavailable_in_core_stage"
+            ),
             "source_role_policy": (
                 "golden_route_is_scope_reference_and_equal_weight_crowd_observation"
             ),
@@ -532,6 +620,8 @@ def build_reference_pace_energy_analysis(
             "speed_filter_unit": "adjacent_trackpoint_pair",
             "whole_track_or_segment_average_filtering": False,
             "sequence_continuity_map_matching": True,
+            "risk_enrichment_available": risk_enrichment_available,
+            "terrain_enrichment_available": terrain_enrichment_available,
             "minimum_distinct_tracks_for_guidance": min_tracks_for_guidance,
             "golden_route_has_special_statistical_weight": False,
             "crowd_axis_requires_human_review": bool(
@@ -1458,6 +1548,24 @@ def _checkpoint_route_distance(
     if isinstance(route_point_index, int) and 0 <= route_point_index < len(route_progress):
         return route_progress[route_point_index]
     return None
+
+
+def _route_axis_gpx_path(
+    root: Path,
+    scope_reference_records: list[dict[str, Any]],
+) -> tuple[Path | None, str | None]:
+    matches = sorted(
+        (root / "normalized/routes/filtered").glob(
+            "primary.*.speed_filtered.gpx"
+        )
+    )
+    if matches:
+        return matches[0], matches[0].relative_to(root).as_posix()
+    for source in scope_reference_records:
+        path, _, source_ref = _analysis_gpx_path(root, source)
+        if path is not None and path.is_file():
+            return path, source_ref
+    return None, None
 
 
 def _primary_route_progress(root: Path) -> list[float]:

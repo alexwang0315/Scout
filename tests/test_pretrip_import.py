@@ -1532,6 +1532,15 @@ def test_compare_pretrip_workspace_strict_counts_excludes_cwa_gee_metrics(
         "mileage_tag_alignment_ref": "outputs/mileage_tag_alignment.json",
         "boss_points_ref": "outputs/boss_points.json",
         "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+        "reference_pace_energy_analysis_ref": (
+            "outputs/reference_pace_energy_analysis.json"
+        ),
+        "reference_pace_energy_map_geojson_ref": (
+            "outputs/reference_pace_energy_map.geojson"
+        ),
+        "architecture_preparation_manifest_ref": (
+            "outputs/architecture_preparation_manifest.json"
+        ),
     }
     stable_metrics = {
         "checkpoint_candidate_count": 3,
@@ -1559,6 +1568,11 @@ def test_compare_pretrip_workspace_strict_counts_excludes_cwa_gee_metrics(
         "boss_point_count": 23,
         "route_pressure_peak_count": 24,
         "route_pressure_sample_count": 25,
+        "architecture_preparation_status": "ready",
+        "architecture_preparation_stage": "enriched",
+        "architecture_observed_route_bin_count": 26,
+        "architecture_guidance_eligible_route_bin_count": 27,
+        "architecture_checkpoint_passage_timing_node_count": 28,
     }
     for root, marker, environment_metrics in (
         (

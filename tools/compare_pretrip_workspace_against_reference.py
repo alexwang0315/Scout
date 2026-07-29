@@ -34,6 +34,11 @@ DEFAULT_KEY_METRICS = (
     "boss_point_count",
     "route_pressure_peak_count",
     "route_pressure_sample_count",
+    "architecture_preparation_status",
+    "architecture_preparation_stage",
+    "architecture_observed_route_bin_count",
+    "architecture_guidance_eligible_route_bin_count",
+    "architecture_checkpoint_passage_timing_node_count",
 )
 
 TIME_SENSITIVE_ENVIRONMENT_METRICS = (
@@ -74,6 +79,9 @@ REQUIRED_REFS = (
     "mileage_tag_alignment_ref",
     "boss_points_ref",
     "route_pressure_profile_ref",
+    "reference_pace_energy_analysis_ref",
+    "reference_pace_energy_map_geojson_ref",
+    "architecture_preparation_manifest_ref",
 )
 
 

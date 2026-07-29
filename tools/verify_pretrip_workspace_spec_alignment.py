@@ -35,6 +35,9 @@ REQUIRED_PROJECT_REFS = {
     "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
     "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
     "calibrated_risk_heatmap_ref": "outputs/risk/calibrated_risk_heatmap.geojson",
+    "reference_pace_energy_analysis_ref": "outputs/reference_pace_energy_analysis.json",
+    "reference_pace_energy_map_geojson_ref": "outputs/reference_pace_energy_map.geojson",
+    "architecture_preparation_manifest_ref": "outputs/architecture_preparation_manifest.json",
     "imagery_manifest_ref": "",
     "raster_tile_manifest_ref": "",
 }
@@ -173,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
     layer_candidate_artifacts: dict[str, dict[str, Any] | None] = {}
     route_context_summary = {"checked": False, "available": False}
     route_architecture_summary = {"checked": False, "available": False}
+    architecture_preparation_summary = {"checked": False, "available": False}
     pace_fit_summary = {"checked": False, "available": False}
     navigation_terrain_summary = {"checked": False, "available": False}
     weather_decision_summary = {"checked": False, "available": False}
@@ -283,6 +287,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             _check_layer_candidate_artifacts(layer_candidate_artifacts, errors)
             _check_risk_refs(project_root, project, errors)
+            architecture_preparation_summary = _check_architecture_preparation(
+                project_root,
+                project,
+                errors,
+            )
             route_context_summary = _check_route_context_refs(
                 project_root,
                 project,
@@ -368,6 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         "semantic_judgements": _semantic_judgement_summary(semantic_judgements),
         "route_context": route_context_summary,
         "route_architecture": route_architecture_summary,
+        "architecture_preparation": architecture_preparation_summary,
         "pace_fit": pace_fit_summary,
         "navigation_terrain": navigation_terrain_summary,
         "weather_decision": weather_decision_summary,
@@ -2461,6 +2471,176 @@ def _check_risk_refs(project_root: Path, project: dict[str, Any], errors: list[s
         errors.append("risk ribbon segment count is empty")
     if int(project.get("calibrated_risk_heatmap_segment_count") or 0) <= 0:
         errors.append("calibrated risk heatmap segment count is empty")
+
+
+def _check_architecture_preparation(
+    project_root: Path,
+    project: dict[str, Any],
+    errors: list[str],
+) -> dict[str, Any]:
+    from pretrip_architecture_preparation import inspect_architecture_readiness
+
+    analysis = _load_json_ref(
+        project_root,
+        project,
+        "reference_pace_energy_analysis_ref",
+        errors,
+    )
+    pace_map = _load_json_ref(
+        project_root,
+        project,
+        "reference_pace_energy_map_geojson_ref",
+        errors,
+    )
+    manifest = _load_json_ref(
+        project_root,
+        project,
+        "architecture_preparation_manifest_ref",
+        errors,
+    )
+    if not all(isinstance(item, dict) for item in (analysis, pace_map, manifest)):
+        return {"checked": True, "available": False, "status": "missing"}
+
+    assert isinstance(analysis, dict)
+    assert isinstance(pace_map, dict)
+    assert isinstance(manifest, dict)
+    if analysis.get("artifact_kind") != "pretrip_reference_pace_energy_analysis":
+        errors.append("Architecture analysis artifact_kind mismatch")
+    if analysis.get("schema_version") != "reference_pace_energy_analysis.v0":
+        errors.append("Architecture analysis schema_version mismatch")
+    if pace_map.get("type") != "FeatureCollection":
+        errors.append("Architecture pace map is not a FeatureCollection")
+    if manifest.get("artifact_kind") != "pretrip_architecture_preparation_manifest":
+        errors.append("Architecture preparation manifest artifact_kind mismatch")
+    if manifest.get("schema_version") != "architecture_preparation_manifest.v1":
+        errors.append("Architecture preparation manifest schema_version mismatch")
+    if analysis.get("preparation_stage") != "enriched":
+        errors.append(
+            "Architecture analysis is not enriched: "
+            f"{analysis.get('preparation_stage')}"
+        )
+    analysis_quality = analysis.get("data_quality")
+    analysis_quality = analysis_quality if isinstance(analysis_quality, dict) else {}
+    if analysis_quality.get("risk_enrichment_available") is not True:
+        errors.append("Architecture analysis risk enrichment is unavailable")
+    if analysis_quality.get("terrain_enrichment_available") is not True:
+        errors.append("Architecture analysis terrain enrichment is unavailable")
+    expected_output_refs = {
+        "reference_pace_energy_analysis_ref": (
+            "outputs/reference_pace_energy_analysis.json"
+        ),
+        "reference_pace_energy_map_geojson_ref": (
+            "outputs/reference_pace_energy_map.geojson"
+        ),
+        "architecture_preparation_manifest_ref": (
+            "outputs/architecture_preparation_manifest.json"
+        ),
+    }
+    manifest_output_refs = manifest.get("output_refs")
+    manifest_output_refs = (
+        manifest_output_refs if isinstance(manifest_output_refs, dict) else {}
+    )
+    for ref_key, expected_ref in expected_output_refs.items():
+        if manifest_output_refs.get(ref_key) != expected_ref:
+            errors.append(
+                f"Architecture manifest output ref mismatch: {ref_key}"
+            )
+    if project.get("architecture_preparation_input_sha256") != manifest.get(
+        "input_sha256"
+    ):
+        errors.append("Architecture project input SHA differs from manifest")
+
+    readiness = inspect_architecture_readiness(project_root)
+    if readiness.get("status") != "ready":
+        errors.append(
+            "Architecture preparation is not ready: "
+            f"{readiness.get('status')}"
+        )
+    if readiness.get("fresh") is not True:
+        errors.append("Architecture preparation inputs are stale")
+    if readiness.get("preparation_stage") != "enriched":
+        errors.append(
+            "Architecture preparation is not enriched: "
+            f"{readiness.get('preparation_stage')}"
+        )
+    if readiness.get("browseable") is not True:
+        errors.append("Architecture preparation is not browseable")
+
+    report_counts = analysis.get("counts")
+    report_counts = report_counts if isinstance(report_counts, dict) else {}
+    manifest_counts = manifest.get("counts")
+    manifest_counts = manifest_counts if isinstance(manifest_counts, dict) else {}
+    observed_bin_count = int(report_counts.get("observed_route_bin_count") or 0)
+    guidance_bin_count = int(
+        report_counts.get("guidance_eligible_route_bin_count") or 0
+    )
+    passage_node_count = int(
+        report_counts.get("checkpoint_passage_timing_node_count") or 0
+    )
+    pace_map_features = pace_map.get("features")
+    feature_count = len(pace_map_features) if isinstance(pace_map_features, list) else 0
+    if observed_bin_count <= 0:
+        errors.append("Architecture analysis has no observed route bins")
+    if feature_count <= 0:
+        errors.append("Architecture pace map has no route features")
+    for label, report_value, manifest_value, project_value in (
+        (
+            "observed route bin",
+            observed_bin_count,
+            manifest_counts.get("observed_route_bin_count"),
+            project.get("architecture_observed_route_bin_count"),
+        ),
+        (
+            "guidance eligible route bin",
+            guidance_bin_count,
+            manifest_counts.get("guidance_eligible_route_bin_count"),
+            project.get("architecture_guidance_eligible_route_bin_count"),
+        ),
+        (
+            "checkpoint passage timing node",
+            passage_node_count,
+            manifest_counts.get("checkpoint_passage_timing_node_count"),
+            project.get("architecture_checkpoint_passage_timing_node_count"),
+        ),
+    ):
+        if report_value != int(manifest_value or 0):
+            errors.append(f"Architecture {label} count differs from manifest")
+        if report_value != int(project_value or 0):
+            errors.append(f"Architecture {label} count differs from project")
+    if feature_count != int(manifest_counts.get("pace_map_feature_count") or 0):
+        errors.append("Architecture pace map feature count differs from manifest")
+
+    for label, artifact in (
+        ("Architecture analysis", analysis),
+        ("Architecture preparation manifest", manifest),
+    ):
+        boundary = artifact.get("boundary")
+        boundary = boundary if isinstance(boundary, dict) else {}
+        if boundary.get("medical_diagnosis") is not False:
+            errors.append(f"{label} allows medical diagnosis")
+        if boundary.get("phase1_runtime_safety_truth") is not False:
+            errors.append(f"{label} claims Phase 1 runtime safety truth")
+        if boundary.get("safety_api_called") is not False:
+            errors.append(f"{label} called the safety API")
+        privacy = artifact.get("privacy")
+        privacy = privacy if isinstance(privacy, dict) else {}
+        if privacy.get("raw_gpx_embedded") is not False:
+            errors.append(f"{label} embeds raw GPX")
+        if privacy.get("precise_timestamps_embedded") is not False:
+            errors.append(f"{label} embeds precise timestamps")
+
+    return {
+        "checked": True,
+        "available": True,
+        "status": readiness.get("status"),
+        "fresh": readiness.get("fresh"),
+        "preparation_stage": readiness.get("preparation_stage"),
+        "browseable": readiness.get("browseable"),
+        "observed_route_bin_count": observed_bin_count,
+        "guidance_eligible_route_bin_count": guidance_bin_count,
+        "checkpoint_passage_timing_node_count": passage_node_count,
+        "pace_map_feature_count": feature_count,
+    }
 
 
 def _check_admin_api(

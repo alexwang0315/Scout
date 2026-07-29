@@ -14290,10 +14290,32 @@
     function renderRouteFingerprint(snapshot) {
       const bins = architectureBins(snapshot);
       if (!bins.length) {
+        const routeDistance = Math.max(1, Number(snapshot.route_spine?.distance_m || snapshot.architecture_summary?.route_distance_m || 1));
+        const width = Math.max(980, 224 + Math.ceil(routeDistance / 500) * 36);
+        const plotX = 96;
+        const plotWidth = width - 144;
+        const xForDistance = value => plotX + Math.max(0, Math.min(1, Number(value || 0) / routeDistance)) * plotWidth;
+        const ticks = Array.from({length: 9}, (_, index) => {
+          const ratio = index / 8;
+          const x = plotX + ratio * plotWidth;
+          return `<line class="architecture-grid-line" x1="${x.toFixed(1)}" y1="28" x2="${x.toFixed(1)}" y2="132"></line><text class="architecture-axis-text" x="${x.toFixed(1)}" y="20" text-anchor="${index === 0 ? "start" : index === 8 ? "end" : "middle"}">${(routeDistance * ratio / 1000).toFixed(1)}K</text>`;
+        }).join("");
+        const cpNodes = asArray(snapshot.route_spine?.nodes).map(node => {
+          const x = xForDistance(node.route_distance_m);
+          return `<circle cx="${x.toFixed(1)}" cy="82" r="${["start", "finish"].includes(node.node_type) ? 6 : 3.2}" fill="#e9eadc" stroke="#62b8c6" stroke-width="2"><title>${escapeHtml(node.label || node.node_id)}</title></circle>`;
+        }).join("");
         return `
-          <section class="architecture-fingerprint-frame architecture-desktop-fingerprint" data-route-fingerprint="unavailable">
-            <div class="architecture-frame-heading"><div><h3>Route Fingerprint</h3><p>Distance-indexed route pressure lanes.</p></div><span class="chip warn">${escapeHtml(snapshot.status || "unavailable")}</span></div>
-            <div class="architecture-empty"><div><strong>Mobility bins are not available.</strong>Run the deterministic reference pace/energy analysis, then reload this project.</div></div>
+          <section class="architecture-fingerprint-frame architecture-desktop-fingerprint" data-route-fingerprint="partial" data-architecture-mobility-status="pending">
+            <div class="architecture-frame-heading"><div><h3>Route Fingerprint</h3><p>Golden-route structure is available; historical mobility lanes are pending.</p></div><span class="chip warn">${escapeHtml(snapshot.status || "partial")}</span></div>
+            <div class="architecture-fingerprint-scroll" data-architecture-fingerprint-scroll>
+              <svg class="architecture-fingerprint" viewBox="0 0 ${width} 156" width="${width}" height="156" style="width:${width}px;min-width:${width}px;height:156px" role="img" aria-label="Golden-route structural fingerprint while mobility evidence is pending">
+                ${ticks}
+                <line x1="${plotX}" y1="82" x2="${plotX + plotWidth}" y2="82" stroke="#62b8c6" stroke-width="8" stroke-linecap="round" opacity=".72"></line>
+                ${cpNodes}
+                <text class="architecture-lane-text" x="16" y="86">CP GRAPH</text>
+                <text class="architecture-axis-text" x="${plotX}" y="126">Mobility, terrain demand, risk passage and confidence lanes will appear after deterministic enrichment.</text>
+              </svg>
+            </div>
           </section>
         `;
       }
@@ -14629,32 +14651,37 @@
             height: MAP_HEIGHT,
           }) : ""}
           <g data-layer-group="terrain"><path d="${architectureRoutePath}" fill="none" stroke="#b7cf63" stroke-width="30" opacity=".055" stroke-linecap="round"></path></g>
+          <g data-layer-group="route-structure"><path d="${architectureRoutePath}" fill="none" stroke="#62b8c6" stroke-width="${bins.length ? 4 : 7}" opacity="${bins.length ? .2 : .82}" stroke-linecap="round" stroke-linejoin="round"></path></g>
           <g data-layer-group="segments" data-architecture-lens="${escapeHtml(state.architectureLens)}">${architectureMapSlices(mapData, bins, selected, routeDistance, displayBounds)}</g>
           <g data-layer-group="checkpoints">${architectureMapCheckpointPoints(mapData, displayBounds)}</g>
         </svg>
       `;
-      const mapContent = mapData.connected && bins.length ? `
+      const mapContent = mapData.connected ? `
         ${renderDashboardMapViewport("architecture-map", "Route architecture lens map", architectureMapSvg, {
           className: "architecture-map-surface",
           attributes: `data-dashboard-basemap-layer="rudy-twmap" data-dashboard-basemap-policy="rudy-twmap-only" data-dashboard-tile-zoom="${baseZoom}"`,
           renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
           wheelZoom: false,
         })}
+        ${bins.length ? "" : `<div class="architecture-empty"><div><strong>Route structure only.</strong>Historical mobility bins are pending; geometry and checkpoints remain available for orientation.</div></div>`}
         <div class="architecture-map-legend" data-architecture-legend="${escapeHtml(state.architectureLens)}" aria-label="Architecture lens color legend">
           <div class="architecture-map-legend-head"><strong>${escapeHtml(architectureLensLabel())}</strong><span>${escapeHtml(architectureLensLegendSubtitle())}</span></div>
           ${renderArchitectureLensLegend()}
           <div class="architecture-map-legend-symbols"><span class="architecture-map-legend-symbol is-selected">Amber glow · selected segment</span><span class="architecture-map-legend-symbol is-checkpoint">White point · checkpoint</span></div>
           <div class="architecture-map-legend-meta">Rudy+TW WMTS basemap · ${formatInteger(mapData.coordinateSegments.length)} workspace segment geometries from <span class="mono">${escapeHtml(mapData.sourcePath)}</span> · full golden-route scope retained; crowd gaps render as no observed bin · page-local styling over the existing <span class="mono">segments</span> data group · no 33rd Scout layer.</div>
         </div>
-      ` : `<div class="architecture-empty"><div><strong>Route map projection unavailable.</strong>${bins.length ? "The demand vectors are loaded, but display geometry is missing." : "Load both route geometry and mobility bins."}</div></div>`;
+      ` : `<div class="architecture-empty"><div><strong>Route map projection unavailable.</strong>${bins.length ? "The demand vectors are loaded, but display geometry is missing." : "Route display geometry is missing."}</div></div>`;
       return `
-        <section class="architecture-map-frame" data-architecture-mobile-panel="map">
+        <section class="architecture-map-frame" data-architecture-mobile-panel="map" data-architecture-mobility-status="${bins.length ? "ready" : "pending"}">
           <div class="architecture-map-heading">
             <div><h3>Architecture lens</h3><p>Same route centerline, recolored by the selected candidate metric.</p></div>
             <span class="chip ${mapData.connected ? "ok" : "warn"}">${mapData.connected ? "geometry connected" : "geometry missing"}</span>
           </div>
           <div class="architecture-lensbar" role="tablist" aria-label="Architecture map lenses">
-            ${lensButtons.map(([id, label]) => `<button type="button" role="tab" aria-selected="${state.architectureLens === id ? "true" : "false"}" class="${state.architectureLens === id ? "is-active" : ""}" data-architecture-lens="${id}">${label}</button>`).join("")}
+            ${lensButtons.map(([id, label]) => {
+              const disabled = !bins.length && id !== "structure";
+              return `<button type="button" role="tab" aria-selected="${state.architectureLens === id ? "true" : "false"}" class="${state.architectureLens === id ? "is-active" : ""}" data-architecture-lens="${id}" ${disabled ? 'disabled aria-disabled="true"' : ""}>${label}</button>`;
+            }).join("")}
           </div>
           <div class="architecture-map-canvas">${mapContent}</div>
         </section>
