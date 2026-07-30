@@ -13519,7 +13519,7 @@
         NAVIGATION_RUDY_TILE_SOURCE.minZoom,
         Math.min(
           NAVIGATION_RUDY_TILE_SOURCE.maxZoom,
-          baseZoom + Math.round(Math.log2(viewState.zoom)),
+          baseZoom + Math.ceil(Math.log2(viewState.zoom)),
         ),
       );
       const visibleBounds = navigationRudyVisibleBounds(viewport, viewState, fullBounds);

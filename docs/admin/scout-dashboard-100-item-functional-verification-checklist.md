@@ -878,7 +878,9 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 1. 載入 Workspace evidence，核對 terrain-intelligence API、bounded route
    points、terrain hierarchy、pressure candidates 與 ordered events。
 2. 檢查 Rudy+TW WMTS 為唯一 basemap，初始 tile matrix 與可見 tile 回應成功。
-3. 使用 `+`、`-`、Fit、鍵盤與 mouse drag，核對 tile matrix／translation 更新。
+3. 從 Fit 狀態記錄初始 tile matrix，使用一次 `+` 後確認 dataset 與實際
+   Rudy+TW request 的 `TILEMATRIX` 都立即升一級；再使用 `-`、鍵盤與
+   mouse drag 核對 matrix／translation 更新。
 4. 切換 Structure、Pressure、Risk、Retreat lenses。
 5. 點選 hierarchy／pressure／event，核對 Inspector 與來源。
 6. 切換 Training fixture，檢查八個 annotation 與 Map Literacy Checklist。
@@ -887,7 +889,8 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 通過條件：
 
 - Workspace evidence 與 Training fixture 清楚分離，不把合成 annotation 說成真實路線。
-- Rudy+TW 是唯一底圖；zoom 會載入合理 matrix 級別，pan 不改變 zoom。
+- Rudy+TW 是唯一底圖；第一次 `+` 不得只拉伸原圖磚，必須立即載入下一個
+  matrix 級別；pan 不改變 zoom。
 - Route、hierarchy、pressure 與 event overlays 保持 candidate-only 且可追溯。
 - 未準備的 ridge／valley／saddle 明確顯示 `not_prepared`，不從 raster 猜測。
 - 所有 Inspector selection 與地圖 marker／event 一致。
@@ -981,11 +984,15 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 2. 確認主 Map 是唯一 `full-canonical` surface；另外 7 張圖的唯一 basemap
    都是 Rudy+TW WMTS，路線與 evidence 為 SVG／GeoJSON 等向量圖徵。
 3. 逐一列出以單一圖片顯示的 overlay，核對是否屬於明確 allowlist。
-4. 平移與縮放後檢查圖磚更新、向量對位與單圖 georeference。
+4. 從 Fit 點擊一次 `+`，確認圖磚數量／範圍重新計算，而且
+   `data-dashboard-tile-zoom` 與 network request 的 `TILEMATRIX` 立即
+   升級；再平移並檢查向量對位與單圖 georeference。
 
 通過條件：
 
 - 一般底圖與圖層使用圖磚或向量，不以任意單張圖片冒充可縮放地圖。
+- 多張圖磚也不得以低 matrix 直接拉伸冒充縮放完成；第一次放大就必須要求
+  足以支撐顯示比例的下一級圖磚。
 - 主 Map 保留完整 canonical 圖層；Overview、LBS、Permission、Weather、
   Navigation、Architecture、Pace Fit 只使用 Rudy+TW 作為底圖，不得混入
   OSM 或裝飾性假底圖。
@@ -1002,8 +1009,11 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
   registry 為 1 個 `full-canonical` 與 7 個 `rudy-twmap-only`；六個
   Dashboard-native supporting maps 的 tile source 都只有 `rudy-twmap`，
   Weather 只有 Rudy+TW basemap 並保留 CWA thematic overlays。
-- 缺陷編號：
-- 備註：未發現未核准的單一圖片。
+- 追加證據（2026-07-29，Navigation）：Fit 為 `1.000x`／matrix `13`／
+  `24` tiles；第一次 `+` 為 `1.250x`／matrix `14`／`70` tiles，request
+  含 `TILEMATRIX=14`；blocked image `0`、console error `0`。
+- 缺陷編號：`DASH-MAP-REG-001`（已修正，保留回歸門檻）。
+- 備註：未發現未核准的單一圖片；低解析 matrix 被拉伸也視為同類缺陷。
 
 ### DASH-029 所有 Dashboard 地圖基本 Zoom、Pan 與 Fit
 
