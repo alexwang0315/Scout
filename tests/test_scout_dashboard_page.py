@@ -1484,9 +1484,12 @@ def test_weather_embedded_map_keeps_the_basic_map_view_controls_visible() -> Non
     assert "top: 58px;" in frame_state_rule
 
 
-def test_weather_embedded_map_uses_only_rudy_tw_tiles_and_cwa_rainfall() -> None:
+def test_weather_embedded_map_defaults_to_rudy_tw_and_cwa_imagery_only() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+    weather_layer_defaults = html.split(
+        "const WEATHER_LAYER_DEFAULTS = Object.freeze(", 1
+    )[1].split("const WEATHER_EMBEDDED_MAP_LAYER_IDS", 1)[0]
     weather_layer_contract = html.split(
         "const WEATHER_EMBEDDED_MAP_LAYER_IDS = Object.freeze([", 1
     )[1].split("]);", 1)[0]
@@ -1504,13 +1507,19 @@ def test_weather_embedded_map_uses_only_rudy_tw_tiles_and_cwa_rainfall() -> None
     )[1].split("load().catch", 1)[0]
 
     assert '"rudy-twmap"' in weather_layer_contract
-    assert '"cwa-qpf"' in weather_layer_contract
+    assert '"cwa-weather"' in weather_layer_contract
+    assert '"cwa-qpf"' not in weather_layer_contract
     assert weather_layer_contract.count('"') == 4
+    assert 'layerId === "cwa-weather"' in weather_layer_defaults
     assert "&mapOnly=1&wheelZoom=0&initialLayers=${encodeURIComponent(" in weather_section
     assert "WEATHER_EMBEDDED_MAP_LAYER_IDS.join" in weather_section
     assert "SCOUT_LAYER_IDS.forEach(layerId =>" in weather_frame_adapter
     assert (
         "WEATHER_EMBEDDED_MAP_LAYER_IDS.includes(layerId)"
+        in weather_frame_adapter
+    )
+    assert (
+        'layerId === "rudy-twmap" || state.layerEnabled[layerId] !== false'
         in weather_frame_adapter
     )
     assert 'get("initialLayers")' in pretrip_html
@@ -1559,6 +1568,34 @@ def test_weather_embedded_map_loads_cwa_imagery_only_after_layer_enable() -> Non
     assert "void loadCwaWeatherImageryIfEnabled(PROJECT_ID);" in layer_change_handler
     assert 'state.layerEnabled["cwa-weather"] === false' in bridge_wait
     assert "return false;" in bridge_wait
+
+
+def test_weather_route_bbox_callout_is_collapsible_and_compact_by_default() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    state_init = html.split("const state = {", 1)[1].split("selectedAction:", 1)[0]
+    callout_renderer = html.split(
+        "function renderWeatherIntersectionMap(snapshot)", 1
+    )[1].split("function renderWeatherActions(snapshot)", 1)[0]
+    control_binding = html.split(
+        "function bindWeatherCwaControls()", 1
+    )[1].split("function bindRenderedControls()", 1)[0]
+    callout_styles = html.split(".weather-map-route-callout {", 1)[1].split(
+        ".weather-map-timeline {", 1
+    )[0]
+
+    assert "weatherIntersectionCalloutExpanded: false" in state_init
+    assert '<details class="weather-map-route-callout"' in callout_renderer
+    assert 'data-weather-intersection-callout-toggle="true"' in callout_renderer
+    assert 'data-weather-intersection-callout-action="true"' in callout_renderer
+    assert (
+        '${state.weatherIntersectionCalloutExpanded ? "open" : ""}'
+        in callout_renderer
+    )
+    assert "callout.compactTitle" in callout_renderer
+    assert "state.weatherIntersectionCalloutExpanded = callout.open" in control_binding
+    assert 'callout.addEventListener("toggle"' in control_binding
+    assert ":not([open])" in callout_styles
+    assert "text-overflow: ellipsis" in callout_styles
 
 
 def test_scout_dashboard_map_route_removes_header_without_losing_mobile_navigation() -> None:
@@ -1610,7 +1647,7 @@ def test_weather_hydrology_controls_are_owned_by_six_axis_weather_not_map() -> N
         in html
     )
     assert (
-        'WEATHER_LAYER_IDS.map(layerId => [layerId, layerId === "cwa-qpf"])'
+        'WEATHER_LAYER_IDS.map(layerId => [layerId, layerId === "cwa-weather"])'
         in html
     )
     assert "...WEATHER_LAYER_DEFAULTS" in html

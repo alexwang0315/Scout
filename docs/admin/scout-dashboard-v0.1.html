@@ -2004,25 +2004,75 @@
       right: 18px;
       bottom: 18px;
       width: min(390px, calc(100% - 36px));
-      padding: 15px 17px;
       border-left: 4px solid var(--bad);
+      border-radius: 8px;
       color: var(--text);
       background: rgba(6, 13, 11, .92);
       box-shadow: 0 18px 44px rgba(0, 0, 0, .28);
+      overflow: hidden;
     }
 
-    .weather-map-route-callout strong,
-    .weather-map-route-callout span {
+    .weather-map-route-callout:not([open]) {
+      width: auto;
+      max-width: min(360px, calc(100% - 36px));
+    }
+
+    .weather-map-route-callout summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 44px;
+      padding: 10px 12px;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .weather-map-route-callout summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .weather-map-route-callout summary:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -3px;
+    }
+
+    .weather-map-route-callout-summary {
+      display: block;
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+      color: #ff8267;
+      font-size: 14px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .weather-map-route-callout-action {
+      flex: 0 0 auto;
+      color: var(--accent);
+      font: 800 10px var(--mono);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .weather-map-route-callout-body {
+      padding: 13px 17px 15px;
+      border-top: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .weather-map-route-callout-body strong,
+    .weather-map-route-callout-body span {
       display: block;
     }
 
-    .weather-map-route-callout strong {
+    .weather-map-route-callout-body strong {
       margin-bottom: 5px;
       color: #ff8267;
       font-size: 16px;
     }
 
-    .weather-map-route-callout span {
+    .weather-map-route-callout-body span {
       color: var(--muted);
     }
 
@@ -4826,6 +4876,10 @@
         bottom: 12px;
         width: calc(100% - 24px);
       }
+      .weather-map-route-callout:not([open]) {
+        width: auto;
+        max-width: calc(100% - 24px);
+      }
       .weather-map-timeline {
         padding: 15px 12px;
       }
@@ -7506,12 +7560,12 @@
     ]);
 
     const WEATHER_LAYER_DEFAULTS = Object.freeze(Object.fromEntries(
-      WEATHER_LAYER_IDS.map(layerId => [layerId, layerId === "cwa-qpf"]),
+      WEATHER_LAYER_IDS.map(layerId => [layerId, layerId === "cwa-weather"]),
     ));
 
     const WEATHER_EMBEDDED_MAP_LAYER_IDS = Object.freeze([
       "rudy-twmap",
-      "cwa-qpf",
+      "cwa-weather",
     ]);
     const DASHBOARD_MAP_RENDER_POLICY = "tile-vector-approved-single-image";
     const DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES = Object.freeze([
@@ -7837,6 +7891,7 @@
       weatherSatelliteOpacityPercent: 48,
       weatherRainfallOpacityPercent: 56,
       weatherCwaPlaying: false,
+      weatherIntersectionCalloutExpanded: false,
       selectedAction: "film",
       activeDebugDetail: "state",
       activeEvidenceTab: "default",
@@ -12245,9 +12300,10 @@
         }
         if (surface.id === "weather-map") {
           diagnosticRequire(adapter.includes("WEATHER_EMBEDDED_MAP_LAYER_IDS"), "Weather basemap allowlist is missing.");
-          diagnosticRequire(adapter.includes("wheelZoom=0&initialLayers="), "Weather does not request its Rudy+TW-only basemap preset.");
+          diagnosticRequire(adapter.includes("wheelZoom=0&initialLayers="), "Weather does not request its Rudy+TW plus CWA imagery preset.");
           diagnosticRequire(WEATHER_EMBEDDED_MAP_LAYER_IDS.length === 2, "Weather embedded layer preset has unexpected layers.");
           diagnosticRequire(WEATHER_EMBEDDED_MAP_LAYER_IDS[0] === "rudy-twmap", "Weather basemap is not Rudy+TW.");
+          diagnosticRequire(WEATHER_EMBEDDED_MAP_LAYER_IDS[1] === "cwa-weather", "Weather default overlay is not CWA imagery.");
           continue;
         }
         diagnosticRequire(renderer.includes("<svg") && (renderer.includes("<path") || renderer.includes("<circle")), `${surface.label} vector rendering is missing.`);
@@ -12947,20 +13003,26 @@
         weatherRainfallCoverageSummary(snapshot.futureRainfall, "Next 1h QPF"),
       ].join(" ");
       if (snapshot.loading) return {
+        compactTitle: "Rainfall coverage · loading",
         title: "Route-weather intersection is loading.",
         detail: `Waiting for cache-only CWA evidence. ${routeDetail}`,
       };
       if (snapshot.coverageStatus === "covered") return {
+        compactTitle: `${snapshot.availableCells} rainfall cells · route bbox`,
         title: `${snapshot.availableCells} rainfall cells are inside the route review bbox.`,
         detail: `${rainfallCoverageDetail} Inspect the candidate grid against exposed route segments; bbox coverage is not a safety decision. ${routeDetail}`,
       };
       if (snapshot.coverageStatus === "no_coverage") return {
+        compactTitle: snapshot.futureRainfall
+          ? "Next 1h QPF · no valid cells"
+          : "Rainfall grid · no valid cells",
         title: snapshot.futureRainfall
           ? "Next 1h QPF has no valid route-bbox values."
           : "Rainfall grid has no valid route-bbox values.",
         detail: `${rainfallCoverageDetail} Recheck after connected preparation before route review. ${routeDetail}`,
       };
       return {
+        compactTitle: "Rainfall coverage · unresolved",
         title: "Route-weather intersection is unresolved.",
         detail: `${rainfallCoverageDetail} Cached route-bbox rainfall evidence is unavailable. ${routeDetail}`,
       };
@@ -13026,10 +13088,16 @@
           <div class="weather-intersection-map weather-cwa-frame-shell">
             <iframe class="weather-cwa-map-frame" data-weather-cwa-map-frame="true" title="Canonical Pre-trip CWA weather map" src="${escapeHtml(`${surfaceSrc("/admin/pretrip")}&mapOnly=1&wheelZoom=0&initialLayers=${encodeURIComponent(WEATHER_EMBEDDED_MAP_LAYER_IDS.join(","))}`)}" loading="eager"></iframe>
             <span class="weather-cwa-frame-state" data-weather-cwa-frame-state="loading">CWA MAP BRIDGE · LOADING</span>
-            <div class="weather-map-route-callout" data-weather-intersection-callout="true">
-              <strong>${escapeHtml(callout.title)}</strong>
-              <span>${escapeHtml(callout.detail)}</span>
-            </div>
+            <details class="weather-map-route-callout" data-weather-intersection-callout="true" data-weather-intersection-callout-state="${state.weatherIntersectionCalloutExpanded ? "expanded" : "collapsed"}" ${state.weatherIntersectionCalloutExpanded ? "open" : ""}>
+              <summary data-weather-intersection-callout-toggle="true" aria-label="Toggle rainfall coverage details">
+                <strong class="weather-map-route-callout-summary">${escapeHtml(callout.compactTitle)}</strong>
+                <span class="weather-map-route-callout-action" data-weather-intersection-callout-action="true" aria-hidden="true">${state.weatherIntersectionCalloutExpanded ? "Collapse −" : "Details +"}</span>
+              </summary>
+              <div class="weather-map-route-callout-body">
+                <strong>${escapeHtml(callout.title)}</strong>
+                <span>${escapeHtml(callout.detail)}</span>
+              </div>
+            </details>
           </div>
           ${renderWeatherTimeline(snapshot)}
         </section>
@@ -18660,7 +18728,7 @@
         if (frame.dataset.weatherCwaInitialState !== "applied") {
           SCOUT_LAYER_IDS.forEach(layerId => {
             const enabled = WEATHER_EMBEDDED_MAP_LAYER_IDS.includes(layerId)
-              && (layerId !== "cwa-qpf" || state.layerEnabled[layerId] !== false);
+              && (layerId === "rudy-twmap" || state.layerEnabled[layerId] !== false);
             setEmbeddedPretripLayerEnabled(frame, layerId, enabled);
           });
           controller.setProduct(state.weatherCwaProduct);
@@ -18695,6 +18763,17 @@
     function bindWeatherCwaControls() {
       const frame = document.querySelector('[data-weather-cwa-map-frame="true"]');
       if (frame) bindWeatherCwaMapFrame(frame);
+      const callout = document.querySelector('[data-weather-intersection-callout="true"]');
+      if (callout) {
+        const action = callout.querySelector('[data-weather-intersection-callout-action="true"]');
+        const syncCalloutState = () => {
+          state.weatherIntersectionCalloutExpanded = callout.open;
+          callout.dataset.weatherIntersectionCalloutState = callout.open ? "expanded" : "collapsed";
+          if (action) action.textContent = callout.open ? "Collapse −" : "Details +";
+        };
+        syncCalloutState();
+        callout.addEventListener("toggle", syncCalloutState);
+      }
       document.querySelectorAll("[data-weather-layer-control]").forEach(button => {
         button.addEventListener("click", () => {
           const layerId = button.dataset.weatherLayerControl || "";
