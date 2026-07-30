@@ -275,10 +275,16 @@ def collect_pretrip_p0_p1_sources(
     project = _load_json(project_path)
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     generated_at = generated_at or _utc_now()
-    query_plan_ref = str(project.get("web_case_query_plan_ref") or DEFAULT_WEB_CASE_QUERY_PLAN_REF)
-    evidence_ref = str(project.get("web_case_evidence_ref") or DEFAULT_WEB_CASE_EVIDENCE_REF)
+    query_plan_ref = str(
+        project.get("web_case_query_plan_ref") or DEFAULT_WEB_CASE_QUERY_PLAN_REF
+    )
+    evidence_ref = str(
+        project.get("web_case_evidence_ref") or DEFAULT_WEB_CASE_EVIDENCE_REF
+    )
     route_scope_ref = _route_scope_ref(project)
-    keywords = route_keywords or _route_keywords_from_workspace(root, project, project_id)
+    keywords = route_keywords or _route_keywords_from_workspace(
+        root, project, project_id
+    )
     base_sources = (
         [dict(source) for source in DEFAULT_CONCRETE_SOURCE_RECORDS]
         if source_records is None
@@ -422,7 +428,9 @@ def collect_pretrip_p0_p1_sources(
         "project_id": project_id,
         "source_id": f"{project_id}.p0_p1_web_case_evidence",
         "source_path": evidence_ref,
-        "status": _evidence_status(allow_network_fetch, evidence_items, source_statuses),
+        "status": _evidence_status(
+            allow_network_fetch, evidence_items, source_statuses
+        ),
         "generated_at": generated_at,
         "route_scope_ref": route_scope_ref,
         "source_plan_ref": query_plan_ref,
@@ -515,7 +523,9 @@ def _source_records_from_html(path: Path | str | None) -> list[dict[str, Any]]:
         return []
     parser = _AnchorExtractor()
     parser.feed(html_path.read_text(encoding="utf-8"))
-    return [_classify_url(url, label=label) | {"url": url} for url, label in parser.links]
+    return [
+        _classify_url(url, label=label) | {"url": url} for url, label in parser.links
+    ]
 
 
 def _image_records_from_json(path: Path | str | None) -> list[dict[str, Any]]:
@@ -643,7 +653,7 @@ def _classify_url(url: str, *, label: str | None = None) -> dict[str, str]:
     if host.endswith("forest.gov.tw") or host.endswith("hike.taiwan.gov.tw"):
         tier = "P0"
         family = "official_baseline"
-    elif "nps.gov.tw" in host:
+    elif "nps.gov.tw" in host or host.endswith("ysnp.gov.tw"):
         tier = "P0"
         family = "official_status"
     elif "nlsc.gov.tw" in host:
@@ -830,6 +840,7 @@ def _evidence_item(
         "candidate_id": candidate_id,
         "label": title,
         "title": title,
+        "operator_label": source["label"],
         "summary": extracted.get("summary"),
         "snippets": extracted.get("snippets", []),
         "url": source["url"],
@@ -879,7 +890,7 @@ def _extract_html_summary(
     title = parser.title or (parser.headings[0] if parser.headings else "")
     text = _collapse_ws(" ".join(parser.text_chunks))
     snippets = _snippets(text, keywords)
-    summary = " / ".join(snippets)[:640] if snippets else text[:360]
+    summary = " / ".join(snippets)[:640]
     return {
         "title": _collapse_ws(title or "")[:120],
         "summary": summary,
@@ -896,7 +907,9 @@ def _normalized_image_refs(
     normalized: list[dict[str, Any]] = []
     seen: set[str] = set()
     for image in image_refs:
-        src = str(image.get("src") or image.get("href") or image.get("content") or "").strip()
+        src = str(
+            image.get("src") or image.get("href") or image.get("content") or ""
+        ).strip()
         if not src or src.startswith(("data:", "blob:", "javascript:")):
             continue
         url = urljoin(base_url or "", src)
@@ -951,22 +964,32 @@ def _image_refs_for_source(
 def _snippets(text: str, keywords: list[str]) -> list[str]:
     terms = [
         *keywords,
-        "奇萊",
-        "南華",
-        "能高",
-        "天池山莊",
-        "雲天宮",
-        "光被八表",
         "入園",
+        "山屋",
+        "營地",
         "落石",
         "風險",
         "住宿",
+        "古道",
+        "步道",
+        "路況",
     ]
     sentences = re.split(r"(?<=[。！？!?])\s+|\n+", text)
     matches: list[str] = []
     for sentence in sentences:
         value = _collapse_ws(sentence)
         if len(value) < 8:
+            continue
+        if any(
+            marker in value
+            for marker in (
+                "跳到主要內容",
+                "網站導覽",
+                "網站如有資料錯誤",
+                "TOP 檔案專區",
+                "RSS訂閱",
+            )
+        ):
             continue
         if any(term and term in value for term in terms):
             matches.append(value[:180])
@@ -1005,7 +1028,9 @@ def _fetch_url(url: str, timeout_seconds: float) -> FetchResult:
         },
     )
     try:
-        with urlopen(request, timeout=timeout_seconds, context=_https_context()) as response:
+        with urlopen(
+            request, timeout=timeout_seconds, context=_https_context()
+        ) as response:
             charset = response.headers.get_content_charset() or "utf-8"
             raw = response.read(1_500_000)
             return {
@@ -1052,11 +1077,17 @@ def _counts(
     return {
         "evidence_item_count": len(evidence_items),
         "source_count": len(source_statuses),
-        "fetched_source_count": sum(1 for item in source_statuses if item.get("status") == "fetched"),
-        "operator_image_source_count": sum(
-            1 for item in source_statuses if item.get("status") == "operator_image_imported"
+        "fetched_source_count": sum(
+            1 for item in source_statuses if item.get("status") == "fetched"
         ),
-        "failed_source_count": sum(1 for item in source_statuses if item.get("status") == "fetch_failed"),
+        "operator_image_source_count": sum(
+            1
+            for item in source_statuses
+            if item.get("status") == "operator_image_imported"
+        ),
+        "failed_source_count": sum(
+            1 for item in source_statuses if item.get("status") == "fetch_failed"
+        ),
         "by_source_tier": dict(sorted(by_tier.items())),
         "by_source_family": dict(sorted(by_family.items())),
         "candidate_only": True,
@@ -1140,14 +1171,21 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     temp_path.replace(path)
 
 
-def _update_project(path: Path, project: dict[str, Any], updates: dict[str, Any]) -> None:
+def _update_project(
+    path: Path, project: dict[str, Any], updates: dict[str, Any]
+) -> None:
     if not path.exists():
         return
     _write_json(path, {**project, **updates})
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 class _TextExtractor(HTMLParser):
@@ -1322,10 +1360,14 @@ class _OperatorImageHTMLExtractor(HTMLParser):
             self._caption_buffer = []
         if tag == "a":
             href = self._first_attr(attrs_dict, "href")
-            self._anchor_stack.append(href if href.startswith(("http://", "https://")) else "")
+            self._anchor_stack.append(
+                href if href.startswith(("http://", "https://")) else ""
+            )
             if self._anchor_stack[-1]:
                 self._set_current_context("page_url", self._anchor_stack[-1])
-                self._backfill_current_context_records("page_url", self._anchor_stack[-1])
+                self._backfill_current_context_records(
+                    "page_url", self._anchor_stack[-1]
+                )
         if tag == "img":
             record = self._record_from_image_attrs(attrs_dict)
             if record:
@@ -1378,16 +1420,13 @@ class _OperatorImageHTMLExtractor(HTMLParser):
             or self._current_context_value("page_url")
             or self._current_anchor_href()
         )
-        context_layer = (
-            self._first_attr(
-                attrs,
-                "data-context-layer",
-                "data-sec6-layer",
-                "data-scout-context-layer",
-                "data-layer",
-            )
-            or self._current_context_value("context_layer")
-        )
+        context_layer = self._first_attr(
+            attrs,
+            "data-context-layer",
+            "data-sec6-layer",
+            "data-scout-context-layer",
+            "data-layer",
+        ) or self._current_context_value("context_layer")
         data_label = self._first_attr(attrs, "data-label")
         return {
             "image_url": src,
@@ -1418,9 +1457,7 @@ class _OperatorImageHTMLExtractor(HTMLParser):
             return
         raw_start_index = context.get("start_index")
         start_index = (
-            int(raw_start_index)
-            if raw_start_index is not None
-            else len(self.records)
+            int(raw_start_index) if raw_start_index is not None else len(self.records)
         )
         for record in self.records[start_index:]:
             if key == "caption" and record.get("caption_source") == "data":
@@ -1431,7 +1468,8 @@ class _OperatorImageHTMLExtractor(HTMLParser):
                     record["label"] = value
                 record["summary"] = record.get("summary") or value
             elif key == "page_url" and (
-                not record.get("page_url") or record.get("page_url") == record.get("image_url")
+                not record.get("page_url")
+                or record.get("page_url") == record.get("image_url")
             ):
                 record["page_url"] = value
             elif not record.get(key):
@@ -1460,11 +1498,7 @@ class _OperatorImageHTMLExtractor(HTMLParser):
 
     @staticmethod
     def _attrs(attrs: list[tuple[str, str | None]]) -> dict[str, str]:
-        return {
-            key.lower(): str(value or "").strip()
-            for key, value in attrs
-            if key
-        }
+        return {key.lower(): str(value or "").strip() for key, value in attrs if key}
 
     @staticmethod
     def _first_attr(attrs: dict[str, str], *keys: str) -> str:
@@ -1503,7 +1537,9 @@ class _AnchorExtractor(HTMLParser):
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Collect Scout P0/P1 route context web evidence.")
+    parser = argparse.ArgumentParser(
+        description="Collect Scout P0/P1 route context web evidence."
+    )
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--allow-network-fetch", action="store_true")
     parser.add_argument("--source-list-html", type=Path, default=None)

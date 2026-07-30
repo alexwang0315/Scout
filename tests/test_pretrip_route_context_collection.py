@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -16,6 +17,13 @@ from pretrip_route_context_collection import (
     SOURCE_TIER_CATALOG,
     ROUTE_CONTEXT_SOURCE_MANIFEST_REF,
     collect_pretrip_route_context,
+    _briefing_profile_points,
+    _briefing_schedule_phases,
+    _briefing_source_brief_points,
+    _briefing_source_health_panel,
+    _briefing_source_summary,
+    _briefing_source_tier_card,
+    _stop_advisory_text,
 )
 from scout_agent_cli import run_scout_agent_cli
 from scout_route_context_tool import assess_scout_route_context
@@ -23,8 +31,117 @@ from tools.verify_pretrip_workspace_spec_alignment import _check_route_context_r
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_PROJECT = REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+FIXTURE_PROJECT = (
+    REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+)
 MANIFEST_DIR = REPO_ROOT / "tools" / "scout_agent_tool_manifests"
+
+
+def _visible_html_text(document: str) -> str:
+    without_code = re.sub(
+        r"<(script|style)\b[^>]*>.*?</\1>",
+        " ",
+        document,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", without_code)).strip()
+
+
+def test_route_source_brief_points_drop_image_caption_noise() -> None:
+    points = _briefing_source_brief_points(
+        "A. 紀念碑原貌 B. 紀念碑現況 ▲ 1910年代人物 "
+        "清朝八通關古道的修築始於清代開山政策。 / "
+        "日人修築之越道路與清領時期古道路徑不同，東段分走溪流南北岸。"
+    )
+
+    assert points == [
+        "清朝八通關古道的修築始於清代開山政策。",
+        "日人修築之越道路與清領時期古道路徑不同，東段分走溪流南北岸。",
+    ]
+    assert all("紀念碑原貌" not in point for point in points)
+
+
+def test_briefing_quality_gate_keeps_filtered_inputs_and_point_groups_honest() -> None:
+    route_points = [
+        {"display_label": f"節點 {index}", "distance_m": distance_m}
+        for index, distance_m in enumerate(
+            (3000, 4000, 38200, 40800, 43700, 47200, 70200),
+            start=1,
+        )
+    ]
+    source_manifest = {
+        "source_report": [
+            {
+                "source_kind": "mcp_candidates",
+                "source_tier": "P1",
+                "status": "loaded",
+                "loaded_count": 7,
+                "materialized_point_count": 7,
+                "filtered_out_point_count": 0,
+            },
+            {
+                "source_kind": "named_point_evidence",
+                "source_tier": "P1",
+                "status": "loaded",
+                "loaded_count": 7,
+                "materialized_point_count": 7,
+                "filtered_out_point_count": 0,
+            },
+            {
+                "source_kind": "raster_label_evidence",
+                "source_tier": "P1",
+                "status": "loaded",
+                "loaded_count": 17,
+                "materialized_point_count": 0,
+                "filtered_out_point_count": 17,
+            },
+        ],
+        "cache_policy": {
+            "live_source_refresh_status": "live_network_refreshed",
+            "refresh_required_before_runtime_truth": False,
+            "network_refresh_required": False,
+        },
+    }
+
+    p1_card = _briefing_source_tier_card(source_manifest, "P1")
+    assert "已載入 2 類可用資料" in p1_card
+    assert "Raster 標籤 · 17 讀入 / 0 進入路線點" in p1_card
+    assert "品質不足，不列為路線點" in p1_card
+    assert "Raster 標籤 · 已載入 · 17" not in p1_card
+
+    profile_points = _briefing_profile_points(route_points, 89827.14)
+    assert [point["label"] for point in profile_points] == [
+        f"節點 {index}" for index in range(1, 8)
+    ]
+
+    phases = _briefing_schedule_phases(route_points, 89827.14)
+    assert [phase["name"] for phase in phases] == [
+        "命名節點群組 1",
+        "命名節點群組 2",
+        "命名節點群組 3",
+    ]
+    assert phases[-1]["summary"] == "70.2K 節點 7；只是一個具名點，不代表路段。"
+    assert phases[-1]["uncovered_ranges"] == ["70.2K–89.8K"]
+
+    source_summary = _briefing_source_summary(source_manifest)
+    health_panel = _briefing_source_health_panel(
+        source_manifest,
+        source_summary,
+        {"candidate_only": True, "runtime_safety_truth": False},
+    )
+    assert "已知資訊缺口" in health_panel
+    assert "本次列定來源抓取完成" in health_panel
+    assert "現況與天氣仍未同步" in health_panel
+    assert "無必要缺口" not in health_panel
+    assert "無可補強缺口" not in health_panel
+    assert "已完成來源更新" not in health_panel
+
+    assert "優先查核是否需降低暴露或快速通過" in _stop_advisory_text(
+        {"stop_advisory_candidate": "pass_through_or_minimize_exposure"}
+    )
+    assert "現地應快速通過" not in _stop_advisory_text(
+        {"stop_advisory_candidate": "pass_through_or_minimize_exposure"}
+    )
 
 
 def test_route_context_collection_dry_run_uses_sec6_sources_without_writes() -> None:
@@ -63,13 +180,24 @@ def test_route_context_collection_dry_run_uses_sec6_sources_without_writes() -> 
     assert result["boundary"]["runtime_safety_truth"] is False
     assert result["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert result["outputs"]["route_context_evidence_ref"] == ROUTE_CONTEXT_EVIDENCE_REF
-    assert result["outputs"]["route_context_source_manifest_ref"] == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
+    assert (
+        result["outputs"]["route_context_source_manifest_ref"]
+        == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
+    )
     assert result["outputs"]["route_context_pack_ref"] == ROUTE_CONTEXT_PACK_REF
-    assert result["outputs"]["route_context_crawl_seed_plan_ref"] == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
-    assert result["outputs"]["route_context_media_manifest_ref"] == ROUTE_CONTEXT_MEDIA_MANIFEST_REF
+    assert (
+        result["outputs"]["route_context_crawl_seed_plan_ref"]
+        == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
+    )
+    assert (
+        result["outputs"]["route_context_media_manifest_ref"]
+        == ROUTE_CONTEXT_MEDIA_MANIFEST_REF
+    )
     assert result["outputs"]["route_context_briefing_ref"] == ROUTE_CONTEXT_BRIEFING_REF
     assert result["outputs"]["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
-    assert result["outputs"]["route_mileage_k_anchors_ref"] == ROUTE_MILEAGE_K_ANCHORS_REF
+    assert (
+        result["outputs"]["route_mileage_k_anchors_ref"] == ROUTE_MILEAGE_K_ANCHORS_REF
+    )
 
     source_status = {
         source["source_kind"]: source["status"] for source in result["source_report"]
@@ -81,7 +209,248 @@ def test_route_context_collection_dry_run_uses_sec6_sources_without_writes() -> 
     assert source_status["raster_label_evidence"] == "missing"
 
 
-def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path) -> None:
+def test_route_context_briefing_is_route_specific_and_rejects_map_label_noise(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "dongqing_batongguan_historic_trail_scoutAI"
+    shutil.copytree(FIXTURE_PROJECT, project_root)
+
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["project_id"] = "dongqing_batongguan_historic_trail_scoutAI"
+    project["route_name"] = "20210220清朝八通關全線"
+    project["raster_label_evidence_ref"] = (
+        "outputs/layers/normalized/raster_label_evidence.geojson"
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    route_summary_path = project_root / "normalized/routes/route_summary.json"
+    route_summary = json.loads(route_summary_path.read_text(encoding="utf-8"))
+    route_summary.update(
+        {
+            "route_name": "20210220清朝八通關全線",
+            "distance_m": 89827.14,
+            "elevation_min_m": 595.3,
+            "elevation_max_m": 3248.96,
+        }
+    )
+    route_summary_path.write_text(
+        json.dumps(route_summary, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    mcp_path = project_root / "outputs/mcp/mcp_candidates.json"
+    mcp = json.loads(mcp_path.read_text(encoding="utf-8"))
+    mcp["project_id"] = project["project_id"]
+    mcp["mcp_candidates"] = []
+    mcp["mcp_candidate_count"] = 0
+    mcp_path.write_text(
+        json.dumps(mcp, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    named_path = project_root / "outputs/mcp/named_point_evidence.json"
+    named = json.loads(named_path.read_text(encoding="utf-8"))
+    named["project_id"] = project["project_id"]
+    named_points = named["named_points"][:4]
+    replacements = (
+        ("244獵人營地", 3000.0, ["camp_hut_structure"]),
+        ("大水窟山屋", 38200.0, ["camp_hut_structure"]),
+        ("米亞桑溪", 43700.0, ["water_source"]),
+        ("公山", 47200.0, ["viewpoint_trailhead_pass"]),
+    )
+    for point, (label, distance_m, point_class) in zip(
+        named_points,
+        replacements,
+        strict=True,
+    ):
+        point["canonical_name"] = label
+        point["aliases"] = [label]
+        point["named_point_id"] = f"np.{label}"
+        point["point_class"] = point_class
+        point["route_position"]["distance_m"] = distance_m
+    named["named_points"] = named_points
+    named_path.write_text(
+        json.dumps(named, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    route_notes_path = project_root / "candidates/route_note_candidates.json"
+    route_notes = json.loads(route_notes_path.read_text(encoding="utf-8"))
+    route_notes["project_id"] = project["project_id"]
+    route_notes["candidates"] = []
+    route_notes["counts"] = {key: 0 for key in route_notes.get("counts", {})}
+    route_notes_path.write_text(
+        json.dumps(route_notes, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    web_path = project_root / "outputs/layers/normalized/web_case_evidence.json"
+    web = json.loads(web_path.read_text(encoding="utf-8"))
+    web["project_id"] = project["project_id"]
+    web["points"] = []
+    web["source_statuses"] = []
+    web["counts"] = {
+        "by_source_tier": {},
+        "image_ref_count": 0,
+    }
+    web_path.write_text(
+        json.dumps(web, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    raster_path = project_root / project["raster_label_evidence_ref"]
+    raster_path.parent.mkdir(parents=True, exist_ok=True)
+    raster_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"id": "valid", "label": "大黑水塘"},
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [121.01, 23.45],
+                        },
+                    },
+                    *[
+                        {
+                            "type": "Feature",
+                            "properties": {"id": f"noise-{index}", "label": label},
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [121.01, 23.45],
+                            },
+                        }
+                        for index, label in enumerate(
+                            (
+                                "il",
+                                "ul",
+                                "台",
+                                "灣",
+                                "魯",
+                                "地",
+                                "圖",
+                                "v2026.07.23",
+                                "GN",
+                                "By,",
+                                "馬",
+                                "2",
+                                "hae",
+                                "care",
+                                "oe",
+                                "Vike",
+                                "eS.",
+                            ),
+                            start=1,
+                        )
+                    ],
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    collect_pretrip_route_context(
+        project_root,
+        dry_run=False,
+        include_route_notes=False,
+        route_keyword="東清八通關古道 清朝八通關古道 大水窟 米亞桑溪",
+        collected_at="2026-07-30T00:00:00Z",
+    )
+
+    briefing = (project_root / ROUTE_CONTEXT_BRIEFING_REF).read_text(encoding="utf-8")
+    visible_briefing = _visible_html_text(briefing)
+    points = json.loads(
+        (project_root / ROUTE_CONTEXT_POINTS_REF).read_text(encoding="utf-8")
+    )
+    source_manifest = json.loads(
+        (project_root / ROUTE_CONTEXT_SOURCE_MANIFEST_REF).read_text(encoding="utf-8")
+    )
+    labels = {point["display_label"] for point in points["points"]}
+    ocr_source = next(
+        source
+        for source in source_manifest["source_report"]
+        if source["source_kind"] == "ocr_label_evidence"
+    )
+
+    assert "東清八通關古道" in briefing
+    assert "大水窟山屋" in briefing
+    assert "米亞桑溪" in briefing
+    assert "大黑水塘" in briefing
+    for unrelated in (
+        "奇萊",
+        "南華",
+        "能高越嶺",
+        "雲海保線所",
+        "天池山莊",
+        "光被八表",
+        "雙峰",
+    ):
+        assert unrelated not in briefing
+    for unsourced_duration in ("1 日或壓縮", "2 天 1 夜", "3 天 2 夜"):
+        assert unsourced_duration not in briefing
+    assert "分日天數尚無可追溯行程來源" in briefing
+    assert "89.8 km" in briefing
+    assert "目前明確不能回答" in briefing
+    assert "目前沒有可追溯的每日里程、宿點與接駁行程表" in briefing
+    assert "缺口保留為缺口" in briefing
+    hero = briefing[
+        briefing.index('<header class="hero"') : briefing.index("</header>")
+    ]
+    assert "project: dongqing_batongguan_historic_trail_scoutAI" in hero
+    assert "briefing 產製日期 2026-07-30" in hero
+    assert "候選資料，需人工審查" in hero
+    assert "現況與天氣未同步" in hero
+    assert "非出發核准" in hero
+    assert "資料更新 2026-07-30" not in hero
+    assert "clip-path: polygon" not in briefing
+    assert "里程節點軸（非高程剖面）" in briefing
+    assert "來源圖片分類" in briefing
+    assert "照片路標" not in briefing
+    assert "現地應快速通過，不建議停留拍照" not in briefing
+    assert "無必要缺口" not in briefing
+    assert "無可補強缺口" not in briefing
+    assert "已完成來源更新" not in briefing
+    assert "body.mode-briefing .briefing-detail-slide" in briefing
+    assert '<a class="nav-detail" href="#photo-essay">' in briefing
+    assert '<section class="slide briefing-detail-slide" id="photo-essay">' in briefing
+    assert ocr_source["status"] == "project_mismatch"
+    assert ocr_source["binding_error"] == "source_artifact_project_id_mismatch"
+    for noisy_label in (
+        "il",
+        "ul",
+        "台",
+        "灣",
+        "魯",
+        "地",
+        "圖",
+        "v2026.07.23",
+        "GN",
+        "By,",
+        "馬",
+        "2",
+        "hae",
+        "care",
+        "oe",
+        "Vike",
+        "eS.",
+    ):
+        assert noisy_label not in labels
+    for noisy_label in ("v2026.07.23", "eS."):
+        assert noisy_label not in visible_briefing
+
+
+def test_route_context_collection_writes_workspace_layout_outputs(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "chilai_nanhua_day1"
     shutil.copytree(FIXTURE_PROJECT, project_root)
 
@@ -128,14 +497,20 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert points["artifact_kind"] == "pretrip_route_context_points"
     assert mileage_anchors["artifact_kind"] == "pretrip_route_mileage_k_anchors"
     assert mileage_anchors["scan_summary"]["source_candidate_count"] == 4406
-    assert mileage_anchors["scan_summary"]["complete_scan_before_route_bbox_filter"] is True
+    assert (
+        mileage_anchors["scan_summary"]["complete_scan_before_route_bbox_filter"]
+        is True
+    )
     assert mileage_anchors["scan_summary"]["raw_mileage_label_hit_count"] > 500
-    assert mileage_anchors["scan_summary"]["unique_trail_mileage_k_count"] > (
-        mileage_anchors["anchor_count"]
+    assert (
+        mileage_anchors["scan_summary"]["unique_trail_mileage_k_count"]
+        > (mileage_anchors["anchor_count"])
     )
     assert mileage_anchors["scan_summary"]["unique_road_mileage_stone_count"] >= 3
     assert mileage_anchors["scan_summary"]["route_bbox_filtered_out_count"] > 0
-    assert set(mileage_anchors["scan_summary"]["unique_road_mileage_stone_values_kept"]) == {
+    assert set(
+        mileage_anchors["scan_summary"]["unique_road_mileage_stone_values_kept"]
+    ) == {
         "0K",
         "92.3K",
         "94K",
@@ -169,11 +544,18 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
         and "road_mileage_stone_not_trail_k_anchor" in point["review_reasons"]
         for point in points["points"]
     )
-    assert crawl_seed_plan["route_note_seed_policy"]["route_notes_are_conclusion"] is False
-    assert crawl_seed_plan["route_note_seed_policy"]["route_notes_are_seed_material"] is True
+    assert (
+        crawl_seed_plan["route_note_seed_policy"]["route_notes_are_conclusion"] is False
+    )
+    assert (
+        crawl_seed_plan["route_note_seed_policy"]["route_notes_are_seed_material"]
+        is True
+    )
     assert crawl_seed_plan["route_note_seed_count"] > 0
     assert "奇萊-南華" in crawl_seed_plan["route_keywords"]
-    assert all("每日記錄" not in keyword for keyword in crawl_seed_plan["route_keywords"])
+    assert all(
+        "每日記錄" not in keyword for keyword in crawl_seed_plan["route_keywords"]
+    )
     assert "Scout 行前路線說明" in briefing
     for section_id in (
         "intelligence",
@@ -195,14 +577,14 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
         "sources",
     ):
         assert f'id="{section_id}"' in briefing
-    assert "先看這趟路有哪些必須提醒的點" in briefing
-    assert "先把這趟路的重點拆清楚" in briefing
-    assert "路線脈絡點" in briefing
-    assert "六個行前面向" in briefing
-    assert "資料可信度" in briefing
-    assert "短停邊界" in briefing
-    assert "值得看不等於可以停" in briefing
-    assert "預計幾天可以完成" in briefing
+    assert "目前有哪些可用事實與明確缺口" in briefing
+    assert "先分清已證實內容與缺口" in briefing
+    assert "命名節點" in briefing
+    assert "官方脈絡" in briefing
+    assert "證據層級" in briefing
+    assert "缺口處理" in briefing
+    assert "不能用舊軌跡日期、照片或點名反推出分日與現況" in briefing
+    assert "這份資料能不能回答行程天數" in briefing
     assert "沿途停看聽導覽卡" in briefing
     assert "看什麼" in briefing
     assert "隊伍提問" in briefing
@@ -226,23 +608,19 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "itinerary-option-card" in briefing
     assert "itinerary-lens" in briefing
     assert "天數判斷畫面" in briefing
-    assert "缺任一條件就排除" in briefing
+    assert "補齊來源後再討論" in briefing
     assert "出發前行程審查板" in briefing
     assert "schedule-decision-board" in briefing
     assert "schedule-gate-panel" in briefing
     assert "schedule-gates" in briefing
     assert "領隊確認天氣、路況、山屋與隊伍狀態" in briefing
     assert "先確認能不能照原計畫走" in briefing
-    assert "採用條件" in briefing
-    assert "建議主案" in briefing
-    assert "觀察主案" in briefing
+    assert "未覆蓋里程" in briefing
+    assert "命名節點群組" in briefing
+    assert "分日天數尚無可追溯行程來源" in briefing
     assert "schedule-board" in briefing
-    assert "標準完成版" in briefing
-    assert "慢走觀察版" in briefing
-    assert "D1" in briefing
-    assert "D2" in briefing
-    assert "D3" in briefing
-    assert "壓縮行程只保留為人工核准候選" in briefing
+    assert "未覆蓋里程" in briefing
+    assert "這份 briefing 不提供未有來源的分日建議" in briefing
     assert "highlight-wall" in briefing
     assert "trust-board" in briefing
     assert "source-trust-layout" in briefing
@@ -267,7 +645,7 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "安全邊界" in briefing
     assert "展開來源查核表與待補資料" in briefing
     assert "visual-anchor-board" in briefing
-    assert "照片路標" in briefing
+    assert "來源圖片分類" in briefing
     assert "路線故事牆" in briefing
     assert "先讓隊伍記住畫面，再講資料" in briefing
     assert "story-feature" in briefing
@@ -309,10 +687,10 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "map-atlas-hero" in briefing
     assert "map-atlas-layers" in briefing
     assert "地圖深度與廣度" in briefing
-    assert "先用地圖建立廣度，再用節點建立深度" in briefing
-    assert "官方底圖" in briefing
-    assert "延伸地圖" in briefing
-    assert "走過的痕跡" in briefing
+    assert "先確認路線尺度，再按距離讀命名節點" in briefing
+    assert "官方來源" in briefing
+    assert "路線命名點" in briefing
+    assert "待查線索" in briefing
     assert "先用一組畫面講完這趟路" in briefing
     assert "四段路線" in briefing
     assert "visual-story-arc" in briefing
@@ -328,13 +706,19 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "visual-kit-card" in briefing
     assert "visual-kit-score" in briefing
     assert "先看入山、宿點、稜線、短停與天候" in briefing
-    assert "照片與地圖對應的行程段落" in briefing
-    assert "領隊可依入山、路線走向、宿點、中高山地形、短停觀察與天候季節逐段檢查" in briefing
+    assert "照片與地圖的行前主題檢查" in briefing
+    assert "可用畫面主題" in briefing
+    assert (
+        "領隊可依入山、路線走向、宿點、中高山地形、短停觀察與天候季節分類檢查"
+        in briefing
+    )
     assert "不是增加裝飾圖，而是讓每張圖負責一個行前說明任務" not in briefing
     assert "避免簡報只剩資料欄位" not in briefing
     assert "開場主視覺" not in briefing
     assert "行前照片與地圖狀態" not in briefing
-    assert "已檢查開場、路線總覽、宿點、地形、短停與天候季節六類行程畫面" not in briefing
+    assert (
+        "已檢查開場、路線總覽、宿點、地形、短停與天候季節六類行程畫面" not in briefing
+    )
     assert "入山與稜線遠景" in briefing
     assert "路線全段走向圖" in briefing
     assert "宿點與中繼點" in briefing
@@ -355,17 +739,17 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "路線筆記只作為待查資料" in briefing
     assert "先把路線讀成一張行走地圖" in briefing
     assert "路線閱讀圖" in briefing
-    assert "先看節奏，再看節點" in briefing
+    assert "里程節點軸（非高程剖面）" in briefing
     assert "route-focus-strip" in briefing
     assert "路線頁主判斷" in briefing
-    assert "領隊先講這三件事" in briefing
-    assert "先建立路線節奏，再決定哪些點要停、哪些點要快通過" in briefing
+    assert "目前可確認的路線骨架" in briefing
+    assert "先讀距離與節點；不要從點名推測行程用途" in briefing
     assert "route-reader-cues" in briefing
     assert "route-photo-strip" in briefing
     assert "route-data-details" in briefing
     assert "路線畫面補充" in briefing
-    assert "每個檢查點" in briefing
-    assert "定位訊號" in briefing
+    assert "命名節點按路線距離整理" in briefing
+    assert "現行公告" in briefing
     assert "定位與感測" in briefing
     assert "官方天氣" in briefing
     assert "預定路線方向" in briefing
@@ -465,7 +849,6 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "隊伍回顧是自有線索" in briefing
     assert "候選點與邊界" in briefing
 
-
     assert "短停畫面" in briefing
     assert "risk-review-grid" in briefing
     assert "risk-review-card" in briefing
@@ -482,9 +865,9 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "schedule-photo-strip" in briefing
     assert "schedule-focus-strip" in briefing
     assert "行程頁主判斷" in briefing
-    assert "領隊先做版本選擇" in briefing
-    assert "主案是 2 天 1 夜" in briefing
-    assert "壓縮行程不進預設建議" in briefing
+    assert "領隊先確認證據是否足夠" in briefing
+    assert "領隊先確認證據是否足夠" in briefing
+    assert "目前只整理命名節點群組" in briefing
     assert '<body class="mode-briefing">' in briefing
     assert 'data-briefing-mode="briefing"' in briefing
     assert 'data-briefing-mode="data"' in briefing
@@ -545,7 +928,7 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert "visual-agenda-step" in briefing
     assert "行程導覽" in briefing
     assert "先用四張圖抓住行程順序" in briefing
-    assert "先決定節奏" in briefing
+    assert "先確認能回答多少" in briefing
     assert "先看畫面" in briefing
     assert "讀成行走地圖" in briefing
     assert "留緩衝再出發" in briefing
@@ -554,9 +937,9 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert 'href="#visual-kit"' in briefing
     assert 'href="#route"' in briefing
     assert 'href="#schedule"' in briefing
-    assert 'aria-current' in briefing
-    assert 'window.addEventListener(\'scroll\', scheduleActiveNav' in briefing
-    assert 'window.addEventListener(\'resize\', scheduleActiveNav)' in briefing
+    assert "aria-current" in briefing
+    assert "window.addEventListener('scroll', scheduleActiveNav" in briefing
+    assert "window.addEventListener('resize', scheduleActiveNav)" in briefing
     assert "navLinks.forEach((link) =>" in briefing
     assert "link.addEventListener('click', (event) =>" in briefing
     assert "event.preventDefault()" in briefing
@@ -588,15 +971,26 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     }
     assert "live_source_refresh_evidence" in source_manifest
     assert project["route_context_evidence_ref"] == ROUTE_CONTEXT_EVIDENCE_REF
-    assert project["route_context_source_manifest_ref"] == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
+    assert (
+        project["route_context_source_manifest_ref"]
+        == ROUTE_CONTEXT_SOURCE_MANIFEST_REF
+    )
     assert project["route_context_pack_ref"] == ROUTE_CONTEXT_PACK_REF
-    assert project["route_context_crawl_seed_plan_ref"] == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
-    assert project["route_context_media_manifest_ref"] == ROUTE_CONTEXT_MEDIA_MANIFEST_REF
+    assert (
+        project["route_context_crawl_seed_plan_ref"]
+        == ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF
+    )
+    assert (
+        project["route_context_media_manifest_ref"] == ROUTE_CONTEXT_MEDIA_MANIFEST_REF
+    )
     assert project["route_context_briefing_ref"] == ROUTE_CONTEXT_BRIEFING_REF
     assert project["route_context_points_ref"] == ROUTE_CONTEXT_POINTS_REF
     assert project["route_context_point_count"] == points["point_count"]
     assert project["route_context_crawl_seed_count"] == crawl_seed_plan["seed_count"]
-    assert project["route_context_collection_schema_version"] == "route_context_collection.v1"
+    assert (
+        project["route_context_collection_schema_version"]
+        == "route_context_collection.v1"
+    )
     assert points["boundary"]["runtime_safety_truth"] is False
     assert "route_note_candidate" not in points["counts"]["by_evidence_type"]
     assert "黑水塘" in labels
@@ -610,39 +1004,60 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     )
 
     assert named_source["loaded_count"] == 8
-    heishuitang = next(point for point in points["points"] if point["display_label"] == "黑水塘")
+    heishuitang = next(
+        point for point in points["points"] if point["display_label"] == "黑水塘"
+    )
     assert "named_point" in heishuitang["evidence_families"]
     assert "major_critical_point" in heishuitang["merged_evidence_types"]
     assert heishuitang["observation_score"]["candidate_only"] is True
-    assert heishuitang["source_freshness"]["requires_refresh_before_runtime_truth"] is True
+    assert (
+        heishuitang["source_freshness"]["requires_refresh_before_runtime_truth"] is True
+    )
     assert heishuitang["display_policy"]["show_label"] is True
 
-    artifact_manifest = build_pretrip_artifact_manifest(project_root / "project.json").to_dict()
+    artifact_manifest = build_pretrip_artifact_manifest(
+        project_root / "project.json"
+    ).to_dict()
     by_kind = {
         artifact["artifact_kind"]: artifact
         for artifact in artifact_manifest["artifacts"]
         if artifact["source"] == "project"
     }
-    assert by_kind["route_context_evidence"]["route_context_point_count"] == points["point_count"]
+    assert (
+        by_kind["route_context_evidence"]["route_context_point_count"]
+        == points["point_count"]
+    )
     assert by_kind["route_context_source_manifest"]["network_refresh_required"] is True
-    assert by_kind["route_context_source_manifest"]["cache_only_answer_allowed"] is False
+    assert (
+        by_kind["route_context_source_manifest"]["cache_only_answer_allowed"] is False
+    )
     assert (
         by_kind["route_context_source_manifest"]["live_source_refresh_status"]
         == source_manifest["cache_policy"]["live_source_refresh_status"]
     )
     assert by_kind["route_context_pack"]["query_mode"] == "cache_first_tool_second"
-    assert by_kind["route_context_crawl_seed_plan"]["route_notes_are_conclusion"] is False
-    assert by_kind["route_context_media_manifest"]["media_count"] == media_manifest["media_count"]
+    assert (
+        by_kind["route_context_crawl_seed_plan"]["route_notes_are_conclusion"] is False
+    )
+    assert (
+        by_kind["route_context_media_manifest"]["media_count"]
+        == media_manifest["media_count"]
+    )
     assert by_kind["route_context_media_manifest"]["media_count"] >= 1
-    assert by_kind["route_context_media_manifest"]["anchored_media_count"] == media_manifest["media_count"]
+    assert (
+        by_kind["route_context_media_manifest"]["anchored_media_count"]
+        == media_manifest["media_count"]
+    )
     assert by_kind["route_context_media_manifest"]["route_point_media_count"] >= 1
     assert by_kind["route_context_media_manifest"]["has_hero_image"] is True
     assert by_kind["route_context_media_manifest"]["raw_image_embedded"] is False
-    assert by_kind["route_context_media_manifest"]["visual_readiness_status"] == (
-        media_manifest["visual_readiness"]["status"]
+    assert (
+        by_kind["route_context_media_manifest"]["visual_readiness_status"]
+        == (media_manifest["visual_readiness"]["status"])
     )
-    assert by_kind["route_context_media_manifest"]["visual_quality_gate"] == (
-        media_manifest["visual_readiness"]["quality_gate"]
+    assert (
+        by_kind["route_context_media_manifest"]["visual_quality_gate"]
+        == (media_manifest["visual_readiness"]["quality_gate"])
     )
     assert by_kind["route_context_briefing"]["content_type"] == "text/html"
     assert by_kind["route_context_points"]["point_count"] == points["point_count"]
@@ -657,9 +1072,14 @@ def test_route_context_collection_writes_workspace_layout_outputs(tmp_path: Path
     assert route_context_summary["available"] is True
     assert route_context_summary["point_count"] == points["point_count"]
     assert route_context_summary["crawl_seed_count"] == crawl_seed_plan["seed_count"]
-    assert route_context_summary["route_note_seed_count"] == crawl_seed_plan["route_note_seed_count"]
+    assert (
+        route_context_summary["route_note_seed_count"]
+        == crawl_seed_plan["route_note_seed_count"]
+    )
     assert route_context_summary["briefing_available"] is True
-    assert route_context_summary["anchored_media_count"] == media_manifest["media_count"]
+    assert (
+        route_context_summary["anchored_media_count"] == media_manifest["media_count"]
+    )
     assert route_context_summary["route_point_media_count"] >= 1
     assert route_context_summary["network_refresh_required"] is True
     assert route_context_summary["cache_only_answer_allowed"] is False
@@ -704,7 +1124,9 @@ def test_route_context_verifier_requires_live_refresh_when_network_allowed(
     web_payload = json.loads(web_path.read_text(encoding="utf-8"))
     web_payload.setdefault("boundary", {})["network_calls_allowed"] = False
     web_payload["boundary"]["network_calls_made"] = False
-    web_path.write_text(json.dumps(web_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    web_path.write_text(
+        json.dumps(web_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     collect_pretrip_route_context(
         project_root,
@@ -723,7 +1145,9 @@ def test_route_context_verifier_requires_live_refresh_when_network_allowed(
     )
 
     assert summary["live_source_refresh_status"] == "cache_only_no_live_refresh"
-    assert "route context source manifest missing live source refresh evidence" in errors
+    assert (
+        "route context source manifest missing live source refresh evidence" in errors
+    )
 
 
 def test_route_context_verifier_accepts_live_refresh_evidence_when_network_allowed(
@@ -736,7 +1160,9 @@ def test_route_context_verifier_accepts_live_refresh_evidence_when_network_allow
     web_payload["collector_schema_version"] = "pretrip_p0_p1_source_collection.v1"
     web_payload.setdefault("boundary", {})["network_calls_allowed"] = True
     web_payload["boundary"]["network_calls_made"] = True
-    web_path.write_text(json.dumps(web_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    web_path.write_text(
+        json.dumps(web_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     collect_pretrip_route_context(
         project_root,
@@ -819,9 +1245,17 @@ def test_route_context_collection_normalizes_workspace_k_labels_from_ocr_and_ras
             "source_ref": "local_rudy_tw_tile.z15.x26142.y13991",
         }
     )
-    ocr_path.write_text(json.dumps(ocr_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    ocr_path.write_text(
+        json.dumps(ocr_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
-    raster_path = project_root / "outputs" / "layers" / "normalized" / "raster_label_evidence.geojson"
+    raster_path = (
+        project_root
+        / "outputs"
+        / "layers"
+        / "normalized"
+        / "raster_label_evidence.geojson"
+    )
     raster_path.parent.mkdir(parents=True, exist_ok=True)
     raster_path.write_text(
         json.dumps(
@@ -859,7 +1293,7 @@ def test_route_context_collection_normalizes_workspace_k_labels_from_ocr_and_ras
                             "confidence": 0.73,
                             "source_ref": "rudy_tw_runtime_tile",
                         },
-                    }
+                    },
                 ],
             },
             ensure_ascii=False,
@@ -915,7 +1349,9 @@ def test_route_context_collection_normalizes_workspace_k_labels_from_ocr_and_ras
     )
 
 
-def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: Path) -> None:
+def test_route_context_collection_uses_web_media_in_presentation_html(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "chilai_nanhua_day1"
     shutil.copytree(FIXTURE_PROJECT, project_root)
     web_ref = "outputs/layers/normalized/web_case_evidence.json"
@@ -962,6 +1398,28 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
             "source_tier": "P0",
             "source_family": "official_baseline",
             "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_image_embedded": False,
+        },
+        {
+            "url": "https://example.test/ckfinder/userfiles/images/tltle.png",
+            "alt": "路線標題圖",
+            "caption": "路線標題圖",
+            "source_tier": "P0",
+            "source_family": "official_baseline",
+            "page_url": "https://example.test/route",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_image_embedded": False,
+        },
+        {
+            "url": "https://example.test/ckfinder/userfiles/images/background.png",
+            "alt": "背景森林圖",
+            "caption": "背景森林圖",
+            "source_tier": "P0",
+            "source_family": "official_baseline",
+            "page_url": "https://example.test/route",
             "candidate_only": True,
             "runtime_safety_truth": False,
             "raw_image_embedded": False,
@@ -1058,7 +1516,9 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
     project_path = project_root / "project.json"
     project = json.loads(project_path.read_text(encoding="utf-8"))
     project["web_case_evidence_ref"] = web_ref
-    project_path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     collect_pretrip_route_context(
         project_root,
@@ -1099,9 +1559,7 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
         if slot["status"] == "missing"
     ]
     assert all(slot["missing_action"] for slot in missing_slots)
-    assert {
-        slot["slot_id"] for slot in media_manifest["visual_kit"]["slots"]
-    } == {
+    assert {slot["slot_id"] for slot in media_manifest["visual_kit"]["slots"]} == {
         "route_cover",
         "route_map",
         "lodging_nodes",
@@ -1109,14 +1567,16 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
         "three_minute_stop",
         "weather_season",
     }
-    assert media_manifest["hero_image"]["url"] == "https://example.test/photos/yunhai.jpg"
-    assert media_manifest["hero_image"]["presentation_anchor"]["anchor_kind"] == "route_point"
+    assert (
+        media_manifest["hero_image"]["url"] == "https://example.test/photos/yunhai.jpg"
+    )
+    assert (
+        media_manifest["hero_image"]["presentation_anchor"]["anchor_kind"]
+        == "route_point"
+    )
     assert media_manifest["hero_image"]["presentation_anchor"]["label"] == "雲海保線所"
     assert media_manifest["boundary"]["raw_image_embedded"] is False
-    media_urls = {
-        image["url"]
-        for image in media_manifest["gallery_images"]
-    }
+    media_urls = {image["url"] for image in media_manifest["gallery_images"]}
     assert all(image["url"] not in media_urls for image in bad_image_refs)
     assert "Visual evidence gap" not in briefing
     assert "https://example.test/photos/yunhai.jpg" in briefing
@@ -1127,9 +1587,7 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
     assert "facebook.com/tr" not in briefing
     assert "ForestTherapy_circle.png" not in briefing
     map_atlas_fragment = briefing[
-        briefing.index('class="map-atlas"') : briefing.index(
-            'class="map-layer-card"'
-        )
+        briefing.index('class="map-atlas"') : briefing.index('class="map-layer-card"')
     ]
     assert "https://example.test/photos/context-3.jpg" in map_atlas_fragment
     assert "https://example.test/photos/yunhai.jpg" not in map_atlas_fragment
@@ -1143,11 +1601,19 @@ def test_route_context_collection_uses_web_media_in_presentation_html(tmp_path: 
     assert briefing.count('<figure class="visual-contact-card">') == 8
     assert briefing.count('<article class="visual-anchor">') == 8
     assert "先看照片中的行進方向" in briefing
-    assert "照片路標" in briefing
+    assert "來源圖片分類" in briefing
+    assert "按來源主題分類" in briefing
+    assert "可用畫面主題" in briefing
+    assert "整理成三組命名節點" in briefing
+    assert "再把每張照片對回行程段落" not in briefing
+    assert "已對應行程段落" not in briefing
+    assert "整理成前段、中段與後段" not in briefing
     assert "<img" in briefing
 
 
-def test_builtin_route_context_collect_tool_runs_with_authorization(tmp_path: Path) -> None:
+def test_builtin_route_context_collect_tool_runs_with_authorization(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "chilai_nanhua_day1"
     shutil.copytree(FIXTURE_PROJECT, project_root)
     for ref in (
@@ -1222,7 +1688,9 @@ def test_builtin_route_context_collect_tool_runs_with_authorization(tmp_path: Pa
     assert (project_root / ROUTE_CONTEXT_POINTS_REF).is_file()
 
 
-def test_route_context_assessor_reads_collected_canonical_points(tmp_path: Path) -> None:
+def test_route_context_assessor_reads_collected_canonical_points(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "chilai_nanhua_day1"
     shutil.copytree(FIXTURE_PROJECT, project_root)
     collect_pretrip_route_context(
@@ -1246,7 +1714,9 @@ def test_route_context_assessor_reads_collected_canonical_points(tmp_path: Path)
     assert "黑水塘" in {item["label"] for item in result["results"]}
 
 
-def test_route_context_collection_marks_sensitive_cultural_points(tmp_path: Path) -> None:
+def test_route_context_collection_marks_sensitive_cultural_points(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "chilai_nanhua_day1"
     shutil.copytree(FIXTURE_PROJECT, project_root)
     route_notes_path = project_root / "candidates" / "route_note_candidates.json"
@@ -1279,9 +1749,13 @@ def test_route_context_collection_marks_sensitive_cultural_points(tmp_path: Path
         collected_at="2026-06-15T00:00:00Z",
     )
 
-    points = json.loads((project_root / ROUTE_CONTEXT_POINTS_REF).read_text(encoding="utf-8"))
+    points = json.loads(
+        (project_root / ROUTE_CONTEXT_POINTS_REF).read_text(encoding="utf-8")
+    )
     sensitive = next(
-        point for point in points["points"] if point["display_label"] == "舊社獵徑禁忌地"
+        point
+        for point in points["points"]
+        if point["display_label"] == "舊社獵徑禁忌地"
     )
     assert sensitive["sensitivity_level"] == "restricted"
     assert sensitive["display_policy"]["show_exact_coordinate"] is False
@@ -1291,12 +1765,12 @@ def test_route_context_collection_marks_sensitive_cultural_points(tmp_path: Path
 
 
 def test_route_context_briefing_skill_pins_visual_map_source_template() -> None:
-    skill = (REPO_ROOT / ".agents" / "skills" / "scout-route-context-briefing" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    template = (REPO_ROOT / "skills" / "scout" / "route-briefing-compose.yaml").read_text(
-        encoding="utf-8"
-    )
+    skill = (
+        REPO_ROOT / ".agents" / "skills" / "scout-route-context-briefing" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    template = (
+        REPO_ROOT / "skills" / "scout" / "route-briefing-compose.yaml"
+    ).read_text(encoding="utf-8")
 
     for expected in (
         "Visual / Map Briefing Template",

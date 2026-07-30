@@ -1,0 +1,83 @@
+# Scout Route Context one-click input contract.
+#
+# Copy this file for each new journey. Relative paths are resolved from the
+# copied YAML file. Use a new project_id every time; the pipeline never
+# overwrites an existing workspace.
+schema_version: scout.route_context_pipeline.v1
+
+project_id: replace_with_new_trip_id
+workspace_root: /absolute/path/to/scout-workspaces
+
+route:
+  # The ordered, reviewed route that owns distance, elevation, checkpoints,
+  # and briefing identity.
+  golden_gpx: /absolute/path/to/new-trip.gpx
+
+  # Use either a directory or explicit reference_gpx entries. Remove the field
+  # when this journey has no reference tracks.
+  reference_dir: /absolute/path/to/reference-gpx-directory
+  reference_gpx: []
+
+  # Put the canonical route name first, followed only by genuine aliases.
+  keywords:
+    - 新旅程正式名稱
+    - 新旅程別名
+
+sources:
+  # Live source collection requires both this flag and the command-line
+  # --confirm-network-fetch acknowledgement.
+  allow_network_fetch: true
+  timeout_seconds: 20
+  minimum_evidence_items: 2
+
+  # Replace every example URL. P0 should be an official baseline/status source;
+  # P1 should expand itinerary, historical, cultural, natural, or terrain
+  # context. Add more records when the route needs broader coverage.
+  records:
+    - source_id: new_trip_official
+      source_tier: P0
+      source_family: official_baseline
+      label: 新旅程官方資料
+      url: https://replace.example/new-trip/official
+    - source_id: new_trip_itinerary
+      source_tier: P1
+      source_family: community_route_evidence
+      label: 新旅程行程與路線紀錄
+      url: https://replace.example/new-trip/itinerary
+
+preparation:
+  import_profile: mac-workstation
+
+  # Route Context can compile after import and source collection alone. Enable
+  # this only when the same run must also prepare the selected Scout map layers.
+  run_layer_preparation: false
+  layer_profile: mac-workstation
+  network_mode: no-network
+  allow_network_fetch: false
+
+compile:
+  include_route_notes: true
+  route_note_point_policy: seed_only
+  limit_route_notes: 80
+
+review:
+  # "required" means the run stops at needs_semantic_review until a
+  # hash-bound result from the selected reviewer is supplied.
+  semantic_review: required
+
+  # Keep chatgpt-pro for the Codex in-app handoff, or change this to
+  # scout-ai-cloud and run pretrip_route_context_scout_ai_review against the
+  # generated content_review_packet.json.
+  reviewer: chatgpt-pro
+  minimum_source_briefs: 2
+  minimum_visible_characters: 800
+  minimum_h2_count: 3
+  required_source_tiers:
+    - P0
+    - P1
+
+  # List names and distinctive aliases from prior journeys whose accidental
+  # appearance must fail the deterministic review. Replace these placeholders.
+  forbidden_route_terms:
+    - 上一條旅程名稱
+    - 上一條旅程別名

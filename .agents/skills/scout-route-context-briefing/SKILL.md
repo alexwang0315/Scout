@@ -9,6 +9,185 @@ description: Generate Scout pretrip route-context briefings from route/workspace
 
 Use this skill to turn a route name, workspace, GPX/import result, completed-trip record, or source list into Scout pretrip route-context artifacts and a briefing HTML. Keep the result as pretrip candidate/evidence only; never promote source text, Scout-owned observations, or model output into runtime safety truth.
 
+## One-click New Journey Pipeline
+
+For a completely new journey, use this Skill as the operator-facing one-click
+surface and `pretrip_route_context_pipeline.py` as the deterministic execution
+engine. The Skill owns interaction and the selected semantic-review handoff;
+the program owns validation, files, stage receipts, compilation, and completion
+status. The reviewer may be `chatgpt-pro` or the configured
+`scout-ai-cloud` model.
+
+The required state machine is:
+
+1. `輸入契約 / input_contract`
+   - Validate the YAML contract and every referenced local input before writing.
+   - Bind one new `project_id` to the golden GPX, reference GPX set, route
+     keywords, and SHA-256 input fingerprints.
+   - Refuse an existing project unless `--resume` points to the same config and
+     unchanged inputs. Never overwrite or rebuild another route workspace.
+2. `證據收集 / evidence_collection`
+   - Import the route, optionally prepare requested layers, and collect only the
+     explicitly supplied P0/P1 sources.
+   - Require both YAML opt-in and `--confirm-network-fetch` before live fetches.
+   - Record evidence counts, source tiers, retrieval outcomes, network use, and
+     the normalized evidence hash.
+3. `確定性編譯 / deterministic_compile`
+   - Compile route-context points, source manifest, route-context pack, and
+     briefing HTML from the bound workspace.
+   - Require all outputs to exist, match the project, and have recorded hashes.
+   - Do not use a prior route's aliases, URLs, images, lodging, or copy as
+     fallback content.
+4. `內容審核 / content_review`
+   - First run deterministic gates for project binding, route identity,
+     prior-route contamination, blocked product copy, P0/P1 coverage, evidence
+     materialization, document shape, and candidate-only boundaries.
+   - For `chatgpt-pro`, invoke `$gpt-pro-collaboration` in the Codex in-app
+     browser with only the generated briefing and
+     `outputs/route_context_pipeline/content_review_packet.json` in scope.
+   - For `scout-ai-cloud`, invoke
+     `pretrip_route_context_scout_ai_review.py` with the exact pipeline review
+     packet as `--binding-review-packet`. Use the configured cloud profile and
+     never silently fall back to the local model.
+   - Accept only the selected reviewer result matching `project_id`, the exact
+     briefing SHA-256, and—for Scout AI—the exact review-packet SHA-256.
+     `NEEDS_WORK`, a missing review, or any mismatch must not become
+     `completed`.
+
+Before any import/preparation run, read
+`docs/specs/scout-pretrip-full-preparation-runbook.md` and record newly
+discovered import/preparation mistakes or corrections there.
+
+Start by copying and editing:
+
+```text
+config/pretrip-route-context-pipeline.example.yaml
+```
+
+Validate without writing:
+
+```bash
+rtk ./venv/bin/python -m pretrip_route_context_pipeline \
+  --config <new-trip.yaml> \
+  --dry-run
+```
+
+Run the local deterministic stages:
+
+```bash
+rtk ./venv/bin/python -m pretrip_route_context_pipeline \
+  --config <new-trip.yaml> \
+  --confirm-network-fetch
+```
+
+Exit status `3` and pipeline status `needs_semantic_review` are an intentional
+handoff, not success. For ChatGPT Pro, use the collaboration ledger, send the
+review packet and briefing, and save the strict JSON response locally using the
+packet's `expected_result_schema`.
+
+For Scout AI / DeepSeek, set `review.reviewer: scout-ai-cloud` in the input
+contract and run:
+
+```bash
+rtk ./venv/bin/python -m pretrip_route_context_scout_ai_review \
+  --project-root <workspace-root>/<project-id> \
+  --model-config configs/assistant-models.dashboard-aihat2.json \
+  --binding-review-packet \
+    <workspace-root>/<project-id>/outputs/route_context_pipeline/content_review_packet.json
+```
+
+This produces:
+
+- `scout_ai_content_review_packet.json`, containing the bounded visible briefing
+  and evidence snapshot sent to the model;
+- `scout_ai_semantic_review_result.json`, containing provider/model identity,
+  briefing/review-packet hashes, verdict, findings, usage, and candidate-only
+  boundaries;
+- `semantic_review_comparison.json` and `.md`, ready to receive a hash-matched
+  ChatGPT Pro result for side-by-side comparison.
+
+Then resume with either reviewer result:
+
+```bash
+rtk ./venv/bin/python -m pretrip_route_context_pipeline \
+  --config <new-trip.yaml> \
+  --confirm-network-fetch \
+  --resume \
+  --semantic-review-result <semantic-review-result.json>
+```
+
+For the operator, this is one Skill request: the Skill executes, hands off to
+GPT Pro, waits for the reviewed response, and resumes the same run. Report
+success only when the manifest says `completed` and all four stage receipts say
+`pass`. Do not generate briefing variants, edit the Route Context Intelligence
+implementation spec, or rebuild a Chilai workspace unless the user separately
+authorizes that scope.
+
+## Evidence-bound Scout AI Regeneration
+
+Use this branch when an existing Route Context has already been judged
+`NEEDS_WORK` and the user asks Scout AI plus a configured cloud model to rebuild
+the briefing. This is a separate, hash-bound regeneration cycle; it must not
+silently rerun import, map preparation, route binding, or another journey.
+
+The input is one reviewed JSON contract with schema
+`scout.route_context_regeneration_evidence.v1`. It must bind the exact
+`project_id` and contain:
+
+- the display name and bound track identity;
+- `current_status.operability` as `open`, `closed`, or `unknown`;
+- P0-backed current status and application rules;
+- sourced historical/reference itinerary and logistics;
+- the six context-layer claims, unresolved items, and complete source ledger.
+
+Run the Scout AI editorial pass and deterministic compiler:
+
+```bash
+rtk ./venv/bin/python -m pretrip_route_context_scout_ai_regenerate \
+  --project-root <workspace-root>/<project-id> \
+  --evidence <reviewed-regeneration-evidence.json> \
+  --model-config configs/assistant-models.dashboard-aihat2.json \
+  --skill .agents/skills/scout-route-context-briefing/SKILL.md \
+  --model deepseek/deepseek-v3.2 \
+  --env-file <repo-env-file>
+```
+
+The cloud model may choose only the editorial title, section headings, reading
+order, reader questions, and closing note. It never writes the HTML or changes
+facts. Deterministic code validates every source reference, requires P0-only
+support for current status and application rules, archives the prior briefing,
+and compiles the visible document from the typed evidence.
+
+Then run an independent model pass against the regenerated hash:
+
+```bash
+rtk ./venv/bin/python -m pretrip_route_context_scout_ai_review \
+  --project-root <workspace-root>/<project-id> \
+  --model-config configs/assistant-models.dashboard-aihat2.json \
+  --model deepseek/deepseek-v3.2 \
+  --env-file <repo-env-file>
+```
+
+Accept the result only when briefing, regeneration receipt, review packet, and
+semantic review all name the same briefing SHA-256. Preserve every previous
+different-hash briefing and review under their archive directories.
+
+For `closed` routes, compile a `closed_route_context`: an unmistakable
+not-open warning, a Gate 0 that waits for official reopening, historical
+itinerary anti-reuse copy, and the post-reopening verification order. Review
+the document as a readable historical and status guide; a content `PASS` never
+means open, passable, safe, or approved to depart.
+
+If the reviewer returns `NEEDS_WORK`, use its findings to repair the evidence
+contract, deterministic renderer, or editorial constraints, then run a fresh
+regeneration and independent review. Do not weaken the rubric or rewrite a
+review result into `PASS`.
+
+For the operator this remains one Skill request. The Skill performs evidence
+preflight, regeneration, independent review, focused tests, hash checks, and a
+browser smoke before returning. The two programs remain separate so the
+generator cannot mark its own content as reviewed.
+
 ## Core Boundary
 
 - Treat all outputs as pretrip candidate-only evidence.
