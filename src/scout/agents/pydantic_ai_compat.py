@@ -126,27 +126,49 @@ def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
     capabilities: list[Any] = []
     if policy.native_web_search_enabled:
         from pydantic_ai.capabilities.web_search import WebSearch
+        from scout.agents.local_web_search import build_local_web_search
 
-        capabilities.append(
-            WebSearch(
-                native=True,
-                max_uses=policy.native_research_max_searches,
-                allowed_domains=policy.native_research_allowed_domains or None,
-                blocked_domains=policy.native_research_blocked_domains or None,
-                description=(
-                    "Scout trusted native web search. No per-query approval is "
-                    "required, but findings are candidate-only and are not "
-                    "runtime safety truth."
-                ),
+        if policy.provider == "openai-chat":
+            capabilities.append(
+                WebSearch(
+                    native=True,
+                    max_uses=policy.native_research_max_searches,
+                    allowed_domains=policy.native_research_allowed_domains or None,
+                    blocked_domains=policy.native_research_blocked_domains or None,
+                    description=(
+                        "Scout trusted native web search. No per-query approval is "
+                        "required, but findings are candidate-only and are not "
+                        "runtime safety truth."
+                    ),
+                )
             )
-        )
+        else:
+            capabilities.append(
+                WebSearch(
+                    native=False,
+                    local=build_local_web_search(
+                        allowed_domains=(
+                            policy.native_research_allowed_domains or None
+                        ),
+                        blocked_domains=(
+                            policy.native_research_blocked_domains or None
+                        ),
+                        max_uses=policy.native_research_max_searches,
+                    ),
+                    description=(
+                        "Scout trusted local web search with deterministic result "
+                        "provenance. No per-query approval is required, but findings "
+                        "are candidate-only and are not runtime safety truth."
+                    ),
+                )
+            )
     if policy.native_web_fetch_enabled:
         from pydantic_ai.capabilities.web_fetch import WebFetch
         from scout.agents.local_web_fetch import build_local_web_fetch
 
         capabilities.append(
             WebFetch(
-                native=True,
+                native=False,
                 local=build_local_web_fetch(
                     allowed_domains=policy.native_research_allowed_domains or None,
                     blocked_domains=policy.native_research_blocked_domains or None,
@@ -154,13 +176,11 @@ def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
                 ),
                 allowed_domains=policy.native_research_allowed_domains or None,
                 blocked_domains=policy.native_research_blocked_domains or None,
-                max_uses=policy.native_research_max_fetches,
-                enable_citations=True,
                 max_content_tokens=None,
                 description=(
-                    "Scout trusted native web fetch. No per-query approval is "
-                    "required, but fetched content is candidate-only and is not "
-                    "runtime safety truth."
+                    "Scout trusted local web fetch with deterministic URL and domain "
+                    "validation. No per-query approval is required, but fetched "
+                    "content is candidate-only and is not runtime safety truth."
                 ),
             )
         )

@@ -70,59 +70,11 @@ def pydantic_result_output(result: Any) -> Any:
 def pydantic_native_research_capabilities(policy: Any) -> list[Any]:
     """Build no-approval native research capabilities for trusted Scout runs."""
 
-    mode = getattr(policy, "mode", None)
-    if (
-        not getattr(policy, "native_research_enabled", False)
-        or getattr(mode, "value", mode) != "external_pydantic_ai"
-    ):
-        return []
+    from scout.agents.pydantic_ai_compat import (
+        pydantic_native_research_capabilities as packaged_capabilities,
+    )
 
-    capabilities: list[Any] = []
-    allowed_domains = getattr(policy, "native_research_allowed_domains", []) or None
-    blocked_domains = getattr(policy, "native_research_blocked_domains", []) or None
-    if getattr(policy, "native_web_search_enabled", False):
-        from pydantic_ai.capabilities.web_search import WebSearch
-
-        capabilities.append(
-            WebSearch(
-                native=True,
-                max_uses=getattr(policy, "native_research_max_searches", 10),
-                allowed_domains=allowed_domains,
-                blocked_domains=blocked_domains,
-                description=(
-                    "Scout trusted native web search. No per-query approval is "
-                    "required, but findings are candidate-only and are not "
-                    "runtime safety truth."
-                ),
-            )
-        )
-    if getattr(policy, "native_web_fetch_enabled", False):
-        from pydantic_ai.capabilities.web_fetch import WebFetch
-        from scout.agents.local_web_fetch import build_local_web_fetch
-
-        max_fetches = getattr(policy, "native_research_max_fetches", 10)
-
-        capabilities.append(
-            WebFetch(
-                native=True,
-                local=build_local_web_fetch(
-                    allowed_domains=allowed_domains,
-                    blocked_domains=blocked_domains,
-                    max_uses=max_fetches,
-                ),
-                allowed_domains=allowed_domains,
-                blocked_domains=blocked_domains,
-                max_uses=max_fetches,
-                enable_citations=True,
-                max_content_tokens=None,
-                description=(
-                    "Scout trusted native web fetch. No per-query approval is "
-                    "required, but fetched content is candidate-only and is not "
-                    "runtime safety truth."
-                ),
-            )
-        )
-    return capabilities
+    return packaged_capabilities(policy)
 
 
 def build_chat_model(

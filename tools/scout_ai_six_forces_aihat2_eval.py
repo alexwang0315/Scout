@@ -2591,7 +2591,12 @@ def health_guard(health: dict[str, Any]) -> dict[str, Any]:
         warnings.append(
             f"historical_power_or_throttle_flags=0x{throttle_value & 0xF0000:x}"
         )
-    if not (health.get("ups") or {}).get("power_supplies"):
+    ups = health.get("ups") or {}
+    upsc_stdout = str((ups.get("upsc_list") or {}).get("stdout") or "").strip()
+    ups_observable = bool(ups.get("power_supplies")) or bool(
+        (ups.get("ups_hat_e") or {}).get("available")
+    ) or bool(upsc_stdout)
+    if not ups_observable:
         warnings.append("ups_not_observable_via_power_supply_or_upsc")
     return {
         "status": "fail" if errors else "warn" if warnings else "pass",

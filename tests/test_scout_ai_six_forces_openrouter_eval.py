@@ -78,15 +78,30 @@ def test_redacts_openrouter_secret_from_error() -> None:
     assert "[REDACTED]" in message
 
 
-def test_requires_pydantic_ai_214(monkeypatch) -> None:
+def test_requires_pydantic_ai_220_or_newer(monkeypatch) -> None:
     monkeypatch.setattr(
         eval_module,
         "runtime_package_versions",
-        lambda: {"pydantic_ai_slim": "2.12.4"},
+        lambda: {"pydantic_ai_slim": "2.19.9"},
     )
 
-    with pytest.raises(RuntimeError, match="requires pydantic-ai-slim 2.14.x"):
-        eval_module.require_pydantic_ai_214()
+    with pytest.raises(
+        RuntimeError,
+        match="requires pydantic-ai-slim 2.20.0 or newer",
+    ):
+        eval_module.require_pydantic_ai_220_or_newer()
+
+
+def test_accepts_pydantic_ai_220_or_newer(monkeypatch) -> None:
+    monkeypatch.setattr(
+        eval_module,
+        "runtime_package_versions",
+        lambda: {"pydantic_ai_slim": "2.20.0"},
+    )
+
+    assert eval_module.require_pydantic_ai_220_or_newer() == {
+        "pydantic_ai_slim": "2.20.0"
+    }
 
 
 def test_openrouter_caller_executes_every_supplied_evidence_card_as_native_tools(
@@ -161,7 +176,7 @@ def test_run_eval_records_openrouter_manifest_and_scenario_snapshot(
     monkeypatch.setattr(eval_module, "expand_case_runs", lambda _artifact: [])
     monkeypatch.setattr(
         eval_module,
-        "require_pydantic_ai_214",
+        "require_pydantic_ai_220_or_newer",
         lambda: (_ for _ in ()).throw(
             AssertionError("no provider gate is needed when no model call is pending")
         ),

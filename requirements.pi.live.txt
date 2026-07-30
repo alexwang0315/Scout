@@ -1,5 +1,5 @@
 fastapi==0.136.1
 pydantic==2.13.3
 uvicorn==0.46.0
-pydantic-ai-slim[openai,openrouter]==2.14.1
+pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]==2.20.0
 paho-mqtt==2.1.0

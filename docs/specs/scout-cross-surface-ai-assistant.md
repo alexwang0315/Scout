@@ -23,14 +23,19 @@ assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
 keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
-2026-07-20 update: Scout AI is the full-capability user entrypoint. Pydantic AI
-provider compatibility targets v2.13.0. The assistant and Mac-local fallback
+2026-07-30 update: Scout AI is the full-capability user entrypoint. Pydantic AI
+provider compatibility targets v2.20.0. The assistant and Mac-local fallback
 paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
-provider for `openrouter:<vendor/model>`. Native WebSearch and WebFetch are
-enabled by default for external provider-backed Scout AI calls; operators may
-opt out for lab/CI with `SCOUT_AI_OS_NATIVE_RESEARCH=0`. Provider-native MCP
-still requires a reviewed connector boundary.
+provider for `openrouter:<vendor/model>`. Trusted WebSearch and WebFetch are
+enabled by default for external provider-backed Scout AI calls. OpenRouter and
+NVIDIA use Scout's local, traced search/fetch adapters; direct OpenAI Chat may
+use supported native search. Operators may opt out for lab/CI with
+`SCOUT_AI_OS_NATIVE_RESEARCH=0`. Provider-native MCP still requires a reviewed
+connector boundary. OpenRouter request settings remain immutable across calls,
+tool-search history remains replayable across provider handoffs, bare MCP
+errors enter the normal recovery ladder, and provider-specific `RequestUsage`
+fields remain available to redacted telemetry.
 
 This document defines the cross-surface assistant guardrails that now anchor the
 mock provider, bounded context adapters, read-only API, UI shell, opt-in
@@ -279,7 +284,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.13.0;
+- supported runtime family: Pydantic AI v2.20.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;
@@ -292,7 +297,7 @@ Current Pydantic AI provider policy:
 - WebSearch and WebFetch are on by default for external provider-backed Scout AI
   calls. `SCOUT_AI_OS_NATIVE_RESEARCH=0` is only a lab/CI opt-out.
 - provider-native MCP remains off unless separately reviewed and permissioned.
-- v2.13 capability model hooks may participate in model selection, but Scout
+- v2 capability model hooks may participate in model selection, but Scout
   model policy remains authoritative and UI/event adapters must preserve
   deferred tool request/result events.
 

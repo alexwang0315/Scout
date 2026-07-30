@@ -42,6 +42,29 @@ def test_aihat2_eval_prompt_does_not_instruct_template_copy() -> None:
     assert "Scout 工具摘要" in prompt
 
 
+def test_ups_hat_e_status_reports_read_only_i2c_sample(tmp_path: Path) -> None:
+    bus = tmp_path / "i2c-1"
+    bus.touch()
+
+    status = eval_module._ups_hat_e_status(
+        bus=bus,
+        reader=lambda **_kwargs: {
+            "battery": {"percent": 87, "voltage_mv": 16240},
+            "cell_voltage_mv": [4060, 4061, 4059, 4060],
+            "low_cell_threshold_mv": 3150,
+            "low_cell_voltage_present": False,
+            "power_state": "discharging",
+            "vbus": {"voltage_mv": 0, "current_ma": 0, "power_mw": 0},
+        },
+    )
+
+    assert status["available"] is True
+    assert status["read_only"] is True
+    assert status["power_control_write_allowed"] is False
+    assert status["battery"]["percent"] == 87
+    assert status["cell_voltage_mv"] == [4060, 4061, 4059, 4060]
+
+
 def test_aihat2_eval_prompt_uses_plain_text_tool_evidence() -> None:
     prompt = build_prompt(
         question="route summary 的距離是多少？",
@@ -566,7 +589,7 @@ def test_aihat2_eval_can_route_hailo_through_pydantic_ai_v2() -> None:
 
     assert answer == '{"a":"grounded"}'
     assert metadata["pydantic_ai"]["used"] is True
-    assert metadata["pydantic_ai"]["runtime_version"].startswith("2.14.")
+    assert metadata["pydantic_ai"]["runtime_version"].startswith("2.")
     assert metadata["pydantic_ai"]["requests"] == 1
 
 
