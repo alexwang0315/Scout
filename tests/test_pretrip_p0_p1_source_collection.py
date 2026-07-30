@@ -8,18 +8,33 @@ from pretrip_p0_p1_source_collection import (
     DEFAULT_P0_P1_SOURCE_CATALOG,
     DEFAULT_WEB_CASE_EVIDENCE_REF,
     DEFAULT_WEB_CASE_QUERY_PLAN_REF,
+    _classify_url,
     collect_pretrip_p0_p1_sources,
 )
 from pretrip_route_context_collection import (
     ROUTE_CONTEXT_BRIEFING_REF,
     ROUTE_CONTEXT_MEDIA_MANIFEST_REF,
     ROUTE_CONTEXT_POINTS_REF,
+    ROUTE_CONTEXT_SOURCE_MANIFEST_REF,
     collect_pretrip_route_context,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_PROJECT = REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+FIXTURE_PROJECT = (
+    REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+)
+
+
+def test_ysnp_route_pages_are_classified_as_p0_official_sources() -> None:
+    source = _classify_url(
+        "https://www.ysnp.gov.tw/StaticPage/AncientRoad1",
+        label="玉山國家公園：清代八通關古道概述",
+    )
+
+    assert source["source_tier"] == "P0"
+    assert source["source_family"] == "official_status"
+    assert source["label"] == "玉山國家公園：清代八通關古道概述"
 
 
 def test_p0_p1_source_collection_defaults_to_generic_catalog_without_route_urls(
@@ -147,8 +162,12 @@ def test_p0_p1_source_collection_writes_web_case_evidence_without_live_network(
     assert result["boundary"]["candidate_only"] is True
     assert result["boundary"]["runtime_safety_truth"] is False
 
-    query_plan = json.loads((project_root / DEFAULT_WEB_CASE_QUERY_PLAN_REF).read_text(encoding="utf-8"))
-    evidence = json.loads((project_root / DEFAULT_WEB_CASE_EVIDENCE_REF).read_text(encoding="utf-8"))
+    query_plan = json.loads(
+        (project_root / DEFAULT_WEB_CASE_QUERY_PLAN_REF).read_text(encoding="utf-8")
+    )
+    evidence = json.loads(
+        (project_root / DEFAULT_WEB_CASE_EVIDENCE_REF).read_text(encoding="utf-8")
+    )
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     assert query_plan["artifact_kind"] == "pretrip_web_case_query_plan"
     assert query_plan["schema_version"] == "route_corridor_map_preparation.v1"
@@ -165,7 +184,10 @@ def test_p0_p1_source_collection_writes_web_case_evidence_without_live_network(
     p1_image_urls = {image["url"] for image in evidence["points"][1]["image_refs"]}
     assert "https://example.test/photos/tianchi-cover.jpg" in p0_image_urls
     assert "https://example.test/photos/tianchi.jpg" in p0_image_urls
-    assert all(image["raw_image_embedded"] is False for image in evidence["points"][0]["image_refs"])
+    assert all(
+        image["raw_image_embedded"] is False
+        for image in evidence["points"][0]["image_refs"]
+    )
     assert "https://example.test/assets/route-cover.jpg" in p1_image_urls
     assert "https://example.test/assets/ridge-large.jpg" in p1_image_urls
     assert "https://example.test/assets/guangbei.jpg" in p1_image_urls
@@ -187,22 +209,33 @@ def test_p0_p1_source_collection_writes_web_case_evidence_without_live_network(
     assert web_source["loaded_count"] == 2
     assert web_source["source_tier"] == "mixed:P0/P1"
     assert web_source["source_tier_counts"] == {"P0": 1, "P1": 1}
-    points = json.loads((project_root / ROUTE_CONTEXT_POINTS_REF).read_text(encoding="utf-8"))
+    points = json.loads(
+        (project_root / ROUTE_CONTEXT_POINTS_REF).read_text(encoding="utf-8")
+    )
     web_points = [
         point
         for point in points["points"]
         if point["evidence_type"] == "web_case_evidence"
     ]
-    assert points["counts"]["by_evidence_type"]["web_case_evidence"] == 2
-    assert {point["source_tier"] for point in web_points} == {"P0", "P1"}
-    assert any(
-        point["display_label"] == "奇萊南華路線介紹"
-        and point["runtime_safety_truth"] is False
-        for point in points["points"]
+    source_manifest = json.loads(
+        (project_root / ROUTE_CONTEXT_SOURCE_MANIFEST_REF).read_text(encoding="utf-8")
     )
+    assert "web_case_evidence" not in points["counts"]["by_evidence_type"]
+    assert web_points == []
+    assert source_manifest["route_source_brief_count"] == 2
+    assert {item["title"] for item in source_manifest["route_source_briefs"]} == {
+        "天池山莊開放公告",
+        "健行筆記奇萊南華",
+    }
+    assert {item["source_tier"] for item in source_manifest["route_source_briefs"]} == {
+        "P0",
+        "P1",
+    }
 
 
-def test_p0_p1_source_collection_requires_explicit_network_fetch(tmp_path: Path) -> None:
+def test_p0_p1_source_collection_requires_explicit_network_fetch(
+    tmp_path: Path,
+) -> None:
     project_root = tmp_path / "chilai_nanhua_day1"
     shutil.copytree(FIXTURE_PROJECT, project_root)
 
@@ -217,7 +250,9 @@ def test_p0_p1_source_collection_requires_explicit_network_fetch(tmp_path: Path)
         fetcher=blocked_fetcher,
     )
 
-    evidence = json.loads((project_root / DEFAULT_WEB_CASE_EVIDENCE_REF).read_text(encoding="utf-8"))
+    evidence = json.loads(
+        (project_root / DEFAULT_WEB_CASE_EVIDENCE_REF).read_text(encoding="utf-8")
+    )
     assert result["network_calls_made"] is False
     assert result["evidence_item_count"] == 0
     assert result["boundary"]["network_calls_allowed"] is False
@@ -274,8 +309,12 @@ def test_p0_p1_source_collection_imports_operator_image_list_without_network(
     assert result["image_source_count"] == 7
     assert result["evidence_item_count"] == 7
     assert result["boundary"]["network_calls_allowed"] is False
-    evidence = json.loads((project_root / DEFAULT_WEB_CASE_EVIDENCE_REF).read_text(encoding="utf-8"))
-    query_plan = json.loads((project_root / DEFAULT_WEB_CASE_QUERY_PLAN_REF).read_text(encoding="utf-8"))
+    evidence = json.loads(
+        (project_root / DEFAULT_WEB_CASE_EVIDENCE_REF).read_text(encoding="utf-8")
+    )
+    query_plan = json.loads(
+        (project_root / DEFAULT_WEB_CASE_QUERY_PLAN_REF).read_text(encoding="utf-8")
+    )
     assert query_plan["status"] == "ready_from_operator_image_list"
     assert query_plan["image_source_count"] == 7
     assert query_plan["source_policy"]["operator_image_import_allowed"] is True
@@ -335,10 +374,21 @@ def test_p0_p1_source_collection_imports_operator_image_list_without_network(
         "observation_point",
         "route_overview",
     }
-    assert by_layer["cultural"]["presentation_anchor"]["context_kind"] == "cultural_context"
-    assert by_layer["terrain"]["presentation_anchor"]["context_kind"] == "terrain_context"
-    assert by_layer["seasonal"]["presentation_anchor"]["context_kind"] == "seasonal_context"
-    assert by_layer["cultural"]["presentation_anchor"]["match_reason"] == "operator_supplied_context_layer"
+    assert (
+        by_layer["cultural"]["presentation_anchor"]["context_kind"]
+        == "cultural_context"
+    )
+    assert (
+        by_layer["terrain"]["presentation_anchor"]["context_kind"] == "terrain_context"
+    )
+    assert (
+        by_layer["seasonal"]["presentation_anchor"]["context_kind"]
+        == "seasonal_context"
+    )
+    assert (
+        by_layer["cultural"]["presentation_anchor"]["match_reason"]
+        == "operator_supplied_context_layer"
+    )
     assert "https://example.test/media/historical.jpg" in briefing
     assert "https://example.test/media/route_overview.jpg" in briefing
     assert "能高越嶺道舊道影像" in briefing
@@ -359,9 +409,13 @@ def test_p0_p1_source_collection_imports_operator_image_list_without_network(
     assert media_manifest["visual_kit_missing_count"] <= 1
     assert "路線照片與地圖" in briefing
     assert "visual-kit-board" in briefing
-    assert "照片與地圖對應的行程段落" in briefing
+    assert "照片與地圖的行前主題檢查" in briefing
+    assert "可用畫面主題" in briefing
     assert "入山與稜線遠景" in briefing
-    assert "領隊可依入山、路線走向、宿點、中高山地形、短停觀察與天候季節逐段檢查" in briefing
+    assert (
+        "領隊可依入山、路線走向、宿點、中高山地形、短停觀察與天候季節分類檢查"
+        in briefing
+    )
     assert "不是增加裝飾圖，而是讓每張圖負責一個行前說明任務" not in briefing
     assert "避免簡報只剩資料欄位" not in briefing
 
@@ -425,8 +479,12 @@ def test_p0_p1_source_collection_imports_operator_image_html_without_network(
     assert result["network_calls_made"] is False
     assert result["image_source_count"] == 7
     assert result["evidence_item_count"] == 7
-    query_plan = json.loads((project_root / DEFAULT_WEB_CASE_QUERY_PLAN_REF).read_text(encoding="utf-8"))
-    evidence = json.loads((project_root / DEFAULT_WEB_CASE_EVIDENCE_REF).read_text(encoding="utf-8"))
+    query_plan = json.loads(
+        (project_root / DEFAULT_WEB_CASE_QUERY_PLAN_REF).read_text(encoding="utf-8")
+    )
+    evidence = json.loads(
+        (project_root / DEFAULT_WEB_CASE_EVIDENCE_REF).read_text(encoding="utf-8")
+    )
     assert query_plan["status"] == "ready_from_operator_image_list"
     assert "image_list_html" in query_plan["source_policy"]["concrete_url_inputs"]
     assert evidence["counts"]["operator_image_source_count"] == 7
