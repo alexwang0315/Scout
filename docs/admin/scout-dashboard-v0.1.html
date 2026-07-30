@@ -11588,6 +11588,54 @@
 
         viewport.querySelector('[data-map-control="box-zoom"]')?.click();
         diagnosticRequire(controller.getState().mode === "box", "Box zoom mode did not activate.");
+
+        const selectionOverlay = viewport.querySelector("[data-dashboard-map-selection]");
+        selectionOverlay.style.cssText = "left:100px;top:80px;width:20px;height:16px;";
+        selectionOverlay.hidden = false;
+        selectionOverlay.setAttribute("aria-hidden", "false");
+        const beforeSmallBoxZoom = controller.getState();
+        controller.zoomToBox({
+          startX: 100,
+          startY: 80,
+          lastX: 120,
+          lastY: 96,
+          moved: true,
+        });
+        const afterSmallBoxZoom = controller.getState();
+        diagnosticRequire(
+          afterSmallBoxZoom.zoom <= beforeSmallBoxZoom.zoom * 1.251,
+          "A tiny rectangle caused an extreme map zoom.",
+        );
+        diagnosticRequire(afterSmallBoxZoom.mode === "pan", "Tiny rectangle zoom did not restore pan mode.");
+        diagnosticRequire(
+          selectionOverlay.hidden === true
+          && selectionOverlay.getAttribute("style") === null
+          && selectionOverlay.getAttribute("aria-hidden") === "true",
+          "Completed rectangle zoom did not fully clear the selection overlay.",
+        );
+
+        controller.setMode("box");
+        const beforeBoundedBoxZoom = controller.getState();
+        controller.zoomToBox({
+          startX: 60,
+          startY: 60,
+          lastX: 120,
+          lastY: 120,
+          moved: true,
+        });
+        const afterBoundedBoxZoom = controller.getState();
+        const boundedBoxZoomFactor = afterBoundedBoxZoom.zoom / beforeBoundedBoxZoom.zoom;
+        diagnosticRequire(
+          boundedBoxZoomFactor <= DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR + .001,
+          "Rectangle zoom exceeded the per-selection zoom ceiling.",
+        );
+        diagnosticRequire(afterBoundedBoxZoom.mode === "pan", "Rectangle zoom did not restore pan mode.");
+        diagnosticRequire(
+          viewport.dataset.mapLastGesture === "rectangle-zoom-in",
+          "Rectangle zoom completion evidence was not recorded.",
+        );
+
+        controller.setMode("box");
         viewport.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
         diagnosticRequire(
           viewport.querySelector("[data-dashboard-map-selection]")?.hidden === true,
@@ -11605,6 +11653,10 @@
         return {
           controls: Array.from(viewport.querySelectorAll("[data-map-control]"))
             .map(control => control.dataset.mapControl),
+          boundedBoxZoomFactor,
+          boxZoomRestoredPan: afterBoundedBoxZoom.mode === "pan",
+          boxZoomSelectionCleared: selectionOverlay.hidden
+            && selectionOverlay.getAttribute("style") === null,
           keyboardPanChanged: afterKeyboardPan.x !== beforeKeyboardPan.x,
           wheelZoomDisabled: afterWheel.zoom === beforeWheel.zoom,
           reset,
@@ -11748,9 +11800,15 @@
       diagnosticRequire(typeof createDashboardMapViewportController === "function", "Shared map viewport controller is unavailable.");
       const exercised = diagnosticExerciseSharedMapController();
       diagnosticRequire(exercised.controls.length === 5, `Expected five map controls; found ${exercised.controls.length}.`);
+      diagnosticRequire(
+        exercised.boundedBoxZoomFactor <= DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR + .001,
+        "Rectangle zoom exceeded the one-shot zoom ceiling.",
+      );
+      diagnosticRequire(exercised.boxZoomRestoredPan, "Rectangle zoom did not restore pan mode.");
+      diagnosticRequire(exercised.boxZoomSelectionCleared, "Rectangle zoom left its selection overlay visible.");
       diagnosticRequire(exercised.keyboardPanChanged, "Keyboard pan did not change the live diagnostic viewport.");
       diagnosticRequire(exercised.wheelZoomDisabled, "Wheel zoom was not disabled in the live diagnostic viewport.");
-      return "Pan · Box · Zoom · Fit · keyboard behavior exercised in live DOM";
+      return "Pan · one-shot bounded Box · Zoom · Fit · keyboard behavior exercised in live DOM";
     }
 
     async function diagnosticCheck006() {
@@ -16091,6 +16149,9 @@
       );
     }
 
+    const DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX = 48;
+    const DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR = 4;
+
     function renderDashboardMapControls(viewportId, mode = "pan", mouseZoomEnabled = true) {
       const panActive = mode !== "box";
       return `
@@ -16099,7 +16160,7 @@
           <button type="button" data-map-control="zoom-out" aria-label="Zoom out" title="Zoom out (-)">−</button>
           <button type="button" data-map-control="reset" aria-label="Reset map view" title="Fit map (0)">Fit</button>
           <button type="button" data-map-control="pan" aria-label="Mouse drag pan" aria-pressed="${panActive ? "true" : "false"}" title="Mouse drag pan (P)">Pan</button>
-          ${mouseZoomEnabled ? `<button type="button" data-map-control="box-zoom" aria-label="Point or rectangle zoom" aria-pressed="${panActive ? "false" : "true"}" title="Point zoom or rectangle drag: drag down-right to zoom in; drag up-left to zoom out (B)">▣</button>` : ""}
+          ${mouseZoomEnabled ? `<button type="button" data-map-control="box-zoom" aria-label="Point or rectangle zoom" aria-pressed="${panActive ? "false" : "true"}" title="One selection, maximum 4×: drag down-right to zoom in; drag up-left to zoom out; then return to Pan (B)">▣</button>` : ""}
           <output data-map-zoom-level aria-label="Map zoom level">100%</output>
         </div>
       `;
@@ -16115,7 +16176,7 @@
       const mode = mouseZoomEnabled && saved.mode === "box" ? "box" : "pan";
       const className = ["dashboard-map-viewport", options.className || ""].filter(Boolean).join(" ");
       const interactionLabel = mouseZoomEnabled
-        ? `Use mouse drag or arrow keys to pan; plus, minus, point zoom, or rectangle drag to zoom. Mouse wheel zoom is ${wheelZoomEnabled ? "enabled" : "disabled"}.`
+        ? `Use mouse drag or arrow keys to pan; plus, minus, point zoom, or one-shot rectangle drag to zoom up to 4× before returning to pan. Mouse wheel zoom is ${wheelZoomEnabled ? "enabled" : "disabled"}.`
         : "Use mouse drag or arrow keys to pan; use plus, minus, or keyboard shortcuts to zoom.";
       return `
         <div
@@ -16198,6 +16259,12 @@
         if (live) live.textContent = message;
       };
 
+      const clearSelection = () => {
+        selection.hidden = true;
+        selection.setAttribute("aria-hidden", "true");
+        selection.removeAttribute("style");
+      };
+
       const apply = (message = "") => {
         viewState = clampedState(viewState);
         stage.style.transform = `translate3d(${viewState.x.toFixed(2)}px, ${viewState.y.toFixed(2)}px, 0) scale(${viewState.zoom.toFixed(4)})`;
@@ -16241,7 +16308,11 @@
       };
 
       const reset = () => {
-        viewState = {...viewState, zoom: 1, x: 0, y: 0};
+        viewState = {...viewState, zoom: 1, x: 0, y: 0, mode: "pan"};
+        pointerState = null;
+        clearSelection();
+        viewport.dataset.mapDragging = "false";
+        viewport.dataset.mapLastGesture = "reset";
         apply("Map view reset.");
       };
 
@@ -16251,10 +16322,10 @@
           mode: mouseZoomEnabled && mode === "box" ? "box" : "pan",
         };
         pointerState = null;
-        selection.hidden = true;
+        clearSelection();
         viewport.dataset.mapDragging = "false";
         apply(viewState.mode === "box"
-          ? "Box zoom active. Click to zoom, drag down-right to zoom in, or drag up-left to zoom out."
+          ? "Box zoom active for one selection. Click to zoom, drag down-right to zoom in, or drag up-left to zoom out. Rectangle zoom is capped at 4× and then returns to pan."
           : "Mouse drag pan active.");
       };
 
@@ -16267,6 +16338,7 @@
         selection.style.width = `${Math.abs(current.x - pointerState.startX)}px`;
         selection.style.height = `${Math.abs(current.y - pointerState.startY)}px`;
         selection.hidden = false;
+        selection.setAttribute("aria-hidden", "false");
       };
 
       const finishBoxZoom = (pointer) => {
@@ -16277,23 +16349,35 @@
           x: (pointer.startX + pointer.lastX) / 2,
           y: (pointer.startY + pointer.lastY) / 2,
         };
-        if (!pointer.moved || boxWidth < 8 || boxHeight < 8) {
-          zoomAt(1.25, center, "Point zoom in.");
+        viewState = {...viewState, mode: "pan"};
+        if (
+          !pointer.moved
+          || boxWidth < DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX
+          || boxHeight < DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX
+        ) {
+          viewport.dataset.mapLastGesture = "point-zoom-in";
+          zoomAt(1.25, center, "Selection was too small for box zoom; point zoom applied and pan restored.");
           return;
         }
-        const factor = Math.max(1.25, Math.min(viewportWidth / boxWidth, viewportHeight / boxHeight));
+        const factor = Math.min(DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR,
+          Math.max(1.25, Math.min(viewportWidth / boxWidth, viewportHeight / boxHeight)));
         const zoomOut = pointer.lastX < pointer.startX && pointer.lastY < pointer.startY;
         if (zoomOut) {
-          zoomAt(1 / factor, center, "Rectangle zoom out.");
+          viewport.dataset.mapLastGesture = "rectangle-zoom-out";
+          zoomAt(1 / factor, center, "Rectangle zoom out complete; pan restored.");
           return;
         }
-        zoomAt(factor, center);
+        const nextZoom = Math.max(1, Math.min(12, viewState.zoom * factor));
+        const localX = (center.x - viewState.x) / viewState.zoom;
+        const localY = (center.y - viewState.y) / viewState.zoom;
         viewState = {
           ...viewState,
-          x: viewState.x + viewportWidth / 2 - center.x,
-          y: viewState.y + viewportHeight / 2 - center.y,
+          zoom: nextZoom,
+          x: viewportWidth / 2 - localX * nextZoom,
+          y: viewportHeight / 2 - localY * nextZoom,
         };
-        apply("Rectangle zoom in.");
+        viewport.dataset.mapLastGesture = "rectangle-zoom-in";
+        apply(`Rectangle zoom in complete at ${Math.round(nextZoom * 100)} percent; pan restored.`);
       };
 
       const onPointerDown = (event) => {
@@ -16346,7 +16430,7 @@
         pointerState = null;
         viewport.dataset.mapDragging = "false";
         if (viewport.hasPointerCapture?.(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
-        selection.hidden = true;
+        clearSelection();
         if (cancelled) {
           announce("Map gesture cancelled.");
           return;
@@ -16383,7 +16467,7 @@
         else if (mouseZoomEnabled && event.key.toLowerCase() === "b") setMode("box");
         else if (event.key === "Escape") {
           pointerState = null;
-          selection.hidden = true;
+          clearSelection();
           viewport.dataset.mapDragging = "false";
           announce("Map gesture cancelled.");
         } else handled = false;
@@ -16421,6 +16505,10 @@
         reset,
         setMode,
         zoomAt,
+        zoomToBox: pointer => {
+          clearSelection();
+          finishBoxZoom(pointer);
+        },
       };
     }
 

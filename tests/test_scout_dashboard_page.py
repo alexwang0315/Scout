@@ -2054,6 +2054,34 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     assert "Math.round(Math.log2(viewState.zoom))" not in tile_refresh
 
 
+def test_dashboard_rectangle_zoom_is_bounded_one_shot_and_clears_selection() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    map_controller = html.split(
+        "function createDashboardMapViewportController", 1
+    )[1].split("function bindDashboardMapViewports", 1)[0]
+    map_diagnostic = html.split(
+        "function diagnosticExerciseSharedMapController()", 1
+    )[1].split("async function diagnosticCheck001()", 1)[0]
+    box_zoom = map_controller.split(
+        "const finishBoxZoom =", 1
+    )[1].split("const onPointerDown =", 1)[0]
+
+    assert "const DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX = 48;" in html
+    assert "const DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR = 4;" in html
+    assert "const clearSelection = () => {" in map_controller
+    assert 'selection.removeAttribute("style");' in map_controller
+    assert 'selection.setAttribute("aria-hidden", "true");' in map_controller
+    assert 'selection.setAttribute("aria-hidden", "false");' in map_controller
+    assert "boxWidth < DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX" in box_zoom
+    assert "boxHeight < DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX" in box_zoom
+    assert "Math.min(DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR" in box_zoom
+    assert 'viewState = {...viewState, mode: "pan"};' in box_zoom
+    assert 'viewport.dataset.mapLastGesture = "rectangle-zoom-in";' in box_zoom
+    assert "zoomToBox:" in map_controller
+    assert "controller.zoomToBox(" in map_diagnostic
+    assert "boundedBoxZoomFactor" in map_diagnostic
+
+
 def test_map_navigation_weather_disable_wheel_zoom_but_keep_box_zoom() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
