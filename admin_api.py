@@ -2361,6 +2361,114 @@ def _pretrip_view_request_copy(view: dict[str, Any]) -> dict[str, Any]:
     return request_view
 
 
+def _refresh_pretrip_osm_pbf_cache_freshness(
+    view: dict[str, Any],
+    *,
+    now: datetime,
+) -> dict[str, Any]:
+    summary = view.get("summary")
+    osm_pbf_evidence = view.get("osm_pbf_evidence")
+    pbf_cache = (
+        osm_pbf_evidence.get("pbf_cache")
+        if isinstance(osm_pbf_evidence, dict)
+        else None
+    )
+    expires_at_raw = (
+        view.get("osm_pbf_cache_expires_at")
+        or (
+            summary.get("osm_pbf_cache_expires_at")
+            if isinstance(summary, dict)
+            else None
+        )
+        or (pbf_cache.get("expires_at") if isinstance(pbf_cache, dict) else None)
+    )
+    expires_at = _parse_optional_utc_datetime(expires_at_raw)
+    if expires_at is None:
+        return view
+
+    evaluated_at = (
+        now.replace(tzinfo=timezone.utc)
+        if now.tzinfo is None
+        else now.astimezone(timezone.utc)
+    )
+    refresh_required = evaluated_at > expires_at
+    cache_status = (
+        "stale_refresh_recommended" if refresh_required else "fresh"
+    )
+    cache_updates: dict[str, Any] = {
+        "cache_status": cache_status,
+        "refresh_required": refresh_required,
+        "checked_at": evaluated_at.isoformat(),
+        "expires_at": expires_at.isoformat(),
+    }
+    file_modified_at = _parse_optional_utc_datetime(
+        pbf_cache.get("file_modified_at")
+        if isinstance(pbf_cache, dict)
+        else None
+    )
+    if file_modified_at is not None:
+        cache_updates["age_days"] = round(
+            max(0.0, (evaluated_at - file_modified_at).total_seconds())
+            / (24 * 60 * 60),
+            3,
+        )
+
+    project_updates = {
+        "osm_pbf_cache_status": cache_status,
+        "osm_pbf_cache_expires_at": expires_at.isoformat(),
+        "osm_pbf_refresh_required": refresh_required,
+    }
+    refreshed_summary = (
+        {**summary, **project_updates}
+        if isinstance(summary, dict)
+        else summary
+    )
+    refreshed_pbf_cache = {
+        **(pbf_cache if isinstance(pbf_cache, dict) else {}),
+        **cache_updates,
+    }
+    refreshed_osm_pbf_evidence = (
+        {**osm_pbf_evidence, "pbf_cache": refreshed_pbf_cache}
+        if isinstance(osm_pbf_evidence, dict)
+        else osm_pbf_evidence
+    )
+    refreshed_view = {
+        **view,
+        **project_updates,
+        "summary": refreshed_summary,
+        "osm_pbf_evidence": refreshed_osm_pbf_evidence,
+    }
+
+    tabs = view.get("tabs")
+    if not isinstance(tabs, dict):
+        return refreshed_view
+    pretrip_tab = tabs.get("pre_trip_planning")
+    if not isinstance(pretrip_tab, dict):
+        return refreshed_view
+    refreshed_pretrip_tab = {
+        **pretrip_tab,
+        "summary": refreshed_summary,
+        "osm_pbf_evidence": refreshed_osm_pbf_evidence,
+    }
+    return {
+        **refreshed_view,
+        "tabs": {**tabs, "pre_trip_planning": refreshed_pretrip_tab},
+    }
+
+
+def _parse_optional_utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def create_admin_router(
     *,
     incident_store_path: Path | None = None,
@@ -3945,6 +4053,10 @@ def create_admin_router(
                     while len(pretrip_view_cache) > 8:
                         pretrip_view_cache.pop(next(iter(pretrip_view_cache)))
             view = _pretrip_view_request_copy(cached_view)
+            view = _refresh_pretrip_osm_pbf_cache_freshness(
+                view,
+                now=resolved_now_factory(),
+            )
             _attach_energy_reserve_monitor(
                 view,
                 inventory_root=resolved_wearable_inventory_root,
@@ -7284,6 +7396,7 @@ def _compact_overpass_evidence(payload: Any) -> Any:
     for key, extra_keys in {
         "corridor_candidates": (
             "candidate_type",
+            "category_id",
             "feature_type",
             "osm_type",
             "osm_id",
@@ -7294,6 +7407,7 @@ def _compact_overpass_evidence(payload: Any) -> Any:
         ),
         "hazard_candidates": (
             "candidate_type",
+            "category_id",
             "feature_type",
             "osm_type",
             "osm_id",
@@ -7304,6 +7418,7 @@ def _compact_overpass_evidence(payload: Any) -> Any:
         ),
         "poi_candidates": (
             "candidate_type",
+            "category_id",
             "feature_type",
             "osm_type",
             "osm_id",
@@ -7336,6 +7451,8 @@ def _compact_osm_pbf_evidence(payload: Any) -> Any:
     for key in ("render_source_ref", "conversion_rule_version"):
         if key in payload:
             compact[key] = payload[key]
+    if isinstance(payload.get("pbf_cache"), dict):
+        compact["pbf_cache"] = dict(payload["pbf_cache"])
     items = payload.get("items")
     if isinstance(items, list):
         compact["items"] = [

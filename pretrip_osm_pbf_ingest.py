@@ -11,8 +11,12 @@ from typing import Any
 
 from pretrip_models import RouteBBox
 from pretrip_overpass_ingest import (
+    OTHER_POI_AMENITIES,
+    OTHER_POI_PLACE_VALUES,
+    OTHER_POI_TOURISM_VALUES,
     ROUTE_CORRIDOR_HIGHWAYS,
     ROUTE_CORRIDOR_HIGHWAY_VALUES,
+    SHELTER_TOURISM_VALUES,
     TRAIL_HIGHWAYS,
     import_overpass_evidence_candidates,
 )
@@ -43,9 +47,15 @@ OSM_PBF_FILTER_SPECS = (
     "r/type=route",
     "r/route=hiking",
     "n/place=locality,hamlet,village,town,city",
-    "n/tourism=wilderness_hut,alpine_hut",
-    "n/amenity=shelter,drinking_water,parking",
+    "n/highway=milestone",
+    "n/information=route_marker,mobile",
+    "n/tourism=wilderness_hut,alpine_hut,information,viewpoint,camp_site,picnic_site",
+    "n/amenity=shelter,drinking_water,parking,toilets,place_of_worship",
     "n/natural=spring,peak",
+    "w/tourism=wilderness_hut,alpine_hut",
+    "w/amenity=shelter,toilets,place_of_worship",
+    "r/tourism=wilderness_hut,alpine_hut",
+    "r/amenity=shelter,toilets,place_of_worship",
     "w/waterway=river,stream,ditch,drain",
     "w/natural=cliff,scree,bare_rock,wood,forest,water,grassland,glacier",
     "w/landuse=forest,farmland,residential,grass,meadow,orchard,recreation_ground",
@@ -96,11 +106,30 @@ OSM_PBF_FEATURE_CATEGORIES: dict[str, dict[str, str]] = {
         "timeline_group": "OSM Other",
     },
 }
-_NODE_MATCH_KEYS = frozenset({"natural", "amenity", "tourism", "man_made", "place"})
+TRAIL_VISIBILITY_OBSCURITY_SCORES = {
+    "intermediate": 0.60,
+    "bad": 0.75,
+    "horrible": 0.90,
+    "no": 0.95,
+}
+_NODE_MATCH_KEYS = frozenset(
+    {
+        "natural",
+        "amenity",
+        "tourism",
+        "man_made",
+        "place",
+        "highway",
+        "information",
+    }
+)
 _WAY_MATCH_KEYS = frozenset(
     {
         "highway",
         "natural",
+        "amenity",
+        "tourism",
+        "place",
         "geological",
         "hazard",
         "risk",
@@ -110,7 +139,7 @@ _WAY_MATCH_KEYS = frozenset(
         "building",
     }
 )
-_RELATION_MATCH_KEYS = frozenset({"route", "type"})
+_RELATION_MATCH_KEYS = frozenset({"route", "type", "amenity", "tourism", "place"})
 _OSM_PBF_NATIVE_FILTER_KEYS = tuple(
     sorted(_NODE_MATCH_KEYS | _WAY_MATCH_KEYS | _RELATION_MATCH_KEYS)
 )
@@ -565,6 +594,69 @@ def build_osm_pbf_feature_index(
             "phase2_brain_writeback_allowed": False,
         },
     }
+
+
+def build_osm_trail_visibility_candidates(
+    payload: dict[str, Any],
+    *,
+    source_ref: str,
+) -> list[dict[str, Any]]:
+    """Project explicit OSM trail_visibility tags into source-owned candidates."""
+
+    candidates: list[dict[str, Any]] = []
+    overpass_payload = osm_json_to_overpass_payload(payload)
+    for element in overpass_payload.get("elements", []):
+        if not isinstance(element, dict) or element.get("type") != "way":
+            continue
+        tags = dict(element.get("tags") or {})
+        visibility = str(tags.get("trail_visibility") or "").strip().lower()
+        score = TRAIL_VISIBILITY_OBSCURITY_SCORES.get(visibility)
+        if score is None:
+            continue
+        geometry = _feature_index_geometry_from_overpass_element(element)
+        if not isinstance(geometry, dict):
+            continue
+        osm_id = element.get("id")
+        if not isinstance(osm_id, int):
+            continue
+        candidate_id = f"osm_pbf.trail_visibility.way.{osm_id}"
+        label = str(
+            tags.get("name")
+            or tags.get("name:zh")
+            or f"OSM trail visibility way/{osm_id}"
+        )
+        candidates.append(
+            {
+                "candidate_id": candidate_id,
+                "label": label,
+                "osm_type": "way",
+                "osm_id": str(osm_id),
+                "trail_visibility": visibility,
+                "score": score,
+                "confidence": "medium" if score >= 0.75 else "low",
+                "stale_risk": "medium",
+                "geometry": geometry,
+                "tags": tags,
+                "source_refs": [source_ref, f"way/{osm_id}"],
+                "source_attribution": [
+                    {
+                        "source_kind": "local_osm_pbf_trail_visibility",
+                        "source_ref": source_ref,
+                        "source_candidate_id": candidate_id,
+                        "confidence": "medium" if score >= 0.75 else "low",
+                        "stale_risk": "medium",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+                "conversion_rule_version": (
+                    "osm-pbf-trail-visibility-obscurity.v0.1"
+                ),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    return candidates
 
 
 def osm_json_to_geojson_feature_collection(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1270,10 +1362,14 @@ def _matches_node_tags(tags: dict[str, Any]) -> bool:
     return (
         tags.get("natural") == "peak"
         or tags.get("natural") == "spring"
-        or tags.get("amenity") in {"shelter", "drinking_water", "parking"}
-        or tags.get("tourism") in {"wilderness_hut", "alpine_hut"}
+        or tags.get("highway") == "milestone"
+        or tags.get("information") in {"route_marker", "mobile"}
+        or tags.get("amenity")
+        in {"shelter", "drinking_water", "parking", *OTHER_POI_AMENITIES}
+        or tags.get("tourism")
+        in {*SHELTER_TOURISM_VALUES, *OTHER_POI_TOURISM_VALUES}
         or tags.get("man_made") == "water_tap"
-        or tags.get("place") in {"locality", "hamlet", "village", "town", "city"}
+        or tags.get("place") in OTHER_POI_PLACE_VALUES
     )
 
 
@@ -1293,6 +1389,10 @@ def _matches_route_evidence_way_tags(tags: dict[str, Any]) -> bool:
     highway = str(tags.get("highway", "")).strip().lower()
     return (
         highway in TRAIL_HIGHWAYS
+        or tags.get("amenity") in {"shelter", *OTHER_POI_AMENITIES}
+        or tags.get("tourism")
+        in {*SHELTER_TOURISM_VALUES, *OTHER_POI_TOURISM_VALUES}
+        or tags.get("place") in OTHER_POI_PLACE_VALUES
         or tags.get("natural") in {"scree", "bare_rock"}
         or tags.get("geological") == "landslide"
         or "hazard" in tags
@@ -1304,9 +1404,12 @@ def _matches_route_evidence_node_tags(tags: dict[str, Any]) -> bool:
     return (
         tags.get("natural") == "peak"
         or tags.get("natural") == "spring"
-        or tags.get("amenity") in {"shelter", "drinking_water", "parking"}
-        or tags.get("tourism") in {"wilderness_hut", "alpine_hut"}
+        or tags.get("amenity")
+        in {"shelter", "drinking_water", "parking", *OTHER_POI_AMENITIES}
+        or tags.get("tourism")
+        in {*SHELTER_TOURISM_VALUES, *OTHER_POI_TOURISM_VALUES}
         or tags.get("man_made") == "water_tap"
+        or tags.get("place") in OTHER_POI_PLACE_VALUES
     )
 
 
@@ -1314,6 +1417,10 @@ def _matches_way_tags(tags: dict[str, Any]) -> bool:
     highway = str(tags.get("highway", "")).strip().lower()
     return (
         highway in OSM_CARTO_ROAD_HIGHWAYS
+        or tags.get("amenity") in {"shelter", *OTHER_POI_AMENITIES}
+        or tags.get("tourism")
+        in {*SHELTER_TOURISM_VALUES, *OTHER_POI_TOURISM_VALUES}
+        or tags.get("place") in OTHER_POI_PLACE_VALUES
         or (
             tags.get("natural")
             in {"cliff", "scree", "bare_rock", "wood", "forest", "water", "grassland", "glacier"}
@@ -1334,7 +1441,11 @@ def _matches_way_tags(tags: dict[str, Any]) -> bool:
 def _matches_relation_tags(tags: dict[str, Any]) -> bool:
     return tags.get("route") == "hiking" or (
         tags.get("type") == "route" and tags.get("route") == "hiking"
-    )
+    ) or tags.get("amenity") in {"shelter", *OTHER_POI_AMENITIES} or tags.get(
+        "tourism"
+    ) in {*SHELTER_TOURISM_VALUES, *OTHER_POI_TOURISM_VALUES} or tags.get(
+        "place"
+    ) in OTHER_POI_PLACE_VALUES
 
 
 def _osmium_tags(entity: Any) -> dict[str, Any]:

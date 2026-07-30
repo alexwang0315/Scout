@@ -1679,6 +1679,56 @@
       border-top: 1px solid var(--line);
     }
 
+    .completed-gpx-lifecycle {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(98, 181, 196, .38);
+      border-radius: 8px;
+      background: rgba(98, 181, 196, .07);
+    }
+
+    .completed-gpx-lifecycle header,
+    .completed-gpx-recording {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .completed-gpx-lifecycle header div,
+    .completed-gpx-recording div {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .completed-gpx-lifecycle p,
+    .completed-gpx-recording small {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .completed-gpx-recordings {
+      display: grid;
+      gap: 6px;
+    }
+
+    .completed-gpx-recording {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, .14);
+    }
+
+    .completed-gpx-lifecycle button {
+      min-width: 0;
+      height: auto;
+      min-height: 36px;
+      padding: 7px 10px;
+      white-space: normal;
+    }
+
     .action-grid {
       display: flex;
       flex-wrap: wrap;
@@ -7184,6 +7234,7 @@
     const BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status";
     const BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start";
     const BODY_INDEX_WATCH_STOP_PATH = "/admin/dashboard/body-index/watch/stop";
+    const COMPLETED_TRIP_RECORDINGS_PATH = "/admin/post-analysis/completed-trip-recordings";
     const DASHBOARD_LIVING_PATH = "/admin/dashboard/living";
     const LIVING_REFRESH_INTERVAL_MS = 3000;
     const TRIP_INTAKE_VALIDATE_PATH = "/admin/dashboard/trip-intake/validate";
@@ -7819,6 +7870,12 @@
       pendingMapEvidenceFocusId: "",
       mapEvidenceRetryTimer: null,
       evidenceItemsBySource: {},
+      completedTripCatalog: null,
+      completedTripCatalogStatus: {
+        status: "idle",
+        text: "尚未檢查完成軌跡目錄。",
+      },
+      completedTripActivationBusy: false,
       pretripDataProjectId: PROJECT_ID,
       briefingFrameVersion: "",
       briefingRegenerationBusy: false,
@@ -7954,6 +8011,14 @@
       const paramProjectId = new URLSearchParams(window.location.search).get("projectId") || "";
       if (/^[A-Za-z0-9_.-]+$/.test(paramProjectId)) return paramProjectId;
       return localStorage.getItem("scout.dashboardProjectId") || localStorage.getItem("scout.emergencyProjectId") || PROJECT_ID;
+    }
+
+    function completedTripRecordingsPath() {
+      return `${COMPLETED_TRIP_RECORDINGS_PATH}?projectId=${encodeURIComponent(state.pretripDataProjectId || projectId())}`;
+    }
+
+    function completedTripRecordingSelectPath(recordingId) {
+      return `${COMPLETED_TRIP_RECORDINGS_PATH}/${encodeURIComponent(recordingId)}/select?projectId=${encodeURIComponent(state.pretripDataProjectId || projectId())}`;
     }
 
     function workspaceContextForProject(candidateProjectId = projectId()) {
@@ -12234,10 +12299,15 @@
       const groups = pretripEvidenceGroups(project);
       const groupGaps = groups
         .filter(group => Number(group.count) === 0)
-        .map(group => `${group.tabId} / ${group.title}`);
+        .map(group => `${group.tabId} / ${group.title} (${group.zeroState || "unexplained zero"})`);
       const timelineGaps = asArray(project.evidence_timeline?.categories)
         .filter(item => Number(item.count) === 0)
-        .map(item => `default / Evidence Timeline / ${item.label || item.category_id || "unnamed category"}`);
+        .map(item => {
+          const reason = ["capability_timeline", "rest_intervals"].includes(item.category_id)
+            ? "completed GPX not imported"
+            : "source unavailable";
+          return `default / Evidence Timeline / ${item.label || item.category_id || "unnamed category"} (${reason})`;
+        });
       return [...new Set([...groupGaps, ...timelineGaps])];
     }
 
@@ -16975,6 +17045,121 @@
       `;
     }
 
+    function renderCompletedGpxLifecycle() {
+      const catalog = state.completedTripCatalog;
+      const recordings = asArray(catalog?.recordings);
+      const activeRecordingId = String(catalog?.active_recording?.recording_id || "");
+      const status = state.completedTripCatalogStatus || {};
+      const busy = Boolean(state.completedTripActivationBusy);
+      const statusTone = status.status === "error"
+        ? "bad"
+        : status.status === "ready"
+          ? "ok"
+          : "warn";
+      return `
+        <section class="completed-gpx-lifecycle" data-completed-gpx-lifecycle="true">
+          <header>
+            <div>
+              <strong>Completed GPX lifecycle</strong>
+              <p>Only an operator-selected completed recording can populate Capability Timeline and Rest Intervals.</p>
+            </div>
+            <button type="button" data-completed-gpx-action="refresh" ${busy ? "disabled" : ""}>
+              ${status.status === "loading" ? "Checking…" : "Check recordings"}
+            </button>
+          </header>
+          <span class="chip ${statusTone}" role="status" aria-live="polite">${escapeHtml(status.text || "尚未檢查完成軌跡目錄。")}</span>
+          ${recordings.length ? `
+            <div class="completed-gpx-recordings" role="list" aria-label="Completed GPX recordings">
+              ${recordings.map((recording) => {
+                const recordingId = String(recording.recording_id || "");
+                const active = recordingId === activeRecordingId;
+                const loadable = recording.loadable !== false;
+                return `
+                  <article class="completed-gpx-recording" role="listitem">
+                    <div>
+                      <strong>${escapeHtml(recording.display_name || recording.filename || recordingId)}</strong>
+                      <small>${formatInteger(recording.point_count)} points · ${formatDistanceKm(recording.distance_m)}${active ? " · active" : ""}</small>
+                    </div>
+                    <button
+                      type="button"
+                      data-completed-gpx-recording-id="${escapeHtml(recording.recording_id)}"
+                      ${!loadable || active || busy ? "disabled" : ""}
+                    >${active ? "Active" : loadable ? "Build evidence" : "Invalid GPX"}</button>
+                  </article>
+                `;
+              }).join("")}
+            </div>
+          ` : catalog && status.status === "ready" ? `
+            <p>No completed GPX was found in the configured post-analysis inbox. Add a reviewed completed recording, then check again; Scout will not substitute the planned or reference route.</p>
+          ` : ""}
+        </section>
+      `;
+    }
+
+    async function loadCompletedTripRecordings() {
+      state.completedTripCatalogStatus = {
+        status: "loading",
+        text: "正在檢查可用的完成軌跡…",
+      };
+      render();
+      try {
+        const catalog = await fetchJson(completedTripRecordingsPath());
+        state.completedTripCatalog = catalog;
+        const count = Number(catalog.recording_count || asArray(catalog.recordings).length);
+        state.completedTripCatalogStatus = {
+          status: "ready",
+          text: count
+            ? `找到 ${count} 份完成軌跡；選擇一份後才會建立 post-analysis evidence。`
+            : "尚未找到完成軌跡；Capability Timeline 與 Rest Intervals 保持未匯入。",
+        };
+      } catch (error) {
+        state.completedTripCatalogStatus = {
+          status: "error",
+          text: `完成軌跡目錄讀取失敗：${error.message || error}`,
+        };
+      }
+      render();
+    }
+
+    async function activateCompletedTripRecording(recordingId) {
+      const safeRecordingId = String(recordingId || "").trim();
+      if (!safeRecordingId || state.completedTripActivationBusy) return;
+      state.completedTripActivationBusy = true;
+      state.completedTripCatalogStatus = {
+        status: "loading",
+        text: "正在建立 Capability Timeline 與 Rest Intervals…",
+      };
+      render();
+      try {
+        const result = await postJson(
+          completedTripRecordingSelectPath(safeRecordingId),
+          {},
+          { timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS },
+        );
+        if (result.capability_timeline) {
+          state.project = {
+            ...(state.project || {}),
+            capability_timeline_import: result.capability_timeline,
+            completed_trip_track: result.completed_trip_track || null,
+          };
+        }
+        const catalog = await fetchJson(completedTripRecordingsPath());
+        state.completedTripCatalog = catalog;
+        state.completedTripCatalogStatus = {
+          status: "ready",
+          text: "完成軌跡已啟用；Capability Timeline 與 Rest Intervals 已從 post-analysis 結果更新。",
+        };
+      } catch (error) {
+        state.completedTripCatalogStatus = {
+          status: "error",
+          text: `完成軌跡處理失敗：${error.message || error}`,
+        };
+      } finally {
+        state.completedTripActivationBusy = false;
+        render();
+      }
+    }
+
     function renderPretripEvidencePanel() {
       const view = state.project || {};
       const groups = pretripEvidenceGroups(view);
@@ -17005,6 +17190,7 @@
                 </button>
               `).join("")}
             </div>
+            ${activeTab === "completed" ? renderCompletedGpxLifecycle() : ""}
             <div class="pretrip-evidence-groups" id="dashboardTimeline">
               ${activeGroups.length ? activeGroups.map((group, index) => renderPretripEvidenceGroup(group, index, {context: "timeline", tabId: activeTab})).join("") : `<div class="evidence-empty">No evidence in this category.</div>`}
             </div>
@@ -17169,6 +17355,10 @@
       const countLabel = pagination.pageCount > 1
         ? `${baseCountLabel} · page ${pagination.page}/${pagination.pageCount}`
         : baseCountLabel;
+      const zeroState = Number(group.count) === 0
+        ? String(group.zeroState || "")
+        : "";
+      const displayCountLabel = zeroState ? zeroState : countLabel;
       const emptyNote = group.emptyNote
         || (Number(group.count) > 0
           ? `${group.count} items are declared by the source, but their row payload is not loaded on this surface.`
@@ -17187,7 +17377,7 @@
             data-evidence-group-context="${escapeHtml(context)}"
             data-evidence-group-tab="${escapeHtml(tabId)}"
             data-evidence-group-title="${escapeHtml(group.title)}"
-          >${escapeHtml(group.title)} <span>${escapeHtml(countLabel)}</span></summary>
+          >${escapeHtml(group.title)} <span>${escapeHtml(displayCountLabel)}</span></summary>
           ${isOpen && pagination.items.length ? `
             <div class="pretrip-evidence-items">
               ${pagination.items.map((item) => `
@@ -17223,21 +17413,80 @@
         const sourceItems = asArray(rawItems);
         const items = sourceItems.map((item, index) => normalizeEvidenceRow(mapper(item), item, `${tabId}:${title}:${index}`));
         const count = Number.isFinite(Number(options.displayCount)) ? Number(options.displayCount) : sourceItems.length;
-        groups.push({ tabId, title, category, count, items, emptyNote: options.emptyNote || "" });
+        groups.push({
+          tabId,
+          title,
+          category,
+          count,
+          items,
+          emptyNote: options.emptyNote || "",
+          zeroState: options.zeroState || "",
+        });
       };
       state.evidenceItemsBySource = {};
       const overpassGroups = view.overpass_evidence?.category_groups || {};
+      const overpassTimelineItems = [
+        ...asArray(view.overpass_evidence?.corridor_candidates),
+        ...asArray(view.overpass_evidence?.hazard_candidates),
+        ...asArray(view.overpass_evidence?.poi_candidates),
+      ];
+      const overpassCategoryByCandidateType = {
+        trail_corridor_candidate: "overpass_trail_corridor",
+        hiking_route_candidate: "overpass_hiking_route",
+        shelter_candidate: "overpass_shelter",
+        water_source_candidate: "overpass_water_source",
+        parking_candidate: "overpass_parking",
+        peak_candidate: "overpass_peak",
+        terrain_risk_candidate: "overpass_terrain_risk",
+        other_poi_candidate: "overpass_other_poi",
+      };
+      const overpassCategoryItems = (categoryId) => {
+        const projectedItems = asArray(overpassGroups[categoryId]);
+        if (projectedItems.length) return projectedItems;
+        return overpassTimelineItems.filter((item) => (
+          item.category_id === categoryId
+          || overpassCategoryByCandidateType[item.candidate_type] === categoryId
+        ));
+      };
+      const overpassCategoryCount = (categoryId) => {
+        const loadedCount = overpassCategoryItems(categoryId).length;
+        const declaredCount = Number(
+          view.overpass_evidence?.counts?.category_counts?.[categoryId],
+        );
+        return Number.isFinite(declaredCount)
+          ? Math.max(declaredCount, loadedCount)
+          : loadedCount;
+      };
+      const overpassZeroState = view.overpass_evidence?.status === "missing_source"
+        ? "source unavailable"
+        : "source checked · no matches";
       const overpassSummary = (item) => `${item.candidate_type || item.feature_type || "overpass"} | ${item.osm_type || "object"}/${item.osm_id || "-"} | ${item.confidence || item.status || "-"}`;
       const osmPbfItems = asArray(view.osm_pbf_evidence?.items);
       const osmPbfCategory = (categoryId) => osmPbfItems.filter((item) => item.category_id === categoryId);
+      const osmPbfZeroState = view.osm_pbf_evidence?.status === "missing_source"
+        ? "source unavailable"
+        : "source checked · no matches";
       const osmPbfSummary = (item) => `${item.feature_type || "osm"} | ${item.geometry_type || "-"} | ${item.osm_type || "object"}/${item.osm_id || "-"}`;
       const infoSections = Object.entries(view.tabs || {}).flatMap(([tabId, tab]) =>
         asArray(tab?.sections).map((section) => ({ ...section, tab_id: tabId }))
       );
+      const derivativeZeroState = (collection) => {
+        const status = String(collection?.status || collection?.source_status || "");
+        if (status === "ready_empty") return "prepared · no candidates";
+        if (["missing_source", "unavailable"].includes(status)) return "source unavailable";
+        return "no candidates";
+      };
+      const timelineCategorySublabel = (item) => {
+        if (item.available) return `${item.count || 0} evidence | available`;
+        if (["capability_timeline", "rest_intervals"].includes(item.category_id)) {
+          return "completed GPX not imported";
+        }
+        return "source unavailable";
+      };
 
       add("default", "Evidence Timeline", view.evidence_timeline?.categories, (item) => ({
         label: item.label || item.category_id,
-        sublabel: `${item.count || 0} evidence | ${item.available ? "available" : "empty"}`,
+        sublabel: timelineCategorySublabel(item),
       }), "timeline");
       add("default", "Reference Segment Timing", view.reference_segment_timing?.segments, (item) => ({
         label: item.label || item.segment_id,
@@ -17268,29 +17517,29 @@
         sublabel: `${item.source_kind || "mileage"} | ${item.route_projection_status || "projection-review"} | ${Math.round(item.route_distance_m || 0)}m`,
       }), "timeline");
 
-      add("map_risk", "Overpass Trail Corridors", overpassGroups.overpass_trail_corridor || view.overpass_evidence?.corridor_candidates, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "route");
-      add("map_risk", "Overpass Hiking Routes", overpassGroups.overpass_hiking_route, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "route");
-      add("map_risk", "Overpass Shelters", overpassGroups.overpass_shelter, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
-      add("map_risk", "Overpass Water Sources", overpassGroups.overpass_water_source, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
-      add("map_risk", "Overpass Parking", overpassGroups.overpass_parking, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
-      add("map_risk", "Overpass Peaks", overpassGroups.overpass_peak, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
-      add("map_risk", "Overpass Terrain Risk", overpassGroups.overpass_terrain_risk || view.overpass_evidence?.hazard_candidates, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "risk");
-      add("map_risk", "Overpass Other POI", overpassGroups.overpass_other_poi, (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi");
-      add("map_risk", "OSM Trail Network", osmPbfCategory("trail_network"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "route");
-      add("map_risk", "OSM Milestones", osmPbfCategory("milestone_route_marker"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "timeline");
-      add("map_risk", "OSM Mobile", osmPbfCategory("mobile_signal"), (item) => ({ label: item.label || "通訊點", sublabel: osmPbfSummary(item) }), "poi");
-      add("map_risk", "OSM Peaks / Terrain", [...osmPbfCategory("peak_terrain"), ...osmPbfCategory("terrain_risk_context")], (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "risk");
-      add("map_risk", "OSM POI / Amenities", osmPbfCategory("amenity_poi"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "poi");
-      add("map_risk", "OSM Water / Hydrology", osmPbfCategory("water_hydrology"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "risk");
+      add("map_risk", "Overpass Trail Corridors", overpassCategoryItems("overpass_trail_corridor"), (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "route", { displayCount: overpassCategoryCount("overpass_trail_corridor"), zeroState: overpassZeroState });
+      add("map_risk", "Overpass Hiking Routes", overpassCategoryItems("overpass_hiking_route"), (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "route", { displayCount: overpassCategoryCount("overpass_hiking_route"), zeroState: overpassZeroState });
+      add("map_risk", "Overpass Shelters", overpassCategoryItems("overpass_shelter"), (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi", { displayCount: overpassCategoryCount("overpass_shelter"), zeroState: overpassZeroState });
+      add("map_risk", "Overpass Water Sources", overpassCategoryItems("overpass_water_source"), (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi", { displayCount: overpassCategoryCount("overpass_water_source"), zeroState: overpassZeroState });
+      add("map_risk", "Overpass Parking", overpassCategoryItems("overpass_parking"), (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi", { displayCount: overpassCategoryCount("overpass_parking"), zeroState: overpassZeroState });
+      add("map_risk", "Overpass Peaks", overpassCategoryItems("overpass_peak"), (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi", { displayCount: overpassCategoryCount("overpass_peak"), zeroState: overpassZeroState });
+      add("map_risk", "Overpass Terrain Risk", overpassCategoryItems("overpass_terrain_risk"), (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "risk", { displayCount: overpassCategoryCount("overpass_terrain_risk"), zeroState: overpassZeroState });
+      add("map_risk", "Overpass Other POI", overpassCategoryItems("overpass_other_poi"), (item) => ({ label: item.label || item.candidate_id, sublabel: overpassSummary(item) }), "poi", { displayCount: overpassCategoryCount("overpass_other_poi"), zeroState: overpassZeroState });
+      add("map_risk", "OSM Trail Network", osmPbfCategory("trail_network"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "route", { zeroState: osmPbfZeroState });
+      add("map_risk", "OSM Milestones", osmPbfCategory("milestone_route_marker"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "timeline", { zeroState: osmPbfZeroState });
+      add("map_risk", "OSM Mobile", osmPbfCategory("mobile_signal"), (item) => ({ label: item.label || "通訊點", sublabel: osmPbfSummary(item) }), "poi", { zeroState: osmPbfZeroState });
+      add("map_risk", "OSM Peaks / Terrain", [...osmPbfCategory("peak_terrain"), ...osmPbfCategory("terrain_risk_context")], (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "risk", { zeroState: osmPbfZeroState });
+      add("map_risk", "OSM POI / Amenities", osmPbfCategory("amenity_poi"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "poi", { zeroState: osmPbfZeroState });
+      add("map_risk", "OSM Water / Hydrology", osmPbfCategory("water_hydrology"), (item) => ({ label: item.label || item.candidate_id, sublabel: osmPbfSummary(item) }), "risk", { zeroState: osmPbfZeroState });
       add("map_risk", "Risk Score", view.risk_score?.points, (item) => ({ label: `${item.score_field || "pretrip_risk"} ${numberText(item.pretrip_risk, 1)}`, sublabel: `L${item.risk_level || "-"} | ${Math.round(item.distance_m || 0)}m` }), "risk");
       add("map_risk", "Baseline Risk", view.risk_ribbon?.segments, (item) => ({ label: `${item.risk_bucket || "baseline"} ${numberText(item.pretrip_risk, 1)}`, sublabel: `${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m` }), "risk");
       add("map_risk", "Calibrated Heat", view.risk_heatmap?.segments, (item) => ({ label: `${item.risk_bucket || "heat"} ${numberText(item.pretrip_risk, 1)}`, sublabel: `${item.score_field || "calibrated"} | ${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m` }), "risk");
       add("map_risk", "Risk Delta", view.risk_delta?.segments, (item) => ({ label: `${item.delta_bucket || "delta"} ${numberText(item.delta_score, 1)}`, sublabel: `baseline ${numberText(item.baseline_pretrip_risk, 1)} | calibrated ${numberText(item.calibrated_risk_candidate, 1)}` }), "risk");
       add("map_risk", "Environmental Risk Derivatives", view.environment_risk_derivative_layers?.category_items || [], (item) => ({ label: item.label || item.source_id || "Environmental risk derivatives", sublabel: item.status || item.evidence_type || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.counts?.candidate_count });
-      add("map_risk", "New Landslide Candidates", view.environment_risk_derivative_layers?.new_landslide_candidates?.candidates, (item) => ({ label: item.label || "New landslide candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.new_landslide_candidates?.counts?.candidate_count });
-      add("map_risk", "Wetness / Flash Flood Candidates", view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.candidates, (item) => ({ label: item.label || "Wetness / flash-flood candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.counts?.candidate_count });
-      add("map_risk", "Trail Obscurity Candidates", view.environment_risk_derivative_layers?.trail_obscurity_risk?.candidates, (item) => ({ label: item.label || "Trail obscurity candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.trail_obscurity_risk?.counts?.candidate_count });
-      add("map_risk", "Practical Darkness Candidates", view.environment_risk_derivative_layers?.practical_darkness_time?.candidates, (item) => ({ label: item.label || "Practical darkness candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.practical_darkness_time?.counts?.candidate_count });
+      add("map_risk", "New Landslide Candidates", view.environment_risk_derivative_layers?.new_landslide_candidates?.candidates, (item) => ({ label: item.label || "New landslide candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.new_landslide_candidates?.counts?.candidate_count, zeroState: derivativeZeroState(view.environment_risk_derivative_layers?.new_landslide_candidates) });
+      add("map_risk", "Wetness / Flash Flood Candidates", view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.candidates, (item) => ({ label: item.label || "Wetness / flash-flood candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.counts?.candidate_count, zeroState: derivativeZeroState(view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility) });
+      add("map_risk", "Trail Obscurity Candidates", view.environment_risk_derivative_layers?.trail_obscurity_risk?.candidates, (item) => ({ label: item.label || "Trail obscurity candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.trail_obscurity_risk?.counts?.candidate_count, zeroState: derivativeZeroState(view.environment_risk_derivative_layers?.trail_obscurity_risk) });
+      add("map_risk", "Practical Darkness Candidates", view.environment_risk_derivative_layers?.practical_darkness_time?.candidates, (item) => ({ label: item.label || "Practical darkness candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.practical_darkness_time?.counts?.candidate_count, zeroState: derivativeZeroState(view.environment_risk_derivative_layers?.practical_darkness_time) });
       add("map_risk", "Environment Values", view.environment_values?.items, (item) => ({ label: item.label || item.source_id || "Environment value evidence", sublabel: item.evidence_type || item.status || "candidate" }), "risk");
       add("map_risk", "CWA QPF", view.cwa_qpf?.points, (item) => ({ label: item.label || "CWA QPF", sublabel: `${item.status || "candidate"} | PoP ${valueOrDash(item.rain_probability ?? item.rainProbability)}%` }), "risk");
       add("map_risk", "CWA Weather", view.cwa_weather?.points, (item) => ({ label: item.label || item.station_name || "CWA weather", sublabel: `${item.evidence_type || "cwa"} | 24h ${valueOrDash(item.last_24h_mm)} mm` }), "risk");
@@ -17300,10 +17549,16 @@
       add("map_risk", "Retreat Routes", view.retreat_routes, (item) => ({ label: item.label || item.candidate_id, sublabel: item.review_state || "candidate" }), "retreat");
       add("map_risk", "Reference GPX", view.reference_tracks?.reference_tracks, (item) => ({ label: item.label || item.candidate_id, sublabel: `${Math.round((item.route?.distance_m || 0) / 1000)}km | ${item.route?.point_count || 0} pts` }), "reference");
 
+      const capabilityEdges = asArray(view.capability_timeline_import?.edges);
+      const restIntervals = capabilityEdges.filter((item) => Number(item.rest_time_s || 0) > 0);
       add("completed", "Capability Timeline", view.capability_timeline_import?.edges, (item) => ({
         label: item.edge_id || item.source_id,
         sublabel: `${item.from_node_id || "-"} -> ${item.to_node_id || "-"} | ${Math.round(item.moving_time_s || 0)}s moving | ${Math.round(item.rest_time_s || 0)}s rest`,
-      }), "reference");
+      }), "reference", { zeroState: view.capability_timeline_import ? "no completed edges" : "not imported" });
+      add("completed", "Rest Intervals", restIntervals, (item) => ({
+        label: item.edge_id || item.source_id || "Rest interval",
+        sublabel: `${Math.round(item.rest_time_s || 0)}s rest | ${item.from_node_id || "-"} -> ${item.to_node_id || "-"}`,
+      }), "reference", { zeroState: view.capability_timeline_import ? "completed GPX checked · no qualifying rest intervals" : "not imported" });
       add("info", "Info Sections", infoSections, (item) => ({ label: item.title || item.id, sublabel: `${item.tab_id || "tab"} | ${item.status || "traceable"}` }), "route");
       add("review", "Review Groups", view.review_workbench?.category_groups, (item) => ({ label: item.label, sublabel: `${item.item_count || 0} items | ${item.bulk_eligible_count || 0} bulk | ${item.review_action || "review"}` }), "review_group");
       add("review", "Review Queue", view.review_queue?.items, (item) => ({ label: item.title || item.candidate_ref || item.record_id, sublabel: `${item.severity || "review"} | ${item.category || item.status || "queue"}` }), "review");
@@ -19374,6 +19629,16 @@
     }
 
     function bindMapEvidenceControls() {
+      document.querySelectorAll('[data-completed-gpx-action="refresh"]').forEach((button) => {
+        button.addEventListener("click", () => {
+          void loadCompletedTripRecordings();
+        });
+      });
+      document.querySelectorAll("[data-completed-gpx-recording-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+          void activateCompletedTripRecording(button.dataset.completedGpxRecordingId || "");
+        });
+      });
       document.querySelectorAll("[data-map-evidence-toggle]").forEach((button) => {
         button.addEventListener("click", () => {
           state.mapEvidenceCollapsed = !state.mapEvidenceCollapsed;

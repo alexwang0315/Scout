@@ -3,6 +3,9 @@ from pathlib import Path
 
 from pretrip_models import RouteBBox
 from pretrip_osm_pbf_ingest import (
+    OSM_PBF_FILTER_SPECS,
+    _matches_node_tags,
+    build_osm_trail_visibility_candidates,
     build_osm_pbf_feature_index,
     build_osmium_extraction_plan,
     import_osm_pbf_evidence_candidates,
@@ -178,10 +181,13 @@ def test_osm_pbf_route_candidate_adapter_does_not_consume_full_carto_context() -
 
     assert len(render_geojson["features"]) == 6
     assert evidence["counts"]["render_context_osm_element_count"] == 6
-    assert evidence["counts"]["candidate_basis_osm_element_count"] == 1
+    assert evidence["counts"]["candidate_basis_osm_element_count"] == 2
     assert evidence["counts"]["trail_corridor_candidate"] == 1
-    assert evidence["counts"]["candidates"] == 1
-    assert evidence["candidates"][0]["candidate_type"] == "trail_corridor_candidate"
+    assert evidence["counts"]["other_poi_candidate"] == 1
+    assert evidence["counts"]["candidates"] == 2
+    assert {
+        candidate["candidate_type"] for candidate in evidence["candidates"]
+    } == {"trail_corridor_candidate", "other_poi_candidate"}
 
 
 def test_osmium_extraction_plan_uses_route_bbox_and_hiking_filters(tmp_path: Path) -> None:
@@ -217,6 +223,10 @@ def test_osmium_extraction_plan_uses_route_bbox_and_hiking_filters(tmp_path: Pat
         assert highway in highway_spec
     assert "n/natural=spring,peak" in plan.filter_specs
     assert "n/place=locality,hamlet,village,town,city" in plan.filter_specs
+    assert "n/highway=milestone" in plan.filter_specs
+    assert "n/information=route_marker,mobile" in plan.filter_specs
+    assert "w/tourism=wilderness_hut,alpine_hut" in plan.filter_specs
+    assert "w/amenity=shelter,toilets,place_of_worship" in plan.filter_specs
     assert "w/waterway=river,stream,ditch,drain" in plan.filter_specs
     assert "w/natural=cliff,scree,bare_rock,wood,forest,water,grassland,glacier" in plan.filter_specs
     assert (
@@ -224,6 +234,133 @@ def test_osmium_extraction_plan_uses_route_bbox_and_hiking_filters(tmp_path: Pat
         in plan.filter_specs
     )
     assert "w/building" in plan.filter_specs
+
+
+def test_osm_pbf_streaming_matcher_keeps_milestones_mobile_and_other_poi() -> None:
+    assert "n/highway=milestone" in OSM_PBF_FILTER_SPECS
+    assert "n/information=route_marker,mobile" in OSM_PBF_FILTER_SPECS
+    assert _matches_node_tags({"highway": "milestone", "distance": "7K+000"})
+    assert _matches_node_tags({"information": "route_marker"})
+    assert _matches_node_tags({"information": "mobile"})
+    assert _matches_node_tags({"amenity": "toilets"})
+    assert _matches_node_tags({"amenity": "place_of_worship"})
+
+
+def test_local_pbf_route_candidate_adapter_keeps_way_huts_and_other_poi() -> None:
+    payload = {
+        "version": 0.6,
+        "elements": [
+            {
+                "type": "way",
+                "id": 233579579,
+                "tags": {
+                    "name": "天池山莊",
+                    "tourism": "alpine_hut",
+                    "building": "yes",
+                },
+                "geometry": [
+                    {"lat": 24.0420, "lon": 121.2790},
+                    {"lat": 24.0420, "lon": 121.2792},
+                    {"lat": 24.0422, "lon": 121.2792},
+                    {"lat": 24.0420, "lon": 121.2790},
+                ],
+            },
+            {
+                "type": "node",
+                "id": 301,
+                "lat": 24.041,
+                "lon": 121.278,
+                "tags": {"name": "天池", "place": "locality"},
+            },
+            {
+                "type": "node",
+                "id": 302,
+                "lat": 24.043,
+                "lon": 121.280,
+                "tags": {"name": "公廁", "amenity": "toilets"},
+            },
+        ],
+    }
+
+    evidence = import_osm_pbf_evidence_candidates(
+        payload,
+        query_body="fixture local osm pbf extraction",
+        bbox_wgs84=RouteBBox(
+            min_lat=24.03,
+            min_lon=121.27,
+            max_lat=24.05,
+            max_lon=121.29,
+        ),
+        route_corridor={"route_ref": "fixture.route", "corridor_m": 500},
+        request_timestamp="2026-07-28T00:00:00+00:00",
+        endpoint="local-osm-pbf:///tmp/taiwan.osm.pbf",
+        raw_payload_uri="normalized/map/osm_pbf_raw.osm.json",
+        raw_response_sha256=None,
+        normalized_artifact_path="normalized/map/overpass_vector_evidence.geojson",
+        source_ref="normalized/map/osm_pbf_raw.osm.json",
+        pbf_source_uri="/tmp/taiwan.osm.pbf",
+    )
+
+    candidate_types = [
+        candidate["candidate_type"] for candidate in evidence["candidates"]
+    ]
+    assert candidate_types.count("shelter_candidate") == 1
+    assert candidate_types.count("other_poi_candidate") == 2
+    hut = next(
+        candidate
+        for candidate in evidence["candidates"]
+        if candidate["candidate_type"] == "shelter_candidate"
+    )
+    assert hut["osm_type"] == "way"
+    assert hut["geometry"]["type"] == "Point"
+    assert hut["geojson_feature"]["properties"]["poi_type"] == "shelter"
+
+
+def test_osm_trail_visibility_candidates_only_flag_obscure_trails() -> None:
+    payload = {
+        "version": 0.6,
+        "elements": [
+            {
+                "type": "way",
+                "id": 401,
+                "tags": {
+                    "name": "模糊路徑",
+                    "highway": "path",
+                    "trail_visibility": "horrible",
+                },
+                "geometry": [
+                    {"lat": 24.040, "lon": 121.270},
+                    {"lat": 24.041, "lon": 121.271},
+                ],
+            },
+            {
+                "type": "way",
+                "id": 402,
+                "tags": {
+                    "name": "清楚路徑",
+                    "highway": "path",
+                    "trail_visibility": "excellent",
+                },
+                "geometry": [
+                    {"lat": 24.042, "lon": 121.272},
+                    {"lat": 24.043, "lon": 121.273},
+                ],
+            },
+        ],
+    }
+
+    candidates = build_osm_trail_visibility_candidates(
+        payload,
+        source_ref="normalized/map/osm_pbf_phase_a_raw.osm.json",
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0]["candidate_id"] == "osm_pbf.trail_visibility.way.401"
+    assert candidates[0]["trail_visibility"] == "horrible"
+    assert candidates[0]["score"] == 0.9
+    assert candidates[0]["geometry"]["type"] == "LineString"
+    assert candidates[0]["candidate_only"] is True
+    assert candidates[0]["runtime_safety_truth"] is False
 
 
 def test_osm_pbf_feature_index_groups_render_features_for_map_risk_timeline() -> None:

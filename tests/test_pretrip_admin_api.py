@@ -1,6 +1,7 @@
 import json
 import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -419,6 +420,87 @@ def test_pretrip_project_projection_cache_hits_and_invalidates_on_workspace_chan
     assert build_calls == [project_id, project_id]
 
 
+def test_pretrip_project_refreshes_expired_osm_pbf_cache_status_on_every_request(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "expired_osm_cache_demo"
+    project_root = tmp_path / project_id
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": project_id}),
+        encoding="utf-8",
+    )
+    pbf_cache = {
+        "cache_status": "fresh",
+        "refresh_required": False,
+        "file_modified_at": "2026-06-01T00:00:00+00:00",
+        "checked_at": "2026-06-15T00:00:00+00:00",
+        "expires_at": "2026-07-01T00:00:00+00:00",
+        "age_days": 14.0,
+    }
+
+    def fake_build(project: str, *, project_root: Path) -> dict[str, object]:
+        summary = {
+            "project_id": project,
+            "osm_pbf_cache_status": "fresh",
+            "osm_pbf_refresh_required": False,
+            "osm_pbf_cache_expires_at": pbf_cache["expires_at"],
+        }
+        osm_pbf_evidence = {
+            "status": "ready",
+            "pbf_cache": dict(pbf_cache),
+            "items": [],
+        }
+        return {
+            "project_id": project,
+            **summary,
+            "summary": summary,
+            "osm_pbf_evidence": osm_pbf_evidence,
+            "tabs": {
+                "pre_trip_planning": {
+                    "sections": [],
+                    "summary": summary,
+                    "osm_pbf_evidence": osm_pbf_evidence,
+                },
+                "review_workspace": {"sections": []},
+                "post_analysis": {"sections": []},
+                "agent_skills": {"sections": []},
+            },
+        }
+
+    monkeypatch.setattr(admin_api, "build_pretrip_admin_view", fake_build)
+    monkeypatch.setattr(
+        admin_api,
+        "_attach_energy_reserve_monitor",
+        lambda payload, **kwargs: None,
+    )
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=tmp_path,
+            now_factory=lambda: datetime(2026, 7, 28, tzinfo=timezone.utc),
+        )
+    )
+
+    first = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+    second = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+
+    assert first.status_code == 200
+    assert second.headers["x-scout-projection-cache"] == "hit"
+    payload = second.json()
+    assert payload["osm_pbf_cache_status"] == "stale_refresh_recommended"
+    assert payload["osm_pbf_refresh_required"] is True
+    assert payload["summary"]["osm_pbf_cache_status"] == "stale_refresh_recommended"
+    assert payload["osm_pbf_evidence"]["pbf_cache"]["cache_status"] == (
+        "stale_refresh_recommended"
+    )
+    assert payload["osm_pbf_evidence"]["pbf_cache"]["refresh_required"] is True
+    assert payload["osm_pbf_evidence"]["pbf_cache"]["checked_at"] == (
+        "2026-07-28T00:00:00+00:00"
+    )
+    assert payload["osm_pbf_evidence"]["pbf_cache"]["age_days"] == 57.0
+
+
 def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
     route_note_candidates = [
         {
@@ -479,6 +561,7 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
         {
             "candidate_id": f"overpass.{index:03d}",
             "candidate_type": "trail_corridor_candidate",
+            "category_id": "overpass_trail_corridor",
             "feature_type": "path",
             "osm_type": "way",
             "osm_id": str(index),
@@ -665,6 +748,10 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
     assert compact["overpass_evidence"]["corridor_candidates"][0]["corridor"][
         "coordinates"
     ]
+    assert (
+        compact["overpass_evidence"]["corridor_candidates"][0]["category_id"]
+        == "overpass_trail_corridor"
+    )
     assert len(compact["overpass_evidence"]["corridor_candidates"]) == len(
         overpass_corridors
     )

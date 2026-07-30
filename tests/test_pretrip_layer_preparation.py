@@ -1169,7 +1169,7 @@ def test_layer_preparation_writes_gee_numeric_artifacts_with_injected_fetcher(
             pass
 
         def fetch_route_feature_package(self, **kwargs):
-            assert kwargs["project_id"] == "chilai_nanhua_day1"
+            assert kwargs["project_id"] == "test-project"
             segment = kwargs["segments"][0]["properties"]["segment_id"]
             return {
                 "provider": "google_earth_engine",
@@ -2254,6 +2254,9 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
 ) -> None:
     project_root = _copy_fixture_project(tmp_path)
     project = _load(project_root / "project.json")
+    for ref_key, ref in pretrip_layer_preparation.SCOUT_RISK_OUTPUT_REFS.items():
+        project.pop(ref_key, None)
+        (project_root / ref).unlink(missing_ok=True)
     gis_ref = "candidates/gis_perception.json"
     project["gis_perception_candidates_ref"] = gis_ref
     (project_root / "project.json").write_text(

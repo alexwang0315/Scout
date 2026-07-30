@@ -100,6 +100,68 @@ Verification:
   console error count `0`.
 - `tests/test_scout_dashboard_page.py`: `61 passed`.
 
+### 2026-07-28 - Repair false zero Evidence counts and explain empty states
+
+User request:
+
+- Timeline Evidence showed many categories with a count of `0`.
+
+Implementation:
+
+- Reproduced the issue against the live
+  `chilai_nanhua_day1_scoutAI` compact project projection.
+- Found that the workspace contained Overpass Hiking Routes `2`, Water Sources
+  `1`, Parking `1`, and Peaks `6`, but compact projection removed each
+  candidate's `category_id`. Dashboard therefore treated the merged corridor,
+  hazard and POI lists as if their subtype groups were empty.
+- Preserved `category_id` in compact Overpass candidates and made Dashboard
+  rebuild groups from `category_id`, with `candidate_type` as a compatibility
+  fallback. Declared `counts.category_counts` remains the authoritative total
+  when the compact row payload is bounded.
+- Replaced unexplained user-facing zeros with explicit absence states:
+  - `source checked · no matches`;
+  - `prepared · no candidates`;
+  - `source unavailable`;
+  - `completed GPX not imported`.
+- Kept `DASH-030` as an internal coverage-gap check, but added the same reason
+  to every zero-count diagnostic entry instead of reporting an unexplained
+  number.
+
+Boundary:
+
+- Empty evidence was not fabricated or converted into a positive count.
+- A valid zero remains available to the read-only Diagnostic while the normal
+  Timeline UI presents the reason for absence.
+- Completed-trip capability edges and rest intervals remain unavailable until
+  a completed GPX is explicitly imported.
+- No preparation, external fetch, POST, workspace write, outbound effect or
+  runtime safety mutation was performed.
+
+Verification:
+
+- Compact projection now returns all `84` Overpass candidates with
+  `category_id`; no projected candidate is missing the field.
+- Browser-visible corrections:
+  - Trail Corridors `58`;
+  - Hiking Routes `2`;
+  - Water Sources `1`;
+  - Parking `1`;
+  - Peaks `6`.
+- Browser-visible true-empty examples now read `source checked · no matches`
+  or `prepared · no candidates`; Capability Timeline and Rest Intervals read
+  `completed GPX not imported`.
+- Focused Dashboard regression suite: `59 passed`, `1` unrelated pre-existing
+  test deselected.
+- Full affected Python run: `151 passed`, with one unrelated pre-existing
+  Dashboard assertion still rejecting Diagnostic's existing
+  `/debug-projection` request.
+- Inline Dashboard JavaScript parse, `pnpm lint`, and `pnpm typecheck`: passed.
+- Real Chromium Timeline check: zero console errors and zero failed responses.
+- Real Chromium `Diag all`: `26 passed / 4 data-dependent failures`, zero POST;
+  `DASH-030` reduced from `13` to `9` zero-count surface entries and now
+  explains each remaining absence.
+- Dashboard server restarted successfully and returned HTTP `200`.
+
 ### 2026-07-28 - Use Rudy+TW as the only supporting-map basemap
 
 User request:
