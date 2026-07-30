@@ -921,7 +921,7 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     assert 'url.hash = "features-workspace";' in html
     assert "validateWorkspaceSelection(nextProjectId)" in html
     assert "const WORKSPACE_ROOT =" not in html
-    assert "void loadConnectedPreparationStatus();" in html
+    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in html
     assert workspace_page.index("renderWorkspaceOperationConsole()") < workspace_page.index(
         "renderWorkspaceStatsPanels(stats)"
     )
@@ -1508,6 +1508,39 @@ def test_weather_embedded_map_uses_only_rudy_tw_tiles_and_cwa_rainfall() -> None
     assert "renderRasterBasemapLayers(state.view);" in map_viewport_adapter
 
 
+def test_weather_embedded_map_loads_cwa_imagery_only_after_layer_enable() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+    imagery_gate = pretrip_html.split(
+        "async function loadCwaWeatherImageryIfEnabled(projectId)", 1
+    )[1].split("async function loadCwaRainfallGridOverlay(view)", 1)[0]
+    project_reload = pretrip_html.split(
+        "async function reloadProjectView()", 1
+    )[1].split("async function loadOsmPbfVectorLayer(view)", 1)[0]
+    layer_change_handler = pretrip_html.split(
+        "function handleLayerChange(event)", 1
+    )[1].split("function closeLayerMenus(", 1)[0]
+    bridge_wait = html.split(
+        "function weatherCwaBridgeShouldWait(snapshot = {})", 1
+    )[1].split("function scheduleWeatherCwaBridgeRetry(", 1)[0]
+
+    assert "if (!cwaWeatherLayerInput()?.checked)" in imagery_gate
+    assert "return null;" in imagery_gate
+    assert "await loadCwaWeatherImagery(projectId)" in imagery_gate
+    assert (
+        "const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID);"
+        in project_reload
+    )
+    assert (
+        "const imageryPromise = loadCwaWeatherImagery(PROJECT_ID)"
+        not in project_reload
+    )
+    assert 'input.dataset.layer !== "cwa-weather"' in layer_change_handler
+    assert "void loadCwaWeatherImageryIfEnabled(PROJECT_ID);" in layer_change_handler
+    assert 'state.layerEnabled["cwa-weather"] === false' in bridge_wait
+    assert "return false;" in bridge_wait
+
+
 def test_scout_dashboard_map_route_removes_header_without_losing_mobile_navigation() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
@@ -1862,7 +1895,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "不能單獨證明步道存在" in navigation
     assert "需要來源與人工複核" in navigation
     assert 'role="listitem"\n                class="navigation-event-card"' not in navigation
-    assert "void loadConnectedPreparationStatus();" in html
+    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in html
     assert 'const pageHeaderHidden = route === "outdoor-navigation";' in html
     assert (
         'dashboardShell?.classList.toggle("is-page-header-hidden", pageHeaderHidden);'
@@ -2702,6 +2735,16 @@ def test_dashboard_cwa_truth_state_play_guard_and_single_product_contract() -> N
     assert "coverageStatus:" in pretrip_html
 
 
+def test_dashboard_open_triggers_connected_preparation() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    startup = html.split(
+        'document.addEventListener("DOMContentLoaded", () => {', 1
+    )[1].split("function apiBase()", 1)[0]
+
+    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in startup
+    assert "void loadConnectedPreparationStatus();" not in startup
+
+
 def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
@@ -2774,7 +2817,7 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         'data-weather-location-trend="true"',
         ):
             assert marker in html
-    assert "void loadConnectedPreparationStatus();" in html
+    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in html
     assert 'const pastRainfall = rainfallProducts.find(item => item.gridKind === "qpe_past_1h")' in html
     assert 'const futureRainfall = rainfallProducts.find(item => item.gridKind === "qpf_next_1h")' in html
     assert '"Past 1h QPE"' in html
