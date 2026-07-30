@@ -7469,10 +7469,16 @@
         setActiveTabDetail(state.view);
       }
     }
+    function handleLayerChange(event) {
+      updateLayers();
+      const input = event.currentTarget;
+      if (input.dataset.layer !== "cwa-weather") return;
+      void loadCwaWeatherImageryIfEnabled(PROJECT_ID);
+    }
     function bindControls() {
       bindLayerMenuDismiss();
       bindAssistantControls();
-      document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", updateLayers));
+      document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", handleLayerChange));
       document.querySelectorAll("[data-layer-preset]").forEach(button => {
         button.addEventListener("click", () => applyLayerPreset(button.dataset.layerPreset));
       });
@@ -7881,6 +7887,28 @@
       syncCwaImageryControls();
       return cwaImageryUi.manifest;
     }
+    function clearCwaWeatherImagery() {
+      if (cwaImageryUi.playTimer) clearInterval(cwaImageryUi.playTimer);
+      cwaImageryUi.playTimer = null;
+      cwaImageryUi.manifest = null;
+      cwaImageryUi.frameIndex = 0;
+      syncCwaImageryControls();
+    }
+    async function loadCwaWeatherImageryIfEnabled(projectId) {
+      if (!cwaWeatherLayerInput()?.checked) {
+        clearCwaWeatherImagery();
+        renderCurrentCwaImagerySurface();
+        return null;
+      }
+      const manifest = await loadCwaWeatherImagery(projectId);
+      if (!cwaWeatherLayerInput()?.checked) {
+        clearCwaWeatherImagery();
+        renderCurrentCwaImagerySurface();
+        return null;
+      }
+      renderCurrentCwaImagerySurface();
+      return manifest;
+    }
     async function loadCwaRainfallGridOverlay(view) {
       const cwaQpf = view?.cwa_qpf && typeof view.cwa_qpf === "object" ? view.cwa_qpf : {};
       const endpoint = String(cwaQpf.gridOverlayEndpoint || "");
@@ -8084,10 +8112,7 @@
         publishPretripProjectBridge("base_ready");
         return nextView;
       });
-      const imageryPromise = loadCwaWeatherImagery(PROJECT_ID).then(result => {
-        renderMap(state.view || view);
-        return result;
-      });
+      const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID);
       const osmCartoPalettePromise = loadOsmCartoPalette();
       const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);
       const weatherOverlayPromise = fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/weather-overlay`)

@@ -7876,7 +7876,7 @@
       bindMobileNavigation();
       bindAgentChatControls();
       setRoute(routeFromHash());
-      void loadConnectedPreparationStatus();
+      void triggerDashboardConnectedPreparation("dashboard-open");
       loadWorkspaceCatalog().finally(() => loadData()).finally(() => {
         if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
       });
@@ -18086,6 +18086,7 @@
     }
 
     function weatherCwaBridgeShouldWait(snapshot = {}) {
+      if (state.layerEnabled["cwa-weather"] === false) return false;
       const parentFrameCount = weatherTimelineFrames(weatherCandidateSnapshot()).length;
       const bridgeFrameCount = snapshot.current
         ? Math.max(1, Number(snapshot.maxFrameIndex || 0) + 1)
