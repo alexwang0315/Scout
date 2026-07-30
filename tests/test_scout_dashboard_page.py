@@ -1909,6 +1909,9 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     map_controller = html.split(
         "function createDashboardMapViewportController", 1
     )[1].split("function bindDashboardMapViewports", 1)[0]
+    tile_refresh = html.split(
+        "function updateDashboardRudyTileLayer", 1
+    )[1].split("function updateNavigationRudyTileLayer", 1)[0]
 
     for marker in (
         "const DASHBOARD_RUDY_TILE_SOURCE",
@@ -1957,6 +1960,8 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
         "{passive: false});"
         in map_controller
     )
+    assert "Math.ceil(Math.log2(viewState.zoom))" in tile_refresh
+    assert "Math.round(Math.log2(viewState.zoom))" not in tile_refresh
 
 
 def test_map_navigation_weather_disable_wheel_zoom_but_keep_box_zoom() -> None:

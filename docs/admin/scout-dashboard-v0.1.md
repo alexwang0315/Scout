@@ -46,6 +46,60 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-07-29 - Record recurring tile-map visual regression
+
+Defect ID: `DASH-MAP-REG-001`.
+
+User report:
+
+- A Dashboard supporting map again appeared to be a non-tiled image.
+- This is a recurring regression family even when the immediate implementation
+  is not identical.
+
+Recurrence history:
+
+1. On 2026-07-23, Navigation still used terrain image overlays where the
+   supporting basemap was expected to be dynamic. Those images were replaced
+   by Rudy+TW WMTS tiles in commit `f40b76f6`.
+2. On 2026-07-29, Navigation still had multiple WMTS tiles in the DOM, but the
+   first `+` action enlarged matrix-13 tiles from `100%` to `125%` without
+   requesting matrix 14. The scaled lower-resolution tiles made the map look
+   like a static raster again.
+
+Root cause and correction:
+
+- `updateDashboardRudyTileLayer()` derived the effective matrix with
+  `Math.round(Math.log2(viewState.zoom))`.
+- At `1.25x`, the result rounded down to the base matrix, so the browser scaled
+  the existing tile pixels before the next zoom action crossed the threshold.
+- The matrix selection now uses `Math.ceil(...)`. Any zoom above the current
+  native scale immediately requests the next matrix instead of presenting a
+  blurry intermediate scale.
+
+Permanent acceptance gate:
+
+- Do not classify a map as tiled merely because its DOM contains more than one
+  `<image>`.
+- From Fit, record the initial `data-dashboard-tile-zoom`, click `+` exactly
+  once, and require both the dataset and Rudy+TW request `TILEMATRIX` to advance
+  on that first zoom action.
+- Require multiple visible WMTS tile requests, HTTP success, render-policy
+  status `verified`, zero blocked unapproved images, and aligned vector
+  overlays.
+- Treat a lower-resolution tile matrix stretched across a higher display zoom
+  as this same defect family, even though the DOM is technically tiled.
+- Preserve the regression assertion in
+  `test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoom`.
+
+Verification:
+
+- Fit: `1.000x`, matrix `13`, `24` Rudy+TW tiles.
+- First `+`: `1.250x`, matrix `14`, `70` Rudy+TW tiles; the first request
+  contained `TILEMATRIX=14`.
+- `data-map-render-policy-status=verified`, blocked image count `0`, and browser
+  console error count `0`.
+- `tests/test_scout_dashboard_page.py`: `61 passed`.
+
 ### 2026-07-28 - Use Rudy+TW as the only supporting-map basemap
 
 User request:
