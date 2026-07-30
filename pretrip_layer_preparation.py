@@ -34,6 +34,7 @@ from admin_local_raster_tiles import (
 from cwa_route_identity import load_cwa_route_identity
 from pretrip_models import RouteBBox
 from pretrip_osm_pbf_ingest import (
+    build_osm_trail_visibility_candidates,
     build_osm_pbf_feature_index,
     extract_osm_pbf_to_osm_json,
     import_osm_pbf_evidence_candidates,
@@ -1934,12 +1935,29 @@ def _prepare_gee_environment_artifacts(
                 project=project,
                 fallback=cwa_time_metadata,
             )
+            osm_trail_visibility_candidates: list[dict[str, Any]] = []
+            osm_raw_path = _project_ref_path(
+                project_root,
+                project,
+                "osm_pbf_raw_payload_ref",
+            )
+            if osm_raw_path is not None and osm_raw_path.is_file():
+                osm_trail_visibility_candidates = (
+                    build_osm_trail_visibility_candidates(
+                        _load_json(osm_raw_path),
+                        source_ref=str(
+                            project.get("osm_pbf_raw_payload_ref")
+                            or "normalized/map/osm_pbf_phase_a_raw.osm.json"
+                        ),
+                    )
+                )
             derivatives_summary = write_environment_risk_derivative_artifacts(
                 feature_package=feature_package_for_derivatives,
                 output_dir=project_root / "outputs" / "environment" / "derived",
                 project_id=str(project_id),
                 generated_at=prepared_at,
                 cwa_time_metadata=derivative_cwa_time_metadata,
+                osm_trail_visibility_candidates=osm_trail_visibility_candidates,
             )
         except Exception as exc:  # pragma: no cover - defensive derivative boundary.
             derivatives_summary = {
@@ -8277,8 +8295,9 @@ def _build_overpass_query_body(bbox: dict[str, float]) -> str:
             f'  way["highway"~"{ROUTE_CORRIDOR_HIGHWAY_PATTERN}"]{bbox_expr};',
             f'  relation["type"="route"]["route"="hiking"]{bbox_expr};',
             f'  relation["route"="hiking"]{bbox_expr};',
-            f'  node["tourism"~"^(wilderness_hut|alpine_hut)$"]{bbox_expr};',
-            f'  node["amenity"~"^(shelter|drinking_water|parking)$"]{bbox_expr};',
+            f'  nwr["tourism"~"^(wilderness_hut|alpine_hut|information|viewpoint|camp_site|picnic_site)$"]{bbox_expr};',
+            f'  nwr["amenity"~"^(shelter|drinking_water|parking|toilets|place_of_worship)$"]{bbox_expr};',
+            f'  node["place"~"^(locality|hamlet|village|town|city)$"]{bbox_expr};',
             f'  node["natural"~"^(spring|peak)$"]{bbox_expr};',
             f'  way["natural"~"^(cliff|scree|bare_rock)$"]{bbox_expr};',
             f'  way["geological"="landslide"]{bbox_expr};',

@@ -1408,6 +1408,7 @@ def build_pretrip_admin_view(
 
     view = {
         "project_id": project_id,
+        **_project_osm_pbf_cache_projection(project),
         "artifacts": source_refs,
         "summary": planning_tab["summary"],
         "route": planning_tab["route"],
@@ -5310,6 +5311,7 @@ def _project_summary(
 ) -> dict[str, Any]:
     return {
         "project_id": project["project_id"],
+        **_project_osm_pbf_cache_projection(project),
         "source_id": project["project_id"],
         "source_path": source_refs["project"],
         "evidence_type": "pretrip_project",
@@ -5323,6 +5325,20 @@ def _project_summary(
             for key, value in project.items()
             if key.endswith("_count") and isinstance(value, int)
         },
+    }
+
+
+def _project_osm_pbf_cache_projection(project: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: project[key]
+        for key in (
+            "osm_pbf_cache_ttl_days",
+            "osm_pbf_cache_status",
+            "osm_pbf_cache_expires_at",
+            "osm_pbf_refresh_required",
+            "osm_pbf_feature_index_feature_count",
+        )
+        if key in project
     }
 
 
@@ -7704,6 +7720,7 @@ def _osm_pbf_feature_index_summary(
         "status": payload.get("status", "missing_source"),
         "conversion_rule_version": payload.get("conversion_rule_version"),
         "render_source_ref": payload.get("render_source_ref"),
+        "pbf_cache": dict(payload.get("pbf_cache") or {}),
         "counts": counts,
         "categories": category_items,
         "category_groups": category_groups,
@@ -7815,6 +7832,8 @@ def _overpass_timeline_category_id(candidate: dict[str, Any]) -> str:
         return "overpass_peak"
     if candidate_type == "terrain_risk_candidate":
         return "overpass_terrain_risk"
+    if candidate_type == "other_poi_candidate":
+        return "overpass_other_poi"
     if candidate.get("feature_type") == "hazard_zone":
         return "overpass_terrain_risk"
     tags = candidate.get("tags") or {}

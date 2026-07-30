@@ -1073,12 +1073,14 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 - 結果：`FAIL`（2026-07-28，`chilai_nanhua_day1_scoutAI`）
 - 證據：Chromium `Diag all` 完成 30/30，`DASH-030` 紅燈；全程 0 POST。
-- count=0 類別：共 13 類。畫面列出 Overpass Hiking Routes、Overpass
-  Shelters、Overpass Water Sources、Overpass Parking、Overpass Peaks、
-  Overpass Other POI、OSM Milestones、OSM Mobile，並標示另有 5 類。
+- 重新投影後，修正四個假 0：Overpass Hiking Routes `2`、Water Sources
+  `1`、Parking `1`、Peaks `6`。
+- 目前內部 count=0 surface entries 共 9 類；使用者介面不再只顯示數字 0，
+  而是標示 `source checked · no matches`、`prepared · no candidates` 或
+  `completed GPX not imported`。Diagnostic 保留內部零值並連同原因列出。
 - 缺陷編號：
-- 備註：這是目前 workspace 的 Evidence coverage gap，不代表系統自動判定
-  這些類別必須存在真實地物。
+- 備註：剩餘項目是已確認的來源空集合或尚未匯入完成 GPX，不代表系統自動
+  判定這些類別必須存在真實地物，也不得為了讓計數大於 0 而捏造 evidence。
 
 ## 後續項目收錄門檻
 

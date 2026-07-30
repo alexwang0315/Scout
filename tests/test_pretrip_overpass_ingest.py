@@ -7,6 +7,7 @@ from pretrip_models import RouteBBox
 from pretrip_overpass_ingest import (
     CONVERSION_RULE_VERSION,
     OverpassIngestResult,
+    import_overpass_evidence_candidates,
     load_overpass_evidence_candidates,
 )
 
@@ -78,6 +79,81 @@ def test_overpass_node_way_relation_tags_become_phase_a_candidates():
     assert terrain.feature_type == "hazard_zone"
     assert terrain.geojson_feature["properties"]["hazard_type"] == "landslide"
     assert terrain.geometry["type"] == "Polygon"
+
+
+def test_overpass_way_and_relation_huts_and_other_poi_get_representative_points():
+    payload = {
+        "version": 0.6,
+        "elements": [
+            {
+                "type": "way",
+                "id": 7001,
+                "tags": {"name": "天池山莊", "tourism": "alpine_hut"},
+                "geometry": [
+                    {"lat": 24.0420, "lon": 121.2790},
+                    {"lat": 24.0420, "lon": 121.2792},
+                    {"lat": 24.0422, "lon": 121.2792},
+                    {"lat": 24.0420, "lon": 121.2790},
+                ],
+            },
+            {
+                "type": "relation",
+                "id": 7002,
+                "tags": {"name": "測試避難設施", "amenity": "shelter"},
+                "members": [
+                    {
+                        "type": "way",
+                        "ref": 7001,
+                        "geometry": [
+                            {"lat": 24.0420, "lon": 121.2790},
+                            {"lat": 24.0422, "lon": 121.2792},
+                        ],
+                    }
+                ],
+            },
+            {
+                "type": "node",
+                "id": 7003,
+                "lat": 24.041,
+                "lon": 121.278,
+                "tags": {"name": "天池", "place": "locality"},
+            },
+            {
+                "type": "node",
+                "id": 7004,
+                "lat": 24.043,
+                "lon": 121.280,
+                "tags": {"name": "公廁", "amenity": "toilets"},
+            },
+        ],
+    }
+
+    result = import_overpass_evidence_candidates(
+        payload,
+        query_body="fixture",
+        bbox_wgs84=RouteBBox(
+            min_lat=24.03,
+            min_lon=121.27,
+            max_lat=24.05,
+            max_lon=121.29,
+        ),
+        request_timestamp="2026-07-28T00:00:00Z",
+        endpoint="fixture://overpass",
+        http_status=200,
+        raw_payload_uri="fixture.json",
+        normalized_artifact_path="normalized.geojson",
+        source_ref="fixture",
+    )
+
+    assert result.counts["shelter_candidate"] == 2
+    assert result.counts["other_poi_candidate"] == 2
+    assert all(candidate.geometry["type"] == "Point" for candidate in result.candidates)
+    other = next(
+        candidate
+        for candidate in result.candidates
+        if candidate.candidate_type == "other_poi_candidate"
+    )
+    assert other.geojson_feature["properties"]["poi_type"] == "other"
 
 
 def test_incomplete_overpass_geometry_is_marked_and_skipped_without_crash():

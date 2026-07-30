@@ -26,6 +26,15 @@ ROUTE_CORRIDOR_HIGHWAY_VALUES = (
 )
 ROUTE_CORRIDOR_HIGHWAYS = set(ROUTE_CORRIDOR_HIGHWAY_VALUES)
 ROUTE_CORRIDOR_HIGHWAY_PATTERN = f"^({'|'.join(ROUTE_CORRIDOR_HIGHWAY_VALUES)})$"
+SHELTER_TOURISM_VALUES = {"wilderness_hut", "alpine_hut"}
+OTHER_POI_AMENITIES = {"toilets", "place_of_worship"}
+OTHER_POI_TOURISM_VALUES = {
+    "information",
+    "viewpoint",
+    "camp_site",
+    "picnic_site",
+}
+OTHER_POI_PLACE_VALUES = {"locality", "hamlet", "village", "town", "city"}
 
 OverpassOsmType = Literal["node", "way", "relation"]
 OverpassCandidateType = Literal[
@@ -36,6 +45,7 @@ OverpassCandidateType = Literal[
     "parking_candidate",
     "peak_candidate",
     "terrain_risk_candidate",
+    "other_poi_candidate",
 ]
 ScoutMapFeatureType = Literal["approved_corridor", "hazard_zone", "poi"]
 Confidence = Literal["low", "medium", "high", "unknown"]
@@ -386,19 +396,21 @@ def _candidate_from_element(
 
 
 def _classification(osm_type: str, tags: dict[str, Any]) -> dict[str, Any] | None:
-    if osm_type == "node":
-        if tags.get("natural") == "peak":
-            return _rule("peak_candidate", "poi", "medium", "medium")
-        if tags.get("amenity") == "parking" or "parking" in tags:
-            return _rule("parking_candidate", "poi", "medium", "medium")
-        if (
-            tags.get("natural") == "spring"
-            or tags.get("amenity") == "drinking_water"
-            or tags.get("man_made") == "water_tap"
-        ):
-            return _rule("water_source_candidate", "poi", "low", "high")
-        if tags.get("amenity") == "shelter" or tags.get("tourism") in {"wilderness_hut", "alpine_hut"}:
-            return _rule("shelter_candidate", "poi", "medium", "high")
+    if tags.get("natural") == "peak":
+        return _rule("peak_candidate", "poi", "medium", "medium")
+    if tags.get("amenity") == "parking" or "parking" in tags:
+        return _rule("parking_candidate", "poi", "medium", "medium")
+    if (
+        tags.get("natural") == "spring"
+        or tags.get("amenity") == "drinking_water"
+        or tags.get("man_made") == "water_tap"
+    ):
+        return _rule("water_source_candidate", "poi", "low", "high")
+    if (
+        tags.get("amenity") == "shelter"
+        or tags.get("tourism") in SHELTER_TOURISM_VALUES
+    ):
+        return _rule("shelter_candidate", "poi", "medium", "high")
 
     if _is_terrain_risk(tags):
         return _rule("terrain_risk_candidate", "hazard_zone", "low", "high")
@@ -408,6 +420,9 @@ def _classification(osm_type: str, tags: dict[str, Any]) -> dict[str, Any] | Non
 
     if str(tags.get("highway", "")).strip().lower() in ROUTE_CORRIDOR_HIGHWAYS:
         return _rule("trail_corridor_candidate", "approved_corridor", "medium", "medium")
+
+    if _is_other_poi(tags):
+        return _rule("other_poi_candidate", "poi", "low", "medium")
 
     return None
 
@@ -444,9 +459,39 @@ def _geometry_for_rule(element: dict[str, Any], rule: dict[str, Any]) -> tuple[d
 
 
 def _point_geometry(element: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
-    if element.get("type") != "node" or "lat" not in element or "lon" not in element:
-        return None, "POI candidate requires node lat/lon geometry"
-    return {"type": "Point", "coordinates": [float(element["lon"]), float(element["lat"])]}, None
+    if element.get("type") == "node" and "lat" in element and "lon" in element:
+        return {
+            "type": "Point",
+            "coordinates": [float(element["lon"]), float(element["lat"])],
+        }, None
+    coordinates = _element_representative_coordinates(element)
+    if not coordinates:
+        return None, "POI candidate requires node coordinates or complete way/relation geometry"
+    return {
+        "type": "Point",
+        "coordinates": [
+            sum(point[0] for point in coordinates) / len(coordinates),
+            sum(point[1] for point in coordinates) / len(coordinates),
+        ],
+    }, None
+
+
+def _element_representative_coordinates(element: dict[str, Any]) -> list[list[float]]:
+    if element.get("type") == "way":
+        geometry = element.get("geometry")
+        coordinates = _geometry_points(geometry) if isinstance(geometry, list) else None
+        return coordinates or []
+    if element.get("type") == "relation":
+        coordinates: list[list[float]] = []
+        for member in element.get("members", []):
+            geometry = member.get("geometry") if isinstance(member, dict) else None
+            member_coordinates = (
+                _geometry_points(geometry) if isinstance(geometry, list) else None
+            )
+            if member_coordinates:
+                coordinates.extend(member_coordinates)
+        return coordinates
+    return []
 
 
 def _line_geometry(element: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
@@ -573,6 +618,7 @@ def _geojson_feature(
         "water_source_candidate",
         "parking_candidate",
         "peak_candidate",
+        "other_poi_candidate",
     }:
         properties["poi_type"] = _poi_type(evidence.candidate_type)
     elif evidence.candidate_type == "terrain_risk_candidate":
@@ -654,7 +700,16 @@ def _poi_type(candidate_type: str) -> str:
         "water_source_candidate": "water_source",
         "parking_candidate": "parking",
         "peak_candidate": "peak",
+        "other_poi_candidate": "other",
     }.get(candidate_type, "unknown")
+
+
+def _is_other_poi(tags: dict[str, Any]) -> bool:
+    return (
+        tags.get("amenity") in OTHER_POI_AMENITIES
+        or tags.get("tourism") in OTHER_POI_TOURISM_VALUES
+        or tags.get("place") in OTHER_POI_PLACE_VALUES
+    )
 
 
 def _hazard_type(tags: dict[str, Any]) -> str:

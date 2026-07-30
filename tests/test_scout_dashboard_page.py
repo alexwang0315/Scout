@@ -1226,6 +1226,25 @@ def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> Non
     assert "fetchFirstPretripJson" in html
     assert "renderPretripEvidencePanel" in html
     assert "pretripEvidenceGroups" in html
+    assert "const overpassTimelineItems = [" in html
+    assert "const overpassCategoryItems = (categoryId) =>" in html
+    assert "const overpassCategoryCount = (categoryId) =>" in html
+    assert 'overpassCategoryItems("overpass_hiking_route")' in html
+    assert 'displayCount: overpassCategoryCount("overpass_hiking_route")' in html
+    assert "source checked · no matches" in html
+    assert "prepared · no candidates" in html
+    assert "completed GPX not imported" in html
+    assert "const displayCountLabel = zeroState ? zeroState : countLabel;" in html
+    assert 'zeroState: view.capability_timeline_import ? "no completed edges" : "not imported"' in html
+    assert 'const COMPLETED_TRIP_RECORDINGS_PATH = "/admin/post-analysis/completed-trip-recordings";' in html
+    assert "function completedTripRecordingsPath()" in html
+    assert "projectId=${encodeURIComponent(state.pretripDataProjectId || projectId())}" in html
+    assert "completedTripRecordingSelectPath(safeRecordingId)" in html
+    assert "function renderCompletedGpxLifecycle()" in html
+    assert "async function loadCompletedTripRecordings()" in html
+    assert "async function activateCompletedTripRecording(recordingId)" in html
+    assert 'data-completed-gpx-action="refresh"' in html
+    assert 'data-completed-gpx-recording-id="${escapeHtml(recording.recording_id)}"' in html
     assert 'data-pretrip-evidence-source="${escapeHtml(sourceProject)}"' in html
     for tab_id, label in (
         ("default", "CP / Timeline"),
@@ -1262,6 +1281,7 @@ def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> Non
         "Retreat Routes",
         "Reference GPX",
         "Capability Timeline",
+        "Rest Intervals",
         "Info Sections",
         "Review Groups",
         "Review Queue",
@@ -3459,6 +3479,8 @@ def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
         "function diagnosticZeroCountEvidenceCategories(",
         ".filter(group => Number(group.count) === 0)",
         ".filter(item => Number(item.count) === 0)",
+        'group.zeroState || "unexplained zero"',
+        'const reason = ["capability_timeline", "rest_intervals"].includes(item.category_id)',
         "Evidence categories count=0:",
     ):
         assert marker in html

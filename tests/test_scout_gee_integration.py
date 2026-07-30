@@ -3,6 +3,7 @@ import json
 from scout_gee_integration import (
     RestGeeRouteFeatureClient,
     _gee_access_token,
+    _route_feature_compute_jobs,
     build_environment_risk_derivatives,
     build_route_segments_from_gpx,
     build_scout_gee_feature_package,
@@ -363,56 +364,165 @@ def test_scout_gee_feature_package_uses_route_risk_terrain_fallback(tmp_path) ->
     assert first["runtime_safety_truth"] is False
 
 
-def test_scout_gee_feature_package_does_not_treat_echo_manifest_as_metrics(
-    tmp_path,
-) -> None:
-    class EchoRouteFeatureClient(RestGeeRouteFeatureClient):
-        def _compute_value(self, **kwargs):
-            return {
-                "http_status": 200,
-                "result": {
-                    "job_kind": "scout_gee_route_feature_package",
-                    "job_version": "scout_gee_feature_package.v0.1",
-                    "expected_output": "segment_features",
-                    "segments": [
-                        {
-                            "type": "Feature",
-                            "properties": {"segment_id": "gee.segment.0001"},
-                            "geometry": {"type": "LineString", "coordinates": []},
-                        }
-                    ],
-                    "dataset_config": {"datasets": [{}, {}]},
+def test_rest_route_feature_client_computes_and_merges_segment_feature_jobs() -> None:
+    class ComputeFeaturesRouteClient(RestGeeRouteFeatureClient):
+        def __init__(self):
+            super().__init__({"EARTHENGINE_TOKEN": "token-ref"})
+            self.workload_tags = []
+
+        def _compute_features(self, **kwargs):
+            workload_tag = kwargs["workload_tag"]
+            self.workload_tags.append(workload_tag)
+            properties_by_job = {
+                "scout-route-terrain": {
+                    "elevation_m": 1550,
+                    "slope_deg": 36,
+                },
+                "scout-route-optical": {
+                    "ndvi": 0.48,
+                    "bsi": 0.22,
+                    "ndwi": -0.18,
+                    "sentinel2_before_after_change_score": 0.31,
+                },
+                "scout-route-landcover": {
+                    "dynamic_world_trees": 0.62,
+                    "dynamic_world_shrub_and_scrub": 0.13,
+                    "dynamic_world_bare": 0.08,
+                },
+                "scout-route-radar": {
+                    "mean": -2.4,
+                },
+                "scout-route-rainfall": {
+                    "gpm_recent_rainfall_mm": 88.5,
+                    "chirps_rainfall_anomaly": 1.7,
                 },
             }
+            return {
+                "http_status": 200,
+                "page_count": 1,
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": None,
+                        "properties": {
+                            "segment_id": "gee.segment.0001",
+                            **properties_by_job[workload_tag],
+                        },
+                    }
+                ],
+            }
 
-    gpx = tmp_path / "route.gpx"
-    risk = tmp_path / "route_risk.geojson"
-    _write_test_gpx(gpx)
-    _write_route_risk_geojson(risk)
-
-    package = build_scout_gee_feature_package(
-        gpx_path=gpx,
+    client = ComputeFeaturesRouteClient()
+    raw = client.fetch_route_feature_package(
         project_id="test-route",
-        prepared_at="2026-06-22T00:00:00Z",
-        route_risk_geojson_path=risk,
-        env={
-            "SCOUT_GEE_ENABLED": "true",
-            "SCOUT_GEE_PROJECT_ID": "test-project",
-            "EARTHENGINE_TOKEN": "token-ref",
+        route_polyline={"type": "Feature", "geometry": None, "properties": {}},
+        route_buffer={
+            "type": "Feature",
+            "geometry": None,
+            "properties": {"buffer_m": 60},
         },
-        client=EchoRouteFeatureClient({"EARTHENGINE_TOKEN": "token-ref"}),
+        segments=[
+            {
+                "type": "Feature",
+                "properties": {"segment_id": "gee.segment.0001"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[121.17, 23.87], [121.171, 23.871]],
+                },
+            }
+        ],
+        dataset_config=load_gee_dataset_config(),
+        date_ranges={
+            "sentinel2_sr": {
+                "start": "2026-04-01T00:00:00Z",
+                "end": "2026-07-01T00:00:00Z",
+            },
+            "sentinel1_grd": {
+                "before": {
+                    "start": "2025-07-01T00:00:00Z",
+                    "end": "2026-01-01T00:00:00Z",
+                },
+                "after": {
+                    "start": "2026-04-01T00:00:00Z",
+                    "end": "2026-07-01T00:00:00Z",
+                },
+            },
+            "dynamic_world": {
+                "start": "2025-07-01T00:00:00Z",
+                "end": "2026-07-01T00:00:00Z",
+            },
+            "gpm_imerg": {
+                "start": "2026-06-28T00:00:00Z",
+                "end": "2026-07-01T00:00:00Z",
+            },
+            "chirps_daily": {
+                "start": "2026-06-01T00:00:00Z",
+                "end": "2026-07-01T00:00:00Z",
+            },
+        },
+        prepared_at="2026-06-22T00:00:00Z",
     )
 
-    first = package["segments"][0]
-    assert package["status"] == "server_script_not_configured"
-    assert package["counts"]["raw_segment_feature_count"] == 0
-    assert package["blocker_reasons"] == ["gee_route_feature_script_not_configured"]
-    assert package["raw_failure_summary"]["result_summary"]["input_segment_count"] == 1
+    assert raw["status"] == "ready"
+    assert set(client.workload_tags) == {
+        "scout-route-terrain",
+        "scout-route-optical",
+        "scout-route-landcover",
+        "scout-route-radar",
+        "scout-route-rainfall",
+    }
+    first = raw["segment_features"][0]
+    assert first["segment_id"] == "gee.segment.0001"
     assert first["slope_deg"] == 36
-    assert first["metric_source_notes"][0]["source_kind"] == (
-        "scout_risk_engine_route_profile"
+    assert first["ndvi"] == 0.48
+    assert first["dynamic_world_trees"] == 0.62
+    assert first["sentinel1_before_after_backscatter_anomaly_db"] == -2.4
+    assert first["gpm_recent_rainfall_mm"] == 88.5
+    assert raw["external_api_call_performed"] is True
+
+
+def test_route_feature_radar_job_filters_to_vv_interferometric_wide_swath() -> None:
+    jobs = _route_feature_compute_jobs(
+        route_buffer={
+            "type": "Feature",
+            "geometry": None,
+            "properties": {"buffer_m": 60},
+        },
+        segments=[
+            {
+                "type": "Feature",
+                "properties": {"segment_id": "gee.segment.0001"},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[121.17, 23.87], [121.171, 23.871]],
+                },
+            }
+        ],
+        dataset_config=load_gee_dataset_config(),
+        date_ranges={
+            "sentinel1_grd": {
+                "before": {
+                    "start": "2025-07-01T00:00:00Z",
+                    "end": "2026-01-01T00:00:00Z",
+                },
+                "after": {
+                    "start": "2026-04-01T00:00:00Z",
+                    "end": "2026-07-01T00:00:00Z",
+                },
+            },
+        },
+        prepared_at="2026-07-01T00:00:00Z",
     )
-    assert first["sentinel2_indices"]["ndvi"] is None
+
+    radar_job = next(job for job in jobs if job["job_id"] == "scout-route-radar")
+    expression = json.dumps(radar_job["expression"], sort_keys=True)
+
+    assert '"functionName": "Filter.listContains"' in expression
+    assert "transmitterReceiverPolarisation" in expression
+    assert '"constantValue": "VV"' in expression
+    assert '"functionName": "Filter.equals"' in expression
+    assert "instrumentMode" in expression
+    assert '"constantValue": "IW"' in expression
 
 
 def test_environment_risk_derivatives_create_candidate_layers(tmp_path) -> None:
@@ -533,6 +643,52 @@ def test_environment_risk_derivatives_create_candidate_layers(tmp_path) -> None:
     assert written_wetness["features"][0]["properties"][
         "cwa_api_fetched_at_hour"
     ] == "2026-06-26T01:00:00Z"
+
+
+def test_environment_derivatives_merge_osm_trail_visibility_as_separate_source() -> None:
+    package = {
+        "artifact_kind": "scout_gee_feature_package",
+        "schema_version": "scout_gee_feature_package.v0.1",
+        "project_id": "test-route",
+        "generated_at": "2026-07-28T00:00:00Z",
+        "status": "server_script_not_configured",
+        "segments": [],
+        "source_datasets": [],
+    }
+    osm_candidates = [
+        {
+            "candidate_id": "osm_pbf.trail_visibility.way.401",
+            "label": "模糊路徑",
+            "trail_visibility": "horrible",
+            "score": 0.9,
+            "confidence": "medium",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[121.270, 24.040], [121.271, 24.041]],
+            },
+            "source_refs": [
+                "normalized/map/osm_pbf_phase_a_raw.osm.json",
+                "way/401",
+            ],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    ]
+
+    derivatives = build_environment_risk_derivatives(
+        package,
+        osm_trail_visibility_candidates=osm_candidates,
+    )
+
+    assert derivatives["status"] == "ready_with_data_gaps"
+    assert derivatives["counts"]["trail_obscurity_candidate_count"] == 1
+    assert derivatives["counts"]["osm_trail_visibility_candidate_count"] == 1
+    feature = derivatives["collections"]["trail_obscurity_risk"]["features"][0]
+    assert feature["properties"]["source"] == "local_osm_pbf_trail_visibility"
+    assert feature["properties"]["supporting_metrics"] == {
+        "osm_trail_visibility": "horrible"
+    }
+    assert feature["properties"]["runtime_safety_truth"] is False
 
 
 class _FakeRouteFeatureClient:

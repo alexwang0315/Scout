@@ -3071,26 +3071,143 @@ server entrypoint before diagnosing the workspace artifacts.
 `admin_api:create_admin_app --factory` without an injected
 `pretrip_workspace_root` exposes repository fixtures only. A real workspace id
 will then return `404 Pre-trip project not found`, even when
-`<workspace_root>/<project_id>/project.json` exists. For a local prepared
-workspace preview, launch the Phase 4 runtime with the workspace parent root:
+`<workspace_root>/<project_id>/project.json` exists. For a local Dashboard
+preview with Workspace Operations and Connected Preparation available, launch
+the Dashboard factory with the workspace parent root:
 
 ```bash
 SCOUT_PRETRIP_WORKSPACE_ROOT=/Users/alexwang0315/workspace \
   ./venv/bin/python -m uvicorn \
-  phase4_admin_runtime:create_phase4_admin_runtime_app \
+  admin_api:create_dashboard_app \
   --factory --host 127.0.0.1 --port 9099
 ```
+
+`phase4_admin_runtime:create_phase4_admin_runtime_app` can read the workspace,
+but it does not inject the Dashboard Connected Preparation manager. Using it
+for this surface makes
+`/admin/pretrip/projects/<project_id>/connected-preparation` return HTTP 503
+even while the main project projection succeeds.
 
 Verify the binding before opening the Dashboard:
 
 ```bash
 curl http://127.0.0.1:9099/admin/pretrip/projects
 curl "http://127.0.0.1:9099/admin/pretrip/projects/<project_id>?compact=1"
+curl "http://127.0.0.1:9099/admin/pretrip/projects/<project_id>/connected-preparation"
 ```
 
-The first response must list the requested project and the second must return
-HTTP 200. A valid Dashboard URL is then:
+The first response must list the requested project; the project and connected
+preparation responses must both return HTTP 200. A valid Dashboard URL is then:
 
 ```text
 http://127.0.0.1:9099/admin/dashboard?projectId=<project_id>
+```
+
+## Run Log: 2026-07-28 Timeline Evidence Producer Repair
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+The Timeline Evidence category shells were present, but several producers
+reported zero because their source extraction or lifecycle state was
+incomplete. The repairs and operating rules are:
+
+1. **Shelters and Other POI**
+   - Root cause: the Overpass classifier accepted mostly node geometry, while
+     huts and shelters are frequently mapped as ways or relations. Other POI
+     had no bounded candidate class.
+   - Repair: query and classify `nwr` shelter/hut records, derive a
+     representative point for node/way/relation geometry, and keep a bounded
+     Other POI allow-list.
+   - Current workspace result: `Shelters = 2`, `Other POI = 91`.
+
+2. **OSM Milestones and OSM Mobile**
+   - Root cause: the PBF feature-index contract knew these categories, but the
+     streaming matcher omitted `highway=milestone`,
+     `information=route_marker`, and `information=mobile`.
+   - Repair: retain those tags in the PBF streaming filter and route adapter.
+   - Current workspace result: `OSM Milestones = 34`, `OSM Mobile = 37`.
+
+3. **Trail Obscurity**
+   - Root cause: this category depended only on unavailable GEE segment
+     metrics even though the local PBF contains explicit
+     `trail_visibility` evidence.
+   - Repair: keep low-visibility OSM tags (`intermediate`, `bad`, `horrible`,
+     `no`) as a separate candidate-only source and merge them with GEE-derived
+     obscurity candidates. OSM is supporting evidence, not a replacement for
+     satellite/terrain computation.
+   - Current workspace result: `OSM trail_visibility candidates = 3`;
+     combined `Trail Obscurity = 84` after GEE preparation.
+
+4. **GEE route metrics and New Landslide**
+   - Root cause: the previous route-feature job posted a constant manifest to
+     `value:compute`, so HTTP 200 could echo the request without producing
+     per-segment metrics.
+   - Repair: use server-side `table:computeFeatures` with
+     `Image.reduceRegions` for terrain, Sentinel-2 optical change,
+     Dynamic World land cover, Sentinel-1 radar change, and rainfall.
+   - Sentinel-1 must be filtered to collections containing `VV` and using
+     `instrumentMode=IW`; otherwise mixed `HH/HV` imagery causes
+     `Image.select('VV')` to fail. A single-band reducer returns `mean`, which
+     must be normalized to
+     `sentinel1_before_after_backscatter_anomaly_db`.
+   - Run connected preparation with `./venv/bin/python`; the project venv
+     contains the required `google-auth` service-account support. System Python
+     may report `missing_google_auth_dependency`.
+   - Current workspace result: `244/244` GEE route segments, `244` radar metric
+     segments, package status `ready`, derivative status `ready`, and zero
+     blockers. `New Landslide = 0` is now a computed zero (no segment crossed
+     the candidate threshold), not missing data. Keep the category title and
+     state this distinction in the UI.
+
+5. **PBF freshness**
+   - Root cause: a cached admin projection could preserve an old `fresh` state
+     after the source PBF crossed its TTL.
+   - Repair: recompute PBF cache age, expiry, status, and refresh requirement
+     on every project GET, including projection-cache hits.
+   - Current source status: `stale_refresh_recommended`; the no-network rebuild
+     deliberately used the existing PBF and did not imply a fresh download.
+
+6. **Capability Timeline and Rest Intervals**
+   - These are post-trip lifecycle categories. Before a completed user GPX is
+     imported, their truthful state is `not imported`, not a generic data zero.
+   - The Dashboard must list completed-trip recordings from the real
+     post-analysis endpoint and require an explicit operator action to build
+     evidence. Never substitute the planned/reference route for a completed
+     user track.
+
+7. **Overpass route identity cascade**
+   - Rebuilding Overpass alignment changes the canonical display-route hash.
+     Existing CWA rainfall projection/trend and imagery/risk pairs must then be
+     regenerated against that hash; strict project reads correctly reject the
+     mixed provenance with HTTP 422.
+   - Refresh rainfall and weather imagery as explicit connected preparation,
+     then finish with the 10-layer no-network completeness set (`imagery`,
+     four risk layers, `route`, `segments`, `checkpoints`, `reference-tracks`,
+     and `route-notes`). A final single-layer run must not be allowed to leave
+     the current layer manifest incomplete.
+   - Current workspace result: compact project API HTTP 200; rainfall manifest,
+     route projection, weather imagery manifest, and route weather risk package
+     all use the current Overpass-aligned route identity.
+
+Focused validation for this repair:
+
+```text
+GEE + layer preparation pytest: PASS (46 passed)
+Admin view/API pytest: PASS (122 passed)
+Dashboard pytest: PASS (60 passed)
+OSM/Overpass pytest: PASS (14 passed)
+Real OSM/Overpass rebuild: PASS (no network fetch)
+Real GEE rebuild: PASS (244/244 segments; 0 blockers)
+Route-aligned CWA rainfall + imagery pairs: PASS
+Scout layer contract: PASS (repo 32/32; workspace 32/32)
+Dashboard runtime APIs: PASS (project, operations, projection, weather)
+Chrome Timeline smoke: PASS (all requests 200; 0 console errors/warnings)
+Workspace/spec alignment: PARTIAL (2 unrelated existing Route Context gaps)
+pnpm lint / typecheck: PASS
+pnpm test: 15 passed, 2 existing docs-contract failures
+Runtime safety truth mutation: NO
 ```

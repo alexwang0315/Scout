@@ -31,6 +31,9 @@ SCOUT_GEE_OAUTH_CLIENT_SECRET_ENV = "SCOUT_GEE_OAUTH_CLIENT_SECRET"
 GEE_VALUE_COMPUTE_URL_TEMPLATE = (
     "https://earthengine.googleapis.com/v1/projects/{project_id}/value:compute"
 )
+GEE_TABLE_COMPUTE_FEATURES_URL_TEMPLATE = (
+    "https://earthengine.googleapis.com/v1/projects/{project_id}/table:computeFeatures"
+)
 GEE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 SCOUT_GEE_FEATURE_PACKAGE_VERSION = "scout_gee_feature_package.v0.1"
 SCOUT_ENVIRONMENT_RISK_DERIVATIVE_VERSION = "scout_environment_risk_derivatives.v0.1"
@@ -53,6 +56,9 @@ DEFAULT_GEE_ROUTE_SEGMENT_LENGTH_M = 150.0
 MIN_GEE_ROUTE_SEGMENT_LENGTH_M = 100.0
 MAX_GEE_ROUTE_SEGMENT_LENGTH_M = 250.0
 DEFAULT_GEE_ROUTE_BUFFER_M = 60.0
+ROUTE_FEATURE_SINGLE_BAND_OUTPUTS = {
+    "scout-route-radar": "sentinel1_before_after_backscatter_anomaly_db",
+}
 DEFAULT_GEE_DATASET_CONFIG_PATH = (
     Path(__file__).resolve().parent / "config" / "gee_datasets.yaml"
 )
@@ -438,95 +444,204 @@ class RestGeeRouteFeatureClient:
         prepared_at: str,
     ) -> dict[str, Any]:
         token = _gee_access_token(self._env)
-        expression = _route_feature_job_expression(
-            route_polyline=route_polyline,
+        jobs = _route_feature_compute_jobs(
             route_buffer=route_buffer,
             segments=segments,
             dataset_config=dataset_config,
             date_ranges=date_ranges,
             prepared_at=prepared_at,
         )
-        response = self._compute_value(
-            project_id=project_id,
-            token=token,
-            expression=expression,
-        )
-        result = response.get("result")
-        if isinstance(result, Mapping):
-            payload = dict(result)
-        else:
-            payload = {}
-        if _is_route_feature_echo_manifest(payload):
-            return {
-                "provider": GEE_PROVIDER_ID,
-                "project_id_ref": "env:SCOUT_GEE_PROJECT_ID",
-                "prepared_at": prepared_at,
-                "endpoint": GEE_VALUE_COMPUTE_URL_TEMPLATE,
-                "http_status": response.get("http_status"),
-                "status": "server_script_not_configured",
-                "blocker_reasons": ["gee_route_feature_script_not_configured"],
-                "result_summary": _route_feature_echo_manifest_summary(payload),
-                "segment_features": [],
-                "source_metadata": {},
-                "stale_data_warnings": [],
-                "secret_value_embedded": False,
-                "external_api_call_performed": True,
-                "runtime_safety_truth": False,
-            }
+        merged_by_segment: dict[str, dict[str, Any]] = {}
+        job_summaries: list[dict[str, Any]] = []
+        blockers: list[str] = []
+        stale_warnings: list[dict[str, Any]] = []
+        latest_http_status: int | None = None
+        for job in jobs:
+            job_id = str(job["job_id"])
+            try:
+                response = self._compute_features(
+                    project_id=project_id,
+                    token=token,
+                    expression=job["expression"],
+                    workload_tag=job_id,
+                )
+            except GeeFetchError as exc:
+                job_blockers = list(exc.blocker_reasons)
+                blockers.extend(job_blockers)
+                job_summaries.append(
+                    {
+                        "job_id": job_id,
+                        "status": "fetch_failed",
+                        "blocker_reasons": job_blockers,
+                        "feature_count": 0,
+                    }
+                )
+                continue
+            latest_http_status = response.get("http_status")
+            features = [
+                item
+                for item in response.get("features", [])
+                if isinstance(item, Mapping)
+            ]
+            if not features:
+                blocker = f"gee_route_feature_job_empty:{job_id}"
+                blockers.append(blocker)
+                stale_warnings.append(
+                    {
+                        "job_id": job_id,
+                        "warning": "no_route_segment_features_returned",
+                    }
+                )
+            for feature in features:
+                properties = feature.get("properties")
+                if not isinstance(properties, Mapping):
+                    continue
+                segment_id = str(properties.get("segment_id") or "").strip()
+                if not segment_id:
+                    continue
+                normalized_properties = _normalize_route_feature_properties(
+                    job_id,
+                    properties,
+                )
+                merged_by_segment[segment_id] = {
+                    **merged_by_segment.get(segment_id, {"segment_id": segment_id}),
+                    **normalized_properties,
+                }
+            job_summaries.append(
+                {
+                    "job_id": job_id,
+                    "status": "ready" if features else "empty",
+                    "feature_count": len(features),
+                    "page_count": int(response.get("page_count") or 0),
+                    "http_status": response.get("http_status"),
+                    "dataset_keys": list(job.get("dataset_keys") or []),
+                    "scale_m": job.get("scale_m"),
+                }
+            )
+        segment_features = [
+            merged_by_segment[segment_id]
+            for segment_id in [
+                str((item.get("properties") or {}).get("segment_id") or "")
+                for item in segments
+                if isinstance(item, Mapping)
+            ]
+            if segment_id in merged_by_segment
+        ]
+        status = "ready"
+        if blockers and segment_features:
+            status = "ready_with_data_gaps"
+        elif blockers and not segment_features:
+            status = "fetch_failed"
         return {
             "provider": GEE_PROVIDER_ID,
             "project_id_ref": "env:SCOUT_GEE_PROJECT_ID",
             "prepared_at": prepared_at,
-            "endpoint": GEE_VALUE_COMPUTE_URL_TEMPLATE,
-            "http_status": response.get("http_status"),
-            "compiled_job": expression,
-            "result": payload,
-            "segment_features": payload.get("segment_features", []),
-            "source_metadata": payload.get("source_metadata", {}),
-            "stale_data_warnings": payload.get("stale_data_warnings", []),
+            "endpoint": GEE_TABLE_COMPUTE_FEATURES_URL_TEMPLATE,
+            "http_status": latest_http_status,
+            "status": status,
+            "blocker_reasons": list(dict.fromkeys(blockers)),
+            "segment_features": segment_features,
+            "source_metadata": {
+                "job_summaries": job_summaries,
+                "route_polyline_supplied": bool(route_polyline),
+                "route_buffer_supplied": bool(route_buffer),
+            },
+            "stale_data_warnings": stale_warnings,
             "secret_value_embedded": False,
             "external_api_call_performed": True,
             "runtime_safety_truth": False,
         }
 
-    def _compute_value(
+    def _compute_features(
         self,
         *,
         project_id: str,
         token: str,
         expression: dict[str, Any],
+        workload_tag: str,
     ) -> dict[str, Any]:
-        url = GEE_VALUE_COMPUTE_URL_TEMPLATE.format(
+        url = GEE_TABLE_COMPUTE_FEATURES_URL_TEMPLATE.format(
             project_id=urllib.parse.quote(project_id, safe="")
         )
-        body = json_dumps_bytes({"expression": expression})
-        request = urllib.request.Request(
-            url,
-            data=body,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=self._timeout_s) as response:
-                payload = _json_loads_bytes(response.read())
-                return {
-                    "http_status": response.status,
-                    "result": payload.get("result"),
-                    "error": None,
-                }
-        except urllib.error.HTTPError as exc:
-            raise GeeFetchError(
-                [f"gee_route_feature_http_error:{exc.code}"],
-                raw_summary={"http_status": exc.code, "error": _safe_error_payload(exc)},
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise GeeFetchError(
-                [f"gee_route_feature_network_error:{type(exc.reason).__name__}"],
-                raw_summary={"error": str(exc.reason), "secret_value_embedded": False},
-            ) from exc
+        features: list[dict[str, Any]] = []
+        page_token = ""
+        page_count = 0
+        latest_http_status: int | None = None
+        while True:
+            request_payload: dict[str, Any] = {
+                "expression": expression,
+                "pageSize": 1000,
+                "workloadTag": workload_tag,
+            }
+            if page_token:
+                request_payload["pageToken"] = page_token
+            request = urllib.request.Request(
+                url,
+                data=json_dumps_bytes(request_payload),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(
+                    request,
+                    timeout=self._timeout_s,
+                ) as response:
+                    payload = _json_loads_bytes(response.read())
+                    latest_http_status = response.status
+            except urllib.error.HTTPError as exc:
+                raise GeeFetchError(
+                    [f"gee_route_feature_http_error:{workload_tag}:{exc.code}"],
+                    raw_summary={
+                        "http_status": exc.code,
+                        "error": _safe_error_payload(exc),
+                    },
+                ) from exc
+            except urllib.error.URLError as exc:
+                raise GeeFetchError(
+                    [
+                        "gee_route_feature_network_error:"
+                        f"{workload_tag}:{type(exc.reason).__name__}"
+                    ],
+                    raw_summary={
+                        "error": str(exc.reason),
+                        "secret_value_embedded": False,
+                    },
+                ) from exc
+            page_count += 1
+            features.extend(
+                dict(item)
+                for item in payload.get("features", [])
+                if isinstance(item, Mapping)
+            )
+            page_token = str(payload.get("nextPageToken") or "")
+            if not page_token:
+                break
+        return {
+            "http_status": latest_http_status,
+            "features": features,
+            "page_count": page_count,
+        }
+
+
+def _normalize_route_feature_properties(
+    job_id: str,
+    properties: Mapping[str, Any],
+) -> dict[str, Any]:
+    normalized = {
+        str(key): value
+        for key, value in properties.items()
+        if key != "system:index"
+    }
+    output_name = ROUTE_FEATURE_SINGLE_BAND_OUTPUTS.get(job_id)
+    if not output_name or output_name in normalized or "mean" not in normalized:
+        return normalized
+    return {
+        **{key: value for key, value in normalized.items() if key != "mean"},
+        output_name: normalized["mean"],
+    }
 
 
 def build_gee_runtime_status(env: Mapping[str, str] | None = None) -> GeeRuntimeStatus:
@@ -970,7 +1085,6 @@ def build_scout_gee_feature_package(
     route_polyline = _route_polyline_feature(route_points)
     route_buffer = _route_buffer_feature(route_points, buffer_m=buffer_m)
     segment_features = [segment.to_feature() for segment in route_segments]
-    bbox = route_buffer["properties"]["bbox_wgs84"]
     date_ranges = _route_feature_date_ranges(dataset_config, prepared_at)
     status = build_gee_runtime_status(active_env)
     external_api_calls_made = False
@@ -1044,7 +1158,7 @@ def build_scout_gee_feature_package(
     )
     raw_segment_count = len(_extract_raw_segment_features(raw_summary))
     package_status = (
-        "ready"
+        str(raw_summary.get("status") or "ready")
         if raw_segment_count > 0
         else str(raw_summary.get("status") or "fetched_empty")
     )
@@ -1226,6 +1340,7 @@ def build_environment_risk_derivatives(
     generated_at: str | None = None,
     event_date: str | None = None,
     cwa_time_metadata: Mapping[str, Any] | None = None,
+    osm_trail_visibility_candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build candidate-only route environmental risk derivatives.
 
@@ -1290,6 +1405,11 @@ def build_environment_risk_derivatives(
     candidates_by_kind: dict[str, list[dict[str, Any]]] = {
         key: [] for key in collections
     }
+    osm_obscurity_candidates = [
+        dict(item)
+        for item in (osm_trail_visibility_candidates or [])
+        if isinstance(item, Mapping)
+    ]
     skipped_missing_geometry = 0
     for segment in segments:
         geometry = segment.get("geometry")
@@ -1337,11 +1457,26 @@ def build_environment_risk_derivatives(
             collections[kind]["features"].append(feature)
             candidates_by_kind[kind].append(feature)
 
+    for candidate in osm_obscurity_candidates:
+        feature = _osm_trail_visibility_derivative_feature(
+            candidate,
+            project_id=resolved_project_id,
+        )
+        if feature is None:
+            continue
+        collections["trail_obscurity_risk"]["features"].append(feature)
+        candidates_by_kind["trail_obscurity_risk"].append(feature)
+
     for kind, collection in collections.items():
         collection["counts"] = {
             "feature_count": len(collection["features"]),
             "segment_count": len(segments),
             "skipped_missing_geometry_count": skipped_missing_geometry,
+            "osm_trail_visibility_feature_count": (
+                len(osm_obscurity_candidates)
+                if kind == "trail_obscurity_risk"
+                else 0
+            ),
         }
         collection["summary"] = _candidate_collection_summary(collection["features"])
 
@@ -1365,6 +1500,14 @@ def build_environment_risk_derivatives(
         "trail_obscurity_candidate_count": len(
             candidates_by_kind["trail_obscurity_risk"]
         ),
+        "osm_trail_visibility_candidate_count": len(
+            [
+                feature
+                for feature in candidates_by_kind["trail_obscurity_risk"]
+                if feature.get("properties", {}).get("source")
+                == "local_osm_pbf_trail_visibility"
+            ]
+        ),
         "practical_darkness_candidate_count": len(
             candidates_by_kind["practical_darkness_time"]
         ),
@@ -1373,6 +1516,8 @@ def build_environment_risk_derivatives(
     source_metric_gaps = _source_metric_gaps(segments)
     status = "ready" if segments else "missing_source"
     if segments and source_metric_gaps:
+        status = "ready_with_data_gaps"
+    if osm_obscurity_candidates and not segments:
         status = "ready_with_data_gaps"
     return {
         "artifact_kind": "scout_environment_risk_derivatives",
@@ -1385,6 +1530,21 @@ def build_environment_risk_derivatives(
         "source_raw_response_sha256": feature_package.get("raw_response_sha256"),
         "source_datasets": source_datasets,
         "source_metric_gaps": source_metric_gaps,
+        "blocker_reasons": list(feature_package.get("blocker_reasons") or []),
+        "supporting_sources": (
+            [
+                {
+                    "source_kind": "local_osm_pbf_trail_visibility",
+                    "candidate_count": counts[
+                        "osm_trail_visibility_candidate_count"
+                    ],
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            ]
+            if osm_obscurity_candidates
+            else []
+        ),
         "source_time_metadata": {"cwa": resolved_cwa_time_metadata}
         if resolved_cwa_time_metadata
         else {},
@@ -1417,6 +1577,7 @@ def write_environment_risk_derivative_artifacts(
     generated_at: str | None = None,
     event_date: str | None = None,
     cwa_time_metadata: Mapping[str, Any] | None = None,
+    osm_trail_visibility_candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     derivatives = build_environment_risk_derivatives(
         feature_package,
@@ -1424,6 +1585,7 @@ def write_environment_risk_derivative_artifacts(
         generated_at=generated_at,
         event_date=event_date,
         cwa_time_metadata=cwa_time_metadata,
+        osm_trail_visibility_candidates=osm_trail_visibility_candidates,
     )
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -1502,6 +1664,47 @@ def _empty_derivative_collection(
             "candidate_only": True,
             "runtime_safety_truth": False,
             "phase1_runtime_mutation_allowed": False,
+        },
+    }
+
+
+def _osm_trail_visibility_derivative_feature(
+    candidate: Mapping[str, Any],
+    *,
+    project_id: str,
+) -> dict[str, Any] | None:
+    geometry = candidate.get("geometry")
+    score = _optional_float(candidate.get("score"))
+    visibility = str(candidate.get("trail_visibility") or "").strip().lower()
+    if not isinstance(geometry, Mapping) or score is None or not visibility:
+        return None
+    properties = _candidate_properties(
+        kind="trail_obscurity_risk",
+        label=str(candidate.get("label") or "OSM 路跡可視度候選"),
+        score=score,
+        confidence=str(candidate.get("confidence") or "low"),
+        stale_risk=str(candidate.get("stale_risk") or "medium"),
+        rule_version="scout_osm_trail_visibility_obscurity.v0.1",
+        supporting_metrics={"osm_trail_visibility": visibility},
+        missing_metrics=[],
+        rationale=(
+            "OSM trail_visibility explicitly marks a difficult-to-see trail. "
+            "This is a separate source candidate and does not substitute for "
+            "missing GEE vegetation or GPX-density metrics."
+        ),
+    )
+    return {
+        "type": "Feature",
+        "geometry": dict(geometry),
+        "properties": {
+            **properties,
+            "project_id": project_id,
+            "source": "local_osm_pbf_trail_visibility",
+            "source_candidate_id": candidate.get("candidate_id"),
+            "source_refs": list(candidate.get("source_refs") or []),
+            "source_attribution": list(candidate.get("source_attribution") or []),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
         },
     }
 
@@ -2145,54 +2348,612 @@ def _window_dict(start: datetime, end: datetime) -> dict[str, str]:
     }
 
 
-def _route_feature_job_expression(
+def _route_feature_compute_jobs(
     *,
-    route_polyline: dict[str, Any],
-    route_buffer: dict[str, Any],
+    route_buffer: Mapping[str, Any],
     segments: list[dict[str, Any]],
     dataset_config: Mapping[str, Any],
     date_ranges: Mapping[str, Any],
     prepared_at: str,
+) -> list[dict[str, Any]]:
+    buffer_properties = (
+        route_buffer.get("properties")
+        if isinstance(route_buffer.get("properties"), Mapping)
+        else {}
+    )
+    buffer_m = _optional_float(buffer_properties.get("buffer_m")) or (
+        DEFAULT_GEE_ROUTE_BUFFER_M
+    )
+    segment_collection = _segment_feature_collection_expression(
+        segments,
+        buffer_m=buffer_m,
+    )
+    sentinel2_after = _window_from_route_feature_range(
+        date_ranges.get("sentinel2_sr"),
+        prepared_at=prepared_at,
+        fallback_days=90,
+    )
+    sentinel2_before = _preceding_window(sentinel2_after)
+    dynamic_world_window = _window_from_route_feature_range(
+        date_ranges.get("dynamic_world"),
+        prepared_at=prepared_at,
+        fallback_days=365,
+    )
+    gpm_window = _window_from_route_feature_range(
+        date_ranges.get("gpm_imerg"),
+        prepared_at=prepared_at,
+        fallback_days=3,
+    )
+    chirps_window = _window_from_route_feature_range(
+        date_ranges.get("chirps_daily"),
+        prepared_at=prepared_at,
+        fallback_days=30,
+    )
+    chirps_baseline_window = _preceding_window(chirps_window)
+    sentinel1_range = (
+        date_ranges.get("sentinel1_grd")
+        if isinstance(date_ranges.get("sentinel1_grd"), Mapping)
+        else {}
+    )
+    sentinel1_before = _window_from_route_feature_range(
+        sentinel1_range.get("before"),
+        prepared_at=prepared_at,
+        fallback_days=180,
+    )
+    sentinel1_after = _window_from_route_feature_range(
+        sentinel1_range.get("after"),
+        prepared_at=prepared_at,
+        fallback_days=90,
+    )
+
+    nasadem_id = _route_feature_dataset_id(
+        dataset_config,
+        "nasadem",
+        "NASA/NASADEM_HGT/001",
+    )
+    sentinel2_id = _route_feature_dataset_id(
+        dataset_config,
+        "sentinel2_sr",
+        "COPERNICUS/S2_SR_HARMONIZED",
+    )
+    dynamic_world_id = _route_feature_dataset_id(
+        dataset_config,
+        "dynamic_world",
+        "GOOGLE/DYNAMICWORLD/V1",
+    )
+    sentinel1_id = _route_feature_dataset_id(
+        dataset_config,
+        "sentinel1_grd",
+        "COPERNICUS/S1_GRD",
+    )
+    gpm_id = _route_feature_dataset_id(
+        dataset_config,
+        "gpm_imerg",
+        "NASA/GPM_L3/IMERG_V07",
+    )
+    chirps_id = _route_feature_dataset_id(
+        dataset_config,
+        "chirps_daily",
+        "UCSB-CHG/CHIRPS/DAILY",
+    )
+    cloud_threshold = _optional_float(
+        (dataset_config.get("cloud_filtering") or {}).get(
+            "sentinel2_max_cloud_probability"
+        )
+    )
+    if cloud_threshold is None:
+        cloud_threshold = 35.0
+
+    terrain = _terrain_route_feature_image(nasadem_id)
+    optical = _sentinel2_route_feature_image(
+        sentinel2_id,
+        after_window=sentinel2_after,
+        before_window=sentinel2_before,
+        max_cloud_percentage=cloud_threshold,
+    )
+    landcover = _dynamic_world_route_feature_image(
+        dynamic_world_id,
+        window=dynamic_world_window,
+    )
+    radar = _sentinel1_route_feature_image(
+        sentinel1_id,
+        before_window=sentinel1_before,
+        after_window=sentinel1_after,
+    )
+    rainfall = _rainfall_route_feature_image(
+        gpm_id=gpm_id,
+        gpm_window=gpm_window,
+        chirps_id=chirps_id,
+        chirps_window=chirps_window,
+        chirps_baseline_window=chirps_baseline_window,
+    )
+    job_specs = (
+        (
+            "scout-route-terrain",
+            terrain,
+            30,
+            ["nasadem"],
+        ),
+        (
+            "scout-route-optical",
+            optical,
+            20,
+            ["sentinel2_sr"],
+        ),
+        (
+            "scout-route-landcover",
+            landcover,
+            10,
+            ["dynamic_world"],
+        ),
+        (
+            "scout-route-radar",
+            radar,
+            10,
+            ["sentinel1_grd"],
+        ),
+        (
+            "scout-route-rainfall",
+            rainfall,
+            10000,
+            ["gpm_imerg", "chirps_daily"],
+        ),
+    )
+    return [
+        {
+            "job_id": job_id,
+            "dataset_keys": dataset_keys,
+            "scale_m": scale_m,
+            "expression": _reduce_route_segments_expression(
+                image=image,
+                collection=segment_collection,
+                scale_m=scale_m,
+            ),
+        }
+        for job_id, image, scale_m, dataset_keys in job_specs
+    ]
+
+
+def _segment_feature_collection_expression(
+    segments: list[dict[str, Any]],
+    *,
+    buffer_m: float,
 ) -> dict[str, Any]:
-    # v0.1 compiles a deterministic server-side job manifest. The REST client
-    # expects a Scout-owned GEE script/service to compute the segment metrics and
-    # return the same manifest shape with segment_features populated.
-    return _expression_graph(
-        _const(
+    features = []
+    for segment in segments:
+        if not isinstance(segment, Mapping):
+            continue
+        geometry = segment.get("geometry")
+        if not isinstance(geometry, Mapping):
+            continue
+        ring = _buffered_segment_bbox_ring(geometry, buffer_m=buffer_m)
+        if not ring:
+            continue
+        properties = (
+            dict(segment.get("properties"))
+            if isinstance(segment.get("properties"), Mapping)
+            else {}
+        )
+        features.append(
+            _fn(
+                "Feature",
+                {
+                    "geometry": _fn(
+                        "GeometryConstructors.Polygon",
+                        {
+                            "coordinates": _const([ring]),
+                            "geodesic": _const(False),
+                        },
+                    ),
+                    "metadata": _const(properties),
+                },
+            )
+        )
+    return _fn("Collection", {"features": _array_value(features)})
+
+
+def _buffered_segment_bbox_ring(
+    geometry: Mapping[str, Any],
+    *,
+    buffer_m: float,
+) -> list[list[float]]:
+    coordinates = geometry.get("coordinates")
+    if not isinstance(coordinates, list):
+        return []
+    points = [
+        (float(point[0]), float(point[1]))
+        for point in coordinates
+        if (
+            isinstance(point, list)
+            and len(point) >= 2
+            and isinstance(point[0], (int, float))
+            and isinstance(point[1], (int, float))
+        )
+    ]
+    if not points:
+        return []
+    mid_lat = sum(point[1] for point in points) / len(points)
+    lat_pad = buffer_m / 111_320.0
+    lon_pad = buffer_m / max(
+        1.0,
+        111_320.0 * math.cos(math.radians(mid_lat)),
+    )
+    west = min(point[0] for point in points) - lon_pad
+    east = max(point[0] for point in points) + lon_pad
+    south = min(point[1] for point in points) - lat_pad
+    north = max(point[1] for point in points) + lat_pad
+    return [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+    ]
+
+
+def _terrain_route_feature_image(dataset_id: str) -> dict[str, Any]:
+    elevation = _select_image_bands(
+        _fn("Image.load", {"id": _const(dataset_id)}),
+        ["elevation"],
+        ["elevation_m"],
+    )
+    slope = _rename_image(
+        _fn("Terrain.slope", {"input": elevation}),
+        ["slope_deg"],
+    )
+    aspect = _rename_image(
+        _fn("Terrain.aspect", {"input": elevation}),
+        ["aspect_deg"],
+    )
+    return _add_image_bands(_add_image_bands(elevation, slope), aspect)
+
+
+def _sentinel2_route_feature_image(
+    dataset_id: str,
+    *,
+    after_window: GeeFetchWindow,
+    before_window: GeeFetchWindow,
+    max_cloud_percentage: float,
+) -> dict[str, Any]:
+    after_collection = _filter_collection_less_than(
+        _collection_filtered_by_date(dataset_id, after_window),
+        field="CLOUDY_PIXEL_PERCENTAGE",
+        value=max_cloud_percentage + 1.0,
+    )
+    before_collection = _filter_collection_less_than(
+        _collection_filtered_by_date(dataset_id, before_window),
+        field="CLOUDY_PIXEL_PERCENTAGE",
+        value=max_cloud_percentage + 1.0,
+    )
+    after_image = _fn("reduce.median", {"collection": after_collection})
+    before_image = _fn("reduce.median", {"collection": before_collection})
+    ndvi = _rename_image(
+        _fn(
+            "Image.normalizedDifference",
+            {"input": after_image, "bandNames": _const(["B8", "B4"])},
+        ),
+        ["ndvi"],
+    )
+    ndwi = _rename_image(
+        _fn(
+            "Image.normalizedDifference",
+            {"input": after_image, "bandNames": _const(["B3", "B8"])},
+        ),
+        ["ndwi"],
+    )
+    bsi = _bare_soil_index_image(after_image)
+    before_ndvi = _fn(
+        "Image.normalizedDifference",
+        {"input": before_image, "bandNames": _const(["B8", "B4"])},
+    )
+    change = _rename_image(
+        _fn(
+            "Image.abs",
             {
-                "job_kind": "scout_gee_route_feature_package",
-                "job_version": SCOUT_GEE_FEATURE_PACKAGE_VERSION,
-                "prepared_at": prepared_at,
-                "route_polyline": route_polyline,
-                "route_buffer": route_buffer,
-                "segments": segments,
-                "dataset_config": dict(dataset_config),
-                "date_ranges": dict(date_ranges),
-                "expected_output": "segment_features",
-            }
+                "value": _fn(
+                    "Image.subtract",
+                    {"image1": ndvi, "image2": before_ndvi},
+                )
+            },
+        ),
+        ["sentinel2_before_after_change_score"],
+    )
+    return _add_image_bands(
+        _add_image_bands(_add_image_bands(ndvi, bsi), ndwi),
+        change,
+    )
+
+
+def _bare_soil_index_image(image: dict[str, Any]) -> dict[str, Any]:
+    swir_red = _fn(
+        "Image.add",
+        {
+            "image1": _select_image_bands(image, ["B11"]),
+            "image2": _select_image_bands(image, ["B4"]),
+        },
+    )
+    nir_blue = _fn(
+        "Image.add",
+        {
+            "image1": _select_image_bands(image, ["B8"]),
+            "image2": _select_image_bands(image, ["B2"]),
+        },
+    )
+    return _rename_image(
+        _fn(
+            "Image.divide",
+            {
+                "image1": _fn(
+                    "Image.subtract",
+                    {"image1": swir_red, "image2": nir_blue},
+                ),
+                "image2": _fn(
+                    "Image.add",
+                    {"image1": swir_red, "image2": nir_blue},
+                ),
+            },
+        ),
+        ["bsi"],
+    )
+
+
+def _dynamic_world_route_feature_image(
+    dataset_id: str,
+    *,
+    window: GeeFetchWindow,
+) -> dict[str, Any]:
+    image = _fn(
+        "reduce.median",
+        {"collection": _collection_filtered_by_date(dataset_id, window)},
+    )
+    return _select_image_bands(
+        image,
+        ["trees", "shrub_and_scrub", "bare"],
+        [
+            "dynamic_world_trees",
+            "dynamic_world_shrub_and_scrub",
+            "dynamic_world_bare",
+        ],
+    )
+
+
+def _sentinel1_route_feature_image(
+    dataset_id: str,
+    *,
+    before_window: GeeFetchWindow,
+    after_window: GeeFetchWindow,
+) -> dict[str, Any]:
+    before_collection = _sentinel1_vv_collection(
+        _collection_filtered_by_date(dataset_id, before_window)
+    )
+    after_collection = _sentinel1_vv_collection(
+        _collection_filtered_by_date(dataset_id, after_window)
+    )
+    before = _select_image_bands(
+        _fn(
+            "reduce.median",
+            {"collection": before_collection},
+        ),
+        ["VV"],
+    )
+    after = _select_image_bands(
+        _fn(
+            "reduce.median",
+            {"collection": after_collection},
+        ),
+        ["VV"],
+    )
+    return _rename_image(
+        _fn("Image.subtract", {"image1": after, "image2": before}),
+        ["sentinel1_before_after_backscatter_anomaly_db"],
+    )
+
+
+def _sentinel1_vv_collection(collection: dict[str, Any]) -> dict[str, Any]:
+    with_vv = _fn(
+        "Collection.filter",
+        {
+            "collection": collection,
+            "filter": _fn(
+                "Filter.listContains",
+                {
+                    "leftField": _const("transmitterReceiverPolarisation"),
+                    "rightValue": _const("VV"),
+                },
+            ),
+        },
+    )
+    return _fn(
+        "Collection.filter",
+        {
+            "collection": with_vv,
+            "filter": _fn(
+                "Filter.equals",
+                {
+                    "leftField": _const("instrumentMode"),
+                    "rightValue": _const("IW"),
+                },
+            ),
+        },
+    )
+
+
+def _rainfall_route_feature_image(
+    *,
+    gpm_id: str,
+    gpm_window: GeeFetchWindow,
+    chirps_id: str,
+    chirps_window: GeeFetchWindow,
+    chirps_baseline_window: GeeFetchWindow,
+) -> dict[str, Any]:
+    gpm_sum = _select_image_bands(
+        _fn(
+            "reduce.sum",
+            {"collection": _collection_filtered_by_date(gpm_id, gpm_window)},
+        ),
+        ["precipitation"],
+    )
+    gpm_mm = _rename_image(
+        _fn(
+            "Image.multiply",
+            {
+                "image1": gpm_sum,
+                "image2": _fn("Image.constant", {"value": _const(0.5)}),
+            },
+        ),
+        ["gpm_recent_rainfall_mm"],
+    )
+    chirps_recent = _select_image_bands(
+        _fn(
+            "reduce.sum",
+            {"collection": _collection_filtered_by_date(chirps_id, chirps_window)},
+        ),
+        ["precipitation"],
+    )
+    chirps_baseline = _select_image_bands(
+        _fn(
+            "reduce.sum",
+            {
+                "collection": _collection_filtered_by_date(
+                    chirps_id,
+                    chirps_baseline_window,
+                )
+            },
+        ),
+        ["precipitation"],
+    )
+    chirps_anomaly = _rename_image(
+        _fn(
+            "Image.divide",
+            {
+                "image1": _fn(
+                    "Image.subtract",
+                    {"image1": chirps_recent, "image2": chirps_baseline},
+                ),
+                "image2": chirps_baseline,
+            },
+        ),
+        ["chirps_rainfall_anomaly"],
+    )
+    return _add_image_bands(gpm_mm, chirps_anomaly)
+
+
+def _reduce_route_segments_expression(
+    *,
+    image: dict[str, Any],
+    collection: dict[str, Any],
+    scale_m: int,
+) -> dict[str, Any]:
+    return _expression_graph(
+        _fn(
+            "Image.reduceRegions",
+            {
+                "image": image,
+                "collection": collection,
+                "reducer": _fn("Reducer.mean", {}),
+                "scale": _const(scale_m),
+                "tileScale": _const(2),
+                "maxPixelsPerRegion": _const(10000000),
+            },
         )
     )
 
 
-def _is_route_feature_echo_manifest(payload: Mapping[str, Any]) -> bool:
-    return (
-        payload.get("job_kind") == "scout_gee_route_feature_package"
-        and payload.get("expected_output") == "segment_features"
-        and not isinstance(payload.get("segment_features"), list)
-        and isinstance(payload.get("segments"), list)
+def _select_image_bands(
+    image: dict[str, Any],
+    bands: list[str],
+    names: list[str] | None = None,
+) -> dict[str, Any]:
+    arguments: dict[str, Any] = {
+        "input": image,
+        "bandSelectors": _const(bands),
+    }
+    if names is not None:
+        arguments["newNames"] = _const(names)
+    return _fn("Image.select", arguments)
+
+
+def _rename_image(image: dict[str, Any], names: list[str]) -> dict[str, Any]:
+    return _fn("Image.rename", {"input": image, "names": _const(names)})
+
+
+def _add_image_bands(
+    destination: dict[str, Any],
+    source: dict[str, Any],
+) -> dict[str, Any]:
+    return _fn(
+        "Image.addBands",
+        {
+            "dstImg": destination,
+            "srcImg": source,
+            "overwrite": _const(True),
+        },
     )
 
 
-def _route_feature_echo_manifest_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        "job_kind": payload.get("job_kind"),
-        "job_version": payload.get("job_version"),
-        "expected_output": payload.get("expected_output"),
-        "input_segment_count": len(payload.get("segments") or []),
-        "dataset_count": len((payload.get("dataset_config") or {}).get("datasets") or [])
-        if isinstance(payload.get("dataset_config"), Mapping)
-        else 0,
-    }
+def _filter_collection_less_than(
+    collection: dict[str, Any],
+    *,
+    field: str,
+    value: float,
+) -> dict[str, Any]:
+    return _fn(
+        "Collection.filter",
+        {
+            "collection": collection,
+            "filter": _fn(
+                "Filter.lessThan",
+                {
+                    "leftField": _const(field),
+                    "rightValue": _const(value),
+                },
+            ),
+        },
+    )
+
+
+def _array_value(values: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"arrayValue": {"values": values}}
+
+
+def _window_from_route_feature_range(
+    value: Any,
+    *,
+    prepared_at: str,
+    fallback_days: int,
+) -> GeeFetchWindow:
+    if isinstance(value, Mapping) and value.get("start") and value.get("end"):
+        return GeeFetchWindow(start=str(value["start"]), end=str(value["end"]))
+    end = _parse_datetime(prepared_at)
+    return GeeFetchWindow(
+        start=(end - timedelta(days=fallback_days))
+        .isoformat()
+        .replace("+00:00", "Z"),
+        end=end.isoformat().replace("+00:00", "Z"),
+    )
+
+
+def _preceding_window(window: GeeFetchWindow) -> GeeFetchWindow:
+    start = _parse_datetime(window.start)
+    end = _parse_datetime(window.end)
+    duration = max(end - start, timedelta(days=1))
+    return GeeFetchWindow(
+        start=(start - duration).isoformat().replace("+00:00", "Z"),
+        end=start.isoformat().replace("+00:00", "Z"),
+    )
+
+
+def _route_feature_dataset_id(
+    dataset_config: Mapping[str, Any],
+    key: str,
+    fallback: str,
+) -> str:
+    for dataset in dataset_config.get("datasets", []):
+        if not isinstance(dataset, Mapping):
+            continue
+        if str(dataset.get("key") or "") == key and dataset.get("dataset_id"):
+            return str(dataset["dataset_id"])
+    return fallback
 
 
 def _route_feature_raw_failure_summary(raw_summary: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -2292,7 +3053,23 @@ def _segment_metric_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
         "dynamic_world",
         "landcover_probabilities",
     )
+    if not dynamic_world:
+        dynamic_world = {
+            "trees": _first_number(raw, "dynamic_world_trees"),
+            "shrub_and_scrub": _first_number(
+                raw,
+                "dynamic_world_shrub_and_scrub",
+            ),
+            "bare": _first_number(raw, "dynamic_world_bare"),
+        }
     sentinel2 = _nested_mapping(raw, "sentinel2_indices", "sentinel2", "s2")
+    if not sentinel2:
+        sentinel2 = {
+            "ndvi": _first_number(raw, "ndvi"),
+            "bsi": _first_number(raw, "bsi", "bare_soil_index"),
+            "ndwi": _first_number(raw, "ndwi"),
+            "nbr": _first_number(raw, "nbr"),
+        }
     return {
         "elevation_m": _first_number(raw, "elevation_m", "elevation"),
         "slope_deg": _first_number(raw, "slope_deg", "slope_degrees", "slope"),
