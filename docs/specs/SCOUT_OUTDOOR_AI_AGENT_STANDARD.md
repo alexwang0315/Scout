@@ -676,6 +676,8 @@ route_architecture_intelligence
 ├── architecture_summary
 ├── route_spine
 ├── crowd_axis  # compatibility field; status must retain golden_route_scope
+├── golden_route_elevation_profile
+│   └── samples[]  # route_distance_m + elevation envelope; no coordinates/time
 ├── segment_demand_vectors[]
 ├── checkpoint_passage_timing
 │   └── nodes[]  # every CP/MCP; min/max/average/mode_5min + named_places
@@ -705,6 +707,21 @@ privacy.precise_activity_timestamps_embedded=false
 
 Projection 只包含聚合路段指標，不嵌入 raw GPX、raw health payload、精確活動
 timestamps 或 home/work traces。
+
+Golden GPX 高度剖面是 Architecture 的共同顯示軸：
+
+- `golden_route_elevation_profile` 必須由 workspace golden GPX 產生，保留
+  `source_provider`、project-relative `source_path` 與 `sha256`，但 sample 只能
+  包含 route distance、route progress、代表/最小/最大海拔及聚合 trackpoint
+  數量；不得包含座標、精確 timestamps 或 raw GPX；
+- 若 historical mobility/risk/pressure 來源的 route-distance 長度與 golden GPX
+  相差超過 2%，所有來源距離必須原樣留在 `source_*_distance_m`，Dashboard
+  顯示值則依 route progress deterministic 投影到 golden GPX 的實體距離；
+- `route_axis_transform` 必須揭露 source distance、golden distance、
+  `source_to_golden_scale` 與 transform status，不能把進度投影後的數值冒充
+  原始量測距離；
+- 高度與 Architecture lanes 的疊合只供 pretrip 結構比較，不是個人耗能、
+  生理壓力、完成機率或 runtime safety truth。
 
 #### 9.6.1 Preparation / Freshness Contract
 

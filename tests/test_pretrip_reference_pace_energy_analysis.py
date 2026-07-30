@@ -208,6 +208,63 @@ def test_reference_pace_energy_analysis_rejects_fixed_interval_assumption_and_bu
     assert "2026-01-01T" not in serialized
 
 
+def test_reference_analysis_emits_coordinate_free_golden_route_elevation_profile(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_workspace(tmp_path)
+
+    report, _ = build_reference_pace_energy_analysis(
+        project_root,
+        generated_at="2026-07-17T00:00:00+00:00",
+        route_bin_m=250.0,
+        min_tracks_for_guidance=3,
+    )
+
+    profile = report["golden_route_elevation_profile"]
+    assert profile["artifact_kind"] == "pretrip_golden_route_elevation_profile"
+    assert profile["schema_version"] == "golden_route_elevation_profile.v0"
+    assert profile["status"] == "available"
+    assert profile["source_provider"] == "workspace_golden_gpx"
+    assert profile["source_path"].endswith(
+        "normalized/routes/filtered/primary.demo.speed_filtered.gpx"
+    )
+    assert len(profile["sha256"]) == 64
+    assert 550.0 < profile["distance_m"] < 650.0
+    assert profile["minimum_elevation_m"] == 1000.0
+    assert profile["maximum_elevation_m"] == 1048.0
+    assert profile["source_trackpoint_count"] == 13
+    assert profile["elevation_trackpoint_count"] == 13
+    assert profile["sample_count"] == len(profile["samples"])
+    assert profile["sample_count"] <= 800
+    assert profile["samples"][0]["route_distance_m"] == 0.0
+    assert profile["samples"][-1]["route_progress_ratio"] == 1.0
+    assert all(
+        set(sample)
+        == {
+            "route_distance_m",
+            "route_progress_ratio",
+            "elevation_m",
+            "minimum_elevation_m",
+            "maximum_elevation_m",
+            "source_trackpoint_count",
+        }
+        for sample in profile["samples"]
+    )
+    assert profile["privacy"] == {
+        "coordinates_embedded": False,
+        "precise_timestamps_embedded": False,
+        "raw_gpx_embedded": False,
+        "source_original_path_embedded": False,
+    }
+    assert profile["boundary"]["candidate_only"] is True
+    assert profile["boundary"]["runtime_safety_truth"] is False
+    serialized = json.dumps(profile, ensure_ascii=False)
+    assert "lat" not in serialized
+    assert "lon" not in serialized
+    assert "<trkpt" not in serialized
+    assert "2026-01-01T" not in serialized
+
+
 def test_reference_pace_energy_writer_emits_dashboard_ready_artifacts(tmp_path: Path) -> None:
     project_root = _write_workspace(tmp_path)
 

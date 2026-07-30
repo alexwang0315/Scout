@@ -59,13 +59,16 @@ def build_route_architecture_intelligence(
         if isinstance(reference_value.get("crowd_axis"), Mapping)
         else {}
     )
+    golden_route_elevation_profile = _golden_route_elevation_profile_projection(
+        reference_value.get("golden_route_elevation_profile")
+    )
 
     raw_bins = [
         dict(item)
         for item in reference_value.get("route_bins", [])
         if isinstance(item, Mapping)
     ]
-    vectors = _demand_vectors(
+    source_vectors = _demand_vectors(
         raw_bins,
         source_provider=str(
             reference_value.get("source_provider")
@@ -79,14 +82,37 @@ def build_route_architecture_intelligence(
         source_sha256=str(reference_value.get("sha256") or ""),
         crowd_axis=crowd_axis,
     )
-    route_distance_m = _route_distance(route_value, vectors, crowd_axis=crowd_axis)
     source_route_distance_m = (
         _number(crowd_axis.get("source_route_distance_m"))
         or _number(route_value.get("distance_m"))
-        or route_distance_m
+        or max(
+            (
+                _number(item.get("source_end_distance_m"))
+                or _number(item.get("end_distance_m"))
+                or 0.0
+                for item in source_vectors
+            ),
+            default=0.0,
+        )
+    )
+    route_axis_transform = _golden_route_axis_transform(
+        source_route_distance_m=source_route_distance_m,
+        golden_route_elevation_profile=golden_route_elevation_profile,
+    )
+    vectors = _normalize_vectors_to_golden_axis(
+        source_vectors,
+        route_axis_transform=route_axis_transform,
+    )
+    route_distance_m = (
+        _number(route_axis_transform.get("golden_distance_m"))
+        or _route_distance(route_value, vectors, crowd_axis=crowd_axis)
     )
     crowd_analysis_origin_m = 0.0
-    route_axis_basis = "golden_route_scope"
+    route_axis_basis = (
+        "golden_gpx_distance"
+        if route_axis_transform.get("status") in {"aligned", "progress_normalized"}
+        else "golden_route_scope"
+    )
     architecture_available = bool(normalized_value)
     mission_graph_available = bool(mission_graph_value)
     candidate_graph_available = bool(candidate_graph_value)
@@ -178,6 +204,7 @@ def build_route_architecture_intelligence(
             "source_route_distance_m": round(source_route_distance_m, 3),
             "crowd_analysis_origin_m": round(crowd_analysis_origin_m, 3),
             "route_axis_basis": route_axis_basis,
+            "route_axis_transform": route_axis_transform,
             "route_axis_requires_human_review": bool(
                 False
             ),
@@ -195,6 +222,7 @@ def build_route_architecture_intelligence(
             "source_distance_m": round(source_route_distance_m, 3),
             "analysis_origin_m": round(crowd_analysis_origin_m, 3),
             "axis_basis": route_axis_basis,
+            "axis_transform": route_axis_transform,
             "axis_requires_human_review": bool(
                 False
             ),
@@ -202,6 +230,7 @@ def build_route_architecture_intelligence(
                 checkpoint_values,
                 route_distance_m,
                 distance_origin_m=crowd_analysis_origin_m,
+                distance_scale=_route_axis_scale(route_axis_transform),
                 source_ref=(
                     source_ref_values.get("checkpoints")
                     or "candidates/checkpoints.json"
@@ -215,9 +244,15 @@ def build_route_architecture_intelligence(
         "crowd_axis": {
             **crowd_axis,
             "status": "golden_route_axis_retained",
-            "route_axis_basis": "golden_route_scope",
+            "route_axis_basis": route_axis_basis,
             "analysis_origin_m": 0.0,
             "analysis_distance_m": round(route_distance_m, 3),
+            "source_analysis_distance_m": round(
+                _number(crowd_axis.get("analysis_distance_m"))
+                or source_route_distance_m,
+                3,
+            ),
+            "axis_transform": route_axis_transform,
             "axis_rebased": False,
             "leading_span_m": 0.0,
             "leading_span_interpretability": "not_applicable",
@@ -227,10 +262,15 @@ def build_route_architecture_intelligence(
             "candidate_only": True,
             "runtime_safety_truth": False,
         },
+        "golden_route_elevation_profile": {
+            **golden_route_elevation_profile,
+            "axis_alignment": route_axis_transform,
+        },
         "segment_demand_vectors": vectors,
         "checkpoint_passage_timing": _checkpoint_passage_timing_projection(
             passage_timing_value,
             route_distance_m=route_distance_m,
+            distance_scale=_route_axis_scale(route_axis_transform),
             default_source_ref=reference_source_ref,
         ),
         "checkpoint_graph": _checkpoint_graph(
@@ -281,6 +321,8 @@ def build_route_architecture_intelligence(
             "pace_variability": "Relative spread between historical conservative and fast envelopes.",
             "composite_pressure_index": "Candidate visualization index, not a difficulty grade or success probability.",
             "route_axis": "Golden-route start-to-finish scope; crowd coverage changes confidence, never the axis origin or extent.",
+            "golden_route_elevation": "Coordinate-free golden GPX elevation profile on the shared Architecture distance axis.",
+            "route_axis_transform": "Source metric distances are preserved, then normalized by route progress when the source axis differs from golden GPX distance.",
             "checkpoint_passage_duration": "Historical aggregate duration for a fixed 500 m route window centered on each CP/MCP; mode is rounded to 5-minute buckets.",
         },
         "limitations": [
@@ -289,6 +331,7 @@ def build_route_architecture_intelligence(
             "Candidate topology can describe route structure, but reversibility and alternatives remain unverified without reviewed architecture and mission graph evidence.",
             "Weather, physiologic state, darkness, and environment threats remain separate decision dimensions.",
             "Sparse crowd coverage lowers evidence quality for affected bins; it never rebases or truncates the golden-route scope.",
+            "When source route-distance products disagree with golden GPX length, Architecture compares them by normalized route progress and preserves every original source distance.",
             "CP/MCP passage timing describes historical route demand and does not predict personal completion or runtime safety.",
         ],
         "privacy": {
@@ -310,6 +353,225 @@ def build_route_architecture_intelligence(
     }
     payload["sha256"] = _payload_sha256(payload)
     return payload
+
+
+def _golden_route_elevation_profile_projection(value: Any) -> dict[str, Any]:
+    profile = dict(value) if isinstance(value, Mapping) else {}
+    samples = []
+    for raw in profile.get("samples", []):
+        if not isinstance(raw, Mapping):
+            continue
+        distance_m = _number(raw.get("route_distance_m"))
+        elevation_m = _number(raw.get("elevation_m"))
+        if distance_m is None or elevation_m is None:
+            continue
+        samples.append(
+            {
+                "route_distance_m": round(max(0.0, distance_m), 3),
+                "route_progress_ratio": round(
+                    _clamp(
+                        _number(raw.get("route_progress_ratio")) or 0.0,
+                        0.0,
+                        1.0,
+                    ),
+                    6,
+                ),
+                "elevation_m": round(elevation_m, 2),
+                "minimum_elevation_m": _rounded(
+                    _number(raw.get("minimum_elevation_m"))
+                ),
+                "maximum_elevation_m": _rounded(
+                    _number(raw.get("maximum_elevation_m"))
+                ),
+                "source_trackpoint_count": max(
+                    0,
+                    int(raw.get("source_trackpoint_count") or 0),
+                ),
+            }
+        )
+    samples.sort(key=lambda item: item["route_distance_m"])
+
+    data_quality = (
+        dict(profile.get("data_quality"))
+        if isinstance(profile.get("data_quality"), Mapping)
+        else {}
+    )
+    status = (
+        "available"
+        if profile.get("status") == "available" and samples
+        else str(profile.get("status") or "missing")
+    )
+    return {
+        "artifact_kind": str(
+            profile.get("artifact_kind")
+            or "pretrip_golden_route_elevation_profile"
+        ),
+        "schema_version": str(
+            profile.get("schema_version")
+            or "golden_route_elevation_profile.v0"
+        ),
+        "status": status,
+        "source_provider": str(
+            profile.get("source_provider") or "workspace_golden_gpx"
+        ),
+        "source_path": (
+            str(profile.get("source_path"))
+            if profile.get("source_path")
+            else None
+        ),
+        "source_kind": str(profile.get("source_kind") or "unknown"),
+        "sha256": str(profile.get("sha256") or ""),
+        "distance_m": _rounded(_number(profile.get("distance_m"))),
+        "minimum_elevation_m": _rounded(
+            _number(profile.get("minimum_elevation_m"))
+        ),
+        "maximum_elevation_m": _rounded(
+            _number(profile.get("maximum_elevation_m"))
+        ),
+        "source_trackpoint_count": max(
+            0,
+            int(profile.get("source_trackpoint_count") or 0),
+        ),
+        "elevation_trackpoint_count": max(
+            0,
+            int(profile.get("elevation_trackpoint_count") or 0),
+        ),
+        "sample_count": len(samples),
+        "samples": samples,
+        "data_quality": {
+            "status": str(data_quality.get("status") or "unavailable"),
+            "elevation_coverage": _rounded(
+                _number(data_quality.get("elevation_coverage"))
+            ),
+            "track_segment_count": max(
+                0,
+                int(data_quality.get("track_segment_count") or 0),
+            ),
+            "sampling_policy": str(
+                data_quality.get("sampling_policy")
+                or "distance_bucketed_coordinate_free_profile"
+            ),
+        },
+        "privacy": {
+            "coordinates_embedded": False,
+            "precise_timestamps_embedded": False,
+            "raw_gpx_embedded": False,
+            "source_original_path_embedded": False,
+        },
+        "boundary": {
+            "candidate_only": True,
+            "medical_diagnosis": False,
+            "runtime_safety_truth": False,
+            "phase1_runtime_safety_truth": False,
+            "safety_api_called": False,
+        },
+    }
+
+
+def _golden_route_axis_transform(
+    *,
+    source_route_distance_m: float,
+    golden_route_elevation_profile: Mapping[str, Any],
+) -> dict[str, Any]:
+    source_distance_m = max(0.0, float(source_route_distance_m))
+    golden_distance_m = _number(
+        golden_route_elevation_profile.get("distance_m")
+    )
+    profile_available = (
+        golden_route_elevation_profile.get("status") == "available"
+        and golden_distance_m is not None
+        and golden_distance_m > 0.0
+    )
+    if not profile_available:
+        return {
+            "status": "unavailable",
+            "source_distance_m": round(source_distance_m, 3),
+            "golden_distance_m": None,
+            "source_to_golden_scale": 1.0,
+            "source_distances_preserved": True,
+        }
+
+    safe_golden_distance_m = float(golden_distance_m)
+    if source_distance_m <= 0.0:
+        return {
+            "status": "golden_only",
+            "source_distance_m": 0.0,
+            "golden_distance_m": round(safe_golden_distance_m, 3),
+            "source_to_golden_scale": 1.0,
+            "source_distances_preserved": True,
+        }
+
+    scale = safe_golden_distance_m / source_distance_m
+    relative_gap = abs(safe_golden_distance_m - source_distance_m) / max(
+        safe_golden_distance_m,
+        source_distance_m,
+    )
+    return {
+        "status": "aligned" if relative_gap <= 0.02 else "progress_normalized",
+        "source_distance_m": round(source_distance_m, 3),
+        "golden_distance_m": round(safe_golden_distance_m, 3),
+        "source_to_golden_scale": round(scale, 6),
+        "source_distances_preserved": True,
+    }
+
+
+def _normalize_vectors_to_golden_axis(
+    vectors: Sequence[Mapping[str, Any]],
+    *,
+    route_axis_transform: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    scale = _route_axis_scale(route_axis_transform)
+    golden_distance_m = _number(route_axis_transform.get("golden_distance_m"))
+    normalized = []
+    for raw in vectors:
+        source_start_m = (
+            _number(raw.get("source_start_distance_m"))
+            if raw.get("source_start_distance_m") is not None
+            else _number(raw.get("start_distance_m"))
+        ) or 0.0
+        source_end_m = (
+            _number(raw.get("source_end_distance_m"))
+            if raw.get("source_end_distance_m") is not None
+            else _number(raw.get("end_distance_m"))
+        ) or source_start_m
+        start_m = max(0.0, source_start_m * scale)
+        end_m = max(start_m, source_end_m * scale)
+        midpoint_m = (start_m + end_m) / 2.0
+        normalized.append(
+            {
+                **dict(raw),
+                "start_distance_m": round(start_m, 3),
+                "end_distance_m": round(end_m, 3),
+                "source_start_distance_m": round(source_start_m, 3),
+                "source_end_distance_m": round(source_end_m, 3),
+                "distance_label": _distance_range_label(start_m, end_m),
+                "route_progress": (
+                    round(
+                        _clamp(midpoint_m / golden_distance_m, 0.0, 1.0),
+                        6,
+                    )
+                    if golden_distance_m
+                    else None
+                ),
+                "axis_transform_status": str(
+                    route_axis_transform.get("status") or "unavailable"
+                ),
+            }
+        )
+    return normalized
+
+
+def _route_axis_scale(route_axis_transform: Mapping[str, Any]) -> float:
+    source_distance_m = _number(route_axis_transform.get("source_distance_m"))
+    golden_distance_m = _number(route_axis_transform.get("golden_distance_m"))
+    if (
+        source_distance_m is not None
+        and source_distance_m > 0.0
+        and golden_distance_m is not None
+        and golden_distance_m > 0.0
+    ):
+        return golden_distance_m / source_distance_m
+    return _number(route_axis_transform.get("source_to_golden_scale")) or 1.0
 
 
 def _demand_vectors(
@@ -456,6 +718,7 @@ def _route_spine_nodes(
     route_distance_m: float,
     *,
     distance_origin_m: float = 0.0,
+    distance_scale: float = 1.0,
     source_ref: str,
 ) -> list[dict[str, Any]]:
     nodes = []
@@ -466,7 +729,9 @@ def _route_spine_nodes(
         node_id = str(item.get("candidate_id") or item.get("checkpoint_id") or f"cp.{index + 1}")
         checkpoint_type = str(item.get("checkpoint_type") or "checkpoint")
         source_distance_m = distance_m
-        analysis_distance_m = source_distance_m - distance_origin_m
+        analysis_distance_m = (
+            source_distance_m - distance_origin_m
+        ) * distance_scale
         if analysis_distance_m < 0:
             continue
         node = {
@@ -502,6 +767,7 @@ def _checkpoint_passage_timing_projection(
     value: Mapping[str, Any],
     *,
     route_distance_m: float,
+    distance_scale: float = 1.0,
     default_source_ref: str,
 ) -> dict[str, Any]:
     nodes = []
@@ -526,6 +792,16 @@ def _checkpoint_passage_timing_projection(
             for item in duration.get("mode_5min_tied_buckets", [])
             if isinstance(item, (int, float)) and not isinstance(item, bool)
         ]
+        analysis_distance_m = distance_m * distance_scale
+        source_window = {
+            "start_distance_m": _rounded(
+                _number(window.get("start_distance_m"))
+            ),
+            "end_distance_m": _rounded(
+                _number(window.get("end_distance_m"))
+            ),
+            "distance_m": _rounded(_number(window.get("distance_m"))),
+        }
         nodes.append(
             {
                 "node_id": str(raw.get("node_id") or f"passage.{len(nodes) + 1}"),
@@ -541,12 +817,17 @@ def _checkpoint_passage_timing_projection(
                 "checkpoint_type": str(
                     raw.get("checkpoint_type") or "route_progress"
                 ),
+                "source_route_distance_m": round(distance_m, 3),
                 "route_distance_m": round(
-                    _clamp(distance_m, 0.0, route_distance_m),
+                    _clamp(analysis_distance_m, 0.0, route_distance_m),
                     3,
                 ),
                 "route_progress": round(
-                    _clamp(distance_m / route_distance_m, 0.0, 1.0)
+                    _clamp(
+                        analysis_distance_m / route_distance_m,
+                        0.0,
+                        1.0,
+                    )
                     if route_distance_m
                     else 0.0,
                     5,
@@ -554,16 +835,28 @@ def _checkpoint_passage_timing_projection(
                 "passage_window": {
                     "start_distance_m": _rounded(
                         _number(window.get("start_distance_m"))
+                        * distance_scale
+                        if _number(window.get("start_distance_m")) is not None
+                        else None
                     ),
                     "end_distance_m": _rounded(
                         _number(window.get("end_distance_m"))
+                        * distance_scale
+                        if _number(window.get("end_distance_m")) is not None
+                        else None
                     ),
-                    "distance_m": _rounded(_number(window.get("distance_m"))),
+                    "distance_m": _rounded(
+                        _number(window.get("distance_m"))
+                        * distance_scale
+                        if _number(window.get("distance_m")) is not None
+                        else None
+                    ),
                     "semantics": str(
                         window.get("semantics")
                         or "fixed_500m_route_window_centered_on_cp_or_mcp"
                     ),
                 },
+                "source_passage_window": source_window,
                 "duration_minutes": {
                     "min": _rounded(_number(duration.get("min"))),
                     "max": _rounded(_number(duration.get("max"))),
