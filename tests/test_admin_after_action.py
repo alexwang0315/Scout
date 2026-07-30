@@ -720,6 +720,136 @@ class AdminAfterActionTests(unittest.TestCase):
             True,
         )
 
+    def test_completed_trip_recordings_are_scoped_to_requested_workspace(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_root = Path(temp_dir) / "workspaces"
+            project_id = "dongqing_project"
+            project_root = workspace_root / project_id
+            (project_root / "candidates").mkdir(parents=True)
+            recorded = (
+                project_root
+                / "post_analysis"
+                / "completed_trips"
+                / "recorded"
+                / "primary_user"
+            )
+            recorded.mkdir(parents=True)
+            completed_gpx = recorded / "completed.gpx"
+            completed_gpx.write_text(
+                """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="scout-test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Dongqing completed</name><trkseg>
+    <trkpt lat="23.000" lon="121.000"><ele>100</ele><time>2026-01-01T00:00:00Z</time></trkpt>
+    <trkpt lat="23.010" lon="121.000"><ele>150</ele><time>2026-01-01T00:30:00Z</time></trkpt>
+    <trkpt lat="23.020" lon="121.000"><ele>120</ele><time>2026-01-01T01:00:00Z</time></trkpt>
+  </trkseg></trk>
+</gpx>
+""",
+                encoding="utf-8",
+            )
+            checkpoints = [
+                {
+                    "candidate_id": "cp.start",
+                    "label": "Start",
+                    "lat": 23.000,
+                    "lon": 121.000,
+                    "arrival_radius_m": 50,
+                },
+                {
+                    "candidate_id": "cp.finish",
+                    "label": "Finish",
+                    "lat": 23.020,
+                    "lon": 121.000,
+                    "arrival_radius_m": 50,
+                },
+            ]
+            segments = [
+                {
+                    "candidate_id": "seg.001",
+                    "from_candidate_id": "cp.start",
+                    "to_candidate_id": "cp.finish",
+                    "distance_m": 2224.0,
+                }
+            ]
+            (project_root / "candidates" / "checkpoints.json").write_text(
+                json.dumps(checkpoints),
+                encoding="utf-8",
+            )
+            (project_root / "candidates" / "segments.json").write_text(
+                json.dumps(segments),
+                encoding="utf-8",
+            )
+            (project_root / "project.json").write_text(
+                json.dumps(
+                    {
+                        "project_id": project_id,
+                        "checkpoint_candidates_ref": "candidates/checkpoints.json",
+                        "segment_candidates_ref": "candidates/segments.json",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            client = TestClient(
+                create_admin_app(pretrip_workspace_root=workspace_root)
+            )
+            catalog_response = client.get(
+                "/admin/post-analysis/completed-trip-recordings",
+                params={"projectId": project_id},
+            )
+
+            self.assertEqual(catalog_response.status_code, 200)
+            catalog = catalog_response.json()
+            self.assertEqual(catalog["project_id"], project_id)
+            self.assertEqual(catalog["case_id"], project_id)
+            self.assertEqual(catalog["storage_scope"], "workspace")
+            self.assertEqual(catalog["recording_count"], 1)
+            self.assertEqual(
+                Path(catalog["recording_set_root"]).resolve(),
+                (
+                    project_root
+                    / "post_analysis"
+                    / "completed_trips"
+                    / "recorded"
+                ).resolve(),
+            )
+
+            recording_id = catalog["recordings"][0]["recording_id"]
+            selected = client.post(
+                f"/admin/post-analysis/completed-trip-recordings/{recording_id}/select",
+                params={"projectId": project_id},
+            )
+
+            self.assertEqual(selected.status_code, 200)
+            result = selected.json()
+            self.assertEqual(result["project_id"], project_id)
+            self.assertEqual(result["case_id"], project_id)
+            active_gpx = Path(result["paths"]["active_completed_track_gpx"])
+            self.assertTrue(active_gpx.is_file())
+            self.assertTrue(
+                active_gpx.resolve().is_relative_to(project_root.resolve())
+            )
+            self.assertTrue(
+                Path(result["paths"]["outputs_dir"])
+                .resolve()
+                .is_relative_to(project_root.resolve())
+            )
+            refreshed = client.get(
+                "/admin/post-analysis/completed-trip-recordings",
+                params={"projectId": project_id},
+            )
+            self.assertEqual(refreshed.status_code, 200)
+            refreshed_payload = refreshed.json()
+            self.assertEqual(
+                refreshed_payload["active_recording"]["recording_id"],
+                recording_id,
+            )
+            unsafe = client.get(
+                "/admin/post-analysis/completed-trip-recordings",
+                params={"projectId": "../dongqing_project"},
+            )
+            self.assertEqual(unsafe.status_code, 422)
+
     def test_admin_page_serves_presentation_layer(self):
         client = TestClient(create_admin_app())
 

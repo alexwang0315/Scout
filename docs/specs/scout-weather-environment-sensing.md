@@ -268,12 +268,15 @@ allow_network_fetch=true
 SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1
 ```
 
-It fetches metadata/images, keeps raw frames in
-`SCOUT_CWA_IMAGERY_CACHE_ROOT` outside the workspace, builds bounded display
-assets, georeferences them from registry metadata, samples the GPX route
-buffer, and estimates echo/cloud motion. Raspberry Pi and mobile profiles must
-not decode, resize, classify, sample, or motion-process these images. They may
-only consume the compact JSON packages and cache-only display assets.
+It fetches metadata/images, keeps raw frames in the project-owned
+`<workspace_root>/<project_id>/cache/cwa-weather-imagery`, builds bounded
+display assets, georeferences them from registry metadata, samples the GPX
+route buffer, and estimates echo/cloud motion. The root is derived from the
+selected project rather than a global environment setting, so retention,
+pruning, locks, and asset reads cannot cross workspace boundaries. Raspberry
+Pi and mobile profiles must not decode, resize, classify, sample, or
+motion-process these images. They may only consume the compact JSON packages
+and cache-only display assets.
 Dense GPX routes are sampled with a server-side route-segment spatial index;
 the worker must not perform a grid-cell by every-route-segment all-pairs scan.
 This preserves the bounded 160-pixel analysis grid while keeping recurring Mac

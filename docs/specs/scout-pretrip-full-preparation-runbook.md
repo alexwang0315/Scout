@@ -381,7 +381,6 @@ explicit-fetch approval flags:
 
 ```bash
 SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1 \
-SCOUT_CWA_IMAGERY_CACHE_ROOT=/tmp/scout-local-data/cwa-weather-imagery \
 PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m pretrip_layer_preparation \
   --project-id "$PROJECT_ID" \
   --workspace-root "$WORKSPACE_ROOT" \
@@ -399,7 +398,10 @@ Required checks:
   attestation; profile text alone never authorizes image-heavy work;
 - ARM and Raspberry Pi hosts fail closed even when a workstation profile is
   supplied;
-- raw image cache root is outside the project workspace and repository;
+- raw image cache root is fixed at
+  `<workspace_root>/<project_id>/cache/cwa-weather-imagery`; it is inside the
+  selected project workspace, outside the repository, and never shared with
+  another project id;
 - each image is capped at 8 MiB and 20 megapixels, each product is capped at 24
   evenly spaced frames across the requested window, and jobs are serialized
   with a retry cooldown;
@@ -434,8 +436,9 @@ schemaVersion=dashboardConnectedPreparation.v1
 
 The server coordinator loads the repository `.env` (or the explicitly selected
 `SCOUT_ENV_FILE`) without logging values, sets
-`SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1`, uses an external cache at
-`~/.scout/cache/cwa-weather-imagery` by default, and refreshes the
+`SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1`, derives the CWA imagery cache from the
+selected project as
+`<workspace_root>/<project_id>/cache/cwa-weather-imagery`, and refreshes the
 provider-backed Overpass/CWA/GEE layer subset with:
 
 ```text
@@ -456,19 +459,19 @@ Run the exact same connected path once from the terminal with:
 ```bash
 SCOUT_ENV_FILE=/Users/alexwang0315/scout-fusion/.env \
 SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1 \
-SCOUT_CWA_IMAGERY_CACHE_ROOT=/Users/alexwang0315/.scout/cache/cwa-weather-imagery \
 PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python -m dashboard_connected_preparation \
   --project-id "$PROJECT_ID" \
   --workspace-root "$WORKSPACE_ROOT" \
-  --repo-root /Users/alexwang0315/scout-fusion \
-  --cache-root /Users/alexwang0315/.scout/cache/cwa-weather-imagery
+  --repo-root /Users/alexwang0315/scout-fusion
 ```
 
 The redacted status may expose credential *names* and env-file paths, but never
 credential values. It reports `cwaApiRequestAttempted`, `externalApiCallsMade`,
 component statuses, next refresh time, and prepared artifact refs. Every run
-retains older observed frames in the bounded external cache so the real
-3/6/9/12-hour windows can grow over time without fabricated history.
+retains older observed frames in the bounded project-local cache so the real
+3/6/9/12-hour windows can grow over time without fabricated history. Cache
+retention, pruning, locks, and asset reads are scoped to that project; a
+refresh or cleanup for one workspace must not affect another workspace.
 While a run is queued or running, the three request-result booleans are `null`
 and `requestActivityState=in-progress`; the Dashboard renders this as
 `in progress`, not the misleading `false`. A completed run replaces them with
@@ -3209,5 +3212,159 @@ Chrome Timeline smoke: PASS (all requests 200; 0 console errors/warnings)
 Workspace/spec alignment: PARTIAL (2 unrelated existing Route Context gaps)
 pnpm lint / typecheck: PASS
 pnpm test: 15 passed, 2 existing docs-contract failures
+Runtime safety truth mutation: NO
+```
+
+## Run Log: 2026-07-29 東清八通關 From-Zero Preparation
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/dongqing_batongguan_historic_trail_scoutAI
+```
+
+This run exposed five ordering and verification details that must be part of
+future from-zero preparation:
+
+1. **Use a project-local imagery tile for the spec-alignment gate**
+   - `tools/verify_pretrip_workspace_spec_alignment.py` currently defaults to
+     `14/13708/7063`, which is a Chilai-specific tile. A different route can
+     therefore exercise `local_parent_cache_fallback` even when its own
+     prepared imagery is complete.
+   - Select one exact `z/x/y` member from the generated imagery plan or local
+     cache and pass it with `--imagery-tile`. For this workspace,
+     `14/13708/7096` verified as `local_cache` with no errors or warnings.
+
+2. **Collect explicit P0/P1 web evidence after the final layer run**
+   - The layer-preparation post-enrichment step can replace an earlier explicit
+     `web_case_evidence.json` with an empty planned-evidence artifact.
+   - Run the bounded P0/P1 collector after the final 23-layer preparation, then
+     regenerate Route Context, Boss, and Navigation outputs so their source
+     tiers and hashes refer to the retained evidence.
+
+3. **Require completed Overpass alignment after risk ribbon generation**
+   - An initial all-layer run can report
+     `skipped_missing_overpass_centerline` when route alignment is attempted
+     before the risk ribbon exists.
+   - Rerun alignment after the ribbon is durable, or perform a final complete
+     preparation pass. Acceptance requires a completed alignment artifact; a
+     skipped first pass is not a valid terminal state.
+
+4. **Keep CWA imagery cache inside the selected project workspace**
+   - A single global `SCOUT_CWA_IMAGERY_CACHE_ROOT` lets two Dashboard
+     workspaces share retention, lock, and same-relative-ref state. Refreshing
+     or pruning one route can therefore change what another route can render.
+   - The deterministic cache root is now
+     `<workspace_root>/<project_id>/cache/cwa-weather-imagery` for preparation
+     and cache-only Admin reads. Global cache configuration is not consulted.
+   - Existing global or legacy cache directories are not migrated or deleted
+     implicitly. Re-run Connected Preparation for the selected workspace, then
+     verify both the status `workspaceCacheRoot` and a real imagery asset GET.
+
+5. **Validate multi-track continuity before artifact gates**
+   - The golden GPX document order `航跡 523 → 524 → 527` creates a
+     `25,998.872 m` cross-track jump and the candidate `seg.026`.
+   - The continuous candidate order is `航跡 527 → 523 → 524`. Correct the
+     source ordering and rebuild every distance/order-dependent artifact before
+     accepting route identity.
+   - Layer-contract and spec-alignment passes prove consistency with the active
+     route identity; they do not prove that multi-track ordering is
+     geographically or historically correct.
+
+The structural preparation result was 23/23 preparation layers ready, and the
+repository/workspace 32-layer contract gates passed. The later continuity audit
+means this workspace remains candidate-only until the golden route is reordered
+and its dependent artifacts are rebuilt. The UI exposes 31 pre-trip layers
+because `completed-track` truthfully remains absent until an actual post-trip
+recording is imported.
+
+## Run Log: 2026-07-29 Reference Timing and Completed-Track Isolation Repair
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/dongqing_batongguan_historic_trail_scoutAI
+```
+
+Two inherited Chilai-Nanhua assumptions caused misleading results on a newly
+prepared workspace:
+
+1. **Reference timing must use the selected workspace route**
+   - Root cause: the timing producer always used the eight named
+     Chilai-Nanhua segments, so timed East Batongguan GPX files could not match
+     any segment. The rebuild wrapper also invoked timing before route/layer
+     enrichment was complete.
+   - Repair: derive ordered timing nodes from the workspace CP/MCP route
+     distances, retain route endpoints, sample long gaps at approximately
+     5 km, and run timing after layer and Route Architecture preparation.
+   - Time-quality gate: reject an entire source from timing aggregation when
+     more than 1% of adjacent timestamps inside its original track segments are
+     non-increasing. Preserve the raw source and report the rejection; never
+     rewrite or silently repair its timestamps.
+   - Current result: `18` route nodes, `17` adjacent segments, `10` usable
+     segments, and `20` aggregate timing measurements from `3` accepted timed
+     references. The golden route
+     `2021_03清朝越嶺_高興_p.gpx` remains the golden geometry source but is
+     excluded from timing because its non-increasing timestamp ratio is
+     `0.059724`, above the `0.01` gate.
+   - These counts reflect the pre-correction route identity and must be rebuilt
+     after the golden multi-track ordering is corrected.
+
+2. **Completed-track state must be workspace-local**
+   - Root cause: the completed-recording endpoint and output paths were fixed
+     to the Chilai-Nanhua case and a shared data root. A Dashboard opened on a
+     different project could therefore see or activate the wrong case.
+   - Repair: Dashboard requests now carry `projectId`; the API validates that
+     identifier against the configured workspace and uses these project-local
+     roots:
+
+     ```text
+     <project_root>/post_analysis/completed_trips/recorded
+     <project_root>/post_analysis/completed_trips/active
+     <project_root>/post_analysis/completed_trips/outputs
+     ```
+
+   - A planned, golden, or reference GPX must never be copied into this
+     lifecycle as a completed track. Until an actual post-trip recording is
+     placed under `recorded/<recording_id>/` and explicitly selected, the
+     truthful recording count remains zero and the completed Timeline
+     categories remain `not imported`.
+
+3. **CWA route identity must hash route geometry, not volatile artifact bytes**
+   - Root cause: `routeSha256` previously hashed the entire aligned-route JSON.
+     A semantically identical no-network rebuild changed `generated_at`, which
+     changed the raw file hash and incorrectly made current rainfall and
+     imagery evidence fail closed with `route identity mismatch`.
+   - Repair: hash the full ordered route coordinate sequence for
+     `routeSha256`. A coordinate change still changes identity, while timestamp
+     or formatting-only rewrites do not. Validation also accepts the current
+     raw artifact hash for existing pre-migration CWA evidence, so untouched
+     workspaces remain readable until their next connected refresh.
+   - Transition rule: refresh CWA evidence once with the geometry-hash
+     implementation, finish the complete no-network layer manifest, and verify
+     the compact Admin API again. Do not edit identity fields in stored CWA
+     artifacts by hand.
+
+4. **Verification and no-network receipts must describe the current run**
+   - Direct execution of
+     `tools/verify_pretrip_workspace_spec_alignment.py` must add the repository
+     root to its import path; otherwise the documented command can fail before
+     checking the workspace.
+   - A `no-network` layer manifest must not inherit old project-level provider
+     call flags from an earlier connected run. Its manifest-level
+     `network_calls_made` and `external_api_calls_made` values describe only
+     the current invocation.
+
+Focused regression evidence for this repair:
+
+```text
+Reference timing + workspace completed-track API + Dashboard contract:
+PASS (7 passed)
+CWA route identity: PASS (31 passed)
+Final focused regression set: PASS (40 passed)
+Workspace/spec alignment: PASS (0 errors, 0 warnings)
+Scout layer contract: PASS (repo 32/32; workspace 32/32)
+Live Dashboard/project/navigation/completed-recording endpoints: HTTP 200
+Original GPX/KML mutation: NO
 Runtime safety truth mutation: NO
 ```

@@ -141,6 +141,8 @@ UI v0.
 ```text
 pretrip/workspaces/{project_id}/
   project.json
+  cache/
+    cwa-weather-imagery/
   inbox/
     source_manifest.json
     gpx/
@@ -246,6 +248,13 @@ pretrip/workspaces/{project_id}/
     registry/
     traces/
 ```
+
+`cache/cwa-weather-imagery/` is project-local raw/provider cache state. The
+preparation worker and cache-only Admin imagery endpoints must derive this
+path from the validated project root; they must not select it from a global
+cache environment variable. Its frame retention, pruning, server-job lock,
+and relative asset refs are isolated from every other project workspace.
+Canonical compact CWA evidence remains under `outputs/environment/cwa/`.
 
 `project.json` is the anchor manifest. It should expose project-relative refs
 for canonical artifacts, schema versions, source provenance, candidate counts,

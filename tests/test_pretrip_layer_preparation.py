@@ -55,6 +55,40 @@ def test_layer_preparation_preview_is_metadata_only_and_no_write(
     assert "<trkpt" not in json.dumps(preview, ensure_ascii=False).lower()
 
 
+def test_no_network_manifest_does_not_inherit_historical_provider_calls(
+    tmp_path: Path,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project_path.write_text(
+        json.dumps(
+            {
+                **project,
+                "overpass_fetched_at": "2026-05-21T00:00:00+00:00",
+                "cwa_external_api_calls_made": True,
+                "gee_external_api_calls_made": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    preview = build_layer_preparation_preview(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("route", "segments", "checkpoints"),
+            network_mode="no-network",
+            allow_network_fetch=False,
+            prepared_at="2026-05-22T00:00:00+00:00",
+        )
+    )
+
+    assert preview["network_policy"]["network_calls_made"] is False
+    assert preview["network_policy"]["external_api_calls_made"] is False
+    assert preview["boundary"]["external_api_calls_made"] is False
+
+
 def test_same_run_overpass_alignment_precedes_cwa_preparation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -115,15 +115,68 @@ def test_route_identity_skips_missing_aligned_ref_and_loads_base_route(
     }
 
     identity, points = load_cwa_route_identity(tmp_path, project)
+    expected_geometry_sha256 = hashlib.sha256(
+        json.dumps(
+            [[23.0, 121.0], [23.1, 121.1]],
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
     assert identity == {
         "projectId": "current-project",
         "routeRef": BASE_REF,
-        "routeSha256": hashlib.sha256(route_path.read_bytes()).hexdigest(),
+        "routeSha256": expected_geometry_sha256,
         "routeBasis": "segment_display_geometry",
         "pointCount": 2,
     }
+    assert identity["routeSha256"] != hashlib.sha256(route_path.read_bytes()).hexdigest()
     assert points == [(23.0, 121.0), (23.1, 121.1)]
+
+
+def test_route_identity_is_stable_when_only_generation_metadata_changes(
+    tmp_path: Path,
+) -> None:
+    payload = _valid_payload()
+    payload["generated_at"] = "2026-07-29T08:00:00+00:00"
+    route_path = _write_payload(tmp_path, payload)
+    project = {
+        "project_id": "current-project",
+        "overpass_aligned_segment_display_geometry_ref": ALIGNED_REF,
+    }
+
+    first_identity, _points = load_cwa_route_identity(tmp_path, project)
+    first_raw_sha256 = hashlib.sha256(route_path.read_bytes()).hexdigest()
+
+    payload["generated_at"] = "2026-07-29T09:00:00+00:00"
+    _write_payload(tmp_path, payload)
+    second_identity, _points = load_cwa_route_identity(tmp_path, project)
+    second_raw_sha256 = hashlib.sha256(route_path.read_bytes()).hexdigest()
+
+    assert first_raw_sha256 != second_raw_sha256
+    assert first_identity["routeSha256"] == second_identity["routeSha256"]
+
+
+def test_route_identity_changes_when_route_geometry_changes(tmp_path: Path) -> None:
+    payload = _valid_payload()
+    _write_payload(tmp_path, payload)
+    project = {
+        "project_id": "current-project",
+        "overpass_aligned_segment_display_geometry_ref": ALIGNED_REF,
+    }
+
+    first_identity, _points = load_cwa_route_identity(tmp_path, project)
+    payload["segments"] = [
+        _valid_segment(
+            [
+                {"lat": 23.0, "lon": 121.0},
+                {"lat": 23.2, "lon": 121.2},
+            ]
+        )
+    ]
+    _write_payload(tmp_path, payload)
+    second_identity, _points = load_cwa_route_identity(tmp_path, project)
+
+    assert first_identity["routeSha256"] != second_identity["routeSha256"]
 
 
 @pytest.mark.parametrize("segments", [[], "not-a-segment-list"])
@@ -275,6 +328,21 @@ def test_artifact_route_identity_handles_legacy_verified_and_mismatch(
             tmp_path,
             project,
             identity,
+            artifact_label="projection",
+        )
+        == "verified"
+    )
+    legacy_raw_identity = {
+        **identity,
+        "routeSha256": hashlib.sha256(
+            (tmp_path / ALIGNED_REF).read_bytes()
+        ).hexdigest(),
+    }
+    assert (
+        validate_cwa_artifact_route_identity(
+            tmp_path,
+            project,
+            legacy_raw_identity,
             artifact_label="projection",
         )
         == "verified"

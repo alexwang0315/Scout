@@ -75,7 +75,7 @@ def load_cwa_route_identity(
         identity = {
             "projectId": project_id,
             "routeRef": normalized_ref,
-            "routeSha256": hashlib.sha256(raw).hexdigest(),
+            "routeSha256": _route_geometry_sha256(all_points),
             "routeBasis": route_basis,
             "pointCount": len(all_points),
         }
@@ -103,9 +103,16 @@ def validate_cwa_artifact_route_identity(
     if not isinstance(artifact_route_sha, str) or not artifact_route_sha:
         return "legacy_unverified"
     current_identity, _route_points = load_cwa_route_identity(project_root, project)
-    for key in ("projectId", "routeRef", "routeSha256", "routeBasis"):
+    for key in ("projectId", "routeRef", "routeBasis"):
         artifact_value = artifact.get(key)
         if artifact_value is not None and artifact_value != current_identity.get(key):
+            raise ValueError(f"{artifact_label} route identity mismatch")
+    if artifact_route_sha != current_identity["routeSha256"]:
+        legacy_raw_sha256 = _legacy_route_artifact_sha256(
+            project_root,
+            str(current_identity["routeRef"]),
+        )
+        if artifact_route_sha != legacy_raw_sha256:
             raise ValueError(f"{artifact_label} route identity mismatch")
     return "verified"
 
@@ -156,6 +163,29 @@ def _validate_route_artifact_identity(
             and segment_route_artifact_id != f"artifact.gpx.{project_id}"
         ):
             raise ValueError("CWA route segment project identity mismatch")
+
+
+def _route_geometry_sha256(points: list[tuple[float, float]]) -> str:
+    canonical_geometry = json.dumps(
+        [[lat, lon] for lat, lon in points],
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical_geometry).hexdigest()
+
+
+def _legacy_route_artifact_sha256(
+    project_root: Path | str,
+    route_ref: str,
+) -> str:
+    root = Path(project_root).expanduser().resolve()
+    path = _safe_project_ref(root, route_ref)
+    with path.open("rb") as handle:
+        raw = handle.read(MAX_ROUTE_ARTIFACT_BYTES + 1)
+    if len(raw) > MAX_ROUTE_ARTIFACT_BYTES:
+        raise ValueError("CWA route artifact exceeds size limit")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _pair_identity(

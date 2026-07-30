@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -42,34 +43,63 @@ ROUTE_TIME_ENTRIES_PATH = (
 )
 
 
+@dataclass(frozen=True)
+class CompletedTripContext:
+    project_id: str
+    case_id: str
+    route_family: str
+    storage_scope: str
+    reference_root: Path
+    recording_root: Path
+    inbox_dir: Path
+    active_dir: Path
+    outputs_dir: Path
+    pretrip_project_root: Path | None
+
+
 def list_completed_trip_recordings(
     *,
     data_root: Path,
     root: Path = ROOT,
+    project_id: str | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
-    recording_root = data_root / RECORDED_RELATIVE_DIR
-    inbox_dir = data_root / "post_analysis" / "inbox"
-    recordings = _scan_recordings(
+    context = _completed_trip_context(
         data_root=data_root,
-        roots=[recording_root],
+        root=root,
+        project_id=project_id,
+        project_root=project_root,
+    )
+    recordings = _scan_recordings(
+        data_root=context.reference_root,
+        roots=[context.recording_root],
         root=root,
     )
     if not recordings:
         recordings = _scan_recordings(
-            data_root=data_root,
-            roots=[inbox_dir],
+            data_root=context.reference_root,
+            roots=[context.inbox_dir],
             root=root,
         )
-    active = load_active_completed_trip_recording_projection(data_root=data_root, root=root)
+    active = load_active_completed_trip_recording_projection(
+        data_root=data_root,
+        root=root,
+        project_id=project_id,
+        project_root=project_root,
+    )
     return {
         "artifact_kind": "completed_trip_recording_set",
         "artifact_version": "completed_trip_recording_set.v1",
-        "case_id": CASE_ID,
-        "route_family": ROUTE_FAMILY,
+        "project_id": context.project_id,
+        "case_id": context.case_id,
+        "route_family": context.route_family,
+        "storage_scope": context.storage_scope,
         "recording_count": len(recordings),
-        "recording_set_root": str(recording_root),
-        "recording_set_root_exists": recording_root.exists(),
-        "recording_set_manifest_path": str(recording_root / "recording_set_manifest.json"),
+        "recording_set_root": str(context.recording_root),
+        "recording_set_root_exists": context.recording_root.exists(),
+        "recording_set_manifest_path": str(
+            context.recording_root / "recording_set_manifest.json"
+        ),
         "active_recording": active.get("recording") if active else None,
         "recordings": recordings,
         "boundary": _boundary(),
@@ -81,8 +111,21 @@ def select_completed_trip_recording_for_post_analysis(
     *,
     data_root: Path,
     root: Path = ROOT,
+    project_id: str | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
-    catalog = list_completed_trip_recordings(data_root=data_root, root=root)
+    context = _completed_trip_context(
+        data_root=data_root,
+        root=root,
+        project_id=project_id,
+        project_root=project_root,
+    )
+    catalog = list_completed_trip_recordings(
+        data_root=data_root,
+        root=root,
+        project_id=project_id,
+        project_root=project_root,
+    )
     recording = _find_recording(catalog, recording_id)
     if not recording.get("loadable", False):
         raise ValueError(f"completed trip recording is not loadable: {recording_id}")
@@ -91,12 +134,10 @@ def select_completed_trip_recording_for_post_analysis(
     if not source_gpx.exists():
         raise FileNotFoundError(f"completed trip GPX not found: {source_gpx}")
 
-    inbox_dir = data_root / "post_analysis" / "inbox"
-    active_dir = data_root / ACTIVE_RELATIVE_DIR
-    outputs_dir = data_root / OUTPUTS_RELATIVE_DIR / recording_id
-    inbox_dir.mkdir(parents=True, exist_ok=True)
-    active_dir.mkdir(parents=True, exist_ok=True)
-    active_gpx = inbox_dir / "latest_completed_trip.gpx"
+    context.inbox_dir.mkdir(parents=True, exist_ok=True)
+    context.active_dir.mkdir(parents=True, exist_ok=True)
+    outputs_dir = context.outputs_dir / recording_id
+    active_gpx = context.inbox_dir / "latest_completed_trip.gpx"
     if source_gpx.resolve() != active_gpx.resolve():
         shutil.copy2(source_gpx, active_gpx)
 
@@ -106,7 +147,8 @@ def select_completed_trip_recording_for_post_analysis(
     activated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     active_record = {
         "artifact_kind": "active_completed_trip_recording",
-        "case_id": CASE_ID,
+        "project_id": context.project_id,
+        "case_id": context.case_id,
         "recording": _public_recording(recording),
         "recording_set_manifest_path": catalog["recording_set_manifest_path"],
         "activated_at": activated_at,
@@ -116,23 +158,36 @@ def select_completed_trip_recording_for_post_analysis(
         "boundary": _boundary(),
         "mutation": _mutation(),
     }
-    _write_json(active_dir / "active_completed_trip_recording.json", active_record)
-    _write_json(inbox_dir / "latest_completed_trip_recording.json", active_record)
+    active_record_path = (
+        context.active_dir / "active_completed_trip_recording.json"
+    )
+    inbox_record_path = context.inbox_dir / "latest_completed_trip_recording.json"
+    _write_json(active_record_path, active_record)
+    _write_json(inbox_record_path, active_record)
 
+    capability_kwargs: dict[str, Any]
+    if context.pretrip_project_root is not None:
+        capability_kwargs = {
+            "pretrip_project_root": context.pretrip_project_root,
+        }
+    else:
+        capability_kwargs = {
+            "checkpoint_definitions_path": CHECKPOINT_DEFINITIONS_PATH,
+            "route_time_entries_path": ROUTE_TIME_ENTRIES_PATH,
+        }
     files = build_capability_artifacts(
-        case_id=f"{CASE_ID}.{recording_id}",
+        case_id=f"{context.case_id}.{recording_id}",
         completed_track_gpx=active_gpx,
-        checkpoint_definitions_path=CHECKPOINT_DEFINITIONS_PATH,
-        route_family=ROUTE_FAMILY,
+        route_family=context.route_family,
         output_dir=outputs_dir,
-        route_time_entries_path=ROUTE_TIME_ENTRIES_PATH,
         root=root,
+        **capability_kwargs,
     )
     reaction_simulation_path = outputs_dir / "scout_reaction_simulation.json"
     reaction_simulation = build_scout_reaction_simulation_from_gpx(
         active_gpx,
         scenario_id=recording_id,
-        case_id=CASE_ID,
+        case_id=context.case_id,
         output_path=reaction_simulation_path,
         root=root,
     )
@@ -149,18 +204,19 @@ def select_completed_trip_recording_for_post_analysis(
     active_record["capability_timeline"] = capability
     active_record["scout_reaction_simulation"] = reaction_simulation
     active_record["completed_trip_track"] = completed_trip_track
-    _write_json(active_dir / "active_completed_trip_recording.json", active_record)
-    _write_json(inbox_dir / "latest_completed_trip_recording.json", active_record)
+    _write_json(active_record_path, active_record)
+    _write_json(inbox_record_path, active_record)
     return {
         "artifact_kind": "completed_trip_recording_post_analysis_result",
-        "case_id": CASE_ID,
+        "project_id": context.project_id,
+        "case_id": context.case_id,
         "recording": _public_recording(recording),
         "capability_timeline": capability,
         "scout_reaction_simulation": reaction_simulation,
         "completed_trip_track": completed_trip_track,
         "paths": {
             "active_completed_track_gpx": str(active_gpx),
-            "active_recording_record": str(active_dir / "active_completed_trip_recording.json"),
+            "active_recording_record": str(active_record_path),
             "recording_set_manifest": catalog["recording_set_manifest_path"],
             "outputs_dir": str(outputs_dir),
             "capability_timeline": files.timeline_path,
@@ -177,12 +233,16 @@ def load_active_completed_trip_recording_projection(
     *,
     data_root: Path,
     root: Path = ROOT,
+    project_id: str | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any] | None:
-    active_path = (
-        data_root
-        / ACTIVE_RELATIVE_DIR
-        / "active_completed_trip_recording.json"
+    context = _completed_trip_context(
+        data_root=data_root,
+        root=root,
+        project_id=project_id,
+        project_root=project_root,
     )
+    active_path = context.active_dir / "active_completed_trip_recording.json"
     if not active_path.exists():
         return None
     active = _load_json(active_path)
@@ -207,6 +267,72 @@ def load_active_completed_trip_recording_projection(
                 source_path=active.get("source_gpx") or active["recording"].get("source_path"),
             )
     return active
+
+
+def _completed_trip_context(
+    *,
+    data_root: Path,
+    root: Path,
+    project_id: str | None,
+    project_root: Path | None,
+) -> CompletedTripContext:
+    if project_id is not None or project_root is not None:
+        if project_root is None:
+            raise ValueError(
+                "project_root is required for project-scoped completed-trip storage"
+            )
+        resolved_project_root = Path(project_root).expanduser().resolve()
+        project_path = resolved_project_root / "project.json"
+        if not project_path.is_file():
+            raise FileNotFoundError(
+                f"pretrip project.json not found: {project_path}"
+            )
+        project = _load_json(project_path)
+        resolved_project_id = str(
+            project_id
+            or project.get("project_id")
+            or project.get("id")
+            or resolved_project_root.name
+        )
+        recorded_project_id = str(
+            project.get("project_id") or project.get("id") or resolved_project_id
+        )
+        if recorded_project_id != resolved_project_id:
+            raise ValueError(
+                "completed-trip project id does not match workspace project.json"
+            )
+        post_analysis_root = resolved_project_root / "post_analysis"
+        completed_trip_root = post_analysis_root / "completed_trips"
+        return CompletedTripContext(
+            project_id=resolved_project_id,
+            case_id=resolved_project_id,
+            route_family=str(
+                project.get("route_family")
+                or project.get("route_name")
+                or resolved_project_id
+            ),
+            storage_scope="workspace",
+            reference_root=resolved_project_root,
+            recording_root=completed_trip_root / "recorded",
+            inbox_dir=post_analysis_root / "inbox",
+            active_dir=completed_trip_root / "active",
+            outputs_dir=completed_trip_root / "outputs",
+            pretrip_project_root=resolved_project_root,
+        )
+
+    resolved_data_root = Path(data_root).expanduser().resolve()
+    return CompletedTripContext(
+        project_id=CASE_ID,
+        case_id=CASE_ID,
+        route_family=ROUTE_FAMILY,
+        storage_scope="legacy_data_root",
+        reference_root=resolved_data_root,
+        recording_root=resolved_data_root / RECORDED_RELATIVE_DIR,
+        inbox_dir=resolved_data_root / "post_analysis" / "inbox",
+        active_dir=resolved_data_root / ACTIVE_RELATIVE_DIR,
+        outputs_dir=resolved_data_root / OUTPUTS_RELATIVE_DIR,
+        pretrip_project_root=None,
+    )
 
 
 def build_completed_trip_track_projection(

@@ -14,7 +14,10 @@ from cwa_imagery_registry import build_cwa_imagery_registry
 from cwa_radar_ingestor import CwaRadarIngestor
 from cwa_satellite_ingestor import CwaSatelliteIngestor
 from route_imagery_sampler import RasterGrid, build_route_buffer
-from weather_imagery_tile_cache import WeatherImageryTileCache
+from weather_imagery_tile_cache import (
+    WeatherImageryTileCache,
+    project_cwa_imagery_cache_root,
+)
 
 
 def test_risk_extractor_outputs_requested_features_and_teii_interactions(tmp_path: Path) -> None:
@@ -176,7 +179,9 @@ def test_server_job_writes_compact_manifests_and_rejects_pi_processing(tmp_path:
     project_root = tmp_path / "workspace" / "route"
     project_root.mkdir(parents=True)
     (project_root / "project.json").write_text('{"project_id":"fixture-route"}\n')
-    cache = WeatherImageryTileCache(tmp_path / "external-cache")
+    cache = WeatherImageryTileCache(
+        project_cwa_imagery_cache_root(project_root)
+    )
     registry = build_cwa_imagery_registry()
     radar_spec = registry["radar.integrated.taiwan.transparent"]
     satellite_spec = registry["satellite.enhanced_color.taiwan"]
@@ -349,7 +354,7 @@ def test_server_job_fails_closed_without_trusted_capability(tmp_path: Path) -> N
         )
 
 
-def test_unlocked_server_job_rejects_network_denial_and_workspace_cache(
+def test_unlocked_server_job_requires_network_and_fixed_project_cache(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -381,11 +386,35 @@ def test_unlocked_server_job_rejects_network_denial_and_workspace_cache(
             allow_network_fetch=False,
         )
 
-    workspace_cache = WeatherImageryTileCache(project_root / "raw-cache")
-    with pytest.raises(ValueError, match="cache must live outside"):
+    with pytest.raises(ValueError, match="project-local cache"):
         extractor._run_server_side_cwa_imagery_job_unlocked(
             **common,
-            cache=workspace_cache,
+            cache=external_cache,
+            allow_network_fetch=True,
+        )
+
+    wrong_workspace_cache = WeatherImageryTileCache(project_root / "raw-cache")
+    with pytest.raises(ValueError, match="project-local cache"):
+        extractor._run_server_side_cwa_imagery_job_unlocked(
+            **common,
+            cache=wrong_workspace_cache,
+            allow_network_fetch=True,
+        )
+
+    monkeypatch.setattr(
+        extractor,
+        "build_route_buffer",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("project cache boundary passed")
+        ),
+    )
+    project_cache = WeatherImageryTileCache(
+        project_cwa_imagery_cache_root(project_root)
+    )
+    with pytest.raises(RuntimeError, match="project cache boundary passed"):
+        extractor._run_server_side_cwa_imagery_job_unlocked(
+            **common,
+            cache=project_cache,
             allow_network_fetch=True,
         )
 

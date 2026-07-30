@@ -11,7 +11,18 @@ from cwa_imagery_registry import build_cwa_imagery_registry
 from weather_imagery_tile_cache import (
     WeatherImageryTileCache,
     _web_mercator_latitude_for_row,
+    project_cwa_imagery_cache_root,
 )
+
+
+def test_project_cwa_imagery_cache_root_is_workspace_local(tmp_path: Path) -> None:
+    project_root = tmp_path / "workspaces" / "fixture-route"
+
+    cache_root = project_cwa_imagery_cache_root(project_root)
+
+    assert cache_root == (
+        project_root / "cache" / "cwa-weather-imagery"
+    ).resolve()
 
 
 def test_cache_stores_content_addressed_georeferenced_frame(tmp_path: Path) -> None:
