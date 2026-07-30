@@ -21,6 +21,9 @@ ARTIFACT_KIND = "pretrip_reference_pace_energy_analysis"
 SCHEMA_VERSION = "reference_pace_energy_analysis.v0"
 PACE_MAP_ARTIFACT_KIND = "pretrip_reference_pace_energy_map"
 PACE_MAP_SCHEMA_VERSION = "reference_pace_energy_map.v0"
+GOLDEN_ELEVATION_PROFILE_ARTIFACT_KIND = "pretrip_golden_route_elevation_profile"
+GOLDEN_ELEVATION_PROFILE_SCHEMA_VERSION = "golden_route_elevation_profile.v0"
+MAX_GOLDEN_ELEVATION_PROFILE_SAMPLES = 800
 
 DEFAULT_SOURCE_INDEX_REF = "sources/historical_gpx_source_index.json"
 DEFAULT_RISK_SCORE_POINTS_REF = "outputs/risk/risk_score_points.geojson"
@@ -370,6 +373,11 @@ def build_reference_pace_energy_analysis(
         (sample.route_distance_m for sample in spatial_index.samples),
         default=0.0,
     )
+    golden_route_elevation_profile = _build_golden_route_elevation_profile(
+        root,
+        scope_reference_records,
+        comparison_source_distance_m=source_route_distance_m,
+    )
     source_sha256 = _sha256_file(source_index_path)
     checkpoint_passage_timing = _build_checkpoint_passage_timing(
         root=root,
@@ -466,6 +474,11 @@ def build_reference_pace_energy_analysis(
                     else "missing"
                 ),
             },
+            "golden_route_gpx": {
+                "source_path": golden_route_elevation_profile.get("source_path"),
+                "sha256": golden_route_elevation_profile.get("sha256"),
+                "status": golden_route_elevation_profile.get("status"),
+            },
         },
         "output_refs": {
             "analysis_ref": DEFAULT_REPORT_REF,
@@ -533,6 +546,9 @@ def build_reference_pace_energy_analysis(
             "timed_checkpoint_passage_node_count": checkpoint_passage_timing[
                 "data_quality"
             ]["timed_node_count"],
+            "golden_route_elevation_profile_sample_count": int(
+                golden_route_elevation_profile.get("sample_count") or 0
+            ),
         },
         "crowd_axis": crowd_axis,
         "policy": {
@@ -574,6 +590,10 @@ def build_reference_pace_energy_analysis(
                 "pair_with_strict_speed_bounds; never_reject_a_whole_track_or_segment_"
                 "from_its_average_speed"
             ),
+            "architecture_comparison_axis_policy": (
+                "preserve_source_distances_then_progress_normalize_architecture_"
+                "metrics_to_the_golden_gpx_distance_axis"
+            ),
         },
         "metric_definitions": {
             "reference_pace": "historical traversal speed quantiles after pause, gap, non-walking, corridor, and transition filtering",
@@ -591,10 +611,16 @@ def build_reference_pace_energy_analysis(
                 "centered on each CP/MCP. Each sample is one contiguous track "
                 "bout and direction with at least 60% observed window coverage."
             ),
+            "golden_route_elevation_m": (
+                "Coordinate-free elevation samples from the workspace golden GPX; "
+                "used as the Architecture comparison axis, not as a medical, "
+                "physiologic, or runtime safety signal."
+            ),
         },
         "tracks": track_reports,
         "relationships": relationship_summary,
         "route_bins": bin_summaries,
+        "golden_route_elevation_profile": golden_route_elevation_profile,
         "checkpoint_passage_timing": checkpoint_passage_timing,
         "suggested_observation_dimensions": [
             "signed walking grade and direction",
@@ -622,6 +648,9 @@ def build_reference_pace_energy_analysis(
             "sequence_continuity_map_matching": True,
             "risk_enrichment_available": risk_enrichment_available,
             "terrain_enrichment_available": terrain_enrichment_available,
+            "golden_route_elevation_available": (
+                golden_route_elevation_profile.get("status") == "available"
+            ),
             "minimum_distinct_tracks_for_guidance": min_tracks_for_guidance,
             "golden_route_has_special_statistical_weight": False,
             "crowd_axis_requires_human_review": bool(
@@ -1548,6 +1577,265 @@ def _checkpoint_route_distance(
     if isinstance(route_point_index, int) and 0 <= route_point_index < len(route_progress):
         return route_progress[route_point_index]
     return None
+
+
+def _build_golden_route_elevation_profile(
+    root: Path,
+    scope_reference_records: list[dict[str, Any]],
+    *,
+    comparison_source_distance_m: float,
+) -> dict[str, Any]:
+    source_path, source_ref, source_kind = _golden_route_profile_source(
+        root,
+        scope_reference_records,
+    )
+    privacy = {
+        "coordinates_embedded": False,
+        "precise_timestamps_embedded": False,
+        "raw_gpx_embedded": False,
+        "source_original_path_embedded": False,
+    }
+    boundary = {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "phase1_runtime_safety_truth": False,
+        "safety_api_called": False,
+    }
+    if source_path is None or source_ref is None or not source_path.is_file():
+        return {
+            "artifact_kind": GOLDEN_ELEVATION_PROFILE_ARTIFACT_KIND,
+            "schema_version": GOLDEN_ELEVATION_PROFILE_SCHEMA_VERSION,
+            "status": "missing",
+            "source_provider": "workspace_golden_gpx",
+            "source_path": source_ref,
+            "source_kind": source_kind,
+            "sha256": None,
+            "distance_m": None,
+            "minimum_elevation_m": None,
+            "maximum_elevation_m": None,
+            "source_trackpoint_count": 0,
+            "elevation_trackpoint_count": 0,
+            "sample_count": 0,
+            "samples": [],
+            "axis_alignment": {
+                "status": "missing_golden_gpx",
+                "comparison_source_distance_m": _round(
+                    comparison_source_distance_m,
+                    3,
+                ),
+                "source_to_golden_scale": None,
+            },
+            "data_quality": {
+                "status": "unavailable",
+                "elevation_coverage": 0.0,
+                "sampling_policy": "distance_bucketed_coordinate_free_profile",
+            },
+            "privacy": privacy,
+            "boundary": boundary,
+        }
+
+    track_segments = _parse_gpx_track_segments(source_path)
+    source_trackpoint_count = sum(len(segment) for segment in track_segments)
+    elevation_points: list[tuple[float, float]] = []
+    total_distance_m = 0.0
+    for segment in track_segments:
+        previous: _TrackPoint | None = None
+        for point in segment:
+            if previous is not None:
+                total_distance_m += haversine_m(
+                    previous.lat,
+                    previous.lon,
+                    point.lat,
+                    point.lon,
+                )
+            if point.elevation_m is not None:
+                elevation_points.append((total_distance_m, point.elevation_m))
+            previous = point
+
+    samples = _distance_bucketed_elevation_samples(
+        elevation_points,
+        total_distance_m=total_distance_m,
+        max_samples=MAX_GOLDEN_ELEVATION_PROFILE_SAMPLES,
+    )
+    elevations = [item[1] for item in elevation_points]
+    elevation_coverage = (
+        len(elevation_points) / source_trackpoint_count
+        if source_trackpoint_count
+        else 0.0
+    )
+    available = bool(samples) and total_distance_m > 0.0
+    source_distance_m = max(0.0, float(comparison_source_distance_m))
+    source_to_golden_scale = (
+        total_distance_m / source_distance_m if source_distance_m > 0.0 else None
+    )
+    relative_gap = (
+        abs(total_distance_m - source_distance_m)
+        / max(total_distance_m, source_distance_m)
+        if total_distance_m > 0.0 and source_distance_m > 0.0
+        else None
+    )
+    alignment_status = (
+        "aligned"
+        if relative_gap is not None and relative_gap <= 0.02
+        else "progress_normalization_required"
+        if relative_gap is not None
+        else "source_axis_unavailable"
+    )
+    return {
+        "artifact_kind": GOLDEN_ELEVATION_PROFILE_ARTIFACT_KIND,
+        "schema_version": GOLDEN_ELEVATION_PROFILE_SCHEMA_VERSION,
+        "status": "available" if available else "missing_elevation",
+        "source_provider": "workspace_golden_gpx",
+        "source_path": source_ref,
+        "source_kind": source_kind,
+        "sha256": _sha256_file(source_path),
+        "distance_m": _round(total_distance_m, 3) if available else None,
+        "minimum_elevation_m": _round(min(elevations), 2) if elevations else None,
+        "maximum_elevation_m": _round(max(elevations), 2) if elevations else None,
+        "source_trackpoint_count": source_trackpoint_count,
+        "elevation_trackpoint_count": len(elevation_points),
+        "sample_count": len(samples),
+        "samples": samples,
+        "axis_alignment": {
+            "status": alignment_status,
+            "comparison_source_distance_m": _round(source_distance_m, 3),
+            "source_to_golden_scale": _round(source_to_golden_scale, 6),
+            "source_distances_preserved": True,
+            "comparison_policy": (
+                "architecture_metrics_progress_normalized_to_golden_gpx_distance"
+            ),
+        },
+        "data_quality": {
+            "status": (
+                "high"
+                if available and elevation_coverage >= 0.95
+                else "medium"
+                if available and elevation_coverage >= 0.5
+                else "low"
+                if available
+                else "unavailable"
+            ),
+            "elevation_coverage": _round(elevation_coverage, 4),
+            "track_segment_count": len(track_segments),
+            "sampling_policy": "distance_bucketed_coordinate_free_profile",
+            "maximum_sample_count": MAX_GOLDEN_ELEVATION_PROFILE_SAMPLES,
+            "raw_gpx_coordinates_removed": True,
+            "raw_gpx_timestamps_removed": True,
+        },
+        "privacy": privacy,
+        "boundary": boundary,
+    }
+
+
+def _golden_route_profile_source(
+    root: Path,
+    scope_reference_records: list[dict[str, Any]],
+) -> tuple[Path | None, str | None, str]:
+    for source in scope_reference_records:
+        workspace_ref = str(source.get("workspace_ref") or "")
+        if not workspace_ref:
+            continue
+        source_path = _resolve_project_ref(root, workspace_ref)
+        if source_path.is_file():
+            return source_path, workspace_ref, "workspace_raw_golden_gpx"
+
+    route_axis_path, route_axis_ref = _route_axis_gpx_path(
+        root,
+        scope_reference_records,
+    )
+    return (
+        route_axis_path,
+        route_axis_ref,
+        "speed_filtered_golden_gpx_fallback",
+    )
+
+
+def _distance_bucketed_elevation_samples(
+    points: list[tuple[float, float]],
+    *,
+    total_distance_m: float,
+    max_samples: int,
+) -> list[dict[str, Any]]:
+    if not points or total_distance_m <= 0.0:
+        return []
+
+    def sample_record(
+        distance_m: float,
+        elevation_values: list[float],
+        source_count: int,
+    ) -> dict[str, Any]:
+        return {
+            "route_distance_m": _round(distance_m, 3),
+            "route_progress_ratio": _round(
+                _clamp(distance_m / total_distance_m, 0.0, 1.0),
+                6,
+            ),
+            "elevation_m": _round(statistics.median(elevation_values), 2),
+            "minimum_elevation_m": _round(min(elevation_values), 2),
+            "maximum_elevation_m": _round(max(elevation_values), 2),
+            "source_trackpoint_count": source_count,
+        }
+
+    if len(points) <= max_samples:
+        records = [
+            sample_record(distance_m, [elevation_m], 1)
+            for distance_m, elevation_m in points
+        ]
+        records[-1] = {
+            **records[-1],
+            "route_distance_m": _round(total_distance_m, 3),
+            "route_progress_ratio": 1.0,
+        }
+        return records
+
+    bucket_count = max(2, int(max_samples))
+    buckets: list[list[tuple[float, float]]] = [
+        [] for _ in range(bucket_count)
+    ]
+    for distance_m, elevation_m in points:
+        bucket_index = min(
+            bucket_count - 1,
+            int(
+                _clamp(
+                    distance_m / total_distance_m,
+                    0.0,
+                    1.0,
+                )
+                * bucket_count
+            ),
+        )
+        buckets[bucket_index].append((distance_m, elevation_m))
+
+    records = []
+    for index, bucket in enumerate(buckets):
+        if not bucket:
+            continue
+        distance_m = (
+            0.0
+            if index == 0
+            else total_distance_m
+            if index == bucket_count - 1
+            else statistics.fmean(item[0] for item in bucket)
+        )
+        records.append(
+            sample_record(
+                distance_m,
+                [item[1] for item in bucket],
+                len(bucket),
+            )
+        )
+    if records:
+        records[0] = {
+            **records[0],
+            "route_distance_m": 0.0,
+            "route_progress_ratio": 0.0,
+        }
+        records[-1] = {
+            **records[-1],
+            "route_distance_m": _round(total_distance_m, 3),
+            "route_progress_ratio": 1.0,
+        }
+    return records
 
 
 def _route_axis_gpx_path(

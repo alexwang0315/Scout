@@ -278,6 +278,119 @@ def test_route_architecture_retains_golden_scope_axis_when_crowd_support_is_spar
     assert first["distance_label"] == "0.00–0.25K"
 
 
+def test_route_architecture_normalizes_all_metrics_to_golden_gpx_distance_axis() -> None:
+    reference = _reference_pace_payload()
+    reference["crowd_axis"] = {
+        "status": "golden_route_axis_retained",
+        "route_axis_basis": "source_analysis_axis",
+        "source_route_distance_m": 750.0,
+        "analysis_distance_m": 750.0,
+        "analysis_origin_m": 0.0,
+        "axis_rebased": False,
+    }
+    reference["golden_route_elevation_profile"] = {
+        "artifact_kind": "pretrip_golden_route_elevation_profile",
+        "schema_version": "golden_route_elevation_profile.v0",
+        "status": "available",
+        "source_provider": "workspace_golden_gpx",
+        "source_path": "inbox/gpx/golden.gpx",
+        "sha256": "e" * 64,
+        "distance_m": 500.0,
+        "minimum_elevation_m": 1000.0,
+        "maximum_elevation_m": 1250.0,
+        "sample_count": 3,
+        "samples": [
+            {
+                "route_distance_m": 0.0,
+                "route_progress_ratio": 0.0,
+                "elevation_m": 1000.0,
+                "minimum_elevation_m": 1000.0,
+                "maximum_elevation_m": 1000.0,
+                "source_trackpoint_count": 1,
+            },
+            {
+                "route_distance_m": 250.0,
+                "route_progress_ratio": 0.5,
+                "elevation_m": 1250.0,
+                "minimum_elevation_m": 1240.0,
+                "maximum_elevation_m": 1260.0,
+                "source_trackpoint_count": 3,
+            },
+            {
+                "route_distance_m": 500.0,
+                "route_progress_ratio": 1.0,
+                "elevation_m": 1100.0,
+                "minimum_elevation_m": 1100.0,
+                "maximum_elevation_m": 1100.0,
+                "source_trackpoint_count": 1,
+            },
+        ],
+        "data_quality": {"status": "high"},
+        "privacy": {
+            "coordinates_embedded": False,
+            "precise_timestamps_embedded": False,
+            "raw_gpx_embedded": False,
+            "source_original_path_embedded": False,
+        },
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
+    }
+
+    projection = build_route_architecture_intelligence(
+        project_id="golden_profile_demo",
+        route={"route_name": "Golden profile route", "distance_m": 750.0},
+        checkpoints=[
+            {
+                "candidate_id": "cp.start",
+                "label": "Start",
+                "route_distance_m": 0.0,
+            },
+            {
+                "candidate_id": "cp.finish",
+                "label": "Finish",
+                "route_distance_m": 750.0,
+            },
+        ],
+        segments=[],
+        retreat_routes=[],
+        reference_pace_energy_analysis=reference,
+    )
+
+    summary = projection["architecture_summary"]
+    assert summary["route_distance_m"] == 500.0
+    assert summary["source_route_distance_m"] == 750.0
+    assert summary["route_axis_basis"] == "golden_gpx_distance"
+    assert summary["route_axis_transform"] == {
+        "status": "progress_normalized",
+        "source_distance_m": 750.0,
+        "golden_distance_m": 500.0,
+        "source_to_golden_scale": 0.666667,
+        "source_distances_preserved": True,
+    }
+    assert projection["route_spine"]["distance_m"] == 500.0
+    assert projection["route_spine"]["source_distance_m"] == 750.0
+    assert [node["route_distance_m"] for node in projection["route_spine"]["nodes"]] == [
+        0.0,
+        500.0,
+    ]
+    vectors = projection["segment_demand_vectors"]
+    assert vectors[1]["source_start_distance_m"] == 250.0
+    assert vectors[1]["source_end_distance_m"] == 500.0
+    assert vectors[1]["start_distance_m"] == 166.667
+    assert vectors[1]["end_distance_m"] == 333.333
+    assert vectors[1]["distance_label"] == "0.17–0.33K"
+    profile = projection["golden_route_elevation_profile"]
+    assert profile["distance_m"] == 500.0
+    assert profile["sample_count"] == 3
+    assert profile["samples"][1]["elevation_m"] == 1250.0
+    assert profile["privacy"]["coordinates_embedded"] is False
+    assert profile["boundary"]["runtime_safety_truth"] is False
+    assert projection["crowd_axis"]["analysis_distance_m"] == 500.0
+    assert projection["crowd_axis"]["source_analysis_distance_m"] == 750.0
+
+
 def test_route_architecture_projects_every_cp_mcp_passage_timing_node() -> None:
     reference = _reference_pace_payload()
     reference["checkpoint_passage_timing"] = {

@@ -5370,6 +5370,68 @@
       font: 10px var(--mono);
     }
 
+    .architecture-fingerprint .architecture-elevation-area {
+      fill: url(#architectureElevationFill);
+      opacity: .72;
+    }
+
+    .architecture-fingerprint .architecture-elevation-envelope {
+      fill: rgba(98, 184, 198, .16);
+      stroke: none;
+    }
+
+    .architecture-fingerprint .architecture-elevation-line {
+      fill: none;
+      stroke: #dfe8c7;
+      stroke-width: 2.25;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .architecture-fingerprint .architecture-elevation-label {
+      fill: #dfe8c7;
+      font: 700 10px var(--mono);
+      paint-order: stroke;
+      stroke: #0b1512;
+      stroke-width: 3px;
+    }
+
+    .architecture-sticky-lane-key {
+      position: sticky;
+      left: 0;
+      z-index: 5;
+      width: 150px;
+      height: 0;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .architecture-sticky-lane-key span {
+      position: absolute;
+      left: 12px;
+      display: block;
+      max-width: 134px;
+      padding: 3px 6px;
+      color: #a8b6a8;
+      font: 800 9px/1.15 var(--mono);
+      letter-spacing: .07em;
+      white-space: nowrap;
+      background: rgba(7, 15, 12, .9);
+      border-left: 2px solid rgba(98, 184, 198, .45);
+      box-shadow: 10px 0 18px rgba(7, 15, 12, .72);
+    }
+
+    .architecture-sticky-lane-key span.is-elevation {
+      color: #dfe8c7;
+      border-left-color: var(--architecture-lichen);
+    }
+
+    .architecture-sticky-lane-key span.is-passage {
+      color: var(--architecture-amber);
+      border-left-color: var(--architecture-amber);
+    }
+
     .architecture-fingerprint [data-architecture-bin-id] {
       cursor: pointer;
       transition: opacity .12s ease, filter .12s ease;
@@ -14182,6 +14244,19 @@
             : "Route architecture projection is unavailable for this project.",
         },
         route_spine: {distance_m: 0, nodes: [], pressure_anchors: []},
+        golden_route_elevation_profile: {
+          status: loading ? "loading" : "missing",
+          source_provider: "workspace_golden_gpx",
+          distance_m: 0,
+          sample_count: 0,
+          samples: [],
+          privacy: {
+            coordinates_embedded: false,
+            precise_timestamps_embedded: false,
+            raw_gpx_embedded: false,
+          },
+          boundary: {candidate_only: true, runtime_safety_truth: false},
+        },
         segment_demand_vectors: [],
         checkpoint_graph: {
           status: "candidate_projection",
@@ -14226,6 +14301,76 @@
 
     function architectureBins(snapshot = architectureSnapshot()) {
       return asArray(snapshot.segment_demand_vectors).filter(item => item && typeof item === "object");
+    }
+
+    function architectureElevationProfile(snapshot = architectureSnapshot()) {
+      const profile = snapshot?.golden_route_elevation_profile;
+      if (!profile || typeof profile !== "object") {
+        return {available: false, samples: []};
+      }
+      const samples = asArray(profile.samples)
+        .map(item => ({
+          route_distance_m: Number(item?.route_distance_m),
+          elevation_m: Number(item?.elevation_m),
+          minimum_elevation_m: Number(item?.minimum_elevation_m),
+          maximum_elevation_m: Number(item?.maximum_elevation_m),
+          source_trackpoint_count: Number(item?.source_trackpoint_count || 0),
+        }))
+        .filter(item => Number.isFinite(item.route_distance_m) && Number.isFinite(item.elevation_m))
+        .sort((left, right) => left.route_distance_m - right.route_distance_m);
+      return {
+        ...profile,
+        available: profile.status === "available" && samples.length > 1,
+        samples,
+      };
+    }
+
+    function architectureElevationPaths(profile, xForDistance, topY, height) {
+      const samples = asArray(profile?.samples);
+      const observedElevations = samples.flatMap(item => [
+        Number(item.minimum_elevation_m),
+        Number(item.elevation_m),
+        Number(item.maximum_elevation_m),
+      ]).filter(Number.isFinite);
+      const minimumElevation = Number.isFinite(Number(profile?.minimum_elevation_m))
+        ? Number(profile.minimum_elevation_m)
+        : Math.min(...observedElevations);
+      const maximumElevation = Number.isFinite(Number(profile?.maximum_elevation_m))
+        ? Number(profile.maximum_elevation_m)
+        : Math.max(...observedElevations);
+      const elevationRange = Math.max(1, maximumElevation - minimumElevation);
+      const yForElevation = value => topY + height - ((Number(value) - minimumElevation) / elevationRange) * height;
+      const linePath = samples.map((item, index) => `${index ? "L" : "M"}${xForDistance(item.route_distance_m).toFixed(1)} ${yForElevation(item.elevation_m).toFixed(1)}`).join(" ");
+      const upperPath = samples.map((item, index) => {
+        const elevation = Number.isFinite(item.maximum_elevation_m) ? item.maximum_elevation_m : item.elevation_m;
+        return `${index ? "L" : "M"}${xForDistance(item.route_distance_m).toFixed(1)} ${yForElevation(elevation).toFixed(1)}`;
+      }).join(" ");
+      const lowerPath = samples.slice().reverse().map(item => {
+        const elevation = Number.isFinite(item.minimum_elevation_m) ? item.minimum_elevation_m : item.elevation_m;
+        return `L${xForDistance(item.route_distance_m).toFixed(1)} ${yForElevation(elevation).toFixed(1)}`;
+      }).join(" ");
+      const firstX = xForDistance(samples[0]?.route_distance_m || 0);
+      const lastX = xForDistance(samples.at(-1)?.route_distance_m || 0);
+      const baselineY = topY + height;
+      return {
+        minimumElevation,
+        maximumElevation,
+        linePath,
+        envelopePath: samples.length ? `${upperPath} ${lowerPath} Z` : "",
+        areaPath: samples.length ? `${linePath} L${lastX.toFixed(1)} ${baselineY.toFixed(1)} L${firstX.toFixed(1)} ${baselineY.toFixed(1)} Z` : "",
+      };
+    }
+
+    function architectureElevationAtDistance(snapshot, routeDistanceM) {
+      const profile = architectureElevationProfile(snapshot);
+      if (!profile.available) return null;
+      return profile.samples.reduce((nearest, sample) => (
+        !nearest
+        || Math.abs(sample.route_distance_m - routeDistanceM)
+          < Math.abs(nearest.route_distance_m - routeDistanceM)
+          ? sample
+          : nearest
+      ), null);
     }
 
     function architecturePassageTimingNodes(snapshot = architectureSnapshot()) {
@@ -14279,8 +14424,8 @@
     function architectureModeOpacity(lane) {
       const mode = state.architectureMode || "structure";
       const focus = {
-        structure: ["structure"],
-        demand: ["terrain", "mobility", "risk"],
+        structure: ["elevation", "structure"],
+        demand: ["composite", "terrain", "mobility", "risk", "endurance", "pace_variability"],
         reversibility: ["reversibility", "time"],
         evidence: ["evidence"],
       }[mode] || ["structure"];
@@ -14321,36 +14466,73 @@
       }
       const selected = architectureSelectedBin(snapshot);
       const timingNodes = architecturePassageTimingNodes(snapshot);
+      const elevationProfile = architectureElevationProfile(snapshot);
       const routeDistance = Math.max(1, Number(snapshot.route_spine?.distance_m || snapshot.architecture_summary?.route_distance_m || bins.at(-1)?.end_distance_m || 1));
-      const sourceRouteDistance = Math.max(
-        routeDistance,
-        Number(snapshot.crowd_axis?.source_route_distance_m || 0),
+      const sourceRouteDistance = Number(
+        snapshot.architecture_summary?.source_route_distance_m
+        || snapshot.crowd_axis?.source_route_distance_m
+        || routeDistance,
       );
-      const axisDescription = "Golden-route start-to-finish axis · crowd gaps lower confidence but never rebase or truncate the route.";
+      const axisTransform = snapshot.architecture_summary?.route_axis_transform
+        || snapshot.route_spine?.axis_transform
+        || {};
+      const sourceToGoldenScale = Number(axisTransform.source_to_golden_scale || 1);
+      const axisDescription = elevationProfile.available
+        ? "Golden GPX physical distance and elevation · Architecture source metrics aligned by route progress; crowd gaps lower confidence but never rebase or truncate the route."
+        : "Golden-route start-to-finish axis · elevation evidence unavailable; crowd gaps lower confidence but never rebase or truncate the route.";
       const width = Math.max(
         1780,
         224 + Math.ceil(routeDistance / 500) * 116,
       );
-      const height = timingNodes.length ? 708 : 430;
+      const height = timingNodes.length ? 958 : 670;
       const plotX = 154;
       const plotWidth = width - 224;
-      const laneHeight = 40;
-      const laneY = {structure: 46, terrain: 100, mobility: 154, risk: 208, reversibility: 262, time: 316, evidence: 374};
+      const elevationTop = 42;
+      const elevationHeight = 116;
+      const laneHeight = 34;
+      const laneY = {
+        structure: 176,
+        composite: 222,
+        terrain: 268,
+        mobility: 314,
+        risk: 360,
+        endurance: 406,
+        pace_variability: 452,
+        reversibility: 498,
+        time: 544,
+        evidence: 590,
+      };
+      const metricBottom = laneY.evidence + laneHeight;
       const xForDistance = value => plotX + Math.max(0, Math.min(1, Number(value || 0) / routeDistance)) * plotWidth;
+      const elevationPaths = architectureElevationPaths(
+        elevationProfile,
+        xForDistance,
+        elevationTop,
+        elevationHeight,
+      );
       const ticks = Array.from({length: 9}, (_, index) => {
         const ratio = index / 8;
         const x = plotX + ratio * plotWidth;
-        return `<line class="architecture-grid-line" x1="${x.toFixed(1)}" y1="30" x2="${x.toFixed(1)}" y2="410"></line><text class="architecture-axis-text" x="${x.toFixed(1)}" y="22" text-anchor="${index === 0 ? "start" : index === 8 ? "end" : "middle"}">${(routeDistance * ratio / 1000).toFixed(1)}K</text>`;
+        return `<line class="architecture-grid-line" x1="${x.toFixed(1)}" y1="30" x2="${x.toFixed(1)}" y2="${metricBottom + 8}"></line><text class="architecture-axis-text" x="${x.toFixed(1)}" y="22" text-anchor="${index === 0 ? "start" : index === 8 ? "end" : "middle"}">${(routeDistance * ratio / 1000).toFixed(1)}K</text>`;
       }).join("");
-      const laneLabels = [
+      const laneDefinitions = [
         ["structure", "CP GRAPH"],
+        ["composite", "COMPOSITE"],
         ["terrain", "TERRAIN"],
-        ["mobility", "MOBILITY"],
+        ["mobility", "SLOW PASSAGE"],
         ["risk", "RISK PASSAGE"],
+        ["endurance", "ENDURANCE"],
+        ["pace_variability", "PACE VAR"],
         ["reversibility", "REVERSIBILITY"],
         ["time", "TIME WINDOW"],
         ["evidence", "CONFIDENCE"],
-      ].map(([lane, label]) => `<text class="architecture-lane-text" x="16" y="${laneY[lane] + laneHeight / 2 + 4}">${label}</text><line class="architecture-lane-rule" x1="${plotX}" y1="${laneY[lane] + laneHeight}" x2="${plotX + plotWidth}" y2="${laneY[lane] + laneHeight}"></line>`).join("");
+      ];
+      const laneLabels = laneDefinitions.map(([lane, label]) => `<text class="architecture-lane-text" x="16" y="${laneY[lane] + laneHeight / 2 + 4}">${label}</text><line class="architecture-lane-rule" x1="${plotX}" y1="${laneY[lane] + laneHeight}" x2="${plotX + plotWidth}" y2="${laneY[lane] + laneHeight}"></line>`).join("");
+      const stickyLaneLabels = [
+        ["elevation", "GOLDEN ELEVATION", elevationTop + 8],
+        ...laneDefinitions.map(([lane, label]) => [lane, label, laneY[lane] + 8]),
+        ...(timingNodes.length ? [["passage", "CP/MCP PASSAGE", metricBottom + 22]] : []),
+      ].map(([lane, label, top]) => `<span class="is-${lane}" style="top:${top}px">${label}</span>`).join("");
       const binMarks = bins.map((bin, index) => {
         const x1 = xForDistance(bin.start_distance_m);
         const x2 = Math.max(x1 + 2, xForDistance(bin.end_distance_m));
@@ -14358,6 +14540,9 @@
         const terrain = architectureVectorValue(bin, "terrain_demand");
         const slow = architectureVectorValue(bin, "slow_passage_impedance");
         const risk = architectureVectorValue(bin, "risk_passage_pressure");
+        const composite = architectureVectorValue(bin, "composite_pressure_index");
+        const endurance = architectureVectorValue(bin, "endurance_exposure");
+        const paceVariability = architectureVectorValue(bin, "pace_variability");
         const evidence = architectureVectorValue(bin, "evidence_quality");
         const isSelected = bin.route_bin_id === selected?.route_bin_id;
         const tabindex = isSelected ? "0" : "-1";
@@ -14365,11 +14550,14 @@
         return `
           <g role="button" tabindex="${tabindex}" aria-label="${escapeHtml(bin.distance_label || bin.route_bin_id)} pressure ${Math.round(architectureVectorValue(bin, "composite_pressure_index"))}" data-architecture-bin-id="${escapeHtml(bin.route_bin_id)}" data-architecture-selected="${isSelected ? "true" : "false"}">
             <rect x="${x1.toFixed(1)}" y="${laneY.structure}" width="${binWidth.toFixed(1)}" height="${laneHeight}" fill="${structureFill}" opacity="${architectureModeOpacity("structure")}"></rect>
-            <rect x="${x1.toFixed(1)}" y="${(laneY.terrain + laneHeight - terrain * .38).toFixed(1)}" width="${binWidth.toFixed(1)}" height="${Math.max(2, terrain * .38).toFixed(1)}" fill="${architecturePressureColor(terrain)}" opacity="${architectureModeOpacity("terrain")}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${laneY.composite}" width="${binWidth.toFixed(1)}" height="${laneHeight}" fill="${architecturePressureColor(composite)}" opacity="${(.2 + composite / 130 * architectureModeOpacity("composite")).toFixed(2)}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${(laneY.terrain + laneHeight - terrain * .32).toFixed(1)}" width="${binWidth.toFixed(1)}" height="${Math.max(2, terrain * .32).toFixed(1)}" fill="${architecturePressureColor(terrain)}" opacity="${architectureModeOpacity("terrain")}"></rect>
             <rect x="${x1.toFixed(1)}" y="${laneY.mobility}" width="${binWidth.toFixed(1)}" height="${laneHeight}" fill="${architecturePressureColor(slow)}" opacity="${(.22 + slow / 135).toFixed(2)}"></rect>
             <rect x="${x1.toFixed(1)}" y="${laneY.risk}" width="${binWidth.toFixed(1)}" height="${laneHeight}" fill="${architecturePressureColor(risk)}" opacity="${(.18 + risk / 125 * architectureModeOpacity("risk")).toFixed(2)}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${(laneY.endurance + laneHeight - endurance * .32).toFixed(1)}" width="${binWidth.toFixed(1)}" height="${Math.max(2, endurance * .32).toFixed(1)}" fill="${architecturePressureColor(endurance)}" opacity="${architectureModeOpacity("endurance")}"></rect>
+            <rect x="${x1.toFixed(1)}" y="${laneY.pace_variability}" width="${binWidth.toFixed(1)}" height="${laneHeight}" fill="${architecturePressureColor(paceVariability)}" opacity="${(.2 + paceVariability / 130 * architectureModeOpacity("pace_variability")).toFixed(2)}"></rect>
             <rect x="${x1.toFixed(1)}" y="${laneY.evidence}" width="${binWidth.toFixed(1)}" height="24" fill="${architectureEvidenceColor(bin)}" opacity="${(.25 + evidence / 140 * architectureModeOpacity("evidence")).toFixed(2)}"></rect>
-            <rect x="${x1.toFixed(1)}" y="${laneY.structure}" width="${binWidth.toFixed(1)}" height="352" fill="transparent"></rect>
+            <rect x="${x1.toFixed(1)}" y="${elevationTop}" width="${binWidth.toFixed(1)}" height="${metricBottom - elevationTop}" fill="transparent"></rect>
           </g>
         `;
       }).join("");
@@ -14380,9 +14568,14 @@
       const selectedPassageNodeId = state.architectureSelectedPassageNodeId || timingNodes[0]?.node_id || "";
       const passageMarks = timingNodes.map((node, index) => {
         const x = xForDistance(node.route_distance_m);
-        const rowY = index % 2 === 0 ? 442 : 566;
-        const cardX = x - 53;
+        const rowY = index % 2 === 0 ? 688 : 812;
+        const cardX = Math.max(plotX, Math.min(plotX + plotWidth - 106, x - 53));
         const duration = node.duration_minutes || {};
+        const sourcePassageDistance = Number(
+          node.source_passage_window?.distance_m
+          || node.passage_window?.distance_m
+          || 500,
+        );
         const namedPlaces = asArray(node.named_places).filter(Boolean);
         const namedPlace = namedPlaces[0] || "";
         const nodeTitle = node.node_kind === "mcp"
@@ -14396,11 +14589,11 @@
         const isSelected = node.node_id === selectedPassageNodeId;
         const modeLabel = architecturePassageDurationLabel(duration.mode_5min, 0);
         const supplementalNames = namedPlaces.filter((name) => name !== node.label);
-        const fullLabel = `${nodeTitle}${supplementalNames.length ? ` · ${supplementalNames.join(" / ")}` : ""}; 500 metre passage; minimum ${architecturePassageDurationLabel(duration.min)}; average ${architecturePassageDurationLabel(duration.average)}; 5 minute mode ${modeLabel}; maximum ${architecturePassageDurationLabel(duration.max)}; ${sampleCount} samples from ${trackCount} tracks`;
+        const fullLabel = `${nodeTitle}${supplementalNames.length ? ` · ${supplementalNames.join(" / ")}` : ""}; source ${Math.round(sourcePassageDistance)} metre passage; minimum ${architecturePassageDurationLabel(duration.min)}; average ${architecturePassageDurationLabel(duration.average)}; 5 minute mode ${modeLabel}; maximum ${architecturePassageDurationLabel(duration.max)}; ${sampleCount} samples from ${trackCount} tracks`;
         return `
           <g role="button" tabindex="${isSelected ? "0" : "-1"}" aria-label="${escapeHtml(fullLabel)}" data-architecture-passage-node-id="${escapeHtml(node.node_id)}" data-architecture-passage-selected="${isSelected ? "true" : "false"}">
-            <line x1="${x.toFixed(1)}" y1="414" x2="${x.toFixed(1)}" y2="${rowY}" stroke="${node.node_kind === "mcp" ? "#f0ae3b" : "#62b8c6"}" stroke-width="1.5" stroke-dasharray="3 4"></line>
-            <circle cx="${x.toFixed(1)}" cy="414" r="${node.node_kind === "mcp" ? 5 : 3.5}" fill="${node.node_kind === "mcp" ? "#f0ae3b" : "#62b8c6"}"></circle>
+            <line x1="${x.toFixed(1)}" y1="${metricBottom + 10}" x2="${x.toFixed(1)}" y2="${rowY}" stroke="${node.node_kind === "mcp" ? "#f0ae3b" : "#62b8c6"}" stroke-width="1.5" stroke-dasharray="3 4"></line>
+            <circle cx="${x.toFixed(1)}" cy="${metricBottom + 10}" r="${node.node_kind === "mcp" ? 5 : 3.5}" fill="${node.node_kind === "mcp" ? "#f0ae3b" : "#62b8c6"}"></circle>
             <rect class="architecture-passage-card ${node.node_kind === "mcp" ? "is-mcp" : ""}" x="${cardX.toFixed(1)}" y="${rowY}" width="106" height="120" rx="5"></rect>
             <text class="architecture-passage-title" x="${(cardX + 8).toFixed(1)}" y="${rowY + 16}">${escapeHtml(nodeTitle.slice(0, 17))}</text>
             <text class="architecture-passage-place" x="${(cardX + 8).toFixed(1)}" y="${rowY + 31}">${escapeHtml(placeLabel.slice(0, 17))}</text>
@@ -14431,27 +14624,44 @@
           : "time dependency evidence unavailable";
       const selectedX = selected ? xForDistance((Number(selected.start_distance_m) + Number(selected.end_distance_m)) / 2) : plotX;
       return `
-        <section class="architecture-fingerprint-frame architecture-desktop-fingerprint" data-route-fingerprint="ready">
+        <section class="architecture-fingerprint-frame architecture-desktop-fingerprint" data-route-fingerprint="ready" ${elevationProfile.available ? 'data-architecture-elevation-profile="true"' : 'data-architecture-elevation-profile="false"'} data-architecture-axis-basis="golden-gpx-distance">
           <div class="architecture-frame-heading">
-            <div><h3>Route Fingerprint</h3><p>${escapeHtml(axisDescription)} · source axis ${formatDistanceKm(sourceRouteDistance)}.</p></div>
+            <div><h3>Golden GPX Elevation × Architecture Metrics</h3><p>${escapeHtml(axisDescription)} · golden ${formatDistanceKm(routeDistance)} · source ${formatDistanceKm(sourceRouteDistance)} · source_to_golden_scale ${Number.isFinite(sourceToGoldenScale) ? sourceToGoldenScale.toFixed(6) : "—"}.</p></div>
             <span class="chip ${snapshot.status === "ready" ? "ok" : "warn"}">${escapeHtml(snapshot.status)}</span>
           </div>
           <div class="architecture-fingerprint-scroll" data-architecture-fingerprint-scroll>
-            <svg class="architecture-fingerprint" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="width:${width}px;min-width:${width}px;height:${height}px" role="img" aria-label="Distance-indexed route architecture fingerprint with CP and MCP passage timing">
-              <defs><pattern id="architectureMissingHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#f0ae3b" stroke-opacity=".22" stroke-width="2"></line></pattern></defs>
-              ${ticks}${laneLabels}${binMarks}${cpNodes}
+            <div class="architecture-sticky-lane-key" aria-hidden="true">${stickyLaneLabels}</div>
+            <svg class="architecture-fingerprint" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="width:${width}px;min-width:${width}px;height:${height}px" role="img" aria-label="Golden GPX elevation profile compared with distance-indexed route architecture metrics and CP or MCP passage timing">
+              <defs>
+                <pattern id="architectureMissingHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#f0ae3b" stroke-opacity=".22" stroke-width="2"></line></pattern>
+                <linearGradient id="architectureElevationFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b7cf63" stop-opacity=".62"></stop><stop offset="100%" stop-color="#62b8c6" stop-opacity=".04"></stop></linearGradient>
+              </defs>
+              ${ticks}
+              <text class="architecture-lane-text" x="16" y="${elevationTop + 20}">GOLDEN ELEVATION</text>
+              <text class="architecture-axis-text" x="16" y="${elevationTop + 38}">${elevationProfile.available ? `${Math.round(elevationPaths.minimumElevation)}–${Math.round(elevationPaths.maximumElevation)} M` : "PROFILE MISSING"}</text>
+              <line class="architecture-lane-rule" x1="${plotX}" y1="${elevationTop + elevationHeight}" x2="${plotX + plotWidth}" y2="${elevationTop + elevationHeight}"></line>
+              ${elevationProfile.available ? `
+                <g opacity="${architectureModeOpacity("elevation")}">
+                  <path class="architecture-elevation-envelope" d="${elevationPaths.envelopePath}"></path>
+                  <path class="architecture-elevation-area" d="${elevationPaths.areaPath}"></path>
+                  <path class="architecture-elevation-line" d="${elevationPaths.linePath}"></path>
+                  <text class="architecture-elevation-label" x="${plotX + 8}" y="${elevationTop + 13}">${Math.round(elevationPaths.maximumElevation)}m</text>
+                  <text class="architecture-elevation-label" x="${plotX + 8}" y="${elevationTop + elevationHeight - 6}">${Math.round(elevationPaths.minimumElevation)}m</text>
+                </g>
+              ` : `<rect x="${plotX}" y="${elevationTop}" width="${plotWidth}" height="${elevationHeight}" fill="url(#architectureMissingHatch)"></rect>`}
+              ${laneLabels}${binMarks}${cpNodes}
               <rect x="${plotX}" y="${laneY.reversibility}" width="${plotWidth}" height="${laneHeight}" fill="${topologyAvailable ? "#183d36" : "url(#architectureMissingHatch)"}" opacity="${architectureModeOpacity("reversibility")}"></rect>
               <text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.reversibility + 25}">${graphLabel}</text>
               <rect x="${plotX}" y="${laneY.time}" width="${plotWidth}" height="${laneHeight}" fill="${timeAvailable ? "#203a31" : "url(#architectureMissingHatch)"}" opacity="${architectureModeOpacity("time")}"></rect>
               <text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.time + 25}">${timeLabel}</text>
-              <line x1="${selectedX.toFixed(1)}" y1="29" x2="${selectedX.toFixed(1)}" y2="410" stroke="#f0ae3b" stroke-width="2" stroke-dasharray="4 4"></line>
+              <line x1="${selectedX.toFixed(1)}" y1="29" x2="${selectedX.toFixed(1)}" y2="${metricBottom + 8}" stroke="#f0ae3b" stroke-width="2" stroke-dasharray="4 4"></line>
               ${timingNodes.length ? `
-                <rect x="0" y="420" width="${width}" height="288" fill="#09110e"></rect>
-                <line class="architecture-lane-rule" x1="${plotX}" y1="414" x2="${plotX + plotWidth}" y2="414"></line>
-                <text class="architecture-lane-text" x="16" y="443">CP/MCP PASSAGE · 500M WINDOW</text>
-                <text class="architecture-axis-text" x="16" y="460">MIN / AVG / MODE / MAX</text>
-                <text class="architecture-axis-text" x="16" y="477">MODE · 5 MIN BUCKET</text>
-                <text class="architecture-axis-text" x="16" y="494">CLICK → MAP + SEGMENT</text>
+                <rect x="0" y="${metricBottom + 16}" width="${width}" height="318" fill="#09110e"></rect>
+                <line class="architecture-lane-rule" x1="${plotX}" y1="${metricBottom + 10}" x2="${plotX + plotWidth}" y2="${metricBottom + 10}"></line>
+                <text class="architecture-lane-text" x="16" y="${metricBottom + 34}">CP/MCP PASSAGE · 500M WINDOW</text>
+                <text class="architecture-axis-text" x="16" y="${metricBottom + 51}">SOURCE 500M WINDOW</text>
+                <text class="architecture-axis-text" x="16" y="${metricBottom + 68}">MIN / AVG / MODE / MAX</text>
+                <text class="architecture-axis-text" x="16" y="${metricBottom + 85}">CLICK → MAP + SEGMENT</text>
                 ${passageMarks}
               ` : ""}
             </svg>
@@ -14713,6 +14923,14 @@
       const vector = bin.historical_mobility_demand_vector || {};
       const speeds = bin.reference_speed_kmh || {};
       const pace = bin.reference_pace_seconds_per_100m || {};
+      const midpointDistanceM = (
+        Number(bin.start_distance_m)
+        + Number(bin.end_distance_m)
+      ) / 2;
+      const elevationSample = architectureElevationAtDistance(
+        snapshot,
+        midpointDistanceM,
+      );
       return `
         <section class="architecture-segment-inspector" data-architecture-mobile-panel="segment" data-selected-architecture-bin="${escapeHtml(bin.route_bin_id)}">
           <div class="architecture-inspector-heading">
@@ -14739,6 +14957,7 @@
               <p class="small-note">P50 ${architectureMetric(pace.p50, " sec / 100 m", 0)} · conservative ${architectureMetric(pace.p75_conservative, " sec / 100 m", 0)}</p>
             </div>
             <div class="architecture-metric-grid">
+              <div><small>Golden elevation</small><strong>${architectureMetric(elevationSample?.elevation_m, " m", 0)}</strong></div>
               <div><small>Grade P50</small><strong>${architectureMetric(Number(bin.signed_grade_ratio_p50) * 100, "%", 1)}</strong></div>
               <div><small>Risk source value</small><strong>${architectureMetric(bin.risk_score_p50, "/100", 1)}</strong></div>
               <div><small>Viscosity</small><strong>${architectureMetric(bin.grade_adjusted_viscosity_index, "", 1)}</strong></div>
@@ -14765,11 +14984,16 @@
       const selected = architectureSelectedBin(snapshot);
       return `
         <section class="architecture-mobile-spine" data-architecture-mobile-panel="spine">
-          <div class="architecture-lower-heading"><div><h3>Route spine</h3><p>Vertical mobile projection; high-pressure anchors and regular distance samples.</p></div><span class="chip info">${bins.length} shown</span></div>
+          <div class="architecture-lower-heading"><div><h3>Route spine</h3><p>Vertical mobile projection; golden elevation, pressure anchors and regular distance samples.</p></div><span class="chip info">${bins.length} shown</span></div>
           ${bins.length ? `<div class="architecture-spine-list">${bins.map(bin => {
             const score = architectureVectorValue(bin, "composite_pressure_index");
             const selectedClass = bin.route_bin_id === selected?.route_bin_id ? "is-selected" : "";
-            return `<button type="button" class="architecture-spine-item ${selectedClass}" data-architecture-bin-id="${escapeHtml(bin.route_bin_id)}"><span><strong>${escapeHtml(bin.distance_label || bin.route_bin_id)}</strong><small>${escapeHtml(bin.why_demanding?.map(architectureReasonLabel).join(" · ") || "distributed demand")}</small></span><span class="architecture-spine-score">${Math.round(score)}</span></button>`;
+            const midpointDistanceM = (Number(bin.start_distance_m) + Number(bin.end_distance_m)) / 2;
+            const elevation = architectureElevationAtDistance(snapshot, midpointDistanceM);
+            const elevationLabel = Number.isFinite(Number(elevation?.elevation_m))
+              ? `${Math.round(Number(elevation.elevation_m))}m`
+              : "elevation unavailable";
+            return `<button type="button" class="architecture-spine-item ${selectedClass}" data-architecture-bin-id="${escapeHtml(bin.route_bin_id)}"><span><strong>${escapeHtml(bin.distance_label || bin.route_bin_id)}</strong><small>${escapeHtml(elevationLabel)} · ${escapeHtml(bin.why_demanding?.map(architectureReasonLabel).join(" · ") || "distributed demand")}</small></span><span class="architecture-spine-score">${Math.round(score)}</span></button>`;
           }).join("")}</div>` : `<div class="architecture-empty"><div><strong>No route spine yet.</strong>Historical mobility bins are unavailable.</div></div>`}
         </section>
       `;
