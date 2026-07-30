@@ -18,7 +18,7 @@ from scout.agents.pydantic_ai_compat import (
 
 
 def test_pydantic_ai_runtime_version_supports_slim_install() -> None:
-    assert pydantic_ai_runtime_version() == "2.14.1"
+    assert pydantic_ai_runtime_version() == "2.20.0"
     assert packaged_runtime_version() == pydantic_ai_runtime_version()
 
 
@@ -175,6 +175,12 @@ def test_native_research_capabilities_are_on_by_default_for_external_models() ->
         "WebSearch",
         "WebFetch",
     ]
+    for capability in pydantic_native_research_capabilities(policy):
+        assert capability.native is False
+        assert capability.local is not None
+    for capability in packaged_native_research_capabilities(policy):
+        assert capability.native is False
+        assert capability.local is not None
 
 
 def test_native_research_capabilities_skip_local_function_model() -> None:
@@ -209,9 +215,33 @@ def test_native_research_capabilities_include_web_search_and_fetch() -> None:
     assert policy.native_research_candidate_only is True
     assert policy.native_research_runtime_safety_truth is False
     assert [type(item).__name__ for item in capabilities] == ["WebSearch", "WebFetch"]
-    assert capabilities[0].max_uses == 10
-    assert capabilities[1].max_uses == 10
+    assert capabilities[0].native is False
+    assert capabilities[0].local is not None
+    assert capabilities[0].max_uses is None
+    assert capabilities[1].native is False
+    assert capabilities[1].max_uses is None
     assert capabilities[1].max_content_tokens is None
     assert capabilities[1].local is not None
-    assert capabilities[0].allowed_domains == ["pydantic.dev", "openrouter.ai"]
+    assert capabilities[0].allowed_domains is None
     assert capabilities[1].blocked_domains == ["example.com"]
+
+
+def test_openai_chat_keeps_native_search_but_uses_local_fetch() -> None:
+    policy = resolve_model_policy(
+        "openai-chat:gpt-4o-mini",
+        env={
+            "SCOUT_AI_OS_NATIVE_RESEARCH": "1",
+            "SCOUT_AI_OS_NATIVE_RESEARCH_ALLOWED_DOMAINS": "pydantic.dev",
+        },
+    )
+
+    capabilities = packaged_native_research_capabilities(policy)
+
+    assert capabilities[0].native is not False
+    assert capabilities[0].local is None
+    assert capabilities[0].max_uses == 10
+    assert capabilities[0].allowed_domains == ["pydantic.dev"]
+    assert capabilities[1].native is False
+    assert capabilities[1].local is not None
+    assert capabilities[1].max_uses is None
+    assert capabilities[1].allowed_domains == ["pydantic.dev"]

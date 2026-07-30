@@ -151,7 +151,62 @@ def _ups_status() -> dict[str, Any]:
         "power_supply_count": len(supplies),
         "power_supplies": supplies,
         "upsc_list": run_command(["sh", "-lc", "command -v upsc >/dev/null && upsc -l || true"]),
+        "ups_hat_e": _ups_hat_e_status(),
     }
+
+
+def _ups_hat_e_status(
+    *,
+    bus: Path = Path("/dev/i2c-1"),
+    reader: Callable[..., dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    if not bus.exists():
+        return {
+            "available": False,
+            "bus": str(bus),
+            "read_only": True,
+            "power_control_write_allowed": False,
+        }
+    try:
+        if reader is None:
+            from tools.pi_ups_hat_e_smoke import (
+                DEFAULT_ADDRESS,
+                DEFAULT_LOW_CELL_MV,
+                read_ups_hat_e_sample,
+            )
+
+            reader = read_ups_hat_e_sample
+            address = DEFAULT_ADDRESS
+            low_cell_mv = DEFAULT_LOW_CELL_MV
+        else:
+            address = 0x2D
+            low_cell_mv = 3150
+        sample = reader(
+            bus=bus,
+            address=address,
+            low_cell_mv=low_cell_mv,
+        )
+        return {
+            "available": True,
+            "bus": str(bus),
+            "address": f"0x{address:02x}",
+            "read_only": True,
+            "power_control_write_allowed": False,
+            "battery": sample.get("battery"),
+            "cell_voltage_mv": sample.get("cell_voltage_mv"),
+            "low_cell_threshold_mv": sample.get("low_cell_threshold_mv"),
+            "low_cell_voltage_present": sample.get("low_cell_voltage_present"),
+            "power_state": sample.get("power_state"),
+            "vbus": sample.get("vbus"),
+        }
+    except Exception as exc:  # noqa: BLE001 - telemetry gaps must not stop eval.
+        return {
+            "available": False,
+            "bus": str(bus),
+            "read_only": True,
+            "power_control_write_allowed": False,
+            "error": f"{type(exc).__name__}: {exc}"[:500],
+        }
 
 
 def require_ai_hat_runtime(endpoint: str) -> None:

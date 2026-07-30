@@ -657,6 +657,27 @@ def test_health_guard_warns_on_historical_flags_but_fails_current_flags() -> Non
     assert current["status"] == "fail"
 
 
+def test_health_guard_accepts_read_only_ups_hat_e_telemetry() -> None:
+    guard = health_guard(
+        {
+            "temp": {"stdout": "temp=56.5'C"},
+            "throttled": {"stdout": "throttled=0x0"},
+            "ups": {
+                "power_supplies": [],
+                "upsc_list": {"stdout": ""},
+                "ups_hat_e": {
+                    "available": True,
+                    "read_only": True,
+                    "power_control_write_allowed": False,
+                },
+            },
+        }
+    )
+
+    assert guard["status"] == "pass"
+    assert guard["warnings"] == []
+
+
 @pytest.mark.parametrize(
     (
         "adapter_id",
@@ -1332,9 +1353,9 @@ def test_plain_excerpt_keeps_string_newlines_natural_and_finishes_nearby_sentenc
 def test_runtime_package_versions_attest_pydantic_ai_stack() -> None:
     versions = runtime_package_versions()
 
-    assert versions["pydantic_ai_slim"] == "2.14.1"
-    assert versions["pydantic_evals"] == "2.14.1"
-    assert versions["pydantic_graph"] == "2.14.1"
+    assert versions["pydantic_ai_slim"] == "2.20.0"
+    assert versions["pydantic_evals"] == "2.20.0"
+    assert versions["pydantic_graph"] == "2.20.0"
 
 
 def test_three_axis_scorecard_separates_transport_safety_and_semantics() -> None:

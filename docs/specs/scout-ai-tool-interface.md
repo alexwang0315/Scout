@@ -4,13 +4,13 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-07-20
+## Implementation Update 2026-07-30
 
-Scout AI now runs against Pydantic AI v2.13.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.20.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[openai,openrouter]` is pinned to v2.13.0 for Pi admin/live
-  runtimes and the local development venv.
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.20.0 for Pi
+  admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
   continuation from executing extra same-turn tools after Scout has produced a
@@ -29,16 +29,40 @@ tracks. Tool execution remains deterministic and read-only by default:
   supplies `openai:<model>`, Scout normalizes it to `openai-chat:<model>` to
   preserve the existing Chat-Completions-like Scout tool/output contract rather
   than silently switching to the OpenAI Responses API behavior.
-- Native WebSearch and WebFetch are enabled by default for external
-  provider-backed Scout AI calls. Scout AI is the full-capability entrypoint;
-  deterministic tools and provider-native research are supporting capability
-  layers. Operators may opt out for lab/CI with
-  `SCOUT_AI_OS_NATIVE_RESEARCH=0`, or constrain domains with the native
-  research domain env vars.
-- Provider-native MCP remains disabled until the matching Pydantic AI optional
-  dependency and a Scout-owned connector boundary are added.
-- Capability adapters may use v2.13 `get_model`, `resolve_model_id`, and
+- Trusted WebSearch and WebFetch are enabled by default for external
+  provider-backed Scout AI calls. Direct OpenAI Chat may use native search;
+  OpenRouter/NVIDIA use Scout's bounded DuckDuckGo function tool so the search
+  result and URL appear in the deterministic call trace. WebFetch currently
+  uses Scout's local URL/domain-validating function tool on all configured
+  providers. Operators may opt out for lab/CI with
+  `SCOUT_AI_OS_NATIVE_RESEARCH=0`, or constrain domains with the native research
+  domain env vars.
+- Provider-native MCP remains disabled until a Scout-owned connector boundary
+  explicitly enables it. The Mac `pydantic-ai-smoke` optional dependency
+  includes MCP and the Pydantic built-in WebFetch extra only for compatibility
+  verification.
+- Capability adapters may use v2 `get_model`, `resolve_model_id`, and
   `for_agent` hooks. Model resolution still passes through Scout model policy.
+- OpenRouter request settings are caller-owned immutable input. Provider
+  adapters may derive a per-request copy but must not mutate the configured
+  settings object while normalizing or sending a request.
+- Tool-search request and result history must survive supported model/provider
+  handoffs. Scout adapters must not discard those parts merely because the next
+  request uses a different provider.
+- A bare MCP `McpError` is a recoverable tool/provider failure. Scout records
+  the redacted error in the deterministic trace and may continue through its
+  normal recovery ladder instead of treating it as a process failure.
+- All provider-specific fields preserved by Pydantic AI `RequestUsage` remain
+  available to Scout telemetry. Unknown usage fields must not be silently
+  dropped, and any value that could contain sensitive provider metadata must be
+  redacted before persistence or display.
+- `ToolFailed` results must remain visible in the deterministic
+  call trace even when no model retry is requested.
+- OpenRouter `AdvisorTool` support and OpenAI Responses
+  `WebSearchTool.external_web_access` are opt-in provider features; the package
+  upgrade does not bypass Scout capability policy.
+- `ModelHTTPError.headers` and `retry_after` may drive redacted retry telemetry.
+  Raw authorization or provider headers must never enter artifacts or UI.
 - Deferred tool streams expose `DeferredToolRequestsEvent` and
   `DeferredToolResultsEvent`; tool adapters must preserve source references and
   deterministic verification across those events.
