@@ -186,3 +186,178 @@ def test_chilai_reference_segment_timing_fixture_contract() -> None:
     assert "/Users/" not in serialized
     assert "<trkpt" not in serialized
     assert "<time" not in serialized
+
+
+def test_reference_segment_timing_uses_workspace_route_nodes_without_named_waypoints(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "dongqing"
+    (project_root / "sources").mkdir(parents=True)
+    (project_root / "candidates").mkdir()
+    (project_root / "outputs" / "mcp").mkdir(parents=True)
+    source_gpx = tmp_path / "timestamped-reference.gpx"
+    points = [
+        ("2026-01-01T00:00:00+00:00", 23.000, 121.000),
+        ("2026-01-01T00:30:00+00:00", 23.010, 121.000),
+        ("2026-01-01T01:00:00+00:00", 23.020, 121.000),
+    ]
+    source_gpx.write_text(_gpx(points, []), encoding="utf-8")
+    source_sha = hashlib.sha256(source_gpx.read_bytes()).hexdigest()
+    source_index = {
+        "artifact_kind": "pretrip_historical_gpx_source_index",
+        "schema_version": "historical_gpx_importer.v1",
+        "project_id": "dongqing",
+        "sources": [
+            {
+                "source_id": "gpx.source.dongqing.reference.001",
+                "original_path": str(source_gpx),
+                "original_filename": source_gpx.name,
+                "provider": "operator_supplied_local_file",
+                "role": "reference_track",
+                "route_role": "reference_track",
+                "sha256": source_sha,
+            }
+        ],
+    }
+    (project_root / "sources" / "historical_gpx_source_index.json").write_text(
+        json.dumps(source_index, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    checkpoints = [
+        {
+            "candidate_id": "cp.start",
+            "label": "Start",
+            "lat": 23.000,
+            "lon": 121.000,
+            "route_distance_m": 0.0,
+        },
+        {
+            "candidate_id": "cp.middle",
+            "label": "CP middle",
+            "lat": 23.010,
+            "lon": 121.000,
+            "route_distance_m": 1112.0,
+        },
+        {
+            "candidate_id": "cp.finish",
+            "label": "Finish",
+            "lat": 23.020,
+            "lon": 121.000,
+            "route_distance_m": 2224.0,
+        },
+    ]
+    (project_root / "candidates" / "checkpoints.json").write_text(
+        json.dumps(checkpoints, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "mcp" / "mcp_candidates.json").write_text(
+        json.dumps(
+            {
+                "mcp_candidates": [
+                    {
+                        "mcp_id": "mcp.named-camp",
+                        "label": "Named camp",
+                        "lat": 23.010,
+                        "lon": 121.000,
+                        "distance_m": 1112.0,
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "dongqing",
+                "checkpoint_candidates_ref": "candidates/checkpoints.json",
+                "mcp_candidates_ref": "outputs/mcp/mcp_candidates.json",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_reference_segment_timing(project_root)
+
+    assert payload["status"] == "ready"
+    assert payload["method"]["checkpoint_source"] == "workspace_route_distance_cp_mcp"
+    assert payload["counts"]["timed_source_file_count"] == 1
+    assert payload["counts"]["checkpoint_count"] == 3
+    assert payload["counts"]["segment_count"] == 2
+    assert payload["counts"]["usable_segment_count"] == 2
+    assert payload["counts"]["measurement_count"] == 2
+    assert [item["label"] for item in payload["segments"]] == [
+        "Start -> Named camp",
+        "Named camp -> Finish",
+    ]
+    assert "屯原登山口" not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_reference_segment_timing_rejects_source_with_unreliable_time_order(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "project"
+    (project_root / "sources").mkdir(parents=True)
+    source_gpx = tmp_path / "bad-time-order.gpx"
+    source_gpx.write_text(
+        _gpx(
+            [
+                ("2026-01-01T00:00:00+00:00", 24.000, 121.000),
+                ("2026-01-01T01:00:00+00:00", 24.040, 121.000),
+                ("2026-01-01T00:30:00+00:00", 24.120, 121.000),
+            ],
+            [
+                ("屯原登山口", 24.000, 121.000),
+                ("雲海保線所", 24.040, 121.000),
+                ("天池山莊", 24.120, 121.000),
+                ("天池岔路口", 24.129, 121.000),
+                ("奇萊南峰", 24.145, 121.000),
+                ("南華山", 24.129, 121.015),
+            ],
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "sources" / "historical_gpx_source_index.json").write_text(
+        json.dumps(
+            {
+                "project_id": "bad_time_order",
+                "sources": [
+                    {
+                        "source_id": "gpx.source.bad-time",
+                        "original_path": str(source_gpx),
+                        "original_filename": source_gpx.name,
+                        "role": "reference_track",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_reference_segment_timing(project_root)
+
+    assert payload["counts"]["timed_source_file_count"] == 0
+    assert payload["counts"]["time_quality_rejected_source_file_count"] == 1
+    assert payload["source_time_quality"][0]["status"] == "rejected_non_monotonic"
+    assert payload["source_time_quality"][0]["non_increasing_ratio"] == 0.5
+
+
+def test_workspace_rebuild_generates_reference_timing_after_route_enrichment() -> None:
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "tools"
+        / "rebuild_pretrip_workspace_on_scout.sh"
+    ).read_text(encoding="utf-8")
+
+    layer_index = script.index('echo "Running pretrip layer preparation..."')
+    architecture_index = script.index(
+        'echo "Preparing Route Architecture Intelligence artifacts..."'
+    )
+    timing_index = script.index(
+        'echo "Building workspace-specific reference segment timing evidence..."'
+    )
+    verifier_index = script.index('echo "Running spec alignment verifier..."')
+
+    assert layer_index < architecture_index < timing_index < verifier_index

@@ -11,6 +11,7 @@ from typing import Any, Callable, Mapping, MutableMapping
 
 from pretrip_layer_preparation import LayerPreparationRequest, run_layer_preparation
 from scout_env import ScoutEnvLoadResult, load_scout_env_files
+from weather_imagery_tile_cache import project_cwa_imagery_cache_root
 
 
 ROOT = Path(__file__).resolve().parent
@@ -38,10 +39,6 @@ TimerFactory = Callable[[float, Callable[[], None]], Any]
 NowFactory = Callable[[], datetime]
 
 
-def default_cwa_imagery_cache_root() -> Path:
-    return Path.home() / ".scout" / "cache" / "cwa-weather-imagery"
-
-
 def create_dashboard_connected_preparation_manager(
     *,
     workspace_root: Path,
@@ -50,7 +47,6 @@ def create_dashboard_connected_preparation_manager(
     initial_env_load_result: ScoutEnvLoadResult | None = None,
 ) -> "DashboardConnectedPreparationManager":
     source = environ if environ is not None else os.environ
-    cache_root_value = str(source.get("SCOUT_CWA_IMAGERY_CACHE_ROOT") or "").strip()
     interval_value = str(
         source.get("SCOUT_DASHBOARD_CONNECTED_REFRESH_SECONDS") or "600"
     ).strip()
@@ -61,7 +57,6 @@ def create_dashboard_connected_preparation_manager(
     return DashboardConnectedPreparationManager(
         repo_root=repo_root,
         workspace_root=workspace_root,
-        cache_root=Path(cache_root_value) if cache_root_value else None,
         refresh_interval_seconds=interval_seconds,
         environ=environ,
         initial_env_load_result=initial_env_load_result,
@@ -80,7 +75,6 @@ class DashboardConnectedPreparationManager:
         *,
         workspace_root: Path,
         repo_root: Path = ROOT,
-        cache_root: Path | None = None,
         refresh_interval_seconds: int = DEFAULT_REFRESH_INTERVAL_SECONDS,
         environ: MutableMapping[str, str] | None = None,
         initial_env_load_result: ScoutEnvLoadResult | None = None,
@@ -91,9 +85,6 @@ class DashboardConnectedPreparationManager:
     ) -> None:
         self.workspace_root = Path(workspace_root).expanduser().resolve()
         self.repo_root = Path(repo_root).expanduser().resolve()
-        self.cache_root = Path(
-            cache_root or default_cwa_imagery_cache_root()
-        ).expanduser().resolve()
         self.refresh_interval_seconds = max(
             MIN_REFRESH_INTERVAL_SECONDS,
             int(refresh_interval_seconds),
@@ -110,7 +101,6 @@ class DashboardConnectedPreparationManager:
         self._states: dict[str, dict[str, Any]] = {}
         self._timers: dict[str, Any] = {}
         self._stopped = False
-        self._validate_cache_boundary()
 
     def trigger(
         self,
@@ -251,7 +241,7 @@ class DashboardConnectedPreparationManager:
                 "nextRunAt": None,
             }
         try:
-            env_result = self._prepare_environment()
+            env_result = self._prepare_environment(project_id)
             request = self._build_request(project_id, prepared_at=started_at)
             manifest = self.runner(request)
             completed_at = self._now()
@@ -305,7 +295,7 @@ class DashboardConnectedPreparationManager:
             self._timers[project_id] = timer
         timer.start()
 
-    def _prepare_environment(self) -> ScoutEnvLoadResult:
+    def _prepare_environment(self, project_id: str) -> ScoutEnvLoadResult:
         configured_env = str(self.environ.get("SCOUT_ENV_FILE") or "").strip()
         current_result = load_scout_env_files(
             repo_root=self.repo_root,
@@ -318,9 +308,12 @@ class DashboardConnectedPreparationManager:
                 else self.repo_root / ".env"
             ),
         )
-        self.cache_root.mkdir(parents=True, exist_ok=True)
+        project_root = self._validated_project_root(project_id)
+        project_cwa_imagery_cache_root(project_root).mkdir(
+            parents=True,
+            exist_ok=True,
+        )
         self.environ["SCOUT_CWA_SERVER_IMAGERY_CAPABLE"] = "1"
-        self.environ["SCOUT_CWA_IMAGERY_CACHE_ROOT"] = str(self.cache_root)
         initial_result = self.initial_env_load_result
         if initial_result is None:
             return current_result
@@ -442,6 +435,9 @@ class DashboardConnectedPreparationManager:
         }
 
     def _base_status(self, project_id: str) -> dict[str, Any]:
+        cache_root = project_cwa_imagery_cache_root(
+            self.workspace_root / project_id
+        )
         return {
             "schemaVersion": SCHEMA_VERSION,
             "projectId": project_id,
@@ -453,7 +449,8 @@ class DashboardConnectedPreparationManager:
             "prepareCwaImagery": True,
             "refreshMapPreparationSpecArtifacts": False,
             "serverImageryCapable": True,
-            "externalCacheRoot": str(self.cache_root),
+            "cacheScope": "project_workspace",
+            "workspaceCacheRoot": str(cache_root),
             "recurring": True,
             "refreshIntervalSeconds": self.refresh_interval_seconds,
             "requestedLayers": list(CONNECTED_DASHBOARD_LAYERS),
@@ -523,16 +520,6 @@ class DashboardConnectedPreparationManager:
             raise ValueError("pre-trip project identity mismatch")
         return project_root
 
-    def _validate_cache_boundary(self) -> None:
-        for root in (self.workspace_root, self.repo_root):
-            if self.cache_root == root:
-                raise ValueError("CWA imagery cache must be outside the workspace and repository")
-            try:
-                self.cache_root.relative_to(root)
-            except ValueError:
-                continue
-            raise ValueError("CWA imagery cache must be outside the workspace and repository")
-
     def _now(self) -> datetime:
         value = self.now_factory()
         if value.tzinfo is None or value.utcoffset() is None:
@@ -552,12 +539,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project-id", required=True)
     parser.add_argument("--workspace-root", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, default=ROOT)
-    parser.add_argument("--cache-root", type=Path, default=default_cwa_imagery_cache_root())
     args = parser.parse_args(argv)
     manager = DashboardConnectedPreparationManager(
         repo_root=args.repo_root,
         workspace_root=args.workspace_root,
-        cache_root=args.cache_root,
     )
     status = manager.run_once(args.project_id, reason="operator-cli")
     print(json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True))

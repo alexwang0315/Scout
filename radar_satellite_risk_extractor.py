@@ -26,7 +26,11 @@ from route_imagery_sampler import (
     sample_radar_grid,
     sample_satellite_grid,
 )
-from weather_imagery_tile_cache import CachedImageryFrame, WeatherImageryTileCache
+from weather_imagery_tile_cache import (
+    CachedImageryFrame,
+    WeatherImageryTileCache,
+    project_cwa_imagery_cache_root,
+)
 
 
 def build_route_weather_risk_package(
@@ -269,13 +273,10 @@ def _run_server_side_cwa_imagery_job_unlocked(
             "explicit network approval is required for the CWA imagery server job"
         )
     root = Path(project_root).resolve()
-    try:
-        cache.root.relative_to(root)
-    except ValueError:
-        pass
-    else:
+    expected_cache_root = project_cwa_imagery_cache_root(root)
+    if cache.root != expected_cache_root:
         raise ValueError(
-            "raw CWA imagery cache must live outside the project workspace"
+            "raw CWA imagery cache must use the fixed project-local cache root"
         )
     route_buffer = build_route_buffer(route_points, buffer_m=route_buffer_m)
     radar_frames = _ingest_window_or_latest(

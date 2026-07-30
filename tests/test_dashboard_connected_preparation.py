@@ -65,7 +65,9 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
 ) -> None:
     repo_root = tmp_path / "repo"
     workspace_root = tmp_path / "workspaces"
-    cache_root = tmp_path / "external-cache" / "cwa"
+    cache_root = (
+        workspace_root / "fixture-route" / "cache" / "cwa-weather-imagery"
+    )
     repo_root.mkdir()
     _write_project(workspace_root)
     (repo_root / ".env").write_text(
@@ -79,7 +81,7 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
         requests.append(request)
         assert environ["CWA_API_KEY"] == "do-not-expose-this-value"
         assert environ["SCOUT_CWA_SERVER_IMAGERY_CAPABLE"] == "1"
-        assert environ["SCOUT_CWA_IMAGERY_CACHE_ROOT"] == str(cache_root)
+        assert "SCOUT_CWA_IMAGERY_CACHE_ROOT" not in environ
         evidence_ref = "outputs/environment/cwa/cwa_weather_evidence.json"
         evidence_path = workspace_root / "fixture-route" / evidence_ref
         evidence_path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +101,6 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
     manager = DashboardConnectedPreparationManager(
         repo_root=repo_root,
         workspace_root=workspace_root,
-        cache_root=cache_root,
         environ=environ,
         runner=fake_runner,
         now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
@@ -135,6 +136,9 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
     assert status["allowNetworkFetch"] is True
     assert status["prepareCwaImagery"] is True
     assert status["serverImageryCapable"] is True
+    assert status["cacheScope"] == "project_workspace"
+    assert status["workspaceCacheRoot"] == str(cache_root)
+    assert cache_root.is_dir()
     assert status["componentStatuses"]["cwaWeather"] == "ready"
 
 
@@ -159,7 +163,6 @@ def test_connected_preparation_trigger_is_single_flight_and_schedules_refresh(
     manager = DashboardConnectedPreparationManager(
         repo_root=repo_root,
         workspace_root=workspace_root,
-        cache_root=tmp_path / "outside-cache",
         environ={"CWA_API_KEY": "present"},
         runner=fake_runner,
         refresh_interval_seconds=600,
@@ -202,7 +205,6 @@ def test_connected_preparation_refresh_for_assistant_completes_before_return(
     manager = DashboardConnectedPreparationManager(
         repo_root=repo_root,
         workspace_root=workspace_root,
-        cache_root=tmp_path / "outside-cache",
         environ={"CWA_API_KEY": "present"},
         runner=fake_runner,
         timer_factory=_RecordedTimer,
@@ -234,7 +236,6 @@ def test_connected_preparation_reports_in_progress_without_false_call_results(
     manager = DashboardConnectedPreparationManager(
         repo_root=repo_root,
         workspace_root=workspace_root,
-        cache_root=tmp_path / "outside-cache",
         environ={"CWA_API_KEY": "present"},
         runner=lambda _: pytest.fail("deferred worker must not run"),
         thread_factory=_DeferredThread,
@@ -261,7 +262,6 @@ def test_connected_preparation_keeps_startup_env_source_provenance(
     manager = DashboardConnectedPreparationManager(
         repo_root=repo_root,
         workspace_root=workspace_root,
-        cache_root=tmp_path / "outside-cache",
         environ={"CWA_API_KEY": "already-loaded"},
         initial_env_load_result=ScoutEnvLoadResult(
             loaded_files=(str(env_path),),
@@ -280,17 +280,42 @@ def test_connected_preparation_keeps_startup_env_source_provenance(
     assert status["credentialValuesExposed"] is False
 
 
-def test_connected_preparation_rejects_cache_inside_workspace(tmp_path: Path) -> None:
+def test_connected_preparation_keeps_each_project_cache_inside_its_workspace(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
     workspace_root = tmp_path / "workspaces"
     _write_project(workspace_root)
+    _write_project(workspace_root, "other-route")
+    global_cache = tmp_path / "global-cache"
+    environ = {"SCOUT_CWA_IMAGERY_CACHE_ROOT": str(global_cache)}
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ=environ,
+        runner=lambda _: {
+            "network_policy": {"network_calls_made": False},
+            "boundary": {"external_api_calls_made": False},
+        },
+    )
 
-    with pytest.raises(ValueError, match="outside the workspace"):
-        DashboardConnectedPreparationManager(
-            repo_root=tmp_path,
-            workspace_root=workspace_root,
-            cache_root=workspace_root / "cache",
-            environ={},
-        )
+    first = manager.run_once("fixture-route")
+    second = manager.run_once("other-route")
+
+    first_cache = Path(first["workspaceCacheRoot"])
+    second_cache = Path(second["workspaceCacheRoot"])
+    assert first_cache == (
+        workspace_root / "fixture-route" / "cache" / "cwa-weather-imagery"
+    ).resolve()
+    assert second_cache == (
+        workspace_root / "other-route" / "cache" / "cwa-weather-imagery"
+    ).resolve()
+    assert first_cache != second_cache
+    assert first_cache.is_dir()
+    assert second_cache.is_dir()
+    assert not global_cache.exists()
+    assert environ["SCOUT_CWA_IMAGERY_CACHE_ROOT"] == str(global_cache)
 
 
 def test_connected_preparation_does_not_read_artifacts_from_another_project(
@@ -312,7 +337,6 @@ def test_connected_preparation_does_not_read_artifacts_from_another_project(
     manager = DashboardConnectedPreparationManager(
         repo_root=repo_root,
         workspace_root=workspace_root,
-        cache_root=tmp_path / "outside-cache",
         environ={},
         runner=lambda _: {
             "network_policy": {"network_calls_made": False},

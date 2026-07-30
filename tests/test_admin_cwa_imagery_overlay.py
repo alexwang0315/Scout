@@ -51,11 +51,17 @@ def test_admin_weather_imagery_manifest_and_asset_are_cache_only(
     project_root = workspace_root / "fixture-route"
     manifest_path = project_root / "outputs/environment/cwa/imagery/weather_imagery_manifest.json"
     manifest_path.parent.mkdir(parents=True)
-    cache_root = tmp_path / "external-cache"
+    cache_root = project_root / "cache" / "cwa-weather-imagery"
     asset_ref = "frames/radar/frame.display.png"
     asset_path = cache_root / asset_ref
     asset_path.parent.mkdir(parents=True)
     asset_path.write_bytes(b"cached-overlay")
+    other_cache_root = (
+        workspace_root / "other-route" / "cache" / "cwa-weather-imagery"
+    )
+    other_asset_path = other_cache_root / asset_ref
+    other_asset_path.parent.mkdir(parents=True)
+    other_asset_path.write_bytes(b"wrong-workspace-overlay")
     manifest = {
         "artifactKind": "weatherImageryTimelineManifest",
         "schemaVersion": "weatherImageryTimelineManifest.v1",
@@ -116,7 +122,7 @@ def test_admin_weather_imagery_manifest_and_asset_are_cache_only(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setenv("SCOUT_CWA_IMAGERY_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv("SCOUT_CWA_IMAGERY_CACHE_ROOT", str(other_cache_root))
     client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
 
     response = client.get("/admin/pretrip/projects/fixture-route/weather-imagery")
@@ -153,7 +159,7 @@ def test_admin_weather_imagery_recomputes_freshness_and_hides_missing_assets(
     manifest_ref = "outputs/environment/cwa/imagery/weather_imagery_manifest.json"
     manifest_path = project_root / manifest_ref
     manifest_path.parent.mkdir(parents=True)
-    cache_root = tmp_path / "external-cache"
+    cache_root = project_root / "cache" / "cwa-weather-imagery"
     asset_ref = "frames/radar/stale.display.png"
     asset_path = cache_root / asset_ref
     asset_path.parent.mkdir(parents=True)
@@ -194,7 +200,10 @@ def test_admin_weather_imagery_recomputes_freshness_and_hides_missing_assets(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setenv("SCOUT_CWA_IMAGERY_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv(
+        "SCOUT_CWA_IMAGERY_CACHE_ROOT",
+        str(tmp_path / "legacy-global-cache"),
+    )
     client = TestClient(
         create_admin_app(
             pretrip_workspace_root=workspace_root,
@@ -269,7 +278,7 @@ def test_admin_weather_dashboard_combines_cached_route_decision_evidence(
     trend_ref = "outputs/environment/cwa/rainfall/route_precipitation_trend.json"
     risk_ref = "outputs/route_weather_risk_package.json"
     alert_ref = "outputs/route_weather_lora_alert.json"
-    cache_root = tmp_path / "external-cache"
+    cache_root = project_root / "cache" / "cwa-weather-imagery"
     asset_ref = "frames/radar/frame.display.png"
     asset_path = cache_root / asset_ref
     asset_path.parent.mkdir(parents=True)
@@ -436,7 +445,10 @@ def test_admin_weather_dashboard_combines_cached_route_decision_evidence(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setenv("SCOUT_CWA_IMAGERY_CACHE_ROOT", str(cache_root))
+    monkeypatch.setenv(
+        "SCOUT_CWA_IMAGERY_CACHE_ROOT",
+        str(tmp_path / "legacy-global-cache"),
+    )
     client = TestClient(
         create_admin_app(
             pretrip_workspace_root=workspace_root,

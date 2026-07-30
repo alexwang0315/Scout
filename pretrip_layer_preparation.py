@@ -1336,7 +1336,10 @@ def _maybe_prepare_cwa_imagery_server_job(
         from cwa_radar_ingestor import CwaRadarIngestor
         from cwa_satellite_ingestor import CwaSatelliteIngestor
         from radar_satellite_risk_extractor import run_server_side_cwa_imagery_job
-        from weather_imagery_tile_cache import WeatherImageryTileCache
+        from weather_imagery_tile_cache import (
+            WeatherImageryTileCache,
+            project_cwa_imagery_cache_root,
+        )
 
         true_color_urls = {
             extent: value
@@ -1348,12 +1351,7 @@ def _maybe_prepare_cwa_imagery_server_job(
             if value
         }
         registry = build_cwa_imagery_registry(true_color_urls=true_color_urls)
-        cache_root = Path(
-            os.environ.get(
-                "SCOUT_CWA_IMAGERY_CACHE_ROOT",
-                "~/.scout-fusion/cwa-weather-imagery-cache",
-            )
-        ).expanduser()
+        cache_root = project_cwa_imagery_cache_root(project_root)
         cache = WeatherImageryTileCache(cache_root)
         refs = run_server_side_cwa_imagery_job(
             project_root=project_root,
@@ -2535,9 +2533,13 @@ def _build_layer_preparation_manifest(
     )
     counts = _layer_counts(layers, validation)
     network_calls_made = bool(
-        project.get("overpass_fetched_at")
-        or project.get("cwa_external_api_calls_made")
-        or project.get("gee_external_api_calls_made")
+        request.network_mode == "explicit-fetch"
+        and request.allow_network_fetch
+        and (
+            project.get("overpass_fetched_at")
+            or project.get("cwa_external_api_calls_made")
+            or project.get("gee_external_api_calls_made")
+        )
     )
     boundary = _boundary(
         request,

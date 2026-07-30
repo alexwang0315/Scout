@@ -17,7 +17,7 @@ from urllib.parse import quote
 from xml.etree.ElementTree import ParseError
 
 import yaml
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
 from pydantic import (
     BaseModel,
@@ -2874,22 +2874,57 @@ def create_admin_router(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.get("/post-analysis/completed-trip-recordings")
-    def completed_trip_recordings() -> dict[str, Any]:
+    def completed_trip_recordings(
+        project_id: str | None = Query(default=None, alias="projectId"),
+    ) -> dict[str, Any]:
         try:
+            project_root = (
+                _validated_pretrip_project_root(
+                    pretrip_workspace_root,
+                    project_id=project_id,
+                )
+                if project_id
+                else None
+            )
+            if project_id and project_root is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Pre-trip project not found",
+                )
             return list_completed_trip_recordings(
                 data_root=_data_root_from_env(),
                 root=ROOT,
+                project_id=project_id,
+                project_root=project_root,
             )
         except (ValueError, OSError, ValidationError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post("/post-analysis/completed-trip-recordings/{recording_id}/select")
-    def select_completed_trip_recording(recording_id: str) -> dict[str, Any]:
+    def select_completed_trip_recording(
+        recording_id: str,
+        project_id: str | None = Query(default=None, alias="projectId"),
+    ) -> dict[str, Any]:
         try:
+            project_root = (
+                _validated_pretrip_project_root(
+                    pretrip_workspace_root,
+                    project_id=project_id,
+                )
+                if project_id
+                else None
+            )
+            if project_id and project_root is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Pre-trip project not found",
+                )
             result = select_completed_trip_recording_for_post_analysis(
                 recording_id,
                 data_root=_data_root_from_env(),
                 root=ROOT,
+                project_id=project_id,
+                project_root=project_root,
             )
             _attach_energy_reserve_monitor(
                 result,
@@ -4057,6 +4092,13 @@ def create_admin_router(
                 view,
                 now=resolved_now_factory(),
             )
+            if project_root is not None:
+                _attach_completed_trip_recording_projection(
+                    view,
+                    data_root=_data_root_from_env(),
+                    project_id=project_id,
+                    project_root=project_root,
+                )
             _attach_energy_reserve_monitor(
                 view,
                 inventory_root=resolved_wearable_inventory_root,
@@ -4629,16 +4671,14 @@ def create_admin_router(
             return _empty_cwa_weather_imagery_manifest(project_id)
         public_manifest = json.loads(json.dumps(manifest))
         from weather_imagery_freshness import evaluate_weather_imagery_freshness
-        from weather_imagery_tile_cache import WeatherImageryTileCache
+        from weather_imagery_tile_cache import (
+            WeatherImageryTileCache,
+            project_cwa_imagery_cache_root,
+        )
 
         evaluated_at = resolved_now_factory()
         cache = WeatherImageryTileCache(
-            Path(
-                os.environ.get(
-                    "SCOUT_CWA_IMAGERY_CACHE_ROOT",
-                    "~/.scout-fusion/cwa-weather-imagery-cache",
-                )
-            ).expanduser()
+            project_cwa_imagery_cache_root(project_root)
         )
         supported_frame_states: list[tuple[str, str]] = []
         for overlay in (public_manifest.get("childOverlays") or {}).values():
@@ -4755,15 +4795,13 @@ def create_admin_router(
         asset_ref = frame.get("assetRef") or frame.get("displayRef") or frame.get("cacheRef")
         if not isinstance(asset_ref, str) or not asset_ref:
             raise HTTPException(status_code=404, detail="Weather imagery asset not prepared")
-        from weather_imagery_tile_cache import WeatherImageryTileCache
+        from weather_imagery_tile_cache import (
+            WeatherImageryTileCache,
+            project_cwa_imagery_cache_root,
+        )
 
         cache = WeatherImageryTileCache(
-            Path(
-                os.environ.get(
-                    "SCOUT_CWA_IMAGERY_CACHE_ROOT",
-                    "~/.scout-fusion/cwa-weather-imagery-cache",
-                )
-            ).expanduser()
+            project_cwa_imagery_cache_root(project_root)
         )
         try:
             content = cache.read_asset(asset_ref)
@@ -6717,7 +6755,14 @@ def create_admin_router(
                 incident_store_path=resolved_incident_store_path,
                 pretrip_project_root=pretrip_project_root,
             )
-            if case_id == PRETRIP_CASE_ID:
+            if pretrip_project_root is not None:
+                _attach_completed_trip_recording_projection(
+                    view,
+                    data_root=_data_root_from_env(),
+                    project_id=case_id,
+                    project_root=pretrip_project_root,
+                )
+            elif case_id == PRETRIP_CASE_ID:
                 _attach_completed_trip_scenario_projection(view, data_root=_data_root_from_env())
                 _attach_completed_trip_recording_projection(view, data_root=_data_root_from_env())
             _attach_energy_reserve_monitor(
@@ -7129,10 +7174,22 @@ def _attach_completed_trip_recording_projection(
     view: dict[str, Any],
     *,
     data_root: Path,
+    project_id: str | None = None,
+    project_root: Path | None = None,
 ) -> None:
-    catalog = list_completed_trip_recordings(data_root=data_root, root=ROOT)
+    catalog = list_completed_trip_recordings(
+        data_root=data_root,
+        root=ROOT,
+        project_id=project_id,
+        project_root=project_root,
+    )
     view["completed_trip_recordings"] = catalog
-    active = load_active_completed_trip_recording_projection(data_root=data_root, root=ROOT)
+    active = load_active_completed_trip_recording_projection(
+        data_root=data_root,
+        root=ROOT,
+        project_id=project_id,
+        project_root=project_root,
+    )
     if not active:
         return
     view["active_completed_trip_recording"] = active.get("recording")

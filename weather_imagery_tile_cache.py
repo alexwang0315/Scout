@@ -22,6 +22,21 @@ DEFAULT_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_CACHE_MAX_AGE_HOURS = 72
 
 
+PROJECT_CWA_IMAGERY_CACHE_REF = Path("cache") / "cwa-weather-imagery"
+
+
+def project_cwa_imagery_cache_root(project_root: Path | str) -> Path:
+    """Return the project-owned CWA cache without consulting global state."""
+
+    resolved_project_root = Path(project_root).expanduser().resolve()
+    cache_root = (resolved_project_root / PROJECT_CWA_IMAGERY_CACHE_REF).resolve()
+    try:
+        cache_root.relative_to(resolved_project_root)
+    except ValueError as exc:  # pragma: no cover - constant path is defensive.
+        raise ValueError("CWA imagery cache must stay inside the project workspace") from exc
+    return cache_root
+
+
 @dataclass(frozen=True)
 class CachedImageryFrame:
     frame_id: str

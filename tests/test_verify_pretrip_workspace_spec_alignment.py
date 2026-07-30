@@ -35,6 +35,25 @@ def test_runtime_session_layout_contract_accepts_black_box_recorder(tmp_path: Pa
     assert payload["summary"]["runtime_session"]["scout_svr_checked"] is True
 
 
+def test_verifier_direct_execution_bootstraps_repo_import_path(
+    tmp_path: Path,
+) -> None:
+    code = (
+        "import runpy; "
+        f"runpy.run_path({str(VERIFIER)!r}); "
+        "import pretrip_architecture_preparation"
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_runtime_session_layout_contract_rejects_credential_exposure(
     tmp_path: Path,
 ) -> None:

@@ -3947,8 +3947,11 @@ Verification:
   `mac-workstation + explicit-fetch + allow-network-fetch`.
 - The manager loads the local repository `.env` or explicit `SCOUT_ENV_FILE`
   without exposing values, sets the CWA imagery server capability, requires a
-  cache outside the workspace/repository, refreshes the provider-backed
-  Overpass/CWA/GEE layer subset, and enables `prepare_cwa_imagery`. Existing
+  project-local cache at
+  `<workspace_root>/<project_id>/cache/cwa-weather-imagery`, refreshes the
+  provider-backed Overpass/CWA/GEE layer subset, and enables
+  `prepare_cwa_imagery`. Cache retention, pruning, locks, and reads are
+  workspace-isolated; a global cache environment value is ignored. Existing
   route, terrain, and TEII artifacts remain inputs and are not regenerated on
   every refresh.
 - The job is single-flight and schedules a service-lifetime refresh every ten

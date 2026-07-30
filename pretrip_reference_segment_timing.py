@@ -18,6 +18,9 @@ DEFAULT_OUTPUT_REF = "outputs/reference_segment_timing.json"
 CHECKPOINT_MATCH_RADIUS_M = 200.0
 CHECKPOINT_CLUSTER_RADIUS_M = 350.0
 MAX_VISIT_GAP_MINUTES = 45
+WORKSPACE_TIMING_NODE_SPACING_M = 5_000.0
+WORKSPACE_TIMING_NODE_DEDUP_M = 250.0
+MAX_NON_INCREASING_TIME_RATIO = 0.01
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,18 @@ class ReferenceSegmentSpec:
     to_name: str
     max_duration_minutes: float
     distance_filter_km: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class ReferenceTimingNode:
+    key: str
+    label: str
+    lat: float
+    lon: float
+    route_distance_m: float
+    source_kind: str
+    source_id: str
+    priority: int
 
 
 CHILAI_NANHUA_REFERENCE_SEGMENTS = (
@@ -123,9 +138,11 @@ def build_reference_segment_timing(
     project_id: str | None = None,
     source_index_ref: str = DEFAULT_SOURCE_INDEX_REF,
     route_guide_timing_ref: str = DEFAULT_ROUTE_GUIDE_TIMING_REF,
-    target_segments: tuple[ReferenceSegmentSpec, ...] = CHILAI_NANHUA_REFERENCE_SEGMENTS,
+    target_segments: tuple[ReferenceSegmentSpec, ...] | None = None,
 ) -> dict[str, Any]:
     project_root = Path(project_root)
+    project_path = project_root / "project.json"
+    project = _load_json(project_path) if project_path.exists() else {}
     source_index_path = project_root / source_index_ref
     guide_path = project_root / route_guide_timing_ref
     source_index = _load_json(source_index_path) if source_index_path.exists() else {}
@@ -140,24 +157,71 @@ def build_reference_segment_timing(
     existing_sources = [
         source for source in source_records if Path(str(source.get("original_path") or "")).exists()
     ]
-    canonical_checkpoints, checkpoint_quality = _canonical_checkpoints(existing_sources)
+    workspace_nodes = (
+        _workspace_route_timing_nodes(project_root, project)
+        if target_segments is None
+        else []
+    )
+    if len(workspace_nodes) >= 2:
+        resolved_target_segments = _workspace_reference_segments(workspace_nodes)
+        canonical_checkpoints = {
+            node.key: (node.lat, node.lon) for node in workspace_nodes
+        }
+        checkpoint_quality = _workspace_checkpoint_quality(workspace_nodes)
+        checkpoint_source = "workspace_route_distance_cp_mcp"
+    else:
+        resolved_target_segments = (
+            target_segments
+            if target_segments is not None
+            else CHILAI_NANHUA_REFERENCE_SEGMENTS
+        )
+        canonical_checkpoints, checkpoint_quality = _canonical_checkpoints(
+            existing_sources
+        )
+        checkpoint_source = "gpx_waypoint_name_cluster"
+    required_checkpoint_keys = {
+        key
+        for spec in resolved_target_segments
+        for key in (spec.from_key, spec.to_key)
+    }
 
     measurements: dict[str, list[dict[str, Any]]] = {
-        spec.segment_id: [] for spec in target_segments
+        spec.segment_id: [] for spec in resolved_target_segments
     }
     rejected_by_distance: dict[str, list[dict[str, Any]]] = {
-        spec.segment_id: [] for spec in target_segments
+        spec.segment_id: [] for spec in resolved_target_segments
     }
-    boundary_crossed: dict[str, int] = {spec.segment_id: 0 for spec in target_segments}
+    boundary_crossed: dict[str, int] = {
+        spec.segment_id: 0 for spec in resolved_target_segments
+    }
     timed_source_count = 0
+    time_quality_rejected_source_count = 0
+    source_time_quality: list[dict[str, Any]] = []
 
-    if all(key in canonical_checkpoints for key in CHECKPOINT_LABELS):
+    if all(key in canonical_checkpoints for key in required_checkpoint_keys):
         for source in existing_sources:
             source_path = Path(str(source.get("original_path") or ""))
-            track_parts = _track_parts(source_path)
-            timed_point_count = sum(len(part) for part in track_parts)
+            track_parts, time_quality = _track_parts_with_time_quality(source_path)
+            timed_point_count = int(time_quality["timed_point_count"])
+            source_quality = {
+                "source_id": str(source.get("source_id") or ""),
+                "source_filename": source.get("original_filename"),
+                **time_quality,
+            }
             if timed_point_count < 2:
+                source_quality["status"] = "missing_or_insufficient_time"
+                source_time_quality.append(source_quality)
                 continue
+            if (
+                float(time_quality["non_increasing_ratio"])
+                > MAX_NON_INCREASING_TIME_RATIO
+            ):
+                source_quality["status"] = "rejected_non_monotonic"
+                source_time_quality.append(source_quality)
+                time_quality_rejected_source_count += 1
+                continue
+            source_quality["status"] = "accepted"
+            source_time_quality.append(source_quality)
             timed_source_count += 1
             flat_points = [
                 {**point, "part_index": part_index}
@@ -166,9 +230,9 @@ def build_reference_segment_timing(
             ]
             visits = {
                 key: _checkpoint_visits(flat_points, canonical_checkpoints[key])
-                for key in CHECKPOINT_LABELS
+                for key in required_checkpoint_keys
             }
-            for spec in target_segments:
+            for spec in resolved_target_segments:
                 result = _measurement_for_source_segment(
                     source,
                     flat_points,
@@ -194,7 +258,7 @@ def build_reference_segment_timing(
             boundary_crossed[spec.segment_id],
             guide_graph,
         )
-        for spec in target_segments
+        for spec in resolved_target_segments
     ]
     usable_segment_count = sum(1 for item in segment_summaries if item["sample_count"] > 0)
     measurement_count = sum(item["sample_count"] for item in segment_summaries)
@@ -214,6 +278,9 @@ def build_reference_segment_timing(
             "source_file_count": len(source_records),
             "existing_source_file_count": len(existing_sources),
             "timed_source_file_count": timed_source_count,
+            "time_quality_rejected_source_file_count": (
+                time_quality_rejected_source_count
+            ),
             "checkpoint_count": len(canonical_checkpoints),
             "segment_count": len(segment_summaries),
             "usable_segment_count": usable_segment_count,
@@ -224,9 +291,20 @@ def build_reference_segment_timing(
             "track_boundary_crossed_measurement_count": sum(boundary_crossed.values()),
         },
         "method": {
-            "checkpoint_source": "gpx_waypoint_name_cluster",
+            "checkpoint_source": checkpoint_source,
             "checkpoint_cluster_radius_m": CHECKPOINT_CLUSTER_RADIUS_M,
             "checkpoint_match_radius_m": CHECKPOINT_MATCH_RADIUS_M,
+            "workspace_timing_node_spacing_m": (
+                WORKSPACE_TIMING_NODE_SPACING_M
+                if checkpoint_source == "workspace_route_distance_cp_mcp"
+                else None
+            ),
+            "workspace_timing_node_dedup_m": (
+                WORKSPACE_TIMING_NODE_DEDUP_M
+                if checkpoint_source == "workspace_route_distance_cp_mcp"
+                else None
+            ),
+            "max_non_increasing_time_ratio": MAX_NON_INCREASING_TIME_RATIO,
             "visit_split_gap_minutes": MAX_VISIT_GAP_MINUTES,
             "duration_basis": "nearest_trackpoint_to_checkpoint_centroid",
             "distance_basis": "trackline_distance_between_checkpoint_passages",
@@ -236,11 +314,15 @@ def build_reference_segment_timing(
             "guide_time_basis": "route_guide_timing_shortest_path",
         },
         "checkpoint_match_quality": checkpoint_quality,
+        "source_time_quality": source_time_quality,
         "segments": segment_summaries,
         "data_quality": {
             "source_file_count": len(source_records),
             "existing_source_file_count": len(existing_sources),
             "timed_source_file_count": timed_source_count,
+            "time_quality_rejected_source_file_count": (
+                time_quality_rejected_source_count
+            ),
             "usable_segment_count": usable_segment_count,
             "measurement_count": measurement_count,
             "distance_filter_applied": True,
@@ -273,6 +355,287 @@ def build_reference_segment_timing(
             "Durations are aggregate pretrip evidence for comparison only; raw GPX, coordinates, and precise timestamps are not embedded.",
         ],
     }
+
+
+def _workspace_route_timing_nodes(
+    project_root: Path,
+    project: dict[str, Any],
+) -> list[ReferenceTimingNode]:
+    checkpoint_ref = str(
+        project.get("overpass_aligned_checkpoint_candidates_ref")
+        or project.get("checkpoint_candidates_ref")
+        or ""
+    )
+    if not checkpoint_ref:
+        return []
+    checkpoint_payload = _load_optional_json(project_root / checkpoint_ref)
+    checkpoints = _payload_items(
+        checkpoint_payload,
+        "checkpoint_candidates",
+        "checkpoints",
+        "candidates",
+    )
+    if not checkpoints:
+        return []
+
+    mcp_ref = str(project.get("mcp_candidates_ref") or "")
+    mcp_payload = _load_optional_json(project_root / mcp_ref) if mcp_ref else {}
+    mcp_items = _payload_items(mcp_payload, "mcp_candidates", "candidates")
+    route_total_m = _workspace_route_total_m(project_root, project, checkpoints)
+    candidates = [
+        node
+        for node in (
+            _workspace_timing_node(
+                item,
+                source_kind="checkpoint",
+                priority=3 if _is_route_endpoint(item) else 1,
+                fallback_route_distance_m=(
+                    route_total_m
+                    if _is_finish_node(item)
+                    else 0.0
+                    if _is_start_node(item)
+                    else None
+                ),
+            )
+            for item in checkpoints
+        )
+        if node is not None
+    ]
+    mcp_nodes = [
+        node
+        for node in (
+            _workspace_timing_node(
+                item,
+                source_kind="mcp",
+                priority=2,
+            )
+            for item in mcp_items
+        )
+        if node is not None
+    ]
+    endpoint_nodes = [node for node in candidates if node.priority == 3]
+    ordinary_nodes = [node for node in candidates if node.priority == 1]
+    selected = [*endpoint_nodes, *mcp_nodes]
+    if route_total_m > 0 and ordinary_nodes:
+        target_m = WORKSPACE_TIMING_NODE_SPACING_M
+        while target_m < route_total_m:
+            selected.append(
+                min(
+                    ordinary_nodes,
+                    key=lambda node: abs(node.route_distance_m - target_m),
+                )
+            )
+            target_m += WORKSPACE_TIMING_NODE_SPACING_M
+    elif len(ordinary_nodes) <= 24:
+        selected.extend(ordinary_nodes)
+
+    unique_by_identity = {
+        (node.source_kind, node.source_id): node for node in selected
+    }
+    ordered = sorted(
+        unique_by_identity.values(),
+        key=lambda node: (node.route_distance_m, -node.priority, node.source_id),
+    )
+    deduped: list[ReferenceTimingNode] = []
+    for node in ordered:
+        if (
+            deduped
+            and abs(node.route_distance_m - deduped[-1].route_distance_m)
+            <= WORKSPACE_TIMING_NODE_DEDUP_M
+        ):
+            if node.priority > deduped[-1].priority:
+                deduped[-1] = node
+            continue
+        deduped.append(node)
+    return [
+        ReferenceTimingNode(
+            key=f"workspace_node_{index:03d}_{_safe_id(node.source_id)}",
+            label=node.label,
+            lat=node.lat,
+            lon=node.lon,
+            route_distance_m=node.route_distance_m,
+            source_kind=node.source_kind,
+            source_id=node.source_id,
+            priority=node.priority,
+        )
+        for index, node in enumerate(deduped, start=1)
+    ]
+
+
+def _workspace_timing_node(
+    item: dict[str, Any],
+    *,
+    source_kind: str,
+    priority: int,
+    fallback_route_distance_m: float | None = None,
+) -> ReferenceTimingNode | None:
+    lat = _float_or_none(item.get("lat"))
+    lon = _float_or_none(item.get("lon"))
+    route_distance_m = _float_or_none(
+        item.get("route_distance_m", item.get("distance_m"))
+    )
+    if route_distance_m is None:
+        route_distance_m = fallback_route_distance_m
+    source_id = str(
+        item.get("mcp_id")
+        or item.get("candidate_id")
+        or item.get("checkpoint_id")
+        or ""
+    )
+    label = str(item.get("label") or item.get("name") or source_id).strip()
+    if (
+        lat is None
+        or lon is None
+        or route_distance_m is None
+        or route_distance_m < 0
+        or not source_id
+        or not label
+    ):
+        return None
+    return ReferenceTimingNode(
+        key="",
+        label=label,
+        lat=lat,
+        lon=lon,
+        route_distance_m=route_distance_m,
+        source_kind=source_kind,
+        source_id=source_id,
+        priority=priority,
+    )
+
+
+def _workspace_reference_segments(
+    nodes: list[ReferenceTimingNode],
+) -> tuple[ReferenceSegmentSpec, ...]:
+    segments: list[ReferenceSegmentSpec] = []
+    for index, (start, end) in enumerate(zip(nodes, nodes[1:]), start=1):
+        expected_distance_km = max(
+            (end.route_distance_m - start.route_distance_m) / 1000.0,
+            0.05,
+        )
+        minimum_distance_km = max(0.03, expected_distance_km * 0.55)
+        maximum_distance_km = max(
+            minimum_distance_km + 0.1,
+            expected_distance_km * 1.65,
+        )
+        segments.append(
+            ReferenceSegmentSpec(
+                segment_id=f"ref_segment_timing.workspace.{index:03d}",
+                from_key=start.key,
+                to_key=end.key,
+                from_name=start.label,
+                to_name=end.label,
+                max_duration_minutes=max(120.0, expected_distance_km * 180.0),
+                distance_filter_km=(
+                    round(minimum_distance_km, 3),
+                    round(maximum_distance_km, 3),
+                ),
+            )
+        )
+    return tuple(segments)
+
+
+def _workspace_checkpoint_quality(
+    nodes: list[ReferenceTimingNode],
+) -> dict[str, Any]:
+    return {
+        node.key: {
+            "label": node.label,
+            "classified_waypoint_count": 0,
+            "cluster_count": 1,
+            "main_cluster_waypoint_count": 1,
+            "main_cluster_source_count": 1,
+            "coordinates_embedded": False,
+            "route_distance_m": round(node.route_distance_m, 1),
+            "source_kind": node.source_kind,
+            "source_id": node.source_id,
+        }
+        for node in nodes
+    }
+
+
+def _workspace_route_total_m(
+    project_root: Path,
+    project: dict[str, Any],
+    checkpoints: list[dict[str, Any]],
+) -> float:
+    distances = [
+        value
+        for value in (
+            _float_or_none(
+                item.get("route_distance_m", item.get("distance_m"))
+            )
+            for item in checkpoints
+        )
+        if value is not None
+    ]
+    route_summary_ref = str(project.get("route_summary_ref") or "")
+    if route_summary_ref:
+        summary = _load_optional_json(project_root / route_summary_ref)
+        summary_distance = _float_or_none(
+            summary.get("distance_m", summary.get("total_distance_m"))
+            if isinstance(summary, dict)
+            else None
+        )
+        if summary_distance is not None:
+            distances.append(summary_distance)
+    return max(distances, default=0.0)
+
+
+def _payload_items(payload: Any, *keys: str) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _load_optional_json(path: Path) -> Any:
+    if not path.is_file():
+        return {}
+    try:
+        return _load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _is_route_endpoint(item: dict[str, Any]) -> bool:
+    return _is_start_node(item) or _is_finish_node(item)
+
+
+def _is_start_node(item: dict[str, Any]) -> bool:
+    identity = _compact_text(
+        str(
+            item.get("candidate_id")
+            or item.get("checkpoint_id")
+            or item.get("label")
+            or ""
+        )
+    ).lower()
+    return identity in {"cp.start", "start", "起點"}
+
+
+def _is_finish_node(item: dict[str, Any]) -> bool:
+    identity = _compact_text(
+        str(
+            item.get("candidate_id")
+            or item.get("checkpoint_id")
+            or item.get("label")
+            or ""
+        )
+    ).lower()
+    return identity in {"cp.finish", "finish", "終點"}
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def write_reference_segment_timing(
@@ -712,14 +1075,27 @@ def _checkpoint_visits(
 
 
 def _track_parts(path: Path) -> list[list[dict[str, Any]]]:
+    parts, _ = _track_parts_with_time_quality(path)
+    return parts
+
+
+def _track_parts_with_time_quality(
+    path: Path,
+) -> tuple[list[list[dict[str, Any]]], dict[str, Any]]:
     root = ET.parse(path).getroot()
     parts: list[list[dict[str, Any]]] = []
+    timed_point_count = 0
+    adjacent_interval_count = 0
+    non_increasing_interval_count = 0
     for segment in root.findall(".//{*}trkseg"):
         points: list[dict[str, Any]] = []
+        segment_times: list[datetime] = []
         for trkpt in segment.findall("{*}trkpt"):
             point_time = _parse_time(trkpt.findtext("{*}time"))
             if point_time is None:
                 continue
+            timed_point_count += 1
+            segment_times.append(point_time)
             try:
                 lat = float(trkpt.attrib["lat"])
                 lon = float(trkpt.attrib["lon"])
@@ -728,7 +1104,24 @@ def _track_parts(path: Path) -> list[list[dict[str, Any]]]:
             points.append({"lat": lat, "lon": lon, "time": point_time})
         if points:
             parts.append(points)
-    return parts
+        adjacent_interval_count += max(len(segment_times) - 1, 0)
+        non_increasing_interval_count += sum(
+            current <= previous
+            for previous, current in zip(segment_times, segment_times[1:])
+        )
+    non_increasing_ratio = (
+        non_increasing_interval_count / adjacent_interval_count
+        if adjacent_interval_count
+        else 0.0
+    )
+    return parts, {
+        "timed_point_count": timed_point_count,
+        "adjacent_interval_count": adjacent_interval_count,
+        "non_increasing_interval_count": non_increasing_interval_count,
+        "non_increasing_ratio": round(non_increasing_ratio, 6),
+        "threshold": MAX_NON_INCREASING_TIME_RATIO,
+        "precise_timestamps_embedded": False,
+    }
 
 
 def _trackline_distance_km(
