@@ -18,6 +18,10 @@ SCHEMA_VERSION = "scout_route_architecture_intelligence.v0"
 MAX_SPINE_NODES = 40
 MAX_GRAPH_EDGES = 160
 MAX_PRESSURE_ANCHORS = 10
+DIFFICULTY_CP_MIN_COMPOSITE_PRESSURE = 55.0
+DIFFICULTY_CP_CLUSTER_GAP_M = 500.0
+DIFFICULTY_CP_MAX_COUNT = 10
+DIFFICULTY_CP_MAX_MATCH_DISTANCE_M = 1_000.0
 
 
 def build_route_architecture_intelligence(
@@ -155,6 +159,13 @@ def build_route_architecture_intelligence(
         vectors,
         source_ref=reference_source_ref,
     )
+    checkpoint_passage_timing = _checkpoint_passage_timing_projection(
+        passage_timing_value,
+        route_distance_m=route_distance_m,
+        distance_scale=_route_axis_scale(route_axis_transform),
+        default_source_ref=reference_source_ref,
+        demand_vectors=vectors,
+    )
     evidence_quality = _evidence_quality(
         status=status,
         reference=reference_value,
@@ -231,6 +242,7 @@ def build_route_architecture_intelligence(
                 route_distance_m,
                 distance_origin_m=crowd_analysis_origin_m,
                 distance_scale=_route_axis_scale(route_axis_transform),
+                passage_nodes=checkpoint_passage_timing["nodes"],
                 source_ref=(
                     source_ref_values.get("checkpoints")
                     or "candidates/checkpoints.json"
@@ -267,12 +279,7 @@ def build_route_architecture_intelligence(
             "axis_alignment": route_axis_transform,
         },
         "segment_demand_vectors": vectors,
-        "checkpoint_passage_timing": _checkpoint_passage_timing_projection(
-            passage_timing_value,
-            route_distance_m=route_distance_m,
-            distance_scale=_route_axis_scale(route_axis_transform),
-            default_source_ref=reference_source_ref,
-        ),
+        "checkpoint_passage_timing": checkpoint_passage_timing,
         "checkpoint_graph": _checkpoint_graph(
             checkpoint_values,
             segment_values,
@@ -324,11 +331,13 @@ def build_route_architecture_intelligence(
             "golden_route_elevation": "Coordinate-free golden GPX elevation profile on the shared Architecture distance axis.",
             "route_axis_transform": "Source metric distances are preserved, then normalized by route progress when the source axis differs from golden GPX distance.",
             "checkpoint_passage_duration": "Historical aggregate duration for a fixed 500 m route window centered on each CP/MCP; mode is rounded to 5-minute buckets.",
+            "difficulty_cp_selection": "Route-progress nodes default to MCP; only guidance-eligible high-pressure cluster peaks at composite pressure >=55 are promoted to Architecture CP, capped at 10.",
         },
         "limitations": [
             "Reference GPX reflects uploader behavior and selection bias, not the current user's capacity.",
             "Positive gravitational power is a per-kilogram mechanical proxy, not measured human energy expenditure.",
             "Candidate topology can describe route structure, but reversibility and alternatives remain unverified without reviewed architecture and mission graph evidence.",
+            "Architecture difficulty CP is a de-cluttered pretrip pressure anchor, not a Boss Point, route-safety verdict, or runtime command.",
             "Weather, physiologic state, darkness, and environment threats remain separate decision dimensions.",
             "Sparse crowd coverage lowers evidence quality for affected bins; it never rebases or truncates the golden-route scope.",
             "When source route-distance products disagree with golden GPX length, Architecture compares them by normalized route progress and preserves every original source distance.",
@@ -719,15 +728,35 @@ def _route_spine_nodes(
     *,
     distance_origin_m: float = 0.0,
     distance_scale: float = 1.0,
+    passage_nodes: Sequence[Mapping[str, Any]] = (),
     source_ref: str,
 ) -> list[dict[str, Any]]:
     nodes = []
+    passage_by_id = {
+        str(item.get("node_id")): item
+        for item in passage_nodes
+        if item.get("node_id")
+    }
     for index, item in enumerate(checkpoints):
         distance_m = _checkpoint_distance(item)
         if distance_m is None:
             continue
         node_id = str(item.get("candidate_id") or item.get("checkpoint_id") or f"cp.{index + 1}")
         checkpoint_type = str(item.get("checkpoint_type") or "checkpoint")
+        passage_node = passage_by_id.get(node_id, {})
+        is_route_anchor = checkpoint_type in {"start", "finish"}
+        node_kind = str(
+            passage_node.get("node_kind")
+            or ("route_anchor" if is_route_anchor else "mcp")
+        )
+        selection_role = str(
+            passage_node.get("selection_role")
+            or ("route_anchor" if is_route_anchor else "route_micro_checkpoint")
+        )
+        display_priority = str(
+            passage_node.get("display_priority")
+            or ("primary" if is_route_anchor else "context")
+        )
         source_distance_m = distance_m
         analysis_distance_m = (
             source_distance_m - distance_origin_m
@@ -738,6 +767,17 @@ def _route_spine_nodes(
                 "node_id": node_id,
                 "label": str(item.get("label") or node_id),
                 "node_type": checkpoint_type,
+                "node_kind": node_kind,
+                "source_node_kind": str(
+                    passage_node.get("source_node_kind") or "cp"
+                ),
+                "selection_role": selection_role,
+                "display_priority": display_priority,
+                "difficulty": (
+                    dict(passage_node.get("difficulty"))
+                    if isinstance(passage_node.get("difficulty"), Mapping)
+                    else None
+                ),
                 "route_distance_m": round(analysis_distance_m, 3),
                 "source_route_distance_m": round(source_distance_m, 3),
                 "route_progress": round(analysis_distance_m / route_distance_m, 5) if route_distance_m else 0.0,
@@ -760,7 +800,296 @@ def _route_spine_nodes(
             )
         )
     nodes.sort(key=lambda item: (item["route_distance_m"], item["node_id"]))
-    return _sample_evenly(nodes, MAX_SPINE_NODES)
+    featured = [
+        item
+        for item in nodes
+        if item["display_priority"] in {"primary", "secondary"}
+    ]
+    context = [
+        item
+        for item in nodes
+        if item["display_priority"] not in {"primary", "secondary"}
+    ]
+    sampled_context = _sample_evenly(
+        context,
+        max(0, MAX_SPINE_NODES - len(featured)),
+    )
+    selected_ids = {
+        str(item["node_id"])
+        for item in [*featured, *sampled_context]
+    }
+    return [
+        item
+        for item in nodes
+        if str(item["node_id"]) in selected_ids
+    ][:MAX_SPINE_NODES]
+
+
+def _difficulty_cp_anchors(
+    demand_vectors: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    candidates = []
+    for item in demand_vectors:
+        vector = (
+            item.get("historical_mobility_demand_vector")
+            if isinstance(
+                item.get("historical_mobility_demand_vector"),
+                Mapping,
+            )
+            else {}
+        )
+        score = _number(vector.get("composite_pressure_index"))
+        start_distance_m = _number(item.get("start_distance_m"))
+        end_distance_m = _number(item.get("end_distance_m"))
+        if (
+            score is None
+            or score < DIFFICULTY_CP_MIN_COMPOSITE_PRESSURE
+            or not bool(item.get("guidance_eligible"))
+            or start_distance_m is None
+            or end_distance_m is None
+        ):
+            continue
+        candidates.append(
+            {
+                "route_bin_id": str(item.get("route_bin_id") or ""),
+                "start_distance_m": float(start_distance_m),
+                "end_distance_m": float(end_distance_m),
+                "route_distance_m": (
+                    float(start_distance_m) + float(end_distance_m)
+                )
+                / 2.0,
+                "composite_pressure_index": round(float(score), 2),
+                "why_demanding": [
+                    str(reason)
+                    for reason in item.get("why_demanding", [])
+                    if reason
+                ],
+                "data_quality": str(
+                    item.get("data_quality") or "unknown"
+                ),
+            }
+        )
+
+    clusters: list[list[dict[str, Any]]] = []
+    for candidate in sorted(
+        candidates,
+        key=lambda item: (
+            item["start_distance_m"],
+            item["end_distance_m"],
+            item["route_bin_id"],
+        ),
+    ):
+        if (
+            clusters
+            and candidate["start_distance_m"]
+            <= max(item["end_distance_m"] for item in clusters[-1])
+            + DIFFICULTY_CP_CLUSTER_GAP_M
+        ):
+            clusters[-1] = [*clusters[-1], candidate]
+        else:
+            clusters.append([candidate])
+
+    peaks = []
+    for cluster in clusters:
+        peak = max(
+            cluster,
+            key=lambda item: (
+                item["composite_pressure_index"],
+                item["route_distance_m"],
+            ),
+        )
+        peaks.append(
+            {
+                **peak,
+                "cluster_start_distance_m": round(
+                    min(item["start_distance_m"] for item in cluster),
+                    3,
+                ),
+                "cluster_end_distance_m": round(
+                    max(item["end_distance_m"] for item in cluster),
+                    3,
+                ),
+                "cluster_bin_count": len(cluster),
+            }
+        )
+
+    selected = sorted(
+        peaks,
+        key=lambda item: (
+            item["composite_pressure_index"],
+            item["cluster_bin_count"],
+            -item["route_distance_m"],
+        ),
+        reverse=True,
+    )[:DIFFICULTY_CP_MAX_COUNT]
+    return sorted(
+        selected,
+        key=lambda item: (
+            item["route_distance_m"],
+            item["route_bin_id"],
+        ),
+    )
+
+
+def _difficulty_cp_detail(
+    anchor: Mapping[str, Any],
+    *,
+    matched_node_offset_m: float | None,
+) -> dict[str, Any]:
+    score = float(anchor["composite_pressure_index"])
+    return {
+        "composite_pressure_index": round(score, 2),
+        "pressure_band": "very_high" if score >= 78.0 else "high",
+        "route_bin_id": str(anchor["route_bin_id"]),
+        "cluster_start_distance_m": round(
+            float(anchor["cluster_start_distance_m"]),
+            3,
+        ),
+        "cluster_end_distance_m": round(
+            float(anchor["cluster_end_distance_m"]),
+            3,
+        ),
+        "cluster_bin_count": int(anchor["cluster_bin_count"]),
+        "why_demanding": list(anchor.get("why_demanding") or []),
+        "matched_node_offset_m": _rounded(matched_node_offset_m),
+    }
+
+
+def _synthetic_difficulty_cp(
+    anchor: Mapping[str, Any],
+    *,
+    route_distance_m: float,
+) -> dict[str, Any]:
+    distance_m = _clamp(
+        float(anchor["route_distance_m"]),
+        0.0,
+        route_distance_m,
+    )
+    safe_bin_id = re.sub(
+        r"[^a-zA-Z0-9_.-]+",
+        "-",
+        str(anchor["route_bin_id"]),
+    ).strip("-")
+    return {
+        "node_id": f"difficulty_cp.{safe_bin_id or 'pressure_peak'}",
+        "source_node_kind": "pressure_anchor",
+        "node_kind": "cp",
+        "selection_role": "difficulty_cp",
+        "display_priority": "primary",
+        "label": f"Difficulty CP {distance_m / 1000.0:.2f}K",
+        "named_places": [],
+        "checkpoint_type": "difficulty_pressure_peak",
+        "source_route_distance_m": None,
+        "route_distance_m": round(distance_m, 3),
+        "route_progress": round(
+            distance_m / route_distance_m if route_distance_m else 0.0,
+            5,
+        ),
+        "passage_window": {
+            "start_distance_m": None,
+            "end_distance_m": None,
+            "distance_m": None,
+            "semantics": "pressure_peak_without_source_passage_window",
+        },
+        "source_passage_window": {
+            "start_distance_m": None,
+            "end_distance_m": None,
+            "distance_m": None,
+        },
+        "duration_minutes": {
+            "min": None,
+            "max": None,
+            "average": None,
+            "mode_5min": None,
+            "mode_5min_tied_buckets": [],
+        },
+        "sample_count": 0,
+        "distinct_track_count": 0,
+        "direction_counts": {},
+        "coverage_ratio": {},
+        "data_quality": str(anchor.get("data_quality") or "unknown"),
+        "difficulty": _difficulty_cp_detail(
+            anchor,
+            matched_node_offset_m=None,
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _promote_difficulty_cp_nodes(
+    nodes: Sequence[Mapping[str, Any]],
+    *,
+    anchors: Sequence[Mapping[str, Any]],
+    route_distance_m: float,
+) -> list[dict[str, Any]]:
+    nodes_by_id = {
+        str(item["node_id"]): dict(item)
+        for item in nodes
+    }
+    assigned_ids: set[str] = set()
+    synthetic_nodes = []
+    for anchor in anchors:
+        candidates = [
+            item
+            for item in nodes_by_id.values()
+            if item["selection_role"] == "route_micro_checkpoint"
+            and str(item["node_id"]) not in assigned_ids
+        ]
+        nearest = min(
+            candidates,
+            key=lambda item: (
+                abs(
+                    float(item["route_distance_m"])
+                    - float(anchor["route_distance_m"])
+                ),
+                str(item["node_id"]),
+            ),
+            default=None,
+        )
+        offset_m = (
+            abs(
+                float(nearest["route_distance_m"])
+                - float(anchor["route_distance_m"])
+            )
+            if nearest
+            else None
+        )
+        if nearest is None or (
+            offset_m is not None
+            and offset_m > DIFFICULTY_CP_MAX_MATCH_DISTANCE_M
+        ):
+            synthetic_nodes.append(
+                _synthetic_difficulty_cp(
+                    anchor,
+                    route_distance_m=route_distance_m,
+                )
+            )
+            continue
+        node_id = str(nearest["node_id"])
+        assigned_ids.add(node_id)
+        nodes_by_id = {
+            **nodes_by_id,
+            node_id: {
+                **nearest,
+                "node_kind": "cp",
+                "selection_role": "difficulty_cp",
+                "display_priority": "primary",
+                "difficulty": _difficulty_cp_detail(
+                    anchor,
+                    matched_node_offset_m=offset_m,
+                ),
+            },
+        }
+
+    return sorted(
+        [*nodes_by_id.values(), *synthetic_nodes],
+        key=lambda item: (
+            float(item["route_distance_m"]),
+            0 if item["node_kind"] == "cp" else 1,
+            str(item["node_id"]),
+        ),
+    )
 
 
 def _checkpoint_passage_timing_projection(
@@ -769,6 +1098,7 @@ def _checkpoint_passage_timing_projection(
     route_distance_m: float,
     distance_scale: float = 1.0,
     default_source_ref: str,
+    demand_vectors: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     nodes = []
     for raw in value.get("nodes", []):
@@ -802,21 +1132,39 @@ def _checkpoint_passage_timing_projection(
             ),
             "distance_m": _rounded(_number(window.get("distance_m"))),
         }
+        source_node_kind = (
+            "mcp" if str(raw.get("node_kind")) == "mcp" else "cp"
+        )
+        checkpoint_type = str(
+            raw.get("checkpoint_type") or "route_progress"
+        )
+        is_route_anchor = checkpoint_type in {"start", "finish"}
+        if is_route_anchor:
+            node_kind = "route_anchor"
+            selection_role = "route_anchor"
+            display_priority = "primary"
+        elif source_node_kind == "mcp":
+            node_kind = "mcp"
+            selection_role = "authored_mcp"
+            display_priority = "secondary"
+        else:
+            node_kind = "mcp"
+            selection_role = "route_micro_checkpoint"
+            display_priority = "context"
         nodes.append(
             {
                 "node_id": str(raw.get("node_id") or f"passage.{len(nodes) + 1}"),
-                "node_kind": (
-                    "mcp" if str(raw.get("node_kind")) == "mcp" else "cp"
-                ),
-                "label": str(raw.get("label") or raw.get("node_id") or "CP"),
+                "source_node_kind": source_node_kind,
+                "node_kind": node_kind,
+                "selection_role": selection_role,
+                "display_priority": display_priority,
+                "label": str(raw.get("label") or raw.get("node_id") or "MCP"),
                 "named_places": [
                     str(item)
                     for item in raw.get("named_places", [])
                     if isinstance(item, str) and item
                 ],
-                "checkpoint_type": str(
-                    raw.get("checkpoint_type") or "route_progress"
-                ),
+                "checkpoint_type": checkpoint_type,
                 "source_route_distance_m": round(distance_m, 3),
                 "route_distance_m": round(
                     _clamp(analysis_distance_m, 0.0, route_distance_m),
@@ -882,18 +1230,33 @@ def _checkpoint_passage_timing_projection(
                     else {}
                 ),
                 "data_quality": str(raw.get("data_quality") or "unavailable"),
+                "difficulty": None,
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             }
         )
-    nodes.sort(
-        key=lambda item: (
-            item["route_distance_m"],
-            0 if item["node_kind"] == "cp" else 1,
-            item["node_id"],
-        )
+    nodes = _promote_difficulty_cp_nodes(
+        nodes,
+        anchors=_difficulty_cp_anchors(demand_vectors),
+        route_distance_m=route_distance_m,
     )
     timed_node_count = sum(item["sample_count"] > 0 for item in nodes)
+    difficulty_cp_count = sum(
+        item["node_kind"] == "cp"
+        and item["selection_role"] == "difficulty_cp"
+        for item in nodes
+    )
+    mcp_count = sum(item["node_kind"] == "mcp" for item in nodes)
+    context_mcp_count = sum(
+        item["node_kind"] == "mcp"
+        and item["display_priority"] == "context"
+        for item in nodes
+    )
+    card_node_count = sum(
+        item["node_kind"] in {"cp", "mcp"}
+        and item["display_priority"] in {"primary", "secondary"}
+        for item in nodes
+    )
     data_quality = (
         dict(value.get("data_quality"))
         if isinstance(value.get("data_quality"), Mapping)
@@ -921,6 +1284,16 @@ def _checkpoint_passage_timing_projection(
             if isinstance(value.get("policy"), Mapping)
             else {}
         ),
+        "selection_policy": {
+            "default_node_kind": "mcp",
+            "difficulty_cp_minimum_composite_pressure": (
+                DIFFICULTY_CP_MIN_COMPOSITE_PRESSURE
+            ),
+            "difficulty_cp_requires_guidance_eligible": True,
+            "difficulty_cp_cluster_gap_m": DIFFICULTY_CP_CLUSTER_GAP_M,
+            "maximum_difficulty_cp_count": DIFFICULTY_CP_MAX_COUNT,
+            "card_display_priorities": ["primary", "secondary"],
+        },
         "data_quality": {
             **data_quality,
             "node_count": len(nodes),
@@ -928,6 +1301,10 @@ def _checkpoint_passage_timing_projection(
         },
         "node_count": len(nodes),
         "timed_node_count": timed_node_count,
+        "difficulty_cp_count": difficulty_cp_count,
+        "mcp_count": mcp_count,
+        "card_node_count": card_node_count,
+        "context_mcp_count": context_mcp_count,
         "nodes": nodes,
         "privacy": {
             **privacy,
