@@ -10,6 +10,10 @@ from fastapi.testclient import TestClient
 
 import admin_api
 from admin_api import create_admin_app
+from navigation_terrain_projection_store import (
+    NavigationTerrainProjectionResolution,
+    compile_navigation_terrain_projection,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -148,6 +152,12 @@ def test_navigation_terrain_intelligence_api_projects_bounded_workspace_evidence
         ),
         encoding="utf-8",
     )
+    compile_navigation_terrain_projection(
+        project_root,
+        project=json.loads((project_root / "project.json").read_text()),
+        project_id=project_id,
+        compiled_at="2026-07-29T07:00:00Z",
+    )
     client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
 
     response = client.get(
@@ -167,6 +177,47 @@ def test_navigation_terrain_intelligence_api_projects_bounded_workspace_evidence
     assert payload["boundary"]["candidate_only"] is True
     assert payload["boundary"]["runtime_safety_truth"] is False
     assert payload["boundary"]["safe_or_walkable"] == "not_determined"
+
+
+def test_navigation_terrain_intelligence_api_returns_preparing_without_blocking(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "navigation-terrain-preparing"
+    project_root = tmp_path / project_id
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": project_id}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        admin_api,
+        "resolve_navigation_terrain_projection",
+        lambda *_args, **_kwargs: NavigationTerrainProjectionResolution(
+            http_status=202,
+            payload={
+                "schema_version": "scout_navigation_terrain_intelligence.v0",
+                "artifact_kind": "navigation_terrain_intelligence_projection_status",
+                "project_id": project_id,
+                "status": "preparing",
+                "projection_state": "preparing",
+                "retry_after_ms": 1000,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+        ),
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{project_id}/navigation-terrain-intelligence"
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "preparing"
+    assert response.json()["retry_after_ms"] == 1000
 
 
 def test_scout_dashboard_living_closed_loop_contract() -> None:
@@ -690,7 +741,11 @@ def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
     assert 'return route === "agent" || route === "debug" || route === "diagnostic" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
     assert "routeUsesFullFrame(route)" in html
     assert 'return route === "map";' in html
-    assert "/debug-projection`" not in html
+    project_loader = html.split("async function loadProjectData()", 1)[1].split(
+        "async function loadBriefingData()",
+        1,
+    )[0]
+    assert "/debug-projection`" not in project_loader
 
 
 def test_scout_dashboard_agent_tab_posts_to_same_origin_assistant_api() -> None:
@@ -915,13 +970,27 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     assert 'operation: operationName' in html
     assert "confirm_record: true" in html
     assert "triggerDashboardConnectedPreparation(\"workspace-operator-refresh\"" in html
-    assert "External refresh may use network services and update candidate evidence." in html
+    assert "Dashboard startup reads cached evidence only." in html
+    assert (
+        "The current published snapshot stays readable while refresh is running;"
+        in html
+    )
+    assert "Refresh evidence” runs Connected Preparation immediately." in html
+    assert "state.connectedPreparation?.nextRunAt" in html
+    assert "preparation.publicationStatus" in html
+    assert "preparation.recoveryJournalStatus" in html
+    assert "status.crossProcessLocking === true" in html
+    assert "status.recoveryJournalStatus" in html
+    assert "Cross-process lock" in html
+    assert "Recovery journal" in html
+    assert "after current refresh completes" in html
     assert 'localStorage.setItem("scout.dashboardProjectId", nextProjectId)' in html
     assert 'url.searchParams.set("projectId", nextProjectId)' in html
     assert 'url.hash = "features-workspace";' in html
     assert "validateWorkspaceSelection(nextProjectId)" in html
     assert "const WORKSPACE_ROOT =" not in html
-    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in html
+    assert "void loadConnectedPreparationStatus();" in html
+    assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in html
     assert workspace_page.index("renderWorkspaceOperationConsole()") < workspace_page.index(
         "renderWorkspaceStatsPanels(stats)"
     )
@@ -1910,6 +1979,11 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "走錯徵兆",
         "回復檢查",
         "/navigation-terrain-intelligence",
+        "Workspace terrain projection is preparing.",
+        "scheduleNavigationTerrainPolling",
+        "stopNavigationTerrainPolling",
+        "navigationTerrainPollTimer",
+        'snapshot.status === "preparing"',
     ):
         assert marker in html
 
@@ -1952,7 +2026,8 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "不能單獨證明步道存在" in navigation
     assert "需要來源與人工複核" in navigation
     assert 'role="listitem"\n                class="navigation-event-card"' not in navigation
-    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in html
+    assert "void loadConnectedPreparationStatus();" in html
+    assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in html
     assert 'const pageHeaderHidden = route === "outdoor-navigation";' in html
     assert (
         'dashboardShell?.classList.toggle("is-page-header-hidden", pageHeaderHidden);'
@@ -2551,15 +2626,28 @@ def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> N
 
 def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     html = PAGE.read_text(encoding="utf-8")
+    controls = html.split(
+        "function bindRouteContextBriefingControls()", 1
+    )[1].split("function bindDebugDetailControls()", 1)[0]
+    regeneration_controls = controls.split("const variantsButton", 1)[0]
 
     assert "function routeContextBriefingProjectId()" in html
     assert "function routeContextBriefingSrc()" in html
     assert "function renderRouteBriefingMetaBlock" in html
-    assert "return candidate || PRETRIP_DATA_PROJECT_ID;" in html
+    assert "return projectId();" in html
     assert 'return route === "agent" || route === "debug" || route === "diagnostic" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
     assert 'decisionBand(force.decision, "Scout AI route-context trip briefing loaded"' not in html
     assert "/admin/pretrip/projects/${project}/briefings/route-context" in html
     assert "data-route-context-briefing=\"true\"" in html
+    assert 'class="route-briefing-inline-document"' in html
+    assert "完整 Route Context 導覽" in html
+    assert 'scrolling="no"' in html
+    assert "function syncRouteContextBriefingFrameHeight(frame)" in html
+    assert "function bindRouteContextBriefingFrame(frame)" in html
+    assert "documentRef.documentElement?.scrollHeight" in html
+    assert "frame.dataset.routeContextBriefingHeight = String(nextHeight);" in html
+    assert "new ResizeObserver(sync)" in html
+    assert "bindRouteContextBriefingFrame(routeContextBriefingFrame);" in html
     assert 'class="route-briefing-meta-drawer" data-route-briefing-metadata="collapsed"' in html
     assert '<details class="route-briefing-meta-drawer" data-route-briefing-metadata="collapsed" open>' not in html
     assert "Briefing metadata" in html
@@ -2568,7 +2656,7 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "Scout AI Trip Briefing" not in html
     assert "route-briefing-ops" in html
     assert "data-route-context-briefing-regenerate" in html
-    assert "Regenerate with Scout AI" in html
+    assert "重新產生並審核" in html
     assert "/briefings/route-context/regenerate" in html
     assert "function routeContextBriefingVariantsPath()" in html
     assert "function routeContextBriefingVariantsGeneratePath()" in html
@@ -2588,12 +2676,22 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "Model audit" in html
     assert "single Scout AI model call" in html
     assert "canonical briefing unchanged" in html
-    assert "Calling Scout AI, then rebuilding briefing artifact" in html
+    assert "輸入契約 → 證據收集 → 確定性編譯 → DeepSeek 內容審核" in html
+    assert 'model: "deepseek/deepseek-v3.2"' in html
+    assert "canonical_promoted" in html
+    assert 'payload.review?.verdict === "PASS"' in html
+    assert "payload.generation?.editorial_contract?.status" in html
+    assert "payload.generation?.model_request_count" in html
+    assert "確定性內容門檻" in html
+    assert "審核未通過，已保留前一版" in html
+    assert "timeoutMs: ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS" in html
+    assert "await loadRouteContextBriefingArtifactStatus();" in regeneration_controls
+    assert "await loadData();" not in regeneration_controls
     assert "Calling Scout AI via OpenRouter" not in html
     assert "Open briefing" in html
     assert "outputs/briefings/route_context_briefing.html" in html
     assert "scout-route-context-briefing skill" in html
-    assert "pretrip_route_context_collection" in html
+    assert "輸入契約 → 證據收集 → 確定性編譯 → 內容審核" in html
     assert "candidate-only" in html
     assert "runtime_safety_truth=false" in html
     assert "stop permission, route open/closed decision" in html
@@ -2601,6 +2699,49 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert '["Outbound", "closed"]' in html
     assert "no live safety automation" not in html
     assert '<div class="debug-main-stack">\n            ${renderMetricPanel("Briefing Source"' not in html
+
+
+def test_dashboard_route_context_binds_selected_project_before_first_render() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    project_binding = html.split(
+        "function routeContextBriefingProjectId()", 1
+    )[1].split("function routeContextBriefingSrc()", 1)[0]
+
+    assert "pretripDataProjectId: projectId()," in html
+    assert "pretripDataProjectId: PROJECT_ID," not in html
+    assert "return projectId();" in project_binding
+    assert "PRETRIP_DATA_PROJECT_ID" not in project_binding
+
+
+def test_dashboard_route_context_reports_canonical_briefing_availability() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    status_loader = html.split(
+        "async function loadRouteContextBriefingArtifactStatus()", 1
+    )[1].split("async function loadBodyIndexData()", 1)[0]
+
+    assert '<link rel="icon" href="data:">' in html
+    for marker in (
+        "briefingArtifactStatus",
+        "function routeContextBriefingStatusPath()",
+        "function loadRouteContextBriefingArtifactStatus()",
+        "/briefings/route-context/status",
+        'status: "checking"',
+        'data-route-context-briefing-state="missing"',
+        "Route briefing unavailable for this workspace",
+        "No Scout AI request was started.",
+        "Canonical briefing missing",
+        "Artifact exists · content quality not approved",
+    ):
+        assert marker in html
+
+    assert "Existing artifacts verified" not in html
+    assert "fetchJson(routeContextBriefingStatusPath())" in status_loader
+    assert '["available", "missing"].includes(status)' in status_loader
+    assert 'status === "available"' in status_loader
+    assert "routeContextBriefingSrc()" not in status_loader
+    assert 'artifactStatus.status === "available"' in html
+    assert "Only a hash-bound PASS replaces and reloads the canonical briefing" in html
+    assert "If the frame is empty, regenerate the route-context briefing artifact" not in html
 
 
 def test_scout_dashboard_emergency_boundary_and_mobile_independence_contract() -> None:
@@ -2820,14 +2961,20 @@ def test_dashboard_cwa_truth_state_play_guard_and_single_product_contract() -> N
     assert "coverageStatus:" in pretrip_html
 
 
-def test_dashboard_open_triggers_connected_preparation() -> None:
+def test_dashboard_open_only_reads_connected_preparation_status() -> None:
     html = PAGE.read_text(encoding="utf-8")
     startup = html.split(
         'document.addEventListener("DOMContentLoaded", () => {', 1
     )[1].split("function apiBase()", 1)[0]
+    status_loader = html.split(
+        "async function loadConnectedPreparationStatus()", 1
+    )[1].split("async function triggerDashboardConnectedPreparation", 1)[0]
 
-    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in startup
-    assert "void loadConnectedPreparationStatus();" not in startup
+    assert "void loadConnectedPreparationStatus();" in startup
+    assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in startup
+    assert "fetchJson(" in status_loader
+    assert "postJson(" not in status_loader
+    assert "refreshCurrentDataView();" in status_loader
 
 
 def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
@@ -2902,7 +3049,8 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         'data-weather-location-trend="true"',
         ):
             assert marker in html
-    assert 'void triggerDashboardConnectedPreparation("dashboard-open");' in html
+    assert "void loadConnectedPreparationStatus();" in html
+    assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in html
     assert 'const pastRainfall = rainfallProducts.find(item => item.gridKind === "qpe_past_1h")' in html
     assert 'const futureRainfall = rainfallProducts.find(item => item.gridKind === "qpf_next_1h")' in html
     assert '"Past 1h QPE"' in html
