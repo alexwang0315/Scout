@@ -24,7 +24,7 @@ keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
 2026-07-30 update: Scout AI is the full-capability user entrypoint. Pydantic AI
-provider compatibility targets v2.20.0. The assistant and Mac-local fallback
+provider compatibility targets v2.22.0. The assistant and Mac-local fallback
 paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
 provider for `openrouter:<vendor/model>`. Trusted WebSearch and WebFetch are
@@ -284,7 +284,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.20.0;
+- supported runtime family: Pydantic AI v2.22.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;
@@ -525,6 +525,13 @@ Slice 15 acceptance:
 - manual Pi/AI HAT+ 2 verification should use
   `tools/pi_ai_hat_plus_2_smoke.py` and an already-running `hailo-ollama`
   service; it remains not part of the assistant readiness gate;
+- Pydantic AI 2.22 calls to Hailo Ollama normalize its nanosecond `created`
+  response field into Unix seconds before provider response parsing. This
+  compatibility adapter is restricted to the `hailo:`/local Hailo model path;
+- a loopback-only Hailo listener is not reachable from the normal admin Docker
+  bridge through `host.docker.internal`. Hardware smoke may use a disposable
+  host-network container, but the long-running admin container must not broaden
+  the Hailo listener to the field LAN;
 - fallback output remains `read-only model interpretation` with
   `safety_authority=false`, no `/safety/*` mutation, no ObservedFact write, no
   outbound send, and no hardware/provider control.

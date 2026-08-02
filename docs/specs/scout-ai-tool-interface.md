@@ -4,12 +4,12 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-07-30
+## Implementation Update 2026-08-02
 
-Scout AI now runs against Pydantic AI v2.20.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.22.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.20.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.22.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -43,6 +43,15 @@ tracks. Tool execution remains deterministic and read-only by default:
   verification.
 - Capability adapters may use v2 `get_model`, `resolve_model_id`, and
   `for_agent` hooks. Model resolution still passes through Scout model policy.
+- `RunContext.is_tool_available` may be used to avoid planning unavailable
+  tools, but it is not an authorization signal. Deterministic Scout permission
+  and effect checks remain authoritative.
+- `UsageLimits.per_request_input_tokens_limit` remains unset in Aggressive
+  Construction Mode. External provider context limits trigger evidence
+  checkpointing and continuation rather than a hidden Scout token cap.
+- MCP `prefer_tasks` remains opt-in per reviewed connector. MCP and tool-search
+  retry settings inherit Scout's stage policy and may not reduce the guaranteed
+  10 tool calls and 10 model requests available to each recovery stage.
 - OpenRouter request settings are caller-owned immutable input. Provider
   adapters may derive a per-request copy but must not mutate the configured
   settings object while normalizing or sending a request.
@@ -63,6 +72,9 @@ tracks. Tool execution remains deterministic and read-only by default:
   upgrade does not bypass Scout capability policy.
 - `ModelHTTPError.headers` and `retry_after` may drive redacted retry telemetry.
   Raw authorization or provider headers must never enter artifacts or UI.
+- An OpenRouter null/missing choices response is a provider `ModelAPIError`.
+  Preserve completed evidence and enter the repair/model-switch ladder; do not
+  synthesize an evidence-free answer from that response.
 - Deferred tool streams expose `DeferredToolRequestsEvent` and
   `DeferredToolResultsEvent`; tool adapters must preserve source references and
   deterministic verification across those events.

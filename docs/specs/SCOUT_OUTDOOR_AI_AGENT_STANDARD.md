@@ -680,7 +680,7 @@ route_architecture_intelligence
 │   └── samples[]  # route_distance_m + elevation envelope; no coordinates/time
 ├── segment_demand_vectors[]
 ├── checkpoint_passage_timing
-│   └── nodes[]  # every CP/MCP; min/max/average/mode_5min + named_places
+│   └── nodes[]  # source nodes retained; Architecture MCP/CP role + display priority
 ├── checkpoint_graph
 ├── retreat_dependencies[]
 ├── alternatives[]
@@ -722,6 +722,41 @@ Golden GPX 高度剖面是 Architecture 的共同顯示軸：
   原始量測距離；
 - 高度與 Architecture lanes 的疊合只供 pretrip 結構比較，不是個人耗能、
   生理壓力、完成機率或 runtime safety truth。
+
+Architecture 的 `CP` 不是「每隔一段距離就產生一點」。V0 採以下
+deterministic promotion contract：
+
+- 所有自動對齊的 route-progress checkpoint 預設投影為 `MCP`
+  （micro checkpoint），並保留 `source_node_kind`；不得因來源 artifact
+  使用 `cp.*` ID 就自動升格為 Architecture CP；
+- authored MCP / named MCP 保持 `node_kind=mcp` 與
+  `display_priority=secondary`；
+- 只有 `guidance_eligible=true` 且
+  `composite_pressure_index >= 55` 的 route bin 才可成為 difficulty CP
+  候選；相距不超過 500m 的高壓 bins 必須合併成同一壓力區域並只取區域
+  peak；
+- 每條 route 最多顯示 10 個 difficulty CP；入選節點必須揭露 pressure
+  score、band、linked route bin、cluster extent、選擇原因與原節點距離
+  offset；
+- `display_priority=primary/secondary` 才繪製 passage card；其餘 context MCP
+  仍留在 projection 供證據與抽樣定位，但不得把全部 context MCP 展開成卡片；
+- route start / finish 是 `route_anchor`，不是 difficulty CP；
+- difficulty CP 仍是 pretrip route-pressure candidate，不等於 Boss Point、
+  撤退命令或 runtime safety truth。Boss Point 仍需 route-pressure profile、
+  terrain/risk、MCP/named point 與 review evidence 的獨立合成。
+
+Architecture selection interaction contract：
+
+- Architecture Lens 地圖、Route Fingerprint、mobile route spine 與 Segment
+  Microscope 必須以同一個 `route_bin_id` 表示區段選取；任何 surface 選中
+  route segment 後，其餘 surface 必須同步高亮並顯示同一個 evidence
+  envelope；
+- CP、MCP 與 route anchor 必須以同一個 `node_id` 表示 evidence 選取；
+  點選地圖 marker 或 Fingerprint node/card 時，必須同步 node highlight，
+  並以該 node 的 route distance deterministic 對應所屬或最近 route bin；
+- 直接選取 route bin 時必須清除先前 node selection，避免畫面同時暗示兩個
+  不同位置；互動只能改變頁面 selection state，不得修改 evidence artifact、
+  Phase 1 runtime safety truth 或呼叫 `/safety/*`。
 
 #### 9.6.1 Preparation / Freshness Contract
 
@@ -890,16 +925,16 @@ Scout 的地圖力是：
 
 ### 11.2 Scout Must Assess
 
-| 地圖力項目 | 風險意義 |
-|---|---|
-| 是否下載離線地圖 | 沒訊號時仍能導航。 |
-| 是否有 GPX 軌跡 | 避免走錯路線。 |
-| 是否理解等高線 | 理解坡度與地形壓力。 |
-| 是否能辨識稜線 / 谷線 / 鞍部 | 理解地形結構。 |
-| 是否知道岔路點 | 預防迷途。 |
-| 是否知道撤退方向 | 出事時知道往哪裡退。 |
-| 是否有定位備援 | 手機沒電或 GPS 飄移時的應對。 |
-| 是否能理解地形風險圖層 | 崩壁、溪谷、陡坡、曝露地形。 |
+| 地圖力項目             | 風險意義              |
+| ----------------- | ----------------- |
+| 是否下載離線地圖          | 沒訊號時仍能導航。         |
+| 是否有 GPX 軌跡        | 避免走錯路線。           |
+| 是否理解等高線           | 理解坡度與地形壓力。        |
+| 是否能辨識稜線 / 谷線 / 鞍部 | 理解地形結構。           |
+| 是否知道岔路點           | 預防迷途。             |
+| 是否知道撤退方向          | 出事時知道往哪裡退。        |
+| 是否有定位備援           | 手機沒電或 GPS 飄移時的應對。 |
+| 是否能理解地形風險圖層       | 崩壁、溪谷、陡坡、曝露地形。    |
 
 ### 11.3 Decision Rule
 

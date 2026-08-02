@@ -100,6 +100,31 @@ Verification:
   console error count `0`.
 - `tests/test_scout_dashboard_page.py`: `61 passed`.
 
+2026-07-30 recurrence and correction:
+
+- Navigation, Architecture, and Permission advanced from Rudy+TW matrix 14 to
+  matrix 18 at `1200%`, yet the basemap was still blurred. The shared
+  `.dashboard-map-stage` had `will-change: transform`, which pre-composited the
+  complete SVG stage and enlarged that cached texture instead of repainting the
+  newly loaded high-resolution tiles.
+- The same stage transform multiplied map-space route strokes and point radii
+  by 12. Live measurements showed an Architecture checkpoint grow from about
+  `7.4px` to `88.7px`, and a Permission point from about `5.7px` to `68px`.
+- Removed persistent transform pre-compositing. Route evidence now uses
+  `non-scaling-stroke`, while point and label groups receive the inverse of the
+  current map zoom through the shared viewport controller.
+- Preserve
+  `test_dashboard_map_zoom_does_not_precompose_dynamic_rudy_tile_stage` and
+  `test_navigation_architecture_permission_zoom_keep_evidence_screen_sized`.
+  Browser acceptance at high zoom requires crisp Rudy+TW contours, the expected
+  higher tile matrix, and evidence markers that remain at their Fit size.
+- The former shared `1200%` ceiling is no longer a fixed literal. Each tiled
+  viewport derives its maximum from the Rudy+TW source's native matrix range;
+  the current Navigation, Architecture, and Permission maps start at matrix 14
+  and therefore reach matrix 19 at `3200%`. Zoom-in disables only at that native
+  ceiling so the UI does not fabricate extra detail by stretching the last
+  available tile matrix.
+
 ### 2026-07-28 - Repair false zero Evidence counts and explain empty states
 
 User request:
@@ -419,6 +444,10 @@ Implementation:
 - Replaced the stale Dashboard-open connected-preparation POST with the current
   intended status GET. Explicit `Refresh evidence` remains the only Dashboard
   control that starts connected preparation.
+- The status GET idempotently enrolls only the selected workspace in the
+  server-side refresh timer. It returns the existing cache immediately, does
+  not call CWA, GEE or Overpass, and records `nextRunAt`; the timer or the
+  explicit `Refresh evidence` action owns subsequent provider refreshes.
 
 Diagnostic boundary:
 
@@ -4659,3 +4688,99 @@ Verification:
   wording.
 - The 32-layer GIS gate is not applicable: no layer ID, layer ordering,
   preparation path, route projection, or shared map contract changed.
+
+## 2026-07-30 - Publish Connected Preparation as a complete generation
+
+Connected Preparation no longer writes provider-refresh output into the
+workspace generation that Dashboard users are reading.
+
+Publication flow:
+
+1. Acquire a non-blocking per-project preparation mutex shared by server
+   processes, then durably create the recovery journal before the staging
+   directory.
+2. Clone the selected workspace into a private staging generation. APFS clone
+   copy is used on macOS, reflink copy is preferred on Linux, and a full-copy
+   fallback remains available. Give the staged project a unique
+   `.scout-workspace-generation.json` identity.
+3. Run the CWA, GEE, and Overpass refresh against only that staged project.
+4. Validate the staged `project.json` identity and build the normal Pre-trip
+   admin projection when the workspace has a route summary.
+5. Acquire the cross-process generation write lock, verify that the original
+   published generation is still live, and durably mark the journal prepared.
+6. Exchange the staged and published project directories as one filesystem
+   operation and flush both parent directories.
+7. Mark the journal exchanged, remove the retired generation, clear the
+   journal, and release the preparation mutex.
+
+Every Dashboard `GET` or `HEAD` under
+`/admin/pretrip/projects/<project_id>` holds a project-generation read lock.
+The final exchange waits for active readers, so one response cannot start with
+one generation of `project.json` and finish with another generation's evidence
+artifacts. Refresh work itself does not hold that lock; users continue reading
+the previously published snapshot while providers and derived artifacts are
+being prepared.
+
+The Connected Preparation status contract now reports
+`publicationMode=staged-atomic-swap`, `publicationStatus`,
+`crossProcessLocking`, `recoveryJournalStatus`, and `startupRecovery`. A
+successful refresh reports the clone and filesystem-exchange modes. A runner or
+validation failure reports `not-published` and discards the invalid staged
+generation, leaving the visible workspace unchanged. A competing process
+reports `busy` without starting another provider run. The Workspace and Weather
+pages expose the lock and journal state instead of suggesting that partially
+written evidence is live.
+
+Executable evidence:
+
+- A blocked-runner regression confirmed that the published `project.json`
+  remained on generation `old` until the runner completed, then changed to
+  generation `new`.
+- Invalid staged project identity was rejected and left the published
+  generation unchanged.
+- An active Dashboard reader blocked publication until the response released
+  its generation lock.
+- The non-atomic fallback exchange restored both old and staged generations
+  after an injected final-rename failure.
+- Separate processes were verified to reject a second preparation writer and
+  to delay publication while another process held a Dashboard read lock.
+- Hard process exits were injected while staging, immediately after atomic
+  exchange, and after the fallback moved the old directory. Startup recovery
+  respectively discarded the abandoned stage, retained the published new
+  generation, and restored the old generation.
+- An evidence-only update with byte-identical `project.json` was distinguished
+  by the generation marker and recovered as the published new generation.
+- A forged journal with a mismatched session identity was preserved and
+  reported `blocked` rather than deleting an unrelated directory.
+- The current 639 MB Chilai-Nanhua workspace passed full admin-projection
+  validation on an APFS temporary clone and published an evidence-only change
+  through `renamex_np` in 6.823 seconds without a provider call or source
+  workspace mutation. `project.json` stayed byte-identical; the generation
+  marker changed, and no session or journal remained.
+- A real `create_dashboard_app --factory` server on an isolated port loaded the
+  Workspace and Weather pages against the current workspace. Both rendered
+  cross-process lock `active` and recovery journal `clear`; all 74 observed
+  page/data requests were GETs, with no Connected Preparation POST and no
+  failed data API response. The existing missing `/favicon.ico` remained the
+  only browser console 404.
+
+Boundary:
+
+- Participating Dashboard server processes coordinate through advisory file
+  locks under `.scout-connected-preparation/locks`. A separate tool that writes
+  directly into a live workspace without the documented preparation entrypoint
+  still does not participate in this coordinator.
+- Journals live under `.scout-connected-preparation/journals`. Recovery accepts
+  only a journal whose project, session path, hashes, and generation identities
+  match the expected filesystem state. Unknown or ambiguous state fails closed
+  as `blocked` and leaves the evidence available for operator review.
+- Cleanup failure after a committed exchange does not misreport the published
+  generation as failed. It returns `retiredWorkspaceCleanup=retained_for_cleanup`
+  with recovery journal `active`; the next startup retries cleanup before
+  allowing another preparation generation.
+- Coordinator, journal, staging-session, and retired-generation symbolic links
+  are rejected. A forged recovery artifact cannot redirect cleanup or restore
+  to an unrelated workspace path.
+- Published data remains candidate evidence. Atomic publication does not turn
+  CWA, GEE, Overpass, route, or derived risk artifacts into runtime safety
+  truth.

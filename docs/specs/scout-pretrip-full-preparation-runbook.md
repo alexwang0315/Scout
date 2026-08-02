@@ -298,6 +298,8 @@ This command is the main orchestrator. It should update:
   - `outputs/reference_pace_energy_analysis.json`;
   - `outputs/reference_pace_energy_map.geojson`;
   - `outputs/architecture_preparation_manifest.json`;
+- the persisted Navigation & Terrain Intelligence projection at
+  `outputs/navigation/navigation_terrain_intelligence.json`;
 - layer manifests and admin/debug projections.
 
 Architecture preparation runs after risk/route-pressure and mileage
@@ -324,6 +326,36 @@ PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python \
 `--require-enriched` is a full-preparation acceptance gate. A `core/partial`
 artifact remains valid for graceful Dashboard browsing, but it does not pass a
 completed full rebuild.
+
+When `terrain` is part of an ordinary full preparation, the orchestrator
+compiles the navigation projection only after the workspace refs and
+post-layer enrichments are available. It records
+`navigation_terrain_projection_ref` in `project.json` and
+`manifest.navigation_terrain_projection.status=completed`. The artifact is
+candidate-only and review-gated; it is not runtime safety truth.
+
+Verify the persisted projection:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python - <<'PY'
+import json, os
+from pathlib import Path
+
+root = Path(os.environ["PROJECT_ROOT"])
+project = json.loads((root / "project.json").read_text())
+ref = project.get("navigation_terrain_projection_ref")
+payload = json.loads((root / ref).read_text()) if ref else {}
+print("ref", ref, "exists", bool(ref and (root / ref).exists()))
+print("projection_state", payload.get("projection_state"))
+print("candidate_only", (payload.get("boundary") or {}).get("candidate_only"))
+PY
+```
+
+Expected: the ref exists, `projection_state=ready`, and
+`candidate_only=true`. If the input fingerprint later becomes stale, the
+Dashboard endpoint returns HTTP 202 `preparing` and runs one coalesced
+background rebuild; it must not block the browser request on a cold DEM
+compilation.
 
 ### Optional One-Shot CWA Numeric Rainfall Grid Worker
 
@@ -553,9 +585,10 @@ jobs, not time-sensitive API refreshes; their manifest status is
 `skipped_connected_refresh`, and they remain available through the normal full
 preparation path. Connected refresh also sets
 `run_map_preparation_spec_artifacts=false`: it reuses existing terrain route
-samples/visualizations instead of spending minutes regenerating them after the
-provider data is already ready. The manifest records the same
-`skipped_connected_refresh` status for that bounded optimization.
+samples/visualizations and the persisted Navigation & Terrain Intelligence
+projection instead of spending minutes regenerating them after the provider
+data is already ready. The manifest records the same
+`skipped_connected_refresh` status for both bounded optimizations.
 
 Radar/satellite motion estimation consumes the newest contiguous cached frame
 suffix whose adjacent intervals are at most two hours. A longer historical gap
@@ -3223,7 +3256,7 @@ Target workspace:
 /Users/alexwang0315/workspace/dongqing_batongguan_historic_trail_scoutAI
 ```
 
-This run exposed five ordering and verification details that must be part of
+This run exposed four ordering and verification details that must be part of
 future from-zero preparation:
 
 1. **Use a project-local imagery tile for the spec-alignment gate**
@@ -3247,8 +3280,8 @@ future from-zero preparation:
      `skipped_missing_overpass_centerline` when route alignment is attempted
      before the risk ribbon exists.
    - Rerun alignment after the ribbon is durable, or perform a final complete
-     preparation pass. Acceptance requires a completed alignment artifact; a
-     skipped first pass is not a valid terminal state.
+   preparation pass. Acceptance requires a completed alignment artifact; a
+   skipped first pass is not a valid terminal state.
 
 4. **Keep CWA imagery cache inside the selected project workspace**
    - A single global `SCOUT_CWA_IMAGERY_CACHE_ROOT` lets two Dashboard
@@ -3261,22 +3294,11 @@ future from-zero preparation:
      implicitly. Re-run Connected Preparation for the selected workspace, then
      verify both the status `workspaceCacheRoot` and a real imagery asset GET.
 
-5. **Validate multi-track continuity before artifact gates**
-   - The golden GPX document order `航跡 523 → 524 → 527` creates a
-     `25,998.872 m` cross-track jump and the candidate `seg.026`.
-   - The continuous candidate order is `航跡 527 → 523 → 524`. Correct the
-     source ordering and rebuild every distance/order-dependent artifact before
-     accepting route identity.
-   - Layer-contract and spec-alignment passes prove consistency with the active
-     route identity; they do not prove that multi-track ordering is
-     geographically or historically correct.
-
-The structural preparation result was 23/23 preparation layers ready, and the
-repository/workspace 32-layer contract gates passed. The later continuity audit
-means this workspace remains candidate-only until the golden route is reordered
-and its dependent artifacts are rebuilt. The UI exposes 31 pre-trip layers
-because `completed-track` truthfully remains absent until an actual post-trip
-recording is imported.
+The final workspace result was 23/23 preparation layers ready, the repository
+and workspace 32-layer contract gates passed, and the project-specific
+spec-alignment gate passed with zero errors and zero warnings. The UI exposes
+31 pre-trip layers because `completed-track` truthfully remains absent until an
+actual post-trip recording is imported.
 
 ## Run Log: 2026-07-29 Reference Timing and Completed-Track Isolation Repair
 
@@ -3307,8 +3329,6 @@ prepared workspace:
      `2021_03清朝越嶺_高興_p.gpx` remains the golden geometry source but is
      excluded from timing because its non-increasing timestamp ratio is
      `0.059724`, above the `0.01` gate.
-   - These counts reflect the pre-correction route identity and must be rebuilt
-     after the golden multi-track ordering is corrected.
 
 2. **Completed-track state must be workspace-local**
    - Root cause: the completed-recording endpoint and output paths were fixed
@@ -3327,8 +3347,8 @@ prepared workspace:
    - A planned, golden, or reference GPX must never be copied into this
      lifecycle as a completed track. Until an actual post-trip recording is
      placed under `recorded/<recording_id>/` and explicitly selected, the
-     truthful recording count remains zero and the completed Timeline
-     categories remain `not imported`.
+   truthful recording count remains zero and the completed Timeline
+   categories remain `not imported`.
 
 3. **CWA route identity must hash route geometry, not volatile artifact bytes**
    - Root cause: `routeSha256` previously hashed the entire aligned-route JSON.
@@ -3368,3 +3388,157 @@ Live Dashboard/project/navigation/completed-recording endpoints: HTTP 200
 Original GPX/KML mutation: NO
 Runtime safety truth mutation: NO
 ```
+
+## Run Log: 2026-07-30 Connected Preparation Generation Publication
+
+Dashboard startup remains cache-only. The selected workspace is enrolled in a
+server timer by the read-only Connected Preparation status GET; provider access
+occurs only when that timer runs or an operator uses `Refresh evidence`.
+
+Scheduled and explicit Connected Preparation now use this publication
+boundary:
+
+```text
+published workspace generation
+  -> acquire the per-project cross-process preparation mutex
+  -> durably write a staging recovery journal
+  -> copy-on-write staged generation
+  -> assign a unique staged generation marker
+  -> refresh CWA / GEE / Overpass and derived project artifacts
+  -> validate project identity and the normal Admin projection
+  -> acquire the cross-process generation write lock
+  -> verify the published generation has not changed
+  -> durably mark the journal prepared
+  -> atomically exchange staged and published directories
+  -> durably mark the journal exchanged
+  -> remove retired generation
+  -> clear the journal and release the preparation mutex
+```
+
+Operational rules:
+
+1. The layer-preparation runner receives the staged `project_root`, never the
+   published project root.
+2. Dashboard project `GET` and `HEAD` requests keep one generation for the
+   duration of the request. They are blocked only during the final directory
+   exchange, not during provider fetching or derivation.
+3. Failed runner output, invalid project identity, invalid route projection,
+   or publication failure must return `publicationStatus=not-published`.
+   The previously published generation remains readable.
+4. Status `running` means a replacement generation is being prepared; it does
+   not mean the currently visible evidence is partially updated.
+5. `publicationStatus=published` and
+   `publicationMode=staged-atomic-swap` confirm that the complete generation
+   crossed the publication boundary.
+6. On macOS, expect `cloneMode=apfs-clone` and normally
+   `filesystemExchange=renamex_np`. Linux prefers reflink clone and
+   `renameat2`. The locked rename fallback includes rollback.
+7. The long-running preparation mutex rejects a second writer in the same or a
+   different server process. It does not block Dashboard readers. The
+   generation write lock is acquired only for final validation and exchange;
+   it waits for shared Dashboard read locks from every participating process.
+8. A competing refresh reports `status=busy`,
+   `requestActivityState=waiting-external-preparation`, and
+   `publicationStatus=not-published`. It must not start a second provider run.
+9. Every newly published project contains
+   `.scout-workspace-generation.json`. Its random generation ID distinguishes
+   complete workspace generations even when `project.json` did not change and
+   only evidence artifacts differ.
+10. Journal and generation-marker writes are flushed before the next
+    filesystem transition. Directory exchanges flush both parent directories
+    before publication cleanup.
+
+The private coordinator paths are:
+
+```text
+<workspace_root>/.scout-connected-preparation/
+  staging/<project_id>.<session_id>/
+  journals/<project_id>.json
+  locks/preparation/<project_id>.lock
+  locks/generation/<project_id>.lock
+```
+
+Do not point Dashboard at a directory below this path. Do not edit its contents
+manually. A successful or safely rejected run removes its session directory.
+
+Crash recovery:
+
+- A `staging` journal with the original generation still published discards the
+  abandoned staged session.
+- A `prepared` journal with the original generation still published discards
+  the unpublished staged generation.
+- A `prepared` or `exchanged` journal whose staged generation is live keeps the
+  new generation and finishes cleanup.
+- If the new generation is already live but retired-generation cleanup fails,
+  publication remains successful, the journal stays `active`, and
+  `startupRecovery=published-cleanup-pending` preserves a deterministic retry
+  on the next manager start or preparation attempt.
+- If the fallback exchange moved the live directory but stopped before
+  installing the staged directory, exactly one retired directory matching the
+  original generation is restored.
+- An invalid journal, mismatched session identity, unknown generation, or
+  ambiguous retired directory is `blocked`. Recovery leaves all evidence in
+  place and fails closed for operator review.
+- Coordinator directories, journal files, staging sessions, and retired
+  recovery candidates must not be symbolic links. Recovery never follows a
+  forged link to delete or restore another workspace; lock files are opened
+  without following a final symlink.
+- `recoveryJournalStatus` describes whether a journal is currently `clear`,
+  `active`, `active-external`, or `blocked`; `startupRecovery` records the
+  latest recovery outcome separately.
+
+All Dashboard-connected refreshes must still use the factory-owned manager.
+The file locks coordinate participating Dashboard server processes, but a tool
+that writes directly into a published workspace without this coordinator
+remains outside the contract.
+
+Verification:
+
+- Cross-process mutex, cross-process reader blocking, equal-`project.json`
+  generation identity, fallback rollback, and hard-process-exit recovery are
+  covered in `tests/test_dashboard_workspace_publication.py`.
+- Connected Preparation busy/status publication behavior is covered in
+  `tests/test_dashboard_connected_preparation.py`.
+- The 32-layer GIS gate is not applicable: no layer ID, layer ordering,
+  preparation path, route projection, or shared map contract changed.
+
+## 2026-07-30 Route Context one-click preparation lessons
+
+The reusable Route Context entrypoint is
+`pretrip_route_context_pipeline.py`, with the copyable contract at
+`config/pretrip-route-context-pipeline.example.yaml`. It is an additive
+candidate-only path; it does not replace Connected Preparation or the full
+32-layer preparation contract.
+
+Mistakes found and corrected while replaying a completely unrelated synthetic
+journey:
+
+1. A plan-only dry run must validate paths and show requested network effects,
+   but it must not require `--confirm-network-fetch`. The confirmation gate is
+   applied only when the run will actually fetch.
+2. Resume identity cannot rely on config paths alone. The input-contract
+   receipt stores SHA-256 fingerprints for the golden GPX, every reference GPX,
+   and local source files; `--resume` fails when those fingerprints drift.
+3. A new route must use a new `project_id`. An existing workspace without the
+   matching pipeline manifest is never adopted, moved, overwritten, or rebuilt.
+4. A successful deterministic render is not a content-quality pass. The run
+   stops at `needs_semantic_review` after deterministic checks and accepts only
+   a ChatGPT Pro review matching both `project_id` and the exact briefing
+   SHA-256.
+5. Route Context generation does not automatically require full map-layer
+   preparation. `preparation.run_layer_preparation=false` is valid when the
+   requested slice is route import, explicit P0/P1 evidence collection, Route
+   Context compilation, and briefing review. Enable layer preparation only when
+   those layer artifacts are in the named scope.
+
+The required receipt sequence is:
+
+```text
+輸入契約 PASS
+  -> 證據收集 PASS
+  -> 確定性編譯 PASS
+  -> 內容審核 PASS | NEEDS_WORK
+```
+
+`needs_semantic_review` is an intentional handoff state, not completion. The
+pipeline is complete only when all four receipts are `pass`.
