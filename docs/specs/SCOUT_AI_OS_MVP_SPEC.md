@@ -35,7 +35,7 @@ architecture. The implemented core includes:
 - local notification gateway and runtime tick loop;
 - provider-backed agent facades with a local `FunctionModel` default;
 - model policy, timeout/cost SLA gateway, and external-model fallback handling;
-- Pydantic AI v2.20.0 compatibility helpers;
+- Pydantic AI v2.22.0 compatibility helpers;
 - generated capability sandbox verification;
 - FastAPI routes and focused API/runtime tests;
 - Scout AI read-only workspace tool workflow:
@@ -94,7 +94,7 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
-- Pydantic AI v2.20.0 model execution with explicit model policy, OpenRouter and
+- Pydantic AI v2.22.0 model execution with explicit model policy, OpenRouter and
   OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
@@ -304,8 +304,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.20.0
-pydantic-evals == 2.20.0
+pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.22.0
+pydantic-evals == 2.22.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -328,19 +328,26 @@ dbos
 mcp clients
 ```
 
-Pydantic AI v2.20.0 operating rules:
+Pydantic AI v2.22.0 operating rules:
 
 - Scout's package path uses `pydantic-ai-slim` with `duckduckgo`, `openai`, and
   `openrouter` extras for Pi compatibility and grounded local web search.
 - `pydantic_ai.Agent` calls must keep `end_strategy="early"` unless a future
   reviewed design proves that continuing same-turn tool execution cannot
   violate Scout's no-side-effect defaults.
-- Pydantic AI v2.20.0 preserves `end_strategy="early"` for native, prompted,
+- Pydantic AI v2.22.0 preserves `end_strategy="early"` for native, prompted,
   and image outputs. Scout keeps regression coverage on the existing early-stop
   contract instead of adding a compatibility workaround.
-- `RunContext.usage_limits` is available to tools and capabilities in v2.20.0.
+- `RunContext.usage_limits` is available to tools and capabilities in v2.22.0.
   It may be used for telemetry and local preflight decisions, but it does not
   replace Scout's deterministic permission, cost, timeout, or execution gates.
+- `UsageLimits.per_request_input_tokens_limit` must remain unset in Aggressive
+  Construction Mode. A provider context-window rejection is checkpointed and
+  resumed through Scout continuation; it is not converted into a hidden Scout
+  token ceiling.
+- `RunContext.is_tool_available` may reduce speculative planning against tools
+  that are not exposed in the current run. It is an availability hint only and
+  never grants permission or authority to execute a tool.
 - Capability integrations may use the v2 `get_model`, `resolve_model_id`,
   and `for_agent` hooks, but capability-selected models remain subject to
   Scout's model policy and deterministic effect boundaries.
@@ -351,6 +358,10 @@ Pydantic AI v2.20.0 operating rules:
 - Bare MCP `McpError` failures are recoverable. Persist a redacted trace,
   preserve completed evidence, and continue through Scout's deterministic
   repair/retry ladder when another useful step remains.
+- MCP task preference (`prefer_tasks`) is an opt-in connector behavior. Scout's
+  default connector path remains direct and auditable until a task-capable MCP
+  server is explicitly configured; inherited MCP retries and tool-search
+  `max_retries` must preserve the minimum 10/10 recovery-stage capacity.
 - Usage telemetry may record `cache_hit_ratio`. Instrumentation that can
   contain model request parameters must remain opt-in and secret-safe via
   `include_model_request_parameters`.
@@ -390,11 +401,14 @@ Pydantic AI v2.20.0 operating rules:
   construction budget. A provider retry limit is not a substitute for Scout's
   deterministic recovery stages.
 - OpenRouter `AdvisorTool` and OpenAI Responses
-  `WebSearchTool.external_web_access` are available in v2.20.0 but are not
+  `WebSearchTool.external_web_access` are available in v2.22.0 but are not
   enabled merely by upgrading the package; each still passes through Scout
   capability and provider policy.
 - `ModelHTTPError.headers` and `retry_after` may inform provider backoff
   telemetry. Headers must be redacted before persistence or display.
+- OpenRouter responses with a null or missing choices payload are treated as a
+  provider `ModelAPIError`, preserving evidence and entering Scout's repair or
+  model-switch ladder instead of being misreported as a grounded no-answer.
 
 ---
 
@@ -810,9 +824,9 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Pydantic AI v2.20.0 Provider Policy
+### 7.6 Pydantic AI v2.22.0 Provider Policy
 
-Scout AI OS uses Pydantic AI v2.20.0 as a typed provider facade, not as an
+Scout AI OS uses Pydantic AI v2.22.0 as a typed provider facade, not as an
 unbounded autonomous runtime.
 
 Provider modes:

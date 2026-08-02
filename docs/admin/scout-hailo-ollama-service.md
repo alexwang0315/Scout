@@ -73,9 +73,15 @@ curl --fail --silent http://127.0.0.1:18000/api/tags
 ```
 
 Mac dashboard 的 `configs/assistant-models.dashboard-aihat2.json` 使用上述
-`127.0.0.1:18000` tunnel。若 Scout admin 跑在同機 Docker container，provider
-可使用 `http://host.docker.internal:8000`，但 compose 必須明確配置 host
-gateway；這個名稱只代表同機 host bridge，不得換成 field LAN 或任意遠端 URL。
+`127.0.0.1:18000` tunnel。Hailo 服務只綁 host loopback 時，一般 Docker bridge
+上的 `host.docker.internal` **無法**連到 `127.0.0.1:8000`。容器驗證應使用一次性
+`--network host` smoke，或在產品化時加入經審核的 local proxy/socket；不可為了
+容器連線而把 Hailo listener 改成 field LAN 可達。
+
+Hailo Ollama 5.3 的 OpenAI-compatible response 會把 `created` 回成奈秒 Unix
+timestamp。Pydantic AI 2.22 預期秒，因此 Scout 的 `hailo:` model adapter 只在
+本地 Hailo 路徑建立 response copy，將毫秒、微秒或奈秒值除到 Unix 秒範圍後再
+交給 Pydantic AI；OpenRouter、NVIDIA 與 OpenAI provider 不使用此修正。
 
 ## Restart Verification
 
