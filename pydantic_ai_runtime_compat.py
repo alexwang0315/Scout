@@ -112,9 +112,14 @@ def build_chat_model(
         model_name = _strip_nvidia_prefix(model_name)
         base_url = base_url or NVIDIA_BASE_URL
         api_key = api_key or os.getenv(NVIDIA_KEY_ENV)
-    if _is_hailo_ollama_model(model_name=model_name, base_url=base_url):
+    is_hailo_model = _is_hailo_ollama_model(
+        model_name=model_name,
+        base_url=base_url,
+    )
+    if is_hailo_model:
         model_name = _strip_hailo_prefix(model_name)
         base_url = base_url or AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL
+        api_key = api_key or LOCAL_OPENAI_COMPATIBLE_API_KEY
 
     try:
         from pydantic_ai.models.openai import OpenAIChatModel
@@ -142,7 +147,13 @@ def build_chat_model(
             api_key=resolved_api_key,
         )
 
-    return OpenAIChatModel(
+    if is_hailo_model:
+        from scout.agents.pydantic_ai_compat import ScoutHailoOpenAIChatModel
+
+        model_type = ScoutHailoOpenAIChatModel
+    else:
+        model_type = OpenAIChatModel
+    return model_type(
         _strip_openai_chat_prefix(model_name),
         provider=provider,
     )

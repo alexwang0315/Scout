@@ -9,6 +9,7 @@ from pydantic_ai_runtime_compat import (
 from scout.schemas.agent_runtime import AgentRunBudget
 from scout.agents.model_policy import resolve_model_policy
 from scout.agents.pydantic_ai_compat import (
+    _normalize_hailo_created_timestamp,
     build_chat_model as build_packaged_chat_model,
     normalize_chat_model_name as normalize_packaged_chat_model_name,
     pydantic_native_research_capabilities as packaged_native_research_capabilities,
@@ -18,7 +19,7 @@ from scout.agents.pydantic_ai_compat import (
 
 
 def test_pydantic_ai_runtime_version_supports_slim_install() -> None:
-    assert pydantic_ai_runtime_version() == "2.20.0"
+    assert pydantic_ai_runtime_version() == "2.22.0"
     assert packaged_runtime_version() == pydantic_ai_runtime_version()
 
 
@@ -44,6 +45,7 @@ def test_usage_limits_are_derived_from_scout_agent_budget() -> None:
     assert root_limits.input_tokens_limit is None
     assert root_limits.output_tokens_limit is None
     assert root_limits.total_tokens_limit is None
+    assert root_limits.per_request_input_tokens_limit is None
     assert packaged_limits == root_limits
 
 
@@ -71,6 +73,7 @@ def test_repair_usage_limits_keep_fresh_ten_call_capacity() -> None:
     assert limits.input_tokens_limit is None
     assert limits.output_tokens_limit is None
     assert limits.total_tokens_limit is None
+    assert limits.per_request_input_tokens_limit is None
 
 
 def test_productization_can_explicitly_enforce_token_limits() -> None:
@@ -86,6 +89,7 @@ def test_productization_can_explicitly_enforce_token_limits() -> None:
     assert limits.input_tokens_limit == budget.max_input_tokens
     assert limits.output_tokens_limit == budget.max_output_tokens
     assert limits.total_tokens_limit == budget.max_total_tokens
+    assert limits.per_request_input_tokens_limit is None
 
 
 def test_openai_prefix_normalizes_to_chat_model_semantics() -> None:
@@ -139,8 +143,8 @@ def test_hailo_prefix_builds_local_openai_compatible_chat_model_without_cloud_ke
     model = build_chat_model(model_name="hailo:qwen2.5:1.5b")
     packaged_model = build_packaged_chat_model(model_name="hailo:qwen2.5:1.5b")
 
-    assert type(model).__name__ == "OpenAIChatModel"
-    assert type(packaged_model).__name__ == "OpenAIChatModel"
+    assert type(model).__name__ == "ScoutHailoOpenAIChatModel"
+    assert type(packaged_model).__name__ == "ScoutHailoOpenAIChatModel"
     assert model.model_name == "qwen2.5:1.5b"
     assert packaged_model.model_name == model.model_name
 
@@ -155,10 +159,17 @@ def test_local_base_url_builds_openai_compatible_chat_model_without_cloud_key() 
         base_url="http://127.0.0.1:8000/v1",
     )
 
-    assert type(model).__name__ == "OpenAIChatModel"
-    assert type(packaged_model).__name__ == "OpenAIChatModel"
+    assert type(model).__name__ == "ScoutHailoOpenAIChatModel"
+    assert type(packaged_model).__name__ == "ScoutHailoOpenAIChatModel"
     assert model.model_name == "qwen2.5:1.5b"
     assert packaged_model.model_name == model.model_name
+
+
+def test_hailo_nanosecond_created_timestamp_is_normalized_to_unix_seconds() -> None:
+    assert _normalize_hailo_created_timestamp(1_785_639_735_708_486_371) == (
+        1_785_639_735
+    )
+    assert _normalize_hailo_created_timestamp(1_785_639_735) == 1_785_639_735
 
 
 def test_native_research_capabilities_are_on_by_default_for_external_models() -> None:

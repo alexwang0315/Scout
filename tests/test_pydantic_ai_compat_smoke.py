@@ -19,12 +19,13 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
 
     assert report["status"] == "passed"
     assert report["required_version"] == REQUIRED_VERSION
-    assert report["check_count"] == 9
-    assert report["passed_count"] == 9
+    assert report["check_count"] == 10
+    assert report["passed_count"] == 10
     assert report["failed_count"] == 0
     assert report["live_openrouter_requested"] is False
     assert {item["name"] for item in report["checks"]} == {
         "runtime_versions",
+        "v222_capability_contract",
         "function_tool_call",
         "structured_output",
         "mcp_instructions_and_tool",

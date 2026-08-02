@@ -133,16 +133,16 @@ def redact_provider_error(message: str, *, secrets: tuple[str, ...] = ()) -> str
     return redacted[:2000]
 
 
-def require_pydantic_ai_220_or_newer() -> dict[str, str]:
+def require_pydantic_ai_222_or_newer() -> dict[str, str]:
     versions = runtime_package_versions()
     installed = versions.get("pydantic_ai_slim", "not-installed")
     match = re.match(r"^(\d+)\.(\d+)\.(\d+)", installed)
     installed_release = (
         tuple(int(part) for part in match.groups()) if match is not None else ()
     )
-    if installed_release < (2, 20, 0):
+    if installed_release < (2, 22, 0):
         raise RuntimeError(
-            "This eval requires pydantic-ai-slim 2.20.0 or newer; "
+            "This eval requires pydantic-ai-slim 2.22.0 or newer; "
             f"installed version is {installed}."
         )
     return versions
@@ -703,7 +703,7 @@ def run_eval(args: argparse.Namespace) -> Path:
             raise RuntimeError(
                 "OPENROUTER_API_KEY is required because model calls are pending"
             )
-        runtime_versions = require_pydantic_ai_220_or_newer()
+        runtime_versions = require_pydantic_ai_222_or_newer()
     current_time = utc_iso()
     manifest = {
         "artifact_kind": ARTIFACT_KIND,
