@@ -140,6 +140,17 @@ def test_route_context_answers_dedicated_layer_without_unrelated_layers() -> Non
     assert cultural["field_answer_priority"] == 100
 
 
+def test_route_context_does_not_treat_saddle_label_as_formation_evidence() -> None:
+    result = assess_scout_route_context(
+        PROJECT_ROOT,
+        query="這個鞍部是怎麼形成的？",
+        limit=4,
+    )
+
+    assert result["field_answer_priority"] == 0
+    assert "怎麼形成" not in result["field_answer"]
+
+
 def test_route_context_answers_briefing_artifact_and_source_manifest_fields() -> None:
     artifact = assess_scout_route_context(
         PROJECT_ROOT,

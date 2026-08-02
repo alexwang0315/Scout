@@ -1678,6 +1678,11 @@ def _route_briefing_field_answer(
         "或 runtime safety truth；出發前仍需重查官方公告、天氣、道路、"
         "入園/山屋與現場風險。"
     )
+    if _has_any(
+        text,
+        ("怎麼形成", "如何形成", "形成原因", "地形成因", "地質成因"),
+    ):
+        return None
     if _has_any(text, ("建議幾天", "幾天", "幾天幾夜", "行程版本", "itinerary")):
         recommended = route_briefing.get("recommended_days") or "未提供建議天數"
         options = _itinerary_option_lines(route_briefing.get("itinerary_options"))
@@ -1697,7 +1702,7 @@ def _route_briefing_field_answer(
             + "。這些不是現場停留授權。"
         )
     requested_layers: list[str] = []
-    if _has_any(text, ("歷史脈絡", "歷史點", "歷史層")):
+    if _has_any(text, ("歷史", "歷史脈絡", "歷史點", "歷史層")):
         requested_layers.append("歷史層")
     if _has_any(text, ("文化", "地名", "舊社", "原住民族")):
         requested_layers.append("文化層")
@@ -1705,6 +1710,8 @@ def _route_briefing_field_answer(
         requested_layers.append("自然層")
     if _has_any(text, ("地形", "崩壁", "稜線", "鞍部")):
         requested_layers.append("地形層")
+    if _has_any(text, ("季節", "花期", "楓紅", "雨季", "低溫")):
+        requested_layers.append("季節層")
     if requested_layers:
         layers = _selected_context_layer_lines(
             route_briefing.get("context_layers"),

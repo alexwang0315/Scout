@@ -77,6 +77,8 @@ def test_regeneration_archives_baseline_and_deterministically_renders_evidence(
     assert "其他路線" in html
     assert "入園日前 10 天至 2 個月" in html
     assert "歷史參考，不是今日建議行程" in html
+    assert "帶著這些問題讀" in html
+    assert "帶著三個問題讀" not in html
     assert "P0" in html
     assert "P1" in html
     assert "P2" in html
@@ -102,6 +104,33 @@ def test_regeneration_archives_baseline_and_deterministically_renders_evidence(
     ).hexdigest()
     assert "evidence_packet" in str(captured["prompt"])
     assert captured["model_name"] == "deepseek/deepseek-v3.2"
+
+
+def test_regeneration_can_create_a_missing_canonical_briefing(tmp_path: Path) -> None:
+    project_root = _write_project(tmp_path)
+    evidence_path = _write_evidence(project_root)
+    briefing_path = (
+        project_root / "outputs" / "briefings" / "route_context_briefing.html"
+    )
+    briefing_path.unlink()
+
+    result = regenerate_route_context_briefing(
+        project_root=project_root,
+        evidence_path=evidence_path,
+        model_config_path=_write_model_config(tmp_path),
+        skill_path=_write_skill(tmp_path),
+        model_caller=lambda **_: {
+            "plan": _editorial_plan(),
+            "usage": {"requests": 1},
+            "response_metadata": {"provider_name": "openrouter"},
+        },
+        generated_at="2026-08-02T04:00:00Z",
+    )
+
+    assert result["status"] == "completed"
+    assert result["archive_ref"] is None
+    assert briefing_path.is_file()
+    assert "<h1>東清八通關古道</h1>" in briefing_path.read_text(encoding="utf-8")
 
 
 def test_regeneration_rejects_claim_with_unknown_source_before_model_call(
@@ -216,6 +245,103 @@ def test_regeneration_rejects_model_route_rename(
                 "response_metadata": {},
             },
         )
+
+
+def test_regeneration_repairs_a_weak_closed_route_editorial_plan(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_project(tmp_path)
+    weak_plan = _editorial_plan()
+    weak_plan["section_headings"]["decision_snapshot"] = "目前狀態先於行程"
+    weak_plan["section_headings"]["p2_route_memory"] = "P2路線記憶"
+    weak_plan["reader_questions"] = [
+        "這條路線目前可以申請嗎？",
+        "大水窟之後的清代東段有什麼不同？",
+        "舊紀錄的九天行程能直接沿用嗎？",
+        "卓溪端接駁現在怎麼安排？",
+    ]
+    weak_plan["closing_note"] = "出發前，先確認官方已恢復其他路線申請。"
+    repaired_plan = _editorial_plan()
+    prompts: list[str] = []
+
+    def fake_model_caller(**kwargs: object) -> dict[str, object]:
+        prompts.append(str(kwargs["prompt"]))
+        return {
+            "plan": weak_plan if len(prompts) == 1 else repaired_plan,
+            "usage": {
+                "requests": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+            },
+            "response_metadata": {"provider_name": "openrouter"},
+        }
+
+    result = regenerate_route_context_briefing(
+        project_root=project_root,
+        evidence_path=_write_evidence(project_root),
+        model_config_path=_write_model_config(tmp_path),
+        skill_path=_write_skill(tmp_path),
+        model_caller=fake_model_caller,
+        generated_at="2026-08-02T06:00:00Z",
+    )
+
+    assert len(prompts) == 2
+    assert "closed-route editorial contract" in prompts[1]
+    assert result["model_request_count"] == 2
+    assert result["editorial_contract"]["status"] == "PASS"
+    plan_record = json.loads(
+        (project_root / result["editorial_plan_ref"]).read_text(encoding="utf-8")
+    )
+    assert [attempt["status"] for attempt in plan_record["attempts"]] == [
+        "rejected",
+        "accepted",
+    ]
+    assert plan_record["usage"]["requests"] == 2
+    assert plan_record["usage"]["input_tokens"] == 200
+
+
+def test_regeneration_keeps_baseline_when_all_editorial_repairs_are_weak(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_project(tmp_path)
+    evidence_path = _write_evidence(project_root)
+    weak_plan = _editorial_plan()
+    weak_plan["section_headings"]["decision_snapshot"] = "目前狀態先於行程"
+    weak_plan["section_headings"]["p2_route_memory"] = "P2路線記憶"
+    weak_plan["reader_questions"] = [
+        "這條路線目前可以申請嗎？",
+        "舊紀錄的九天行程能直接沿用嗎？",
+        "卓溪端接駁現在怎麼安排？",
+    ]
+    weak_plan["closing_note"] = "出發前，先確認官方已恢復其他路線申請。"
+    calls = 0
+
+    def fake_model_caller(**_: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {
+            "plan": weak_plan,
+            "usage": {"requests": 1},
+            "response_metadata": {"provider_name": "openrouter"},
+        }
+
+    with pytest.raises(
+        RouteContextRegenerationError,
+        match="closed-route editorial contract",
+    ):
+        regenerate_route_context_briefing(
+            project_root=project_root,
+            evidence_path=evidence_path,
+            model_config_path=_write_model_config(tmp_path),
+            skill_path=_write_skill(tmp_path),
+            model_caller=fake_model_caller,
+        )
+
+    assert calls == 3
+    briefing_path = (
+        project_root / "outputs" / "briefings" / "route_context_briefing.html"
+    )
+    assert "OLD BRIEFING" in briefing_path.read_text(encoding="utf-8")
 
 
 def _write_project(tmp_path: Path) -> Path:
@@ -457,7 +583,7 @@ def _editorial_plan() -> dict[str, object]:
             "source_ledger",
         ],
         "section_headings": {
-            "decision_snapshot": "先讀今天的結論",
+            "decision_snapshot": "目前未開放：不可直接成行",
             "route_identity": "同名古道，先分清哪一條線",
             "reference_itinerary": "九天實走，只作歷史參考",
             "logistics_and_application": "接駁與申請，從缺口開始",
@@ -471,8 +597,9 @@ def _editorial_plan() -> dict[str, object]:
             "這份舊行程能證明什麼，不能證明什麼？",
             "目前哪一項官方條件直接阻止成行？",
             "若未來重開，第一批要重查哪些資料？",
+            "清代東段與日治越道路線有什麼差異？",
         ],
-        "closing_note": "先把路線讀對，再談能不能出發。",
+        "closing_note": "官方恢復後仍要重查路況與接駁，再談能不能出發。",
     }
 
 
