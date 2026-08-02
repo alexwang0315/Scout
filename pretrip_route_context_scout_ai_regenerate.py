@@ -32,6 +32,7 @@ DEFAULT_SKILL_PATH = (
     ROOT / ".agents" / "skills" / "scout-route-context-briefing" / "SKILL.md"
 )
 DEFAULT_TIMEOUT_SECONDS = 240
+MAX_EDITORIAL_PLAN_ATTEMPTS = 3
 OUTPUT_DIR = Path("outputs/route_context_regeneration")
 EVIDENCE_PACKET_REF = OUTPUT_DIR / "evidence_packet.json"
 EDITORIAL_PLAN_REF = OUTPUT_DIR / "scout_ai_editorial_plan.json"
@@ -344,12 +345,13 @@ def regenerate_route_context_briefing(
         raise RouteContextRegenerationError("cloud model name is empty")
 
     workspace = _load_workspace_snapshot(root, project)
-    prompt = _build_prompt(
+    base_prompt = _build_prompt(
         evidence=evidence,
         workspace=workspace,
         skill_text=skill_text,
     )
-    prompt_sha256 = _sha256_text(prompt)
+    base_prompt_sha256 = _sha256_text(base_prompt)
+    api_key = ""
     if model_caller is None:
         persistent_env = (
             Path(env_file).expanduser().resolve() if env_file is not None else None
@@ -361,38 +363,85 @@ def regenerate_route_context_briefing(
             raise RouteContextRegenerationError(
                 f"{token_env_var} is required for Scout AI cloud regeneration"
             )
-        call_result = _call_live_model(
-            prompt=prompt,
-            model_name=selected_model,
-            base_url=profile.resolved_base_url(),
-            api_key=api_key,
-            timeout_seconds=timeout_seconds,
+
+    attempts: list[dict[str, Any]] = []
+    call_results: list[dict[str, object]] = []
+    active_prompt = base_prompt
+    call_result: dict[str, object] = {}
+    plan: EditorialPlan | None = None
+    for attempt_number in range(1, MAX_EDITORIAL_PLAN_ATTEMPTS + 1):
+        if model_caller is None:
+            call_result = _call_live_model(
+                prompt=active_prompt,
+                model_name=selected_model,
+                base_url=profile.resolved_base_url(),
+                api_key=api_key,
+                timeout_seconds=timeout_seconds,
+            )
+        else:
+            call_result = model_caller(
+                prompt=active_prompt,
+                model_name=selected_model,
+                base_url=profile.resolved_base_url(),
+                timeout_seconds=timeout_seconds,
+            )
+        call_results.append(call_result)
+        prompt_sha256 = _sha256_text(active_prompt)
+        try:
+            candidate_plan = EditorialPlan.model_validate(call_result.get("plan"))
+            _validate_editorial_plan_for_workspace(
+                candidate_plan,
+                workspace,
+                evidence,
+            )
+        except Exception as exc:
+            validation_error = _editorial_validation_error(exc)
+            attempts.append(
+                _model_attempt_record(
+                    attempt_number=attempt_number,
+                    prompt_sha256=prompt_sha256,
+                    call_result=call_result,
+                    status="rejected",
+                    validation_error=validation_error,
+                )
+            )
+            if attempt_number >= MAX_EDITORIAL_PLAN_ATTEMPTS:
+                raise RouteContextRegenerationError(
+                    "Scout AI editorial plan failed its quality contract after "
+                    f"{MAX_EDITORIAL_PLAN_ATTEMPTS} attempts: "
+                    f"{validation_error}"
+                ) from exc
+            active_prompt = _build_repair_prompt(
+                base_prompt=base_prompt,
+                rejected_plan=call_result.get("plan"),
+                validation_error=validation_error,
+                next_attempt=attempt_number + 1,
+            )
+            continue
+        plan = candidate_plan
+        attempts.append(
+            _model_attempt_record(
+                attempt_number=attempt_number,
+                prompt_sha256=prompt_sha256,
+                call_result=call_result,
+                status="accepted",
+            )
         )
-    else:
-        call_result = model_caller(
-            prompt=prompt,
-            model_name=selected_model,
-            base_url=profile.resolved_base_url(),
-            timeout_seconds=timeout_seconds,
-        )
-    try:
-        plan = EditorialPlan.model_validate(call_result.get("plan"))
-    except Exception as exc:
-        raise RouteContextRegenerationError(
-            f"Scout AI editorial plan is invalid: {exc}"
-        ) from exc
-    _validate_editorial_plan_for_workspace(plan, workspace, evidence)
+        break
+
+    if plan is None:
+        raise RouteContextRegenerationError("Scout AI editorial plan was not accepted")
+    prompt = active_prompt
+    prompt_sha256 = _sha256_text(prompt)
+    aggregate_usage = _aggregate_usage(call_results)
 
     generated_at = generated_at or _utc_now()
     briefing_ref = Path(
         str(project.get("route_context_briefing_ref") or DEFAULT_BRIEFING_REF.as_posix())
     )
     briefing_path = _safe_project_path(root, briefing_ref)
-    if not briefing_path.is_file():
-        raise RouteContextRegenerationError(
-            f"canonical briefing not found: {briefing_path}"
-        )
-    baseline_bytes = briefing_path.read_bytes()
+    baseline_bytes = briefing_path.read_bytes() if briefing_path.is_file() else b""
+    baseline_exists = briefing_path.is_file()
     baseline_sha256 = hashlib.sha256(baseline_bytes).hexdigest()
     evidence_sha256 = _sha256_file(evidence_file)
     skill_sha256 = _sha256_file(skill_file)
@@ -405,9 +454,10 @@ def regenerate_route_context_briefing(
     _validate_rendered_html(html_text, evidence=evidence)
     briefing_sha256 = _sha256_text(html_text)
 
-    archive_ref = _archive_ref(generated_at)
-    archive_path = _safe_project_path(root, archive_ref)
-    _write_bytes(archive_path, baseline_bytes)
+    archive_ref = _archive_ref(generated_at) if baseline_exists else None
+    if archive_ref is not None:
+        archive_path = _safe_project_path(root, archive_ref)
+        _write_bytes(archive_path, baseline_bytes)
 
     model_record = {
         "artifact_kind": "scout_ai_route_context_editorial_plan_record",
@@ -417,12 +467,15 @@ def regenerate_route_context_briefing(
         "model": selected_model,
         "provider": _provider_name(profile.resolved_base_url(), call_result),
         "prompt_sha256": prompt_sha256,
+        "base_prompt_sha256": base_prompt_sha256,
         "evidence_sha256": evidence_sha256,
         "skill_ref": str(skill_file),
         "skill_sha256": skill_sha256,
         "plan": plan.model_dump(mode="json"),
-        "usage": _integer_mapping(call_result.get("usage")),
+        "usage": aggregate_usage,
         "response_metadata": _string_mapping(call_result.get("response_metadata")),
+        "attempts": attempts,
+        "editorial_contract": _editorial_contract_receipt(evidence),
         "boundary": _boundary(),
     }
     evidence_packet = {
@@ -445,14 +498,17 @@ def regenerate_route_context_briefing(
         "provider": model_record["provider"],
         "skill_sha256": skill_sha256,
         "prompt_sha256": prompt_sha256,
+        "base_prompt_sha256": base_prompt_sha256,
         "evidence_sha256": evidence_sha256,
         "baseline_sha256": baseline_sha256,
         "briefing_sha256": briefing_sha256,
         "briefing_ref": briefing_ref.as_posix(),
-        "archive_ref": archive_ref.as_posix(),
+        "archive_ref": archive_ref.as_posix() if archive_ref is not None else None,
         "evidence_packet_ref": EVIDENCE_PACKET_REF.as_posix(),
         "editorial_plan_ref": EDITORIAL_PLAN_REF.as_posix(),
         "model_usage": model_record["usage"],
+        "model_request_count": len(attempts),
+        "editorial_contract": model_record["editorial_contract"],
         "boundary": _boundary(),
     }
 
@@ -466,15 +522,18 @@ def regenerate_route_context_briefing(
         "model": selected_model,
         "provider": model_record["provider"],
         "briefing_ref": briefing_ref.as_posix(),
-        "archive_ref": archive_ref.as_posix(),
+        "archive_ref": archive_ref.as_posix() if archive_ref is not None else None,
         "evidence_packet_ref": EVIDENCE_PACKET_REF.as_posix(),
         "editorial_plan_ref": EDITORIAL_PLAN_REF.as_posix(),
         "receipt_ref": RECEIPT_REF.as_posix(),
         "prompt_sha256": prompt_sha256,
+        "base_prompt_sha256": base_prompt_sha256,
         "evidence_sha256": evidence_sha256,
         "baseline_sha256": baseline_sha256,
         "briefing_sha256": briefing_sha256,
         "usage": model_record["usage"],
+        "model_request_count": len(attempts),
+        "editorial_contract": model_record["editorial_contract"],
         "boundary": _boundary(),
     }
 
@@ -624,7 +683,7 @@ def _decision_snapshot(
         {hard_gate}
         <div class="reader-grid">
           <article>
-            <p class="section-kicker">帶著三個問題讀</p>
+            <p class="section-kicker">帶著這些問題讀</p>
             <ol>{questions}</ol>
           </article>
           <article>
@@ -1046,6 +1105,34 @@ def _build_prompt(
     workspace: dict[str, Any],
     skill_text: str,
 ) -> str:
+    closed_route_contract = (
+        {
+            "decision_heading": (
+                "must explicitly state that the route is currently closed or cannot "
+                "be used as a ready-to-depart itinerary"
+            ),
+            "reference_itinerary_heading": (
+                "must state that the old trip is historical/reference material and "
+                "not a current itinerary"
+            ),
+            "reader_question_coverage": [
+                "current official opening or operability",
+                "route identity or historical alignment",
+                "whether the old trip reflects current conditions",
+                "which route, lodging, or transport gaps still require rechecking",
+            ],
+            "closing_note": (
+                "must mention both official reopening and rechecking route/logistics "
+                "before departure planning"
+            ),
+            "human_facing_heading": (
+                "p2_route_memory must use reader-facing language such as 隊伍回顧與軌跡線索, "
+                "not the internal label P2路線記憶"
+            ),
+        }
+        if evidence.current_status.operability == "closed"
+        else None
+    )
     payload = {
         "evidence_packet": evidence.model_dump(mode="json"),
         "workspace_summary": {
@@ -1056,6 +1143,7 @@ def _build_prompt(
         },
         "required_section_ids": list(SECTION_IDS),
         "blocked_visible_terms": list(BLOCKED_EDITORIAL_TERMS),
+        "closed_route_editorial_contract": closed_route_contract,
         "skill_contract": skill_text,
     }
     return (
@@ -1066,11 +1154,37 @@ def _build_prompt(
         "section_order 與 section_headings 必須各自完整涵蓋 required_section_ids，"
         "不得新增或省略。可見文字不得出現 blocked_visible_terms。"
         "title 必須逐字等於 evidence_packet.display_name，不得改名、加副標或縮寫。"
-        "請將『舊實走只作參考、目前狀態先於行程』放在閱讀順序前段。"
+        "decision_snapshot 必須排第一。若目前未開放，章節標題不能只寫『狀態先於行程』，"
+        "而要明說『目前未開放』或『不可直接成行』。舊實走章節要明說只作歷史參考。"
+        "reader_questions 必須合計涵蓋目前官方狀態、路線身分或歷史差異、舊紀錄是否代表"
+        "現況，以及哪些路況／宿點／接駁缺口仍待重查。closing_note 必須同時寫出官方"
+        "重開與重查路況或接駁，不能只確認申請恢復。p2_route_memory 應使用一般讀者"
+        "看得懂的隊伍回顧／軌跡線索用語，不得直接以 P2路線記憶 作章名。"
         "若 workspace_summary 顯示沒有 P2 圖片，visual_essay 的章節名稱必須"
         "明確稱為歷史、官方或參考圖像，不得稱為行程照片、實走照片或現地照片。"
         "不要做出出發核准、通行判斷、安全結論或資料外推。\n\n"
         + json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    )
+
+
+def _build_repair_prompt(
+    *,
+    base_prompt: str,
+    rejected_plan: object,
+    validation_error: str,
+    next_attempt: int,
+) -> str:
+    repair_packet = {
+        "attempt": next_attempt,
+        "rejected_plan": rejected_plan,
+        "deterministic_validation_error": validation_error,
+    }
+    return (
+        base_prompt
+        + "\n\n上一版未通過 deterministic closed-route editorial contract。"
+        "請只修正列出的問題，重新輸出完整結構；不得刪除章節、改寫證據事實或降低"
+        "未開放與待查缺口的醒目程度。\n"
+        + json.dumps(repair_packet, ensure_ascii=False, sort_keys=True)
     )
 
 
@@ -1144,16 +1258,137 @@ def _validate_editorial_plan_for_workspace(
         )
     counts = workspace.get("counts")
     counts = counts if isinstance(counts, dict) else {}
-    if int(counts.get("p2_image_count") or 0) > 0:
+    if int(counts.get("p2_image_count") or 0) <= 0:
+        visual_heading = plan.section_headings["visual_essay"]
+        misleading_terms = ("行程照片", "實走照片", "現地照片")
+        found = [term for term in misleading_terms if term in visual_heading]
+        if found:
+            raise RouteContextRegenerationError(
+                "visual_essay heading mislabels non-P2 imagery: "
+                + ", ".join(found)
+            )
+    if evidence.current_status.operability != "closed":
         return
-    visual_heading = plan.section_headings["visual_essay"]
-    misleading_terms = ("行程照片", "實走照片", "現地照片")
-    found = [term for term in misleading_terms if term in visual_heading]
-    if found:
-        raise RouteContextRegenerationError(
-            "visual_essay heading mislabels non-P2 imagery: "
-            + ", ".join(found)
+
+    violations: list[str] = []
+    if plan.section_order[0] != "decision_snapshot":
+        violations.append("decision_snapshot must be the first section")
+
+    decision_heading = plan.section_headings["decision_snapshot"]
+    if not _contains_any(
+        decision_heading,
+        ("未開放", "不可直接", "不能直接", "不可成行", "不能成行", "暫勿成行"),
+    ):
+        violations.append(
+            "decision heading must explicitly say currently closed or not directly actionable"
         )
+
+    identity_heading = plan.section_headings["route_identity"]
+    if not _contains_any(
+        identity_heading,
+        ("身分", "哪一條", "分清", "清代", "日治", "東段", "綁定", "路線"),
+    ):
+        violations.append("route identity heading must help distinguish the bound route")
+
+    itinerary_heading = plan.section_headings["reference_itinerary"]
+    if not (
+        _contains_any(itinerary_heading, ("舊", "歷史", "實走", "紀錄"))
+        and _contains_any(
+            itinerary_heading,
+            ("參考", "只作", "僅供", "不能", "不得", "不等於", "不是今日"),
+        )
+    ):
+        violations.append(
+            "reference itinerary heading must mark the old trip as historical/reference only"
+        )
+
+    p2_heading = plan.section_headings["p2_route_memory"]
+    if "P2" in p2_heading.upper():
+        violations.append("p2_route_memory heading must use reader-facing wording")
+
+    questions = plan.reader_questions
+    joined_questions = " ".join(questions)
+    if not _contains_any(
+        joined_questions,
+        ("官方", "開放", "未開放", "成行", "申請", "目前", "現在"),
+    ):
+        violations.append("reader questions must cover the current official status")
+    if not _contains_any(
+        joined_questions,
+        ("清代", "日治", "東段", "身分", "哪一條", "不同", "差異", "歷史", "文化"),
+    ):
+        violations.append("reader questions must cover route identity or historical context")
+    if not any(
+        _contains_any(question, ("舊", "實走", "紀錄", "行程", "參考"))
+        and _contains_any(
+            question,
+            ("今日", "現在", "現況", "沿用", "代表", "證明", "不能", "可不可以"),
+        )
+        for question in questions
+    ):
+        violations.append(
+            "a reader question must test whether the old trip represents current conditions"
+        )
+    if not any(
+        _contains_any(
+            question,
+            ("重查", "查證", "待查", "未確認", "缺口", "仍需確認", "哪些資料"),
+        )
+        for question in questions
+    ):
+        violations.append("reader questions must expose a concrete recheck gap")
+
+    if not _contains_any(
+        plan.closing_note,
+        ("恢復", "重開", "重新開放", "開放後"),
+    ):
+        violations.append("closing note must retain the official reopening gate")
+    if not (
+        _contains_any(plan.closing_note, ("重查", "查證", "再確認"))
+        and _contains_any(
+            plan.closing_note,
+            ("路況", "接駁", "宿點", "缺口", "資料", "營地"),
+        )
+    ):
+        violations.append("closing note must require route or logistics rechecking")
+
+    if violations:
+        raise RouteContextRegenerationError(
+            "closed-route editorial contract failed: " + "; ".join(violations)
+        )
+
+
+def _contains_any(value: str, terms: tuple[str, ...]) -> bool:
+    folded = value.casefold()
+    return any(term.casefold() in folded for term in terms)
+
+
+def _editorial_contract_receipt(
+    evidence: RegenerationEvidence,
+) -> dict[str, object]:
+    closed_route = evidence.current_status.operability == "closed"
+    return {
+        "status": "PASS",
+        "mode": (
+            "closed_route_non_regression"
+            if closed_route
+            else "standard_route_editorial"
+        ),
+        "checks": (
+            [
+                "title_binding",
+                "visual_evidence_label",
+                "decision_first",
+                "route_identity",
+                "historical_itinerary_boundary",
+                "reader_question_coverage",
+                "official_reopening_and_recheck_closing",
+                "human_facing_section_copy",
+            ]
+            if closed_route
+            else ["title_binding", "visual_evidence_label"]
+        ),
+    }
 
 
 def _validate_rendered_html(
@@ -1363,6 +1598,40 @@ def _integer_mapping(value: object) -> dict[str, int]:
         for key, item in value.items()
         if isinstance(item, int)
     }
+
+
+def _aggregate_usage(call_results: list[dict[str, object]]) -> dict[str, int]:
+    aggregate: dict[str, int] = {}
+    for result in call_results:
+        for key, item in _integer_mapping(result.get("usage")).items():
+            aggregate[key] = aggregate.get(key, 0) + item
+    return aggregate
+
+
+def _model_attempt_record(
+    *,
+    attempt_number: int,
+    prompt_sha256: str,
+    call_result: dict[str, object],
+    status: str,
+    validation_error: str | None = None,
+) -> dict[str, object]:
+    record: dict[str, object] = {
+        "attempt": attempt_number,
+        "prompt_sha256": prompt_sha256,
+        "status": status,
+        "usage": _integer_mapping(call_result.get("usage")),
+        "response_metadata": _string_mapping(call_result.get("response_metadata")),
+    }
+    if validation_error:
+        record["validation_error"] = validation_error
+    return record
+
+
+def _editorial_validation_error(exc: Exception) -> str:
+    if isinstance(exc, RouteContextRegenerationError):
+        return str(exc)
+    return f"Scout AI editorial plan is invalid: {exc}"
 
 
 def _string_mapping(value: object) -> dict[str, str]:

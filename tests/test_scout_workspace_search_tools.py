@@ -569,6 +569,32 @@ def test_route_structure_joins_route_notes_and_named_points_to_checkpoints() -> 
     ]
 
 
+def test_route_structure_handles_overlapping_checkpoint_coordinates(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "trip"
+    shutil.copytree(PROJECT_ROOT, workspace)
+    checkpoints_path = workspace / "candidates" / "checkpoints.json"
+    checkpoints = json.loads(checkpoints_path.read_text(encoding="utf-8"))
+    duplicate = {
+        **checkpoints[0],
+        "candidate_id": "cp.start.duplicate",
+        "label": "Start duplicate",
+    }
+    checkpoints_path.write_text(
+        json.dumps([*checkpoints, duplicate], ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    result = search_project_route_structure(
+        workspace,
+        query="哪些 checkpoint 靠近 route note 或地圖標註？",
+    )
+
+    assert result["status"] == "completed"
+    assert result["summaries"]["checkpoint_annotations"]["named_point_match_count"] > 0
+
+
 def test_route_structure_search_exposes_segments_for_cross_tool_risk_join() -> None:
     result = search_project_route_structure(
         PROJECT_ROOT,

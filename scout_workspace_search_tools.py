@@ -1319,17 +1319,24 @@ def _checkpoint_annotation_summary(
     def nearest_checkpoint(lat: float, lon: float) -> dict[str, Any] | None:
         if not checkpoint_rows:
             return None
-        distance_m, checkpoint = min(
-            (
+        checkpoint = min(
+            checkpoint_rows,
+            key=lambda item: (
                 _haversine_m(
                     lat,
                     lon,
                     float(item["lat"]),
                     float(item["lon"]),
                 ),
-                item,
-            )
-            for item in checkpoint_rows
+                str(item.get("candidate_id") or ""),
+                str(item.get("label") or ""),
+            ),
+        )
+        distance_m = _haversine_m(
+            lat,
+            lon,
+            float(checkpoint["lat"]),
+            float(checkpoint["lon"]),
         )
         return {
             "checkpoint_id": checkpoint.get("candidate_id"),
