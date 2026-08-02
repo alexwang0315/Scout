@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 from assistant_models import AssistantSurface, ScoutAssistantQuery  # noqa: E402
 from scout_ai_six_forces_scenarios import ScenarioContext, SixForcesCase  # noqa: E402
 from scout_ai_tool_planner import plan_scout_ai_tools  # noqa: E402
+from scout_team_status_tool import TEAM_STATUS_TOOL_ID  # noqa: E402
 from scout.agents.model_execution import (  # noqa: E402
     ModelCall,
     ScoutModelExecutionAdapter,
@@ -189,6 +190,7 @@ FORCE_TOOLS = {
         "scout.ai.navigation_terrain.assess.v0",
         "scout.ai.energy_vitals.assess.v0",
         "scout.ai.equipment_resource.assess.v0",
+        TEAM_STATUS_TOOL_ID,
         "pydantic_ai.tool.search_scout_risk_scores.v0",
     ],
     "RTE": [
@@ -245,6 +247,11 @@ NAV_MAP_PERCEPTION_TERMS = (
 
 def primary_tool_for_question(*, force_code: str, question: str) -> str:
     normalized = question.lower()
+    if force_code == "PER" and any(
+        term in normalized
+        for term in ("前隊", "後隊", "隊伍距離", "隊友距離", "可管理距離", "拉太開")
+    ):
+        return TEAM_STATUS_TOOL_ID
     if force_code == "NAV":
         weather = any(
             term in normalized
@@ -556,6 +563,7 @@ def assess_six_forces_answer_quality(
         tool_results=tool_results,
     )
     failure_reasons = set(quality.get("failure_reasons") or [])
+    matched_weather_signals = _matched_weather_signal_semantics(answer, tool_results)
     primary_field_grounded = _overlaps_primary_field_answer(answer, tool_results)
     any_field_grounded = _overlaps_any_field_answer(answer, tool_results)
     complete_card_grounded = _answer_overlaps_tool_evidence(answer, tool_results)
@@ -566,6 +574,19 @@ def assess_six_forces_answer_quality(
         if any_field_grounded
         else "complete_tool_card_overlap"
     )
+    if (
+        failure_reasons == {"did_not_preserve_expected_tool_tokens"}
+        and matched_weather_signals
+    ):
+        return {
+            **quality,
+            "classification": "auto_screen_pass_requires_human_review",
+            "grounded_context_use": True,
+            "grounding_match_method": "weather_signal_semantic_overlap",
+            "matched_grounding_tokens": matched_weather_signals,
+            "failure_reasons": [],
+            "human_review_required": True,
+        }
     gap_recoverable_reasons = {
         "did_not_preserve_expected_tool_tokens",
         "missing_evidence_gap",
@@ -861,6 +882,35 @@ def _overlaps_primary_field_answer(
     )
 
 
+def _matched_weather_signal_semantics(
+    answer: str,
+    tool_results: list[dict[str, Any]],
+) -> list[str]:
+    evidence = " ".join(
+        str(item.get("field_answer") or "").lower() for item in tool_results
+    )
+    normalized_answer = answer.lower()
+    mappings = {
+        "no_significant_rain": (
+            "無顯著降雨",
+            "無重大降雨",
+            "沒有明顯降雨",
+            "降雨不顯著",
+        ),
+        "light_wind": ("微風", "弱風", "風勢弱", "風不強"),
+        "good_visibility": ("能見度良好", "視線良好", "視野良好"),
+        "heavy_rain": ("大雨", "豪雨", "強降雨"),
+        "strong_wind": ("強風", "風勢強", "大風"),
+        "poor_visibility": ("能見度差", "視線差", "白牆"),
+    }
+    return [
+        signal
+        for signal, translations in mappings.items()
+        if signal in evidence
+        and (signal in normalized_answer or any(term in answer for term in translations))
+    ]
+
+
 def _overlaps_any_field_answer(
     answer: str,
     tool_results: list[dict[str, Any]],
@@ -925,6 +975,201 @@ def _longest_common_substring_size(left: str, right: str) -> int:
     return longest
 
 
+def _answer_obligations_for_run(
+    *,
+    run: dict[str, Any],
+    tool_results: list[dict[str, Any]],
+) -> list[str]:
+    """Keep small-model synthesis focused on evidence-backed answer duties."""
+
+    question = str(run.get("question_text") or "")
+    overlay = run.get("condition_overlay") or {}
+    obligations: list[str] = []
+    team_distance_question = any(
+        term in question
+        for term in ("前隊", "後隊", "隊伍距離", "隊友距離", "可管理距離", "拉太開")
+    )
+
+    if overlay.get("location_status") == "stale_unknown":
+        obligations.append(
+            "明說 GNSS/GPS 定位已過期或位置未知；先停止依賴特定 CP 的移動指示，"
+            "重新取得定位並人工確認周邊。"
+        )
+
+    if run.get("variant_id") == "exposed_strong_wind_shelter_ahead":
+        distance_m = overlay.get("sheltered_candidate_ahead_m")
+        distance_text = f"約 {distance_m:g} 公尺外" if isinstance(distance_m, (int, float)) else "前方"
+        obligations.append(
+            "明說目前不宜停留或照原行動繼續；維持已知路線走廊，前往"
+            f"{distance_text}的背風候選點，抵達後重新評估。"
+        )
+
+    if run.get("variant_id") == "stale_unknown_weather":
+        obligations.append(
+            "明說天氣證據已過期或未知，不能把缺資料視為好天氣；取得 fresh route "
+            "weather evidence 後再判斷。"
+        )
+
+    if run.get("variant_id") == "benign_fresh_route_intersecting":
+        obligations.append(
+            "原樣保留至少一個 weather signal：no_significant_rain、light_wind 或 "
+            "good_visibility；這只支持天氣面的條件式判斷，不可把未驗證的路線、"
+            "地形、隊伍或裝備說成正常。"
+        )
+
+    if run.get("variant_id") == "sheltered_flat_time_available":
+        permission_tool = next(
+            (
+                item
+                for item in tool_results
+                if item.get("tool_id") == "scout.ai.contextual_permission.assess.v0"
+            ),
+            {},
+        )
+        primary_field_answer = str(
+            permission_tool.get("field_answer") or ""
+        )
+        duration_match = re.search(r"最多\s*(\d+)\s*分鐘", primary_field_answer)
+        buffer_match = re.search(
+            r"(?:剩餘)?安全\s*buffer\s*約?\s*(\d+)\s*分鐘",
+            primary_field_answer,
+            flags=re.IGNORECASE,
+        )
+        if duration_match is not None:
+            permission_instruction = (
+                f"明說只可限時停留（最多 {duration_match.group(1)} 分鐘）並在時限後離開"
+            )
+        elif buffer_match is not None:
+            permission_instruction = (
+                f"明說剩餘安全 buffer 約 {buffer_match.group(1)} 分鐘；"
+                "這是行動餘裕，不可改寫成任意停留上限"
+            )
+        else:
+            permission_instruction = "明說工具指定的行動限制與離開條件"
+        if team_distance_question:
+            obligations.append(
+                "隊距問題以 team_status 的決策為準；contextual permission 只補充時間餘裕。"
+                f"{permission_instruction}；結構化 decision 必須與停止或繼續的內文一致。"
+            )
+        else:
+            obligations.append(
+                "以 contextual permission 主要工具的決策為準，"
+                f"{permission_instruction}；次要工具不得覆寫此 permission，"
+                "除非存在阻斷缺口。"
+            )
+    if team_distance_question:
+        team_field_answer = next(
+            (
+                str(item.get("field_answer") or "").strip()
+                for item in tool_results
+                if item.get("tool_id") == "scout.ai.team_status.assess.v0"
+            ),
+            "",
+        )
+        obligations.append(
+            "必須引用 team_status 的隊伍距離、分離或聯絡狀態回答是否仍可管理；"
+            + (
+                "不可只用 contextual permission 代替隊伍證據。"
+                if team_field_answer
+                else "team_status 未提供可用證據時，明說目前無法判定隊距。"
+            )
+        )
+
+    dimension_terms = (
+        ("距離", ("距離", "里程")),
+        ("時間", ("時間", "多久", "幾點")),
+        ("地形", ("地形", "坡", "崩", "暴露")),
+        ("接駁", ("接駁", "交通")),
+        ("天氣", ("天氣", "雨", "風", "霧", "qpf", "QPF")),
+    )
+    dimensions = [
+        label
+        for label, terms in dimension_terms
+        if any(term in question for term in terms)
+    ]
+    if len(dimensions) >= 2:
+        obligations.append(
+            f"逐項回答 {''.join(f'{item}、' for item in dimensions).rstrip('、')}；"
+            "沒有證據的項目要明說缺口，不可省略。"
+        )
+
+    if "qpf" in question.lower():
+        qpf_evidence = next(
+            (
+                str(item.get("field_answer") or "")
+                for item in tool_results
+                if "qpf" in str(item.get("field_answer") or "").lower()
+            ),
+            "",
+        )
+        if "direct qpf accumulation unavailable" in qpf_evidence.lower():
+            obligations.append(
+                "先回答『低估多少』：Direct QPF accumulation unavailable，現有 route-corridor "
+                "證據不能導出 max/mean/p95/peak_window，因此不可編造數字。"
+            )
+        else:
+            obligations.append(
+                "先回答 QPF 是否足以量化題目要求；只能引用 route corridor/bbox 層級證據，"
+                "不可宣稱精準到單一坡面。"
+            )
+
+    return list(dict.fromkeys(obligations))
+
+
+def _supporting_evidence_for_question(
+    *,
+    question: str,
+    tool_results: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    """Retain a few secondary cards needed for joins under the Hailo context cap."""
+
+    lowered = question.lower()
+    scored: list[tuple[int, int, dict[str, str]]] = []
+    relevance_groups = (
+        (("qpf", "雨", "天氣", "風", "霧"), ("cwa", "weather", "gee")),
+        (("地形", "坡", "崩", "暴露"), ("terrain", "risk", "gee")),
+        (("撤退", "路線", "距離", "時間", "接駁"), ("route", "terrain", "readiness")),
+    )
+    team_distance_question = any(
+        term in question
+        for term in ("前隊", "後隊", "隊伍距離", "隊友距離", "可管理距離", "拉太開")
+    )
+    for index, item in enumerate(tool_results[1:], start=1):
+        field_answer = str(item.get("field_answer") or "").strip()
+        tool_id = str(item.get("tool_id") or "").strip()
+        if not field_answer or not tool_id:
+            continue
+        score = 0
+        if "qpf" in lowered and "cwa" in tool_id.lower():
+            score += 50
+        if team_distance_question and "team_status" in tool_id.lower():
+            score += 50
+        for question_terms, tool_terms in relevance_groups:
+            if any(term in lowered for term in question_terms) and any(
+                term in tool_id.lower() for term in tool_terms
+            ):
+                score += 10
+        if score == 0:
+            continue
+        score += max(0, 3 - index)
+        scored.append(
+            (
+                -score,
+                index,
+                {
+                    "tool_id": tool_id,
+                    "field_answer": _plain_excerpt(
+                        field_answer,
+                        260 if not scored else 140,
+                    )
+                    or "",
+                },
+            )
+        )
+    scored.sort(key=lambda row: (row[0], row[1]))
+    return [row[2] for row in scored[:2]]
+
+
 def compact_evidence_for_model(
     *,
     run: dict[str, Any],
@@ -936,6 +1181,23 @@ def compact_evidence_for_model(
     max_chars: int | None = 1600,
 ) -> dict[str, Any]:
     resolved_missing_evidence = list(missing_evidence)
+    question = str(run.get("question_text") or "")
+    qpf_numeric_requested = "qpf" in question.lower() and any(
+        term in question for term in ("多少", "數值", "累積", "最大", "平均")
+    )
+    direct_qpf_unavailable = any(
+        "direct qpf accumulation unavailable"
+        in str(item.get("field_answer") or "").lower()
+        for item in tool_results
+    )
+    if qpf_numeric_requested and direct_qpf_unavailable:
+        primary_tool_id = primary_tool_for_question(
+            force_code=run["force_code"],
+            question=question,
+        )
+        resolved_missing_evidence.append(
+            f"{primary_tool_id}:missing:direct_qpf_accumulation"
+        )
     route_context_results = [
         item
         for item in tool_results
@@ -1037,6 +1299,14 @@ def compact_evidence_for_model(
         "missing_evidence": sorted(set(resolved_missing_evidence)),
         "blocking_missing_evidence": blocking_missing_evidence,
         "supplemental_missing_evidence": supplemental_missing_evidence,
+        "answer_obligations": _answer_obligations_for_run(
+            run=run,
+            tool_results=tool_results,
+        ),
+        "supporting_evidence": _supporting_evidence_for_question(
+            question=run["question_text"],
+            tool_results=tool_results,
+        ),
         **({"mser": mser_context} if mser_context is not None else {}),
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -1181,6 +1451,8 @@ def _pack_evidence(evidence: dict[str, Any], *, max_chars: int) -> dict[str, Any
                 _compact_gap(item, 72)
                 for item in (evidence.get("blocking_missing_evidence") or [])[:2]
             ],
+            "answer_obligations": evidence.get("answer_obligations") or [],
+            "supporting_evidence": evidence.get("supporting_evidence") or [],
             "candidate_only": True,
             "runtime_safety_truth": False,
             "packing": {
@@ -1301,6 +1573,16 @@ def build_structured_prompt(
             primary_tool.get("field_answer"),
             420,
         )
+        obligations = [
+            str(item)
+            for item in compact_evidence.get("answer_obligations") or []
+            if item
+        ]
+        supporting_evidence = [
+            f"{item.get('tool_id')}：{item.get('field_answer')}"
+            for item in compact_evidence.get("supporting_evidence") or []
+            if item.get("tool_id") and item.get("field_answer")
+        ]
         blocking_gaps = [
             _compact_gap(item)
             for item in compact_evidence.get("blocking_missing_evidence") or []
@@ -1311,7 +1593,8 @@ def build_structured_prompt(
         ]
         return (
             "/no_think\n你是 Scout AI 本地短答模型。只依證據直接回答，不可猜測。"
-            "只輸出 D=<決策>|A=<一個完整繁中句子><SCOUT_DONE>。"
+            "輸出必須先寫 D=，接決策值，再寫 |A=，接一個完整繁中句子，"
+            "最後寫 <SCOUT_DONE>。不可輸出『決策值』或本段規則。"
             "事實題 D=null；其他題 D 只能是 GO、CONDITIONAL_GO、GUIDED_ONLY、"
             "CHANGE_PLAN、DELAY、NO_GO、ESCALATE。"
             "a 必須先原樣摘錄主要證據的一個完整子句（含專名、數值或狀態），"
@@ -1321,7 +1604,9 @@ def build_structured_prompt(
             "所有內容是 candidate_only。若有 question_specific_route_context_evidence_missing，"
             "回答「工作區未提供足夠的題目專屬證據，無法確認」。"
             f"\n問:{run['question_text']}"
+            f"\n回答義務:{' '.join(obligations) or '直接回答問題並保留主要證據'}"
             f"\n主要證據:{primary_answer or '無'}"
+            f"\n補充證據:{' | '.join(supporting_evidence) or '無'}"
             f"\n阻斷缺口:{','.join(item for item in blocking_gaps if item) or '無'}"
             f"\n工具:{','.join(tool_ids)}"
         )
@@ -1392,6 +1677,17 @@ def build_recovery_prompt(
         decision = primary_tool.get("decision") or "DELAY"
     if "blocking_gap_requires_non_go_decision" in verifier_errors:
         decision = "DELAY"
+    elif (
+        any(
+            error in verifier_errors
+            for error in (
+                "decision_outside_scenario_boundary",
+                "answer_decision_contradiction",
+            )
+        )
+        and str(primary_tool.get("decision") or "") in DECISIONS
+    ):
+        decision = str(primary_tool["decision"])
     question_specific_gap = any(
         error
         in {
@@ -1401,9 +1697,11 @@ def build_recovery_prompt(
         for error in verifier_errors
     )
     scenario_answer_repair_errors = {
+        "benign_weather_cross_domain_checks_missing",
         "missing_sheltered_candidate_next_step",
         "sheltered_time_buffer_not_used",
         "severe_weather_not_used",
+        "stale_location_gap_not_explained",
         "stale_weather_gap_not_explained",
     }
     replace_unsupported_answer = any(
@@ -1493,6 +1791,10 @@ def build_recovery_prompt(
             "answer 必須使用 evidence 中背風平坦與時間緩衝資訊。"
         ),
         "severe_weather_not_used": "answer 必須使用 evidence 中的雨、風或能見度資訊。",
+        "benign_weather_cross_domain_checks_missing": (
+            "answer 必須說明這只支持天氣面的條件式判斷，仍需核對地形、隊伍與裝備；"
+            "不可直接升級成整體出發批准。"
+        ),
         "stale_weather_gap_not_explained": (
             "answer 或 g 必須明確說天氣資料過期、未知或需要更新。"
         ),
@@ -1523,8 +1825,18 @@ def build_recovery_prompt(
     if model_profile != "cloud":
         primary_answer = _plain_excerpt(
             primary_tool.get("field_answer"),
-            520,
+            360,
         )
+        obligations = [
+            str(item)
+            for item in compact_evidence.get("answer_obligations") or []
+            if item
+        ]
+        supporting_evidence = [
+            f"{item.get('tool_id')}：{item.get('field_answer')}"
+            for item in compact_evidence.get("supporting_evidence") or []
+            if item.get("tool_id") and item.get("field_answer")
+        ][:1]
         gaps = list(
             dict.fromkeys(
                 _compact_gap(item)
@@ -1536,18 +1848,18 @@ def build_recovery_prompt(
             )
         )
         return (
-            "/no_think\n上一個 Scout AI 短答未通過驗證，請只依主要證據重答。"
-            "只輸出 D=<決策>|A=<一個完整繁中句子><SCOUT_DONE>；"
-            "不可重述問題，A 不可用問號結尾。"
-            "A 必須以主要證據開頭，原樣摘錄其中一個完整子句，"
-            "並保留明確狀態、數值、限制與下一步；不得改寫成泛用建議。"
+            "/no_think\n你正在修正未通過 verifier 的 Scout AI 短答。"
+            "只輸出一行：先寫 D= 與指定決策值，再寫 |A= 與一個完整繁中句子，"
+            "最後寫 <SCOUT_DONE>。D= 後不可放句子；不可輸出規則或問題。"
+            "A 必須完成回答義務並引用主要證據的狀態、數值或下一步；"
             "阻斷缺口存在時必須明說過期、未知或缺少。"
-            f"\n決策:{'null' if decision is None else decision}"
+            f"\n決策值固定為:{'null' if decision is None else decision}"
             f"\n問題:{run['question_text']}"
-            f"\n上一答:{previous_output.get('answer') or '空'}"
             f"\n驗證錯誤:{','.join(verifier_errors)}"
             f"\n修正提示:{correction or answer_repair_instruction}"
+            f"\n回答義務:{' '.join(obligations) or '直接回答並保留主要證據'}"
             f"\n主要證據:{primary_answer or '無'}"
+            f"\n必要補充證據:{' | '.join(supporting_evidence) or '無'}"
             f"\n阻斷缺口:{','.join(item for item in gaps if item) or '無'}"
         )
     recovery_instruction = (
@@ -1797,6 +2109,11 @@ def verify_model_output(
     answer_decisions = _overall_answer_decisions(answer)
     if decision in DECISIONS and answer_decisions and answer_decisions != {decision}:
         errors.append("answer_decision_contradiction")
+    if decision == "GO" and any(
+        term in answer
+        for term in ("必須停止", "停止推進", "不要繼續", "不得繼續", "不應繼續")
+    ):
+        errors.append("answer_decision_contradiction")
     if run["question_id"] == "RTE-001" and not any(
         token in answer
         for token in (
@@ -1986,6 +2303,29 @@ def _scenario_faithfulness_errors(
     elif variant == "benign_fresh_route_intersecting":
         if any(term in answer for term in ("豪雨已發生", "必然強風", "必然低能見度")):
             errors.append("benign_weather_promoted_to_severe")
+        conditional_marker = any(
+            term in answer
+            for term in (
+                "有條件",
+                "仍需",
+                "還要",
+                "只就天氣",
+                "僅就天氣",
+                "天氣面",
+            )
+        ) or (
+            any(term in answer for term in ("但", "不過", "然而"))
+            and any(term in answer for term in ("確認", "核對", "檢查"))
+        )
+        cross_domain_check = any(
+            term in answer for term in ("路線", "地形", "隊伍", "裝備")
+        )
+        if (
+            str(output.get("decision") or "").upper()
+            in {"GO", "CONDITIONAL_GO"}
+            and not (conditional_marker and cross_domain_check)
+        ):
+            errors.append("benign_weather_cross_domain_checks_missing")
     elif variant == "stale_unknown_weather":
         gaps = " ".join(str(item) for item in output.get("evidence_gaps") or []).lower()
         if not any(
@@ -2402,7 +2742,8 @@ def execute_run(
     if (
         verifier["status"] != "pass"
         and best_parseable_state is not None
-        and len(verifier.get("errors") or []) > best_error_count
+        and len(model_attempts) > 1
+        and len(verifier.get("errors") or []) >= best_error_count
     ):
         (
             raw_answer,
@@ -3066,7 +3407,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=tuple(item.value for item in MSERExecutionMode),
         default=MSERExecutionMode.SHADOW.value,
     )
-    parser.add_argument("--guided-retry", action="store_true")
+    parser.add_argument(
+        "--guided-retry",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use verifier feedback for bounded semantic repair (default: enabled).",
+    )
     parser.add_argument("--max-runs", type=int)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--question-id", action="append", default=[])

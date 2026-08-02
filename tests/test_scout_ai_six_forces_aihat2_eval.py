@@ -166,6 +166,304 @@ def test_structured_prompt_excludes_reference_and_allowed_decisions() -> None:
     assert "a 必須先原樣摘錄" in prompt
 
 
+def test_local_prompt_uses_concrete_wire_format_without_echoable_placeholders() -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "RTE")
+
+    prompt = build_structured_prompt(
+        run=run,
+        compact_evidence={
+            "scenario_id": run["scenario_id"],
+            "tools": [
+                {
+                    "tool_id": "scout.ai.route_architecture.assess.v0",
+                    "decision": "CONDITIONAL_GO",
+                    "field_answer": "候選撤退線返回入口約 36.505 公里。",
+                }
+            ],
+        },
+        model_profile="local",
+    )
+
+    assert "D=<決策>" not in prompt
+    assert "A=<一個完整繁中句子>" not in prompt
+    assert "先寫 D=" in prompt
+
+
+def test_local_compact_evidence_preserves_exposed_shelter_answer_obligation() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "exposed_strong_wind_shelter_ahead"
+    )
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.contextual_permission.assess.v0",
+                "status": "completed",
+                "decision": "CHANGE_PLAN",
+                "field_answer": "目前暴露；前方約 180 公尺有背風候選點，抵達後重評。",
+            },
+            {
+                "tool_id": "scout.ai.weather_window.assess.v0",
+                "status": "completed",
+                "field_answer": "目前強風。",
+            },
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+    prompt = build_structured_prompt(
+        run=run,
+        compact_evidence=evidence,
+        model_profile="local",
+    )
+
+    obligations = " ".join(evidence["answer_obligations"])
+    assert "180" in obligations
+    assert "背風候選點" in obligations
+    assert "180" in prompt
+    assert "背風候選點" in prompt
+
+
+def test_sheltered_permission_obligation_keeps_primary_limit_authoritative() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.contextual_permission.assess.v0",
+                "status": "completed",
+                "decision": "CONDITIONAL_GO",
+                "field_answer": "可以，最多 8 分鐘；時間到立即離開。",
+            },
+            {
+                "tool_id": "scout.ai.weather_window.assess.v0",
+                "status": "completed",
+                "decision": "DELAY",
+                "field_answer": "一般天氣資料仍待更新。",
+            },
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+
+    obligations = " ".join(evidence["answer_obligations"])
+    assert "permission 主要工具" in obligations
+    assert "8 分鐘" in obligations
+
+
+def test_team_distance_permission_keeps_team_evidence_and_remaining_buffer() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    run["question_text"] = "前隊現在繼續走會不會讓隊伍失去可管理距離？"
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.contextual_permission.assess.v0",
+                "status": "completed",
+                "decision": "GO",
+                "field_answer": "可以繼續前進；目前剩餘安全 buffer 約 48 分鐘。",
+            },
+            {
+                "tool_id": "scout.ai.team_status.assess.v0",
+                "status": "completed",
+                "decision": "CONDITIONAL_GO",
+                "field_answer": "前後隊距離 320 公尺，仍在 500 公尺管理門檻內。",
+            },
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+
+    obligations = " ".join(evidence["answer_obligations"])
+    supporting = " ".join(
+        item["field_answer"] for item in evidence["supporting_evidence"]
+    )
+    assert "48 分鐘" in obligations
+    assert "team_status" in obligations
+    assert "320 公尺" in supporting
+
+
+def test_local_qpf_prompt_preserves_relevant_secondary_cwa_evidence() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "benign_fresh_route_intersecting"
+    )
+    run["question_id"] = "WTH-095"
+    run["question_text"] = "山區地形雨會讓目前 QPF 低估多少不確定性？"
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.weather_window.assess.v0",
+                "status": "completed",
+                "decision": "CONDITIONAL_GO",
+                "field_answer": "良好天氣，但仍需核對地形。",
+            },
+            {
+                "tool_id": "scout.ai.cwa_environment.assess.v0",
+                "status": "completed",
+                "decision": "DELAY",
+                "field_answer": (
+                    "Direct QPF accumulation unavailable: max/mean/p95/peak_window "
+                    "cannot be derived from prepared route-corridor evidence."
+                ),
+            },
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+    prompt = build_structured_prompt(
+        run=run,
+        compact_evidence=evidence,
+        model_profile="local",
+    )
+
+    assert "Direct QPF accumulation unavailable" in prompt
+    assert "低估多少" in " ".join(evidence["answer_obligations"])
+    assert evidence["supporting_evidence"][0]["tool_id"] == (
+        "scout.ai.cwa_environment.assess.v0"
+    )
+    assert evidence["blocking_missing_evidence"] == [
+        "missing:direct_qpf_accumulation"
+    ]
+
+
+def test_benign_weather_obligation_requires_signal_without_cross_domain_claims() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "benign_fresh_route_intersecting"
+    )
+    run["question_text"] = "依目前天氣，今天適合照原計畫出發嗎？"
+
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.weather_window.assess.v0",
+                "status": "completed",
+                "decision": "CONDITIONAL_GO",
+                "field_answer": (
+                    "signals=no_significant_rain, light_wind, good_visibility；"
+                    "天氣面可 CONDITIONAL_GO。"
+                ),
+            }
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+
+    obligations = " ".join(evidence["answer_obligations"])
+    assert "no_significant_rain" in obligations
+    assert "不可把未驗證的路線、地形、隊伍或裝備說成正常" in obligations
+
+
+def test_quality_accepts_traditional_chinese_weather_signal_equivalents() -> None:
+    quality = assess_six_forces_answer_quality(
+        "天氣面為無重大降雨、微風且視線良好，仍需核對地形、隊伍與裝備。",
+        missing_tools=[],
+        blocking_missing_evidence=[],
+        tool_results=[
+            {
+                "tool_id": "scout.ai.weather_window.assess.v0",
+                "status": "completed",
+                "field_answer": (
+                    "signals=no_significant_rain, light_wind, good_visibility。"
+                ),
+            }
+        ],
+    )
+
+    assert quality["classification"] == "auto_screen_pass_requires_human_review"
+    assert quality["failure_reasons"] == []
+    assert quality["grounding_match_method"] == "weather_signal_semantic_overlap"
+
+
+def test_benign_weather_verifier_requires_cross_domain_recheck_before_departure() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "benign_fresh_route_intersecting"
+    )
+    run["question_text"] = "依目前天氣，今天適合照原計畫出發嗎？"
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CONDITIONAL_GO",
+        "answer": "目前無重大降雨、微風且視線良好，適合照原計畫出發。",
+        "decisive_evidence": ["weather signals"],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["天氣轉差"],
+        "source_refs": ["scout.ai.weather_window.assess.v0"],
+        "claims": ["candidate_only"],
+    }
+
+    rejected = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"scout.ai.weather_window.assess.v0"},
+    )
+    accepted = verify_model_output(
+        run=run,
+        output={
+            **output,
+            "answer": (
+                "天氣面為無重大降雨、微風且視線良好，可有條件出發；"
+                "仍需核對地形、隊伍與裝備。"
+            ),
+        },
+        parse_error=None,
+        available_source_refs={"scout.ai.weather_window.assess.v0"},
+    )
+    accepted_rephrased = verify_model_output(
+        run=run,
+        output={
+            **output,
+            "answer": (
+                "依目前天氣，今天適合照原計畫出發，但需確認地形、隊伍與裝備"
+                "是否符合，並核對現況後再出發。"
+            ),
+        },
+        parse_error=None,
+        available_source_refs={"scout.ai.weather_window.assess.v0"},
+    )
+
+    assert "benign_weather_cross_domain_checks_missing" in rejected["errors"]
+    assert "benign_weather_cross_domain_checks_missing" not in accepted["errors"]
+    assert (
+        "benign_weather_cross_domain_checks_missing"
+        not in accepted_rephrased["errors"]
+    )
+
+
 def test_structured_prompt_uses_missing_evidence_response_mode_without_reference() -> None:
     run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP")
 
@@ -442,6 +740,35 @@ def test_verifier_rejects_answer_text_that_contradicts_decision_enum() -> None:
         "opposing_evidence": [],
         "evidence_gaps": [],
         "decision_change_conditions": [],
+        "source_refs": ["tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"tool"},
+    )
+
+    assert "answer_decision_contradiction" in verified["errors"]
+
+
+def test_verifier_rejects_go_decision_when_answer_orders_stop() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "GO",
+        "answer": "隊伍已失去共同節奏，必須停止推進並集合隊伍。",
+        "decisive_evidence": ["team status reports separation"],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["隊伍重新集合"],
         "source_refs": ["tool"],
         "claims": ["candidate_only"],
     }
@@ -1067,9 +1394,10 @@ def test_recovery_prompt_carries_verifier_feedback_without_reference_answer() ->
     assert "工作區未提供" in prompt
     assert "deterministic_reference" not in prompt
     assert "allowed_decisions" not in prompt
-    assert "只輸出 D=<決策>|A=<一個完整繁中句子><SCOUT_DONE>" in prompt
-    assert "決策:DELAY" in prompt
-    assert "山體由花崗岩構成" in prompt
+    assert "先寫 D=" in prompt
+    assert "D=<決策>" not in prompt
+    assert "決策值固定為:DELAY" in prompt
+    assert "山體由花崗岩構成" not in prompt
     assert "工作區未提供足夠的題目專屬證據" in prompt
     assert "question_specific_route_context_evidence_missing" in prompt
 
@@ -1097,7 +1425,7 @@ def test_recovery_prompt_replaces_unsupported_answer_with_primary_field_answer()
     )
 
     assert field_answer in prompt
-    assert "上一答:路線僅有登頂" in prompt
+    assert "路線僅有登頂" not in prompt
     assert "answer_quality:did_not_preserve_expected_tool_tokens" in prompt
 
 
@@ -1126,8 +1454,34 @@ def test_recovery_prompt_replaces_answer_when_sheltered_next_step_is_missing() -
     )
 
     assert field_answer in prompt
-    assert "上一答:會犧牲 35 分鐘 buffer" in prompt
+    assert "會犧牲 35 分鐘 buffer" not in prompt
     assert "missing_sheltered_candidate_next_step" in prompt
+
+
+def test_recovery_prompt_corrects_out_of_boundary_permission_decision() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    prompt = build_recovery_prompt(
+        run=run,
+        compact_evidence={
+            "scenario_id": run["scenario_id"],
+            "tools": [
+                {
+                    "tool_id": "scout.ai.contextual_permission.assess.v0",
+                    "decision": "CONDITIONAL_GO",
+                    "field_answer": "可以，最多 8 分鐘；時間到立即離開。",
+                }
+            ],
+        },
+        previous_output={"decision": "DELAY", "answer": "最多停 8 分鐘。"},
+        verifier_errors=["decision_outside_scenario_boundary"],
+    )
+
+    assert "決策值固定為:CONDITIONAL_GO" in prompt
 
 
 def test_summary_requires_verifier_and_quality_acceptance(tmp_path: Path) -> None:
@@ -1353,9 +1707,21 @@ def test_plain_excerpt_keeps_string_newlines_natural_and_finishes_nearby_sentenc
 def test_runtime_package_versions_attest_pydantic_ai_stack() -> None:
     versions = runtime_package_versions()
 
-    assert versions["pydantic_ai_slim"] == "2.20.0"
-    assert versions["pydantic_evals"] == "2.20.0"
-    assert versions["pydantic_graph"] == "2.20.0"
+    assert versions["pydantic_ai_slim"] == "2.22.0"
+    assert versions["pydantic_evals"] == "2.22.0"
+    assert versions["pydantic_graph"] == "2.22.0"
+
+
+def test_aihat_eval_defaults_to_guided_retry_with_explicit_single_pass_opt_out() -> None:
+    parser = eval_module.build_parser()
+
+    default_args = parser.parse_args(["--workspace", "/tmp/demo"])
+    single_pass_args = parser.parse_args(
+        ["--workspace", "/tmp/demo", "--no-guided-retry"]
+    )
+
+    assert default_args.guided_retry is True
+    assert single_pass_args.guided_retry is False
 
 
 def test_three_axis_scorecard_separates_transport_safety_and_semantics() -> None:
@@ -1505,6 +1871,26 @@ def test_selected_tools_put_force_primary_before_planner_and_defaults(
     assert tools[0] == "scout.ai.pace_guardian.assess.v0"
     assert tools.count("scout.ai.pace_guardian.assess.v0") == 1
     assert "scout.ai.energy_vitals.assess.v0" in tools
+
+
+def test_permission_force_keeps_team_status_available_for_distance_questions(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        eval_module,
+        "plan_scout_ai_tools",
+        lambda *args, **kwargs: SimpleNamespace(selected_tools=[]),
+    )
+    query = ScoutAssistantQuery(
+        surface=AssistantSurface.PRETRIP,
+        question="前隊現在繼續走會不會讓隊伍失去可管理距離？",
+        project_id="demo",
+    )
+
+    tools = selected_tool_ids(query=query, project_root=tmp_path, force_code="PER")
+
+    assert tools[0] == "scout.ai.team_status.assess.v0"
 
 
 def test_nav_terrain_shape_uses_map_perception_as_primary_tool(
