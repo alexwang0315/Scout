@@ -5,11 +5,16 @@ import json
 import os
 import re
 import threading
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, MutableMapping
 
 from pretrip_layer_preparation import LayerPreparationRequest, run_layer_preparation
+from dashboard_workspace_publication import (
+    DashboardWorkspacePublication,
+    WorkspacePreparationBusyError,
+)
 from scout_env import ScoutEnvLoadResult, load_scout_env_files
 from weather_imagery_tile_cache import project_cwa_imagery_cache_root
 
@@ -66,8 +71,8 @@ def create_dashboard_connected_preparation_manager(
 class DashboardConnectedPreparationManager:
     """Single-flight connected preparation with a service-lifetime refresh timer.
 
-    The browser only asks this server manager to prepare. CWA imagery and grids
-    are fetched, georeferenced, sampled, and written by the Mac/server worker.
+    Browser reads register a future refresh without fetching providers. Timer
+    ticks and explicit operator requests run preparation on the Mac/server.
     """
 
     def __init__(
@@ -82,6 +87,7 @@ class DashboardConnectedPreparationManager:
         thread_factory: ThreadFactory = threading.Thread,
         timer_factory: TimerFactory = threading.Timer,
         now_factory: NowFactory | None = None,
+        workspace_publication: DashboardWorkspacePublication | None = None,
     ) -> None:
         self.workspace_root = Path(workspace_root).expanduser().resolve()
         self.repo_root = Path(repo_root).expanduser().resolve()
@@ -96,6 +102,10 @@ class DashboardConnectedPreparationManager:
         self.thread_factory = thread_factory
         self.timer_factory = timer_factory
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
+        self.workspace_publication = (
+            workspace_publication
+            or DashboardWorkspacePublication(self.workspace_root)
+        )
         self._lock = threading.RLock()
         self._state_changed = threading.Condition(self._lock)
         self._states: dict[str, dict[str, Any]] = {}
@@ -106,7 +116,7 @@ class DashboardConnectedPreparationManager:
         self,
         project_id: str,
         *,
-        reason: str = "dashboard-open",
+        reason: str = "operator-refresh",
         force: bool = False,
     ) -> dict[str, Any]:
         self._validated_project_root(project_id)
@@ -152,6 +162,22 @@ class DashboardConnectedPreparationManager:
     ) -> dict[str, Any]:
         self._validated_project_root(project_id)
         return self._execute(project_id, reason=reason)
+
+    def ensure_scheduled(self, project_id: str) -> dict[str, Any]:
+        """Register a future refresh without fetching providers immediately."""
+
+        self._validated_project_root(project_id)
+        with self._lock:
+            if self._stopped:
+                raise RuntimeError("connected preparation manager is stopped")
+            current = self._states.get(project_id)
+            if current and current.get("status") in {"queued", "running"}:
+                return dict(current)
+            if project_id in self._timers and current and current.get("nextRunAt"):
+                return dict(current)
+            timer = self._install_next_timer_locked(project_id)
+        timer.start()
+        return self.snapshot(project_id)
 
     def refresh_for_assistant(
         self,
@@ -225,6 +251,7 @@ class DashboardConnectedPreparationManager:
 
     def _execute(self, project_id: str, *, reason: str) -> dict[str, Any]:
         started_at = self._now()
+        staged_workspace = None
         with self._lock:
             previous = self._states.get(project_id) or self._base_status(project_id)
             self._states[project_id] = {
@@ -241,9 +268,27 @@ class DashboardConnectedPreparationManager:
                 "nextRunAt": None,
             }
         try:
-            env_result = self._prepare_environment(project_id)
+            staged_workspace = self.workspace_publication.stage(project_id)
+            env_result = self._prepare_environment(
+                staged_workspace.staged_root,
+            )
             request = self._build_request(project_id, prepared_at=started_at)
+            request = replace(
+                request,
+                workspace_root=None,
+                project_root=staged_workspace.staged_root,
+            )
             manifest = self.runner(request)
+            if not isinstance(manifest, Mapping):
+                raise TypeError(
+                    "connected preparation runner must return a manifest mapping"
+                )
+            self._validate_staged_project(
+                project_id,
+                staged_workspace.staged_root,
+            )
+            publication = self.workspace_publication.publish(staged_workspace)
+            staged_workspace = None
             completed_at = self._now()
             result = self._result_status(
                 project_id,
@@ -252,8 +297,30 @@ class DashboardConnectedPreparationManager:
                 started_at=started_at,
                 completed_at=completed_at,
                 reason=reason,
+                publication=publication,
             )
+        except WorkspacePreparationBusyError:
+            completed_at = self._now()
+            result = {
+                **self._base_status(project_id),
+                "status": "busy",
+                "requestActivityState": "waiting-external-preparation",
+                "reason": _safe_reason(reason),
+                "startedAt": started_at.isoformat(),
+                "completedAt": completed_at.isoformat(),
+                "publicationStatus": "not-published",
+                "externalPreparationActive": True,
+                "lastError": {
+                    "type": "WorkspacePreparationBusyError",
+                    "message": (
+                        "Another server process is preparing this workspace; "
+                        "the published snapshot remains available."
+                    ),
+                },
+            }
         except Exception as exc:  # pragma: no cover - exact provider failures vary.
+            if staged_workspace is not None:
+                self.workspace_publication.discard(staged_workspace)
             completed_at = self._now()
             result = {
                 **self._base_status(project_id),
@@ -262,6 +329,7 @@ class DashboardConnectedPreparationManager:
                 "reason": _safe_reason(reason),
                 "startedAt": started_at.isoformat(),
                 "completedAt": completed_at.isoformat(),
+                "publicationStatus": "not-published",
                 "lastError": {
                     "type": type(exc).__name__,
                     "message": "Connected preparation failed; inspect redacted server diagnostics.",
@@ -277,25 +345,32 @@ class DashboardConnectedPreparationManager:
         with self._lock:
             if self._stopped:
                 return
-            next_run = self._now() + timedelta(seconds=self.refresh_interval_seconds)
-            state = self._states.get(project_id) or self._base_status(project_id)
-            self._states[project_id] = {
-                **state,
-                "nextRunAt": next_run.isoformat(),
-            }
-            timer = self.timer_factory(
-                self.refresh_interval_seconds,
-                lambda: self.trigger(
-                    project_id,
-                    reason="scheduled-refresh",
-                    force=True,
-                ),
-            )
-            timer.daemon = True
-            self._timers[project_id] = timer
+            previous_timer = self._timers.pop(project_id, None)
+            if previous_timer is not None:
+                previous_timer.cancel()
+            timer = self._install_next_timer_locked(project_id)
         timer.start()
 
-    def _prepare_environment(self, project_id: str) -> ScoutEnvLoadResult:
+    def _install_next_timer_locked(self, project_id: str) -> Any:
+        next_run = self._now() + timedelta(seconds=self.refresh_interval_seconds)
+        state = self._states.get(project_id) or self._base_status(project_id)
+        self._states[project_id] = {
+            **state,
+            "nextRunAt": next_run.isoformat(),
+        }
+        timer = self.timer_factory(
+            self.refresh_interval_seconds,
+            lambda: self.trigger(
+                project_id,
+                reason="scheduled-refresh",
+                force=True,
+            ),
+        )
+        timer.daemon = True
+        self._timers[project_id] = timer
+        return timer
+
+    def _prepare_environment(self, project_root: Path) -> ScoutEnvLoadResult:
         configured_env = str(self.environ.get("SCOUT_ENV_FILE") or "").strip()
         current_result = load_scout_env_files(
             repo_root=self.repo_root,
@@ -308,7 +383,6 @@ class DashboardConnectedPreparationManager:
                 else self.repo_root / ".env"
             ),
         )
-        project_root = self._validated_project_root(project_id)
         project_cwa_imagery_cache_root(project_root).mkdir(
             parents=True,
             exist_ok=True,
@@ -329,6 +403,21 @@ class DashboardConnectedPreparationManager:
                 or current_result.credential_values_exposed
             ),
         )
+
+    def _validate_staged_project(
+        self,
+        project_id: str,
+        project_root: Path,
+    ) -> None:
+        project_path = project_root / "project.json"
+        payload = json.loads(project_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or payload.get("project_id") != project_id:
+            raise ValueError("staged pre-trip project identity mismatch")
+        if not payload.get("route_summary_ref"):
+            return
+        from pretrip_admin_view import build_pretrip_admin_view
+
+        build_pretrip_admin_view(project_id, project_root=project_root)
 
     def _build_request(
         self,
@@ -362,6 +451,7 @@ class DashboardConnectedPreparationManager:
         started_at: datetime,
         completed_at: datetime,
         reason: str,
+        publication: Mapping[str, Any],
     ) -> dict[str, Any]:
         project = self._read_project(project_id)
         network_policy = manifest.get("network_policy")
@@ -432,11 +522,28 @@ class DashboardConnectedPreparationManager:
             "componentStatuses": component_statuses,
             "failedComponents": failed_components,
             "artifactRefs": artifact_refs,
+            **dict(publication),
+            "publicationStatus": "published",
         }
 
     def _base_status(self, project_id: str) -> dict[str, Any]:
         cache_root = project_cwa_imagery_cache_root(
             self.workspace_root / project_id
+        )
+        recovery_reader = getattr(
+            self.workspace_publication,
+            "recovery_status",
+            None,
+        )
+        recovery = (
+            recovery_reader(project_id)
+            if callable(recovery_reader)
+            else {"status": "none"}
+        )
+        recovery_state = str(recovery.get("status") or "none")
+        recovery_journal_state = str(
+            recovery.get("journalStatus")
+            or ("clear" if recovery_state == "none" else recovery_state)
         )
         return {
             "schemaVersion": SCHEMA_VERSION,
@@ -464,6 +571,14 @@ class DashboardConnectedPreparationManager:
             "componentStatuses": {},
             "failedComponents": [],
             "artifactRefs": {},
+            "publicationMode": "staged-atomic-swap",
+            "publicationStatus": "not-started",
+            "crossProcessLocking": True,
+            "recoveryJournalStatus": recovery_journal_state,
+            "startupRecovery": recovery_state,
+            "externalPreparationActive": (
+                recovery_journal_state == "active-external"
+            ),
             "queuedAt": None,
             "startedAt": None,
             "completedAt": None,
@@ -528,8 +643,8 @@ class DashboardConnectedPreparationManager:
 
 
 def _safe_reason(reason: str) -> str:
-    normalized = str(reason or "dashboard-open").strip()
-    return normalized[:80] if normalized else "dashboard-open"
+    normalized = str(reason or "operator-refresh").strip()
+    return normalized[:80] if normalized else "operator-refresh"
 
 
 def main(argv: list[str] | None = None) -> int:
