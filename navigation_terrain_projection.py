@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -15,12 +16,16 @@ from navigation_terrain_projection_expert import (
     normalize_terrain_hierarchy as _normalize_terrain_hierarchy,
 )
 from navigation_terrain_workspace import (
+    WorkspaceTerrainGrid,
     WorkspaceTerrainEvidenceError,
     build_workspace_route_terrain_events,
     build_workspace_route_topology,
     build_workspace_source_ledger,
     build_workspace_terrain_hierarchy,
     extract_dem_structure_candidates,
+    load_workspace_terrain_grid,
+    project_route_sample_points_twd97,
+    route_sample_points,
 )
 
 
@@ -44,6 +49,17 @@ class NavigationTerrainProjectionError(ValueError):
     """Raised when a workspace terrain reference is unsafe or malformed."""
 
 
+@dataclass(frozen=True)
+class _NavigationTerrainInputs:
+    terrain: dict[str, Any]
+    route_samples: dict[str, Any]
+    risk_candidates: dict[str, Any]
+    route_points: list[dict[str, Any]]
+    projected_route_points: list[dict[str, Any]]
+    workspace_grid: WorkspaceTerrainGrid | None
+    workspace_grid_error: str | None
+
+
 def build_navigation_terrain_projection(
     project_root: Path,
     project: dict[str, Any],
@@ -56,9 +72,16 @@ def build_navigation_terrain_projection(
     route_samples_ref = _optional_ref(project.get("terrain_route_samples_ref"))
     risk_candidates_ref = _optional_ref(project.get("terrain_risk_candidates_ref"))
 
-    terrain = _read_json_ref(project_root, terrain_ref)
-    route_samples = _read_json_ref(project_root, route_samples_ref)
-    risk_candidates = _read_json_ref(project_root, risk_candidates_ref)
+    inputs = _load_navigation_terrain_inputs(
+        project_root,
+        project,
+        terrain_ref=terrain_ref,
+        route_samples_ref=route_samples_ref,
+        risk_candidates_ref=risk_candidates_ref,
+    )
+    terrain = inputs.terrain
+    route_samples = inputs.route_samples
+    risk_candidates = inputs.risk_candidates
 
     overlays = _normalize_overlays(terrain, project_id=project_id)
     bounded_route_samples, source_route_sample_count = _normalize_route_samples(
@@ -70,6 +93,7 @@ def build_navigation_terrain_projection(
     workspace_structures = _workspace_structure_projection(
         project_root,
         project,
+        inputs,
     )
     source_ledger = _workspace_source_ledger_projection(
         project_root,
@@ -79,10 +103,12 @@ def build_navigation_terrain_projection(
         project_root,
         project,
         workspace_structures,
+        inputs,
     )
     raw_hierarchy, raw_route_events = _workspace_terrain_bundle(
         project_root,
         project,
+        inputs,
     )
     terrain_hierarchy = _normalize_terrain_hierarchy(raw_hierarchy)
     route_terrain_events = _normalize_route_terrain_events(raw_route_events)
@@ -220,15 +246,20 @@ def build_navigation_terrain_projection(
 def _workspace_terrain_bundle(
     project_root: Path,
     project: dict[str, Any],
+    inputs: _NavigationTerrainInputs,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     cache_key = _terrain_bundle_cache_key(project_root, project)
     cached = _TERRAIN_BUNDLE_CACHE.get(cache_key)
     if cached is not None:
         return cached
+    if inputs.workspace_grid is None:
+        reason = inputs.workspace_grid_error or "Workspace DEM grid is not prepared."
+        return _empty_terrain_hierarchy(reason), _empty_route_terrain_events(reason)
     try:
         hierarchy = build_workspace_terrain_hierarchy(
             project_root,
             project,
+            workspace_grid=inputs.workspace_grid,
             relief_threshold_m=6.0,
             minimum_component_cells=5,
             max_edges_per_network=120,
@@ -237,6 +268,7 @@ def _workspace_terrain_bundle(
             project_root,
             project,
             hierarchy,
+            projected_route_points=inputs.projected_route_points,
             proximity_tolerance_m=50.0,
             max_events=MAX_ROUTE_TERRAIN_EVENTS,
         )
@@ -247,6 +279,45 @@ def _workspace_terrain_bundle(
         _TERRAIN_BUNDLE_CACHE.pop(next(iter(_TERRAIN_BUNDLE_CACHE)))
     _TERRAIN_BUNDLE_CACHE[cache_key] = (hierarchy, route_events)
     return hierarchy, route_events
+
+
+def _load_navigation_terrain_inputs(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    terrain_ref: str | None,
+    route_samples_ref: str | None,
+    risk_candidates_ref: str | None,
+) -> _NavigationTerrainInputs:
+    terrain = _read_json_ref(project_root, terrain_ref)
+    route_samples = _read_json_ref(project_root, route_samples_ref)
+    risk_candidates = _read_json_ref(project_root, risk_candidates_ref)
+    coverage_ref = _optional_ref(project.get("dtm_coverage_summary_ref"))
+    coverage = _read_json_ref(project_root, coverage_ref)
+    parsed_route_points = route_sample_points(route_samples)
+    projected_route_points = project_route_sample_points_twd97(
+        parsed_route_points
+    )
+    try:
+        workspace_grid = load_workspace_terrain_grid(
+            project_root,
+            project,
+            terrain_payload=terrain,
+            coverage_payload=coverage,
+        )
+        workspace_grid_error = None
+    except WorkspaceTerrainEvidenceError as exc:
+        workspace_grid = None
+        workspace_grid_error = str(exc)
+    return _NavigationTerrainInputs(
+        terrain=terrain,
+        route_samples=route_samples,
+        risk_candidates=risk_candidates,
+        route_points=parsed_route_points,
+        projected_route_points=projected_route_points,
+        workspace_grid=workspace_grid,
+        workspace_grid_error=workspace_grid_error,
+    )
 
 
 def _terrain_bundle_cache_key(
@@ -496,9 +567,25 @@ def _structure_projection(
 def _workspace_structure_projection(
     project_root: Path,
     project: dict[str, Any],
+    inputs: _NavigationTerrainInputs,
 ) -> dict[str, Any]:
+    if inputs.workspace_grid is None:
+        return {
+            "status": "not_prepared",
+            "counts": {"ridge": 0, "valley": 0, "saddle": 0},
+            "rendered_counts": {"ridge": 0, "valley": 0, "saddle": 0},
+            "points": [],
+            "error": inputs.workspace_grid_error,
+            "boundary": _workspace_candidate_boundary(),
+        }
     try:
-        return extract_dem_structure_candidates(project_root, project)
+        return extract_dem_structure_candidates(
+            project_root,
+            project,
+            workspace_grid=inputs.workspace_grid,
+            route_points=inputs.route_points,
+            projected_route_points=inputs.projected_route_points,
+        )
     except WorkspaceTerrainEvidenceError as exc:
         return {
             "status": "not_prepared",
@@ -533,12 +620,14 @@ def _workspace_route_topology_projection(
     project_root: Path,
     project: dict[str, Any],
     workspace_structures: dict[str, Any],
+    inputs: _NavigationTerrainInputs,
 ) -> dict[str, Any]:
     try:
         return build_workspace_route_topology(
             project_root,
             project,
             workspace_structures,
+            route_points=inputs.route_points,
         )
     except WorkspaceTerrainEvidenceError as exc:
         return {

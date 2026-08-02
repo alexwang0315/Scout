@@ -7,10 +7,15 @@ import pytest
 
 from navigation_terrain_workspace import (
     WorkspaceTerrainEvidenceError,
+    build_workspace_route_terrain_events,
     build_workspace_route_topology,
     build_workspace_source_ledger,
+    build_workspace_terrain_hierarchy,
     classify_structure_neighborhood,
     extract_dem_structure_candidates,
+    load_workspace_terrain_grid,
+    project_route_sample_points_twd97,
+    route_sample_points,
 )
 
 
@@ -157,6 +162,68 @@ def test_extractor_reads_bounded_grid_and_returns_candidate_points(
     assert all(point["runtime_safety_truth"] is False for point in result["points"])
     assert all("grid_uri" not in point for point in result["points"])
     assert result["boundary"]["safe_or_walkable"] == "not_determined"
+
+
+def test_projection_stages_reuse_one_loaded_dem_and_route_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root, project = _workspace(tmp_path)
+    route_payload = json.loads(
+        (project_root / project["terrain_route_samples_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    route_points = route_sample_points(route_payload)
+    projected_route_points = project_route_sample_points_twd97(route_points)
+    terrain_grid = load_workspace_terrain_grid(project_root, project)
+
+    def unexpected_read(*_args, **_kwargs):
+        pytest.fail("shared projection inputs must not reread workspace JSON")
+
+    monkeypatch.setattr("navigation_terrain_dem._read_project_json", unexpected_read)
+    monkeypatch.setattr("navigation_terrain_topology._read_project_json", unexpected_read)
+    monkeypatch.setattr(
+        "navigation_route_terrain_events._read_project_json",
+        unexpected_read,
+    )
+
+    structures = extract_dem_structure_candidates(
+        project_root,
+        project,
+        max_per_kind=8,
+        workspace_grid=terrain_grid,
+        route_points=route_points,
+        projected_route_points=projected_route_points,
+    )
+    hierarchy = build_workspace_terrain_hierarchy(
+        project_root,
+        project,
+        workspace_grid=terrain_grid,
+        relief_threshold_m=6,
+        minimum_component_cells=3,
+    )
+    topology = build_workspace_route_topology(
+        project_root,
+        project,
+        structures,
+        route_points=route_points,
+    )
+    events = build_workspace_route_terrain_events(
+        project_root,
+        project,
+        hierarchy,
+        projected_route_points=projected_route_points,
+    )
+
+    assert 0 < structures["grid"]["selected_cell_count"] <= len(
+        terrain_grid.elevations
+    )
+    assert hierarchy["grid"]["selected_cell_count"] == len(
+        terrain_grid.elevations
+    )
+    assert topology["status"] == "observed_baseline_topology"
+    assert events["route_point_count"] == len(projected_route_points)
 
 
 def test_extractor_rejects_grid_outside_declared_source_directories(

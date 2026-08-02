@@ -572,6 +572,26 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     )
     manifest["architecture_preparation"] = architecture_preparation
     outputs.update(architecture_preparation.get("output_refs", {}))
+    navigation_terrain_projection = (
+        _run_navigation_terrain_projection_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+        )
+        if request.run_post_layer_enrichments
+        and request.run_map_preparation_spec_artifacts
+        else _skipped_connected_refresh_post_enrichment(
+            "navigation_terrain_projection"
+        )
+    )
+    manifest["navigation_terrain_projection"] = navigation_terrain_projection
+    if navigation_terrain_projection.get("status") == "completed":
+        outputs.update(navigation_terrain_projection.get("output_refs", {}))
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
     summary = _summary_from_manifest(manifest)
     map_preparation_summary = _map_preparation_summary_from_manifest(manifest)
     adapter_manifest = _adapter_manifest_from_manifest(manifest)
@@ -5025,6 +5045,74 @@ def _skipped_connected_refresh_post_enrichment(name: str) -> dict[str, Any]:
             "runtime_safety_truth": False,
             "workspace_file_mutation_allowed": False,
         },
+    }
+
+
+def _run_navigation_terrain_projection_after_layer_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    boundary = {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "review_gated": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "workspace_file_mutation_allowed": True,
+    }
+    if "terrain" not in set(manifest.get("normalized_layers") or []):
+        return {
+            "status": "not_requested",
+            "reason": "terrain_layer_not_requested",
+            "trigger": "prepare_layers_with_terrain",
+            "boundary": boundary,
+        }
+
+    project_path = project_root / "project.json"
+    if not project_path.exists():
+        return {
+            "status": "skipped_missing_project",
+            "trigger": "prepare_layers_with_terrain",
+            "boundary": boundary,
+        }
+
+    try:
+        from navigation_terrain_projection_store import (
+            NAVIGATION_TERRAIN_PROJECTION_REF,
+            compile_navigation_terrain_projection,
+        )
+
+        project = _load_json(project_path)
+        projection = compile_navigation_terrain_projection(
+            project_root,
+            project=project,
+            project_id=str(
+                project.get("project_id")
+                or manifest.get("project_id")
+                or project_root.name
+            ),
+            compiled_at=manifest.get("finished_at"),
+        )
+    except Exception as exc:  # pragma: no cover - defensive preparation boundary
+        return {
+            "status": "failed",
+            "trigger": "prepare_layers_with_terrain",
+            "error": str(exc),
+            "boundary": boundary,
+        }
+
+    compilation = projection.get("projection_compilation") or {}
+    return {
+        "status": "completed",
+        "projection_state": projection.get("projection_state", "ready"),
+        "trigger": "prepare_layers_with_terrain",
+        "compiled_at": compilation.get("compiled_at"),
+        "input_fingerprint": compilation.get("input_fingerprint"),
+        "output_refs": {
+            "navigation_terrain_projection_ref": NAVIGATION_TERRAIN_PROJECTION_REF,
+        },
+        "boundary": projection.get("boundary") or boundary,
     }
 
 

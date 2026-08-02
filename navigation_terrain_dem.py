@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from navigation_terrain_coordinates import twd97_to_wgs84
 
@@ -15,6 +16,20 @@ DEFAULT_MAX_PER_KIND = 24
 
 class WorkspaceTerrainEvidenceError(ValueError):
     """Raised when workspace terrain evidence is unsafe or malformed."""
+
+
+@dataclass(frozen=True)
+class WorkspaceTerrainGrid:
+    """One validated DEM window shared across projection stages."""
+
+    terrain: dict[str, Any]
+    coverage: dict[str, Any]
+    elevations: Mapping[tuple[int, int], float]
+    bbox_twd97: dict[str, float]
+    resolution_m: float
+    selected_tiles: tuple[dict[str, Any], ...]
+    tile_ids: tuple[str, ...]
+    corridor_filter_method: str
 
 
 def classify_structure_neighborhood(
@@ -79,6 +94,9 @@ def extract_dem_structure_candidates(
     project: dict[str, Any],
     *,
     max_per_kind: int = DEFAULT_MAX_PER_KIND,
+    workspace_grid: WorkspaceTerrainGrid | None = None,
+    route_points: Sequence[dict[str, Any]] | None = None,
+    projected_route_points: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Extract bounded ridge, valley, and saddle candidates from workspace DTM."""
 
@@ -87,65 +105,36 @@ def extract_dem_structure_candidates(
     project_root = project_root.resolve()
     terrain_ref = _required_project_ref(project, "terrain_visualization_ref")
     coverage_ref = _required_project_ref(project, "dtm_coverage_summary_ref")
-    terrain = _read_project_json(project_root, terrain_ref)
-    coverage = _read_project_json(project_root, coverage_ref)
-
-    dtm_grid = terrain.get("dtm_grid", {})
-    if not isinstance(dtm_grid, dict):
-        raise WorkspaceTerrainEvidenceError("terrain visualization has no dtm_grid")
-    bbox = _normalize_bbox_twd97(
-        dtm_grid.get("full_route_corridor_bbox_twd97")
-        or dtm_grid.get("bbox_twd97")
+    loaded_grid = workspace_grid or load_workspace_terrain_grid(
+        project_root,
+        project,
     )
-    if bbox is None:
-        raise WorkspaceTerrainEvidenceError(
-            "terrain visualization has no usable TWD97 bounding box"
-        )
-    resolution_m = _positive_number(dtm_grid.get("cell_resolution_m"))
-    if resolution_m is None:
-        raise WorkspaceTerrainEvidenceError(
-            "terrain visualization has no cell resolution"
-        )
-
-    source_dirs = _declared_source_directories(coverage)
-    tiles = coverage.get("candidate_tiles", [])
-    if not isinstance(tiles, list):
-        raise WorkspaceTerrainEvidenceError("DTM coverage candidate_tiles must be a list")
-
-    elevation_by_xy: dict[tuple[int, int], float] = {}
-    tile_ids: list[str] = []
-    for tile in tiles:
-        if not isinstance(tile, dict) or not _bbox_intersects(
-            bbox,
-            _normalize_bbox_twd97(tile.get("bbox_twd97")),
-        ):
-            continue
-        grid_path = _validated_grid_path(tile, source_dirs)
-        tile_ids.append(str(tile.get("tile_id") or grid_path.stem))
-        _read_grid_window(grid_path, bbox, elevation_by_xy)
+    terrain = loaded_grid.terrain
+    dtm_grid = terrain.get("dtm_grid", {})
+    bbox = loaded_grid.bbox_twd97
+    resolution_m = loaded_grid.resolution_m
+    tiles = list(loaded_grid.selected_tiles)
+    elevation_by_xy = dict(loaded_grid.elevations)
+    tile_ids = list(loaded_grid.tile_ids)
 
     route_ref = _optional_project_ref(project, "terrain_route_samples_ref")
     corridor_half_width_m = (
         _positive_number(dtm_grid.get("corridor_half_width_m")) or 500.0
     )
     route_distance_by_xy: dict[tuple[int, int], float] = {}
-    route_points_twd97: list[dict[str, float]] = []
-    corridor_filter_method = "not_applied"
-    bitmap_filtered = _filter_elevations_by_prepared_corridor_bitmap(
-        project_root,
-        terrain,
-        elevation_by_xy,
-        bbox=bbox,
-        resolution_m=resolution_m,
+    route_points_twd97 = list(projected_route_points or ())
+    corridor_filter_method = loaded_grid.corridor_filter_method
+    bitmap_filtered = (
+        elevation_by_xy
+        if corridor_filter_method == "prepared_slope_bitmap_alpha"
+        else None
     )
-    if bitmap_filtered is not None:
-        elevation_by_xy = bitmap_filtered
-        corridor_filter_method = "prepared_slope_bitmap_alpha"
-    if route_ref:
+    if route_ref and route_points is None:
         route_payload = _read_project_json(project_root, route_ref)
-        route_points_twd97 = _route_points_twd97(
-            _route_sample_points(route_payload)
-        )
+        route_points = route_sample_points(route_payload)
+    if route_points is not None and not route_points_twd97:
+        route_points_twd97 = project_route_sample_points_twd97(route_points)
+    if route_ref:
         if route_points_twd97 and bitmap_filtered is None:
             route_distance_by_xy = _route_point_distance_map(
                 list(elevation_by_xy),
@@ -318,6 +307,88 @@ def extract_dem_structure_candidates(
             "safety_api_called": False,
         },
     }
+
+
+def load_workspace_terrain_grid(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    terrain_payload: dict[str, Any] | None = None,
+    coverage_payload: dict[str, Any] | None = None,
+) -> WorkspaceTerrainGrid:
+    """Read and validate the prepared DEM window exactly once."""
+
+    root = project_root.resolve()
+    terrain_ref = _required_project_ref(project, "terrain_visualization_ref")
+    coverage_ref = _required_project_ref(project, "dtm_coverage_summary_ref")
+    terrain = (
+        dict(terrain_payload)
+        if isinstance(terrain_payload, dict)
+        else _read_project_json(root, terrain_ref)
+    )
+    coverage = (
+        dict(coverage_payload)
+        if isinstance(coverage_payload, dict)
+        else _read_project_json(root, coverage_ref)
+    )
+    dtm_grid = terrain.get("dtm_grid", {})
+    if not isinstance(dtm_grid, dict):
+        raise WorkspaceTerrainEvidenceError("terrain visualization has no dtm_grid")
+    bbox = _normalize_bbox_twd97(
+        dtm_grid.get("full_route_corridor_bbox_twd97")
+        or dtm_grid.get("bbox_twd97")
+    )
+    if bbox is None:
+        raise WorkspaceTerrainEvidenceError(
+            "terrain visualization has no usable TWD97 bounding box"
+        )
+    resolution_m = _positive_number(dtm_grid.get("cell_resolution_m"))
+    if resolution_m is None:
+        raise WorkspaceTerrainEvidenceError(
+            "terrain visualization has no cell resolution"
+        )
+    source_dirs = _declared_source_directories(coverage)
+    raw_tiles = coverage.get("candidate_tiles", [])
+    if not isinstance(raw_tiles, list):
+        raise WorkspaceTerrainEvidenceError(
+            "DTM coverage candidate_tiles must be a list"
+        )
+
+    elevations: dict[tuple[int, int], float] = {}
+    selected_tiles: list[dict[str, Any]] = []
+    tile_ids: list[str] = []
+    for tile in raw_tiles:
+        if not isinstance(tile, dict) or not _bbox_intersects(
+            bbox,
+            _normalize_bbox_twd97(tile.get("bbox_twd97")),
+        ):
+            continue
+        grid_path = _validated_grid_path(tile, source_dirs)
+        _read_grid_window(grid_path, bbox, elevations)
+        selected_tiles.append(dict(tile))
+        tile_ids.append(str(tile.get("tile_id") or grid_path.stem))
+
+    filtered = _filter_elevations_by_prepared_corridor_bitmap(
+        root,
+        terrain,
+        elevations,
+        bbox=bbox,
+        resolution_m=resolution_m,
+    )
+    return WorkspaceTerrainGrid(
+        terrain=terrain,
+        coverage=coverage,
+        elevations=filtered if filtered is not None else elevations,
+        bbox_twd97=bbox,
+        resolution_m=resolution_m,
+        selected_tiles=tuple(selected_tiles),
+        tile_ids=tuple(tile_ids),
+        corridor_filter_method=(
+            "prepared_slope_bitmap_alpha"
+            if filtered is not None
+            else "not_applied"
+        ),
+    )
 
 
 def _required_project_ref(project: dict[str, Any], key: str) -> str:
@@ -576,7 +647,7 @@ def _common_vertical_datum(tiles: Sequence[Any]) -> str | None:
     return values.pop() if len(values) == 1 else None
 
 
-def _route_sample_points(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def route_sample_points(payload: dict[str, Any]) -> list[dict[str, Any]]:
     features = payload.get("features", [])
     if not isinstance(features, list):
         return []
@@ -616,9 +687,9 @@ def _route_sample_points(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return points
 
 
-def _route_points_twd97(
+def project_route_sample_points_twd97(
     route_points: Sequence[dict[str, Any]],
-) -> list[dict[str, float]]:
+) -> list[dict[str, Any]]:
     from pretrip_source_ingest import wgs84_to_twd97
 
     projected = []
@@ -629,8 +700,22 @@ def _route_points_twd97(
             projected[-1]["y"] - y,
         ) < 0.001:
             continue
-        projected.append({"x": x, "y": y})
+        projected.append(
+            {
+                "id": str(point.get("id") or f"route-sample-{len(projected):05d}"),
+                "x": x,
+                "y": y,
+                "x_twd97": x,
+                "y_twd97": y,
+                "distance_m": point.get("distance_m"),
+                "elevation_m": point.get("elevation_m"),
+            }
+        )
     return projected
+
+
+_route_sample_points = route_sample_points
+_route_points_twd97 = project_route_sample_points_twd97
 
 
 def _route_point_distance_map(
