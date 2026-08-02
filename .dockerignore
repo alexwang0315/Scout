@@ -16,6 +16,7 @@ scout-risk-engine/scout_codex_package/out/**
 scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_ai_*.py
 !scout_*_tool.py
+!navigation_*.py
 !pretrip_*.py
 !checkpoint_manager.py
 !communication_provider.py

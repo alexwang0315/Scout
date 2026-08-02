@@ -929,6 +929,7 @@ def test_phase4_admin_dockerfile_runs_admin_app_not_field_runtime() -> None:
     assert "scout_cli.py" in source
     assert "scout_agent_cli.py" in source
     assert "scout_agent_runtime.py" in source
+    assert "COPY navigation_*.py ./" in source
     assert "assistant_weather_preparation.py" in source
     assert "dashboard_connected_preparation.py" in source
     assert "dashboard_workspace_operations.py" in source
@@ -995,6 +996,7 @@ def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets()
     assert "!scout_cli.py" in dockerignore
     assert "!scout_agent_cli.py" in dockerignore
     assert "!scout_agent_runtime.py" in dockerignore
+    assert "!navigation_*.py" in dockerignore
     assert "!assistant_weather_preparation.py" in dockerignore
     assert "!dashboard_connected_preparation.py" in dockerignore
     assert "!dashboard_workspace_operations.py" in dockerignore

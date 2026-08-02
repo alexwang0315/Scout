@@ -172,29 +172,29 @@ def build_workspace_route_terrain_events(
     project_root: Path,
     project: dict[str, Any],
     terrain_hierarchy: Mapping[str, Any],
+    *,
+    projected_route_points: Sequence[Mapping[str, Any]] | None = None,
     **options: Any,
 ) -> dict[str, Any]:
     """Join prepared workspace route samples to a terrain hierarchy."""
 
     route_ref = _required_project_ref(project, "terrain_route_samples_ref")
-    route_samples = _route_sample_points(
-        _read_project_json(project_root.resolve(), route_ref)
-    )
-    from pretrip_source_ingest import wgs84_to_twd97
-
-    projected = []
-    for point in route_samples:
-        x, y = wgs84_to_twd97(float(point["lat"]), float(point["lon"]))
-        projected.append(
-            {
-                "id": point["id"],
-                "x_twd97": x,
-                "y_twd97": y,
-                "distance_m": point["distance_m"],
-                "elevation_m": point.get("elevation_m"),
-                "source_refs": [route_ref],
-            }
+    if projected_route_points is None:
+        route_samples = _route_sample_points(
+            _read_project_json(project_root.resolve(), route_ref)
         )
+        from navigation_terrain_dem import project_route_sample_points_twd97
+
+        projected = project_route_sample_points_twd97(route_samples)
+    else:
+        projected = [dict(point) for point in projected_route_points]
+    projected = [
+        {
+            **point,
+            "source_refs": [route_ref],
+        }
+        for point in projected
+    ]
     result = build_route_terrain_events(projected, terrain_hierarchy, **options)
     return {
         **result,

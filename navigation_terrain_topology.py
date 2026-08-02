@@ -17,6 +17,7 @@ def build_workspace_route_topology(
     *,
     target_node_count: int = 8,
     max_edge_points: int = 48,
+    route_points: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the observed baseline and project an optional compiled hypothesis."""
 
@@ -30,15 +31,17 @@ def build_workspace_route_topology(
         )
     project_root = project_root.resolve()
     route_ref = _required_project_ref(project, "terrain_route_samples_ref")
-    route_points = _route_sample_points(
-        _read_project_json(project_root, route_ref)
+    resolved_route_points = (
+        list(route_points)
+        if route_points is not None
+        else _route_sample_points(_read_project_json(project_root, route_ref))
     )
-    if len(route_points) < 2:
+    if len(resolved_route_points) < 2:
         return _empty_route_topology(route_ref)
 
     node_indices = _even_indices(
-        len(route_points),
-        min(target_node_count, len(route_points)),
+        len(resolved_route_points),
+        min(target_node_count, len(resolved_route_points)),
     )
     raw_structure_points = structure_candidates.get("points", [])
     structure_points = (
@@ -48,7 +51,7 @@ def build_workspace_route_topology(
     )
     nodes = []
     for node_number, point_index in enumerate(node_indices):
-        point = route_points[point_index]
+        point = resolved_route_points[point_index]
         nodes.append(
             {
                 "id": f"route-node-{node_number:02d}",
@@ -77,7 +80,7 @@ def build_workspace_route_topology(
     for edge_number, (start_index, end_index) in enumerate(
         zip(node_indices, node_indices[1:])
     ):
-        source_slice = route_points[start_index : end_index + 1]
+        source_slice = resolved_route_points[start_index : end_index + 1]
         sampled = [
             source_slice[index]
             for index in _even_indices(

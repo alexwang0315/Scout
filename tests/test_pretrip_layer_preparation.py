@@ -156,6 +156,7 @@ def test_connected_refresh_skips_non_weather_post_layer_enrichments(
         "_run_boss_point_synthesis_after_layer_preparation",
         "_run_mileage_tag_alignment_after_layer_preparation",
         "_run_architecture_preparation_after_layer_preparation",
+        "_run_navigation_terrain_projection_after_layer_preparation",
         "_write_map_preparation_spec_artifacts",
     ):
         monkeypatch.setattr(
@@ -180,6 +181,7 @@ def test_connected_refresh_skips_non_weather_post_layer_enrichments(
         "boss_point_synthesis",
         "mileage_tag_alignment",
         "architecture_preparation",
+        "navigation_terrain_projection",
         "map_preparation_spec_artifacts",
     ):
         assert manifest[key]["status"] == "skipped_connected_refresh"
@@ -246,6 +248,72 @@ def test_layer_preparation_architecture_stage_follows_mileage_and_projects_resul
     assert result["output_refs"]["architecture_preparation_manifest_ref"] == (
         "outputs/architecture_preparation_manifest.json"
     )
+
+
+def test_terrain_preparation_compiles_and_registers_navigation_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    projection_ref = "outputs/navigation/navigation_terrain_intelligence.json"
+    compile_calls: list[Path] = []
+
+    def compile_projection(
+        *,
+        project_root: Path,
+        manifest: dict[str, object],
+    ) -> dict[str, object]:
+        compile_calls.append(project_root)
+        assert "terrain" in manifest["normalized_layers"]
+        return {
+            "status": "completed",
+            "projection_state": "ready",
+            "output_refs": {
+                "navigation_terrain_projection_ref": projection_ref,
+            },
+        }
+
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_navigation_terrain_projection_after_layer_preparation",
+        compile_projection,
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_write_map_preparation_spec_artifacts",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_raster_label_preparation_after_layer_preparation",
+        lambda **_kwargs: {"status": "not_requested", "output_refs": {}},
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_boss_point_synthesis_after_layer_preparation",
+        lambda **_kwargs: {"status": "not_requested"},
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_mileage_tag_alignment_after_layer_preparation",
+        lambda **_kwargs: {"status": "not_requested"},
+    )
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=("terrain",),
+            prepared_at="2026-07-29T08:00:00+00:00",
+        )
+    )
+
+    assert compile_calls == [project_root]
+    assert manifest["navigation_terrain_projection"]["status"] == "completed"
+    assert manifest["outputs"]["navigation_terrain_projection_ref"] == projection_ref
+    assert _load(project_root / "project.json")[
+        "navigation_terrain_projection_ref"
+    ] == projection_ref
 
 
 def test_project_source_refs_accept_directory_refs(tmp_path: Path) -> None:
