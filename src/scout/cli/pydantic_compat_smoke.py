@@ -41,7 +41,7 @@ from scout.agents.pydantic_ai_compat import (
 )
 
 
-REQUIRED_VERSION = "2.20.0"
+REQUIRED_VERSION = "2.22.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
@@ -133,6 +133,7 @@ async def run_compatibility_smoke(
 def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("runtime_versions", _offline_runtime_versions),
+        ("v222_capability_contract", _offline_v222_capability_contract),
         ("function_tool_call", _offline_function_tool_call),
         ("structured_output", _offline_structured_output),
         ("mcp_instructions_and_tool", _offline_mcp_instructions),
@@ -185,6 +186,35 @@ def _offline_runtime_versions() -> dict[str, str]:
                 f"{package_name}={versions[package_name]}, expected {REQUIRED_VERSION}"
             )
     return versions
+
+
+def _offline_v222_capability_contract() -> dict[str, Any]:
+    from pydantic_ai import RunContext
+    from pydantic_ai.mcp import MCPToolset
+    from pydantic_ai.toolsets._tool_search import ToolSearchToolset
+
+    limits = UsageLimits(request_limit=10, tool_calls_limit=10)
+    mcp_parameters = inspect.signature(MCPToolset).parameters
+    tool_search_parameters = inspect.signature(ToolSearchToolset).parameters
+    _require(
+        limits.per_request_input_tokens_limit is None,
+        "per-request input token limit must remain disabled",
+    )
+    _require(
+        hasattr(RunContext, "is_tool_available"),
+        "RunContext.is_tool_available is unavailable",
+    )
+    _require("prefer_tasks" in mcp_parameters, "MCP prefer_tasks is unavailable")
+    _require(
+        "max_retries" in tool_search_parameters,
+        "ToolSearchToolset max_retries is unavailable",
+    )
+    return {
+        "per_request_input_tokens_limit": None,
+        "run_context_tool_availability": True,
+        "mcp_prefer_tasks_default": mcp_parameters["prefer_tasks"].default,
+        "tool_search_max_retries": True,
+    }
 
 
 async def _offline_function_tool_call() -> dict[str, Any]:

@@ -16,6 +16,42 @@ NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL = "http://127.0.0.1:8000/v1"
 LOCAL_OPENAI_COMPATIBLE_API_KEY = "scout-local-openai-compatible"
+MAX_UNIX_TIMESTAMP_SECONDS = 253_402_300_799
+
+
+try:
+    from pydantic_ai.models.openai import OpenAIChatModel as _PydanticOpenAIChatModel
+except ImportError:  # pragma: no cover - compatibility with older pydantic-ai.
+    from pydantic_ai.models.openai import OpenAIModel as _PydanticOpenAIChatModel
+
+
+def _normalize_hailo_created_timestamp(value: Any) -> Any:
+    """Normalize Hailo Ollama millisecond/microsecond/nanosecond timestamps."""
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        return value
+    normalized = value
+    while normalized > MAX_UNIX_TIMESTAMP_SECONDS:
+        normalized //= 1_000
+    return normalized
+
+
+def _normalize_hailo_chat_completion(response: Any) -> Any:
+    created = getattr(response, "created", None)
+    normalized = _normalize_hailo_created_timestamp(created)
+    if normalized == created:
+        return response
+    model_copy = getattr(response, "model_copy", None)
+    if callable(model_copy):
+        return model_copy(update={"created": normalized})
+    return response
+
+
+class ScoutHailoOpenAIChatModel(_PydanticOpenAIChatModel):
+    """OpenAI-compatible model with Hailo Ollama response normalization."""
+
+    def _process_response(self, response: Any) -> Any:
+        return super()._process_response(_normalize_hailo_chat_completion(response))
 
 
 def pydantic_ai_runtime_version() -> str:
@@ -76,6 +112,10 @@ def pydantic_usage_limits_from_budget(
             if budget.enforce_resource_limits
             else None
         ),
+        # Pydantic AI 2.21 added this independent per-request guard. Scout's
+        # Construction Mode keeps it explicitly disabled so provider context
+        # limits remain telemetry/recovery boundaries rather than hidden caps.
+        per_request_input_tokens_limit=None,
     )
 
 
@@ -212,9 +252,14 @@ def build_chat_model(
         model_name = _strip_nvidia_prefix(model_name)
         base_url = base_url or NVIDIA_BASE_URL
         api_key = api_key or os.getenv(NVIDIA_KEY_ENV)
-    if _is_hailo_ollama_model(model_name=model_name, base_url=base_url):
+    is_hailo_model = _is_hailo_ollama_model(
+        model_name=model_name,
+        base_url=base_url,
+    )
+    if is_hailo_model:
         model_name = _strip_hailo_prefix(model_name)
         base_url = base_url or AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL
+        api_key = api_key or LOCAL_OPENAI_COMPATIBLE_API_KEY
 
     try:
         from pydantic_ai.models.openai import OpenAIChatModel
@@ -242,7 +287,8 @@ def build_chat_model(
             api_key=resolved_api_key,
         )
 
-    return OpenAIChatModel(
+    model_type = ScoutHailoOpenAIChatModel if is_hailo_model else OpenAIChatModel
+    return model_type(
         _strip_openai_chat_prefix(model_name),
         provider=provider,
     )
