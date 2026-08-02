@@ -17,8 +17,8 @@ from urllib.parse import quote
 from xml.etree.ElementTree import ParseError
 
 import yaml
-from fastapi import APIRouter, FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -28,6 +28,7 @@ from pydantic import (
     model_validator,
 )
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from debug_event_provenance import (
     DebugEventIngestionChannel,
@@ -60,9 +61,12 @@ from dashboard_workspace_operations import (
     append_workspace_operation_request,
     load_workspace_operation_requests,
 )
+from dashboard_workspace_publication import dashboard_project_id_from_read_path
 from navigation_terrain_projection import (
     NavigationTerrainProjectionError,
-    build_navigation_terrain_projection,
+)
+from navigation_terrain_projection_store import (
+    resolve_navigation_terrain_projection,
 )
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
@@ -215,6 +219,10 @@ DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REGENERATION_REF = (
     "outputs/scout_ai/route_context_briefing_regeneration.json"
+)
+DEFAULT_ROUTE_CONTEXT_BRIEFING_QUALITY_MODEL = "deepseek/deepseek-v3.2"
+DEFAULT_ROUTE_CONTEXT_BRIEFING_CONTENT_REVIEW_REF = (
+    "outputs/route_context_pipeline/scout_ai_semantic_review_result.json"
 )
 DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_MODEL = "nvidia:z-ai/glm-5.2"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_VARIANTS_OUTPUT_DIR_REF = (
@@ -1642,7 +1650,7 @@ class PreTripRouteContextBriefingRegenerateRequest(BaseModel):
         "seed_only"
     )
     model: str | None = Field(default=None, min_length=1)
-    timeout_seconds: int = Field(default=45, ge=1, le=180)
+    timeout_seconds: int = Field(default=45, ge=1, le=600)
 
 
 class PreTripRouteContextBriefingVariantsGenerateRequest(BaseModel):
@@ -2133,7 +2141,7 @@ class DashboardConnectedPreparationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: str = Field(
-        default="dashboard-open",
+        default="operator-refresh",
         min_length=1,
         max_length=80,
         pattern=r"^[A-Za-z0-9_.:-]+$",
@@ -2157,6 +2165,7 @@ def create_admin_app(
     living_sandbox_store_root: Path | None = None,
     alpha_sandbox_enabled: bool | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
+    route_context_briefing_cycle_runner: Callable[..., dict[str, Any]] | None = None,
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
     ) = None,
@@ -2177,6 +2186,29 @@ def create_admin_app(
             pretrip_workspace_root
         )
     app.state.connected_preparation_manager = resolved_connected_preparation_manager
+    workspace_publication = getattr(
+        resolved_connected_preparation_manager,
+        "workspace_publication",
+        None,
+    )
+    if workspace_publication is not None:
+
+        @app.middleware("http")
+        async def hold_dashboard_workspace_read_generation(
+            request: Request,
+            call_next: Callable[[Request], Any],
+        ) -> Response:
+            project_id = dashboard_project_id_from_read_path(
+                request.method,
+                request.url.path,
+            )
+            if project_id is None:
+                return await call_next(request)
+            await run_in_threadpool(workspace_publication.acquire_read, project_id)
+            try:
+                return await call_next(request)
+            finally:
+                workspace_publication.release_read(project_id)
     app.include_router(
         create_admin_router(
             incident_store_path=incident_store_path,
@@ -2184,6 +2216,7 @@ def create_admin_app(
             living_sandbox_store_root=living_sandbox_store_root,
             alpha_sandbox_enabled=resolved_alpha_sandbox_enabled,
             route_context_briefing_ai_runner=route_context_briefing_ai_runner,
+            route_context_briefing_cycle_runner=route_context_briefing_cycle_runner,
             route_context_briefing_variants_runner_factory=(
                 route_context_briefing_variants_runner_factory
             ),
@@ -2206,6 +2239,7 @@ def create_dashboard_app(
     living_sandbox_store_root: Path | None = None,
     alpha_sandbox_enabled: bool | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
+    route_context_briefing_cycle_runner: Callable[..., dict[str, Any]] | None = None,
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
     ) = None,
@@ -2230,6 +2264,7 @@ def create_dashboard_app(
         living_sandbox_store_root=living_sandbox_store_root,
         alpha_sandbox_enabled=alpha_sandbox_enabled,
         route_context_briefing_ai_runner=route_context_briefing_ai_runner,
+        route_context_briefing_cycle_runner=route_context_briefing_cycle_runner,
         route_context_briefing_variants_runner_factory=(
             route_context_briefing_variants_runner_factory
         ),
@@ -2476,6 +2511,7 @@ def create_admin_router(
     living_sandbox_store_root: Path | None = None,
     alpha_sandbox_enabled: bool | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
+    route_context_briefing_cycle_runner: Callable[..., dict[str, Any]] | None = None,
     route_context_briefing_variants_runner_factory: (
         Callable[[str, int], Any] | None
     ) = None,
@@ -4111,6 +4147,57 @@ def create_admin_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @router.get("/pretrip/projects/{project_id}/briefings/route-context/status")
+    def pretrip_project_route_context_briefing_status(
+        project_id: str,
+        response: Response,
+    ) -> dict[str, Any]:
+        project_root = _pretrip_project_root_for_read(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+        except (json.JSONDecodeError, OSError) as exc:
+            raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+        briefing_ref = (
+            project.get("route_context_briefing_ref")
+            or DEFAULT_ROUTE_CONTEXT_BRIEFING_REF
+        )
+        briefing_path = _safe_pretrip_project_ref_path(project_root, briefing_ref)
+        if briefing_path is None:
+            raise HTTPException(status_code=422, detail="unsafe route context briefing path")
+        available = briefing_path.is_file()
+        content_review = _route_context_briefing_content_review_status(
+            project_root,
+            project=project,
+            briefing_path=briefing_path,
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return {
+            "schema_version": "route_context_briefing_status.v1",
+            "status": "available" if available else "missing",
+            "project_id": project_id,
+            "briefing_ref": str(briefing_ref),
+            "content_length": briefing_path.stat().st_size if available else 0,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            **content_review,
+            "detail": (
+                (
+                    "Canonical briefing artifact exists and its hash-bound content review passed."
+                    if content_review["content_reviewed"]
+                    else "Canonical briefing artifact exists; content quality requires review."
+                )
+                if available
+                else "Canonical briefing artifact is not prepared for the selected workspace."
+            ),
+        }
+
     @router.get(
         "/pretrip/projects/{project_id}/briefings/route-context",
         response_class=HTMLResponse,
@@ -4385,6 +4472,71 @@ def create_admin_router(
         except (json.JSONDecodeError, OSError, ValueError) as exc:
             raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
 
+        use_quality_cycle = (
+            route_context_briefing_cycle_runner is not None
+            or route_context_briefing_ai_runner is None
+        )
+        if use_quality_cycle:
+            from pretrip_route_context_scout_ai_cycle import (
+                RouteContextQualityCycleError,
+                run_route_context_briefing_quality_cycle,
+            )
+
+            quality_cycle_runner = (
+                route_context_briefing_cycle_runner
+                or run_route_context_briefing_quality_cycle
+            )
+            try:
+                result = quality_cycle_runner(
+                    project_root=project_root,
+                    model_name=(
+                        request.model or DEFAULT_ROUTE_CONTEXT_BRIEFING_QUALITY_MODEL
+                    ),
+                    timeout_seconds=request.timeout_seconds,
+                    env_file=(ROOT / ".env") if (ROOT / ".env").is_file() else None,
+                )
+            except TimeoutError as exc:
+                raise HTTPException(status_code=504, detail=str(exc)) from exc
+            except RouteContextQualityCycleError as exc:
+                detail = str(exc)
+                status_code = (
+                    503
+                    if "API_KEY is required" in detail
+                    else 504
+                    if "timed out" in detail.casefold()
+                    else 422
+                )
+                raise HTTPException(status_code=status_code, detail=detail) from exc
+            except (ValueError, OSError, ValidationError) as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            except Exception as exc:  # pragma: no cover - defensive provider wrapper.
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "Scout AI route-context quality cycle failed: "
+                        f"{type(exc).__name__}"
+                    ),
+                ) from exc
+
+            if result.get("project_id") != project_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="route context quality cycle returned another project",
+                )
+            briefing_sha256 = str(result.get("briefing_sha256") or "")
+            iframe_src = (
+                f"/admin/pretrip/projects/{project_id}/briefings/route-context"
+                f"?v={briefing_sha256[:16]}"
+                if result.get("canonical_promoted") is True
+                else None
+            )
+            return {
+                **result,
+                "operator_alias": request.operator_alias,
+                "operator_triggered": True,
+                "iframe_src": iframe_src,
+            }
+
         try:
             model_name = _route_context_briefing_openrouter_model_name(request.model)
             model_provider = model_name.partition(":")[0]
@@ -4506,7 +4658,7 @@ def create_admin_router(
     )
     def pretrip_project_navigation_terrain_intelligence(
         project_id: str,
-    ) -> dict[str, Any]:
+    ) -> JSONResponse:
         project_root = _pretrip_workspace_project_root(
             pretrip_workspace_root,
             project_id=project_id,
@@ -4521,10 +4673,15 @@ def create_admin_router(
                 raise NavigationTerrainProjectionError(
                     "pre-trip project must be an object"
                 )
-            return build_navigation_terrain_projection(
+            resolution = resolve_navigation_terrain_projection(
                 project_root,
                 project,
                 project_id=project_id,
+            )
+            return JSONResponse(
+                status_code=resolution.http_status,
+                content=resolution.payload,
+                headers={"Cache-Control": "no-store"},
             )
         except (json.JSONDecodeError, OSError, NavigationTerrainProjectionError) as exc:
             raise HTTPException(
@@ -5076,7 +5233,7 @@ def create_admin_router(
                 detail="Connected preparation manager is not configured",
             )
         try:
-            return connected_preparation_manager.snapshot(project_id)
+            return connected_preparation_manager.ensure_scheduled(project_id)
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404,
@@ -5086,6 +5243,11 @@ def create_admin_router(
             raise HTTPException(
                 status_code=422,
                 detail="Connected preparation request is invalid",
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Connected preparation manager is unavailable",
             ) from exc
 
     @router.get("/pretrip/projects/{project_id}/rainfall-grid-overlay")
@@ -9311,6 +9473,53 @@ def _safe_pretrip_project_ref_path(
     except ValueError:
         return None
     return resolved_path
+
+
+def _route_context_briefing_content_review_status(
+    project_root: Path,
+    *,
+    project: dict[str, Any],
+    briefing_path: Path,
+) -> dict[str, Any]:
+    empty = {
+        "content_reviewed": False,
+        "content_review_verdict": None,
+        "content_review_ref": None,
+        "content_review_model": None,
+        "readability_score": None,
+    }
+    if not briefing_path.is_file():
+        return empty
+    current_sha256 = hashlib.sha256(briefing_path.read_bytes()).hexdigest()
+    configured_ref = project.get("route_context_briefing_content_review_ref")
+    review_refs = [
+        ref
+        for ref in (
+            configured_ref,
+            DEFAULT_ROUTE_CONTEXT_BRIEFING_CONTENT_REVIEW_REF,
+        )
+        if isinstance(ref, str) and ref
+    ]
+    for review_ref in dict.fromkeys(review_refs):
+        review_path = _safe_pretrip_project_ref_path(project_root, review_ref)
+        if review_path is None or not review_path.is_file():
+            continue
+        try:
+            review = _load_admin_json(review_path)
+        except (json.JSONDecodeError, OSError, ValueError):
+            continue
+        if review.get("briefing_sha256") != current_sha256:
+            continue
+        verdict = review.get("verdict")
+        score = review.get("readability_score")
+        return {
+            "content_reviewed": verdict == "PASS",
+            "content_review_verdict": verdict,
+            "content_review_ref": review_ref,
+            "content_review_model": review.get("model"),
+            "readability_score": score if isinstance(score, int) else None,
+        }
+    return empty
 
 
 def _load_cwa_weather_imagery_manifest(

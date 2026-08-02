@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Scout Dashboard v0.1 alpha admin shell">
+  <link rel="icon" href="data:">
   <title>Scout Dashboard v0.1</title>
   <style>
     :root {
@@ -1066,17 +1067,91 @@
 
     .route-briefing-frame-panel {
       min-height: calc(100vh - 190px);
-      display: grid;
-      grid-template-rows: auto auto minmax(760px, 1fr);
-      overflow: hidden;
+      display: block;
+      overflow: visible;
+    }
+
+    .route-briefing-inline-document {
+      border-top: 1px solid var(--line);
+      background: #071014;
+    }
+
+    .route-briefing-inline-document-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, .08);
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .route-briefing-inline-document-header > div {
+      min-width: 0;
+    }
+
+    .route-briefing-inline-document-header strong,
+    .route-briefing-inline-document-header span {
+      display: block;
+    }
+
+    .route-briefing-inline-document-header strong {
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .route-briefing-inline-document-header span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
     }
 
     .route-briefing-frame {
+      display: block;
       width: 100%;
-      height: 100%;
+      height: 760px;
       min-height: 760px;
       border: 0;
       background: #071014;
+      overflow: hidden;
+    }
+
+    .route-briefing-frame[data-route-context-briefing-integrated="true"] {
+      min-height: 0;
+    }
+
+    .route-briefing-artifact-state {
+      min-height: 420px;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      border-top: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 50% 18%, rgba(183, 207, 99, .08), transparent 42%),
+        #071014;
+      text-align: center;
+    }
+
+    .route-briefing-artifact-state > div {
+      width: min(620px, 100%);
+      display: grid;
+      gap: 10px;
+    }
+
+    .route-briefing-artifact-state h3,
+    .route-briefing-artifact-state p {
+      margin: 0;
+    }
+
+    .route-briefing-artifact-state p {
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .route-briefing-artifact-state[data-route-context-briefing-state="missing"] h3,
+    .route-briefing-artifact-state[data-route-context-briefing-state="error"] h3 {
+      color: var(--danger);
     }
 
     .route-briefing-ops,
@@ -1359,7 +1434,6 @@
       min-width: 100%;
       min-height: 100%;
       transform-origin: 0 0;
-      will-change: transform;
     }
 
     .dashboard-map-stage > svg {
@@ -7280,6 +7354,7 @@
     const ASSISTANT_QUERY_PATH = "/assistant/query";
     const ASSISTANT_QUERY_TIMEOUT_MS = 240000;
     const FETCH_TIMEOUT_MS = 20000;
+    const ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS = 600000;
     const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;
     const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
     const BODY_INDEX_FETCH_TIMEOUT_MS = 180000;
@@ -7318,7 +7393,7 @@
       "map": Object.freeze({maturity: "live", surface: "Operational", data: "Loading map evidence", action: "Read-only layer controls", verification: "Layer toggle verified", provenance: "Pre-trip + cache-only CWA", mode: "Operational"}),
       "timeline": Object.freeze({maturity: "partial", surface: "Operational", data: "Paginated evidence", action: "Read-only focus", verification: "Tabs + focus verified", provenance: "Pre-trip evidence tree", mode: "Operational"}),
       "features-lbs": Object.freeze({maturity: "preview", surface: "Preview UI", data: "Projected location context", action: "Read-only · no tracking", verification: "Layer controls verified", provenance: "Candidate map projection", mode: "Product Preview"}),
-      "outdoor-route-context": Object.freeze({maturity: "partial", surface: "Operational", data: "Artifact-backed briefing", action: "Model generation approval required", verification: "Existing artifacts verified", provenance: "Route Context Intelligence", mode: "Operational"}),
+      "outdoor-route-context": Object.freeze({maturity: "partial", surface: "Degraded", data: "Checking selected workspace briefing", action: "Read-only · regeneration requires approval", verification: "Checking canonical briefing", provenance: "Route Context Intelligence", mode: "Loading"}),
       "outdoor-pace-fit": Object.freeze({maturity: "partial", surface: "Preview UI", data: "Static pace parameters", action: "Read-only preview", verification: "Presentation verified", provenance: "Synthetic projection", mode: "Product Preview"}),
       "outdoor-pace-fit-body-index": Object.freeze({maturity: "partial", surface: "Operational", data: "Sanitized provider metrics", action: "Private import approval required", verification: "Synthetic lifecycle verified", provenance: "Source-provider only", mode: "Operational"}),
       "emergency": Object.freeze({maturity: "partial", surface: "Preview UI", data: "Sample packet", action: "Read-only · no outbound", verification: "No-outbound boundary verified", provenance: "Fixture sample", mode: "Product Preview"}),
@@ -7915,6 +7990,7 @@
       navigationTerrainLens: "structure",
       navigationTerrainSourceMode: "workspace",
       navigationTerrainData: null,
+      navigationTerrainPollTimer: null,
       navigationSelectedLivePointId: "",
       navigationSelectedStructurePointId: "",
       navigationSelectedTerrainEventId: "",
@@ -7931,12 +8007,22 @@
         text: "尚未檢查完成軌跡目錄。",
       },
       completedTripActivationBusy: false,
-      pretripDataProjectId: PROJECT_ID,
+      pretripDataProjectId: projectId(),
       briefingFrameVersion: "",
+      briefingArtifactStatus: {
+        status: "checking",
+        httpStatus: null,
+        detail: "Checking canonical briefing for the selected workspace",
+        contentLength: 0,
+        contentReviewed: false,
+        contentReviewVerdict: null,
+        contentReviewModel: null,
+        readabilityScore: null,
+      },
       briefingRegenerationBusy: false,
       briefingRegenerationStatus: {
         tone: "info",
-        text: "Scout AI regeneration idle",
+        text: "等待重新產生與品質審核",
       },
       briefingVariants: null,
       briefingVariantsBusy: false,
@@ -8050,7 +8136,7 @@
       bindMobileNavigation();
       bindAgentChatControls();
       setRoute(routeFromHash());
-      void triggerDashboardConnectedPreparation("dashboard-open");
+      void loadConnectedPreparationStatus();
       loadWorkspaceCatalog().finally(() => loadData()).finally(() => {
         if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
       });
@@ -8137,14 +8223,18 @@
     }
 
     function routeContextBriefingProjectId() {
-      const candidate = state.pretripDataProjectId || projectId();
-      return candidate || PRETRIP_DATA_PROJECT_ID;
+      return projectId();
     }
 
     function routeContextBriefingSrc() {
       const project = encodeURIComponent(routeContextBriefingProjectId());
       const base = `${apiBase()}/admin/pretrip/projects/${project}/briefings/route-context`;
       return state.briefingFrameVersion ? `${base}?v=${encodeURIComponent(state.briefingFrameVersion)}` : base;
+    }
+
+    function routeContextBriefingStatusPath() {
+      const project = encodeURIComponent(routeContextBriefingProjectId());
+      return `/admin/pretrip/projects/${project}/briefings/route-context/status`;
     }
 
     function routeContextBriefingRegeneratePath() {
@@ -8286,6 +8376,7 @@
       } catch {
         state.connectedPreparation = null;
       }
+      refreshCurrentDataView();
       return state.connectedPreparation;
     }
 
@@ -8420,11 +8511,57 @@
       });
     }
 
+    function stopNavigationTerrainPolling() {
+      if (!state.navigationTerrainPollTimer) return;
+      window.clearTimeout(state.navigationTerrainPollTimer);
+      state.navigationTerrainPollTimer = null;
+    }
+
+    function scheduleNavigationTerrainPolling(retryAfterMs) {
+      stopNavigationTerrainPolling();
+      if (state.navigationTerrainData?.status !== "preparing") return;
+      const expectedProjectId = projectId();
+      const delayMs = Math.min(5000, Math.max(1000, Number(retryAfterMs) || 1000));
+      state.navigationTerrainPollTimer = window.setTimeout(async () => {
+        state.navigationTerrainPollTimer = null;
+        if (projectId() !== expectedProjectId) return;
+        try {
+          await loadNavigationTerrainData();
+          const {navigation_terrain: _cleared, ...remainingErrors} = state.dataScopeErrors;
+          state.dataScopeErrors = remainingErrors;
+        } catch (error) {
+          stopNavigationTerrainPolling();
+          state.dataScopeErrors = {
+            ...state.dataScopeErrors,
+            navigation_terrain: String(
+              error?.message || error || "navigation terrain projection polling failed"
+            ),
+          };
+        } finally {
+          if (state.route === "outdoor-navigation") refreshCurrentDataView();
+        }
+      }, delayMs);
+    }
+
     async function loadNavigationTerrainData() {
-      state.navigationTerrainData = await fetchJson(
-        `/admin/pretrip/projects/${encodeURIComponent(projectId())}/navigation-terrain-intelligence`,
-        {timeoutMs: NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS},
-      );
+      try {
+        state.navigationTerrainData = await fetchJson(
+          `/admin/pretrip/projects/${encodeURIComponent(projectId())}/navigation-terrain-intelligence`,
+          {timeoutMs: NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS},
+        );
+      } catch (error) {
+        stopNavigationTerrainPolling();
+        state.navigationTerrainData = null;
+        throw error;
+      }
+      if (state.navigationTerrainData?.status === "preparing") {
+        scheduleNavigationTerrainPolling(state.navigationTerrainData.retry_after_ms);
+        return state.navigationTerrainData;
+      }
+      stopNavigationTerrainPolling();
+      if (state.navigationTerrainData?.status === "failed") {
+        return state.navigationTerrainData;
+      }
       const firstRisk = asArray(state.navigationTerrainData?.risk_candidates?.points)[0];
       if (!state.navigationSelectedLivePointId && firstRisk?.id) {
         state.navigationSelectedLivePointId = String(firstRisk.id);
@@ -8437,6 +8574,7 @@
       if (!state.navigationSelectedTerrainEventId && firstTerrainEvent?.id) {
         state.navigationSelectedTerrainEventId = String(firstTerrainEvent.id);
       }
+      return state.navigationTerrainData;
     }
 
     function stopLivingRefresh() {
@@ -8480,17 +8618,97 @@
     }
 
     async function loadBriefingData() {
-      try {
-        const data = await fetchFirstPretripJson(candidateId => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/briefings/route-context/variants`);
+      const [artifactResult, variantsResult] = await Promise.allSettled([
+        loadRouteContextBriefingArtifactStatus(),
+        fetchFirstPretripJson(candidateId => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/briefings/route-context/variants`),
+      ]);
+      if (artifactResult.status === "rejected") {
+        state.briefingArtifactStatus = {
+          status: "error",
+          httpStatus: null,
+          detail: String(
+            artifactResult.reason?.message
+            || artifactResult.reason
+            || "Canonical briefing availability check failed"
+          ),
+          contentLength: 0,
+        };
+      }
+      if (variantsResult.status === "fulfilled") {
+        const data = variantsResult.value;
         state.briefingVariants = data;
         if (data.status === "completed") {
           state.briefingVariantsStatus = {
             tone: "ok",
             text: `${data.variant_count || 0} variants ready via ${data.model || "Scout AI"}`,
           };
+        } else if (data.status === "missing") {
+          state.briefingVariantsStatus = {
+            tone: "warn",
+            text: "Route briefing variants missing · no Scout AI request started",
+          };
         }
-      } catch (_error) {
+      } else {
         state.briefingVariantsStatus = {tone: "warn", text: "Route briefing variants unavailable"};
+      }
+    }
+
+    async function loadRouteContextBriefingArtifactStatus() {
+      state.briefingArtifactStatus = {
+        status: "checking",
+        httpStatus: null,
+        detail: "Checking canonical briefing for the selected workspace",
+        contentLength: 0,
+        contentReviewed: false,
+        contentReviewVerdict: null,
+        contentReviewModel: null,
+        readabilityScore: null,
+      };
+      try {
+        const data = await fetchJson(routeContextBriefingStatusPath());
+        const status = data?.status;
+        state.briefingArtifactStatus = ["available", "missing"].includes(status)
+          ? {
+              status,
+              httpStatus: 200,
+              detail: status === "available"
+                ? data.content_reviewed
+                  ? `DeepSeek 品質審核通過 · 可讀性 ${Number(data.readability_score || 0)}/5`
+                  : "Artifact exists · content quality not approved"
+                : (data.detail || "Canonical briefing not prepared for the selected workspace"),
+              contentLength: Math.max(0, Number(data.content_length || 0)),
+              contentReviewed: data.content_reviewed === true,
+              contentReviewVerdict: data.content_review_verdict || null,
+              contentReviewModel: data.content_review_model || null,
+              readabilityScore: data.readability_score !== null
+                && data.readability_score !== undefined
+                && Number.isFinite(Number(data.readability_score))
+                ? Number(data.readability_score)
+                : null,
+            }
+          : {
+              status: "error",
+              httpStatus: 200,
+              detail: `Unknown canonical briefing status: ${status || "empty"}`,
+              contentLength: 0,
+              contentReviewed: false,
+              contentReviewVerdict: null,
+              contentReviewModel: null,
+              readabilityScore: null,
+            };
+        return state.briefingArtifactStatus;
+      } catch (error) {
+        state.briefingArtifactStatus = {
+          status: "error",
+          httpStatus: null,
+          detail: String(error?.message || error || "Canonical briefing availability check failed"),
+          contentLength: 0,
+          contentReviewed: false,
+          contentReviewVerdict: null,
+          contentReviewModel: null,
+          readabilityScore: null,
+        };
+        return state.briefingArtifactStatus;
       }
     }
 
@@ -8723,7 +8941,7 @@
 
     function truthTone(value) {
       const lowered = String(value || "").toLowerCase();
-      if (/unavailable|failed|error|not ready|broken/.test(lowered)) return "bad";
+      if (/unavailable|failed|error|not ready|broken|missing/.test(lowered)) return "bad";
       if (/degraded|stale|no coverage|unknown|not checked|untested|partial|approval|required|fixture|fallback/.test(lowered)) return "warn";
       if (/operational|ready|verified|live runtime/.test(lowered)) return "ok";
       return "info";
@@ -8893,6 +9111,39 @@
             : "Awaiting route architecture evidence";
         truth.provenance = "Pretrip workspace · aggregate historical GPX · runtime truth=false";
         truth.mode = "Candidate analysis";
+      }
+      if (route === "outdoor-route-context") {
+        const artifact = state.briefingArtifactStatus || {
+          status: "checking",
+          httpStatus: null,
+          detail: "Checking canonical briefing",
+          contentLength: 0,
+        };
+        truth.action = "Read-only · regeneration requires approval";
+        truth.provenance = `Route Context Intelligence · ${routeContextBriefingProjectId()}`;
+        if (artifact.status === "available") {
+          truth.surface = artifact.contentReviewed ? "Reviewed briefing" : "Candidate review";
+          truth.data = `Canonical briefing available · ${Math.max(1, Math.round(Number(artifact.contentLength || 0) / 1024))} KiB`;
+          truth.verification = artifact.contentReviewed
+            ? `Hash-bound PASS · readability ${artifact.readabilityScore || "-"}/5 · ${artifact.contentReviewModel || "DeepSeek"}`
+            : "Artifact exists · content quality not approved";
+          truth.mode = artifact.contentReviewed ? "Content reviewed" : "Needs content review";
+        } else if (artifact.status === "missing") {
+          truth.surface = "Unavailable";
+          truth.data = "Canonical briefing missing";
+          truth.verification = artifact.detail || "Canonical briefing not prepared";
+          truth.mode = "Missing artifact";
+        } else if (artifact.status === "error") {
+          truth.surface = "Unavailable";
+          truth.data = "Canonical briefing check failed";
+          truth.verification = artifact.detail || "Briefing availability unknown";
+          truth.mode = "Needs attention";
+        } else {
+          truth.surface = "Degraded";
+          truth.data = "Checking selected workspace briefing";
+          truth.verification = artifact.detail || "Checking canonical briefing";
+          truth.mode = "Loading";
+        }
       }
       const requiredScopes = dataScopesForRoute(route);
       const loadingScopes = requiredScopes.filter((scope) => !loadedDataScopes.has(scope) && !state.dataScopeErrors?.[scope]);
@@ -9852,6 +10103,27 @@
       const requestCount = state.workspaceOperationRequests.length;
       const latestRequest = state.workspaceOperationRequests[0] || null;
       const operationDisabled = context?.capabilities?.record_operation_request ? "" : "disabled";
+      const refreshIntervalMinutes = Math.max(
+        1,
+        Math.round(Number(state.connectedPreparation?.refreshIntervalSeconds || 600) / 60),
+      );
+      const connectedRefreshInProgress = ["queued", "running"].includes(
+        state.connectedPreparation?.status,
+      );
+      const nextScheduledRefresh = connectedRefreshInProgress
+        ? "after current refresh completes"
+        : state.connectedPreparation?.nextRunAt
+          ? formatDateTime(state.connectedPreparation.nextRunAt)
+          : "pending status read";
+      const lastConnectedRefresh = state.connectedPreparation?.completedAt
+        ? formatDateTime(state.connectedPreparation.completedAt)
+        : "not yet completed";
+      const crossProcessLock = state.connectedPreparation?.crossProcessLocking === true
+        ? "active"
+        : "unavailable";
+      const recoveryJournalStatus = state.connectedPreparation?.recoveryJournalStatus
+        || "pending status read";
+      const startupRecovery = state.connectedPreparation?.startupRecovery || "none";
       return `
         <section class="panel workspace-command-panel" data-workspace-operations="true">
           <div class="panel-header">
@@ -9886,7 +10158,7 @@
                 Only an append-only request record is written by this dashboard. It does not execute the operation or change runtime safety truth. ${requestCount} request${requestCount === 1 ? "" : "s"} recorded${latestRequest ? `; latest ${escapeHtml(latestRequest.operation)} · ${escapeHtml(latestRequest.request_id)}` : ""}. Delete requires an explicit destructive approval outside this dashboard.
               </p>
               <p class="workspace-status">
-                External refresh may use network services and update candidate evidence. It runs only after pressing “Refresh external evidence”.
+                Dashboard startup reads cached evidence only. The current published snapshot stays readable while refresh is running; a validated generation replaces it only after completion. Server refresh runs every ${refreshIntervalMinutes} min; next ${escapeHtml(nextScheduledRefresh)}; last ${escapeHtml(lastConnectedRefresh)}. Cross-process lock: ${escapeHtml(crossProcessLock)}; Recovery journal: ${escapeHtml(recoveryJournalStatus)}; startup recovery: ${escapeHtml(startupRecovery)}. “Refresh evidence” runs Connected Preparation immediately. It may use CWA, GEE and Overpass and update candidate evidence.
               </p>
             </div>
           </div>
@@ -11961,6 +12233,8 @@
       diagnosticRequire(status && typeof status === "object", "Connected preparation status is unavailable.");
       const stateLabel = status.status || status.state || status.job_status || "idle";
       diagnosticRequire(!["unsafe", "runtime_mutation"].includes(String(stateLabel)), "Connected preparation returned an unsafe state.");
+      diagnosticRequire(status.crossProcessLocking === true, "Connected preparation cross-process lock is unavailable.");
+      diagnosticRequire(typeof status.recoveryJournalStatus === "string", "Connected preparation recovery journal state is unavailable.");
       const workspaceRoot = diagnosticMarkupRoot(renderWorkspacePage());
       diagnosticRequire(Boolean(workspaceRoot.querySelector("#workspaceRefreshExternalEvidence")), "Connected preparation Refresh control is missing.");
       const statusLoader = diagnosticCompactSource(loadConnectedPreparationStatus);
@@ -11968,7 +12242,7 @@
       const refreshHandler = diagnosticCompactSource(bindWorkspaceControls);
       diagnosticRequire(refreshHandler.includes("workspaceRefreshExternalEvidence"), "Explicit connected preparation handler is missing.");
       diagnosticRequire(refreshHandler.includes("postJson("), "Refresh control is not wired to an explicit POST.");
-      return `Connected preparation status=${stateLabel} · initial loader GET-only · explicit Refresh wired`;
+      return `Connected preparation status=${stateLabel} · cross-process lock · recovery=${status.recoveryJournalStatus} · initial loader GET-only · explicit Refresh wired`;
     }
 
     async function diagnosticCheck014() {
@@ -12981,6 +13255,9 @@
             <div class="metric-line">
               <div class="metric-row"><span>Boundary</span><strong>read cache-only · server connected refresh · candidate-only</strong></div>
               <div class="metric-row"><span>Background preparation</span><strong>${escapeHtml(preparation.status || "not_started")}</strong></div>
+              <div class="metric-row"><span>Published snapshot</span><strong>${escapeHtml(preparation.publicationStatus || "not-started")}</strong></div>
+              <div class="metric-row"><span>Cross-process lock</span><strong>${preparation.crossProcessLocking === true ? "active" : "unavailable"}</strong></div>
+              <div class="metric-row"><span>Recovery journal</span><strong>${escapeHtml(preparation.recoveryJournalStatus || "clear")}</strong></div>
               <div class="metric-row"><span>Fetch policy</span><strong>${escapeHtml(`${preparation.profile || "mac-workstation"} · ${preparation.networkMode || "explicit-fetch"} · allow=${preparation.allowNetworkFetch === true}`)}</strong></div>
               <div class="metric-row"><span>CWA request attempted</span><strong>${escapeHtml(connectedPreparationActivityLabel(preparation.cwaApiRequestAttempted, preparation.status))}</strong></div>
               <div class="metric-row"><span>External API calls</span><strong>${escapeHtml(connectedPreparationActivityLabel(preparation.externalApiCallsMade, preparation.status))}</strong></div>
@@ -13904,6 +14181,15 @@
       }[kind] || "#93a299";
     }
 
+    function navigationTerrainHierarchyStrokeWidth(kind) {
+      return {
+        main_ridge_candidate: 3.6,
+        spur_ridge_candidate: 1.8,
+        drainage_trunk: 3.1,
+        tributary: 1.6,
+      }[kind] || 2;
+    }
+
     function navigationTerrainHierarchyLabel(kind) {
       return {
         main_ridge_candidate: "主稜候選",
@@ -14002,30 +14288,42 @@
                 data-dashboard-map-hint-source="navigation-hierarchy-evidence"
                 data-dashboard-map-hint-title="${escapeHtml(navigationTerrainHierarchyLabel(edge.kind))}"
                 data-dashboard-map-hint-summary="${escapeHtml(`${formatDistanceKm(edge.length_m)} · candidate only · terrain branch is not a trail junction`)}"
+                data-dashboard-map-screen-stroke="${navigationTerrainHierarchyStrokeWidth(edge.kind)}"
                 d="${edge.path}"
                 style="--terrain-edge-color:${navigationTerrainHierarchyColor(edge.kind)}"
               >
                 <title>${escapeHtml(`${navigationTerrainHierarchyLabel(edge.kind)} · ${formatDistanceKm(edge.length_m)} · candidate only`)}</title>
               </path>
             `).join("") : ""}
-            ${routePath ? `<path class="navigation-workspace-route" data-navigation-route-path="true" d="${routePath}" ${lens === "retreat" ? 'marker-start="url(#navigationWorkspaceRetreatArrow)"' : ""}></path>` : ""}
+            ${routePath ? `<path class="navigation-workspace-route" data-navigation-route-path="true" data-dashboard-map-screen-stroke="3" vector-effect="non-scaling-stroke" d="${routePath}" ${lens === "retreat" ? 'marker-start="url(#navigationWorkspaceRetreatArrow)"' : ""}></path>` : ""}
             ${lens === "pressure" ? pressurePoints.map(point => `
-              <circle
-                class="navigation-route-pressure-dot"
-                cx="${point.position.x.toFixed(1)}"
-                cy="${point.position.y.toFixed(1)}"
-                r="4.5"
-                fill="${navigationPressureColor(point.teii_20m ?? point.pretrip_risk ?? point.tri)}"
-                data-dashboard-map-hint-source="navigation-pressure-evidence"
-                data-dashboard-map-hint-title="${escapeHtml(`Route pressure · ${formatDistanceKm(point.distance_m)}`)}"
-                data-dashboard-map-hint-summary="${escapeHtml(`TEII ${valueOrDash(point.teii_20m)} · pretrip risk ${valueOrDash(point.pretrip_risk)} · candidate evidence`)}"
+              <g
+                data-dashboard-map-screen-symbol="true"
+                data-dashboard-map-symbol-x="${point.position.x.toFixed(1)}"
+                data-dashboard-map-symbol-y="${point.position.y.toFixed(1)}"
+                transform="translate(${point.position.x.toFixed(1)} ${point.position.y.toFixed(1)})"
               >
-                <title>${escapeHtml(`${formatDistanceKm(point.distance_m)} · TEII ${valueOrDash(point.teii_20m)}`)}</title>
-              </circle>
+                <circle
+                  class="navigation-route-pressure-dot"
+                  cx="0"
+                  cy="0"
+                  r="4.5"
+                  fill="${navigationPressureColor(point.teii_20m ?? point.pretrip_risk ?? point.tri)}"
+                  data-dashboard-map-hint-source="navigation-pressure-evidence"
+                  data-dashboard-map-hint-title="${escapeHtml(`Route pressure · ${formatDistanceKm(point.distance_m)}`)}"
+                  data-dashboard-map-hint-summary="${escapeHtml(`TEII ${valueOrDash(point.teii_20m)} · pretrip risk ${valueOrDash(point.pretrip_risk)} · candidate evidence`)}"
+                >
+                  <title>${escapeHtml(`${formatDistanceKm(point.distance_m)} · TEII ${valueOrDash(point.teii_20m)}`)}</title>
+                </circle>
+              </g>
             `).join("") : ""}
             ${lens === "structure" ? structurePoints.map(point => `
               <g
                 class="navigation-structure-point"
+                data-dashboard-map-screen-symbol="true"
+                data-dashboard-map-symbol-x="${point.position.x.toFixed(1)}"
+                data-dashboard-map-symbol-y="${point.position.y.toFixed(1)}"
+                transform="translate(${point.position.x.toFixed(1)} ${point.position.y.toFixed(1)})"
                 role="button"
                 tabindex="${point.id === selectedStructurePoint?.id ? "0" : "-1"}"
                 data-navigation-structure-point-id="${escapeHtml(point.id)}"
@@ -14037,14 +14335,18 @@
                 aria-label="${escapeHtml(`${navigationStructureLabel(point.feature_kind)}候選 ${point.index}, score ${point.score}`)}"
                 style="--structure-color:${navigationStructureColor(point.feature_kind)}"
               >
-                <circle cx="${point.position.x.toFixed(1)}" cy="${point.position.y.toFixed(1)}" r="${point.id === selectedStructurePoint?.id ? "8" : "5"}"></circle>
-                <text x="${point.position.x.toFixed(1)}" y="${(point.position.y + 2.8).toFixed(1)}">${escapeHtml(navigationStructureLabel(point.feature_kind))}</text>
+                <circle cx="0" cy="0" r="${point.id === selectedStructurePoint?.id ? "8" : "5"}"></circle>
+                <text x="0" y="2.8">${escapeHtml(navigationStructureLabel(point.feature_kind))}</text>
                 <title>${escapeHtml(`${point.feature_kind} candidate · TPI ${valueOrDash(point.tpi_m)}m · local relief ${valueOrDash(point.local_relief_m)}m`)}</title>
               </g>
             `).join("") : ""}
             ${riskPoints.map(point => `
               <g
                 class="navigation-live-point"
+                data-dashboard-map-screen-symbol="true"
+                data-dashboard-map-symbol-x="${point.position.x.toFixed(1)}"
+                data-dashboard-map-symbol-y="${point.position.y.toFixed(1)}"
+                transform="translate(${point.position.x.toFixed(1)} ${point.position.y.toFixed(1)})"
                 role="button"
                 tabindex="${point.id === selectedPoint?.id ? "0" : "-1"}"
                 data-navigation-live-point-id="${escapeHtml(point.id)}"
@@ -14055,14 +14357,18 @@
                 aria-label="${escapeHtml(`Terrain pressure candidate ${point.index}, display pressure ${point.display_pressure}`)}"
                 style="${lens === "risk" ? "" : "display:none"}"
               >
-                <circle cx="${point.position.x.toFixed(1)}" cy="${point.position.y.toFixed(1)}" r="${point.id === selectedPoint?.id ? "9" : "6"}"></circle>
-                <text x="${point.position.x.toFixed(1)}" y="${(point.position.y + 3).toFixed(1)}">${point.index}</text>
+                <circle cx="0" cy="0" r="${point.id === selectedPoint?.id ? "9" : "6"}"></circle>
+                <text x="0" y="3">${point.index}</text>
                 <title>${escapeHtml(point.reason || "Terrain pressure candidate requires review")}</title>
               </g>
             `).join("")}
             ${lens === "events" ? terrainEvents.map(event => `
               <g
                 class="navigation-terrain-event"
+                data-dashboard-map-screen-symbol="true"
+                data-dashboard-map-symbol-x="${event.position.x.toFixed(1)}"
+                data-dashboard-map-symbol-y="${event.position.y.toFixed(1)}"
+                transform="translate(${event.position.x.toFixed(1)} ${event.position.y.toFixed(1)})"
                 role="button"
                 tabindex="${event.id === selectedEvent?.id ? "0" : "-1"}"
                 data-navigation-terrain-event-id="${escapeHtml(event.id)}"
@@ -14072,8 +14378,8 @@
                 data-dashboard-map-hint-summary="${escapeHtml(`${formatDistanceKm(event.route_distance_m)} · ${event.terrain_relation || "candidate terrain relation"}`)}"
                 aria-label="${escapeHtml(`${event.sequence} ${navigationTerrainEventLabel(event.event_type)}, ${formatDistanceKm(event.route_distance_m)}`)}"
               >
-                <circle cx="${event.position.x.toFixed(1)}" cy="${event.position.y.toFixed(1)}" r="${event.id === selectedEvent?.id ? "9" : "6"}"></circle>
-                <text x="${event.position.x.toFixed(1)}" y="${(event.position.y + 3).toFixed(1)}">${escapeHtml(event.sequence)}</text>
+                <circle cx="0" cy="0" r="${event.id === selectedEvent?.id ? "9" : "6"}"></circle>
+                <text x="0" y="3">${escapeHtml(event.sequence)}</text>
                 <title>${escapeHtml(`${navigationTerrainEventLabel(event.event_type)} · ${event.terrain_relation}`)}</title>
               </g>
             `).join("") : ""}
@@ -14348,9 +14654,30 @@
 
     function renderNavigationWorkspaceLoading(snapshot) {
       const error = state.dataScopeErrors?.navigation_terrain;
+      const preparing = snapshot.status === "preparing";
+      const failed = snapshot.status === "failed";
+      const stateLabel = preparing
+        ? "preparing"
+        : failed
+          ? "failed"
+          : error
+            ? "unavailable"
+            : "loading";
+      const title = preparing
+        ? "Workspace terrain projection is preparing."
+        : failed
+          ? "Workspace terrain projection failed."
+          : error
+            ? "Workspace terrain projection unavailable."
+            : "Loading workspace terrain evidence.";
+      const detail = preparing
+        ? (snapshot.summary || "Compiling prepared DTM and route evidence. This page will update automatically.")
+        : failed
+          ? (snapshot.summary || "The prepared evidence could not be projected. Review the workspace inputs and retry.")
+          : (error || "Reading prepared DTM raster, route samples, and review candidates.");
       return `
-        <div class="navigation-workspace-map" data-navigation-workspace-map="${error ? "unavailable" : "loading"}">
-          <div class="architecture-empty"><div><strong>${error ? "Workspace terrain projection unavailable." : "Loading workspace terrain evidence."}</strong>${escapeHtml(error || "Reading prepared DTM raster, route samples, and review candidates.")}</div></div>
+        <div class="navigation-workspace-map" data-navigation-workspace-map="${stateLabel}" aria-live="polite">
+          <div class="architecture-empty"><div><strong>${escapeHtml(title)}</strong>${escapeHtml(detail)}</div></div>
         </div>
       `;
     }
@@ -14361,7 +14688,7 @@
       const lens = state.navigationTerrainLens || "structure";
       const sourceMode = "workspace";
       const snapshot = navigationTerrainSnapshot();
-      const liveReady = !["loading", "unavailable"].includes(snapshot.status)
+      const liveReady = !["loading", "unavailable", "preparing", "failed"].includes(snapshot.status)
         && Boolean(snapshot?.terrain_surface?.bbox_wgs84);
       const riskPoints = asArray(snapshot?.risk_candidates?.points);
       const selectedLivePoint = riskPoints.find(point => point.id === state.navigationSelectedLivePointId) || riskPoints[0] || null;
@@ -14466,6 +14793,16 @@
           status: loading ? "loading" : "unavailable",
           node_count: 0,
           timed_node_count: 0,
+          difficulty_cp_count: 0,
+          mcp_count: 0,
+          card_node_count: 0,
+          context_mcp_count: 0,
+          selection_policy: {
+            default_node_kind: "mcp",
+            difficulty_cp_minimum_composite_pressure: 55,
+            maximum_difficulty_cp_count: 10,
+            card_display_priorities: ["primary", "secondary"],
+          },
           nodes: [],
           privacy: {raw_gpx_embedded: false, precise_timestamps_embedded: false},
           boundary: {candidate_only: true, runtime_safety_truth: false},
@@ -16202,6 +16539,43 @@
       `;
     }
 
+    function dashboardMapMaxZoom(viewport) {
+      const tileLayer = viewport.querySelector(
+        '[data-dashboard-rudy-tile-layer="true"]',
+      );
+      const baseZoom = Number(tileLayer?.dataset.rudyBaseZoom);
+      if (!Number.isFinite(baseZoom)) return 12;
+      const nativeZoomLevels = Math.max(
+        0,
+        NAVIGATION_RUDY_TILE_SOURCE.maxZoom - baseZoom,
+      );
+      return Math.max(1, 2 ** nativeZoomLevels);
+    }
+
+    function updateDashboardMapScreenSymbols(viewport, viewState) {
+      const inverseZoom = 1 / Math.max(1, Number(viewState.zoom) || 1);
+      const symbols = viewport.querySelectorAll(
+        '[data-dashboard-map-screen-symbol="true"]',
+      );
+      symbols.forEach(symbol => {
+        const x = Number(symbol.dataset.dashboardMapSymbolX);
+        const y = Number(symbol.dataset.dashboardMapSymbolY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        symbol.setAttribute(
+          "transform",
+          `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${inverseZoom.toFixed(6)})`,
+        );
+      });
+      const lines = viewport.querySelectorAll("[data-dashboard-map-screen-stroke]");
+      lines.forEach(line => {
+        const strokeWidth = Number(line.dataset.dashboardMapScreenStroke);
+        if (!Number.isFinite(strokeWidth) || strokeWidth <= 0) return;
+        line.style.strokeWidth = `${(strokeWidth * inverseZoom).toFixed(4)}px`;
+      });
+      viewport.dataset.dashboardMapScreenSymbolCount = String(symbols.length);
+      viewport.dataset.dashboardMapScreenStrokeCount = String(lines.length);
+    }
+
     function createDashboardMapViewportController(viewport) {
       const viewportId = viewport.dataset.dashboardMapViewport || "dashboard-map";
       const stage = viewport.querySelector("[data-dashboard-map-stage]");
@@ -16213,8 +16587,9 @@
       const saved = state.mapViewportById?.[viewportId] || {};
       const mouseZoomEnabled = viewport.dataset.mapMouseZoom !== "false";
       const wheelZoomEnabled = viewport.dataset.mapWheelZoom !== "false";
+      const maxZoom = dashboardMapMaxZoom(viewport);
       let viewState = {
-        zoom: Math.max(1, Math.min(12, Number(saved.zoom) || 1)),
+        zoom: Math.max(1, Math.min(maxZoom, Number(saved.zoom) || 1)),
         x: Number(saved.x) || 0,
         y: Number(saved.y) || 0,
         mode: mouseZoomEnabled && saved.mode === "box" ? "box" : "pan",
@@ -16270,11 +16645,17 @@
         stage.style.transform = `translate3d(${viewState.x.toFixed(2)}px, ${viewState.y.toFixed(2)}px, 0) scale(${viewState.zoom.toFixed(4)})`;
         viewport.dataset.mapMode = viewState.mode;
         viewport.dataset.mapZoom = viewState.zoom.toFixed(3);
+        viewport.dataset.mapMaxZoom = maxZoom.toFixed(3);
         controls.querySelector('[data-map-control="pan"]')?.setAttribute("aria-pressed", viewState.mode === "pan" ? "true" : "false");
         controls.querySelector('[data-map-control="box-zoom"]')?.setAttribute("aria-pressed", viewState.mode === "box" ? "true" : "false");
+        const zoomInControl = controls.querySelector('[data-map-control="zoom-in"]');
+        const zoomOutControl = controls.querySelector('[data-map-control="zoom-out"]');
+        if (zoomInControl) zoomInControl.disabled = viewState.zoom >= maxZoom;
+        if (zoomOutControl) zoomOutControl.disabled = viewState.zoom <= 1;
         const zoomLevel = controls.querySelector("[data-map-zoom-level]");
         if (zoomLevel) zoomLevel.textContent = `${Math.round(viewState.zoom * 100)}%`;
         updateDashboardRudyTileLayer(viewport, viewState);
+        updateDashboardMapScreenSymbols(viewport, viewState);
         persist();
         if (message) announce(message);
       };
@@ -16290,7 +16671,7 @@
       const zoomAt = (factor, point = null, message = "") => {
         const {width, height} = metrics();
         const anchor = point || {x: width / 2, y: height / 2};
-        const nextZoom = Math.max(1, Math.min(12, viewState.zoom * factor));
+        const nextZoom = Math.max(1, Math.min(maxZoom, viewState.zoom * factor));
         const localX = (anchor.x - viewState.x) / viewState.zoom;
         const localY = (anchor.y - viewState.y) / viewState.zoom;
         viewState = {
@@ -16367,7 +16748,7 @@
           zoomAt(1 / factor, center, "Rectangle zoom out complete; pan restored.");
           return;
         }
-        const nextZoom = Math.max(1, Math.min(12, viewState.zoom * factor));
+        const nextZoom = Math.max(1, Math.min(maxZoom, viewState.zoom * factor));
         const localX = (center.x - viewState.x) / viewState.zoom;
         const localY = (center.y - viewState.y) / viewState.zoom;
         viewState = {
@@ -16610,11 +16991,97 @@
       `;
     }
 
+    function renderRouteContextBriefingArtifact(
+      artifactStatus,
+      briefingSrc,
+      briefingProject,
+    ) {
+      if (artifactStatus.status === "available") {
+        return `
+          <div class="route-briefing-inline-document" data-route-context-briefing-inline-document="true">
+            <div class="route-briefing-inline-document-header">
+              <div>
+                <strong>完整 Route Context 導覽</strong>
+                <span data-route-context-briefing-inline-status role="status" aria-live="polite">完整內容載入中…</span>
+              </div>
+              <span class="chip ok">${escapeHtml(briefingProject)}</span>
+            </div>
+            <iframe
+              class="route-briefing-frame"
+              data-route-context-briefing="true"
+              data-route-context-briefing-state="available"
+              title="Scout AI route context trip briefing"
+              src="${escapeHtml(briefingSrc)}"
+              loading="eager"
+              scrolling="no"
+              referrerpolicy="no-referrer"
+            ></iframe>
+          </div>
+        `;
+      }
+      if (artifactStatus.status === "missing") {
+        return `
+          <section
+            class="route-briefing-artifact-state"
+            data-route-context-briefing-state="missing"
+            role="status"
+            aria-live="polite"
+          >
+            <div>
+              <span class="chip bad">Missing briefing</span>
+              <h3>Route briefing unavailable for this workspace</h3>
+              <p>${escapeHtml(briefingProject)} has no prepared trip briefing page. Review the selected workspace before requesting regeneration.</p>
+              <p class="mono">${escapeHtml(artifactStatus.detail || "Canonical briefing not prepared for the selected workspace")}</p>
+              <p>No Scout AI request was started.</p>
+            </div>
+          </section>
+        `;
+      }
+      if (artifactStatus.status === "error") {
+        return `
+          <section
+            class="route-briefing-artifact-state"
+            data-route-context-briefing-state="error"
+            role="status"
+            aria-live="polite"
+          >
+            <div>
+              <span class="chip bad">Briefing unavailable</span>
+              <h3>Route briefing could not be verified</h3>
+              <p>${escapeHtml(artifactStatus.detail || "The selected workspace briefing could not be loaded.")}</p>
+              <p>No Scout AI request was started.</p>
+            </div>
+          </section>
+        `;
+      }
+      return `
+        <section
+          class="route-briefing-artifact-state"
+          data-route-context-briefing-state="checking"
+          role="status"
+          aria-live="polite"
+        >
+          <div>
+            <span class="chip warn">Checking briefing</span>
+            <h3>Checking the selected workspace</h3>
+            <p>${escapeHtml(artifactStatus.detail || "Checking canonical briefing availability.")}</p>
+          </div>
+        </section>
+      `;
+    }
+
     function renderRouteContextPage(force) {
       const briefingProject = routeContextBriefingProjectId();
       const briefingSrc = routeContextBriefingSrc();
       const briefingPath = `/admin/pretrip/projects/${briefingProject}/briefings/route-context`;
-      const regeneration = state.briefingRegenerationStatus || { tone: "info", text: "Scout AI regeneration idle" };
+      const artifactStatus = state.briefingArtifactStatus || {
+        status: "checking",
+        httpStatus: null,
+        detail: "Checking canonical briefing for the selected workspace",
+        contentLength: 0,
+        contentReviewed: false,
+      };
+      const regeneration = state.briefingRegenerationStatus || { tone: "info", text: "等待重新產生與品質審核" };
       const variantsStatus = state.briefingVariantsStatus || { tone: "info", text: "Scout AI variants idle" };
       return `
         ${outdoorTabs(force.route)}
@@ -16627,7 +17094,7 @@
                   type="button"
                   data-route-context-briefing-regenerate
                   ${state.briefingRegenerationBusy ? "disabled" : ""}
-                >${state.briefingRegenerationBusy ? "Regenerating..." : "Regenerate with Scout AI"}</button>
+                >${state.briefingRegenerationBusy ? "產生與審核中…" : "重新產生並審核"}</button>
                 <button
                   class="route-briefing-action-button"
                   type="button"
@@ -16652,7 +17119,9 @@
                   ["API", briefingPath],
                   ["Artifact", "outputs/briefings/route_context_briefing.html"],
                   ["Generated by", "scout-route-context-briefing skill"],
-                  ["Collector", "pretrip_route_context_collection"],
+                  ["Pipeline", "輸入契約 → 證據收集 → 確定性編譯 → 內容審核"],
+                  ["Reviewer", artifactStatus.contentReviewModel || "DeepSeek v3"],
+                  ["Review", artifactStatus.contentReviewed ? `PASS · ${artifactStatus.readabilityScore || "-"}/5` : "not approved"],
                 ])}
                 ${renderRouteBriefingMetaBlock("Artifact Boundary", [
                   ["Use", "route understanding and context-layer evidence"],
@@ -16664,25 +17133,24 @@
                 <section class="route-briefing-meta-block">
                   <h4>Load Contract</h4>
                   <p class="route-briefing-empty">
-                    The dashboard loads the existing pretrip briefing endpoint instead of duplicating the Scout AI briefing renderer. If the frame is empty, regenerate the route-context briefing artifact for ${escapeHtml(briefingProject)} and keep the source ref at outputs/briefings/route_context_briefing.html.
+                    Loading remains read-only. Pressing “重新產生並審核” explicitly runs the project-bound evidence contract, deterministic compiler, and independent DeepSeek review. Only a hash-bound PASS replaces and reloads the canonical briefing; NEEDS_WORK keeps the previous version. Variants remain a separate action.
                   </p>
                 </section>
               </div>
               <div class="route-briefing-meta-actions">
-                <a href="${escapeHtml(briefingSrc)}" target="_blank" rel="noreferrer">Open briefing</a>
+                ${artifactStatus.status === "available"
+                  ? `<a href="${escapeHtml(briefingSrc)}" target="_blank" rel="noreferrer">Open briefing</a>`
+                  : '<span class="chip bad">briefing unavailable</span>'}
                 <span class="chip info">candidate-only</span>
                 <span class="chip warn">runtime_safety_truth=false</span>
-                <span class="chip ${escapeHtml(regeneration.tone)}">Scout AI / OpenRouter</span>
+                <span class="chip ${artifactStatus.contentReviewed ? "ok" : escapeHtml(regeneration.tone)}">${artifactStatus.contentReviewed ? "DeepSeek review PASS" : "Scout AI / OpenRouter"}</span>
               </div>
             </details>
-            <iframe
-              class="route-briefing-frame"
-              data-route-context-briefing="true"
-              title="Scout AI route context trip briefing"
-              src="${escapeHtml(briefingSrc)}"
-              loading="eager"
-              referrerpolicy="no-referrer"
-            ></iframe>
+            ${renderRouteContextBriefingArtifact(
+              artifactStatus,
+              briefingSrc,
+              briefingProject,
+            )}
           </section>
         </div>
       `;
@@ -16836,19 +17304,27 @@
         if (!position) return "";
         const title = point.label || `${surface.pointLabel} ${index + 1}`;
         return `
-          <circle
-            cx="${position.x.toFixed(1)}"
-            cy="${position.y.toFixed(1)}"
-            r="${index === 0 || index === evidencePoints.length - 1 ? "6" : "4"}"
+          <g
+            data-dashboard-map-screen-symbol="true"
+            data-dashboard-map-symbol-x="${position.x.toFixed(1)}"
+            data-dashboard-map-symbol-y="${position.y.toFixed(1)}"
+            transform="translate(${position.x.toFixed(1)} ${position.y.toFixed(1)})"
             role="img"
             tabindex="0"
             data-dashboard-map-hint-source="${escapeHtml(surface.pointSource)}"
             data-dashboard-map-hint-title="${escapeHtml(title)}"
             data-dashboard-map-hint-summary="${escapeHtml(`${surface.label} · workspace candidate evidence`)}"
-            fill="${mode === "permission" ? "#d5a642" : mode === "lbs" ? "#62b5c4" : "#f0f2e7"}"
-            stroke="#0a1512"
-            stroke-width="2"
-          ><title>${escapeHtml(`${title} · candidate evidence`)}</title></circle>
+          >
+            <circle
+              cx="0"
+              cy="0"
+              r="${index === 0 || index === evidencePoints.length - 1 ? "6" : "4"}"
+              fill="${mode === "permission" ? "#d5a642" : mode === "lbs" ? "#62b5c4" : "#f0f2e7"}"
+              stroke="#0a1512"
+              stroke-width="2"
+            ></circle>
+            <title>${escapeHtml(`${title} · candidate evidence`)}</title>
+          </g>
         `;
       }).join("");
       const mapSvg = `
@@ -16866,11 +17342,13 @@
             data-dashboard-map-hint-source="${escapeHtml(`${mode}-route-evidence`)}"
             data-dashboard-map-hint-title="${escapeHtml(surface.title)}"
             data-dashboard-map-hint-summary="${escapeHtml(`Workspace route vector · ${mapData.sourcePath} · candidate context`)}"
+            data-dashboard-map-screen-stroke="8"
             fill="none"
             stroke="#75d5df"
             stroke-width="8"
             stroke-linecap="round"
             stroke-linejoin="round"
+            vector-effect="non-scaling-stroke"
           ><title>${escapeHtml(`${surface.title} · workspace route vector`)}</title></path>
           <g data-dashboard-context-points="${escapeHtml(mode)}">${pointMarkup}</g>
         </svg>
@@ -17246,7 +17724,7 @@
               }).join("")}
             </div>
           ` : catalog && status.status === "ready" ? `
-            <p>No completed GPX was found in the selected workspace. Add a reviewed completed recording, then check again; Scout will not substitute the planned or reference route.</p>
+            <p>No completed GPX was found in the configured post-analysis inbox. Add a reviewed completed recording, then check again; Scout will not substitute the planned or reference route.</p>
           ` : ""}
         </section>
       `;
@@ -18930,6 +19408,12 @@
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
       const surfaceFrame = document.getElementById("surfaceFrame");
       if (surfaceFrame) bindSurfaceFrameHealth(surfaceFrame);
+      const routeContextBriefingFrame = document.querySelector(
+        'iframe[data-route-context-briefing="true"]',
+      );
+      if (routeContextBriefingFrame) {
+        bindRouteContextBriefingFrame(routeContextBriefingFrame);
+      }
       const contextualEvidenceToggle = document.querySelector("[data-context-evidence-toggle]");
       if (contextualEvidenceToggle) {
         contextualEvidenceToggle.addEventListener("click", () => {
@@ -19187,32 +19671,136 @@
       });
     }
 
+    function routeContextBriefingDocumentHeight(frame) {
+      const documentRef = frame.contentDocument || frame.contentWindow?.document;
+      if (!documentRef) return 0;
+      const root = documentRef.documentElement;
+      const body = documentRef.body;
+      return Math.ceil(Math.max(
+        documentRef.documentElement?.scrollHeight || 0,
+        root?.offsetHeight || 0,
+        root?.clientHeight || 0,
+        body?.scrollHeight || 0,
+        body?.offsetHeight || 0,
+      ));
+    }
+
+    function syncRouteContextBriefingFrameHeight(frame) {
+      if (!frame?.isConnected) return false;
+      const inlineStatus = frame
+        .closest('[data-route-context-briefing-inline-document="true"]')
+        ?.querySelector("[data-route-context-briefing-inline-status]");
+      try {
+        const contentHeight = routeContextBriefingDocumentHeight(frame);
+        if (contentHeight <= 0) return false;
+        const nextHeight = contentHeight + 2;
+        if (Math.abs(frame.getBoundingClientRect().height - nextHeight) > 1) {
+          frame.style.height = `${nextHeight}px`;
+        }
+        frame.dataset.routeContextBriefingHeight = String(nextHeight);
+        frame.dataset.routeContextBriefingIntegrated = "true";
+        frame.setAttribute("scrolling", "no");
+        if (inlineStatus) {
+          inlineStatus.textContent = "完整內容已在本頁展開，可使用 Dashboard 捲軸一路閱讀至頁尾。";
+        }
+        return true;
+      } catch (_error) {
+        frame.dataset.routeContextBriefingIntegrated = "false";
+        if (inlineStatus) {
+          inlineStatus.textContent = "完整內容已載入；目前使用內嵌捲動顯示。";
+        }
+        return false;
+      }
+    }
+
+    function bindRouteContextBriefingFrame(frame) {
+      if (frame.dataset.routeContextBriefingHeightBound === "true") return;
+      frame.dataset.routeContextBriefingHeightBound = "true";
+      let resizeObserver = null;
+      let resizeFrame = null;
+      const sync = () => {
+        if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = null;
+          syncRouteContextBriefingFrameHeight(frame);
+        });
+      };
+      const connect = () => {
+        sync();
+        try {
+          const documentRef = frame.contentDocument || frame.contentWindow?.document;
+          if (!documentRef) return;
+          if (resizeObserver) resizeObserver.disconnect();
+          if (typeof ResizeObserver === "function") {
+            resizeObserver = new ResizeObserver(sync);
+            if (documentRef.documentElement) resizeObserver.observe(documentRef.documentElement);
+            if (documentRef.body) resizeObserver.observe(documentRef.body);
+          }
+          documentRef.fonts?.ready?.then(sync).catch(() => {});
+          documentRef.querySelectorAll("img").forEach((image) => {
+            if (!image.complete) image.addEventListener("load", sync, {once: true});
+          });
+        } catch (_error) {
+          sync();
+        }
+      };
+      frame.addEventListener("load", connect);
+      frame.addEventListener("error", () => {
+        const inlineStatus = frame
+          .closest('[data-route-context-briefing-inline-document="true"]')
+          ?.querySelector("[data-route-context-briefing-inline-status]");
+        if (inlineStatus) inlineStatus.textContent = "Route Context 導覽載入失敗。";
+      });
+      if (frame.contentDocument?.readyState === "complete") {
+        window.queueMicrotask(connect);
+      }
+    }
+
     function bindRouteContextBriefingControls() {
       const button = document.querySelector("[data-route-context-briefing-regenerate]");
       if (button) button.addEventListener("click", async () => {
         state.briefingRegenerationBusy = true;
         state.briefingRegenerationStatus = {
           tone: "warn",
-          text: "Calling Scout AI, then rebuilding briefing artifact...",
+          text: "輸入契約 → 證據收集 → 確定性編譯 → DeepSeek 內容審核…",
         };
         render();
         try {
           const payload = await postJson(routeContextBriefingRegeneratePath(), {
             confirm_regenerate: true,
             operator_alias: "dashboard_operator",
-          });
-          const model = payload.scout_ai?.model_name || "openrouter";
-          const ref = payload.outputs?.route_context_briefing_ref || "outputs/briefings/route_context_briefing.html";
-          state.briefingRegenerationStatus = {
-            tone: "ok",
-            text: `Regenerated with ${model}; briefing=${ref}`,
-          };
-          state.briefingFrameVersion = String(Date.now());
-          await loadData();
+            model: "deepseek/deepseek-v3.2",
+            timeout_seconds: 240,
+          }, {timeoutMs: ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS});
+          if (
+            payload.status === "completed"
+            && payload.canonical_promoted === true
+            && payload.review?.verdict === "PASS"
+          ) {
+            const editorialGate = payload.generation?.editorial_contract?.status || "UNKNOWN";
+            const editorialAttempts = payload.generation?.model_request_count || 1;
+            state.briefingRegenerationStatus = {
+              tone: "ok",
+              text: `確定性內容門檻 ${editorialGate} · DeepSeek 審核通過 ${payload.review?.readability_score || "-"}/5 · 編輯 ${editorialAttempts} 次 · 已顯示新版導覽`,
+            };
+            state.briefingFrameVersion = String(
+              payload.briefing_sha256 || Date.now(),
+            ).slice(0, 16);
+            await loadRouteContextBriefingArtifactStatus();
+          } else if (payload.status === "needs_work") {
+            const finding = payload.review?.findings?.[0]?.problem || payload.review?.summary || "內容仍需修正";
+            state.briefingRegenerationStatus = {
+              tone: "bad",
+              text: `審核未通過，已保留前一版 · ${finding}`,
+            };
+            await loadRouteContextBriefingArtifactStatus();
+          } else {
+            throw new Error("品質管線沒有回傳可發布的 PASS 結果");
+          }
         } catch (error) {
           state.briefingRegenerationStatus = {
             tone: "bad",
-            text: `Regeneration failed: ${error.message || error}`,
+            text: `產生或審核失敗：${error.message || error}`,
           };
         } finally {
           state.briefingRegenerationBusy = false;
