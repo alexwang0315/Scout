@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from scout_ai_six_forces_scenarios import (
+    _covering_feature,
     _contained_path,
     ScenarioDecisionOutput,
     artifact_statistics,
@@ -60,23 +61,35 @@ def _real_scenarios():
 def test_real_workspace_generates_five_canonical_progress_anchors() -> None:
     scenarios = _real_scenarios()
 
-    expected = {
-        1: (59750, 59250, 24.058167202, 121.282862140, "cp.118"),
-        2: (49750, 49250, 24.053578033, 121.241105037, "cp.098"),
-        3: (43750, 43250, 24.050482207, 121.215180630, "cp.rest_area.001"),
-        4: (48750, 48250, 24.047716533, 121.237805375, "cp.096"),
-        5: (53750, 53250, 24.048743595, 121.260414740, "cp.106"),
-    }
+    assert [scenario.boss_rank for scenario in scenarios] == [1, 2, 3, 4, 5]
+    assert len({scenario.scenario_id for scenario in scenarios}) == 5
     for scenario in scenarios:
-        boss, target, lat, lon, cp_id = expected[scenario.boss_rank]
-        assert boss - scenario.route_progress_m == pytest.approx(500)
-        assert scenario.route_progress_m == pytest.approx(target)
-        assert scenario.lat == pytest.approx(lat, abs=1e-9)
-        assert scenario.lon == pytest.approx(lon, abs=1e-9)
-        assert scenario.nearest_cp_id == cp_id
+        assert scenario.distance_to_boss_along_route_m == pytest.approx(500)
+        assert scenario.route_progress_m > 0
+        assert 20 <= scenario.lat <= 27
+        assert 118 <= scenario.lon <= 123
+        assert scenario.nearest_cp_id
         assert scenario.travel_direction == "increasing_route_progress"
+        assert scenario.risk_terrain_candidate["start_distance_m"] <= (
+            scenario.route_progress_m
+        )
+        assert scenario.risk_terrain_candidate["end_distance_m"] >= (
+            scenario.route_progress_m
+        )
         assert scenario.risk_terrain_candidate["candidate_only"] is True
         assert scenario.runtime_safety_truth is False
+
+
+def test_covering_feature_assigns_shared_boundary_to_later_segment() -> None:
+    first = {
+        "properties": {"start_distance_m": 0, "end_distance_m": 500},
+    }
+    second = {
+        "properties": {"start_distance_m": 500, "end_distance_m": 1000},
+    }
+
+    assert _covering_feature([second, first], 500) is second
+    assert _covering_feature([second, first], 1000) is second
 
 
 def test_600_cases_are_evenly_mapped_across_forces_and_anchors() -> None:

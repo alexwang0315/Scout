@@ -671,13 +671,21 @@ def _list_payload(value: Any) -> list[dict[str, Any]]:
 
 
 def _covering_feature(features: list[dict[str, Any]], target: float) -> dict[str, Any]:
-    matches = [
-        feature
-        for feature in features
-        if float((feature.get("properties") or {}).get("start_distance_m", -1))
-        <= target
-        <= float((feature.get("properties") or {}).get("end_distance_m", -1))
-    ]
+    ordered = sorted(
+        features,
+        key=lambda feature: (
+            float((feature.get("properties") or {}).get("start_distance_m", -1)),
+            float((feature.get("properties") or {}).get("end_distance_m", -1)),
+        ),
+    )
+    matches = []
+    for index, feature in enumerate(ordered):
+        properties = feature.get("properties") or {}
+        start = float(properties.get("start_distance_m", -1))
+        end = float(properties.get("end_distance_m", -1))
+        is_last = index == len(ordered) - 1
+        if start <= target < end or (is_last and target == end):
+            matches.append(feature)
     if len(matches) != 1:
         raise ValueError(f"expected one risk ribbon segment at {target}, found {len(matches)}")
     return matches[0]
