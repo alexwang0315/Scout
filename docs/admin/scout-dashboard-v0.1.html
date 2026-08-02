@@ -1076,37 +1076,6 @@
       background: #071014;
     }
 
-    .route-briefing-inline-document-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, .08);
-      background: rgba(255, 255, 255, .025);
-    }
-
-    .route-briefing-inline-document-header > div {
-      min-width: 0;
-    }
-
-    .route-briefing-inline-document-header strong,
-    .route-briefing-inline-document-header span {
-      display: block;
-    }
-
-    .route-briefing-inline-document-header strong {
-      color: var(--text);
-      font-size: 13px;
-    }
-
-    .route-briefing-inline-document-header span {
-      margin-top: 3px;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.45;
-    }
-
     .route-briefing-frame {
       display: block;
       width: 100%;
@@ -16999,13 +16968,6 @@
       if (artifactStatus.status === "available") {
         return `
           <div class="route-briefing-inline-document" data-route-context-briefing-inline-document="true">
-            <div class="route-briefing-inline-document-header">
-              <div>
-                <strong>完整 Route Context 導覽</strong>
-                <span data-route-context-briefing-inline-status role="status" aria-live="polite">完整內容載入中…</span>
-              </div>
-              <span class="chip ok">${escapeHtml(briefingProject)}</span>
-            </div>
             <iframe
               class="route-briefing-frame"
               data-route-context-briefing="true"
@@ -17095,12 +17057,6 @@
                   data-route-context-briefing-regenerate
                   ${state.briefingRegenerationBusy ? "disabled" : ""}
                 >${state.briefingRegenerationBusy ? "產生與審核中…" : "重新產生並審核"}</button>
-                <button
-                  class="route-briefing-action-button"
-                  type="button"
-                  data-route-context-briefing-variants-generate
-                  ${state.briefingVariantsBusy ? "disabled" : ""}
-                >${state.briefingVariantsBusy ? "Generating 5 variants..." : "Generate 5 variants with Scout AI"}</button>
               </div>
               <div class="route-briefing-variant-status">
                 <div id="routeBriefingRegenerationStatus">${escapeHtml(regeneration.text)}</div>
@@ -19687,9 +19643,6 @@
 
     function syncRouteContextBriefingFrameHeight(frame) {
       if (!frame?.isConnected) return false;
-      const inlineStatus = frame
-        .closest('[data-route-context-briefing-inline-document="true"]')
-        ?.querySelector("[data-route-context-briefing-inline-status]");
       try {
         const contentHeight = routeContextBriefingDocumentHeight(frame);
         if (contentHeight <= 0) return false;
@@ -19700,15 +19653,9 @@
         frame.dataset.routeContextBriefingHeight = String(nextHeight);
         frame.dataset.routeContextBriefingIntegrated = "true";
         frame.setAttribute("scrolling", "no");
-        if (inlineStatus) {
-          inlineStatus.textContent = "完整內容已在本頁展開，可使用 Dashboard 捲軸一路閱讀至頁尾。";
-        }
         return true;
       } catch (_error) {
         frame.dataset.routeContextBriefingIntegrated = "false";
-        if (inlineStatus) {
-          inlineStatus.textContent = "完整內容已載入；目前使用內嵌捲動顯示。";
-        }
         return false;
       }
     }
@@ -19746,10 +19693,7 @@
       };
       frame.addEventListener("load", connect);
       frame.addEventListener("error", () => {
-        const inlineStatus = frame
-          .closest('[data-route-context-briefing-inline-document="true"]')
-          ?.querySelector("[data-route-context-briefing-inline-status]");
-        if (inlineStatus) inlineStatus.textContent = "Route Context 導覽載入失敗。";
+        frame.dataset.routeContextBriefingIntegrated = "false";
       });
       if (frame.contentDocument?.readyState === "complete") {
         window.queueMicrotask(connect);
@@ -19804,40 +19748,6 @@
           };
         } finally {
           state.briefingRegenerationBusy = false;
-          render();
-        }
-      });
-      const variantsButton = document.querySelector("[data-route-context-briefing-variants-generate]");
-      if (variantsButton) variantsButton.addEventListener("click", async () => {
-        state.briefingVariantsBusy = true;
-        state.briefingVariantsStatus = {
-          tone: "warn",
-          text: "Calling Scout AI route-context-intelligence skill for five variants...",
-        };
-        render();
-        try {
-          const payload = await postJson(routeContextBriefingVariantsGeneratePath(), {
-            confirm_generate: true,
-            model: "nvidia:z-ai/glm-5.2",
-            timeout_seconds: 300,
-            model_max_tokens: 7000,
-            reference_variants_dir_ref: state.briefingVariants?.output_dir_ref || "outputs/briefings/route_context_variants_ai_once",
-            max_reference_similarity: 0.6,
-          });
-          state.briefingVariants = payload;
-          const tokens = payload.token_usage?.total_tokens ? ` · ${payload.token_usage.total_tokens} tokens` : "";
-          state.briefingVariantsStatus = {
-            tone: "ok",
-            text: `Generated ${payload.variant_count || 0} variants with ${payload.model || "Scout AI"}${tokens}`,
-          };
-          await loadData();
-        } catch (error) {
-          state.briefingVariantsStatus = {
-            tone: "bad",
-            text: `Variant generation failed: ${error.message || error}`,
-          };
-        } finally {
-          state.briefingVariantsBusy = false;
           render();
         }
       });
