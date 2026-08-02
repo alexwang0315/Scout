@@ -405,8 +405,32 @@ def test_route_architecture_projects_every_cp_mcp_passage_timing_node() -> None:
             "passage_window_distance_m": 500.0,
             "mode_bucket_minutes": 5,
         },
-        "data_quality": {"status": "medium", "node_count": 2, "timed_node_count": 2},
+        "data_quality": {"status": "medium", "node_count": 3, "timed_node_count": 3},
         "nodes": [
+            {
+                "node_id": "cp.easy",
+                "node_kind": "cp",
+                "label": "Easy route detail",
+                "named_places": [],
+                "route_distance_m": 50.0,
+                "passage_window": {
+                    "start_distance_m": 0.0,
+                    "end_distance_m": 300.0,
+                    "distance_m": 300.0,
+                },
+                "duration_minutes": {
+                    "min": 4.5,
+                    "max": 8.0,
+                    "average": 6.2,
+                    "mode_5min": 5,
+                    "mode_5min_tied_buckets": [5],
+                },
+                "sample_count": 6,
+                "distinct_track_count": 5,
+                "data_quality": "high",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
             {
                 "node_id": "cp.001",
                 "node_kind": "cp",
@@ -470,13 +494,28 @@ def test_route_architecture_projects_every_cp_mcp_passage_timing_node() -> None:
     )
 
     timing = projection["checkpoint_passage_timing"]
-    assert timing["node_count"] == 2
-    assert timing["timed_node_count"] == 2
+    assert timing["node_count"] == 3
+    assert timing["timed_node_count"] == 3
     assert [item["node_id"] for item in timing["nodes"]] == [
+        "cp.easy",
         "cp.001",
         "mcp.yunhai",
     ]
-    named = timing["nodes"][1]
+    easy, difficulty_cp, named = timing["nodes"]
+    assert easy["source_node_kind"] == "cp"
+    assert easy["node_kind"] == "mcp"
+    assert easy["selection_role"] == "route_micro_checkpoint"
+    assert easy["display_priority"] == "context"
+    assert difficulty_cp["source_node_kind"] == "cp"
+    assert difficulty_cp["node_kind"] == "cp"
+    assert difficulty_cp["selection_role"] == "difficulty_cp"
+    assert difficulty_cp["display_priority"] == "primary"
+    assert difficulty_cp["difficulty"]["composite_pressure_index"] >= 55.0
+    assert difficulty_cp["difficulty"]["route_bin_id"] == "reference_pace.bin.0001"
+    assert named["source_node_kind"] == "mcp"
+    assert named["node_kind"] == "mcp"
+    assert named["selection_role"] == "authored_mcp"
+    assert named["display_priority"] == "secondary"
     assert named["label"] == "雲海保線所"
     assert named["named_places"] == ["雲海保線所"]
     assert named["duration_minutes"] == {
@@ -486,6 +525,18 @@ def test_route_architecture_projects_every_cp_mcp_passage_timing_node() -> None:
         "mode_5min": 10,
         "mode_5min_tied_buckets": [10],
     }
+    assert timing["selection_policy"] == {
+        "default_node_kind": "mcp",
+        "difficulty_cp_minimum_composite_pressure": 55.0,
+        "difficulty_cp_requires_guidance_eligible": True,
+        "difficulty_cp_cluster_gap_m": 500.0,
+        "maximum_difficulty_cp_count": 10,
+        "card_display_priorities": ["primary", "secondary"],
+    }
+    assert timing["difficulty_cp_count"] == 1
+    assert timing["mcp_count"] == 2
+    assert timing["card_node_count"] == 2
+    assert timing["context_mcp_count"] == 1
     assert timing["privacy"]["raw_gpx_embedded"] is False
     assert timing["boundary"]["runtime_safety_truth"] is False
 
@@ -678,5 +729,9 @@ def test_outdoor_standard_documents_route_architecture_page_contract() -> None:
         "privacy.raw_gpx_embedded=false",
         "runtime_safety_truth=false",
         "Spine / Map / Segment",
+        "所有自動對齊的 route-progress checkpoint 預設投影為 `MCP`",
+        "`composite_pressure_index >= 55`",
+        "每條 route 最多顯示 10 個 difficulty CP",
+        "`display_priority=primary/secondary`",
     ):
         assert marker in standard
