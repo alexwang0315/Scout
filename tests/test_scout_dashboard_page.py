@@ -2629,7 +2629,10 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     controls = html.split(
         "function bindRouteContextBriefingControls()", 1
     )[1].split("function bindDebugDetailControls()", 1)[0]
-    regeneration_controls = controls.split("const variantsButton", 1)[0]
+    regeneration_controls = controls
+    available_artifact = html.split(
+        'if (artifactStatus.status === "available") {', 1
+    )[1].split('if (artifactStatus.status === "missing") {', 1)[0]
 
     assert "function routeContextBriefingProjectId()" in html
     assert "function routeContextBriefingSrc()" in html
@@ -2640,7 +2643,13 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "/admin/pretrip/projects/${project}/briefings/route-context" in html
     assert "data-route-context-briefing=\"true\"" in html
     assert 'class="route-briefing-inline-document"' in html
-    assert "完整 Route Context 導覽" in html
+    assert "route-briefing-inline-document-header" not in html
+    assert "data-route-context-briefing-inline-status" not in html
+    assert "完整 Route Context 導覽" not in html
+    assert "完整內容載入中…" not in html
+    assert "完整內容已在本頁展開，可使用 Dashboard 捲軸一路閱讀至頁尾。" not in html
+    assert "完整內容已載入；目前使用內嵌捲動顯示。" not in html
+    assert "${escapeHtml(briefingProject)}" not in available_artifact
     assert 'scrolling="no"' in html
     assert "function syncRouteContextBriefingFrameHeight(frame)" in html
     assert "function bindRouteContextBriefingFrame(frame)" in html
@@ -2663,13 +2672,10 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "function routeContextBriefingVariantFileSrc(ref)" in html
     assert "/briefings/route-context/variants" in html
     assert "/briefings/route-context/variants/generate" in html
-    assert "data-route-context-briefing-variants-generate" in html
-    assert "Generate 5 variants with Scout AI" in html
-    assert "Calling Scout AI route-context-intelligence skill for five variants" in html
-    assert "model: \"nvidia:z-ai/glm-5.2\"" in html
-    assert "model_max_tokens: 7000" in html
-    assert "reference_variants_dir_ref" in html
-    assert "max_reference_similarity: 0.6" in html
+    assert "data-route-context-briefing-variants-generate" not in html
+    assert "Generate 5 variants with Scout AI" not in html
+    assert "Generating 5 variants..." not in html
+    assert "Calling Scout AI route-context-intelligence skill for five variants" not in html
     assert "reference similarity" in html
     assert "reference_similarity_gate" in html
     assert "Open variants index" in html
