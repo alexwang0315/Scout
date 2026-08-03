@@ -1,0 +1,59 @@
+{
+  "artifact_kind": "pretrip_contextual_permission_rules",
+  "schema_version": "contextual_permission_rules.v2",
+  "project_id": "chilai_nanhua_day1",
+  "reviewed_baseline_ref": "reviewed://mission-baseline/review.001",
+  "reviewed_baseline_sha256": "d0fdf393413129fb5c50a8a1879ea964efce5c0835576bca4fac517ac7da24a7",
+  "reviewed_by_human": true,
+  "review_receipt_ref": "reviewed://contextual-permission/rules-v1",
+  "review_receipt_sha256": "2f5e2f80efa915cf6ad5f6b67817966e9bc507c17c8351b7b1275f33fa708274",
+  "plan_node_policies": [
+    {
+      "node_id": "node.photo_stop",
+      "mission_day_id": "D1",
+      "adjustment_policy": "auto_reduce",
+      "minimum_duration_minutes": 2,
+      "policy_ref": "candidate://permission/photo-stop",
+      "policy_sha256": "4f30760a16b2f3272f15d34bcbe49544dbe890977b69bfa024480c94fbed6523",
+      "reviewed": true
+    },
+    {
+      "node_id": "node.wait_view",
+      "mission_day_id": "D1",
+      "adjustment_policy": "auto_reduce",
+      "minimum_duration_minutes": 3,
+      "policy_ref": "candidate://permission/view-wait",
+      "policy_sha256": "fe6d0128d64b02ae97f517fba801919ad736c8d66dfc2fcc2571f974c97553e5",
+      "reviewed": true
+    },
+    {
+      "node_id": "node.route_floor",
+      "mission_day_id": "D1",
+      "adjustment_policy": "protected_floor",
+      "minimum_duration_minutes": 45,
+      "policy_ref": "reviewed://permission/route-floor",
+      "policy_sha256": "5f1da4c4420fc0ead62fe8ba33cad51c766c4bcd19ec02f69698c17be87e6e90",
+      "reviewed": true
+    },
+    {
+      "node_id": "node.daylight_reserve",
+      "mission_day_id": "D1",
+      "adjustment_policy": "protected_floor",
+      "minimum_duration_minutes": 30,
+      "policy_ref": "reviewed://permission/daylight-reserve",
+      "policy_sha256": "d3ea9cf536f513b77a464e17c0225bb0943808e8b2d849089dac0b70d61de825",
+      "reviewed": true
+    },
+    {
+      "node_id": "node.night_alternative",
+      "mission_day_id": "D1",
+      "adjustment_policy": "review_only",
+      "minimum_duration_minutes": 0,
+      "policy_ref": "candidate://permission/night-alternative",
+      "policy_sha256": "754a68b438328e2618a8013791451384f82ae93d4ffcae9ca85365b0171a42a2",
+      "reviewed": true
+    }
+  ],
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

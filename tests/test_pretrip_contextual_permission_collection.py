@@ -25,6 +25,7 @@ def test_contextual_permission_collection_dry_run_plans_sec8_refs(
     tmp_path: Path,
 ) -> None:
     project_root = _copy_project(tmp_path)
+    existing_rules = (project_root / CONTEXTUAL_PERMISSION_RULES_REF).read_bytes()
 
     result = collect_pretrip_contextual_permission(
         project_root,
@@ -44,7 +45,7 @@ def test_contextual_permission_collection_dry_run_plans_sec8_refs(
     assert result["rule_count"] >= 5
     assert result["boundary"]["runtime_safety_truth"] is False
     assert not (project_root / CONTEXTUAL_PERMISSION_MODEL_REF).exists()
-    assert not (project_root / CONTEXTUAL_PERMISSION_RULES_REF).exists()
+    assert (project_root / CONTEXTUAL_PERMISSION_RULES_REF).read_bytes() == existing_rules
 
 
 def test_contextual_permission_collection_writes_candidate_rules_and_project_refs(
@@ -81,6 +82,10 @@ def test_contextual_permission_collection_writes_candidate_rules_and_project_ref
     assert model["boundary"]["runtime_safety_truth"] is False
     assert rules["artifact_kind"] == "pretrip_contextual_permission_rules"
     assert rules["human_review_required"] is True
+    assert rules["reviewed_baseline_binding_state"] == "missing_reviewed_baseline"
+    assert rules["reviewed_by_human"] is False
+    assert rules["candidate_only"] is True
+    assert rules["runtime_safety_truth"] is False
     assert rules["counts"]["rule_count"] >= 5
     assert rules["counts"]["bounded_permission_count"] >= 4
     assert rules["counts"]["escalate_count"] == 1

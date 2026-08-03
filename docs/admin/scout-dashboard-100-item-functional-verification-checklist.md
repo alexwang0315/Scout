@@ -7,7 +7,7 @@
 空狀態、跨頁一致性，以及操作後不應發生的副作用。
 
 - 目標：100 個可執行、可判定、可留證據的主檢查項目。
-- 目前版本：29 / 100。
+- 目前版本：36 / 100。
 - 維護狀態：持續記錄中。
 - 起始日期：2026-07-28。
 - 維護方式：本對話串中新增或修改的檢查項目，持續追加到本文件。
@@ -50,14 +50,14 @@
 ## Dashboard Diagnostic UI
 
 Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前的
-`DASH-001～DASH-030`。
+`DASH-001～DASH-036`。
 
 - 尚未測試：灰燈。
 - 測試中：黃燈與 `測試中`。
 - 測試通過：綠燈與 `測試通過`。
 - 測試失敗：紅燈與 `測試失敗`，並顯示失敗原因。
 - 每題都有獨立的 `重新測試`。
-- 頁首 `Diag all` 依序執行 30 題，避免大型 project projection API
+- 頁首 `Diag all` 依序執行 36 題，避免大型 project projection API
   同時被大量呼叫。
 
 Diagnostic UI 是即時、read-only 的快速診斷層。它只使用 UI contract、
@@ -76,14 +76,15 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 | 全域與 Overview | DASH-001、DASH-002、DASH-011 |
 | Plan Trip 與 Workspace | DASH-003、DASH-007、DASH-012～DASH-014 |
 | Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030 |
-| Exploring for Six Axis | DASH-008、DASH-018～DASH-025 |
+| Exploring for Six Axis | DASH-008、DASH-018～DASH-025、DASH-031～DASH-036 |
 | Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015 |
 
-本版刻意不收錄仍屬 preview、placeholder 或未來規劃的功能。只有已存在
-可操作 UI、API／artifact、明確資料邊界，且能產生 PASS／FAIL 證據的功能
+本版刻意不收錄未接線的 preview、placeholder 或未來規劃。已實作的
+candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必要
+通過條件；只有具備可操作 UI、API／artifact 與明確 PASS／FAIL 證據的功能
 才會成為正式檢查項目。
 
-## 目前可驗收的 29 項功能
+## 目前可驗收的 36 項功能
 
 ### DASH-001 Dashboard 啟動、入口與必要 API 可用
 
@@ -906,13 +907,13 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 ### DASH-026 所有 Dashboard 地圖 evidence hover hint 一致性
 
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
-  Architecture、Pace Fit 的全部 8 個 Dashboard 地圖實例。
+  Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
 - 優先級：P0。
 
 檢查步驟：
 
-1. 依 `DASHBOARD_MAP_SURFACES` registry 開啟全部 8 個地圖實例，等待圖層與
+1. 依 `DASHBOARD_MAP_SURFACES` registry 開啟全部 9 個地圖實例，等待圖層與
    evidence 完成載入。
 2. 依序把滑鼠移入每張圖的一個點、線、面、圖層或事件 evidence。
 3. 使用 Tab 將鍵盤焦點移到同一類 evidence。
@@ -921,7 +922,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 通過條件：
 
-- Registry 內全部 8 張圖的 evidence 都能在 hover 與鍵盤 focus 時顯示
+- Registry 內全部 9 張圖的 evidence 都能在 hover 與鍵盤 focus 時顯示
   可讀提示。
 - 嵌入 Map／Weather 的樣式不得把既有 `#hoverHint` 隱藏或裁切在 iframe 外。
 - Dashboard-native SVG 地圖必須使用共用 hover/focus hint contract；嵌入式
@@ -930,17 +931,16 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 證據／結果：
 
-- 結果：`PASS`（2026-07-28，Chromium）
-- 證據：8/8 地圖均找到可 focus 的 evidence target 並顯示非空 hint；
-  實例包含 imagery、稜候選、Architecture route bin、Pace Fit route、
-  hillshade 與 CWA QPF。
+- 結果：`PASS`（2026-08-03，Chromium）
+- 證據：9/9 地圖均找到可 focus 的 evidence target，並顯示非空 hint；
+  最新 registry 已包含 Permission Map 與 Safety / Emergency Review Map。
 - 缺陷編號：
 - 備註：0 POST。
 
 ### DASH-027 所有 Dashboard 地圖框選縮放與鍵盤平移
 
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
-  Architecture、Pace Fit 的全部 8 個 Dashboard 地圖實例。
+  Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
 - 優先級：P0。
 
@@ -955,7 +955,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 通過條件：
 
-- Registry 內全部 8 張圖都能完成矩形放大與反向矩形縮小。
+- Registry 內全部 9 張圖都能完成矩形放大與反向矩形縮小。
 - 四個方向鍵都會改變地圖位置，且只有地圖取得操作焦點時攔截按鍵。
 - 取消後不留下選取框、拖曳狀態或錯誤游標。
 - 全部地圖使用一致的快捷鍵與操作語意。
@@ -963,8 +963,8 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 證據／結果：
 
-- 結果：`PASS`（2026-07-28，Chromium）
-- 證據：8/8 地圖啟用 Box 後完成真實矩形拖曳，縮放約
+- 結果：`PASS`（2026-08-03，Chromium）
+- 證據：9/9 地圖啟用 Box 後完成真實矩形拖曳，縮放約
   `1.97x～2.25x`；ArrowRight 均改變 controller translation 或 SVG
   viewBox；wheel event 前後 zoom／viewBox 不變。
 - 缺陷編號：
@@ -973,15 +973,15 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 ### DASH-028 所有 Dashboard 地圖圖磚、向量與單圖例外政策
 
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
-  Architecture、Pace Fit 的全部 8 個 Dashboard 地圖實例。
+  Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
 - 優先級：P0。
 
 檢查步驟：
 
-1. 檢查 registry 內全部 8 張圖的底圖、路線與一般 overlay 的 DOM／
+1. 檢查 registry 內全部 9 張圖的底圖、路線與一般 overlay 的 DOM／
    network 類型。
-2. 確認主 Map 是唯一 `full-canonical` surface；另外 7 張圖的唯一 basemap
+2. 確認主 Map 是唯一 `full-canonical` surface；其餘 8 張圖的唯一 basemap
    都是 Rudy+TW WMTS，路線與 evidence 為 SVG／GeoJSON 等向量圖徵。
 3. 逐一列出以單一圖片顯示的 overlay，核對是否屬於明確 allowlist。
 4. 從 Fit 點擊一次 `+`，確認圖磚數量／範圍重新計算，而且
@@ -993,9 +993,9 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 - 一般底圖與圖層使用圖磚或向量，不以任意單張圖片冒充可縮放地圖。
 - 多張圖磚也不得以低 matrix 直接拉伸冒充縮放完成；第一次放大就必須要求
   足以支撐顯示比例的下一級圖磚。
-- 主 Map 保留完整 canonical 圖層；Overview、LBS、Permission、Weather、
-  Navigation、Architecture、Pace Fit 只使用 Rudy+TW 作為底圖，不得混入
-  OSM 或裝飾性假底圖。
+- 主 Map 保留完整 canonical 圖層；Overview、LBS、Permission、
+  Safety / Emergency、Weather、Navigation、Architecture、Pace Fit 只使用
+  Rudy+TW 作為底圖，不得混入 OSM 或裝飾性假底圖。
 - 單一圖片只允許明確標記的 satellite、radar、LiDAR、hillshade 或 thematic
   overlay，且必須具備範圍、來源與時間／版本資訊。
 - 圖磚與向量在縮放、平移後保持同一座標位置，沒有漂移或錯位。
@@ -1004,11 +1004,11 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 證據／結果：
 
-- 結果：`PASS`（2026-07-28，Chromium）
-- 證據：8/8 地圖的 `data-map-render-policy-status` 均為 `verified`；
-  registry 為 1 個 `full-canonical` 與 7 個 `rudy-twmap-only`；六個
-  Dashboard-native supporting maps 的 tile source 都只有 `rudy-twmap`，
-  Weather 只有 Rudy+TW basemap 並保留 CWA thematic overlays。
+- 結果：`PASS`（2026-08-03，Chromium）
+- 證據：9/9 地圖的 `data-map-render-policy-status` 均為 `verified`；
+  registry 為 1 個 `full-canonical` 與 8 個 `rudy-twmap-only`；所有 supporting
+  maps 的 basemap tile source 都只有 `rudy-twmap`，Weather 保留 CWA thematic
+  overlays。
 - 追加證據（2026-07-29，Navigation）：Fit 為 `1.000x`／matrix `13`／
   `24` tiles；第一次 `+` 為 `1.250x`／matrix `14`／`70` tiles，request
   含 `TILEMATRIX=14`；blocked image `0`、console error `0`。
@@ -1018,13 +1018,13 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 ### DASH-029 所有 Dashboard 地圖基本 Zoom、Pan 與 Fit
 
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
-  Architecture、Pace Fit 的全部 8 個 Dashboard 地圖實例。
+  Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
 - 優先級：P0。
 
 檢查步驟：
 
-1. 在 registry 內全部 8 張圖分別操作 Zoom in、Zoom out 與允許的縮放方式。
+1. 在 registry 內全部 9 張圖分別操作 Zoom in、Zoom out 與允許的縮放方式。
 2. 使用滑鼠拖曳平移，再使用控制按鍵與鍵盤平移。
 3. 按 Fit／Reset，確認回到完整路線或預設範圍。
 4. 連續重複放大、縮小、平移與 Fit，檢查狀態與圖層對位。
@@ -1032,7 +1032,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 通過條件：
 
-- Registry 內全部 8 張圖都支援 Zoom in、Zoom out、拖曳 Pan 與
+- Registry 內全部 9 張圖都支援 Zoom in、Zoom out、拖曳 Pan 與
   Fit／Reset。
 - Fit 後能看到完整目標範圍，不保留前一次 translation 或 selection。
 - 控制不會造成頁面級水平溢出、iframe 失焦或圖層消失。
@@ -1041,8 +1041,8 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 證據／結果：
 
-- 結果：`PASS`（2026-07-28，Chromium）
-- 證據：8/8 地圖 Zoom in 均由 `1.00x` 到 `1.25x`，Zoom out 回到
+- 結果：`PASS`（2026-08-03，Chromium）
+- 證據：9/9 地圖 Zoom in 均由 `1.00x` 到 `1.25x`，Zoom out 回到
   `1.00x`，方向鍵 Pan 均改變位置，Fit 均還原 scale，wheel event 不改變
   zoom。
 - 缺陷編號：
@@ -1071,20 +1071,200 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 
 證據／結果：
 
-- 結果：`FAIL`（2026-07-28，`chilai_nanhua_day1_scoutAI`）
-- 證據：Chromium `Diag all` 完成 30/30，`DASH-030` 紅燈；全程 0 POST。
+- 結果：`FAIL`（2026-08-03，`chilai_nanhua_day1_scoutAI`）
+- 證據：Chromium `Diag all` 完成 36/36，`DASH-030` 紅燈；目前列出
+  5 個 count=0 類別，全程 0 POST。
 - 重新投影後，修正四個假 0：Overpass Hiking Routes `2`、Water Sources
   `1`、Parking `1`、Peaks `6`。
-- 目前內部 count=0 surface entries 共 9 類；使用者介面不再只顯示數字 0，
-  而是標示 `source checked · no matches`、`prepared · no candidates` 或
-  `completed GPX not imported`。Diagnostic 保留內部零值並連同原因列出。
+- 使用者介面不再只顯示數字 0，而是標示 `source checked · no matches`、
+  `prepared · no candidates` 或 `completed GPX not imported`；Diagnostic
+  保留內部零值並連同原因列出。
 - 缺陷編號：
 - 備註：剩餘項目是已確認的來源空集合或尚未匯入完成 GPX，不代表系統自動
   判定這些類別必須存在真實地物，也不得為了讓計數大於 0 而捏造 evidence。
 
+### DASH-031 Contextual Permission 專案範圍與只讀 API
+
+- 頁面／範圍：Exploring for Six Axis → Permission、Contextual Permission GET。
+- 頁面分類：Exploring for Six Axis / Contextual Permission。
+- 優先級：P0。
+
+檢查步驟：
+
+1. 以目前 Dashboard Project ID 讀取 `contextual-permission-dashboard?lens=baseline`。
+2. 核對 artifact kind、`contextualPermissionDashboard.v1` schema 與回傳 Project ID。
+3. 核對狀態只會是 `ready`、`degraded` 或 `blocked`。
+4. 核對 candidate、runtime、Phase 1、Safety API、outbound 與 hardware authority flags。
+
+通過條件：
+
+- GET projection 綁定目前 Project ID，沒有任意 workspace path 輸入。
+- `candidate_only=true`、`runtime_safety_truth=false`，所有 authority effect flags 為 false。
+- 缺資料時回傳 typed `blocked` 與缺口，不虛構 Current Decision。
+- Diagnostic 全程不送出 POST。
+
+證據／結果：
+
+- 結果：`PASS`（2026-08-03，Chromium，隔離 ready fixture）。
+- 證據：GET projection 綁定 `chilai_nanhua_day1_scoutAI`，schema v1、status
+  `ready`、`candidate_only=true`、runtime truth 與全部 authority effects=false；
+  全批次 0 POST。
+- 缺陷編號：
+
+### DASH-032 Contextual Permission Workbench 與行動版檢視
+
+- 頁面／範圍：Exploring for Six Axis → Permission。
+- 頁面分類：Exploring for Six Axis / Contextual Permission。
+- 優先級：P0。
+- 前置條件：目前專案有 `ready` 的 reviewed baseline/rules projection。
+
+檢查步驟：
+
+1. 直接開啟 `#outdoor-permission`，不先開啟其他 Six Axis 頁面。
+2. 檢查 Six Axis tabs 與 Baseline、Replay、Live Observer 三個 context lenses。
+3. 檢查 Current Decision、Remaining Mission、Risk-Budget、Event & Evidence、
+   Safety / Emergency handoff 與 Permission Map。
+4. 在 390 px 檢查 `Now`、`Remaining`、`Safety`、`Evidence` 四個 mobile views。
+
+通過條件：
+
+- 完整 workbench 使用現有 Dashboard shell、truth strip、tabs、status 與 map primitives。
+- 四個 mobile views 都存在；預設 `Now`，桌面專用工作明確標示
+  `Continue on desktop`。
+- 主要 Decision、Remaining、Safety 與 Evidence 不依賴 hover 或顏色才能理解。
+- 缺 projection 時顯示 fail-closed blocked surface，不顯示假資料。
+
+證據／結果：
+
+- 結果：`PASS`（2026-08-03，Chromium，隔離 ready fixture）。
+- 證據：6 個 Six Axis tabs、3 個 context lenses、4 個 mobile views，以及
+  Decision、Remaining、Risk、Evidence、handoff、Permission Map 均完成渲染；
+  390 px 的 `clientWidth=scrollWidth=390`，沒有頁面級水平溢出。
+- 缺陷編號：
+
+### DASH-033 Immutable Baseline、Forward Projection 與調整政策
+
+- 頁面／範圍：Permission Baseline、Replay、Remaining Mission、Risk-Budget。
+- 頁面分類：Exploring for Six Axis / Contextual Permission。
+- 優先級：P0。
+- 前置條件：Baseline 與 sealed Replay projection 均為 `ready`。
+
+檢查步驟：
+
+1. 同時讀取 Baseline 與 Replay，核對 projection/baseline SHA-256 binding。
+2. 確認 Baseline 不合併 replay events，且 time debt 為 0。
+3. 核對 Replay action event IDs 與 debt ledger，每個 event 只能計數一次。
+4. 逐一檢查 `auto_reduce`、`protected_floor`、`review_only` remaining-plan nodes。
+5. 比對所有 protected reserve 的 baseline/effective minutes。
+
+通過條件：
+
+- Baseline immutable、human-reviewed，Baseline 與 Replay 綁定同一 SHA-256。
+- `effective_duration_minutes` 不低於 reviewed minimum。
+- `review_only` 不自動變更；`protected_floor` 保持 protected；未允許取消的
+  `auto_reduce` node 不會變成 0。
+- 每個 node 都有 rule hash 與 source refs；protected reserves 不被 time debt 消耗。
+
+證據／結果：
+
+- 結果：`PASS`（2026-08-03，Chromium，隔離 ready fixture）。
+- 證據：Baseline／Replay hash binding、immutable human review、唯一 event debt、
+  `auto_reduce`／`protected_floor`／`review_only`、minimum floor、rule refs 與
+  protected reserves 均通過 Diagnostic contract。
+- 缺陷編號：
+
+### DASH-034 Safety / Emergency 專屬決策與權限邊界
+
+- 頁面／範圍：Permission Safety panel、Safety / Emergency handoff。
+- 頁面分類：Exploring for Six Axis / Contextual Permission。
+- 優先級：P0。
+
+檢查步驟：
+
+1. 檢查 Permission projection 的 authority boundary 與 Current Decision runtime authority。
+2. 檢查 `permission_page_can_decide=false` 與 handoff route。
+3. 檢查 Permission 頁只顯示 `Open in Safety / Emergency` 與 refresh。
+4. 搜尋四種 Emergency review decision，不得出現在 Permission DOM。
+
+通過條件：
+
+- Permission 只能 inspect、比較、模擬與 handoff，不能批准 night travel。
+- `approve_for_runtime_consideration`、`reject_night_travel`、
+  `select_hold_or_bivy`、`escalate_emergency` 只存在專屬 Emergency review surface。
+- runtime、Phase 1、Safety API、outbound、transport、external send 與 hardware effects
+  全部為 false。
+- blocked projection 仍顯示 fail-closed 邊界。
+
+證據／結果：
+
+- 結果：`PASS`（2026-08-03，Chromium，隔離 ready fixture）。
+- 證據：Permission 僅渲染 Safety / Emergency handoff，未渲染四個 Emergency
+  decision controls；runtime、Phase 1、Safety API、outbound、external send 與
+  hardware effects 均為 false。
+- 缺陷編號：
+
+### DASH-035 Contextual Permission Evidence lineage 與隱私邊界
+
+- 頁面／範圍：Permission Event & Evidence Ledger、Replay projection。
+- 頁面分類：Exploring for Six Axis / Contextual Permission。
+- 優先級：P0。
+- 前置條件：Replay projection 為 `ready`。
+
+檢查步驟：
+
+1. 檢查每個 evidence 的 source ID、kind、bounded ref、SHA-256、freshness 與 authority。
+2. 檢查每個 action cause 的 source ref、SHA-256 與 source kind。
+3. 確認 `missing_inputs` 與 `conflicting_inputs` 是明確陣列。
+4. 掃描 projection 是否包含 raw GPX、coordinates、health、IMU/PDR/GNSS 或本機絕對路徑。
+5. 確認 Event & Evidence Ledger 可見。
+
+通過條件：
+
+- 所有 evidence/cause 皆可追到 bounded ref 與 hash。
+- 一般 Dashboard input 不得成為 `human_operation` cause。
+- projection 不含 raw private payload、`file://`、`/Users/` 或 path traversal。
+- candidate/runtime truth boundary 在每個 evidence source 上均正確。
+
+證據／結果：
+
+- 結果：`PASS`（2026-08-03，Chromium，隔離 ready fixture）。
+- 證據：Replay evidence 與 causes 均具 bounded ref／SHA-256；missing/conflict
+  arrays 明確存在，Event & Evidence Ledger 可見，projection 不含 raw GPX、
+  health、IMU/PDR/GNSS、精確座標或本機絕對路徑。
+- 缺陷編號：
+
+### DASH-036 Candidate Simulation 明確觸發與 no-write contract
+
+- 頁面／範圍：Permission Candidate Simulation、System → Diagnostic。
+- 頁面分類：Exploring for Six Axis / Contextual Permission。
+- 優先級：P0。
+
+檢查步驟：
+
+1. 確認 Permission 初始資料載入只使用 bounded GET projection。
+2. 改變 scenario input 後，檢查狀態顯示 `Inputs changed · not evaluated`。
+3. 確認只有 `Run candidate simulation` 明確按鍵接到 simulation endpoint。
+4. 核對回傳與 UI 說明包含 `writes_performed=false`，且不取代 stored Current Decision。
+5. 執行 Diagnostic 時攔截 network，確認本題不送 simulation POST。
+
+通過條件：
+
+- 選取 node、event 或 lens 不會隱式執行 simulation。
+- 修改 scenario 只進入 dirty/not-evaluated；last evaluated decision 保持可見。
+- simulation 必須明確觸發、fail closed、no-write、candidate-only，且不替換 Current Decision。
+- Diagnostic 只驗證 wiring，不替操作者執行 simulation。
+
+證據／結果：
+
+- 結果：`PASS`（2026-08-03，Chromium，隔離 ready fixture）。
+- 證據：初始 projection 為 bounded GET；scenario 變更標成 dirty/not evaluated，
+  只有明確 Run 按鍵接到 no-write simulation；Diag all 未執行 simulation，
+  network 攔截結果為 0 POST。
+- 缺陷編號：
+
 ## 後續項目收錄門檻
 
-下一個可用編號為 `DASH-031`。新項目只有在功能已實作，且具備可操作 UI、
+下一個可用編號為 `DASH-037`。新項目只有在功能已實作，且具備可操作 UI、
 API／artifact、測試資料與明確 PASS／FAIL 條件時才加入。未完成、未接線、
 preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
@@ -1092,6 +1272,8 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
+| 2026-08-03 | Chromium 完成 36/36 Diag all：32 PASS、4 個現況資料／服務 FAIL；DASH-031～036 全數 PASS，且 9/9 Dashboard 地圖完成真實操作回歸，全程 0 POST。 |
+| 2026-08-03 | 新增 DASH-031～036，驗證 Contextual Permission read API、Workbench、Forward Projection、Safety / Emergency 邊界、Evidence lineage 與明確 no-write simulation。 |
 | 2026-07-28 | 主 Map 保留完整 canonical layers；其餘 7 張 Dashboard 地圖統一為 Rudy+TW-only basemap、page-local vectors、停用 wheel zoom，並以 Chromium 驗證 8/8 操作一致。 |
 | 2026-07-28 | 將 DASH-026～029 從 Map／Navigation／Weather 擴大為 registry 內全部 8 個 Dashboard 地圖實例。 |
 | 2026-07-28 | 新增 DASH-030，檢查 Evidence 群組與 Evidence Timeline 子類別是否存在 count=0，紅燈時列出類別名稱。 |

@@ -3139,6 +3139,39 @@ preparation responses must both return HTTP 200. A valid Dashboard URL is then:
 http://127.0.0.1:9099/admin/dashboard?projectId=<project_id>
 ```
 
+### Contextual Permission authoring bootstrap
+
+When a real workspace already has a reviewed mission graph and reference-track
+timing but has no human-reviewed daily itinerary, initialize the Permission
+authoring surface without pretending that the baseline is accepted:
+
+```bash
+./venv/bin/python tools/bootstrap_contextual_permission_workspace.py \
+  /absolute/path/to/<project_id>
+```
+
+The bootstrap may create `outputs/planned_eta.json`, a versioned
+reference-GPX baseline candidate, `normalized/permissions/contextual_permission_model.json`,
+`candidates/contextual_permission_rules.json`, and
+`outputs/contextual_permission/workbench_seed.json`. It must leave
+`reviewed_mission_baseline_ref` and `reviewed_mission_baseline_sha256` unset.
+Until human itinerary review completes, `reviewed_by_human=false`, every plan
+node policy must be `review_only`, and the projection must remain
+`status=degraded`, `decision=ESCALATE`, `candidate_only=true`, and
+`runtime_safety_truth=false`.
+
+`degraded` is a usable fail-closed authoring state, not the same as `blocked`.
+The Dashboard must render the Baseline Authoring Workbench and its missing-input
+checklist for `degraded`; reserve the blocked retry card for an unavailable or
+invalid typed projection. Verify this distinction directly:
+
+```bash
+curl "http://127.0.0.1:9099/admin/pretrip/projects/<project_id>/contextual-permission-dashboard?lens=baseline"
+```
+
+Do not rerun GPX import, map preparation, risk generation, or the 32-layer
+pipeline merely to create this bootstrap. Those artifacts are read-only inputs.
+
 ## Run Log: 2026-07-28 Timeline Evidence Producer Repair
 
 Target workspace:
