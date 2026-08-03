@@ -173,6 +173,9 @@ from scout_emergency_mobile_closed_loop_api import (
     create_emergency_mobile_closed_loop_router,
     create_emergency_mobile_ui_router,
 )
+from scout_contextual_permission_workbench_api import (
+    create_contextual_permission_workbench_router,
+)
 from scout_alpha_simulation_api import (
     create_alpha_simulation_router,
     create_alpha_simulation_ui_router,
@@ -2163,6 +2166,7 @@ def create_admin_app(
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
     living_sandbox_store_root: Path | None = None,
+    contextual_permission_store_root: Path | None = None,
     alpha_sandbox_enabled: bool | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
     route_context_briefing_cycle_runner: Callable[..., dict[str, Any]] | None = None,
@@ -2214,6 +2218,7 @@ def create_admin_app(
             incident_store_path=incident_store_path,
             pretrip_workspace_root=pretrip_workspace_root,
             living_sandbox_store_root=living_sandbox_store_root,
+            contextual_permission_store_root=contextual_permission_store_root,
             alpha_sandbox_enabled=resolved_alpha_sandbox_enabled,
             route_context_briefing_ai_runner=route_context_briefing_ai_runner,
             route_context_briefing_cycle_runner=route_context_briefing_cycle_runner,
@@ -2237,6 +2242,7 @@ def create_dashboard_app(
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
     living_sandbox_store_root: Path | None = None,
+    contextual_permission_store_root: Path | None = None,
     alpha_sandbox_enabled: bool | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
     route_context_briefing_cycle_runner: Callable[..., dict[str, Any]] | None = None,
@@ -2262,6 +2268,7 @@ def create_dashboard_app(
         incident_store_path=incident_store_path,
         pretrip_workspace_root=resolved_workspace_root,
         living_sandbox_store_root=living_sandbox_store_root,
+        contextual_permission_store_root=contextual_permission_store_root,
         alpha_sandbox_enabled=alpha_sandbox_enabled,
         route_context_briefing_ai_runner=route_context_briefing_ai_runner,
         route_context_briefing_cycle_runner=route_context_briefing_cycle_runner,
@@ -2509,6 +2516,7 @@ def create_admin_router(
     incident_store_path: Path | None = None,
     pretrip_workspace_root: Path | None = None,
     living_sandbox_store_root: Path | None = None,
+    contextual_permission_store_root: Path | None = None,
     alpha_sandbox_enabled: bool | None = None,
     route_context_briefing_ai_runner: Callable[[str, int], str] | None = None,
     route_context_briefing_cycle_runner: Callable[..., dict[str, Any]] | None = None,
@@ -2529,6 +2537,13 @@ def create_admin_router(
                 or DEFAULT_EMERGENCY_MOBILE_SANDBOX_STORE_ROOT
             ),
             prefix="/dashboard/living",
+        )
+    )
+    router.include_router(
+        create_contextual_permission_workbench_router(
+            pretrip_workspace_root=pretrip_workspace_root,
+            store_root=contextual_permission_store_root,
+            now_factory=now_factory,
         )
     )
     resolved_alpha_sandbox_enabled = (

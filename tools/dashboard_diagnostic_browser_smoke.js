@@ -17,12 +17,15 @@ const { chromium } = require("playwright");
 
 const baseUrl = process.env.SCOUT_DASHBOARD_DIAGNOSTIC_URL
   || "http://127.0.0.1:9099/admin/dashboard?projectId=chilai_nanhua_day1_scoutAI#diagnostic";
-const expectedDiagnosticCount = 30;
+const expectedDiagnosticCount = 36;
 const dataDependentDiagnosticIds = new Set([
   "DASH-009",
   "DASH-018",
   "DASH-019",
   "DASH-030",
+  "DASH-032",
+  "DASH-033",
+  "DASH-035",
 ]);
 
 function assert(condition, message) {
@@ -269,13 +272,14 @@ async function main() {
       "overview-map",
       "lbs-map",
       "permission-map",
+      "emergency-review-map",
       "map",
       "weather-map",
       "navigation-map",
       "architecture-map",
       "pace-fit-map",
     ];
-    assert(dashboardMapSurfaces.length === expectedMapSurfaceIds.length, "Dashboard map registry does not contain eight maps.");
+    assert(dashboardMapSurfaces.length === expectedMapSurfaceIds.length, "Dashboard map registry does not contain all expected maps.");
     for (const surfaceId of expectedMapSurfaceIds) {
       assert(dashboardMapSurfaces.some(surface => surface.id === surfaceId), `Dashboard map registry is missing ${surfaceId}.`);
     }
@@ -284,8 +288,8 @@ async function main() {
       "Dashboard map registry must have exactly one full-canonical map.",
     );
     assert(
-      dashboardMapSurfaces.filter(surface => surface.basemapPolicy === "rudy-twmap-only").length === 7,
-      "Dashboard map registry must have seven Rudy+TW-only maps.",
+      dashboardMapSurfaces.filter(surface => surface.basemapPolicy === "rudy-twmap-only").length === 8,
+      "Dashboard map registry must have eight Rudy+TW-only maps.",
     );
 
     const dash001 = page.locator('[data-diagnostic-case="DASH-001"]');
@@ -338,7 +342,7 @@ async function main() {
     }
     for (const caseId of ["DASH-026", "DASH-027", "DASH-028", "DASH-029"]) {
       assert(snapshot.results[caseId]?.status === "passed", `${caseId} did not pass for every Dashboard map.`);
-      assert(snapshot.results[caseId]?.detail.includes("8 Dashboard maps"), `${caseId} did not report the eight-map scope.`);
+      assert(snapshot.results[caseId]?.detail.includes("9 Dashboard maps"), `${caseId} did not report the nine-map scope.`);
     }
     assert(postRequests.length === 0, `Diagnostic issued unexpected POST requests: ${postRequests.join(", ")}`);
 
@@ -373,6 +377,7 @@ async function main() {
       {id: "overview-map", route: "home", label: "Overview Map preview", viewportId: "overview-map"},
       {id: "lbs-map", route: "features-lbs", label: "LBS Map", viewportId: "lbs-map"},
       {id: "permission-map", route: "outdoor-permission", label: "Permission Map", viewportId: "permission-map"},
+      {id: "emergency-review-map", route: "emergency", label: "Emergency Review Map", viewportId: "emergency-review-map"},
       {id: "navigation-map", route: "outdoor-navigation", label: "Navigation Map", viewportId: "navigation-workspace-map"},
       {id: "architecture-map", route: "outdoor-architecture", label: "Architecture Map", viewportId: "architecture-map"},
       {id: "pace-fit-map", route: "outdoor-pace-fit", label: "Pace Fit Map", viewportId: "pace-fit-map"},

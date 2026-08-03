@@ -2129,6 +2129,52 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     assert "Math.round(Math.log2(viewState.zoom))" not in tile_refresh
 
 
+def test_dashboard_map_zoom_does_not_precompose_dynamic_rudy_tile_stage() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    stage_rule = html.split(".dashboard-map-stage {", 1)[1].split("}", 1)[0]
+
+    assert "will-change: transform" not in stage_rule
+
+
+def test_navigation_architecture_permission_zoom_keep_evidence_screen_sized() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    navigation_map = html.split(
+        "function renderNavigationWorkspaceMap", 1
+    )[1].split("function renderNavigationFeatureExtraction", 1)[0]
+    architecture_map = html.split(
+        "function architectureMapSlices", 1
+    )[1].split("function renderArchitectureEvidenceLedger", 1)[0]
+    permission_map = html.split(
+        "function renderMapPanel", 1
+    )[1].split("function buildMapData", 1)[0]
+    map_controller = html.split(
+        "function createDashboardMapViewportController", 1
+    )[1].split("function bindDashboardMapViewports", 1)[0]
+
+    assert "function updateDashboardMapScreenSymbols(" in html
+    assert "updateDashboardMapScreenSymbols(viewport, viewState)" in map_controller
+    assert 'querySelectorAll("[data-dashboard-map-screen-stroke]")' in html
+    assert "line.style.strokeWidth" in html
+    for renderer in (navigation_map, architecture_map, permission_map):
+        assert 'data-dashboard-map-screen-symbol="true"' in renderer
+        assert "data-dashboard-map-screen-stroke=" in renderer
+        assert 'vector-effect="non-scaling-stroke"' in renderer
+
+
+def test_dashboard_map_zoom_ceiling_uses_rudy_native_max_matrix() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    map_controller = html.split(
+        "function createDashboardMapViewportController", 1
+    )[1].split("function bindDashboardMapViewports", 1)[0]
+
+    assert "function dashboardMapMaxZoom(" in html
+    assert "NAVIGATION_RUDY_TILE_SOURCE.maxZoom - baseZoom" in html
+    assert "const maxZoom = dashboardMapMaxZoom(viewport);" in map_controller
+    assert "Math.min(maxZoom, Number(saved.zoom) || 1)" in map_controller
+    assert "Math.min(maxZoom, viewState.zoom * factor)" in map_controller
+    assert "Math.min(12" not in map_controller
+
+
 def test_dashboard_rectangle_zoom_is_bounded_one_shot_and_clears_selection() -> None:
     html = PAGE.read_text(encoding="utf-8")
     map_controller = html.split(
@@ -2216,7 +2262,7 @@ def test_non_main_dashboard_maps_use_only_rudy_tw_basemap_and_disable_wheel_zoom
         'family: "canonical-pretrip", basemapPolicy: "full-canonical"}'
         in surface_contract
     )
-    assert surface_contract.count('basemapPolicy: "rudy-twmap-only"') == 7
+    assert surface_contract.count('basemapPolicy: "rudy-twmap-only"') == 8
 
     for marker in (
         "const DASHBOARD_RUDY_TILE_SOURCE",
@@ -2606,13 +2652,14 @@ def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> N
 
     assert 'data-route="emergency"' in html
     assert 'data-safety-emergency-console="desktop"' in emergency_page
+    assert 'data-daily-emergency-review="ready"' in emergency_page
+    assert 'data-emergency-decision="${decision}"' in emergency_page
+    assert 'data-emergency-confirm-submit="true"' in html
     assert 'data-emergency-approval-frame="desktop"' in emergency_page
     assert 'src="/admin/dashboard/emergency-approval-desktop-v0"' in emergency_page
-    assert 'href="/admin/dashboard/emergency-approval-desktop-v0"' in emergency_page
-    assert 'title="Safety and emergency desktop approval console"' in emergency_page
-    assert "Open full desktop console" in emergency_page
+    assert 'title="Legacy safety and emergency desktop approval console"' in emergency_page
     assert "emergency-mobile-approval-v0" not in emergency_page
-    assert 'renderMapPanel("emergency")' not in emergency_page
+    assert 'renderMapPanel("emergency")' in emergency_page
     assert ".safety-emergency-shell" in html
     assert ".safety-emergency-frame" in html
     assert '<header class="safety-emergency-commandbar">' not in emergency_page
@@ -2622,6 +2669,221 @@ def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> N
     assert ".safety-emergency-commandbar" not in html
     assert ".safety-emergency-status-grid" not in html
     assert ".safety-emergency-status-card" not in html
+
+
+def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_scope() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    permission_page = html.split("function renderPermissionPage(force)", 1)[1].split(
+        "function weatherImageryFrames", 1
+    )[0]
+    permission_loader = html.split("async function loadPermissionData()", 1)[1].split(
+        "function stopNavigationTerrainPolling", 1
+    )[0]
+    simulation = html.split("async function runPermissionCandidateSimulation()", 1)[
+        1
+    ].split("async function previewPermissionBaseline(", 1)[0]
+
+    assert 'permission: ["outdoor-permission", "emergency"]' in html
+    assert 'permissionLens: "baseline"' in html
+    assert "contextual-permission-dashboard?lens=" in html
+    assert 'state.route === "emergency"\n          ? "replay"' in permission_loader
+    assert "state.permissionProjection = projection;" in permission_loader
+    assert "state.permissionReviewSession = await fetchJson" in permission_loader
+    assert 'projection.status === "blocked"' in permission_page
+    assert 'data-contextual-permission-workbench="${isDegraded ? "degraded" : "ready"}"' in permission_page
+    assert "Permission bootstrap needs itinerary review" in permission_page
+    assert "if (projection.status !== \"ready\")" not in permission_page
+    assert "Remaining Mission Projection" in permission_page
+    assert "Risk-Budget Ledger" in permission_page
+    assert "Event & Evidence Ledger" in permission_page
+    assert "Day, Movement Groups & Communication" in permission_page
+    assert "Safety / Emergency" in permission_page
+    assert "Baseline Authoring Workbench" in permission_page
+    assert "Run candidate simulation" in permission_page
+    assert "candidate_only=true" in permission_page
+    assert 'data-emergency-decision=' not in permission_page
+    assert "state.permissionProjection = result.projection" not in simulation
+    assert "Current Decision not replaced" in simulation
+    assert 'force: route === "emergency" || route === "outdoor-permission"' in html
+
+
+def test_daily_emergency_review_is_shared_fail_closed_and_two_step() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    emergency_page = html.split("function renderEmergencyPage()", 1)[1].split(
+        "function renderDebugPage()", 1
+    )[0]
+    emergency_submit = html.split("async function submitEmergencyReviewDecision()", 1)[
+        1
+    ].split("function bindPermissionControls()", 1)[0]
+    permission_bindings = html.split("function bindPermissionControls()", 1)[1].split(
+        "function bindRenderedControls()", 1
+    )[0]
+
+    for decision in (
+        "select_hold_or_bivy",
+        "reject_night_travel",
+        "approve_for_runtime_consideration",
+        "escalate_emergency",
+    ):
+        assert decision in emergency_page
+    for view in ("decision", "field", "gates", "evidence"):
+        assert f'["{view}",' in emergency_page
+    assert 'data-emergency-evidence-map="true"' in emergency_page
+    assert '["map",' not in emergency_page
+    assert "No write occurs on the first tap" in emergency_page
+    assert 'data-emergency-confirm-submit="true"' in html
+    assert "explicit_confirmation: true" in emergency_submit
+    assert "packet_sha256: packet.sha256" in emergency_submit
+    assert "review_generation: packet.review_generation" in emergency_submit
+    assert "reviewed_sequence: packet.reviewed_sequence" in emergency_submit
+    assert "state.emergencyPendingDecision = {" in permission_bindings
+    assert "postJson(" not in permission_bindings.split(
+        'document.querySelectorAll("[data-emergency-decision]")', 1
+    )[1].split(
+        'document.querySelector("[data-emergency-confirm-submit]")', 1
+    )[0]
+    assert "runtime_authorization_performed=false" in emergency_page
+    assert "outbound_action_performed=false" in emergency_page
+    assert "outbound_transport_invoked=false" in emergency_page
+    assert "external_send_performed=false" in emergency_page
+
+
+def test_emergency_field_state_exposes_od013_through_od018_without_night_packet_lockout() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    emergency_page = html.split("function renderEmergencyPage()", 1)[1].split(
+        "function renderDebugPage()", 1
+    )[0]
+    field_submit = html.split("async function submitEmergencyFieldAction(", 1)[1].split(
+        "async function submitEmergencyReviewDecision()", 1
+    )[0]
+    bindings = html.split("function bindPermissionControls()", 1)[1].split(
+        "function bindRenderedControls()", 1
+    )[0]
+
+    assert "const reviewPacket" in emergency_page
+    assert "Field operations remain available" in emergency_page
+    assert 'data-emergency-field-operations="true"' in emergency_page
+    assert 'data-emergency-field-action="complete_day"' in emergency_page
+    assert 'data-emergency-field-action="wrong_target"' in emergency_page
+    assert 'data-emergency-field-action="cannot_reach_target"' in emergency_page
+    assert 'data-emergency-field-action="select_bivy"' in emergency_page
+    assert 'data-emergency-shelter-hold-card="true"' in emergency_page
+    assert 'data-emergency-departure-checklist="true"' in emergency_page
+    assert 'data-emergency-field-action="start_day"' in emergency_page
+    assert "required_seconds || 600" in emergency_page
+    assert "No leader sleep roll call" in emergency_page
+    assert "No continuous heartbeat required" in emergency_page
+    assert "My group" in emergency_page and "All groups" in emergency_page
+    for suffix in (
+        '"day-end/confirm"',
+        '"day-end/corrections"',
+        '"day-end/unreachable"',
+        '"arrival-dwell"',
+        '"emergency-bivy/selection"',
+        '"shelter-hold/reviews"',
+        '"mission-day-starts"',
+        '"field-conflicts"',
+    ):
+        assert suffix in field_submit
+    first_tap = bindings.split(
+        'document.querySelectorAll("[data-emergency-field-action]")', 1
+    )[1].split(
+        'document.querySelector("[data-emergency-conflict-note]")', 1
+    )[0]
+    assert "state.emergencyPendingFieldAction = {" in first_tap
+    assert "postJson(" not in first_tap
+    assert 'data-emergency-field-confirm-submit="true"' in html
+
+
+def test_baseline_authoring_supports_generate_patch_lineage_and_review_ready_gate() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    baseline_submit = html.split("async function previewPermissionBaseline(", 1)[1].split(
+        "function emergencyReviewDecisionPath", 1
+    )[0]
+    baseline_page = html.split('data-permission-baseline-authoring="true"', 1)[1].split(
+        '<div class="permission-boundary-banner">', 1
+    )[0]
+
+    assert '"generate-draft" : "preview"' in baseline_submit
+    assert "/mission-baseline/patches/preview" in baseline_submit
+    assert "/mission-baseline/candidates/from-patch" in baseline_submit
+    assert "conversation_hashes" in baseline_submit
+    assert 'operation: "add_assumption"' in baseline_submit
+    assert 'data-permission-baseline-patch-panel="true"' in baseline_page
+    assert "Preview Scout patch" in baseline_page
+    assert "Save patch as new version" in baseline_page
+    assert "review_ready === true" in baseline_page
+    assert "free text cannot silently clear them" in baseline_page
+
+
+def test_offline_emergency_review_uses_encrypted_local_intents_before_sync() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    storage = html.split('const EMERGENCY_OFFLINE_DB =', 1)[1].split(
+        "function stopConnectedPreparationPolling", 1
+    )[0]
+    submit = html.split("async function submitEmergencyReviewDecision()", 1)[1].split(
+        "function bindPermissionControls()", 1
+    )[0]
+    field_submit = html.split("async function submitEmergencyFieldAction", 1)[1].split(
+        "async function submitEmergencyReviewDecision", 1
+    )[0]
+
+    assert 'generateKey(\n        {name: "AES-GCM", length: 256}' in storage
+    assert 'false,\n        ["encrypt", "decrypt"]' in storage
+    assert "window.crypto.subtle.encrypt" in storage
+    assert 'database.createObjectStore("offline_intents"' in storage
+    assert "device_local_encrypted: true" in storage
+    assert "/offline-intents/sync" in storage
+    assert "rebuildPermissionTruthAndSyncOfflineIntents" in storage
+    assert 'navigator.onLine === false' in submit
+    assert "saveEmergencyOfflineIntent(packet, pending)" in submit
+    assert "Offline approval is forbidden" in storage
+    assert "no server receipt" in html
+    assert "saveEmergencyOfflineFieldCompletion" in storage
+    assert 'intent_type: "field_day_end_completion"' in storage
+    assert "saveEmergencyOfflineFieldConflict" in storage
+    assert 'intent_type: "field_conflict"' in storage
+    assert "/day-end/offline-intents/sync" in storage
+    assert "/field-conflicts/offline-intents/sync" in storage
+    assert "/movement-groups/offline-intents/sync" in storage
+    assert "uncertainty_acknowledgement: true" in storage
+    assert '["complete_day", "field_conflict"].includes(pending.action)' in field_submit
+    assert "blocked locally by encrypted" in field_submit
+    assert 'displayedState = offlineConflict ? "blocked_pending_sync"' in html
+    assert "server row is unchanged" in html
+    assert 'data-emergency-offline-field-result="true"' in html
+    assert "field receipt recorded; projection refresh pending" in storage
+
+
+def test_permission_lens_switch_renders_after_successful_projection_reload() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    controls = html.split("function bindPermissionControls()", 1)[1].split(
+        'document.querySelectorAll("[data-permission-mobile-view]")', 1
+    )[0]
+
+    assert 'await loadDataScope("permission", {force: true});' in controls
+    assert controls.count('if (state.route === "outdoor-permission") render();') == 2
+
+
+def test_permission_and_emergency_mobile_controls_remain_large_and_complete() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    styles = html.split("<style>", 1)[1].split("</style>", 1)[0]
+
+    assert "@media (max-width: 760px)" in styles
+    assert ".permission-mobile-switcher" in styles
+    assert ".emergency-review-switcher" in styles
+    assert "font-size: 16px;" in styles
+    assert "min-height: 56px;" in styles
+    assert ".emergency-group-toggle button { font-size: 16px; }" in styles
+    assert "font-size: 16px;\n        letter-spacing: 0;" in styles
+    assert "padding-inline: 2px;\n        white-space: nowrap;\n        overflow-wrap: normal;" in styles
+    assert ".emergency-gate-row strong {\n        flex: 0 0 auto;\n        white-space: nowrap;" in styles
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in styles
+    assert ".permission-pane:not(.is-mobile-active)" in styles
+    assert ".emergency-review-pane:not(.is-mobile-active)" in styles
+    assert "overflow-x: hidden;" in styles
+    assert "Continue on desktop" in html
+    assert "stay on the desktop workbench" in html
 
 
 def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
@@ -3474,12 +3736,12 @@ def test_dashboard_joint_review_information_architecture_and_qa_contract() -> No
         "Only an append-only request record is written by this dashboard.",
         "32 canonical layers",
         "completed-track is after-action only",
-        "Permission Class Selector Preview",
-        "No runtime decision",
-        "Product Preview",
+        "Remaining Mission Projection",
+        "Current decision",
+        "Operational workbench",
         "Technical Prototype",
         "Reference",
-        "Static rule set",
+        "Candidate-only",
         "Current Decision Brief",
     ):
         assert copy in html
@@ -3655,7 +3917,7 @@ process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, fai
     assert payload["successReceipt"]["reloadDisabled"] is False
 
 
-def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
+def test_dashboard_diagnostic_page_runs_36_read_only_checks() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     settings_nav = (
@@ -3670,15 +3932,15 @@ def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
     assert diagnostic_nav in html
     assert html.index(diagnostic_nav) > html.index(settings_nav)
     assert '"diagnostic": Object.freeze' in html
-    assert 'diagnostic: ["Diagnostic", "30 read-only Dashboard checks"]' in html
+    assert 'diagnostic: ["Diagnostic", "36 read-only Dashboard checks"]' in html
     assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
 
     case_source = html.split(
         "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
     )[1].split("]);", 1)[0]
-    for index in range(1, 31):
+    for index in range(1, 37):
         assert f'id: "DASH-{index:03d}"' in case_source
-    assert case_source.count('id: "DASH-') == 30
+    assert case_source.count('id: "DASH-') == 36
     assert "postJson(" not in case_source
 
     for marker in (
@@ -3687,15 +3949,30 @@ def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
         "async function diagnosticCheck028()",
         "async function diagnosticCheck029()",
         "async function diagnosticCheck030()",
+        "async function diagnosticCheck031()",
+        "async function diagnosticCheck032()",
+        "async function diagnosticCheck033()",
+        "async function diagnosticCheck034()",
+        "async function diagnosticCheck035()",
+        "async function diagnosticCheck036()",
         "所有 Dashboard 地圖 evidence hover hint",
         "所有 Dashboard 地圖框選縮放與鍵盤平移",
         "所有 Dashboard 地圖圖磚、向量與單圖例外政策",
         "所有 Dashboard 地圖基本 Zoom、Pan 與 Fit",
         "Evidence 是否有計數為 0 的類別",
+        "Contextual Permission 專案範圍與只讀 API",
+        "Contextual Permission Workbench 與行動版檢視",
+        "Immutable Baseline、Forward Projection 與調整政策",
+        "Safety / Emergency 專屬決策與權限邊界",
+        "Contextual Permission Evidence lineage 與隱私邊界",
+        "Candidate Simulation 明確觸發與 no-write contract",
         "DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES",
         "const DASHBOARD_MAP_SURFACES = Object.freeze([",
         "diagnosticMapSurfaceSources",
         "function diagnosticZeroCountEvidenceCategories(",
+        "function diagnosticPermissionProjection(",
+        "function diagnosticPermissionRoot(",
+        "function diagnosticRequireNoAuthority(",
         ".filter(group => Number(group.count) === 0)",
         ".filter(item => Number(item.count) === 0)",
         'group.zeroState || "unexplained zero"',
@@ -3711,6 +3988,7 @@ def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
         "overview-map",
         "lbs-map",
         "permission-map",
+        "emergency-review-map",
         "map",
         "weather-map",
         "navigation-map",
@@ -3718,7 +3996,7 @@ def test_dashboard_diagnostic_page_runs_30_read_only_checks() -> None:
         "pace-fit-map",
     ):
         assert f'id: "{surface_id}"' in surface_source
-    assert surface_source.count("{id:") == 8
+    assert surface_source.count("{id:") == 9
 
     for marker in (
         "function renderDiagnosticPage()",
@@ -3767,6 +4045,9 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "function diagnosticLayerControlIds(",
         "async function diagnosticFetchStatus(",
         "function diagnosticExerciseSharedMapController(",
+        "function diagnosticPermissionProjection(",
+        "function diagnosticPermissionRoot(",
+        "function diagnosticRequireNoAuthority(",
     ):
         assert helper in diagnostic_source
 
@@ -3776,6 +4057,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "/weather-dashboard",
         "/navigation-terrain-intelligence",
         "/connected-preparation",
+        "/contextual-permission-dashboard",
     ):
         assert endpoint in diagnostic_source
 
@@ -3787,6 +4069,24 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
     assert "renderPaceFitPage(force)" in diagnostic_source
     assert 'renderOutdoorPage("outdoor-architecture")' in diagnostic_source
     assert 'renderOutdoorPage("outdoor-navigation")' in diagnostic_source
+
+    for marker in (
+        "async function diagnosticCheck031()",
+        "async function diagnosticCheck032()",
+        "async function diagnosticCheck033()",
+        "async function diagnosticCheck034()",
+        "async function diagnosticCheck035()",
+        "async function diagnosticCheck036()",
+        'artifact_kind === "contextual_permission_dashboard_projection"',
+        'schema_version === "contextualPermissionDashboard.v1"',
+        'data-contextual-permission-workbench="ready"',
+        'requiredPolicy of ["auto_reduce", "protected_floor", "review_only"]',
+        'permission_page_can_decide === false',
+        'cause.source_kind !== "human_operation"',
+        "Inputs changed · not evaluated.",
+        "Current Decision not replaced",
+    ):
+        assert marker in diagnostic_source
 
     check_010 = diagnostic_source.split(
         "async function diagnosticCheck010()", 1
@@ -3802,8 +4102,19 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
     assert "Function.prototype.toString.call(renderPaceFitPage)" not in check_020
     assert "() => renderPaceFitPage(force)" in check_020
 
-    for case_id in ("DASH-009", "DASH-018", "DASH-019", "DASH-030"):
+    for case_id in (
+        "DASH-009",
+        "DASH-018",
+        "DASH-019",
+        "DASH-030",
+        "DASH-032",
+        "DASH-033",
+        "DASH-035",
+    ):
         assert f'"{case_id}"' in browser_smoke
+    assert "const expectedDiagnosticCount = 36" in browser_smoke
+    assert '"emergency-review-map"' in browser_smoke
+    assert 'includes("9 Dashboard maps")' in browser_smoke
     assert "dataDependentDiagnosticIds" in browser_smoke
     assert "implementation check failed" in browser_smoke
     assert r"\bis not defined\b|ReferenceError|TypeError:" in browser_smoke
@@ -3849,11 +4160,24 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
         "source_to_golden_scale",
         'data-route-fingerprint="partial"',
         "function architecturePassageTimingNodes",
+        "function architecturePassageNodeById",
+        "function architectureBinForDistance",
+        "function architectureStructureNodes",
+        "function architectureStructureNodeMarker",
         "function architecturePassageDurationLabel",
-        "CP/MCP PASSAGE · 500M WINDOW",
+        "MCP / DIFFICULTY CP",
+        "SELECTED CP / MCP PASSAGE",
+        "CP = HIGH PRESSURE · MCP = ROUTE DETAIL",
         "MIN / AVG / MODE / MAX",
         'data-architecture-passage-node-id="${escapeHtml(node.node_id)}"',
+        'data-architecture-difficulty-cp-count="${difficultyCpCount}"',
+        'data-architecture-context-mcp-count="${contextMcpCount}"',
+        "Amber diamond · difficulty CP",
+        "Cyan point · MCP",
         "state.architectureSelectedPassageNodeId",
+        'data-architecture-selection-surface="map-evidence"',
+        'data-architecture-selection-surface="fingerprint-structure"',
+        'data-architecture-passage-selected="${isSelected ? "true" : "false"}"',
         "mode_5min",
         "named_places",
         "const sourceRouteDistance = Number(",
@@ -3925,3 +4249,9 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
     )[0]
     assert "const mapContent = mapData.connected ?" in map_renderer
     assert "mapData.connected && bins.length ?" not in map_renderer
+    architecture_binding = html.split("function bindArchitectureControls", 1)[
+        1
+    ].split("function embeddedPretripLayerInput", 1)[0]
+    assert 'state.architectureSelectedPassageNodeId = "";' in architecture_binding
+    assert "architecturePassageNodeById(nodeId)" in architecture_binding
+    assert "architectureBinForDistance(distanceM)" in architecture_binding

@@ -11,6 +11,7 @@
   "checkpoint_events_ref": "outputs/checkpoint_events.json",
   "compiled_mission_graph_candidate_ref": "outputs/compiled_mission_graph.candidate.json",
   "compiled_mission_graph_reviewed_ref": "outputs/compiled_mission_graph.reviewed.json",
+  "contextual_permission_rules_ref": "candidates/contextual_permission_rules.json",
   "contour_interpretation_candidate_count": 2,
   "contour_interpretation_candidates_ref": "outputs/contour_interpretation_candidates.json",
   "debug_projection_events_ref": "outputs/debug_projection_events.jsonl",

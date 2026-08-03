@@ -113,6 +113,16 @@ def collect_pretrip_contextual_permission(
     )
     counts = _counts(rules)
     boundary = _closed_boundary(workspace_file_mutation_allowed=not dry_run)
+    reviewed_baseline_ref = project.get("reviewed_mission_baseline_ref")
+    reviewed_baseline_sha256 = project.get("reviewed_mission_baseline_sha256")
+    baseline_binding_state = (
+        "bound"
+        if isinstance(reviewed_baseline_ref, str)
+        and reviewed_baseline_ref
+        and isinstance(reviewed_baseline_sha256, str)
+        and len(reviewed_baseline_sha256) == 64
+        else "missing_reviewed_baseline"
+    )
 
     model_payload = _model_payload(
         project_id=project_id,
@@ -131,6 +141,12 @@ def collect_pretrip_contextual_permission(
         "probe_context": probe_context,
         "counts": counts,
         "rules": rules,
+        "reviewed_baseline_ref": reviewed_baseline_ref,
+        "reviewed_baseline_sha256": reviewed_baseline_sha256,
+        "reviewed_baseline_binding_state": baseline_binding_state,
+        "reviewed_by_human": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
         "human_review_required": True,
         "standard_alignment": SEC8_ALIGNMENT,
         "boundary": boundary,
