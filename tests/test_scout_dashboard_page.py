@@ -1511,7 +1511,8 @@ def test_dashboard_spatial_maps_share_the_canonical_map_navigation_contract() ->
     assert 'data-map-wheel-zoom="${wheelZoomEnabled ? "true" : "false"}"' in html
     assert "data-dashboard-map-stage" in html
     assert "data-dashboard-map-selection" in html
-    assert "drag down-right to zoom in; drag up-left to zoom out" in html
+    assert "Click or drag in any direction to zoom in" in html
+    assert "drag up-left to zoom out" not in html
 
 
 def test_embedded_map_surfaces_support_mouse_pan_and_matching_keyboard_tools() -> None:
@@ -1948,7 +1949,8 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "navigationSelectedTerrainEventId",
         "navigationTerrainLens",
         "navigationTerrainSourceMode",
-        "navigationTerrainData",
+            "navigationTerrainData",
+            "terrain_validation",
         "loadNavigationTerrainData",
         "function renderNavigationWorkspaceMap(",
         "function renderNavigationFeatureExtraction(",
@@ -1958,6 +1960,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "function renderNavigationEvidenceGaps(",
         "function renderNavigationEvidenceWorkbench(",
         "function navigationTerrainHierarchyPath(",
+        "function navigationTerrainUncertaintyBandStrokeWidth(",
         "function renderNavigationTerrainEventTimeline(",
         "function renderNavigationTerrainEventDetail(",
         'data-navigation-workspace-map="true"',
@@ -1965,8 +1968,10 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         'data-navigation-structure-kind="',
         'data-navigation-route-path="true"',
         'data-navigation-terrain-edge-kind="',
+        'data-navigation-terrain-band="true"',
         'data-navigation-terrain-event-id="',
-        'data-navigation-terrain-event-timeline="true"',
+            'data-navigation-terrain-event-timeline="true"',
+            'data-navigation-terrain-validation="',
         'data-navigation-source-ledger="true"',
         'data-navigation-ordered-clues="true"',
         'data-navigation-route-topology="true"',
@@ -1974,10 +1979,9 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         'data-navigation-evidence-gaps="true"',
         "Workspace DEM + candidate morphology",
         "Prepared DTM + GPX source ledger",
-        "主稜／支稜",
-        "看到什麼",
-        "走錯徵兆",
-        "回復檢查",
+        "候選支持區",
+        "Shadow 事件假說",
+        "僅供離線複核",
         "/navigation-terrain-intelligence",
         "Workspace terrain projection is preparing.",
         "scheduleNavigationTerrainPolling",
@@ -1987,12 +1991,39 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     ):
         assert marker in html
 
+    assert "走錯徵兆" not in navigation
+    assert "回復檢查" not in navigation
+    assert "formatDistanceKm(event.route_distance_m)" not in navigation
+    assert "navigation-terrain-hierarchy-edge" not in navigation
+    assert "navigation-terrain-hierarchy-band" in html
+    assert "--navigation-route: #d1005d;" in html
+    assert "--navigation-ridge: #ef5b0c;" in html
+    assert "--navigation-drainage: #006eb8;" in html
+    assert "--navigation-event: #d72f20;" in html
+    assert "navigation-workspace-route-halo" in html
+    assert 'data-dashboard-map-screen-stroke="7"' in html
+    assert 'data-dashboard-map-screen-stroke="4.5"' in html
+    assert 'data-navigation-structure-label-visibility="selected-only"' in html
+    assert 'point.id === selectedStructurePoint?.id ? "8" : "4"' in html
+    assert 'data-navigation-terrain-event-label-visibility="selected-only"' in html
+    assert 'event.id === selectedEvent?.id ? "8" : "4"' in html
+    assert "overflow-wrap: anywhere;" in html
+    assert 'class="navigation-live-metrics is-boundary"' in html
+
+    for legend_label in (
+        "洋紅路線",
+        "橘色稜脊",
+        "深藍谷地",
+        "紅色事件點",
+    ):
+        assert legend_label in navigation
+
     for lens, label in (
         ("structure", "地形結構"),
         ("pressure", "坡度壓力"),
         ("risk", "風險地形"),
         ("retreat", "撤退方向"),
-        ("events", "路線事件"),
+        ("events", "Shadow 事件"),
     ):
         assert f'["{lens}", "{label}"]' in navigation
 
@@ -2111,7 +2142,8 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     assert "wheelZoom: false" in navigation_map
     assert "wheelZoom: false" in navigation_training_map
     assert 'data-map-control="box-zoom"' in html
-    assert "drag down-right to zoom in; drag up-left to zoom out" in html
+    assert "Click or drag in any direction to zoom in" in html
+    assert "drag up-left to zoom out" not in html
     assert (
         'const mouseZoomEnabled = viewport.dataset.mapMouseZoom !== "false";'
         in map_controller
@@ -2152,13 +2184,17 @@ def test_navigation_architecture_permission_zoom_keep_evidence_screen_sized() ->
     )[1].split("function bindDashboardMapViewports", 1)[0]
 
     assert "function updateDashboardMapScreenSymbols(" in html
+    assert "function dashboardMapScreenSymbolTransform(" in html
     assert "updateDashboardMapScreenSymbols(viewport, viewState)" in map_controller
+    assert "refresh: () => apply()," in map_controller
+    assert "focusElements," in map_controller
     assert 'querySelectorAll("[data-dashboard-map-screen-stroke]")' in html
     assert "line.style.strokeWidth" in html
     for renderer in (navigation_map, architecture_map, permission_map):
         assert 'data-dashboard-map-screen-symbol="true"' in renderer
         assert "data-dashboard-map-screen-stroke=" in renderer
         assert 'vector-effect="non-scaling-stroke"' in renderer
+    assert 'dashboardMapScreenSymbolTransform("architecture-map"' in architecture_map
 
 
 def test_dashboard_map_zoom_ceiling_uses_rudy_native_max_matrix() -> None:
@@ -2175,7 +2211,7 @@ def test_dashboard_map_zoom_ceiling_uses_rudy_native_max_matrix() -> None:
     assert "Math.min(12" not in map_controller
 
 
-def test_dashboard_rectangle_zoom_is_bounded_one_shot_and_clears_selection() -> None:
+def test_dashboard_rectangle_zoom_is_monotonic_persistent_and_clears_selection() -> None:
     html = PAGE.read_text(encoding="utf-8")
     map_controller = html.split(
         "function createDashboardMapViewportController", 1
@@ -2186,6 +2222,9 @@ def test_dashboard_rectangle_zoom_is_bounded_one_shot_and_clears_selection() -> 
     box_zoom = map_controller.split(
         "const finishBoxZoom =", 1
     )[1].split("const onPointerDown =", 1)[0]
+    reset = map_controller.split(
+        "const reset =", 1
+    )[1].split("const setMode =", 1)[0]
 
     assert "const DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX = 48;" in html
     assert "const DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR = 4;" in html
@@ -2196,11 +2235,16 @@ def test_dashboard_rectangle_zoom_is_bounded_one_shot_and_clears_selection() -> 
     assert "boxWidth < DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX" in box_zoom
     assert "boxHeight < DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX" in box_zoom
     assert "Math.min(DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR" in box_zoom
-    assert 'viewState = {...viewState, mode: "pan"};' in box_zoom
+    assert 'viewState = {...viewState, mode: "pan"};' not in box_zoom
+    assert "pointer.lastX < pointer.startX" not in box_zoom
+    assert "zoomAt(1 / factor" not in box_zoom
+    assert 'mode: "pan"' not in reset
     assert 'viewport.dataset.mapLastGesture = "rectangle-zoom-in";' in box_zoom
     assert "zoomToBox:" in map_controller
     assert "controller.zoomToBox(" in map_diagnostic
     assert "boundedBoxZoomFactor" in map_diagnostic
+    assert "reverseDirectionZoomIn" in map_diagnostic
+    assert "boxZoomPersists" in map_diagnostic
 
 
 def test_map_navigation_weather_disable_wheel_zoom_but_keep_box_zoom() -> None:
@@ -2690,6 +2734,12 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "state.permissionProjection = projection;" in permission_loader
     assert "state.permissionReviewSession = await fetchJson" in permission_loader
     assert 'projection.status === "blocked"' in permission_page
+    assert "renderPermissionBaselineAuthoring()" in permission_page
+    assert "Rebuild from reviewed baseline" in permission_page
+    assert "Rebuild after new proposal" in permission_page
+    assert "data-permission-projection-rebuild" in html
+    assert "contextual-permission-dashboard/rebuilds" in html
+    assert "rules remain review_only" in html
     assert 'data-contextual-permission-workbench="${isDegraded ? "degraded" : "ready"}"' in permission_page
     assert "Permission bootstrap needs itinerary review" in permission_page
     assert "if (projection.status !== \"ready\")" not in permission_page
@@ -2698,7 +2748,15 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "Event & Evidence Ledger" in permission_page
     assert "Day, Movement Groups & Communication" in permission_page
     assert "Safety / Emergency" in permission_page
-    assert "Baseline Authoring Workbench" in permission_page
+    assert "Baseline Authoring Workbench" in html
+    assert "Scout auto proposal" in html
+    assert "Quick review" in html
+    assert "Mobile quick flow" in permission_page
+    assert "Pending Safety / Emergency" in html
+    assert "reviewed_day_ids" in html
+    assert "acknowledged_uncertainty_ids" in html
+    assert "safety_handoff_acknowledged" in html
+    assert "Typed evidence payload" in html
     assert "Run candidate simulation" in permission_page
     assert "candidate_only=true" in permission_page
     assert 'data-emergency-decision=' not in permission_page
@@ -2882,8 +2940,9 @@ def test_permission_and_emergency_mobile_controls_remain_large_and_complete() ->
     assert ".permission-pane:not(.is-mobile-active)" in styles
     assert ".emergency-review-pane:not(.is-mobile-active)" in styles
     assert "overflow-x: hidden;" in styles
-    assert "Continue on desktop" in html
-    assert "stay on the desktop workbench" in html
+    assert "Mobile quick flow" in html
+    assert 'class="permission-card" data-permission-baseline-authoring="true"' in html
+    assert "complete at most three checks, then accept" in html
 
 
 def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
@@ -4255,3 +4314,11 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
     assert 'state.architectureSelectedPassageNodeId = "";' in architecture_binding
     assert "architecturePassageNodeById(nodeId)" in architecture_binding
     assert "architectureBinForDistance(distanceM)" in architecture_binding
+    assert "const nodeTarget = selectedNodeId" in architecture_binding
+    assert "const binTarget = selectedBinId" in architecture_binding
+    assert "const target = nodeTarget || binTarget;" in architecture_binding
+    assert "const centerArchitectureMapSelection" in architecture_binding
+    assert "controller.focusElements(targets" in architecture_binding
+    assert 'centerMap: focusSurface.startsWith("fingerprint")' in architecture_binding
+    assert "routeDistanceM: target.dataset.architectureRouteDistanceM" in architecture_binding
+    assert 'data-architecture-route-distance-m="${' in html
