@@ -6226,6 +6226,15 @@
       --terrain-lime: #b7cf63;
       --terrain-amber: #f0ae3b;
       --terrain-coral: #ff6b4a;
+      --navigation-route: #d1005d;
+      --navigation-route-halo: rgba(5, 13, 10, .92);
+      --navigation-ridge: #ef5b0c;
+      --navigation-spur: #ff8a1f;
+      --navigation-watershed: #d63a21;
+      --navigation-drainage: #006eb8;
+      --navigation-tributary: #008f9c;
+      --navigation-event: #d72f20;
+      --navigation-symbol-outline: #07110e;
       display: grid;
       gap: 14px;
     }
@@ -6509,7 +6518,7 @@
 
     .navigation-terrain-legend {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 1px;
       border-top: 1px solid var(--terrain-rule);
       background: var(--terrain-rule);
@@ -6523,7 +6532,42 @@
       line-height: 1.4;
     }
 
-    .navigation-terrain-legend strong { color: #e7eadb; }
+    .navigation-terrain-legend strong {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #e7eadb;
+    }
+
+    .navigation-terrain-legend [data-navigation-legend-kind] strong::before {
+      content: "";
+      display: inline-block;
+      flex: 0 0 auto;
+      width: 18px;
+      height: 4px;
+      border-radius: 1px;
+      background: #87948d;
+      box-shadow: 0 0 0 1px rgba(3, 10, 7, .86);
+    }
+
+    .navigation-terrain-legend [data-navigation-legend-kind="route"] strong::before {
+      background: var(--navigation-route);
+    }
+
+    .navigation-terrain-legend [data-navigation-legend-kind="ridge"] strong::before {
+      background: var(--navigation-ridge);
+    }
+
+    .navigation-terrain-legend [data-navigation-legend-kind="drainage"] strong::before {
+      background: var(--navigation-drainage);
+    }
+
+    .navigation-terrain-legend [data-navigation-legend-kind="event"] strong::before {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--navigation-event);
+    }
     .navigation-workspace-map {
       position: relative;
       overflow: hidden;
@@ -6554,14 +6598,24 @@
       opacity: .94;
     }
 
-    .navigation-workspace-route {
+    .navigation-workspace-route,
+    .navigation-workspace-route-halo {
       fill: none;
-      stroke: #f0f2e7;
-      stroke-width: 3;
       stroke-linecap: round;
       stroke-linejoin: round;
-      paint-order: stroke;
-      filter: drop-shadow(0 1px 2px #000);
+      pointer-events: none;
+    }
+
+    .navigation-workspace-route-halo {
+      stroke: var(--navigation-route-halo);
+      stroke-width: 7;
+      opacity: .94;
+    }
+
+    .navigation-workspace-route {
+      stroke: var(--navigation-route);
+      stroke-width: 4.5;
+      filter: drop-shadow(0 0 1px rgba(255, 255, 255, .78));
     }
 
     .navigation-live-point {
@@ -6571,32 +6625,35 @@
     }
 
     .navigation-live-point circle {
-      fill: rgba(8, 17, 14, .92);
-      stroke: var(--terrain-coral);
-      stroke-width: 2.3;
+      fill: var(--navigation-event);
+      stroke: var(--navigation-symbol-outline);
+      stroke-width: 2;
       transition: r .15s ease, stroke-width .15s ease;
     }
 
     .navigation-live-point text {
       fill: #fff5e8;
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 800;
       text-anchor: middle;
       pointer-events: none;
+      paint-order: stroke;
+      stroke: var(--navigation-symbol-outline);
+      stroke-width: 1.5px;
     }
 
     .navigation-live-point[data-navigation-live-selected="true"] circle,
     .navigation-live-point:hover circle,
     .navigation-live-point:focus circle {
-      r: 10px;
-      stroke-width: 4;
-      filter: drop-shadow(0 0 7px var(--terrain-coral));
+      r: 11px;
+      stroke-width: 3;
+      filter: drop-shadow(0 0 5px rgba(7, 17, 14, .9));
     }
 
     .navigation-route-pressure-dot {
-      stroke: rgba(8, 17, 14, .8);
-      stroke-width: 1;
-      opacity: .8;
+      stroke: var(--navigation-symbol-outline);
+      stroke-width: 1.5;
+      opacity: .92;
     }
 
     .navigation-structure-point {
@@ -6605,58 +6662,76 @@
     }
 
     .navigation-structure-point circle {
-      fill: rgba(8, 17, 14, .88);
-      stroke: var(--structure-color);
-      stroke-width: 2;
-      transition: r .15s ease, stroke-width .15s ease;
+      fill: var(--structure-color);
+      stroke: var(--navigation-symbol-outline);
+      stroke-width: 1.8;
+      opacity: .86;
+      transition: r .15s ease, stroke-width .15s ease, opacity .15s ease;
     }
 
     .navigation-structure-point text {
       fill: #f5f7ed;
-      font-size: 8px;
+      font-size: 9px;
       font-weight: 850;
       text-anchor: middle;
       pointer-events: none;
+      opacity: 0;
+      paint-order: stroke;
+      stroke: var(--navigation-symbol-outline);
+      stroke-width: 1.5px;
     }
 
     .navigation-structure-point[data-navigation-structure-selected="true"] circle,
     .navigation-structure-point:hover circle,
     .navigation-structure-point:focus circle {
       r: 8px;
-      stroke-width: 4;
-      filter: drop-shadow(0 0 7px var(--structure-color));
+      stroke-width: 3;
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(7, 17, 14, .9));
     }
 
-    .navigation-terrain-hierarchy-edge {
+    .navigation-structure-point[data-navigation-structure-selected="true"] text,
+    .navigation-structure-point:hover text,
+    .navigation-structure-point:focus text {
+      opacity: 1;
+    }
+
+    .navigation-terrain-hierarchy-band {
       fill: none;
-      stroke: var(--terrain-edge-color);
-      stroke-width: 2;
+      stroke: var(--terrain-band-color);
       stroke-linecap: round;
       stroke-linejoin: round;
-      vector-effect: non-scaling-stroke;
-      opacity: .82;
+      stroke-dasharray: 8 4;
+      opacity: .48;
       pointer-events: none;
     }
 
-    .navigation-terrain-hierarchy-edge[data-navigation-terrain-edge-kind="main_ridge_candidate"] {
-      stroke-width: 3.6;
-      filter: drop-shadow(0 0 2px rgba(183, 207, 99, .5));
+    .navigation-terrain-hierarchy-band[data-navigation-terrain-edge-kind="main_ridge_candidate"] {
+      stroke: var(--navigation-ridge);
+      opacity: .56;
     }
 
-    .navigation-terrain-hierarchy-edge[data-navigation-terrain-edge-kind="spur_ridge_candidate"] {
-      stroke-width: 1.8;
-      opacity: .72;
+    .navigation-terrain-hierarchy-band[data-navigation-terrain-edge-kind="spur_ridge_candidate"] {
+      stroke: var(--navigation-spur);
+      opacity: .48;
     }
 
-    .navigation-terrain-hierarchy-edge[data-navigation-terrain-edge-kind="drainage_trunk"] {
-      stroke-width: 3.1;
-      stroke-dasharray: 8 4;
+    .navigation-terrain-hierarchy-band[data-navigation-terrain-edge-kind="watershed_boundary"] {
+      stroke: var(--navigation-watershed);
+      stroke-dasharray: 4 4;
+      opacity: .54;
     }
 
-    .navigation-terrain-hierarchy-edge[data-navigation-terrain-edge-kind="tributary"] {
-      stroke-width: 1.6;
-      stroke-dasharray: 5 5;
-      opacity: .72;
+    .navigation-terrain-hierarchy-band[data-navigation-terrain-edge-kind="drainage_trunk"] {
+      stroke: var(--navigation-drainage);
+      stroke-dasharray: 10 4;
+      opacity: .58;
+    }
+
+    .navigation-terrain-hierarchy-band[data-navigation-terrain-edge-kind="tributary"] {
+      stroke: var(--navigation-tributary);
+      stroke-dasharray: 5 4;
+      opacity: .46;
     }
 
     .navigation-terrain-event {
@@ -6665,10 +6740,11 @@
     }
 
     .navigation-terrain-event circle {
-      fill: rgba(8, 17, 14, .82);
-      stroke: #ff6b4a;
-      stroke-width: 2.5;
-      transition: r .15s ease, stroke-width .15s ease;
+      fill: var(--navigation-event);
+      stroke: var(--navigation-symbol-outline);
+      stroke-width: 1.8;
+      opacity: .86;
+      transition: r .15s ease, stroke-width .15s ease, opacity .15s ease;
     }
 
     .navigation-terrain-event text {
@@ -6677,14 +6753,25 @@
       font-weight: 850;
       text-anchor: middle;
       pointer-events: none;
+      opacity: 0;
+      paint-order: stroke;
+      stroke: var(--navigation-symbol-outline);
+      stroke-width: 1.5px;
     }
 
     .navigation-terrain-event[data-navigation-terrain-event-selected="true"] circle,
     .navigation-terrain-event:hover circle,
     .navigation-terrain-event:focus circle {
-      r: 9px;
-      stroke-width: 4;
-      filter: drop-shadow(0 0 8px rgba(255, 107, 74, .84));
+      r: 8px;
+      stroke-width: 3;
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(7, 17, 14, .9));
+    }
+
+    .navigation-terrain-event[data-navigation-terrain-event-selected="true"] text,
+    .navigation-terrain-event:hover text,
+    .navigation-terrain-event:focus text {
+      opacity: 1;
     }
 
     .navigation-workspace-map-status {
@@ -6963,6 +7050,7 @@
     }
 
     .navigation-live-metric {
+      min-width: 0;
       padding: 11px;
       background: #0d1713;
     }
@@ -6979,6 +7067,27 @@
       margin-top: 4px;
       color: #e8eadf;
       font-size: 16px;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .navigation-live-metrics.is-boundary {
+      grid-template-columns: 1fr;
+    }
+
+    .navigation-live-metrics.is-boundary .navigation-live-metric {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 11px;
+    }
+
+    .navigation-live-metrics.is-boundary .navigation-live-metric strong {
+      margin-top: 0;
+      font-size: 13px;
+      text-align: right;
     }
 
     .navigation-terrain-side { display: grid; gap: 14px; }
@@ -7733,6 +7842,158 @@
       font: 10px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
+    .permission-proposal-shell {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .permission-proposal-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--permission-line);
+      background: rgba(10, 24, 18, .78);
+    }
+
+    .permission-proposal-stat {
+      min-width: 0;
+      padding: 9px 10px;
+      border-right: 1px solid var(--permission-line);
+      border-bottom: 1px solid var(--permission-line);
+    }
+
+    .permission-proposal-stat:nth-child(3n) { border-right: 0; }
+    .permission-proposal-stat span,
+    .permission-day-label {
+      display: block;
+      color: #81968a;
+      font: 8px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .permission-proposal-stat strong {
+      display: block;
+      margin-top: 3px;
+      color: #edf0e4;
+      font: 600 13px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .permission-authority-note {
+      padding: 10px 11px;
+      border-left: 3px solid #9fbb55;
+      background: rgba(159, 187, 85, .08);
+      color: #d5ddc4;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .permission-day-stack { display: grid; gap: 8px; }
+
+    .permission-day-card {
+      display: grid;
+      gap: 9px;
+      min-width: 0;
+      padding: 11px;
+      border: 1px solid var(--permission-line);
+      background: #09130f;
+    }
+
+    .permission-day-card-head,
+    .permission-day-route,
+    .permission-day-meta {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .permission-day-card h4 {
+      margin: 2px 0 0;
+      color: #f0f0e8;
+      font: 600 17px/1.2 Georgia, serif;
+    }
+
+    .permission-day-route > div { min-width: 0; flex: 1; }
+
+    .permission-day-route strong,
+    .permission-day-timing strong {
+      display: block;
+      margin-top: 3px;
+      color: #e7ece4;
+      font-size: 13px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .permission-day-route code,
+    .permission-day-meta,
+    .permission-day-evidence {
+      color: #879b90;
+      font: 9px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .permission-day-timing {
+      padding: 9px 10px;
+      border: 1px solid rgba(233, 234, 220, .13);
+      background: rgba(4, 10, 8, .48);
+    }
+
+    .permission-day-timing.is-partial { border-color: rgba(220, 174, 86, .4); }
+    .permission-day-timing.is-unknown { border-color: rgba(239, 106, 103, .38); }
+
+    .permission-day-timing p,
+    .permission-review-control small,
+    .permission-typed-payload summary { margin: 4px 0 0; color: #9daea4; font-size: 10px; line-height: 1.5; }
+
+    .permission-safety-handoff {
+      padding: 9px 10px;
+      border: 1px dashed rgba(220, 174, 86, .45);
+      color: #d8c18f;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .permission-review-panel {
+      display: grid;
+      gap: 9px;
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid rgba(159, 187, 85, .36);
+      background: #0a1510;
+    }
+
+    .permission-review-panel h4 { margin: 0; color: #eef0e5; font: 600 17px/1.2 Georgia, serif; }
+
+    .permission-review-control {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      min-height: 48px;
+      padding: 9px;
+      border: 1px solid rgba(233, 234, 220, .13);
+      color: #dce5dc;
+      font-size: 12px;
+      line-height: 1.45;
+      cursor: pointer;
+    }
+
+    .permission-review-control input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: #9fbb55; }
+    .permission-review-control.is-disabled { opacity: .5; cursor: not-allowed; }
+
+    .permission-typed-payload {
+      min-width: 0;
+      border-top: 1px solid rgba(233, 234, 220, .12);
+      padding-top: 8px;
+    }
+
+    .permission-typed-payload summary { cursor: pointer; color: #b8c6be; }
+    .permission-typed-payload pre { margin-top: 8px; max-width: 100%; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+
     .permission-simulation-form {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -8119,6 +8380,17 @@
         overflow-x: hidden;
         font-size: 16px;
       }
+
+      .permission-proposal-summary { grid-template-columns: 1fr 1fr; }
+      .permission-proposal-stat:nth-child(3n) { border-right: 1px solid var(--permission-line); }
+      .permission-proposal-stat:nth-child(2n) { border-right: 0; }
+      .permission-day-card-head,
+      .permission-day-route,
+      .permission-day-meta { display: grid; grid-template-columns: 1fr; }
+      .permission-review-control { min-height: 52px; font-size: 16px; }
+      .permission-authority-note,
+      .permission-day-timing p,
+      .permission-safety-handoff { font-size: 16px; }
 
       .permission-context-bar,
       .emergency-review-overview {
@@ -9053,6 +9325,12 @@
       permissionBaselinePatchText: "",
       permissionBaselinePatchPreview: null,
       permissionBaselinePendingAction: null,
+      permissionBaselineReviewChecks: {
+        candidateSha256: "",
+        dayEnds: false,
+        timingUncertainty: false,
+        safetyHandoff: false,
+      },
       permissionBaselineBusy: false,
       permissionBaselineStatus: "",
       emergencyReviewView: "decision",
@@ -13989,7 +14267,7 @@
           afterSmallBoxZoom.zoom <= beforeSmallBoxZoom.zoom * 1.251,
           "A tiny rectangle caused an extreme map zoom.",
         );
-        diagnosticRequire(afterSmallBoxZoom.mode === "pan", "Tiny rectangle zoom did not restore pan mode.");
+        diagnosticRequire(afterSmallBoxZoom.mode === "box", "Tiny rectangle zoom unexpectedly left box mode.");
         diagnosticRequire(
           selectionOverlay.hidden === true
           && !selectionOverlay.style.left
@@ -14015,13 +14293,25 @@
           boundedBoxZoomFactor <= DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR + .001,
           "Rectangle zoom exceeded the per-selection zoom ceiling.",
         );
-        diagnosticRequire(afterBoundedBoxZoom.mode === "pan", "Rectangle zoom did not restore pan mode.");
+        diagnosticRequire(afterBoundedBoxZoom.mode === "box", "Rectangle zoom unexpectedly left box mode.");
         diagnosticRequire(
           viewport.dataset.mapLastGesture === "rectangle-zoom-in",
           "Rectangle zoom completion evidence was not recorded.",
         );
 
-        controller.setMode("box");
+        const beforeReverseBoxZoom = controller.getState();
+        controller.zoomToBox({
+          startX: 360,
+          startY: 260,
+          lastX: 160,
+          lastY: 100,
+          moved: true,
+        });
+        const afterReverseBoxZoom = controller.getState();
+        const reverseDirectionZoomIn = afterReverseBoxZoom.zoom > beforeReverseBoxZoom.zoom;
+        diagnosticRequire(reverseDirectionZoomIn, "Reverse-direction rectangle did not zoom in.");
+        diagnosticRequire(afterReverseBoxZoom.mode === "box", "Repeated rectangle zoom did not retain box mode.");
+
         viewport.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
         diagnosticRequire(
           viewport.querySelector("[data-dashboard-map-selection]")?.hidden === true,
@@ -14040,7 +14330,8 @@
           controls: Array.from(viewport.querySelectorAll("[data-map-control]"))
             .map(control => control.dataset.mapControl),
           boundedBoxZoomFactor,
-          boxZoomRestoredPan: afterBoundedBoxZoom.mode === "pan",
+          reverseDirectionZoomIn,
+          boxZoomPersists: afterReverseBoxZoom.mode === "box",
           boxZoomSelectionCleared: selectionOverlay.hidden
             && !selectionOverlay.style.left
             && !selectionOverlay.style.top
@@ -14191,13 +14482,14 @@
       diagnosticRequire(exercised.controls.length === 5, `Expected five map controls; found ${exercised.controls.length}.`);
       diagnosticRequire(
         exercised.boundedBoxZoomFactor <= DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR + .001,
-        "Rectangle zoom exceeded the one-shot zoom ceiling.",
+        "Rectangle zoom exceeded the per-selection zoom ceiling.",
       );
-      diagnosticRequire(exercised.boxZoomRestoredPan, "Rectangle zoom did not restore pan mode.");
+      diagnosticRequire(exercised.reverseDirectionZoomIn, "Reverse-direction rectangle did not zoom in.");
+      diagnosticRequire(exercised.boxZoomPersists, "Rectangle zoom did not remain active for repeated selection.");
       diagnosticRequire(exercised.boxZoomSelectionCleared, "Rectangle zoom left its selection overlay visible.");
       diagnosticRequire(exercised.keyboardPanChanged, "Keyboard pan did not change the live diagnostic viewport.");
       diagnosticRequire(exercised.wheelZoomDisabled, "Wheel zoom was not disabled in the live diagnostic viewport.");
-      return "Pan · one-shot bounded Box · Zoom · Fit · keyboard behavior exercised in live DOM";
+      return "Pan · persistent monotonic Box · Zoom · Fit · keyboard behavior exercised in live DOM";
     }
 
     async function diagnosticCheck006() {
@@ -15290,20 +15582,251 @@
       `;
     }
 
+    function permissionBaselineReviewRequirements(draft = state.permissionBaselineDraft) {
+      const requirements = draft?.review_requirements || {};
+      return {
+        dayIds: asArray(requirements.required_reviewed_day_ids),
+        uncertaintyIds: asArray(requirements.required_acknowledgment_uncertainty_ids),
+        handoffIds: asArray(requirements.pending_safety_handoff_item_ids),
+        handoffRequired: requirements.safety_handoff_required === true,
+      };
+    }
+
+    function resetPermissionBaselineReviewChecks(candidateSha256 = "") {
+      state.permissionBaselineReviewChecks = {
+        candidateSha256,
+        dayEnds: false,
+        timingUncertainty: false,
+        safetyHandoff: false,
+      };
+    }
+
+    function permissionBaselineReviewComplete() {
+      const draft = state.permissionBaselineDraft;
+      const saved = state.permissionBaselineSavedCandidate;
+      if (!draft || draft.proposal_profile !== "ref_gpx_proposal_v1" || !saved?.version_sha256) return false;
+      const requirements = permissionBaselineReviewRequirements(draft);
+      const checks = state.permissionBaselineReviewChecks || {};
+      if (checks.candidateSha256 !== saved.version_sha256) return false;
+      return checks.dayEnds === true
+        && (!requirements.uncertaintyIds.length || checks.timingUncertainty === true)
+        && (!requirements.handoffRequired || checks.safetyHandoff === true);
+    }
+
+    function permissionFormatMinutes(value) {
+      if (!Number.isFinite(Number(value))) return "—";
+      const minutes = Math.max(0, Math.round(Number(value)));
+      const hours = Math.floor(minutes / 60);
+      const remainder = minutes % 60;
+      return hours ? `${hours} h ${remainder} m` : `${remainder} min`;
+    }
+
+    function renderPermissionEta(day) {
+      const eta = day?.eta_proposal || {};
+      const segmentCount = asArray(day?.segment_ids).length;
+      const unsupported = asArray(eta.unsupported_segment_ids);
+      if (eta.state === "complete_derived") {
+        const p50 = Number.isFinite(Number(eta.segment_p50_sum_minutes))
+          ? `<span>Segment p50 sum</span><strong>${permissionFormatMinutes(eta.segment_p50_sum_minutes)}</strong>`
+          : "";
+        return `
+          <div class="permission-day-timing">
+            <span class="permission-day-label">Complete timing coverage</span>
+            ${p50}
+            <span>Segment p75 sum</span><strong>${permissionFormatMinutes(eta.segment_p75_sum_minutes)}</strong>
+            <p>All ${segmentCount} day segments have usable p75 evidence. These are sums of segment-level quantiles, not an observed whole-day historical p75.</p>
+          </div>
+        `;
+      }
+      if (eta.state === "partial_derived") {
+        const p50 = Number.isFinite(Number(eta.supported_segment_p50_sum_minutes))
+          ? `<span>Supported-segment p50 subtotal</span><strong>${permissionFormatMinutes(eta.supported_segment_p50_sum_minutes)}</strong>`
+          : "";
+        return `
+          <div class="permission-day-timing is-partial">
+            <span class="permission-day-label">Partial timing coverage</span>
+            ${p50}
+            <span>Supported-segment p75 subtotal</span><strong>${permissionFormatMinutes(eta.supported_segment_p75_sum_minutes)}</strong>
+            <p>Covers ${asArray(eta.supporting_segment_ids).length} of ${segmentCount} day segments. ${unsupported.length} segment${unsupported.length === 1 ? " has" : "s have"} no usable p75. This subtotal is not a whole-day ETA, and no missing duration was inferred.</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="permission-day-timing is-unknown">
+          <span class="permission-day-label">Whole-day ETA unknown</span>
+          <strong>No numeric duration</strong>
+          <p>No usable p75 is available for this day’s ${unsupported.length || segmentCount} timing segment${(unsupported.length || segmentCount) === 1 ? "" : "s"}. No duration was inferred.</p>
+        </div>
+      `;
+    }
+
+    function renderPermissionBaselineProposal(draft) {
+      if (!draft) {
+        return `
+          <div class="permission-proposal-shell">
+            <span class="permission-day-label">Scout auto proposal</span>
+            <h4>No Ref. GPX proposal yet</h4>
+            <p>Select Generate from Ref. GPX to produce an evidence-bound day proposal. Imported route_days metadata remains source metadata; it is not a reviewed mission-day plan.</p>
+          </div>
+        `;
+      }
+      if (draft.proposal_profile !== "ref_gpx_proposal_v1") {
+        return `
+          <div class="permission-proposal-shell">
+            <span class="permission-day-label">Typed baseline candidate</span>
+            <h4>${escapeHtml(draft.source_mode === "human_text" ? "Human-designed itinerary draft" : "Sparse reference draft")}</h4>
+            <p>${asArray(draft.days).length} mission day row${asArray(draft.days).length === 1 ? "" : "s"} · ${asArray(draft.unresolved_gaps).length} unresolved blocker${asArray(draft.unresolved_gaps).length === 1 ? "" : "s"}.</p>
+            <details class="permission-typed-payload"><summary>Typed evidence payload</summary><pre>${escapeHtml(JSON.stringify(draft, null, 2))}</pre></details>
+          </div>
+        `;
+      }
+      const summary = draft.proposal_summary || {};
+      const requirements = permissionBaselineReviewRequirements(draft);
+      const trailDays = asArray(draft.days).filter(day => day?.day_kind === "on_trail");
+      const routeDaysMetadata = summary.source_route_days_metadata;
+      const dayCards = trailDays.map(day => {
+        const start = day.start_anchor || {};
+        const proposal = day.primary_day_end_proposal || {};
+        const target = proposal.target || {};
+        const artifact = target.artifact || {};
+        const handoffCount = asArray(day.retreat_candidates).length + asArray(day.emergency_bivy_candidates).length;
+        const eta = day.eta_proposal || {};
+        return `
+          <article class="permission-day-card" data-permission-proposal-day="${escapeHtml(day.mission_day_id || "")}">
+            <div class="permission-day-card-head">
+              <div><span class="permission-day-label">${escapeHtml(day.mission_day_id || "Day")}</span><h4>${escapeHtml(start.display_label || "Route start")} → ${escapeHtml(target.display_label || "Proposed day end")}</h4></div>
+              <span class="chip ${eta.state === "complete_derived" ? "good" : eta.state === "partial_derived" ? "warn" : "bad"}">${escapeHtml(String(eta.state || "unknown").replaceAll("_", " "))}</span>
+            </div>
+            <div class="permission-day-route">
+              <div><span class="permission-day-label">Start anchor</span><strong>${escapeHtml(start.display_label || "Unknown")}</strong><code>${escapeHtml(start.anchor_id || "unbound")}</code></div>
+              <div><span class="permission-day-label">Proposed day end</span><strong>${escapeHtml(target.display_label || "Unknown")}</strong><code>${escapeHtml(proposal.proposal_id || "unbound")} · ${escapeHtml(String(artifact.sha256 || "").slice(0, 12) || "no hash")}</code></div>
+            </div>
+            ${renderPermissionEta(day)}
+            ${handoffCount ? `<div class="permission-safety-handoff"><strong>Safety / Emergency handoff pending</strong><br>${handoffCount} concrete candidate${handoffCount === 1 ? " is" : "s are"} recorded for separate review. Permission does not approve or reject them.</div>` : ""}
+            <details class="permission-day-evidence"><summary>Inspect evidence bindings</summary><div>${escapeHtml(asArray(day.segment_ids).join(", ") || "No segment IDs")}<br>${escapeHtml(artifact.ref || "No target ref")}<br>${escapeHtml(asArray(eta.unsupported_segment_ids).length ? `Missing p75: ${asArray(eta.unsupported_segment_ids).join(", ")}` : "Complete p75 coverage")}</div></details>
+          </article>
+        `;
+      }).join("");
+      return `
+        <div class="permission-proposal-shell" data-permission-scout-auto-proposal="true">
+          <div><span class="permission-day-label">Scout auto proposal</span><h4>Proposal-first daily itinerary</h4></div>
+          <div class="permission-authority-note">Permission confirms exact day-end targets and listed timing-gap acknowledgments only. Retreat and emergency-bivy items remain <strong>Pending Safety / Emergency</strong>. Departure and runtime safety are not changed here.</div>
+          <div class="permission-proposal-summary">
+            <div class="permission-proposal-stat"><span>Route</span><strong>${Number(summary.route_length_m || 0) ? `${(Number(summary.route_length_m) / 1000).toFixed(1)} km` : "—"}</strong></div>
+            <div class="permission-proposal-stat"><span>Proposed days</span><strong>${Number(summary.day_count || trailDays.length)}</strong></div>
+            <div class="permission-proposal-stat"><span>Timing</span><strong>${Number(summary.observed_p75_segment_count || 0)} usable / ${Number(summary.missing_p75_segment_count || 0)} missing p75</strong></div>
+            <div class="permission-proposal-stat"><span>Blockers</span><strong>${Number(summary.blocking_gap_count || 0)}</strong></div>
+            <div class="permission-proposal-stat"><span>Safety handoff</span><strong>${requirements.handoffIds.length} pending</strong></div>
+            <div class="permission-proposal-stat"><span>Source route_days</span><strong>${routeDaysMetadata == null ? "unreviewed metadata" : `${routeDaysMetadata} · not used as plan`}</strong></div>
+          </div>
+          <div class="permission-day-stack">${dayCards}</div>
+          <details class="permission-typed-payload"><summary>Typed evidence payload</summary><pre>${escapeHtml(JSON.stringify(draft, null, 2))}</pre></details>
+        </div>
+      `;
+    }
+
+    function renderPermissionBaselineQuickReview() {
+      const draft = state.permissionBaselineDraft;
+      if (draft?.proposal_profile !== "ref_gpx_proposal_v1") return "";
+      const saved = state.permissionBaselineSavedCandidate;
+      const requirements = permissionBaselineReviewRequirements(draft);
+      const checks = state.permissionBaselineReviewChecks || {};
+      const candidateCurrent = Boolean(saved?.version_sha256) && checks.candidateSha256 === saved.version_sha256;
+      const disabled = candidateCurrent ? "" : "disabled";
+      return `
+        <section class="permission-review-panel" data-permission-quick-review="true">
+          <div><span class="permission-day-label">Quick review</span><h4>Permission review</h4><p>Confirm daily destinations and disclosed gaps. Safety candidates remain pending outside this review.</p></div>
+          <label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="dayEnds" ${checks.dayEnds && candidateCurrent ? "checked" : ""} ${disabled}><span>I confirm the exact day-end target shown for every day in this immutable candidate.<small>${requirements.dayIds.length} exact day ID${requirements.dayIds.length === 1 ? "" : "s"} will be enumerated in the receipt.</small></span></label>
+          ${requirements.uncertaintyIds.length ? `<label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="timingUncertainty" ${checks.timingUncertainty && candidateCurrent ? "checked" : ""} ${disabled}><span>I acknowledge every listed timing uncertainty. Supported subtotals are not whole-day ETAs, and no missing duration was inferred.<small>${requirements.uncertaintyIds.length} exact uncertainty ID${requirements.uncertaintyIds.length === 1 ? "" : "s"}.</small></span></label>` : ""}
+          ${requirements.handoffRequired ? `<label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="safetyHandoff" ${checks.safetyHandoff && candidateCurrent ? "checked" : ""} ${disabled}><span>I acknowledge that the listed retreat, emergency-bivy and route-reversal items remain pending separate Safety / Emergency review. This does not approve them.<small>${requirements.handoffIds.length} exact handoff item${requirements.handoffIds.length === 1 ? "" : "s"}.</small></span></label>` : ""}
+          <p class="emergency-review-status">${candidateCurrent ? (permissionBaselineReviewComplete() ? "Review complete for this candidate hash · open the final acceptance sheet." : "Complete the required checks for this exact saved candidate.") : "Save the current candidate version first. Review controls are hash-bound and reset after every change."}</p>
+        </section>
+      `;
+    }
+
+    function renderPermissionBaselineAuthoring() {
+      return `
+        <section class="permission-card" data-permission-baseline-authoring="true">
+          <div class="permission-card-head">
+            <div><h3>Baseline Authoring Workbench</h3><p>Scout auto proposal first, concise human review second. Pending Safety / Emergency items remain outside Permission acceptance; departure and runtime authority never change here.</p></div>
+            <span class="chip info">Immutable versions</span>
+          </div>
+          <div class="permission-card-body">
+            <div class="permission-authoring-tabs" role="tablist" aria-label="Baseline authoring mode">
+              <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "human_text"}" class="${state.permissionBaselineMode === "human_text" ? "is-active" : ""}" data-permission-baseline-mode="human_text">Human Design</button>
+              <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "reference_gpx"}" class="${state.permissionBaselineMode === "reference_gpx" ? "is-active" : ""}" data-permission-baseline-mode="reference_gpx">Generate from Ref. GPX</button>
+            </div>
+            <div class="permission-authoring-grid" style="margin-top:12px">
+              <div class="permission-authoring-source">
+                ${state.permissionBaselineMode === "human_text" ? `
+                  <textarea data-permission-baseline-text="true" aria-label="Ideal-state itinerary text" placeholder="D0: city - trailhead C0&#10;D1: C0 - junction - reviewed camp C1">${escapeHtml(state.permissionBaselineText || "D0: city - trailhead C0\nD1: C0 - reviewed junction - reviewed camp C1")}</textarea>
+                ` : `
+                  <label class="permission-eyebrow" for="permissionBaselineRoute">Reference route axis</label>
+                  <select id="permissionBaselineRoute" data-permission-baseline-ref="true"><option value="outputs/compiled_mission_graph.reviewed.json">Reviewed mission graph route axis</option></select>
+                `}
+                <div class="permission-authoring-actions">
+                  <button type="button" class="permission-button" data-permission-baseline-preview="true">Preview source</button>
+                  <button type="button" class="permission-button" data-permission-baseline-generate="true">Generate typed draft</button>
+                </div>
+              </div>
+              <div class="permission-baseline-preview" aria-live="polite">
+                ${renderPermissionBaselineProposal(state.permissionBaselineDraft)}
+              </div>
+            </div>
+            <div class="permission-authoring-actions">
+              <button type="button" class="permission-button is-warning" data-permission-baseline-save="true" ${state.permissionBaselineDraft ? "" : "disabled aria-disabled=\"true\" title=\"Generate and validate a draft first\""}>Save candidate version</button>
+              <button type="button" class="permission-button is-warning" data-permission-baseline-accept="true" ${state.permissionBaselineSavedCandidate?.review_ready === true && (state.permissionBaselineDraft?.proposal_profile !== "ref_gpx_proposal_v1" || permissionBaselineReviewComplete()) ? "" : "disabled aria-disabled=\"true\" title=\"Save the exact candidate and complete its Quick review first\""}>Accept reviewed baseline</button>
+            </div>
+            ${renderPermissionBaselineQuickReview()}
+            ${state.permissionBaselineSavedCandidate ? `
+              <section class="permission-patch-panel" data-permission-baseline-patch-panel="true">
+                <div class="permission-detail-list">
+                  <div class="permission-detail-row"><span>Current immutable candidate</span><strong>${escapeHtml(state.permissionBaselineSavedCandidate.version_id || "candidate")}<br>${escapeHtml(String(state.permissionBaselineSavedCandidate.version_sha256 || "").slice(0, 16))}</strong></div>
+                  <div class="permission-detail-row"><span>Review readiness</span><strong>${state.permissionBaselineSavedCandidate.review_ready ? "ready for explicit review" : `${escapeHtml(state.permissionBaselineSavedCandidate.validation_state || "needs_review")} · ${asArray(state.permissionBaselineSavedCandidate.unresolved_gaps).length} gap`}</strong></div>
+                </div>
+                <label class="permission-eyebrow" for="permissionBaselinePatchText">Scout conversation correction</label>
+                <textarea id="permissionBaselinePatchText" data-permission-baseline-patch-text="true" maxlength="2000" placeholder="Describe one bounded correction or assumption. Scout previews a child-version patch; it never edits the candidate in place.">${escapeHtml(state.permissionBaselinePatchText || "")}</textarea>
+                <div class="permission-authoring-actions">
+                  <button type="button" class="permission-button" data-permission-baseline-patch-preview="true">Preview Scout patch</button>
+                  <button type="button" class="permission-button is-warning" data-permission-baseline-patch-save="true" ${state.permissionBaselinePatchPreview ? "" : "disabled"}>Save patch as new version</button>
+                </div>
+                ${state.permissionBaselinePatchPreview ? `
+                  <div class="permission-detail-list" data-permission-baseline-patch-diff="true">
+                    <div class="permission-detail-row"><span>Patch</span><strong>${escapeHtml(String(state.permissionBaselinePatchPreview.patch_sha256 || "").slice(0, 16))}<br>writes_performed=false</strong></div>
+                    <div class="permission-detail-row"><span>Additions / removals / reorder</span><strong>${asArray(state.permissionBaselinePatchPreview.additions).length} / ${asArray(state.permissionBaselinePatchPreview.removals).length} / ${asArray(state.permissionBaselinePatchPreview.reordered).length}</strong></div>
+                    <div class="permission-detail-row"><span>Unresolved after patch</span><strong>${asArray(state.permissionBaselinePatchPreview.unresolved_items).length}</strong></div>
+                  </div>
+                ` : ""}
+                <p>Conversation text is evidence-bound as a candidate assumption. Target resolution, coordinate CRS, route-axis and branch review remain typed gates; free text cannot silently clear them.</p>
+              </section>
+            ` : ""}
+            <p class="emergency-review-status">${escapeHtml(state.permissionBaselineStatus || "Preview and draft generation are no-write. Save/Accept require a separate explicit versioned command.")}</p>
+          </div>
+        </section>
+      `;
+    }
+
     function renderPermissionBaselineConfirmationSheet() {
       const pending = state.permissionBaselinePendingAction;
       if (!pending) return "";
       const isSave = pending.kind === "save";
       const isPatchSave = pending.kind === "save_patch";
+      const isRebuild = pending.kind === "rebuild";
+      const isAccept = pending.kind === "accept";
       const draft = state.permissionBaselineDraft || {};
       const saved = state.permissionBaselineSavedCandidate || {};
       const patch = state.permissionBaselinePatchPreview || {};
-      const heading = isSave ? "Save Candidate Version" : isPatchSave ? "Save Patch As New Version" : "Accept Reviewed Baseline";
+      const rebuild = state.permissionProjection?.rebuild || {};
+      const heading = isSave ? "Save Candidate Version" : isPatchSave ? "Save Patch As New Version" : isRebuild ? "Rebuild Bounded Projection" : "Accept Reviewed Baseline";
+      const requirements = permissionBaselineReviewRequirements(draft);
+      const canSubmit = !state.permissionBaselineBusy && (!isAccept || permissionBaselineReviewComplete());
       const consequence = isSave
         ? "Create a new immutable candidate file from this exact no-write draft."
         : isPatchSave
           ? "Create an immutable child candidate bound to the current base version and this exact patch hash."
-          : "Append a human review receipt and create a new immutable reviewed-baseline artifact.";
+          : isRebuild
+            ? "Rebuild planned ETA, review-only rules and the bounded workbench seed from the exact selected reviewed baseline."
+            : "Append a human review receipt and create a new immutable reviewed-baseline artifact.";
       return `
         <div class="emergency-confirm-backdrop" data-permission-baseline-confirm-backdrop="true">
           <section class="emergency-confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="permissionBaselineConfirmTitle" tabindex="-1" data-permission-baseline-confirm-sheet="true">
@@ -15311,14 +15834,15 @@
             <h3 id="permissionBaselineConfirmTitle">${heading}</h3>
             <p>${consequence}</p>
             <div class="permission-detail-list">
-              <div class="permission-detail-row"><span>Source / candidate hash</span><strong>${escapeHtml(String(isSave ? draft.source_sha256 : isPatchSave ? patch.patch_sha256 : saved.version_sha256).slice(0, 16) || "missing")}</strong></div>
-              <div class="permission-detail-row"><span>Result</span><strong>${isSave ? "new candidate version" : isPatchSave ? "new child candidate version" : "new reviewed artifact + stale dependent projection"}</strong></div>
+              <div class="permission-detail-row"><span>Source / candidate hash</span><strong>${escapeHtml(String(isSave ? draft.source_sha256 : isPatchSave ? patch.patch_sha256 : isRebuild ? rebuild.reviewed_baseline_sha256 : saved.version_sha256).slice(0, 16) || "missing")}</strong></div>
+              <div class="permission-detail-row"><span>Result</span><strong>${isSave ? "new candidate version" : isPatchSave ? "new child candidate version" : isRebuild ? "new bounded projection · every rule remains review_only" : "new reviewed artifact + stale dependent projection"}</strong></div>
               <div class="permission-detail-row"><span>Authority</span><strong>candidate only · no departure/runtime approval</strong></div>
+              ${isAccept ? `<div class="permission-detail-row"><span>Permission scope</span><strong>${requirements.dayIds.length} exact day ends · ${requirements.uncertaintyIds.length} timing gaps<br>${requirements.handoffIds.length} Safety / Emergency items remain pending</strong></div>` : ""}
             </div>
-            <p>${isSave || isPatchSave ? "The source candidate is never edited in place." : "The current session is not rebound; Contextual Permission becomes stale until an explicit rebuild."}</p>
+            <p>${isSave || isPatchSave ? "The source candidate is never edited in place." : isRebuild ? "This clears dependency staleness only. It does not approve adjustment policies, departure, Safety / Emergency items, or runtime action." : "This confirms day ends and disclosed timing gaps only. Safety / Emergency items remain unapproved; departure and runtime safety are unchanged."}</p>
             <div class="emergency-confirm-actions">
               <button type="button" class="emergency-confirm-button" data-permission-baseline-confirm-cancel="true">Cancel</button>
-              <button type="button" class="emergency-confirm-button is-warning" data-permission-baseline-confirm-submit="true" ${state.permissionBaselineBusy ? "disabled" : ""}>${state.permissionBaselineBusy ? "Writing…" : isSave ? "Confirm · create candidate version" : isPatchSave ? "Confirm · create child version" : "Confirm · accept reviewed baseline"}</button>
+              <button type="button" class="emergency-confirm-button is-warning" data-permission-baseline-confirm-submit="true" ${canSubmit ? "" : "disabled"}>${state.permissionBaselineBusy ? "Writing…" : isSave ? "Confirm · create candidate version" : isPatchSave ? "Confirm · create child version" : isRebuild ? "Confirm · rebuild bounded projection" : "Accept reviewed baseline"}</button>
             </div>
           </section>
         </div>
@@ -15339,6 +15863,8 @@
         `;
       }
       if (projection.status === "blocked") {
+        const rebuild = projection.rebuild || {};
+        const projectionStale = projection.error?.code === "contextual_permission_projection_stale";
         return `
           ${outdoorTabs(force.route)}
           <section class="permission-shell" data-contextual-permission-workbench="blocked">
@@ -15348,8 +15874,16 @@
               <p>${escapeHtml(projection.error?.message || "The reviewed baseline or typed permission projection is unavailable.")}</p>
               <div class="permission-button-row">
                 <button type="button" class="permission-button" data-permission-refresh="true">Retry bounded projection</button>
+                ${projectionStale && rebuild.reviewed_baseline_sha256 ? (rebuild.eligible
+                  ? `<button type="button" class="permission-button is-warning" data-permission-projection-rebuild="true">Rebuild from reviewed baseline</button>`
+                  : `<button type="button" class="permission-button is-warning" disabled aria-disabled="true" title="Generate and accept a proposal-first Ref. GPX baseline first">Rebuild after new proposal</button>`
+                ) : ""}
               </div>
+              ${projectionStale ? `<p>${rebuild.eligible ? "The selected proposal-first baseline is rebuildable." : "The selected legacy baseline has no exact proposal-first day ends. Generate and accept the Scout proposal below first."} A rebuild only clears dependency staleness; every adjustment rule remains review_only.</p>` : ""}
             </div>
+            ${projectionStale ? renderPermissionBaselineAuthoring() : ""}
+            <div class="permission-boundary-banner">candidate_only=true · runtime_safety_truth=false · no departure approval · no Safety API call · no runtime session update</div>
+            ${renderPermissionBaselineConfirmationSheet()}
           </section>
         `;
       }
@@ -15424,7 +15958,7 @@
             </div>
           </section>
 
-          <div class="permission-desktop-continuation"><strong>Continue on desktop</strong> — Baseline authoring, version promotion and candidate simulation stay on the desktop workbench. This mobile view keeps inspection, refresh, evidence and Safety / Emergency handoff complete.</div>
+          <div class="permission-desktop-continuation"><strong>Mobile quick flow</strong> — Generate the Scout proposal, inspect day cards, save one immutable candidate, complete at most three checks, then accept. Typed evidence stays collapsed until opened.</div>
 
           <div class="permission-workbench-grid">
             <div class="permission-primary-stack">
@@ -15567,62 +16101,7 @@
             </aside>
           </div>
 
-          <section class="permission-card permission-desktop-only" data-permission-baseline-authoring="true">
-            <div class="permission-card-head">
-              <div><h3>Baseline Authoring Workbench</h3><p>Human Design and Ref. GPX converge on one typed candidate. Preview is no-write; accepted baseline remains candidate-only and not departure approval.</p></div>
-              <span class="chip info">Immutable versions</span>
-            </div>
-            <div class="permission-card-body">
-              <div class="permission-authoring-tabs" role="tablist" aria-label="Baseline authoring mode">
-                <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "human_text"}" class="${state.permissionBaselineMode === "human_text" ? "is-active" : ""}" data-permission-baseline-mode="human_text">Human Design</button>
-                <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "reference_gpx"}" class="${state.permissionBaselineMode === "reference_gpx" ? "is-active" : ""}" data-permission-baseline-mode="reference_gpx">Generate from Ref. GPX</button>
-              </div>
-              <div class="permission-authoring-grid" style="margin-top:12px">
-                <div class="permission-authoring-source">
-                  ${state.permissionBaselineMode === "human_text" ? `
-                    <textarea data-permission-baseline-text="true" aria-label="Ideal-state itinerary text" placeholder="D0: city - trailhead C0&#10;D1: C0 - junction - reviewed camp C1">${escapeHtml(state.permissionBaselineText || "D0: city - trailhead C0\nD1: C0 - reviewed junction - reviewed camp C1")}</textarea>
-                  ` : `
-                    <label class="permission-eyebrow" for="permissionBaselineRoute">Reference route axis</label>
-                    <select id="permissionBaselineRoute" data-permission-baseline-ref="true"><option value="outputs/compiled_mission_graph.reviewed.json">Reviewed mission graph route axis</option></select>
-                  `}
-                  <div class="permission-authoring-actions">
-                    <button type="button" class="permission-button" data-permission-baseline-preview="true">Preview source</button>
-                    <button type="button" class="permission-button" data-permission-baseline-generate="true">Generate typed draft</button>
-                  </div>
-                </div>
-                <div class="permission-baseline-preview" aria-live="polite">
-                  ${state.permissionBaselineDraft ? `<pre>${escapeHtml(JSON.stringify(state.permissionBaselineDraft, null, 2))}</pre>` : `<pre>No draft generated. Typing or selecting a reference performs no model call and no write.</pre>`}
-                </div>
-              </div>
-              <div class="permission-authoring-actions">
-                <button type="button" class="permission-button is-warning" data-permission-baseline-save="true" ${state.permissionBaselineDraft ? "" : "disabled aria-disabled=\"true\" title=\"Generate and validate a draft first\""}>Save candidate version</button>
-                <button type="button" class="permission-button is-warning" data-permission-baseline-accept="true" ${state.permissionBaselineSavedCandidate?.review_ready === true ? "" : "disabled aria-disabled=\"true\" title=\"Resolve every gap and save a review-ready candidate first\""}>Accept reviewed baseline</button>
-              </div>
-              ${state.permissionBaselineSavedCandidate ? `
-                <section class="permission-patch-panel" data-permission-baseline-patch-panel="true">
-                  <div class="permission-detail-list">
-                    <div class="permission-detail-row"><span>Current immutable candidate</span><strong>${escapeHtml(state.permissionBaselineSavedCandidate.version_id || "candidate")}<br>${escapeHtml(String(state.permissionBaselineSavedCandidate.version_sha256 || "").slice(0, 16))}</strong></div>
-                    <div class="permission-detail-row"><span>Review readiness</span><strong>${state.permissionBaselineSavedCandidate.review_ready ? "ready for explicit review" : `${escapeHtml(state.permissionBaselineSavedCandidate.validation_state || "needs_review")} · ${asArray(state.permissionBaselineSavedCandidate.unresolved_gaps).length} gap`}</strong></div>
-                  </div>
-                  <label class="permission-eyebrow" for="permissionBaselinePatchText">Scout conversation correction</label>
-                  <textarea id="permissionBaselinePatchText" data-permission-baseline-patch-text="true" maxlength="2000" placeholder="Describe one bounded correction or assumption. Scout previews a child-version patch; it never edits the candidate in place.">${escapeHtml(state.permissionBaselinePatchText || "")}</textarea>
-                  <div class="permission-authoring-actions">
-                    <button type="button" class="permission-button" data-permission-baseline-patch-preview="true">Preview Scout patch</button>
-                    <button type="button" class="permission-button is-warning" data-permission-baseline-patch-save="true" ${state.permissionBaselinePatchPreview ? "" : "disabled"}>Save patch as new version</button>
-                  </div>
-                  ${state.permissionBaselinePatchPreview ? `
-                    <div class="permission-detail-list" data-permission-baseline-patch-diff="true">
-                      <div class="permission-detail-row"><span>Patch</span><strong>${escapeHtml(String(state.permissionBaselinePatchPreview.patch_sha256 || "").slice(0, 16))}<br>writes_performed=false</strong></div>
-                      <div class="permission-detail-row"><span>Additions / removals / reorder</span><strong>${asArray(state.permissionBaselinePatchPreview.additions).length} / ${asArray(state.permissionBaselinePatchPreview.removals).length} / ${asArray(state.permissionBaselinePatchPreview.reordered).length}</strong></div>
-                      <div class="permission-detail-row"><span>Unresolved after patch</span><strong>${asArray(state.permissionBaselinePatchPreview.unresolved_items).length}</strong></div>
-                    </div>
-                  ` : ""}
-                  <p>Conversation text is evidence-bound as a candidate assumption. Target resolution, coordinate CRS, route-axis and branch review remain typed gates; free text cannot silently clear them.</p>
-                </section>
-              ` : ""}
-              <p class="emergency-review-status">${escapeHtml(state.permissionBaselineStatus || "Preview and draft generation are no-write. Save/Accept require a separate explicit versioned command.")}</p>
-            </div>
-          </section>
+          ${renderPermissionBaselineAuthoring()}
 
           <div class="permission-boundary-banner">candidate_only=true · runtime_safety_truth=false · no live safety API call · no Phase 1 mutation · no outbound · no hardware control · no raw health, GPX, precise location history or private timestamp projection</div>
           ${renderPermissionBaselineConfirmationSheet()}
@@ -16821,14 +17300,18 @@
 
     function navigationPressureColor(value) {
       const score = Number(value || 0);
-      if (score >= 90) return "#ff6b4a";
-      if (score >= 75) return "#f0ae3b";
-      if (score >= 55) return "#b7cf63";
-      return "#62b8c6";
+      if (score >= 90) return "var(--navigation-event)";
+      if (score >= 75) return "#ef7900";
+      if (score >= 55) return "#b88700";
+      return "var(--navigation-drainage)";
     }
 
     function navigationStructureColor(kind) {
-      return {ridge: "#b7cf63", valley: "#62b8c6", saddle: "#f0ae3b"}[kind] || "#d8ded2";
+      return {
+        ridge: "var(--navigation-ridge)",
+        valley: "var(--navigation-drainage)",
+        saddle: "#d69b00",
+      }[kind] || "#545f59";
     }
 
     function navigationStructureLabel(kind) {
@@ -16837,31 +17320,22 @@
 
     function navigationTerrainHierarchyColor(kind) {
       return {
-        main_ridge_candidate: "#b7cf63",
-        spur_ridge_candidate: "#8fa84d",
-        drainage_trunk: "#62b8c6",
-        tributary: "#4f91a2",
-        watershed_boundary: "#d5df95",
-      }[kind] || "#93a299";
-    }
-
-    function navigationTerrainHierarchyStrokeWidth(kind) {
-      return {
-        main_ridge_candidate: 3.6,
-        spur_ridge_candidate: 1.8,
-        drainage_trunk: 3.1,
-        tributary: 1.6,
-      }[kind] || 2;
+        main_ridge_candidate: "var(--navigation-ridge)",
+        spur_ridge_candidate: "var(--navigation-spur)",
+        drainage_trunk: "var(--navigation-drainage)",
+        tributary: "var(--navigation-tributary)",
+        watershed_boundary: "var(--navigation-watershed)",
+      }[kind] || "#545f59";
     }
 
     function navigationTerrainHierarchyLabel(kind) {
       return {
-        main_ridge_candidate: "主稜候選",
-        spur_ridge_candidate: "支稜候選",
-        drainage_trunk: "主谷候選",
-        tributary: "支流候選",
-        watershed_boundary: "分水界候選",
-      }[kind] || "地形骨架候選";
+        main_ridge_candidate: "稜脊骨幹候選｜未複核",
+        spur_ridge_candidate: "連通稜脊候選｜未複核",
+        drainage_trunk: "集水骨幹候選｜未水文複核",
+        tributary: "連通谷地候選｜未水文複核",
+        watershed_boundary: "分水界候選｜未複核",
+      }[kind] || "地形候選支持區｜未複核";
     }
 
     function navigationTerrainEventLabel(eventType) {
@@ -16884,8 +17358,31 @@
         .join(" ");
     }
 
+    function navigationTerrainUncertaintyBandStrokeWidth(
+      edge,
+      bounds,
+      width = 1000,
+      height = 392,
+    ) {
+      const normalized = navigationRudyBounds(bounds);
+      if (!normalized) return 4;
+      const centerLatitude = (normalized.north + normalized.south) / 2;
+      const widthM = Math.max(
+        1,
+        (normalized.east - normalized.west)
+          * 111320
+          * Math.cos(centerLatitude * Math.PI / 180),
+      );
+      const heightM = Math.max(1, (normalized.north - normalized.south) * 110540);
+      const pixelsPerM = Math.min(width / widthM, height / heightM);
+      const halfWidthM = Math.max(60, Number(edge?.uncertainty_half_width_m) || 60);
+      return Math.max(2, Math.min(96, halfWidthM * 2 * pixelsPerM));
+    }
+
     function renderNavigationWorkspaceMap(snapshot, selectedPoint, selectedStructurePoint, selectedEvent) {
       const lens = state.navigationTerrainLens || "structure";
+      const terrainValidation = snapshot?.terrain_validation || {};
+      const validationState = terrainValidation.validation_state || "blocked_pending_reference";
       const bounds = snapshot?.terrain_surface?.bbox_wgs84;
       const baseZoom = navigationRudyBaseZoom(bounds);
       const routePath = navigationTerrainRoutePath(snapshot);
@@ -16916,6 +17413,7 @@
         .map(edge => ({
           ...edge,
           path: navigationTerrainHierarchyPath(edge, bounds),
+          bandStrokeWidth: navigationTerrainUncertaintyBandStrokeWidth(edge, bounds),
         }))
         .filter(edge => edge.path);
       const terrainEvents = asArray(snapshot?.route_terrain_events?.events)
@@ -16927,9 +17425,9 @@
       const structureGap = ["ridge", "valley", "saddle"]
         .filter(kind => !["candidate_vectors", "candidate_points"].includes(snapshot?.feature_extraction?.[kind]?.status));
       const statusText = lens === "structure" && hierarchyEdges.length
-        ? `${hierarchyEdges.length} 條連續主稜／支稜／谷線骨架；地形分支不等於步道岔路。`
+        ? `${hierarchyEdges.length} 個低權威候選支持區；不是精確中心線。Geometry gate: ${validationState}。`
         : lens === "events"
-          ? `${terrainEvents.length} 個 GPX × terrain events；紅圈是複核提示，不是安全判定。`
+          ? `${terrainEvents.length} 個 GPX × terrain shadow candidates；${validationState}，紅圈只供離線 QA。`
           : lens === "structure" && structureGap.length
         ? `Rudy+TW 圖磚；${structureGap.join(" / ")} vectors 尚未抽取。`
         : lens === "structure"
@@ -16940,26 +17438,29 @@
       const mapContent = `
           <svg viewBox="0 0 1000 392" role="img" aria-label="Rudy+TW 動態圖磚底圖、路線取樣與人工複核地形候選">
             <defs>
-              <marker id="navigationWorkspaceRetreatArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#62b8c6"></path></marker>
+              <marker id="navigationWorkspaceRetreatArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#d1005d" stroke="#07110e" stroke-width="1"></path></marker>
             </defs>
             <rect width="1000" height="392" fill="#101813"></rect>
             ${renderNavigationRudyTileLayer(bounds, baseZoom)}
             ${["structure", "events"].includes(lens) ? hierarchyEdges.map(edge => `
               <path
-                class="navigation-terrain-hierarchy-edge"
+                class="navigation-terrain-hierarchy-band"
+                data-navigation-terrain-band="true"
                 data-navigation-terrain-edge-kind="${escapeHtml(edge.kind)}"
                 data-navigation-terrain-edge-id="${escapeHtml(edge.id)}"
                 data-dashboard-map-hint-source="navigation-hierarchy-evidence"
                 data-dashboard-map-hint-title="${escapeHtml(navigationTerrainHierarchyLabel(edge.kind))}"
-                data-dashboard-map-hint-summary="${escapeHtml(`${formatDistanceKm(edge.length_m)} · candidate only · terrain branch is not a trail junction`)}"
-                data-dashboard-map-screen-stroke="${navigationTerrainHierarchyStrokeWidth(edge.kind)}"
+                data-dashboard-map-hint-summary="${escapeHtml(`${formatDistanceKm(edge.length_m)} · visual candidate support, not a confidence interval or event source`)}"
                 d="${edge.path}"
-                style="--terrain-edge-color:${navigationTerrainHierarchyColor(edge.kind)}"
+                style="--terrain-band-color:${navigationTerrainHierarchyColor(edge.kind)};stroke-width:${edge.bandStrokeWidth.toFixed(2)}px"
               >
-                <title>${escapeHtml(`${navigationTerrainHierarchyLabel(edge.kind)} · ${formatDistanceKm(edge.length_m)} · candidate only`)}</title>
+                <title>${escapeHtml(`${navigationTerrainHierarchyLabel(edge.kind)} · 候選支持區 · 非精確中心線`)}</title>
               </path>
             `).join("") : ""}
-            ${routePath ? `<path class="navigation-workspace-route" data-navigation-route-path="true" data-dashboard-map-screen-stroke="3" vector-effect="non-scaling-stroke" d="${routePath}" ${lens === "retreat" ? 'marker-start="url(#navigationWorkspaceRetreatArrow)"' : ""}></path>` : ""}
+            ${routePath ? `
+              <path class="navigation-workspace-route-halo" data-navigation-route-halo="true" data-dashboard-map-screen-stroke="7" vector-effect="non-scaling-stroke" d="${routePath}"></path>
+              <path class="navigation-workspace-route" data-navigation-route-path="true" data-dashboard-map-screen-stroke="4.5" vector-effect="non-scaling-stroke" d="${routePath}" ${lens === "retreat" ? 'marker-start="url(#navigationWorkspaceRetreatArrow)"' : ""}></path>
+            ` : ""}
             ${lens === "pressure" ? pressurePoints.map(point => `
               <g
                 data-dashboard-map-screen-symbol="true"
@@ -16971,7 +17472,7 @@
                   class="navigation-route-pressure-dot"
                   cx="0"
                   cy="0"
-                  r="4.5"
+                  r="6"
                   fill="${navigationPressureColor(point.teii_20m ?? point.pretrip_risk ?? point.tri)}"
                   data-dashboard-map-hint-source="navigation-pressure-evidence"
                   data-dashboard-map-hint-title="${escapeHtml(`Route pressure · ${formatDistanceKm(point.distance_m)}`)}"
@@ -16993,13 +17494,14 @@
                 data-navigation-structure-point-id="${escapeHtml(point.id)}"
                 data-navigation-structure-kind="${escapeHtml(point.feature_kind)}"
                 data-navigation-structure-selected="${point.id === selectedStructurePoint?.id ? "true" : "false"}"
+                data-navigation-structure-label-visibility="selected-only"
                 data-dashboard-map-hint-source="navigation-structure-evidence"
                 data-dashboard-map-hint-title="${escapeHtml(`${navigationStructureLabel(point.feature_kind)}候選 ${point.index}`)}"
                 data-dashboard-map-hint-summary="${escapeHtml(`TPI ${valueOrDash(point.tpi_m)}m · local relief ${valueOrDash(point.local_relief_m)}m · score ${valueOrDash(point.score)}`)}"
                 aria-label="${escapeHtml(`${navigationStructureLabel(point.feature_kind)}候選 ${point.index}, score ${point.score}`)}"
                 style="--structure-color:${navigationStructureColor(point.feature_kind)}"
               >
-                <circle cx="0" cy="0" r="${point.id === selectedStructurePoint?.id ? "8" : "5"}"></circle>
+                <circle cx="0" cy="0" r="${point.id === selectedStructurePoint?.id ? "8" : "4"}"></circle>
                 <text x="0" y="2.8">${escapeHtml(navigationStructureLabel(point.feature_kind))}</text>
                 <title>${escapeHtml(`${point.feature_kind} candidate · TPI ${valueOrDash(point.tpi_m)}m · local relief ${valueOrDash(point.local_relief_m)}m`)}</title>
               </g>
@@ -17021,7 +17523,7 @@
                 aria-label="${escapeHtml(`Terrain pressure candidate ${point.index}, display pressure ${point.display_pressure}`)}"
                 style="${lens === "risk" ? "" : "display:none"}"
               >
-                <circle cx="0" cy="0" r="${point.id === selectedPoint?.id ? "9" : "6"}"></circle>
+                <circle cx="0" cy="0" r="${point.id === selectedPoint?.id ? "11" : "7"}"></circle>
                 <text x="0" y="3">${point.index}</text>
                 <title>${escapeHtml(point.reason || "Terrain pressure candidate requires review")}</title>
               </g>
@@ -17029,6 +17531,7 @@
             ${lens === "events" ? terrainEvents.map(event => `
               <g
                 class="navigation-terrain-event"
+                data-navigation-shadow-event="true"
                 data-dashboard-map-screen-symbol="true"
                 data-dashboard-map-symbol-x="${event.position.x.toFixed(1)}"
                 data-dashboard-map-symbol-y="${event.position.y.toFixed(1)}"
@@ -17037,12 +17540,13 @@
                 tabindex="${event.id === selectedEvent?.id ? "0" : "-1"}"
                 data-navigation-terrain-event-id="${escapeHtml(event.id)}"
                 data-navigation-terrain-event-selected="${event.id === selectedEvent?.id ? "true" : "false"}"
+                data-navigation-terrain-event-label-visibility="selected-only"
                 data-dashboard-map-hint-source="navigation-event-evidence"
                 data-dashboard-map-hint-title="${escapeHtml(`${event.sequence} · ${navigationTerrainEventLabel(event.event_type)}`)}"
-                data-dashboard-map-hint-summary="${escapeHtml(`${formatDistanceKm(event.route_distance_m)} · ${event.terrain_relation || "candidate terrain relation"}`)}"
-                aria-label="${escapeHtml(`${event.sequence} ${navigationTerrainEventLabel(event.event_type)}, ${formatDistanceKm(event.route_distance_m)}`)}"
+                data-dashboard-map-hint-summary="${escapeHtml(`shadow sequence ${event.sequence} · ${event.terrain_relation || "candidate terrain relation"}`)}"
+                aria-label="${escapeHtml(`shadow sequence ${event.sequence} ${navigationTerrainEventLabel(event.event_type)}`)}"
               >
-                <circle cx="0" cy="0" r="${event.id === selectedEvent?.id ? "9" : "6"}"></circle>
+                <circle cx="0" cy="0" r="${event.id === selectedEvent?.id ? "8" : "4"}"></circle>
                 <text x="0" y="3">${escapeHtml(event.sequence)}</text>
                 <title>${escapeHtml(`${navigationTerrainEventLabel(event.event_type)} · ${event.terrain_relation}`)}</title>
               </g>
@@ -17050,7 +17554,7 @@
           </svg>
       `;
       const mapOverlay = `
-          <div class="navigation-workspace-map-status"><strong>Rudy+TW · z<span data-navigation-rudy-zoom-label>${baseZoom}</span></strong>${escapeHtml(statusText)}</div>
+          <div class="navigation-workspace-map-status" data-navigation-terrain-validation="${escapeHtml(validationState)}"><strong>Rudy+TW · z<span data-navigation-rudy-zoom-label>${baseZoom}</span></strong>${escapeHtml(statusText)}</div>
           <div class="navigation-workspace-scale">${escapeHtml(`dynamic WMTS · ${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m DEM analysis`)}</div>
       `;
       return renderDashboardMapViewport("navigation-workspace-map",
@@ -17092,30 +17596,29 @@
       if (!selectedEvent) {
         return `
           <section class="navigation-terrain-detail" data-terrain-feature-detail="true">
-            <div class="navigation-terrain-detail-head"><div><h3>Route × Terrain Event</h3><p>目前沒有可顯示的路線地形事件。</p></div><span class="chip warn">not prepared</span></div>
-            <div class="navigation-terrain-detail-body"><p>事件只會由已準備的 GPX 與候選 terrain hierarchy 交會產生。</p></div>
+            <div class="navigation-terrain-detail-head"><div><h3>Route × Terrain Shadow Candidate</h3><p>目前沒有可供離線複核的路線地形候選。</p></div><span class="chip warn">shadow only</span></div>
+            <div class="navigation-terrain-detail-body"><p>候選只供 QA replay，不會形成導航提示或安全狀態。</p></div>
           </section>
         `;
       }
       return `
         <section class="navigation-terrain-detail" data-terrain-feature-detail="true" data-navigation-event-detail="${escapeHtml(selectedEvent.id)}" style="--feature-color:#ff6b4a">
           <div class="navigation-terrain-detail-head">
-            <div><h3>Route × Terrain Event</h3><p>把座標提示翻成現場可觀察的地形關係。</p></div>
-            <span class="chip warn">candidate ${escapeHtml(selectedEvent.sequence)}</span>
+            <div><h3>Route × Terrain Shadow Candidate</h3><p>離線比對 GPX 與未複核地形支持區；不是導航提示。</p></div>
+            <span class="chip warn">shadow ${escapeHtml(selectedEvent.sequence)}</span>
           </div>
           <div class="navigation-terrain-detail-body">
-            <span class="navigation-feature-kicker">${escapeHtml(selectedEvent.event_type)} · ${escapeHtml(formatDistanceKm(selectedEvent.route_distance_m))}</span>
+            <span class="navigation-feature-kicker">${escapeHtml(selectedEvent.event_type)} · shadow sequence ${escapeHtml(selectedEvent.sequence)}</span>
             <h4>${escapeHtml(navigationTerrainEventLabel(selectedEvent.event_type))}</h4>
             <p>${escapeHtml(selectedEvent.terrain_relation || "candidate terrain relation")}</p>
-            <div class="navigation-live-metrics">
-              <div class="navigation-live-metric"><small>Route distance</small><strong>${escapeHtml(formatDistanceKm(selectedEvent.route_distance_m))}</strong></div>
-              <div class="navigation-live-metric"><small>Off-route fit</small><strong>${escapeHtml(`${valueOrDash(selectedEvent.off_route_distance_m)}m`)}</strong></div>
-              <div class="navigation-live-metric"><small>Crossing angle</small><strong>${escapeHtml(selectedEvent.crossing_angle_degrees === null ? "aligned / n.a." : `${selectedEvent.crossing_angle_degrees}°`)}</strong></div>
+            <div class="navigation-live-metrics is-boundary">
+              <div class="navigation-live-metric"><small>Gate</small><strong>${escapeHtml(selectedEvent.gate_mode || "shadow_only")}</strong></div>
+              <div class="navigation-live-metric"><small>Authority</small><strong>operational=false</strong></div>
+              <div class="navigation-live-metric"><small>Effect</small><strong>${escapeHtml(selectedEvent.effect_scope || "none")}</strong></div>
             </div>
             <div class="navigation-detail-steps">
-              <div class="navigation-detail-step"><small>看到什麼</small><strong>${escapeHtml(selectedEvent.observation_prompt || "核對預期地形轉折。")}</strong></div>
-              <div class="navigation-detail-step is-cue"><small>走錯徵兆</small><strong>${escapeHtml(selectedEvent.wrong_way_cue || "地形關係長時間與預期不符。")}</strong></div>
-              <div class="navigation-detail-step is-recovery"><small>回復檢查</small><strong>${escapeHtml(selectedEvent.recovery_prompt || "回到上一個可確認地形點重新比對。")}</strong></div>
+              <div class="navigation-detail-step"><small>Shadow 事件假說</small><strong>${escapeHtml(selectedEvent.review_prompt || "只檢查候選關係，不推導現場行動。")}</strong></div>
+              <div class="navigation-detail-step is-cue"><small>僅供離線複核</small><strong>不得進入事件 feed、偏航狀態、通知、Safety 或 Emergency 決策。</strong></div>
               <div class="navigation-detail-step"><small>證據邊界</small><strong>${formatInteger(asArray(selectedEvent.source_refs).length)} source refs · 不證明步道存在、可通行或安全。</strong></div>
             </div>
           </div>
@@ -17202,7 +17705,7 @@
       return `
         <section class="navigation-event-timeline" data-navigation-terrain-event-timeline="true">
           <div class="navigation-reading-head">
-            <div><h3>Terrain Event Timeline</h3><p>依 GPX 里程排列：先知道應看到什麼，再定義走錯徵兆與回復檢查。</p></div>
+            <div><h3>Terrain Event Shadow Timeline</h3><p>依 GPX 里程排列離線候選；不產生使用者可行動的導航提示。</p></div>
             <span class="chip ${eventProjection.truncated ? "warn" : "info"}">${formatInteger(eventProjection.rendered_count || events.length)} / ${formatInteger(eventProjection.candidate_count || events.length)}</span>
           </div>
           <div class="navigation-event-track" aria-label="Route terrain event sequence">
@@ -17215,9 +17718,9 @@
                 aria-pressed="${event.id === selectedEvent?.id ? "true" : "false"}"
               >
                 <b>${escapeHtml(String(event.sequence).padStart(2, "0"))}</b>
-                <span><small>${escapeHtml(formatDistanceKm(event.route_distance_m))}</small><strong>${escapeHtml(navigationTerrainEventLabel(event.event_type))}</strong><em>${escapeHtml(event.terrain_relation || "candidate relation")}</em></span>
+                <span><small>shadow ${escapeHtml(String(event.sequence).padStart(2, "0"))}</small><strong>${escapeHtml(navigationTerrainEventLabel(event.event_type))}</strong><em>${escapeHtml(event.terrain_relation || "candidate relation")}</em></span>
               </button>
-            `).join("") : '<div class="navigation-event-empty">尚無 GPX × terrain hierarchy 事件；不捏造提示。</div>'}
+            `).join("") : '<div class="navigation-event-empty">尚無 GPX × terrain hierarchy shadow candidate；不捏造提示。</div>'}
           </div>
           ${eventProjection.truncated ? '<p class="navigation-event-limit">事件已依 bounded projection 截斷；完整候選仍需閾值校準與人工複核。</p>' : ""}
         </section>
@@ -17373,7 +17876,7 @@
                     ["pressure", "坡度壓力"],
                     ["risk", "風險地形"],
                     ["retreat", "撤退方向"],
-                    ...(sourceMode === "workspace" ? [["events", "路線事件"]] : []),
+                    ...(sourceMode === "workspace" ? [["events", "Shadow 事件"]] : []),
                   ].map(([lensId, label]) => `
                     <button type="button" data-navigation-terrain-lens="${lensId}" aria-pressed="${lens === lensId ? "true" : "false"}">${escapeHtml(label)}</button>
                   `).join("")}
@@ -17385,10 +17888,11 @@
                     : renderNavigationWorkspaceLoading(snapshot)}
                 <div class="navigation-terrain-legend" aria-label="Terrain map legend">
                 ${sourceMode === "workspace" ? `
-                    <span><strong>Rudy+TW</strong><br>dynamic WMTS tiles</span>
-                    <span><strong>白線</strong><br>bounded route samples</span>
-                    <span><strong>綠線</strong><br>主稜／支稜候選</span>
-                    <span><strong>藍線／紅圈</strong><br>谷線與 route-terrain event</span>
+                    <span data-navigation-legend-kind="basemap"><strong>Rudy+TW</strong><br>dynamic WMTS tiles</span>
+                    <span data-navigation-legend-kind="route"><strong>洋紅路線</strong><br>bounded route samples</span>
+                    <span data-navigation-legend-kind="ridge"><strong>橘色稜脊</strong><br>稜脊／分水界候選</span>
+                    <span data-navigation-legend-kind="drainage"><strong>深藍谷地</strong><br>集水／支流候選</span>
+                    <span data-navigation-legend-kind="event"><strong>紅色事件點</strong><br>離線 shadow candidate</span>
                   ` : `
                     <span><strong>綠實線</strong><br>稜線骨架</span>
                     <span><strong>藍虛線</strong><br>谷線／撤退方向</span>
@@ -18120,10 +18624,12 @@
     function architectureMapCheckpointPoints(mapData, displayBounds, snapshot) {
       if (!mapData.connected) return "";
       const structureById = new Map(
-        architectureStructureNodes(snapshot).map(item => [
-          String(item.node_id),
-          item,
-        ]),
+        [
+          ...asArray(snapshot.route_spine?.nodes),
+          ...asArray(snapshot.checkpoint_passage_timing?.nodes),
+        ]
+          .filter(item => item && item.node_id)
+          .map(item => [String(item.node_id), item]),
       );
       const points = asArray(state.project?.checkpoints)
         .map(item => {
@@ -18145,6 +18651,7 @@
             display_priority: classified.display_priority
               || (routeAnchor ? "primary" : "context"),
             difficulty: classified.difficulty || null,
+            route_distance_m: Number(classified.route_distance_m),
           };
         })
         .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon));
@@ -18180,7 +18687,8 @@
             ? "Route anchor · candidate evidence"
             : "MCP · route-detail evidence";
         const isSelected = point.node_id === state.architectureSelectedPassageNodeId;
-        return `<g data-dashboard-map-screen-symbol="true" data-dashboard-map-symbol-x="${projected.x.toFixed(1)}" data-dashboard-map-symbol-y="${projected.y.toFixed(1)}" data-architecture-passage-node-id="${escapeHtml(point.node_id)}" data-architecture-selection-surface="map-evidence" data-architecture-node-kind="${escapeHtml(point.node_kind)}" data-architecture-passage-selected="${isSelected ? "true" : "false"}" transform="translate(${projected.x.toFixed(1)} ${projected.y.toFixed(1)})" role="button" tabindex="0" aria-label="${escapeHtml(`${point.label} · ${summary}`)}" data-dashboard-map-hint-source="architecture-checkpoint-evidence" data-dashboard-map-hint-title="${escapeHtml(point.label)}" data-dashboard-map-hint-summary="${escapeHtml(summary)}">${marker}<title>${escapeHtml(point.label)} · ${escapeHtml(summary)}</title></g>`;
+        const routeDistanceM = Number(point.route_distance_m);
+        return `<g data-dashboard-map-screen-symbol="true" data-dashboard-map-symbol-x="${projected.x.toFixed(1)}" data-dashboard-map-symbol-y="${projected.y.toFixed(1)}" data-architecture-passage-node-id="${escapeHtml(point.node_id)}" data-architecture-route-distance-m="${Number.isFinite(routeDistanceM) ? routeDistanceM.toFixed(3) : ""}" data-architecture-selection-surface="map-evidence" data-architecture-node-kind="${escapeHtml(point.node_kind)}" data-architecture-passage-selected="${isSelected ? "true" : "false"}" transform="${dashboardMapScreenSymbolTransform("architecture-map", projected.x, projected.y)}" role="button" tabindex="0" aria-label="${escapeHtml(`${point.label} · ${summary}`)}" data-dashboard-map-hint-source="architecture-checkpoint-evidence" data-dashboard-map-hint-title="${escapeHtml(point.label)}" data-dashboard-map-hint-summary="${escapeHtml(summary)}">${marker}<title>${escapeHtml(point.label)} · ${escapeHtml(summary)}</title></g>`;
       }).join("");
     }
 
@@ -19319,7 +19827,7 @@
           <button type="button" data-map-control="zoom-out" aria-label="Zoom out" title="Zoom out (-)">−</button>
           <button type="button" data-map-control="reset" aria-label="Reset map view" title="Fit map (0)">Fit</button>
           <button type="button" data-map-control="pan" aria-label="Mouse drag pan" aria-pressed="${panActive ? "true" : "false"}" title="Mouse drag pan (P)">Pan</button>
-          ${mouseZoomEnabled ? `<button type="button" data-map-control="box-zoom" aria-label="Point or rectangle zoom" aria-pressed="${panActive ? "false" : "true"}" title="One selection, maximum 4×: drag down-right to zoom in; drag up-left to zoom out; then return to Pan (B)">▣</button>` : ""}
+          ${mouseZoomEnabled ? `<button type="button" data-map-control="box-zoom" aria-label="Point or rectangle zoom" aria-pressed="${panActive ? "false" : "true"}" title="Persistent box zoom, maximum 4× per selection: drag in any direction to zoom in; use minus to zoom out (B)">▣</button>` : ""}
           <output data-map-zoom-level aria-label="Map zoom level">100%</output>
         </div>
       `;
@@ -19335,7 +19843,7 @@
       const mode = mouseZoomEnabled && saved.mode === "box" ? "box" : "pan";
       const className = ["dashboard-map-viewport", options.className || ""].filter(Boolean).join(" ");
       const interactionLabel = mouseZoomEnabled
-        ? `Use mouse drag or arrow keys to pan; plus, minus, point zoom, or one-shot rectangle drag to zoom up to 4× before returning to pan. Mouse wheel zoom is ${wheelZoomEnabled ? "enabled" : "disabled"}.`
+        ? `Use mouse drag or arrow keys to pan; plus, minus, or persistent rectangle zoom up to 4× per selection. Rectangle drag zooms in in any direction and remains active until Pan is selected. Mouse wheel zoom is ${wheelZoomEnabled ? "enabled" : "disabled"}.`
         : "Use mouse drag or arrow keys to pan; use plus, minus, or keyboard shortcuts to zoom.";
       return `
         <div
@@ -19372,6 +19880,14 @@
         NAVIGATION_RUDY_TILE_SOURCE.maxZoom - baseZoom,
       );
       return Math.max(1, 2 ** nativeZoomLevels);
+    }
+
+    function dashboardMapScreenSymbolTransform(viewportId, x, y) {
+      const savedZoom = Math.max(
+        1,
+        Number(state.mapViewportById?.[viewportId]?.zoom) || 1,
+      );
+      return `translate(${Number(x).toFixed(1)} ${Number(y).toFixed(1)}) scale(${(1 / savedZoom).toFixed(6)})`;
     }
 
     function updateDashboardMapScreenSymbols(viewport, viewState) {
@@ -19510,13 +20026,37 @@
         apply(message);
       };
 
+      const focusElements = (elements, message = "") => {
+        const elementRects = Array.from(elements || [])
+          .filter(element => element?.getBoundingClientRect)
+          .map(element => element.getBoundingClientRect())
+          .filter(rect => Number.isFinite(rect.left)
+            && Number.isFinite(rect.right)
+            && Number.isFinite(rect.top)
+            && Number.isFinite(rect.bottom));
+        if (!elementRects.length) return false;
+        const viewportRect = viewport.getBoundingClientRect();
+        const targetLeft = Math.min(...elementRects.map(rect => rect.left));
+        const targetRight = Math.max(...elementRects.map(rect => rect.right));
+        const targetTop = Math.min(...elementRects.map(rect => rect.top));
+        const targetBottom = Math.max(...elementRects.map(rect => rect.bottom));
+        panBy(
+          viewportRect.left + viewportRect.width / 2 - (targetLeft + targetRight) / 2,
+          viewportRect.top + viewportRect.height / 2 - (targetTop + targetBottom) / 2,
+          message,
+        );
+        return true;
+      };
+
       const reset = () => {
-        viewState = {...viewState, zoom: 1, x: 0, y: 0, mode: "pan"};
+        viewState = {...viewState, zoom: 1, x: 0, y: 0};
         pointerState = null;
         clearSelection();
         viewport.dataset.mapDragging = "false";
         viewport.dataset.mapLastGesture = "reset";
-        apply("Map view reset.");
+        apply(viewState.mode === "box"
+          ? "Map fitted. Box zoom remains active."
+          : "Map view reset.");
       };
 
       const setMode = (mode) => {
@@ -19528,7 +20068,7 @@
         clearSelection();
         viewport.dataset.mapDragging = "false";
         apply(viewState.mode === "box"
-          ? "Box zoom active for one selection. Click to zoom, drag down-right to zoom in, or drag up-left to zoom out. Rectangle zoom is capped at 4× and then returns to pan."
+          ? "Persistent box zoom active. Click or drag in any direction to zoom in. Each rectangle is capped at 4×; use minus to zoom out or Pan to leave box zoom."
           : "Mouse drag pan active.");
       };
 
@@ -19552,24 +20092,17 @@
           x: (pointer.startX + pointer.lastX) / 2,
           y: (pointer.startY + pointer.lastY) / 2,
         };
-        viewState = {...viewState, mode: "pan"};
         if (
           !pointer.moved
           || boxWidth < DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX
           || boxHeight < DASHBOARD_MAP_BOX_ZOOM_MIN_SIZE_PX
         ) {
           viewport.dataset.mapLastGesture = "point-zoom-in";
-          zoomAt(1.25, center, "Selection was too small for box zoom; point zoom applied and pan restored.");
+          zoomAt(1.25, center, "Selection was too small for box zoom; point zoom applied. Box zoom remains active.");
           return;
         }
         const factor = Math.min(DASHBOARD_MAP_BOX_ZOOM_MAX_FACTOR,
           Math.max(1.25, Math.min(viewportWidth / boxWidth, viewportHeight / boxHeight)));
-        const zoomOut = pointer.lastX < pointer.startX && pointer.lastY < pointer.startY;
-        if (zoomOut) {
-          viewport.dataset.mapLastGesture = "rectangle-zoom-out";
-          zoomAt(1 / factor, center, "Rectangle zoom out complete; pan restored.");
-          return;
-        }
         const nextZoom = Math.max(1, Math.min(maxZoom, viewState.zoom * factor));
         const localX = (center.x - viewState.x) / viewState.zoom;
         const localY = (center.y - viewState.y) / viewState.zoom;
@@ -19580,7 +20113,7 @@
           y: viewportHeight / 2 - localY * nextZoom,
         };
         viewport.dataset.mapLastGesture = "rectangle-zoom-in";
-        apply(`Rectangle zoom in complete at ${Math.round(nextZoom * 100)} percent; pan restored.`);
+        apply(`Rectangle zoom in complete at ${Math.round(nextZoom * 100)} percent. Box zoom remains active.`);
       };
 
       const onPointerDown = (event) => {
@@ -19704,6 +20237,8 @@
 
       return {
         getState: () => ({...viewState}),
+        refresh: () => apply(),
+        focusElements,
         panBy,
         reset,
         setMode,
@@ -21767,12 +22302,17 @@
         if (!nextScroll) return;
         const selectedNodeId = state.architectureSelectedPassageNodeId;
         const selectedBinId = state.architectureSelectedBinId;
-        const selector = selectedNodeId
-          ? `[data-architecture-passage-node-id="${cssEscape(selectedNodeId)}"][data-architecture-selection-surface^="fingerprint"]`
-          : selectedBinId
-            ? `[data-architecture-bin-id="${cssEscape(selectedBinId)}"][data-architecture-selection-surface="fingerprint-bin"]`
-            : "";
-        const target = selector ? nextScroll.querySelector(selector) : null;
+        const nodeTarget = selectedNodeId
+          ? nextScroll.querySelector(
+              `[data-architecture-passage-node-id="${cssEscape(selectedNodeId)}"][data-architecture-selection-surface^="fingerprint"]`,
+            )
+          : null;
+        const binTarget = selectedBinId
+          ? nextScroll.querySelector(
+              `[data-architecture-bin-id="${cssEscape(selectedBinId)}"][data-architecture-selection-surface="fingerprint-bin"]`,
+            )
+          : null;
+        const target = nodeTarget || binTarget;
         if (!target) return;
         const scrollRect = nextScroll.getBoundingClientRect();
         const targetRect = target.getBoundingClientRect();
@@ -21785,7 +22325,30 @@
         );
         state.architectureFingerprintScrollLeft = nextScroll.scrollLeft;
       };
-      const rerenderArchitecture = (focusSelector = "", {centerFingerprint = false} = {}) => {
+      const centerArchitectureMapSelection = ({nodeId = "", binId = ""} = {}) => {
+        const viewport = document.querySelector(
+          '[data-dashboard-map-viewport="architecture-map"]',
+        );
+        const controller = viewport?.dashboardMapController;
+        if (!controller) return false;
+        controller.refresh?.();
+        let targets = nodeId
+          ? viewport.querySelectorAll(
+              `[data-architecture-passage-node-id="${cssEscape(nodeId)}"][data-architecture-selection-surface="map-evidence"]`,
+            )
+          : [];
+        if (!targets.length && binId) {
+          targets = viewport.querySelectorAll(
+            `[data-architecture-bin-id="${cssEscape(binId)}"][data-architecture-selection-surface="map-bin"]`,
+          );
+        }
+        if (!targets.length) return false;
+        return controller.focusElements(targets, "Architecture selection centered on map.");
+      };
+      const rerenderArchitecture = (
+        focusSelector = "",
+        {centerFingerprint = false, centerMap = false} = {},
+      ) => {
         const currentScroll = shell.querySelector("[data-architecture-fingerprint-scroll]");
         if (currentScroll) state.architectureFingerprintScrollLeft = currentScroll.scrollLeft;
         render();
@@ -21793,7 +22356,16 @@
           const nextScroll = document.querySelector("[data-architecture-fingerprint-scroll]");
           if (nextScroll) nextScroll.scrollLeft = Number(state.architectureFingerprintScrollLeft || 0);
           if (centerFingerprint) centerFingerprintSelection(nextScroll);
+          if (centerMap) {
+            centerArchitectureMapSelection({
+              nodeId: state.architectureSelectedPassageNodeId,
+              binId: state.architectureSelectedBinId,
+            });
+          }
           if (focusSelector) document.querySelector(focusSelector)?.focus({preventScroll: true});
+          document.querySelector(
+            '[data-dashboard-map-viewport="architecture-map"]',
+          )?.dashboardMapController?.refresh?.();
         });
       };
       shell.querySelectorAll("button[data-architecture-mode]").forEach(button => {
@@ -21824,15 +22396,27 @@
           : "";
         rerenderArchitecture(
           `[data-architecture-bin-id="${cssEscape(binId)}"]${surfaceSelector}`,
-          {centerFingerprint: true},
+          {
+            centerFingerprint: true,
+            centerMap: focusSurface.startsWith("fingerprint"),
+          },
         );
       };
-      const selectPassageNode = (nodeId, {focusSurface = ""} = {}) => {
+      const selectPassageNode = (
+        nodeId,
+        {focusSurface = "", routeDistanceM = null} = {},
+      ) => {
         if (!nodeId) return;
         const node = architecturePassageNodeById(nodeId);
-        if (!node) return;
+        const nodeDistanceM = Number(node?.route_distance_m);
+        const fallbackDistanceM = routeDistanceM === null || routeDistanceM === ""
+          ? Number.NaN
+          : Number(routeDistanceM);
+        const distanceM = Number.isFinite(nodeDistanceM)
+          ? nodeDistanceM
+          : fallbackDistanceM;
+        if (!node && !Number.isFinite(distanceM)) return;
         state.architectureSelectedPassageNodeId = nodeId;
-        const distanceM = Number(node.route_distance_m || 0);
         const nearest = architectureBinForDistance(distanceM);
         if (nearest?.route_bin_id) state.architectureSelectedBinId = nearest.route_bin_id;
         const surfaceSelector = focusSurface
@@ -21840,14 +22424,20 @@
           : "";
         rerenderArchitecture(
           `[data-architecture-passage-node-id="${cssEscape(nodeId)}"]${surfaceSelector}`,
-          {centerFingerprint: true},
+          {
+            centerFingerprint: true,
+            centerMap: focusSurface.startsWith("fingerprint"),
+          },
         );
       };
       shell.querySelectorAll("[data-architecture-passage-node-id]").forEach(target => {
         target.addEventListener("click", () => {
           selectPassageNode(
             target.dataset.architecturePassageNodeId || "",
-            {focusSurface: target.dataset.architectureSelectionSurface || ""},
+            {
+              focusSurface: target.dataset.architectureSelectionSurface || "",
+              routeDistanceM: target.dataset.architectureRouteDistanceM,
+            },
           );
         });
         target.addEventListener("keydown", event => {
@@ -21855,7 +22445,10 @@
             event.preventDefault();
             selectPassageNode(
               target.dataset.architecturePassageNodeId || "",
-              {focusSurface: target.dataset.architectureSelectionSurface || ""},
+              {
+                focusSurface: target.dataset.architectureSelectionSurface || "",
+                routeDistanceM: target.dataset.architectureRouteDistanceM,
+              },
             );
             return;
           }
@@ -22318,7 +22911,10 @@
         );
         state.permissionBaselineDraft = draft;
         state.permissionBaselinePatchPreview = null;
-        state.permissionBaselineStatus = `${draft.validation_state || "unknown"} · ${asArray(draft.days).length} mission days · candidate_only=true · writes_performed=false`;
+        resetPermissionBaselineReviewChecks();
+        state.permissionBaselineStatus = draft.proposal_profile === "ref_gpx_proposal_v1"
+          ? `Scout proposal ready · ${Number(draft.proposal_summary?.day_count || 0)} proposed days · ${Number(draft.proposal_summary?.missing_p75_segment_count || 0)} missing p75 remain visible · writes_performed=false`
+          : `${draft.validation_state || "unknown"} · ${asArray(draft.days).length} mission days · candidate_only=true · writes_performed=false`;
       } catch (error) {
         state.permissionBaselineDraft = null;
         state.permissionBaselineStatus = `Draft failed closed · ${String(error?.message || error)}`;
@@ -22369,7 +22965,9 @@
         ? "Creating a new immutable candidate version…"
         : pending.kind === "save_patch"
           ? "Creating a new immutable child candidate from the patch…"
-          : "Revalidating and appending the reviewed-baseline receipt…";
+          : pending.kind === "rebuild"
+            ? "Rebuilding baseline-bound ETA, review-only rules and bounded projection…"
+            : "Revalidating and appending the reviewed-baseline receipt…";
       render();
       try {
         const candidateProjectId = state.pretripDataProjectId || projectId();
@@ -22385,6 +22983,7 @@
             },
           );
           state.permissionBaselineSavedCandidate = result;
+          resetPermissionBaselineReviewChecks(result.version_sha256 || "");
           state.permissionBaselinePatchText = "";
           state.permissionBaselinePatchPreview = null;
           state.permissionBaselineStatus = `Candidate version written · ${result.version_ref || "immutable candidate"} · departure approval=false`;
@@ -22402,11 +23001,30 @@
           );
           state.permissionBaselineSavedCandidate = result;
           state.permissionBaselineDraft = patch.draft;
+          resetPermissionBaselineReviewChecks(result.version_sha256 || "");
           state.permissionBaselinePatchPreview = null;
           state.permissionBaselinePatchText = "";
           state.permissionBaselineStatus = `Child candidate written · ${result.version_ref || "immutable version"} · parent ${result.parent_version_id || "bound"} · review_ready=${Boolean(result.review_ready)}`;
+        } else if (pending.kind === "rebuild") {
+          const rebuild = state.permissionProjection?.rebuild || {};
+          if (!rebuild.reviewed_baseline_sha256) throw new Error("Selected reviewed baseline hash is unavailable");
+          const result = await postJson(
+            `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/contextual-permission-dashboard/rebuilds`,
+            {
+              expected_reviewed_baseline_sha256: rebuild.reviewed_baseline_sha256,
+              idempotency_key: pending.idempotencyKey,
+              explicit_confirmation: true,
+            },
+          );
+          state.permissionBaselineStatus = `Bounded projection rebuilt · ${String(result.workbench_seed_sha256 || "").slice(0, 16)} · rules remain review_only · runtime authority=false`;
+          loadedDataScopes.delete("permission");
+          await loadDataScope("permission", {force: true});
         } else {
           if (!saved) throw new Error("Saved candidate is no longer available");
+          if (draft?.proposal_profile === "ref_gpx_proposal_v1" && !permissionBaselineReviewComplete()) {
+            throw new Error("Quick review is incomplete for this candidate hash");
+          }
+          const requirements = permissionBaselineReviewRequirements(draft);
           const result = await postJson(
             `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/mission-baseline/reviews/accept`,
             {
@@ -22414,11 +23032,15 @@
               candidate_sha256: saved.version_sha256,
               reviewer_alias: "dashboard_operator",
               idempotency_key: pending.idempotencyKey,
+              reviewed_day_ids: requirements.dayIds,
+              acknowledged_uncertainty_ids: requirements.uncertaintyIds,
+              safety_handoff_acknowledged: requirements.handoffRequired,
               explicit_confirmation: true,
             },
           );
           state.permissionBaselineStatus = `Reviewed baseline appended · ${result.reviewed_baseline_ref || "reviewed artifact"} · current session not rebound`;
           loadedDataScopes.delete("permission");
+          await loadDataScope("permission", {force: true});
         }
         state.permissionBaselinePendingAction = null;
       } catch (error) {
@@ -22707,6 +23329,17 @@
           }
         });
       });
+      document.querySelector("[data-permission-projection-rebuild]")?.addEventListener("click", () => {
+        const reviewedSha256 = state.permissionProjection?.rebuild?.reviewed_baseline_sha256;
+        if (!reviewedSha256) return;
+        state.permissionBaselinePendingAction = {
+          kind: "rebuild",
+          idempotencyKey: `permission-rebuild-${Date.now()}`,
+        };
+        state.permissionBaselineStatus = "Rebuild selected · inspect the baseline binding and fail-closed consequence. No write yet.";
+        render();
+        window.requestAnimationFrame(() => document.querySelector("[data-permission-baseline-confirm-sheet]")?.focus({preventScroll: true}));
+      });
       document.querySelector("[data-permission-simulation-observed]")?.addEventListener("input", event => {
         state.permissionSimulationObservedMinutes = Math.max(6, Math.min(120, Number(event.currentTarget.value || 16)));
         state.permissionSimulationState = "dirty";
@@ -22722,6 +23355,7 @@
           state.permissionBaselineSavedCandidate = null;
           state.permissionBaselinePatchText = "";
           state.permissionBaselinePatchPreview = null;
+          resetPermissionBaselineReviewChecks();
           state.permissionBaselineStatus = "Source mode changed · no model call · no write.";
           render();
         });
@@ -22732,6 +23366,7 @@
         state.permissionBaselineSavedCandidate = null;
         state.permissionBaselinePatchText = "";
         state.permissionBaselinePatchPreview = null;
+        resetPermissionBaselineReviewChecks();
         state.permissionBaselineStatus = "Source changed · not generated · no write.";
       });
       document.querySelector("[data-permission-baseline-preview]")?.addEventListener("click", () => {
@@ -22752,6 +23387,7 @@
       });
       document.querySelector("[data-permission-baseline-accept]")?.addEventListener("click", () => {
         if (state.permissionBaselineSavedCandidate?.review_ready !== true) return;
+        if (state.permissionBaselineDraft?.proposal_profile === "ref_gpx_proposal_v1" && !permissionBaselineReviewComplete()) return;
         state.permissionBaselinePendingAction = {
           kind: "accept",
           idempotencyKey: `baseline-accept-${Date.now()}`,
@@ -22759,6 +23395,20 @@
         state.permissionBaselineStatus = "Accept selected · inspect the hash-bound review consequence. No write yet.";
         render();
         window.requestAnimationFrame(() => document.querySelector("[data-permission-baseline-confirm-sheet]")?.focus({preventScroll: true}));
+      });
+      document.querySelectorAll("[data-permission-review-check]").forEach(input => {
+        input.addEventListener("change", () => {
+          const savedSha = state.permissionBaselineSavedCandidate?.version_sha256 || "";
+          if (!savedSha || state.permissionBaselineReviewChecks?.candidateSha256 !== savedSha) return;
+          state.permissionBaselineReviewChecks = {
+            ...state.permissionBaselineReviewChecks,
+            [input.dataset.permissionReviewCheck]: input.checked,
+          };
+          state.permissionBaselineStatus = permissionBaselineReviewComplete()
+            ? "Ready for Permission acceptance · inspect the final hash-bound sheet."
+            : "Quick review updated · no write performed.";
+          render();
+        });
       });
       document.querySelector("[data-permission-baseline-patch-text]")?.addEventListener("input", event => {
         state.permissionBaselinePatchText = String(event.currentTarget.value || "").slice(0, 2000);
