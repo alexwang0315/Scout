@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
@@ -88,6 +89,7 @@ def collect_health() -> dict[str, Any]:
         "temp": run_command(["vcgencmd", "measure_temp"]),
         "throttled": run_command(["vcgencmd", "get_throttled"]),
         "core_volts": run_command(["vcgencmd", "measure_volts", "core"]),
+        "memory": run_command(["free", "-m"]),
         "hailortcli_scan": run_command(["hailortcli", "scan"], timeout_seconds=8),
         "hailortcli_identify": run_command(
             ["hailortcli", "fw-control", "identify"],
@@ -123,6 +125,38 @@ def _hailo_tags() -> dict[str, Any]:
         }
     except Exception as exc:  # noqa: BLE001
         return {"endpoint": "http://127.0.0.1:8000/api/tags", "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _hailo_tags_for_endpoint(endpoint: str) -> dict[str, Any]:
+    parsed = urllib.parse.urlparse(endpoint)
+    tags_url = urllib.parse.urlunparse(
+        parsed._replace(path="/api/tags", params="", query="", fragment="")
+    )
+    try:
+        request = urllib.request.Request(tags_url)
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        models = payload.get("models") if isinstance(payload, dict) else []
+        return {
+            "endpoint": tags_url,
+            "model_count": len(models) if isinstance(models, list) else None,
+            "models": [
+                {
+                    "name": item.get("name"),
+                    "format": (item.get("details") or {}).get("format"),
+                    "family": (item.get("details") or {}).get("family"),
+                    "parameter_size": (item.get("details") or {}).get(
+                        "parameter_size"
+                    ),
+                }
+                for item in models[:12]
+                if isinstance(item, dict)
+            ]
+            if isinstance(models, list)
+            else [],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"endpoint": tags_url, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _ups_status() -> dict[str, Any]:
@@ -209,17 +243,56 @@ def _ups_hat_e_status(
         }
 
 
-def require_ai_hat_runtime(endpoint: str) -> None:
+def require_ai_hat_runtime(
+    endpoint: str,
+    *,
+    health_ssh_host: str | None = None,
+) -> dict[str, Any]:
     if os.getenv("SCOUT_ALLOW_NON_AIHAT_EVAL") == "1":
-        return
+        return {
+            "attestation_mode": "explicit_non_aihat_override",
+            "hardware_scan_attested": False,
+            "hef_model_attested": False,
+        }
     node_check = run_command(["sh", "-lc", "test -e /dev/hailo0"])
     scan = run_command(["hailortcli", "scan"], timeout_seconds=8)
-    if node_check["returncode"] != 0 and not _hailo_scan_attests_hardware(scan):
+    local_attested = node_check["returncode"] == 0 or _hailo_scan_attests_hardware(
+        scan
+    )
+    remote_attested = False
+    remote_scan: dict[str, Any] | None = None
+    if not local_attested and health_ssh_host:
+        if (
+            health_ssh_host.startswith("-")
+            or re.fullmatch(r"[A-Za-z0-9_.@:-]+", health_ssh_host) is None
+        ):
+            raise SystemExit("AI HAT+2 remote attestation host is invalid")
+        remote_scan = run_command(
+            [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=8",
+                health_ssh_host,
+                "hailortcli scan",
+            ],
+            timeout_seconds=15,
+        )
+        remote_attested = _hailo_scan_attests_hardware(remote_scan)
+    if not local_attested and not remote_attested:
         raise SystemExit(
             "AI HAT+2 eval requires /dev/hailo0 or a physical Hailo PCIe device "
             "reported by hailortcli scan"
         )
-    tags = _hailo_tags()
+    parsed_endpoint = urllib.parse.urlparse(endpoint)
+    if parsed_endpoint.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise SystemExit("AI HAT+2 eval endpoint must be a local or SSH-tunnel loopback")
+    tags = (
+        _hailo_tags()
+        if endpoint == DEFAULT_HAILO_ENDPOINT
+        else _hailo_tags_for_endpoint(endpoint)
+    )
     if tags.get("error"):
         raise SystemExit(f"AI HAT+2 Hailo endpoint unavailable: {tags['error']}")
     models = tags.get("models")
@@ -228,8 +301,21 @@ def require_ai_hat_runtime(endpoint: str) -> None:
         for item in models
     ):
         raise SystemExit("AI HAT+2 eval endpoint has no hardware HEF model")
-    if "127.0.0.1:8000" not in endpoint:
-        raise SystemExit("AI HAT+2 eval endpoint must be the Scout host local Hailo endpoint")
+    return {
+        "attestation_mode": "local" if local_attested else "ssh_remote",
+        "hardware_scan_attested": True,
+        "hef_model_attested": True,
+        "endpoint_host": parsed_endpoint.hostname,
+        "endpoint_port": parsed_endpoint.port,
+        "model_names": [
+            str(item.get("name"))
+            for item in tags.get("models") or []
+            if isinstance(item, dict) and item.get("name")
+        ],
+        "remote_scan_returncode": (
+            remote_scan.get("returncode") if remote_scan is not None else None
+        ),
+    }
 
 
 def _hailo_scan_attests_hardware(scan: dict[str, Any]) -> bool:

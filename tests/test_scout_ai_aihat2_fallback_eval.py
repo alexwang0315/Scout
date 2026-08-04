@@ -668,6 +668,46 @@ def test_aihat2_eval_accepts_pcie_attestation_without_legacy_device_node(
     require_ai_hat_runtime("http://127.0.0.1:8000/api/chat")
 
 
+def test_aihat2_eval_accepts_ssh_attested_hardware_through_loopback_tunnel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run_command(
+        command: list[str],
+        timeout_seconds: float = 5.0,
+    ) -> dict[str, object]:
+        del timeout_seconds
+        if command and command[0] == "ssh":
+            return {
+                "returncode": 0,
+                "stdout": "Hailo Devices:\n[-] Device: pci/0001:01:00.0",
+            }
+        return {"returncode": 1, "stdout": ""}
+
+    monkeypatch.setattr(eval_module, "run_command", fake_run_command)
+    monkeypatch.setattr(
+        eval_module,
+        "_hailo_tags_for_endpoint",
+        lambda _endpoint: {
+            "models": [
+                {
+                    "name": "qwen3:1.7b",
+                    "format": "hef",
+                    "parameter_size": "1.7B",
+                }
+            ]
+        },
+    )
+
+    attestation = require_ai_hat_runtime(
+        "http://127.0.0.1:18000/api/chat",
+        health_ssh_host="scout",
+    )
+
+    assert attestation["attestation_mode"] == "ssh_remote"
+    assert attestation["hardware_scan_attested"] is True
+    assert attestation["hef_model_attested"] is True
+
+
 def test_aihat2_eval_uses_same_scenario_for_total_info_tool_and_compact_evidence(
     tmp_path: Path,
 ) -> None:

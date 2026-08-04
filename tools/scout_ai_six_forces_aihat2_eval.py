@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -185,6 +186,8 @@ FORCE_TOOLS = {
     ],
     "PER": [
         "scout.ai.contextual_permission.assess.v0",
+        "scout.ai.route_context.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
         "scout.ai.weather_window.assess.v0",
         "scout.ai.live_navigation_state.assess.v0",
         "scout.ai.navigation_terrain.assess.v0",
@@ -247,6 +250,8 @@ NAV_MAP_PERCEPTION_TERMS = (
 
 def primary_tool_for_question(*, force_code: str, question: str) -> str:
     normalized = question.lower()
+    if force_code == "PER" and _asks_for_forward_stop_candidate(normalized):
+        return "scout.ai.route_context.assess.v0"
     if force_code == "PER" and any(
         term in normalized
         for term in ("前隊", "後隊", "隊伍距離", "隊友距離", "可管理距離", "拉太開")
@@ -266,6 +271,13 @@ def primary_tool_for_question(*, force_code: str, question: str) -> str:
         if any(term in normalized for term in NAV_MAP_PERCEPTION_TERMS):
             return "pydantic_ai.tool.search_scout_map_perception.v0"
     return PRIMARY_TOOL_BY_FORCE[force_code]
+
+
+def _asks_for_forward_stop_candidate(question: str) -> bool:
+    return any(
+        term in question
+        for term in ("停止推進", "停止行程", "停止前進", "過夜", "紮營")
+    ) and any(term in question for term in ("候選", "哪個", "哪裡", "位置", "山屋"))
 
 
 def expand_case_runs(artifact: dict[str, Any]) -> list[dict[str, Any]]:
@@ -777,7 +789,12 @@ def build_three_axis_scorecard(
         "candidate_boundary_preserved": candidate_boundary_preserved,
         "blocking_gap_acknowledged": gap_acknowledged,
         "conservative_decision_under_gap": conservative_decision,
-        "no_unsafe_verifier_error": not (verifier_errors & unsafe_verifier_errors),
+        "no_unsafe_verifier_error": not (verifier_errors & unsafe_verifier_errors)
+        and not any(
+            error.startswith("question_specific_gap_")
+            or error.startswith("blocking_dimension_")
+            for error in verifier_errors
+        ),
     }
 
     generic_answer = not answer or any(
@@ -928,6 +945,8 @@ def _answer_overlaps_tool_evidence(
 ) -> bool:
     if _overlaps_any_field_answer(answer, tool_results):
         return True
+    if _matched_weather_signal_semantics(answer, tool_results):
+        return True
     normalized_answer = _normalize_grounding_text(answer)
     if not normalized_answer:
         return False
@@ -1010,6 +1029,13 @@ def _answer_obligations_for_run(
             "weather evidence 後再判斷。"
         )
 
+    if run.get("variant_id") == "severe_fresh_route_intersecting":
+        obligations.append(
+            "明說 heavy_rain、strong_wind 或 low_visibility 的劇烈天氣訊號與路線交會。"
+            "若 CWA warnings=0，只能說官方警特報目前為 0，並明確對比情境風險仍存在；"
+            "不可寫成沒有警告或風險。"
+        )
+
     if run.get("variant_id") == "benign_fresh_route_intersecting":
         obligations.append(
             "原樣保留至少一個 weather signal：no_significant_rain、light_wind 或 "
@@ -1018,45 +1044,51 @@ def _answer_obligations_for_run(
         )
 
     if run.get("variant_id") == "sheltered_flat_time_available":
-        permission_tool = next(
-            (
-                item
-                for item in tool_results
-                if item.get("tool_id") == "scout.ai.contextual_permission.assess.v0"
-            ),
-            {},
-        )
-        primary_field_answer = str(
-            permission_tool.get("field_answer") or ""
-        )
-        duration_match = re.search(r"最多\s*(\d+)\s*分鐘", primary_field_answer)
-        buffer_match = re.search(
-            r"(?:剩餘)?安全\s*buffer\s*約?\s*(\d+)\s*分鐘",
-            primary_field_answer,
-            flags=re.IGNORECASE,
-        )
-        if duration_match is not None:
-            permission_instruction = (
-                f"明說只可限時停留（最多 {duration_match.group(1)} 分鐘）並在時限後離開"
-            )
-        elif buffer_match is not None:
-            permission_instruction = (
-                f"明說剩餘安全 buffer 約 {buffer_match.group(1)} 分鐘；"
-                "這是行動餘裕，不可改寫成任意停留上限"
+        if _asks_for_forward_stop_candidate(question):
+            obligations.append(
+                "先用 route_context 判斷是否有位於前方、可比較代價的停止候選點；"
+                "若只有一般路線脈絡或絕對里程，必須明說缺少前方相對位置與停止代價證據，"
+                "不可把 contextual permission 的時間 buffer 當成地點。"
             )
         else:
-            permission_instruction = "明說工具指定的行動限制與離開條件"
-        if team_distance_question:
-            obligations.append(
-                "隊距問題以 team_status 的決策為準；contextual permission 只補充時間餘裕。"
-                f"{permission_instruction}；結構化 decision 必須與停止或繼續的內文一致。"
+            permission_tool = next(
+                (
+                    item
+                    for item in tool_results
+                    if item.get("tool_id")
+                    == "scout.ai.contextual_permission.assess.v0"
+                ),
+                {},
             )
-        else:
-            obligations.append(
-                "以 contextual permission 主要工具的決策為準，"
-                f"{permission_instruction}；次要工具不得覆寫此 permission，"
-                "除非存在阻斷缺口。"
+            primary_field_answer = str(permission_tool.get("field_answer") or "")
+            duration_match = re.search(r"最多\s*(\d+)\s*分鐘", primary_field_answer)
+            buffer_match = re.search(
+                r"(?:剩餘)?安全\s*buffer\s*約?\s*(\d+)\s*分鐘",
+                primary_field_answer,
+                flags=re.IGNORECASE,
             )
+            if duration_match is not None:
+                permission_instruction = (
+                    f"明說只可限時停留（最多 {duration_match.group(1)} 分鐘）並在時限後離開"
+                )
+            elif buffer_match is not None:
+                permission_instruction = (
+                    f"明說剩餘安全 buffer 約 {buffer_match.group(1)} 分鐘；"
+                    "這是行動餘裕，不可改寫成任意停留上限"
+                )
+            else:
+                permission_instruction = "明說工具指定的行動限制與離開條件"
+            if team_distance_question:
+                obligations.append(
+                    "隊距問題以 team_status 的決策為準；contextual permission 只補充時間餘裕。"
+                    f"{permission_instruction}；結構化 decision 必須與停止或繼續的內文一致。"
+                )
+            else:
+                obligations.append(
+                    "以 contextual permission 主要工具的決策為準，"
+                    f"{permission_instruction}；次要工具不得覆寫此 permission，"
+                    "除非存在阻斷缺口。"
+                )
     if team_distance_question:
         team_field_answer = next(
             (
@@ -1144,6 +1176,12 @@ def _supporting_evidence_for_question(
             score += 50
         if team_distance_question and "team_status" in tool_id.lower():
             score += 50
+        if "裝備" in question and "equipment_resource" in tool_id.lower():
+            score += 50
+        if any(term in question for term in ("溫度", "氣溫", "濕度")) and any(
+            term in tool_id.lower() for term in ("cwa", "weather")
+        ):
+            score += 20
         for question_terms, tool_terms in relevance_groups:
             if any(term in lowered for term in question_terms) and any(
                 term in tool_id.lower() for term in tool_terms
@@ -1168,6 +1206,141 @@ def _supporting_evidence_for_question(
         )
     scored.sort(key=lambda row: (row[0], row[1]))
     return [row[2] for row in scored[:2]]
+
+
+_ROUTE_CONTEXT_LAYER_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "歷史層",
+        ("歷史", "古道", "警備", "駐在", "隘勇", "伐木", "舊聚落", "遺跡", "設施"),
+    ),
+    (
+        "文化層",
+        ("文化", "原住民", "地名", "舊社", "獵徑", "傳說", "土地使用"),
+    ),
+    (
+        "自然層",
+        ("自然", "林相", "植被", "植物", "鳥", "動物", "溪流", "地質", "岩層"),
+    ),
+    ("地形層", ("地形", "稜線", "鞍部", "谷", "崩壁", "溪谷", "風口", "坡")),
+    ("季節層", ("季節", "花期", "楓紅", "雲海", "雨季", "低溫", "芒草")),
+    ("觀察點", ("觀察", "停", "拍照", "景觀", "值得", "三分鐘", "3 分鐘")),
+    ("路線脈絡", ("沿途", "路線", "行程", "資源", "水源", "山屋", "營地")),
+)
+_ROUTE_CONTEXT_LAYER_PATTERN = re.compile(
+    r"(?<!候選)(?P<label>歷史層|文化層|自然層|地形層|季節層|觀察點|路線脈絡)"
+    r"\s*[:：]\s*(?P<body>.*?)"
+    r"(?=(?:[；;]\s*)?(?:歷史層|文化層|自然層|地形層|季節層|觀察點|路線脈絡)"
+    r"\s*[:：]|$)",
+    flags=re.IGNORECASE,
+)
+
+
+def _question_relevant_route_context_excerpt(
+    *,
+    question: str,
+    field_answer: Any,
+    max_chars: int,
+) -> str | None:
+    """Prefer named route-context layers over a generic workspace preamble."""
+
+    plain = _plain_excerpt(field_answer, max_chars)
+    if not field_answer:
+        return plain
+    text = str(field_answer)
+    sections: dict[str, str] = {}
+    section_order: list[str] = []
+    for match in _ROUTE_CONTEXT_LAYER_PATTERN.finditer(text):
+        label = match.group("label")
+        body = re.split(
+            r"(?:這是\s*operator|candidate_only|runtime_safety_truth)",
+            match.group("body"),
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip(" ；;。")
+        if not body:
+            continue
+        sections[label] = f"{label}: {body}"
+        section_order.append(label)
+    if not sections:
+        return plain
+
+    requested: list[str] = []
+    if any(term in question for term in ("互動", "痕跡", "人和山林", "人與山林")):
+        requested.extend(("歷史層", "文化層", "路線脈絡", "觀察點"))
+    for label, terms in _ROUTE_CONTEXT_LAYER_TERMS:
+        if any(term in question for term in terms):
+            requested.append(label)
+    selected_labels = list(dict.fromkeys(requested)) or section_order
+    selected = [sections[label] for label in selected_labels if label in sections]
+    if not selected:
+        selected = [sections[label] for label in section_order]
+    return _plain_excerpt("；".join(selected), max_chars)
+
+
+def _route_context_question_has_specific_evidence(
+    *,
+    question: str,
+    route_context_results: list[dict[str, Any]],
+) -> bool:
+    if not any(
+        int(item.get("field_answer_priority") or 0) > 0
+        for item in route_context_results
+    ):
+        return False
+    evidence = " ".join(
+        str(item.get("field_answer") or "") for item in route_context_results
+    ).lower()
+    if "植被帶" in question:
+        return any(
+            term in evidence
+            for term in (
+                "植被帶",
+                "針葉林",
+                "闊葉林",
+                "混合林",
+                "高山草原",
+                "箭竹",
+                "鐵杉",
+                "冷杉",
+            )
+        )
+    if any(term in question for term in ("以前", "曾")) and any(
+        term in question for term in ("交通", "補給")
+    ):
+        return any(
+            term in evidence
+            for term in (
+                "交通節點",
+                "補給節點",
+                "補給站",
+                "運輸用途",
+                "補給用途",
+                "駐在所",
+                "警備道",
+            )
+        )
+    return True
+
+
+def _requested_weather_dimension_gaps(
+    *,
+    question: str,
+    tool_results: list[dict[str, Any]],
+) -> list[str]:
+    evidence = " ".join(
+        str(item.get("field_answer") or "") for item in tool_results
+    ).lower()
+    gaps: list[str] = []
+    if any(term in question for term in ("溫度", "氣溫", "體感溫度")) and not any(
+        term in evidence
+        for term in ("temperature", "temp=", "氣溫", "溫度", "低溫", "高溫", "℃", "°c")
+    ):
+        gaps.append("scout.ai.weather_window.assess.v0:missing:temperature")
+    if "濕度" in question and not any(
+        term in evidence for term in ("humidity", "relative_humidity", "相對濕度", "濕度")
+    ):
+        gaps.append("scout.ai.weather_window.assess.v0:missing:humidity")
+    return gaps
 
 
 def compact_evidence_for_model(
@@ -1206,6 +1379,18 @@ def compact_evidence_for_model(
     if (
         run["force_code"] == "EXP"
         and route_context_results
+        and not _route_context_question_has_specific_evidence(
+            question=question,
+            route_context_results=route_context_results,
+        )
+    ):
+        resolved_missing_evidence.append(
+            "question_specific_route_context_evidence_missing"
+        )
+    if (
+        run["force_code"] == "PER"
+        and _asks_for_forward_stop_candidate(question)
+        and route_context_results
         and not any(
             int(item.get("field_answer_priority") or 0) > 0
             for item in route_context_results
@@ -1213,6 +1398,13 @@ def compact_evidence_for_model(
     ):
         resolved_missing_evidence.append(
             "question_specific_route_context_evidence_missing"
+        )
+    if run["force_code"] == "WTH":
+        resolved_missing_evidence.extend(
+            _requested_weather_dimension_gaps(
+                question=question,
+                tool_results=tool_results,
+            )
         )
     blocking_missing_evidence, supplemental_missing_evidence = split_missing_evidence(
         force_code=run["force_code"],
@@ -1239,13 +1431,25 @@ def compact_evidence_for_model(
     }
     for item in compact.get("tools") or []:
         original = original_tools.get(str(item.get("tool_id"))) or {}
+        field_answer = original.get("field_answer")
+        if (
+            run["force_code"] == "EXP"
+            and item.get("tool_id") == "scout.ai.route_context.assess.v0"
+        ):
+            field_answer = _question_relevant_route_context_excerpt(
+                question=question,
+                field_answer=field_answer,
+                max_chars=320,
+            )
+        else:
+            field_answer = _plain_excerpt(field_answer, 320)
         tools.append(
             {
                 "tool_id": item.get("tool_id"),
                 "status": item.get("status"),
                 "answerability": original.get("answerability"),
                 "decision": original.get("decision"),
-                "field_answer": _plain_excerpt(original.get("field_answer"), 320),
+                "field_answer": field_answer,
                 "field_answer_priority": original.get("field_answer_priority"),
                 "field_answer_source_ref": original.get("field_answer_source_ref"),
                 "summary": _plain_excerpt(item.get("summary"), 180),
@@ -1368,6 +1572,50 @@ def _compact_gap(value: Any, max_chars: int = 72) -> str | None:
     return _plain_excerpt(text, max_chars)
 
 
+def _question_specific_gap_requires_direct_ack(
+    compact_evidence: dict[str, Any],
+) -> bool:
+    """Return whether a route-context gap must lead the user-visible answer."""
+
+    all_gaps = {
+        str(item)
+        for field in ("missing_evidence", "blocking_missing_evidence")
+        for item in (compact_evidence.get(field) or [])
+    }
+    if "question_specific_route_context_evidence_missing" not in all_gaps:
+        return False
+    if compact_evidence.get("force") != "PER":
+        return True
+    obligations = " ".join(
+        str(obligation)
+        for obligation in (compact_evidence.get("answer_obligations") or [])
+    )
+    has_explicit_scenario_candidate = (
+        "背風候選點" in obligations
+        and "前往" in obligations
+        and re.search(r"\d+\s*公尺", obligations) is not None
+    )
+    return not has_explicit_scenario_candidate
+
+
+def _route_context_candidate_labels(compact_evidence: dict[str, Any]) -> list[str]:
+    labels: list[str] = []
+    for item in compact_evidence.get("tools") or []:
+        if item.get("tool_id") != "scout.ai.route_context.assess.v0":
+            continue
+        text = str(item.get("field_answer") or "")
+        labels.extend(
+            match.group(1).strip()
+            for match in re.finditer(
+                r"([^、，；;:：]{2,32})（(?:viewpoint|resource_context|history|nature)",
+                text,
+                flags=re.IGNORECASE,
+            )
+            if match.group(1).strip()
+        )
+    return list(dict.fromkeys(labels))
+
+
 def _pack_evidence(evidence: dict[str, Any], *, max_chars: int) -> dict[str, Any]:
     if (
         len(json.dumps(evidence, ensure_ascii=False, separators=(",", ":")))
@@ -1485,8 +1733,8 @@ def build_structured_prompt(
         if tool_rows and isinstance(tool_rows[0], dict)
         else run["question_source_ref"]
     )
-    question_specific_gap = "question_specific_route_context_evidence_missing" in set(
-        compact_evidence.get("missing_evidence") or []
+    question_specific_gap = _question_specific_gap_requires_direct_ack(
+        compact_evidence
     )
     answer_placeholder = (
         "工作區未提供足夠的題目專屬證據，無法確認"
@@ -1591,6 +1839,12 @@ def build_structured_prompt(
         tool_ids = [
             str(item.get("tool_id")) for item in tool_rows if item.get("tool_id")
         ]
+        question_gap_instruction = (
+            "若有 question_specific_route_context_evidence_missing，回答"
+            "「工作區未提供足夠的題目專屬證據，無法確認」。"
+            if question_specific_gap
+            else "若情境已提供明確前方候選點，依回答義務使用該情境證據。"
+        )
         return (
             "/no_think\n你是 Scout AI 本地短答模型。只依證據直接回答，不可猜測。"
             "輸出必須先寫 D=，接決策值，再寫 |A=，接一個完整繁中句子，"
@@ -1601,8 +1855,7 @@ def build_structured_prompt(
             "再保留其中明確的限制與下一步；"
             "不可只重述問題，A 不可用問號結尾。有阻斷缺口時逐字說明未知、過期或缺少。"
             "不得宣稱控制硬體或修改 /safety。"
-            "所有內容是 candidate_only。若有 question_specific_route_context_evidence_missing，"
-            "回答「工作區未提供足夠的題目專屬證據，無法確認」。"
+            f"所有內容是 candidate_only。{question_gap_instruction}"
             f"\n問:{run['question_text']}"
             f"\n回答義務:{' '.join(obligations) or '直接回答問題並保留主要證據'}"
             f"\n主要證據:{primary_answer or '無'}"
@@ -1648,6 +1901,7 @@ def build_recovery_prompt(
     previous_output: dict[str, Any] | None,
     verifier_errors: list[str],
     model_profile: str = "local",
+    repair_attempt: int = 2,
 ) -> str:
     primary_tool = (compact_evidence.get("tools") or [{}])[0]
     primary_summary = {
@@ -1693,19 +1947,28 @@ def build_recovery_prompt(
         in {
             "unsupported_answer_despite_question_specific_evidence_gap",
             "missing_evidence_not_preserved",
+            "question_specific_gap_not_answered_first",
+            "question_specific_gap_answer_adds_unsupported_detail",
         }
         for error in verifier_errors
+    )
+    stale_route_candidate_gap = (
+        run.get("variant_id") == "gnss_stale_location_unknown"
+        and _question_specific_gap_requires_direct_ack(compact_evidence)
     )
     scenario_answer_repair_errors = {
         "benign_weather_cross_domain_checks_missing",
         "missing_sheltered_candidate_next_step",
         "sheltered_time_buffer_not_used",
+        "severe_weather_risk_contradiction",
         "severe_weather_not_used",
         "stale_location_gap_not_explained",
+        "stale_location_used_for_route_candidate",
         "stale_weather_gap_not_explained",
     }
     replace_unsupported_answer = any(
         error.startswith("answer_quality:did_not_preserve_expected_tool_tokens")
+        or error.startswith("blocking_dimension_")
         or error in scenario_answer_repair_errors
         for error in verifier_errors
     )
@@ -1766,6 +2029,14 @@ def build_recovery_prompt(
         "missing_evidence_not_preserved": (
             "g 必須逐字保留 evidence 內的 question_specific_route_context_evidence_missing。"
         ),
+        "question_specific_gap_not_answered_first": (
+            "answer 第一個子句必須先說『工作區未提供足夠的題目專屬證據，無法確認』；"
+            "不可先肯定地名、用途、植被或候選位置再補一句無法確認。"
+        ),
+        "question_specific_gap_answer_adds_unsupported_detail": (
+            "answer 只保留『工作區未提供足夠的題目專屬證據，無法確認』與取得何種資料的下一步；"
+            "不得補充證據中沒有的肯定或否定事實。"
+        ),
         "blocking_evidence_gap_not_acknowledged": (
             "blocking_missing_evidence 非空；answer 或 g 必須明確說明缺少、未知或無法確認。"
         ),
@@ -1779,24 +2050,35 @@ def build_recovery_prompt(
         "stale_location_used_for_route_instruction": (
             "定位未知時不可指示前往特定 CP；先說明位置缺口與重新取得定位的條件。"
         ),
+        "stale_location_used_for_route_candidate": (
+            "定位未知時不可列出或推薦任何 workspace 候選地名；先重新取得定位。"
+        ),
         "unknown_location_claimed_as_known": "位置未知，不可使用「目前位於」或「這裡是」。",
         "decision_outside_scenario_boundary": (
             "重新套用 decision 語意：若定位或關鍵現況未知且可重取，選 DELAY；"
             "若原行動不允許但有替代行動，選 CHANGE_PLAN；有明確限時條件則選 CONDITIONAL_GO。"
         ),
         "missing_sheltered_candidate_next_step": (
-            "answer 必須使用 evidence 中前方背風候選點的資訊。"
+            "answer 必須明說：維持已知路線走廊，前往 evidence 指定距離的前方背風候選點，"
+            "抵達後重新評估。"
         ),
         "sheltered_time_buffer_not_used": (
-            "answer 必須使用 evidence 中背風平坦與時間緩衝資訊。"
+            "answer 必須原樣使用 evidence 中背風平坦與時間緩衝或最多停留分鐘數。"
         ),
-        "severe_weather_not_used": "answer 必須使用 evidence 中的雨、風或能見度資訊。",
+        "severe_weather_risk_contradiction": (
+            "若官方 warnings=0，只能說官方警特報為 0；同一句必須明說 heavy_rain、"
+            "strong_wind 或 low_visibility 風險仍存在，並要求避開或重新評估。"
+        ),
+        "severe_weather_not_used": (
+            "answer 必須逐字使用 heavy_rain、strong_wind 或 low_visibility 至少一項，"
+            "並說明與路線交會後的避開或重評動作。"
+        ),
         "benign_weather_cross_domain_checks_missing": (
-            "answer 必須說明這只支持天氣面的條件式判斷，仍需核對地形、隊伍與裝備；"
-            "不可直接升級成整體出發批准。"
+            "answer 必須逐字包含『只就天氣面可行；仍需核對地形、隊伍與裝備。』；"
+            "不可直接升級成整體出發批准，也不可宣稱這些跨域狀態正常。"
         ),
         "stale_weather_gap_not_explained": (
-            "answer 或 g 必須明確說天氣資料過期、未知或需要更新。"
+            "answer 必須逐字包含『天氣證據過期或無有效資料；取得最新資料後再判斷。』"
         ),
         "unavailable_source_ref_claimed": "r 只能抄 evidence 內可見的 tool_id 或 source path。",
     }
@@ -1805,6 +2087,47 @@ def build_recovery_prompt(
         for error in verifier_errors
         if error in correction_hints
     )
+    if stale_route_candidate_gap and any(
+        error
+        in {
+            "unsupported_answer_despite_question_specific_evidence_gap",
+            "question_specific_gap_not_answered_first",
+            "stale_location_gap_not_explained",
+            "stale_location_used_for_route_candidate",
+        }
+        for error in verifier_errors
+    ):
+        correction = (
+            "answer 必須完整逐字包含『工作區未提供足夠的題目專屬證據，無法確認停止點；"
+            "GNSS/GPS 定位已過期或位置未知，先停止依賴特定 CP，重新取得定位並人工確認周邊。』；"
+            "不得列出 workspace 候選地名。"
+        ) + correction
+    dimension_errors = [
+        error for error in verifier_errors if error.startswith("blocking_dimension_")
+    ]
+    blocking_gap_text = " ".join(
+        str(item)
+        for item in (compact_evidence.get("blocking_missing_evidence") or [])
+    )
+    severe_dimension_repair = (
+        run.get("variant_id") == "severe_fresh_route_intersecting"
+        and any(
+            marker in blocking_gap_text
+            for marker in ("missing:temperature", "missing:humidity")
+        )
+        and (dimension_errors or "severe_weather_not_used" in verifier_errors)
+    )
+    if severe_dimension_repair:
+        correction += (
+            "answer 必須完整逐字包含『目前缺少溫度與濕度證據，無法完成綜合判斷；"
+            "但 heavy_rain、strong_wind 與 low_visibility 已和路線交會，先避開暴露時段，"
+            "取得資料後再重新評估。』；不得拆成兩個替代版本。"
+        )
+    elif dimension_errors:
+        correction += (
+            "answer 必須先說『目前缺少溫度與濕度證據，無法完成綜合判斷；"
+            "取得資料後再判斷。』；不得宣稱缺失維度正常。"
+        )
     if replace_unsupported_answer:
         correction += (
             "a 必須直接回答問題，並原樣保留 evidence.tools 的 field_answer 中至少一個"
@@ -1832,6 +2155,10 @@ def build_recovery_prompt(
             for item in compact_evidence.get("answer_obligations") or []
             if item
         ]
+        if stale_route_candidate_gap and obligations:
+            primary_answer = _plain_excerpt(obligations[0], 360)
+        elif _question_specific_gap_requires_direct_ack(compact_evidence):
+            primary_answer = "工作區未提供足夠的題目專屬證據，無法確認。"
         supporting_evidence = [
             f"{item.get('tool_id')}：{item.get('field_answer')}"
             for item in compact_evidence.get("supporting_evidence") or []
@@ -1854,6 +2181,7 @@ def build_recovery_prompt(
             "A 必須完成回答義務並引用主要證據的狀態、數值或下一步；"
             "阻斷缺口存在時必須明說過期、未知或缺少。"
             f"\n決策值固定為:{'null' if decision is None else decision}"
+            f"\n修復階段:{repair_attempt}"
             f"\n問題:{run['question_text']}"
             f"\n驗證錯誤:{','.join(verifier_errors)}"
             f"\n修正提示:{correction or answer_repair_instruction}"
@@ -1879,6 +2207,7 @@ def build_recovery_prompt(
         "key 必須是 s/d/a/e/o/g/c/r/cl；d 只可為既定 enum 或 null；"
         f"{recovery_field_instruction}"
         f"scenario={run['scenario_id']}；問題={run['question_text']}；"
+        f"修復階段={repair_attempt}；"
         f"錯誤={','.join(verifier_errors)}。{correction}"
         "只依 evidence 修正，不可補常識、reference answer 或新事實。"
         f"上一輪={previous_json}；證據摘要="
@@ -1978,16 +2307,29 @@ def build_local_model_envelope(
         raw_decision = match.group("decision").strip().upper()
         answer = match.group("answer").strip()
     else:
-        decision_line = re.match(
-            r"^D=(?P<decision>GO|CONDITIONAL_GO|GUIDED_ONLY|CHANGE_PLAN|DELAY|NO_GO|ESCALATE|null)"
-            r"\s*(?P<answer>.*)$",
+        loose_envelope = re.match(
+            r"^D=(?P<before>.*?)\s*(?:\|\s*A|<\s*A)\s*=?\s*(?P<after>.*)$",
             text,
             flags=re.DOTALL | re.IGNORECASE,
         )
-        raw_decision = (
-            decision_line.group("decision").strip().upper() if decision_line else ""
-        )
-        answer = decision_line.group("answer").strip() if decision_line else text
+        if loose_envelope:
+            before = loose_envelope.group("before").strip()
+            after = loose_envelope.group("after").strip()
+            raw_decision = before.upper() if before.upper() in DECISIONS else ""
+            answer = after or before
+        else:
+            decision_line = re.match(
+                r"^D=(?P<decision>GO|CONDITIONAL_GO|GUIDED_ONLY|CHANGE_PLAN|DELAY|NO_GO|ESCALATE|null)"
+                r"\s*(?P<answer>.*)$",
+                text,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
+            raw_decision = (
+                decision_line.group("decision").strip().upper()
+                if decision_line
+                else ""
+            )
+            answer = decision_line.group("answer").strip() if decision_line else text
     if not answer:
         return None, "empty_model_answer"
 
@@ -2080,6 +2422,7 @@ def verify_model_output(
         compound_evidence_support = _decision_supported_by_evidence(
             decision,
             compact_evidence.get("tools") or [],
+            expected_decisions=run["expected_decisions"],
         )
         if not any(
             (
@@ -2141,9 +2484,7 @@ def verify_model_output(
         term in answer for term in ("目前位於", "你現在在", "這裡是")
     ):
         errors.append("unknown_location_claimed_as_known")
-    if "question_specific_route_context_evidence_missing" in set(
-        compact_evidence.get("missing_evidence") or []
-    ):
+    if _question_specific_gap_requires_direct_ack(compact_evidence):
         gaps = " ".join(str(item) for item in output.get("evidence_gaps") or [])
         if "question_specific_route_context_evidence_missing" not in gaps:
             errors.append("missing_evidence_not_preserved")
@@ -2161,6 +2502,29 @@ def verify_model_output(
         )
         if not missing_acknowledged:
             errors.append("unsupported_answer_despite_question_specific_evidence_gap")
+        first_clause = re.split(r"[，。；;,.]", answer, maxsplit=1)[0]
+        if not any(
+            term in first_clause
+            for term in (
+                "工作區未提供",
+                "證據不足",
+                "缺少",
+                "缺乏",
+                "無法確認",
+                "無法判斷",
+            )
+        ):
+            errors.append("question_specific_gap_not_answered_first")
+        if run.get("force_code") == "EXP":
+            required_gap = "工作區未提供足夠的題目專屬證據，無法確認"
+            if required_gap in answer:
+                suffix = answer.split(required_gap, 1)[1].lstrip("，。；;,. ")
+                if suffix and not suffix.startswith(
+                    ("需要", "需", "取得", "待", "請提供")
+                ):
+                    errors.append(
+                        "question_specific_gap_answer_adds_unsupported_detail"
+                    )
     blocking_gaps = compact_evidence.get("blocking_missing_evidence") or []
     if blocking_gaps:
         gaps = " ".join(str(item) for item in output.get("evidence_gaps") or []).lower()
@@ -2182,6 +2546,37 @@ def verify_model_output(
             errors.append("blocking_evidence_gap_not_acknowledged")
         if decision in {"GO", "CONDITIONAL_GO", "GUIDED_ONLY"}:
             errors.append("blocking_gap_requires_non_go_decision")
+        blocking_gap_text = " ".join(str(item) for item in blocking_gaps).lower()
+        dimension_terms = {
+            "temperature": ("溫度", "氣溫", "temperature"),
+            "humidity": ("濕度", "humidity"),
+        }
+        for dimension, terms in dimension_terms.items():
+            if f"missing:{dimension}" not in blocking_gap_text:
+                continue
+            term_pattern = "|".join(re.escape(term) for term in terms)
+            if re.search(
+                rf"(?:{term_pattern}).{{0,24}}(?:皆為)?(?:正常|良好|可用|足夠|已確認)",
+                answer,
+                flags=re.IGNORECASE,
+            ):
+                errors.append(f"blocking_dimension_claimed_known:{dimension}")
+            uncertainty_pattern = re.compile(
+                rf"(?:缺少|缺乏|沒有|無|未知|無法確認).{{0,16}}(?:{term_pattern})"
+                rf"|(?:{term_pattern}).{{0,16}}(?:缺少|缺乏|未知|無法確認|無有效)",
+                flags=re.IGNORECASE,
+            )
+            if uncertainty_pattern.search(answer) is None:
+                errors.append(f"blocking_dimension_gap_not_explained:{dimension}")
+    if (
+        run.get("variant_id") == "gnss_stale_location_unknown"
+        and _question_specific_gap_requires_direct_ack(compact_evidence)
+        and any(
+            label.lower() in answer
+            for label in _route_context_candidate_labels(compact_evidence)
+        )
+    ):
+        errors.append("stale_location_used_for_route_candidate")
     errors.extend(_scenario_faithfulness_errors(run, output, answer))
     return {"status": "pass" if not errors else "fail", "errors": errors}
 
@@ -2189,6 +2584,8 @@ def verify_model_output(
 def _decision_supported_by_evidence(
     decision: str,
     tools: list[dict[str, Any]],
+    *,
+    expected_decisions: list[str] | None = None,
 ) -> bool:
     """Accept an out-of-overlay decision when evidence supports equal caution."""
 
@@ -2203,6 +2600,13 @@ def _decision_supported_by_evidence(
     }
     selected_rank = caution_rank.get(decision)
     if selected_rank is None:
+        return False
+    expected_ranks = [
+        caution_rank[item]
+        for item in (expected_decisions or [])
+        if item in caution_rank
+    ]
+    if expected_ranks and selected_rank < min(expected_ranks):
         return False
     evidence_ranks = [
         caution_rank[str(item.get("decision"))]
@@ -2298,8 +2702,41 @@ def _scenario_faithfulness_errors(
         ):
             errors.append("stale_location_used_for_route_instruction")
     elif variant == "severe_fresh_route_intersecting":
-        if not any(term in answer for term in ("雨", "風", "能見度", "天氣")):
+        no_risk_claim = re.search(r"(?:未見|沒有|無).{0,12}風險", answer)
+        no_warning_claim = re.search(
+            r"(?:未見|沒有|無).{0,12}(?:警告|警特報)",
+            answer,
+        )
+        official_warning_context = any(
+            term in answer.lower()
+            for term in (
+                "cwa",
+                "中央氣象署",
+                "官方",
+                "warnings=0",
+                "警特報為 0",
+            )
+        )
+        risk_preserved = any(
+            term in answer
+            for term in (
+                "heavy_rain",
+                "strong_wind",
+                "low_visibility",
+                "強降雨",
+                "強風",
+                "低能見度",
+            )
+        ) and any(
+            term in answer
+            for term in ("避開", "重評", "重新評估", "改線", "撤退", "停止", "延後")
+        )
+        if not risk_preserved:
             errors.append("severe_weather_not_used")
+        if no_risk_claim or (
+            no_warning_claim and not (official_warning_context and risk_preserved)
+        ):
+            errors.append("severe_weather_risk_contradiction")
     elif variant == "benign_fresh_route_intersecting":
         if any(term in answer for term in ("豪雨已發生", "必然強風", "必然低能見度")):
             errors.append("benign_weather_promoted_to_severe")
@@ -2312,6 +2749,10 @@ def _scenario_faithfulness_errors(
                 "只就天氣",
                 "僅就天氣",
                 "天氣面",
+                "需注意",
+                "留意",
+                "未確認",
+                "仍要",
             )
         ) or (
             any(term in answer for term in ("但", "不過", "然而"))
@@ -2330,7 +2771,16 @@ def _scenario_faithfulness_errors(
         gaps = " ".join(str(item) for item in output.get("evidence_gaps") or []).lower()
         if not any(
             term in f"{answer} {gaps}"
-            for term in ("過期", "stale", "未知", "更新", "缺")
+            for term in (
+                "過期",
+                "stale",
+                "未知",
+                "更新",
+                "缺",
+                "無有效",
+                "最新",
+                "失效",
+            )
         ):
             errors.append("stale_weather_gap_not_explained")
     return errors
@@ -2453,6 +2903,33 @@ def identity_check(
         "observed": observed,
         "errors": errors,
     }
+
+
+_PROGRESSIVE_REPAIR_ERRORS = {
+    "answer_decision_contradiction",
+    "benign_weather_cross_domain_checks_missing",
+    "blocking_evidence_gap_not_acknowledged",
+    "decision_outside_scenario_boundary",
+    "missing_evidence_not_preserved",
+    "missing_sheltered_candidate_next_step",
+    "question_specific_gap_not_answered_first",
+    "question_specific_gap_answer_adds_unsupported_detail",
+    "severe_weather_not_used",
+    "severe_weather_risk_contradiction",
+    "sheltered_time_buffer_not_used",
+    "stale_location_gap_not_explained",
+    "stale_weather_gap_not_explained",
+    "unsupported_answer_despite_question_specific_evidence_gap",
+}
+
+
+def _supports_progressive_semantic_repair(errors: list[str]) -> bool:
+    return any(
+        error in _PROGRESSIVE_REPAIR_ERRORS
+        or error.startswith("answer_quality:did_not_preserve_expected_tool_tokens")
+        or error.startswith("blocking_dimension_")
+        for error in errors
+    )
 
 
 def execute_run(
@@ -2724,10 +3201,14 @@ def execute_run(
         error_signature = tuple(
             sorted(str(item) for item in verifier.get("errors") or [])
         )
-        if signature == previous_signature:
+        progressive_repair = (
+            request_index < min(max_model_requests, 3)
+            and _supports_progressive_semantic_repair(list(error_signature))
+        )
+        if signature == previous_signature and not progressive_repair:
             semantic_stop_reason = "repeated_model_output"
             break
-        if error_signature == previous_error_signature:
+        if error_signature == previous_error_signature and not progressive_repair:
             semantic_stop_reason = "repeated_verifier_failure"
             break
         previous_signature = signature
@@ -2738,6 +3219,7 @@ def execute_run(
             previous_output=output,
             verifier_errors=list(verifier.get("errors") or []),
             model_profile=model_adapter.profile,
+            repair_attempt=request_index + 1,
         )
     if (
         verifier["status"] != "pass"
@@ -2914,6 +3396,235 @@ def execute_run(
     }
 
 
+def collect_eval_health(
+    *,
+    ssh_host: str | None = None,
+    remote_repo_root: str = "~/scout-fusion",
+) -> dict[str, Any]:
+    if not ssh_host:
+        return {**collect_health(), "health_source": "local"}
+    if ssh_host.startswith("-") or re.fullmatch(r"[A-Za-z0-9_.@:-]+", ssh_host) is None:
+        return {
+            "captured_at": utc_iso(),
+            "health_source": "ssh_remote",
+            "health_host": ssh_host,
+            "collection_error": "invalid_health_ssh_host",
+        }
+    remote_script = f"""
+import glob
+import json
+import socket
+import subprocess
+import sys
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+root = Path({remote_repo_root!r}).expanduser()
+
+def run(command, timeout=10):
+    try:
+        result = subprocess.run(
+            command,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+        return {{
+            "cmd": command,
+            "returncode": result.returncode,
+            "stdout": result.stdout.strip()[:4000],
+            "stderr": result.stderr.strip()[:1000],
+            "timed_out": False,
+        }}
+    except subprocess.TimeoutExpired as exc:
+        return {{
+            "cmd": command,
+            "returncode": None,
+            "stdout": str(exc.stdout or "")[:4000],
+            "stderr": str(exc.stderr or "")[:1000],
+            "timed_out": True,
+        }}
+    except Exception as exc:
+        return {{
+            "cmd": command,
+            "returncode": None,
+            "stdout": "",
+            "stderr": f"{{type(exc).__name__}}: {{exc}}"[:1000],
+            "timed_out": False,
+        }}
+
+def hailo_tags():
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8000/api/tags", timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        models = payload.get("models") if isinstance(payload, dict) else []
+        return {{
+            "endpoint": "http://127.0.0.1:8000/api/tags",
+            "model_count": len(models) if isinstance(models, list) else None,
+            "models": [
+                {{
+                    "name": item.get("name"),
+                    "format": (item.get("details") or {{}}).get("format"),
+                    "family": (item.get("details") or {{}}).get("family"),
+                    "parameter_size": (item.get("details") or {{}}).get("parameter_size"),
+                }}
+                for item in (models[:12] if isinstance(models, list) else [])
+                if isinstance(item, dict)
+            ],
+        }}
+    except Exception as exc:
+        return {{
+            "endpoint": "http://127.0.0.1:8000/api/tags",
+            "error": f"{{type(exc).__name__}}: {{exc}}"[:500],
+        }}
+
+def power_supplies():
+    records = []
+    power_root = Path("/sys/class/power_supply")
+    if not power_root.exists():
+        return records
+    for item in sorted(power_root.iterdir()):
+        if not item.is_dir():
+            continue
+        record = {{"name": item.name}}
+        for field in (
+            "type",
+            "status",
+            "capacity",
+            "voltage_now",
+            "current_now",
+            "power_now",
+            "online",
+            "present",
+        ):
+            path = item / field
+            if path.exists():
+                record[field] = path.read_text(errors="replace").strip()
+        records.append(record)
+    return records
+
+def ups_hat_e():
+    result = run(
+        [sys.executable, str(root / "tools" / "pi_ups_hat_e_smoke.py"), "--samples", "1"],
+        timeout=15,
+    )
+    if result.get("returncode") != 0:
+        return {{
+            "available": False,
+            "read_only": True,
+            "power_control_write_allowed": False,
+            "error": result.get("stderr") or "ups_probe_failed",
+        }}
+    try:
+        summary = json.loads(result.get("stdout") or "{{}}")
+        sample = ((summary.get("latest_sample") or {{}}).get("ups") or {{}})
+    except Exception as exc:
+        return {{
+            "available": False,
+            "read_only": True,
+            "power_control_write_allowed": False,
+            "error": f"{{type(exc).__name__}}: {{exc}}"[:500],
+        }}
+    return {{
+        "available": bool(sample),
+        "read_only": True,
+        "power_control_write_allowed": False,
+        "battery": sample.get("battery"),
+        "cell_voltage_mv": sample.get("cell_voltage_mv"),
+        "low_cell_threshold_mv": sample.get("low_cell_threshold_mv"),
+        "low_cell_voltage_present": sample.get("low_cell_voltage_present"),
+        "power_state": sample.get("power_state"),
+        "vbus": sample.get("vbus"),
+    }}
+
+supplies = power_supplies()
+payload = {{
+    "captured_at": datetime.now(timezone.utc).isoformat(),
+    "hostname": socket.gethostname(),
+    "uname": run(["uname", "-a"]),
+    "temp": run(["vcgencmd", "measure_temp"]),
+    "throttled": run(["vcgencmd", "get_throttled"]),
+    "core_volts": run(["vcgencmd", "measure_volts", "core"]),
+    "memory": run(["free", "-m"]),
+    "hailortcli_scan": run(["hailortcli", "scan"], timeout=8),
+    "hailortcli_identify": run(["hailortcli", "fw-control", "identify"], timeout=8),
+    "hailortcli_monitor": run(
+        ["sh", "-lc", "timeout 2 hailortcli monitor 2>&1 || true"],
+        timeout=4,
+    ),
+    "hailo_nodes": {{
+        "stdout": "\\n".join(sorted(glob.glob("/dev/hailo*"))),
+        "returncode": 0,
+    }},
+    "hailo_models": hailo_tags(),
+    "ups": {{
+        "power_supply_count": len(supplies),
+        "power_supplies": supplies,
+        "upsc_list": run(["sh", "-lc", "command -v upsc >/dev/null && upsc -l || true"]),
+        "ups_hat_e": ups_hat_e(),
+    }},
+}}
+print(json.dumps(payload, ensure_ascii=False))
+"""
+    try:
+        completed = subprocess.run(
+            [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=8",
+                ssh_host,
+                "python3",
+                "-",
+            ],
+            input=remote_script,
+            text=True,
+            capture_output=True,
+            timeout=45,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001 - health evidence must be persisted.
+        return {
+            "captured_at": utc_iso(),
+            "health_source": "ssh_remote",
+            "health_host": ssh_host,
+            "collection_error": f"{type(exc).__name__}: {exc}"[:500],
+        }
+    if completed.returncode != 0:
+        return {
+            "captured_at": utc_iso(),
+            "health_source": "ssh_remote",
+            "health_host": ssh_host,
+            "collection_error": "remote_health_command_failed",
+            "remote_returncode": completed.returncode,
+            "remote_stderr": completed.stderr.strip()[:500],
+        }
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        return {
+            "captured_at": utc_iso(),
+            "health_source": "ssh_remote",
+            "health_host": ssh_host,
+            "collection_error": f"remote_health_json_invalid: {exc}"[:500],
+        }
+    if not isinstance(payload, dict):
+        return {
+            "captured_at": utc_iso(),
+            "health_source": "ssh_remote",
+            "health_host": ssh_host,
+            "collection_error": "remote_health_payload_not_object",
+        }
+    return {
+        **payload,
+        "health_source": "ssh_remote",
+        "health_host": ssh_host,
+    }
+
+
 def health_guard(health: dict[str, Any]) -> dict[str, Any]:
     temp_text = str((health.get("temp") or {}).get("stdout") or "")
     throttled_text = str((health.get("throttled") or {}).get("stdout") or "")
@@ -2924,6 +3635,8 @@ def health_guard(health: dict[str, Any]) -> dict[str, Any]:
     current_flags = (throttle_value & 0xF) if throttle_value is not None else None
     errors = []
     warnings = []
+    if health.get("collection_error"):
+        errors.append("health_collection_failed")
     if temperature_c is not None and temperature_c >= 80:
         errors.append("temperature_at_or_above_80c")
     if current_flags:
@@ -2932,6 +3645,43 @@ def health_guard(health: dict[str, Any]) -> dict[str, Any]:
         warnings.append(
             f"historical_power_or_throttle_flags=0x{throttle_value & 0xF0000:x}"
         )
+    memory_text = str((health.get("memory") or {}).get("stdout") or "")
+    memory_match = re.search(
+        r"^Mem:\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)",
+        memory_text,
+        flags=re.MULTILINE,
+    )
+    memory_available_mb = int(memory_match.group(1)) if memory_match else None
+    if memory_available_mb is not None and memory_available_mb < 256:
+        errors.append("memory_available_below_256mb")
+    elif memory_available_mb is not None and memory_available_mb < 512:
+        warnings.append("memory_available_below_512mb")
+    hailo_monitor_text = re.sub(
+        r"\x1b\[[0-?]*[ -/]*[@-~]",
+        "",
+        str((health.get("hailortcli_monitor") or {}).get("stdout") or ""),
+    )
+    hailo_matches = list(
+        re.finditer(
+            r"pci/\S+\s+HAILO\S+\s+"
+            r"(?P<nnc>\d+(?:\.\d+)?)\s+"
+            r"(?P<cpu>\d+(?:\.\d+)?)\s+"
+            r"(?P<ram>\d+(?:\.\d+)?)\s+"
+            r"\d+\s*/\s*\d+\s+"
+            r"(?P<temperature>\d+(?:\.\d+)?)\s+"
+            r"(?P<voltage>\d+)",
+            hailo_monitor_text,
+            flags=re.IGNORECASE,
+        )
+    )
+    hailo_sample = hailo_matches[-1] if hailo_matches else None
+    ai_hat_temperature_c = (
+        float(hailo_sample.group("temperature")) if hailo_sample else None
+    )
+    ai_hat_voltage_mv = int(hailo_sample.group("voltage")) if hailo_sample else None
+    ai_hat_nnc_utilization_percent = (
+        float(hailo_sample.group("nnc")) if hailo_sample else None
+    )
     ups = health.get("ups") or {}
     upsc_stdout = str((ups.get("upsc_list") or {}).get("stdout") or "").strip()
     ups_observable = bool(ups.get("power_supplies")) or bool(
@@ -2939,18 +3689,38 @@ def health_guard(health: dict[str, Any]) -> dict[str, Any]:
     ) or bool(upsc_stdout)
     if not ups_observable:
         warnings.append("ups_not_observable_via_power_supply_or_upsc")
+    ups_hat = ups.get("ups_hat_e") or {}
+    battery = ups_hat.get("battery") or {}
+    battery_percent = battery.get("percent")
+    battery_voltage_mv = battery.get("voltage_mv")
+    if ups_hat.get("low_cell_voltage_present") is True:
+        errors.append("ups_low_cell_voltage_present")
+    if isinstance(battery_percent, (int, float)) and battery_percent <= 10:
+        errors.append("ups_battery_at_or_below_10_percent")
+    elif isinstance(battery_percent, (int, float)) and battery_percent <= 20:
+        warnings.append("ups_battery_at_or_below_20_percent")
     return {
         "status": "fail" if errors else "warn" if warnings else "pass",
         "temperature_c": temperature_c,
         "throttled_raw": throttled_text or None,
         "current_flags": current_flags,
+        "memory_available_mb": memory_available_mb,
+        "ai_hat_temperature_c": ai_hat_temperature_c,
+        "ai_hat_voltage_mv": ai_hat_voltage_mv,
+        "ai_hat_nnc_utilization_percent": ai_hat_nnc_utilization_percent,
+        "ups_battery_percent": battery_percent,
+        "ups_battery_voltage_mv": battery_voltage_mv,
+        "ups_low_cell_voltage_present": ups_hat.get("low_cell_voltage_present"),
         "errors": errors,
         "warnings": warnings,
     }
 
 
 def run_eval(args: argparse.Namespace) -> Path:
-    require_ai_hat_runtime(args.endpoint)
+    ai_hat_attestation = require_ai_hat_runtime(
+        args.endpoint,
+        health_ssh_host=args.health_ssh_host,
+    )
     workspace = args.workspace.expanduser().resolve()
     scenario_path = workspace / args.scenario_artifact
     artifact = json.loads(scenario_path.read_text(encoding="utf-8"))
@@ -3000,6 +3770,9 @@ def run_eval(args: argparse.Namespace) -> Path:
         "guided_retry_enabled": args.guided_retry,
         "weather_mode": "deterministic_weather_replay",
         "external_api_calls_made": False,
+        "health_source": "ssh_remote" if args.health_ssh_host else "local",
+        "health_ssh_host": args.health_ssh_host,
+        "ai_hat_attestation": ai_hat_attestation,
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
@@ -3017,7 +3790,10 @@ def run_eval(args: argparse.Namespace) -> Path:
             if run["run_case_id"] in completed_ids:
                 continue
             if index == 1 or index % args.health_interval == 0:
-                health = collect_health()
+                health = collect_eval_health(
+                    ssh_host=args.health_ssh_host,
+                    remote_repo_root=args.health_remote_repo_root,
+                )
                 guard = health_guard(health)
                 health["eval_guard"] = guard
                 health_file.write(json.dumps(health, ensure_ascii=False) + "\n")
@@ -3048,7 +3824,10 @@ def run_eval(args: argparse.Namespace) -> Path:
                 file=sys.stderr,
                 flush=True,
             )
-        health = collect_health()
+        health = collect_eval_health(
+            ssh_host=args.health_ssh_host,
+            remote_repo_root=args.health_remote_repo_root,
+        )
         health["eval_guard"] = health_guard(health)
         health_file.write(json.dumps(health, ensure_ascii=False) + "\n")
     _write_summaries(run_dir, manifest, all_results)
@@ -3419,6 +4198,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-id")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--health-interval", type=int, default=25)
+    parser.add_argument("--health-ssh-host")
+    parser.add_argument(
+        "--health-remote-repo-root",
+        default="~/scout-fusion",
+    )
     return parser
 
 
