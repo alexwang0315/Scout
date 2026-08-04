@@ -27,6 +27,7 @@ from tools.scout_ai_six_forces_aihat2_eval import (
     expand_case_runs,
     health_guard,
     parse_model_output,
+    primary_tool_for_question,
     quality_tool_results_for_gaps,
     selected_tool_ids,
     snapshot_for_run,
@@ -227,6 +228,175 @@ def test_local_compact_evidence_preserves_exposed_shelter_answer_obligation() ->
     assert "背風候選點" in obligations
     assert "180" in prompt
     assert "背風候選點" in prompt
+
+
+def test_exp_compact_evidence_prefers_question_relevant_route_context_layers() -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    run["question_id"] = "EXP-006"
+    run["question_text"] = "沿途有哪些地方能看出人和山林互動的痕跡？"
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.route_context.assess.v0",
+                "status": "completed",
+                "decision": "CONDITIONAL_GO",
+                "field_answer_priority": 100,
+                "field_answer": (
+                    "候選路線脈絡：workspace route distance is about 36.5 km; "
+                    "elevation spans about 2166-3350 m; 2958 route samples; "
+                    "文化層: 舊林道叉路、黑水塘；"
+                    "歷史層: 舊林道叉路、稜線啞口觀景點；"
+                    "自然層: 隱蔽樹林區；地形層: 大崩壁；"
+                    "觀察點: 稜線啞口觀景點。"
+                ),
+            }
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+
+    field_answer = evidence["tools"][0]["field_answer"]
+    assert "舊林道叉路" in field_answer
+    assert any(label in field_answer for label in ("文化層", "歷史層"))
+    assert "workspace route distance" not in field_answer
+
+
+def test_exp_compact_evidence_marks_unsupported_vegetation_band_as_blocking() -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    run["question_id"] = "EXP-047"
+    run["question_text"] = "這一段主要是什麼植被帶？"
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.route_context.assess.v0",
+                "status": "completed",
+                "field_answer_priority": 100,
+                "field_answer": "自然層: 隱蔽樹林區 (natural_context)。",
+            }
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+
+    assert "question_specific_route_context_evidence_missing" in evidence[
+        "blocking_missing_evidence"
+    ]
+
+
+def test_exp_compact_evidence_marks_unproven_historic_supply_use_as_blocking() -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    run["question_id"] = "EXP-026"
+    run["question_text"] = "這個鞍部以前是否曾是交通或補給節點？"
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.route_context.assess.v0",
+                "status": "completed",
+                "field_answer_priority": 100,
+                "field_answer": "地形層: 稜線啞口觀景點、稜線通訊點。",
+            }
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+
+    assert "question_specific_route_context_evidence_missing" in evidence[
+        "blocking_missing_evidence"
+    ]
+
+
+def test_per_stop_candidate_uses_route_context_and_requires_specific_evidence() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    run["question_id"] = "PER-091"
+    run["question_text"] = "天黑前到不了山屋時，我們應該在哪個候選點停止推進？"
+
+    assert primary_tool_for_question(
+        force_code="PER",
+        question=run["question_text"],
+    ) == "scout.ai.route_context.assess.v0"
+
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.route_context.assess.v0",
+                "status": "completed",
+                "decision": "CONDITIONAL_GO",
+                "field_answer_priority": 0,
+                "field_answer": "候選路線脈絡：雲海保線所、黑水塘。",
+            },
+            {
+                "tool_id": "scout.ai.contextual_permission.assess.v0",
+                "status": "completed",
+                "decision": "GO",
+                "field_answer": "目前剩餘安全 buffer 約 48 分鐘。",
+            },
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+
+    assert "question_specific_route_context_evidence_missing" in evidence[
+        "blocking_missing_evidence"
+    ]
+    assert "48 分鐘" not in " ".join(evidence["answer_obligations"])
+
+
+def test_weather_compact_evidence_blocks_requested_temperature_and_humidity_gaps() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "benign_fresh_route_intersecting"
+    )
+    run["question_id"] = "WTH-065"
+    run["question_text"] = "請用風、溫度、濕度和裝備狀態判斷是否繼續。"
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[
+            {
+                "tool_id": "scout.ai.weather_window.assess.v0",
+                "status": "completed",
+                "decision": "CONDITIONAL_GO",
+                "field_answer": "signals=no_significant_rain, light_wind, good_visibility。",
+            },
+            {
+                "tool_id": "scout.ai.equipment_resource.assess.v0",
+                "status": "completed",
+                "decision": "GO",
+                "field_answer": "裝備資源資料未顯示主要缺口。",
+            },
+        ],
+        missing_tools=[],
+        missing_evidence=[],
+        max_chars=900,
+    )
+
+    assert "missing:temperature" in evidence["blocking_missing_evidence"]
+    assert "missing:humidity" in evidence["blocking_missing_evidence"]
 
 
 def test_sheltered_permission_obligation_keeps_primary_limit_authoritative() -> None:
@@ -478,6 +648,60 @@ def test_structured_prompt_uses_missing_evidence_response_mode_without_reference
 
     assert "工作區未提供足夠的題目專屬證據，無法確認" in prompt
     assert "deterministic_reference" not in prompt
+
+
+def test_structured_prompt_preserves_question_gap_after_local_packing() -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP")
+
+    prompt = build_structured_prompt(
+        run=run,
+        compact_evidence={
+            "scenario_id": run["scenario_id"],
+            "force": "EXP",
+            "blocking_missing_evidence": [
+                "question_specific_route_context_evidence_missing"
+            ],
+            "tools": [],
+        },
+    )
+
+    assert "工作區未提供足夠的題目專屬證據，無法確認" in prompt
+
+
+def test_permission_prompt_only_exempts_an_explicit_forward_shelter_candidate() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+    )
+    base = {
+        "scenario_id": run["scenario_id"],
+        "force": "PER",
+        "blocking_missing_evidence": [
+            "question_specific_route_context_evidence_missing"
+        ],
+        "tools": [],
+    }
+    unresolved = build_structured_prompt(
+        run=run,
+        compact_evidence={
+            **base,
+            "answer_obligations": ["缺少前方相對位置與停止代價證據。"],
+        },
+    )
+    explicit = build_structured_prompt(
+        run=run,
+        compact_evidence={
+            **base,
+            "answer_obligations": [
+                "維持路線走廊，前往約 180 公尺外的背風候選點後重評。"
+            ],
+        },
+    )
+
+    assert "工作區未提供足夠的題目專屬證據，無法確認" in unresolved
+    assert "工作區未提供足夠的題目專屬證據，無法確認" not in explicit
+    assert "依回答義務使用該情境證據" in explicit
 
 
 def test_cloud_structured_prompt_removes_local_hint_and_uses_native_tool_catalog() -> None:
@@ -845,6 +1069,368 @@ def test_verifier_allows_conservative_decision_supported_by_compound_evidence() 
     assert "decision_outside_scenario_boundary" not in verified["errors"]
 
 
+def test_verifier_rejects_go_below_severe_weather_decision_floor() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "severe_fresh_route_intersecting"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "GO",
+        "answer": "這是短時強降雨。",
+        "decisive_evidence": ["heavy_rain"],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["雨勢減弱後重評"],
+        "source_refs": ["weather.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"weather.tool"},
+        compact_evidence={
+            "tools": [
+                {
+                    "tool_id": "weather.tool",
+                    "decision": "CHANGE_PLAN",
+                    "field_answer": "signals=heavy_rain, strong_wind, low_visibility",
+                }
+            ]
+        },
+    )
+
+    assert "decision_outside_scenario_boundary" in verified["errors"]
+
+
+def test_verifier_rejects_unqualified_no_risk_claim_in_severe_weather() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "severe_fresh_route_intersecting"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CHANGE_PLAN",
+        "answer": (
+            "這次是短時強降雨且與路線交會，但未見任何警告或風險提示，"
+            "建議避開高風險時段後重評。"
+        ),
+        "decisive_evidence": ["heavy_rain"],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["雨勢減弱後重評"],
+        "source_refs": ["weather.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"weather.tool"},
+        compact_evidence={
+            "tools": [
+                {
+                    "tool_id": "weather.tool",
+                    "decision": "CHANGE_PLAN",
+                    "field_answer": "signals=heavy_rain, strong_wind, low_visibility",
+                }
+            ]
+        },
+    )
+
+    assert "severe_weather_risk_contradiction" in verified["errors"]
+
+
+def test_verifier_accepts_zero_official_warning_when_risk_action_is_preserved() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "severe_fresh_route_intersecting"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CHANGE_PLAN",
+        "answer": (
+            "目前無 CWA 警告（warnings=0），heavy_rain 與路線交會，"
+            "應避開暴露時段並重新評估。"
+        ),
+        "decisive_evidence": ["heavy_rain"],
+        "opposing_evidence": ["CWA warnings=0"],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["雨勢減弱後重評"],
+        "source_refs": ["weather.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"weather.tool"},
+        compact_evidence={
+            "tools": [
+                {
+                    "tool_id": "weather.tool",
+                    "decision": "CHANGE_PLAN",
+                    "field_answer": "signals=heavy_rain; CWA warnings=0",
+                }
+            ]
+        },
+    )
+
+    assert "severe_weather_risk_contradiction" not in verified["errors"]
+
+
+def test_verifier_requires_action_for_severe_route_intersection() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "severe_fresh_route_intersecting"
+    )
+    verified = verify_model_output(
+        run=run,
+        output={
+            "scenario_id": run["scenario_id"],
+            "decision": "CHANGE_PLAN",
+            "answer": "heavy_rain、strong_wind 與 low_visibility 已和路線交會。",
+            "decisive_evidence": ["heavy_rain"],
+            "opposing_evidence": [],
+            "evidence_gaps": [],
+            "decision_change_conditions": [],
+            "source_refs": ["weather.tool"],
+            "claims": ["candidate_only"],
+        },
+        parse_error=None,
+        available_source_refs={"weather.tool"},
+        compact_evidence={
+            "tools": [{"tool_id": "weather.tool", "decision": "CHANGE_PLAN"}]
+        },
+    )
+
+    assert "severe_weather_not_used" in verified["errors"]
+
+
+def test_verifier_accepts_explicit_cross_domain_caution_for_benign_weather() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "benign_fresh_route_intersecting"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CONDITIONAL_GO",
+        "answer": "目前可行，需注意地形、隊伍與裝備。",
+        "decisive_evidence": ["no_significant_rain"],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["地形、隊伍與裝備確認後重評"],
+        "source_refs": ["weather.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"weather.tool"},
+    )
+
+    assert "benign_weather_cross_domain_checks_missing" not in verified["errors"]
+
+
+def test_verifier_accepts_no_valid_weather_and_latest_refresh_wording() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "stale_unknown_weather"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "DELAY",
+        "answer": "目前無有效天氣證據，取得最新路線天氣資料後再判斷。",
+        "decisive_evidence": [],
+        "opposing_evidence": [],
+        "evidence_gaps": ["route weather evidence unavailable"],
+        "decision_change_conditions": ["取得最新資料"],
+        "source_refs": ["weather.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"weather.tool"},
+    )
+
+    assert "stale_weather_gap_not_explained" not in verified["errors"]
+
+
+def test_verifier_rejects_positive_claim_before_question_specific_gap() -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    run["question_text"] = "這個鞍部以前是否曾是交通或補給節點？"
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": None,
+        "answer": "這個鞍部曾是補給節點，但目前沒有直接證據，無法確認。",
+        "decisive_evidence": [],
+        "opposing_evidence": [],
+        "evidence_gaps": ["question_specific_route_context_evidence_missing"],
+        "decision_change_conditions": ["取得歷史來源"],
+        "source_refs": ["route.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"route.tool"},
+        compact_evidence={
+            "force": "EXP",
+            "blocking_missing_evidence": [
+                "question_specific_route_context_evidence_missing"
+            ],
+            "tools": [{"tool_id": "route.tool", "decision": "DELAY"}],
+        },
+    )
+
+    assert "question_specific_gap_not_answered_first" in verified["errors"]
+
+
+def test_verifier_rejects_unsupported_detail_after_experience_gap() -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": None,
+        "answer": (
+            "工作區未提供足夠的題目專屬證據，無法確認，"
+            "該鞍部未被標記為交通節點。"
+        ),
+        "decisive_evidence": [],
+        "opposing_evidence": [],
+        "evidence_gaps": ["question_specific_route_context_evidence_missing"],
+        "decision_change_conditions": ["取得歷史來源"],
+        "source_refs": ["route.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"route.tool"},
+        compact_evidence={
+            "force": "EXP",
+            "blocking_missing_evidence": [
+                "question_specific_route_context_evidence_missing"
+            ],
+            "tools": [{"tool_id": "route.tool", "decision": "DELAY"}],
+        },
+    )
+
+    assert "question_specific_gap_answer_adds_unsupported_detail" in verified["errors"]
+
+
+def test_verifier_rejects_known_claim_for_missing_weather_dimensions() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "benign_fresh_route_intersecting"
+    )
+    run["question_text"] = "請用風、溫度、濕度和裝備狀態判斷是否繼續。"
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "DELAY",
+        "answer": "風、溫度、濕度與裝備狀態皆為正常，可以繼續。",
+        "decisive_evidence": ["light_wind"],
+        "opposing_evidence": [],
+        "evidence_gaps": ["missing:temperature", "missing:humidity"],
+        "decision_change_conditions": ["取得更新資料"],
+        "source_refs": ["weather.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"weather.tool"},
+        compact_evidence={
+            "blocking_missing_evidence": [
+                "missing:temperature",
+                "missing:humidity",
+            ],
+            "tools": [{"tool_id": "weather.tool", "decision": "DELAY"}],
+        },
+    )
+
+    assert "blocking_dimension_claimed_known:temperature" in verified["errors"]
+    assert "blocking_dimension_claimed_known:humidity" in verified["errors"]
+
+
+def test_verifier_rejects_named_route_candidate_when_location_is_stale() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "gnss_stale_location_unknown"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "DELAY",
+        "answer": (
+            "工作區未提供足夠的題目專屬證據，無法確認；GNSS 定位已過期，"
+            "可先前往雲海保線所。"
+        ),
+        "decisive_evidence": [],
+        "opposing_evidence": [],
+        "evidence_gaps": ["question_specific_route_context_evidence_missing"],
+        "decision_change_conditions": ["重新定位"],
+        "source_refs": ["scout.ai.route_context.assess.v0"],
+        "claims": ["candidate_only"],
+    }
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"scout.ai.route_context.assess.v0"},
+        compact_evidence={
+            "force": "PER",
+            "blocking_missing_evidence": [
+                "question_specific_route_context_evidence_missing"
+            ],
+            "answer_obligations": [
+                "GNSS/GPS 定位已過期或位置未知，重新取得定位。"
+            ],
+            "tools": [
+                {
+                    "tool_id": "scout.ai.route_context.assess.v0",
+                    "field_answer": "候選路線脈絡：雲海保線所（resource_context，約 1.5 km）。",
+                }
+            ],
+        },
+    )
+
+    assert "stale_location_used_for_route_candidate" in verified["errors"]
+
+
 def test_verifier_requires_route_shape_answer_for_rte001() -> None:
     run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "RTE")
     run["question_id"] = "RTE-001"
@@ -1005,6 +1591,97 @@ def test_health_guard_accepts_read_only_ups_hat_e_telemetry() -> None:
     assert guard["warnings"] == []
 
 
+def test_health_guard_extracts_ai_hat_on_die_telemetry() -> None:
+    guard = health_guard(
+        {
+            "temp": {"stdout": "temp=52.4'C"},
+            "throttled": {"stdout": "throttled=0x0"},
+            "hailortcli_monitor": {
+                "stdout": (
+                    "pci/0001:01:00.0 HAILO10H 71.5 3.1 45.2 "
+                    "3263 / 7221 58.7 801"
+                )
+            },
+            "ups": {"ups_hat_e": {"available": True}},
+        }
+    )
+
+    assert guard["status"] == "pass"
+    assert guard["temperature_c"] == 52.4
+    assert guard["ai_hat_temperature_c"] == 58.7
+    assert guard["ai_hat_voltage_mv"] == 801
+    assert guard["ai_hat_nnc_utilization_percent"] == 71.5
+
+
+def test_health_guard_fails_remote_collection_error_and_low_ups_cell() -> None:
+    collection_error = health_guard(
+        {
+            "collection_error": "ssh health probe failed",
+            "temp": {},
+            "throttled": {},
+            "ups": {},
+        }
+    )
+    low_cell = health_guard(
+        {
+            "temp": {"stdout": "temp=52.0'C"},
+            "throttled": {"stdout": "throttled=0x0"},
+            "memory": {
+                "stdout": (
+                    "Mem: 8062 1136 513 31 6596 6926\n"
+                    "Swap: 2047 0 2047"
+                )
+            },
+            "ups": {
+                "ups_hat_e": {
+                    "available": True,
+                    "low_cell_voltage_present": True,
+                    "battery": {"percent": 8, "voltage_mv": 12000},
+                }
+            },
+        }
+    )
+
+    assert collection_error["status"] == "fail"
+    assert "health_collection_failed" in collection_error["errors"]
+    assert low_cell["status"] == "fail"
+    assert "ups_low_cell_voltage_present" in low_cell["errors"]
+    assert low_cell["memory_available_mb"] == 6926
+
+
+def test_collect_eval_health_reads_remote_json_over_ssh(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["input"] = kwargs["input"]
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "temp": {"stdout": "temp=51.0'C"},
+                    "throttled": {"stdout": "throttled=0x0"},
+                    "ups": {"ups_hat_e": {"available": True}},
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(eval_module.subprocess, "run", fake_run)
+
+    health = eval_module.collect_eval_health(
+        ssh_host="alexwang0315@scout.local",
+        remote_repo_root="~/scout-fusion",
+    )
+
+    assert captured["command"][-2:] == ["python3", "-"]
+    assert "pi_ups_hat_e_smoke.py" in str(captured["input"])
+    assert "hailortcli monitor" in str(captured["input"])
+    assert health["health_source"] == "ssh_remote"
+    assert health["health_host"] == "alexwang0315@scout.local"
+    assert health["temp"]["stdout"] == "temp=51.0'C"
+
+
 @pytest.mark.parametrize(
     (
         "adapter_id",
@@ -1115,6 +1792,78 @@ def test_execute_run_uses_provider_neutral_model_adapter(
     assert result["provider"] == provider
     assert result["model_transport"] == transport
     assert result["model_metadata"]["usage"]["input_tokens"] == 100
+
+
+def test_execute_run_allows_third_progressive_repair_for_repeated_quality_error(
+    monkeypatch,
+) -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    run["question_id"] = "EXP-006"
+    run["question_text"] = "沿途有哪些地方能看出人和山林互動的痕跡？"
+    snapshot = snapshot_for_run(run)
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        eval_module,
+        "selected_tool_ids",
+        lambda **_: ["scout.ai.route_context.assess.v0"],
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "build_total_info",
+        lambda *_args, **_kwargs: {
+            "location_context": {"live_navigation_snapshot": snapshot}
+        },
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "run_tools",
+        lambda **_: (
+            [
+                {
+                    "tool_id": "scout.ai.route_context.assess.v0",
+                    "status": "completed",
+                    "decision": "CONDITIONAL_GO",
+                    "field_answer": "歷史層: 舊林道叉路；文化層: 黑水塘。",
+                    "field_answer_priority": 100,
+                    "field_answer_source_ref": "route-context.json",
+                }
+            ],
+            [],
+            [],
+        ),
+    )
+
+    def repeated_bad_answer(**kwargs):
+        calls.append(str(kwargs["prompt"]))
+        return "D=null|A=沿途有一些一般山徑。<SCOUT_DONE>", {}
+
+    result = eval_module.execute_run(
+        run=run,
+        project_root=Path("/tmp/demo"),
+        endpoint="http://127.0.0.1:8000/api/chat",
+        model="qwen3:1.7b",
+        timeout_seconds=30,
+        max_model_requests=10,
+        guided_retry=True,
+        model_adapter=eval_module.ScoutModelExecutionAdapter(
+            adapter_id="ai_hat_plus_2.test",
+            profile="local",
+            provider="hailo_test",
+            transport="test",
+            invoke=repeated_bad_answer,
+        ),
+    )
+
+    assert result["verifier"]["status"] == "fail"
+    assert result["model_request_count"] == 3
+    assert result["semantic_stop_reason"] in {
+        "repeated_model_output",
+        "repeated_verifier_failure",
+    }
+    assert len(calls) == 3
 
 
 def test_shared_executor_requires_explicit_model_adapter() -> None:
@@ -1281,6 +2030,47 @@ def test_local_model_answer_is_preserved_in_deterministic_envelope() -> None:
     assert output["evidence_gaps"] == ["fresh_weather_optional"]
     assert output["source_refs"] == ["scout.ai.contextual_permission.assess.v0"]
     assert output["claims"] == ["candidate_only"]
+
+
+def test_local_envelope_removes_malformed_protocol_from_user_answer() -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    evidence = {
+        "tools": [{"tool_id": "route.tool", "decision": "DELAY"}],
+        "blocking_missing_evidence": [
+            "question_specific_route_context_evidence_missing"
+        ],
+    }
+
+    repaired, repaired_error = build_local_model_envelope(
+        raw="D= 修復階段:2 |A= 工作區未提供足夠的題目專屬證據，無法確認。",
+        run=run,
+        compact_evidence=evidence,
+        available_source_refs={"route.tool"},
+    )
+    answer_in_decision, decision_error = build_local_model_envelope(
+        raw="D= 工作區未提供足夠的題目專屬證據，無法確認 |A",
+        run=run,
+        compact_evidence=evidence,
+        available_source_refs={"route.tool"},
+    )
+    angle_marker, angle_error = build_local_model_envelope(
+        raw="D= 工作區未提供足夠的題目專屬證據，無法確認 <A",
+        run=run,
+        compact_evidence=evidence,
+        available_source_refs={"route.tool"},
+    )
+
+    assert repaired_error is None
+    assert decision_error is None
+    assert angle_error is None
+    assert repaired is not None
+    assert answer_in_decision is not None
+    assert angle_marker is not None
+    assert repaired["answer"] == "工作區未提供足夠的題目專屬證據，無法確認。"
+    assert answer_in_decision["answer"] == "工作區未提供足夠的題目專屬證據，無法確認"
+    assert angle_marker["answer"] == "工作區未提供足夠的題目專屬證據，無法確認"
 
 
 def test_fresh_weather_overlay_replaces_stale_primary_weather_gap() -> None:
@@ -1456,6 +2246,76 @@ def test_recovery_prompt_replaces_answer_when_sheltered_next_step_is_missing() -
     assert field_answer in prompt
     assert "會犧牲 35 分鐘 buffer" not in prompt
     assert "missing_sheltered_candidate_next_step" in prompt
+
+
+def test_recovery_prompt_combines_severe_weather_and_dimension_gap_obligations() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "severe_fresh_route_intersecting"
+    )
+    prompt = build_recovery_prompt(
+        run=run,
+        compact_evidence={
+            "scenario_id": run["scenario_id"],
+            "force": "WTH",
+            "blocking_missing_evidence": [
+                "missing:temperature",
+                "missing:humidity",
+            ],
+            "tools": [
+                {
+                    "tool_id": "scout.ai.weather_window.assess.v0",
+                    "decision": "CHANGE_PLAN",
+                    "field_answer": (
+                        "heavy_rain、strong_wind、low_visibility 與路線交會。"
+                    ),
+                }
+            ],
+        },
+        previous_output={"decision": "DELAY", "answer": "取得資料後再判斷。"},
+        verifier_errors=["severe_weather_not_used"],
+    )
+
+    assert "不得拆成兩個替代版本" in prompt
+    assert "目前缺少溫度與濕度證據" in prompt
+    assert "heavy_rain、strong_wind 與 low_visibility 已和路線交會" in prompt
+
+
+def test_recovery_prompt_combines_stale_location_and_route_candidate_gap() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "gnss_stale_location_unknown"
+    )
+    prompt = build_recovery_prompt(
+        run=run,
+        compact_evidence={
+            "scenario_id": run["scenario_id"],
+            "force": "PER",
+            "blocking_missing_evidence": [
+                "question_specific_route_context_evidence_missing"
+            ],
+            "answer_obligations": [
+                "GNSS/GPS 定位已過期或位置未知，重新取得定位並人工確認周邊。"
+            ],
+            "tools": [
+                {
+                    "tool_id": "scout.ai.route_context.assess.v0",
+                    "decision": "DELAY",
+                    "field_answer": "候選路線脈絡：雲海保線所（resource_context）。",
+                }
+            ],
+        },
+        previous_output={"decision": "DELAY", "answer": "先重新定位。"},
+        verifier_errors=["stale_location_gap_not_explained"],
+    )
+
+    assert "工作區未提供足夠的題目專屬證據，無法確認停止點" in prompt
+    assert "GNSS/GPS 定位已過期或位置未知" in prompt
+    assert "不得列出 workspace 候選地名" in prompt
 
 
 def test_recovery_prompt_corrects_out_of_boundary_permission_decision() -> None:
@@ -1800,6 +2660,43 @@ def test_three_axis_scorecard_accepts_grounding_from_complete_tool_card_records(
                 "records": [{"score": 99.54, "name": "雲海保線所"}],
             }
         ],
+    )
+
+    assert scorecard["semantic_answer_quality"]["components"][
+        "workspace_evidence_grounding"
+    ]
+    assert scorecard["semantic_answer_quality"]["score"] == 100
+
+
+def test_three_axis_scorecard_accepts_translated_weather_signal_grounding() -> None:
+    scorecard = build_three_axis_scorecard(
+        output={
+            "scenario_id": "scenario.1",
+            "decision": "CHANGE_PLAN",
+            "answer": "這是短時強降雨，先避開暴露時段後重評。",
+            "decisive_evidence": ["heavy_rain"],
+            "opposing_evidence": [],
+            "evidence_gaps": [],
+            "decision_change_conditions": ["雨勢減弱後重評"],
+            "source_refs": ["weather.tool"],
+            "claims": ["candidate_only"],
+        },
+        parse_error=None,
+        identity={"status": "pass", "errors": []},
+        verifier={"status": "pass", "errors": []},
+        model_metadata={"native_tool_trace": {}},
+        native_tool_call_required=False,
+        available_source_refs={"weather.tool"},
+        completed_tools=["weather.tool"],
+        missing_tools=[],
+        blocking_missing_evidence=[],
+        tool_results=[
+            {
+                "tool_id": "weather.tool",
+                "field_answer": "signals=heavy_rain, strong_wind, low_visibility",
+            }
+        ],
+        question="這次雨是短時強降雨還是長時間累積雨？",
     )
 
     assert scorecard["semantic_answer_quality"]["components"][

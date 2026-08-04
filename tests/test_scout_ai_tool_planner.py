@@ -1944,6 +1944,19 @@ def test_planner_selects_team_status_for_rear_group_and_checkin_question() -> No
     assert item.boundary.runtime_safety_truth is False
 
 
+def test_planner_selects_team_status_for_lead_group_manageable_distance() -> None:
+    plan = plan_scout_ai_tools(
+        _query("前隊現在繼續走會不會讓隊伍失去可管理距離？"),
+        project_root=PROJECT_ROOT,
+    )
+
+    item = _single_tool(plan, TEAM_STATUS_TOOL_ID)
+    assert item.status == ScoutAiToolPlanItemStatus.READY_TO_EXECUTE
+    assert item.request is not None
+    assert item.request["tool_id"] == TEAM_STATUS_TOOL_ID
+    assert item.boundary.runtime_safety_truth is False
+
+
 def test_planner_routes_unanswered_message_to_team_status_with_overdue_minutes() -> None:
     plan = plan_scout_ai_tools(
         _query("隊友已經 20 分鐘沒回訊息，要怎麼辦？"),
@@ -2329,6 +2342,23 @@ def test_planner_routes_hut_checkin_pressure_to_route_architecture() -> None:
     assert item.request["tool_id"] == ROUTE_ARCHITECTURE_TOOL_ID
     assert item.request.get("arguments", {}) == {}
     assert item.boundary.runtime_safety_truth is False
+
+
+@pytest.mark.parametrize(
+    "question",
+    (
+        "天黑前到不了山屋時，我們應該在哪個候選點停止推進？",
+        "如果今晚必須停止行程，前方哪個候選位置代價最低？",
+    ),
+)
+def test_planner_routes_forward_stop_candidate_questions_to_route_context_and_graph(
+    question: str,
+) -> None:
+    plan = plan_scout_ai_tools(_query(question), project_root=PROJECT_ROOT)
+
+    tool_ids = _tool_ids(plan)
+    assert ROUTE_ARCHITECTURE_TOOL_ID in tool_ids
+    assert ROUTE_CONTEXT_TOOL_ID in tool_ids
 
 
 def test_planner_routes_transport_deadline_pressure_to_route_architecture() -> None:

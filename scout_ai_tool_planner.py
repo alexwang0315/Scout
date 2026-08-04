@@ -3067,6 +3067,8 @@ def _looks_like_route_structure_question(text: str) -> bool:
 
 
 def _looks_like_route_architecture_question(text: str) -> bool:
+    if _looks_like_forward_stop_candidate_question(text):
+        return True
     if _has_any(text, ("mcp", "reconciliation")) and _has_any(
         text,
         ("support", "reconciliation", "重疊", "重叠", "缺漏", "衝突", "冲突"),
@@ -4395,9 +4397,12 @@ def _looks_like_team_status_question(text: str) -> bool:
             "未回覆",
             "後隊在哪",
             "後隊",
+            "前隊",
             "隊伍分離",
             "隊友距離",
             "隊伍距離",
+            "可管理距離",
+            "拉太開",
             "誰最需要協助",
             "誰需要協助",
             "隊伍目前誰",
@@ -4418,6 +4423,9 @@ def _looks_like_team_status_question(text: str) -> bool:
             "隊伍分離",
             "隊友距離",
             "隊伍距離",
+            "可管理距離",
+            "拉太開",
+            "前隊",
             "誰最需要協助",
             "誰需要協助",
             "隊伍目前誰",
@@ -5161,6 +5169,8 @@ def _looks_like_buffer_cost_question(text: str) -> bool:
 
 
 def _looks_like_route_context_question(text: str) -> bool:
+    if _looks_like_forward_stop_candidate_question(text):
+        return True
     if _looks_like_route_mileage_anchor_question(text):
         return True
     if _looks_like_route_briefing_question(text):
@@ -5172,6 +5182,13 @@ def _looks_like_route_context_question(text: str) -> bool:
     if _looks_like_contextual_permission_question(text):
         return _has_route_context_terms(text)
     return _has_route_context_terms(text)
+
+
+def _looks_like_forward_stop_candidate_question(text: str) -> bool:
+    return _has_any(
+        text,
+        ("停止推進", "停止行程", "停止前進", "過夜", "紮營"),
+    ) and _has_any(text, ("候選", "哪個", "哪裡", "位置", "山屋"))
 
 
 def _has_route_context_terms(text: str) -> bool:
