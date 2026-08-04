@@ -1,5 +1,11 @@
 {
   "annotation_set_id": "expert-contour-reading-example",
+  "annotator_id": null,
+  "reference_case_id": null,
+  "dataset_split": "unspecified",
+  "independence_declared": false,
+  "topology_review_complete": false,
+  "ambiguous_mask_reviewed": false,
   "source_refs": [
     "expert-contour-reading-example.jpg"
   ],
@@ -11,6 +17,7 @@
       "id": "main-ridge-01",
       "semantic_role": "main_ridge",
       "geometry_type": "LineString",
+      "ambiguous": false,
       "image_coordinates": [
         [42, 28],
         [88, 45],
@@ -24,6 +31,7 @@
       "id": "spur-ridge-01",
       "semantic_role": "spur_ridge",
       "geometry_type": "LineString",
+      "ambiguous": false,
       "image_coordinates": [
         [88, 45],
         [74, 82]
@@ -36,6 +44,7 @@
       "id": "ridge-divide-01",
       "semantic_role": "ridge_divide_point",
       "geometry_type": "Point",
+      "ambiguous": false,
       "image_coordinates": [88, 45],
       "source_refs": [
         "expert-contour-reading-example.jpg"
@@ -45,6 +54,7 @@
       "id": "contour-traverse-band-01",
       "semantic_role": "contour_traverse_band",
       "geometry_type": "LineString",
+      "ambiguous": false,
       "image_coordinates": [
         [30, 96],
         [104, 94],
@@ -54,5 +64,6 @@
         "expert-contour-reading-example.jpg"
       ]
     }
-  ]
+  ],
+  "ambiguous_masks": []
 }

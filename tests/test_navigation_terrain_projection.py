@@ -165,6 +165,10 @@ def test_projection_is_bounded_candidate_only_and_reports_structure_gaps(
     assert result["feature_extraction"]["steep_slope"]["status"] == (
         "available_as_raster"
     )
+    assert result["terrain_validation"]["validation_state"] == (
+        "blocked_pending_reference"
+    )
+    assert result["terrain_validation"]["event_source_mode"] == "prohibited"
     assert result["boundary"] == {
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -194,6 +198,9 @@ def test_projection_returns_explicit_unavailable_without_artifacts(
     assert result["route_samples"]["points"] == []
     assert result["risk_candidates"]["points"] == []
     assert result["feature_extraction"]["ridge"]["status"] == "not_prepared"
+    assert result["terrain_validation"]["validation_state"] == (
+        "blocked_pending_reference"
+    )
 
 
 def test_projection_rejects_artifact_reference_outside_project(
@@ -272,6 +279,14 @@ def test_projection_bounds_terrain_hierarchy_and_route_events(
     route_events = {
         "schema_version": "scout_navigation_route_terrain_events.v0",
         "status": "candidate_events",
+        "output_role": "shadow_event_candidate",
+        "validation_state": "blocked_pending_reference",
+        "gate_mode": "shadow_only",
+        "operational_authority": False,
+        "presentation_scope": "developer_debug_only",
+        "effect_scope": "none",
+        "event_source_mode": "shadow_only",
+        "blocked_reason": "geometry_reference_validation_missing",
         "candidate_event_count": MAX_ROUTE_TERRAIN_EVENTS + 5,
         "truncated": True,
         "events": [
@@ -293,6 +308,12 @@ def test_projection_bounds_terrain_hierarchy_and_route_events(
                 "source_refs": ["terrain-source"],
                 "candidate_only": True,
                 "runtime_safety_truth": False,
+                "output_role": "shadow_event_candidate",
+                "validation_state": "blocked_pending_reference",
+                "gate_mode": "shadow_only",
+                "operational_authority": False,
+                "presentation_scope": "developer_debug_only",
+                "effect_scope": "none",
             }
             for index in range(MAX_ROUTE_TERRAIN_EVENTS + 5)
         ],
@@ -300,6 +321,8 @@ def test_projection_bounds_terrain_hierarchy_and_route_events(
             "candidate_only": True,
             "runtime_safety_truth": False,
             "safe_or_walkable": "not_determined",
+            "shadow_only": True,
+            "effect_scope": "none",
         },
     }
     monkeypatch.setattr(
@@ -325,9 +348,27 @@ def test_projection_bounds_terrain_hierarchy_and_route_events(
     )
     assert result["route_terrain_events"]["rendered_count"] == MAX_ROUTE_TERRAIN_EVENTS
     assert result["route_terrain_events"]["truncated"] is True
+    assert result["route_terrain_events"]["gate_mode"] == "shadow_only"
+    assert result["route_terrain_events"]["operational_authority"] is False
+    assert result["route_terrain_events"]["presentation_scope"] == (
+        "developer_debug_only"
+    )
     assert all(
         event["candidate_only"] is True
         and event["runtime_safety_truth"] is False
         and event["source_refs"] == ["terrain-source"]
+        and event["output_role"] == "shadow_event_candidate"
+        and event["operational_authority"] is False
+        and "wrong_way_cue" not in event
+        and "recovery_prompt" not in event
+        and event["review_prompt"].startswith("Shadow review hypothesis")
         for event in result["route_terrain_events"]["events"]
+    )
+    assert all(
+        edge["output_role"] == "uncertainty_band_visualization"
+        and edge["centerline_visible"] is False
+        and edge["operational_authority"] is False
+        and edge["event_source_mode"] == "prohibited"
+        and edge["uncertainty_half_width_m"] >= 60
+        for edge in result["terrain_hierarchy"]["edges"]
     )

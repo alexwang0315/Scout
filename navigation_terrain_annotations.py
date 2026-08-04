@@ -40,6 +40,7 @@ def normalize_expert_terrain_annotations(
     )
     source_refs = _required_refs(payload.get("source_refs"), "source_refs")
     georeference = _normalize_georeference(payload.get("georeference"))
+    protocol = _normalize_protocol(payload)
     raw_annotations = payload.get("annotations")
     if not isinstance(raw_annotations, list):
         raise TerrainAnnotationError("annotations must be a list")
@@ -48,6 +49,10 @@ def normalize_expert_terrain_annotations(
         _normalize_annotation(item, set_source_refs=source_refs)
         for item in raw_annotations
     ]
+    ambiguous_masks = _normalize_ambiguous_masks(
+        payload.get("ambiguous_masks"),
+        set_source_refs=source_refs,
+    )
     geometry_ground_truth_eligible = bool(
         georeference["status"] == "georeferenced"
         and georeference["control_point_count"] >= 3
@@ -62,14 +67,38 @@ def normalize_expert_terrain_annotations(
         if geometry_ground_truth_eligible
         else "semantic_training_only"
     )
+    line_annotations = [
+        item for item in normalized if item["geometry_type"] == "LineString"
+    ]
+    evaluation_reference_eligible = bool(
+        geometry_ground_truth_eligible
+        and protocol["annotator_id"]
+        and protocol["reference_case_id"]
+        and protocol["dataset_split"] in {"tuning", "blind_holdout"}
+        and protocol["independence_declared"] is True
+        and protocol["topology_review_complete"] is True
+        and protocol["ambiguous_mask_reviewed"] is True
+        and line_annotations
+        and all(
+            item.get("uncertainty_half_width_m") is not None
+            for item in line_annotations
+        )
+    )
     return {
-        "schema_version": "scout_expert_terrain_annotations.v0",
+        "schema_version": "scout_expert_terrain_annotations.v1",
         "artifact_kind": "expert_terrain_annotations",
         "annotation_set_id": annotation_set_id,
         "status": status,
         "geometry_ground_truth_eligible": geometry_ground_truth_eligible,
+        "evaluation_reference_eligible": evaluation_reference_eligible,
+        "blind_validation_eligible": bool(
+            evaluation_reference_eligible
+            and protocol["dataset_split"] == "blind_holdout"
+        ),
+        "protocol": protocol,
         "georeference": georeference,
         "annotations": normalized,
+        "ambiguous_masks": ambiguous_masks,
         "source_refs": source_refs,
         "ontology": {
             "edge_roles": dict(EDGE_ROLE_MAP),
@@ -97,7 +126,23 @@ def normalize_expert_terrain_annotations(
             "safe_or_walkable": "not_determined",
             "human_review_required": True,
             "phase1_runtime_mutation_allowed": False,
+            "operational_authority": False,
+            "effect_scope": "none",
         },
+    }
+
+
+def _normalize_protocol(payload: dict[str, Any]) -> dict[str, Any]:
+    dataset_split = str(payload.get("dataset_split") or "unspecified").strip()
+    if dataset_split not in {"unspecified", "tuning", "blind_holdout"}:
+        raise TerrainAnnotationError("dataset_split is unsupported")
+    return {
+        "annotator_id": _optional_text(payload.get("annotator_id")),
+        "reference_case_id": _optional_text(payload.get("reference_case_id")),
+        "dataset_split": dataset_split,
+        "independence_declared": payload.get("independence_declared") is True,
+        "topology_review_complete": payload.get("topology_review_complete") is True,
+        "ambiguous_mask_reviewed": payload.get("ambiguous_mask_reviewed") is True,
     }
 
 
@@ -185,6 +230,11 @@ def _normalize_annotation(
         "coordinates_twd97": map_geometry,
         "map_geometry_available": map_geometry is not None,
         "source_refs": source_refs,
+        "uncertainty_half_width_m": _positive_number(
+            value.get("uncertainty_half_width_m")
+        ),
+        "ambiguous": value.get("ambiguous") is True,
+        "topology": _normalize_topology(value.get("topology")),
         "candidate_only": True,
         "runtime_safety_truth": False,
         "requires_human_review": True,
@@ -194,6 +244,77 @@ def _normalize_annotation(
     else:
         result["terrain_node_kind"] = NODE_ROLE_MAP[semantic_role]
     return result
+
+
+def _normalize_topology(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {"connected_to": [], "junction_id": None}
+    if not isinstance(value, dict):
+        raise TerrainAnnotationError("annotation topology must be an object")
+    connected_to = value.get("connected_to", [])
+    if not isinstance(connected_to, list):
+        raise TerrainAnnotationError("annotation topology connected_to must be a list")
+    return {
+        "connected_to": list(
+            dict.fromkeys(
+                item.strip()[:200]
+                for item in connected_to
+                if isinstance(item, str) and item.strip()
+            )
+        )[:32],
+        "junction_id": _optional_text(value.get("junction_id")),
+    }
+
+
+def _normalize_ambiguous_masks(
+    value: Any,
+    *,
+    set_source_refs: list[str],
+) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise TerrainAnnotationError("ambiguous_masks must be a list")
+    result = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise TerrainAnnotationError("each ambiguous mask must be an object")
+        mask_id = _required_text(item.get("id"), f"ambiguous_masks[{index}].id")
+        coordinates = item.get("coordinates_twd97")
+        if not isinstance(coordinates, list):
+            raise TerrainAnnotationError(
+                f"ambiguous mask {mask_id} coordinates_twd97 must be a polygon"
+            )
+        points = [_coordinate_pair(point) for point in coordinates]
+        if (
+            len(points) < 4
+            or any(point is None for point in points)
+            or points[0] != points[-1]
+        ):
+            raise TerrainAnnotationError(
+                f"ambiguous mask {mask_id} must be a closed polygon"
+            )
+        source_refs = _required_refs(
+            item.get("source_refs"),
+            f"ambiguous mask {mask_id} source_refs",
+        )
+        if not set(source_refs).intersection(set_source_refs):
+            raise TerrainAnnotationError(
+                f"ambiguous mask {mask_id} source_refs do not cite the annotation set"
+            )
+        result.append(
+            {
+                "id": mask_id,
+                "geometry_type": "Polygon",
+                "coordinates_twd97": [
+                    point for point in points if point is not None
+                ],
+                "source_refs": source_refs,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    return result[:64]
 
 
 def _normalize_geometry(
@@ -233,6 +354,12 @@ def _coordinate_pair(value: Any) -> list[float] | None:
 def _required_text(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise TerrainAnnotationError(f"{field_name} is required")
+    return value.strip()[:200]
+
+
+def _optional_text(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
     return value.strip()[:200]
 
 

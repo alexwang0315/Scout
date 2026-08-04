@@ -35,6 +35,8 @@ NAVIGATION_TERRAIN_PROJECTION_INPUT_REF_KEYS = (
     "historical_route_source_ledger_ref",
     "normalized_route_note_candidates_ref",
     "historical_route_hypothesis_ref",
+    "terrain_expert_annotation_refs",
+    "terrain_acceptance_policy_ref",
 )
 
 
@@ -265,26 +267,43 @@ def navigation_terrain_input_fingerprint(
     states: list[dict[str, Any]] = []
     for key in NAVIGATION_TERRAIN_PROJECTION_INPUT_REF_KEYS:
         raw_ref = project.get(key)
-        if not isinstance(raw_ref, str) or not raw_ref.strip():
+        if isinstance(raw_ref, str):
+            refs = [raw_ref.strip()] if raw_ref.strip() else []
+        elif isinstance(raw_ref, list):
+            refs = [
+                item.strip()
+                for item in raw_ref
+                if isinstance(item, str) and item.strip()
+            ]
+        else:
+            refs = []
+        if not refs:
             states.append({"key": key, "ref": None, "size": None, "mtime_ns": None})
             continue
-        ref = raw_ref.strip()
-        path = _safe_project_path(root, ref)
-        try:
-            stat = path.stat()
-        except OSError:
+        for ref_index, ref in enumerate(dict.fromkeys(refs)):
+            path = _safe_project_path(root, ref)
+            try:
+                stat = path.stat()
+            except OSError:
+                states.append(
+                    {
+                        "key": key,
+                        "ref_index": ref_index,
+                        "ref": ref,
+                        "size": None,
+                        "mtime_ns": None,
+                    }
+                )
+                continue
             states.append(
-                {"key": key, "ref": ref, "size": None, "mtime_ns": None}
+                {
+                    "key": key,
+                    "ref_index": ref_index,
+                    "ref": ref,
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                }
             )
-            continue
-        states.append(
-            {
-                "key": key,
-                "ref": ref,
-                "size": stat.st_size,
-                "mtime_ns": stat.st_mtime_ns,
-            }
-        )
     encoded = json.dumps(
         states,
         ensure_ascii=True,

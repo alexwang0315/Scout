@@ -163,3 +163,30 @@ def test_coordinator_serves_valid_persisted_projection_without_scheduling(
         "persisted_workspace_artifact"
     )
     assert executor.calls == []
+
+
+def test_fingerprint_tracks_expert_reference_lists_and_acceptance_policy(
+    tmp_path: Path,
+) -> None:
+    project_root, project = _project(tmp_path)
+    expert_ref = "reviews/navigation/expert-a.json"
+    policy_ref = "reviews/navigation/acceptance-policy.json"
+    project = {
+        **project,
+        "terrain_expert_annotation_refs": [expert_ref],
+        "terrain_acceptance_policy_ref": policy_ref,
+    }
+    _write_json(project_root / expert_ref, {"version": 1})
+    _write_json(project_root / policy_ref, {"version": 1})
+    first = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    _write_json(project_root / expert_ref, {"version": 2, "changed": True})
+    second = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    assert first != second

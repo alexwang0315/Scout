@@ -109,7 +109,8 @@ Derive at least:
 - slope and local relief;
 - contour-compatible horizontal bands;
 - continuous main-ridge/spur-ridge hierarchy, divide points, and saddles;
-- D8 drainage/flow accumulation for valley transfer candidates;
+- conditioned MFD drainage, contributing area, convergence, and stream order
+  for valley transfer candidates;
 - drainage trunks, tributaries, headwaters, and confluences;
 - cliffs, deeply incised streams, and implausible cross-slope jumps;
 - elevation agreement with textual anchors.
@@ -131,9 +132,13 @@ drainage_trunk
 tributary
 ```
 
-Use multi-scale cross-section or curvature evidence rather than a single-cell
-TPI label when constructing the continuous skeleton. Prune pixel noise, retain
-branch topology, identify the component backbone, and expose:
+Use separate ridge and drainage pipelines. Ridge extraction uses multi-scale
+Hessian/curvature evidence, sub-cell non-maximum suppression, persistence, and
+support-constrained topology tracing rather than a single-cell TPI label or
+four-axis cross-section. Drainage uses priority-flood conditioning plus
+slope-weighted MFD flow, accumulation, confluences, and Strahler/Shreve order.
+Preserve raw support geometry, prune pixel noise, retain branch topology, and
+expose:
 
 ```text
 ridge_divide_node
@@ -145,7 +150,11 @@ drainage_confluence_node
 An expert line drawn on an ungeoreferenced screenshot may train semantic
 classification, but it is not coordinate geometry ground truth. Require at
 least three control points, a stated CRS, and a residual below the declared
-tolerance before using the line as a georeferenced candidate annotation.
+tolerance before using the line as a georeferenced candidate annotation. A
+blind geometry gate additionally requires two independent annotators per case,
+explicit tuning/holdout assignment, uncertainty width, completed topology and
+ambiguous-area review, and an externally approved acceptance policy. Never
+invent these reference records or thresholds from the candidate output.
 Use `references/expert-terrain-annotation-example.json` as the minimum
 machine-readable semantic-annotation example.
 
@@ -178,9 +187,14 @@ drainage_branch
 route_terrain_transition
 ```
 
-Each event must include route distance, terrain relation, source references,
-an observable terrain prompt, a wrong-way cue, and a recovery prompt. Phrase
-these as review cues, not proof of safety or commands to continue.
+The offline extraction artifact may retain route distance, terrain relation,
+source references, an observation hypothesis, wrong-way text, and recovery
+text for shadow replay. Until reference-bound geometry and a separate
+event-type gate pass, it must be `shadow_only`, fail closed on old/missing
+authority fields, and must not enter a general-user event feed, navigation
+state, notification, wrong-way, recovery, or safety effect. The bounded
+Dashboard projection strips wrong-way/recovery text and exposes only a neutral
+developer/QA review hypothesis.
 
 Compile the package:
 
@@ -195,7 +209,8 @@ python tools/historical_dem_gpx_route_inference.py compile \
 Draw in this order:
 
 1. original/georeferenced basemap;
-2. continuous main-ridge/spur-ridge and drainage hierarchy;
+2. low-opacity candidate-support bands for the terrain hierarchy, with exact
+   centerlines disabled outside raw debug views;
 3. all separated contour-compatible traverse bands (`H1…Hn`);
 4. longitudinal transfer candidates (`V1…Vn`);
 5. historical and GPX anchors;
@@ -206,14 +221,14 @@ Draw in this order:
 
 Use visually distinct styles:
 
-- thick green for main ridges and thin green for spur ridges;
-- dark blue for drainage trunks and light blue for tributaries;
+- muted, low-opacity support bands for ridge and drainage candidates;
+- no glow, authoritative “main” label, or exact centerline in general views;
 - thin warm lines for horizontal bands;
 - dashed blue lines for valleys/drainage;
 - dark outer stroke plus bright inner stroke for a probable hypothesis;
 - translucent fill for the uncertainty envelope;
 - point symbols for anchors, divide points, saddles, and headwaters;
-- red rings for route-terrain events;
+- red rings only in an explicitly labeled developer/QA shadow-event view;
 - explicit “terrain hypothesis, not confirmed path” label.
 
 Never erase alternatives merely to make the map look decisive.
@@ -229,12 +244,22 @@ Require:
 - route alternatives share reusable edges;
 - conflicts and missing evidence remain visible;
 - output flags remain candidate-only;
+- analytic rotations, curves, Y junctions, saddles, broad/sharp crests,
+  resolution changes, flats, and depressions pass the geometry regression;
+- drainage edges are downstream-directed on conditioned elevation and expose
+  accumulation plus Strahler/Shreve order;
+- lateral RMSE, H95, Hausdorff, Fréchet, topology, orientation, and hydrologic
+  metrics are measured before any threshold is approved;
+- missing expert references or policy always returns a shadow-only blocked
+  validation receipt;
 - current status/access/safety claims are absent unless separately sourced.
 
 Run:
 
 ```bash
 python -m pytest tests/test_historical_dem_gpx_route_inference.py -q
+python -m pytest tests/test_navigation_terrain_geometry_regression.py \
+  tests/test_navigation_terrain_validation.py -q
 python /Users/alexwang0315/.codex/skills/.system/skill-creator/scripts/quick_validate.py \
   .agents/skills/infer-historical-dem-gpx-routes
 ```
@@ -253,6 +278,8 @@ Return or save:
 - contradictions and evidence gaps;
 - GeoJSON/JSON and annotated map when requested;
 - field-verification questions;
+- a geometry-validation receipt that remains blocked when independent blind
+  references or approved thresholds are absent;
 - explicit Scout boundary flags.
 
 Use wording such as “候選路徑假說”, “地形上可能”, and “仍待踏查”. Do not use

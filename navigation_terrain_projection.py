@@ -27,9 +27,10 @@ from navigation_terrain_workspace import (
     project_route_sample_points_twd97,
     route_sample_points,
 )
+from navigation_terrain_validation import build_terrain_validation_receipt
 
 
-NAVIGATION_TERRAIN_SCHEMA_VERSION = "scout_navigation_terrain_intelligence.v0"
+NAVIGATION_TERRAIN_SCHEMA_VERSION = "scout_navigation_terrain_intelligence.v1"
 MAX_TERRAIN_HIERARCHY_EDGES = expert_projection.MAX_TERRAIN_HIERARCHY_EDGES
 MAX_ROUTE_SAMPLE_POINTS = 240
 MAX_RISK_CANDIDATES = 50
@@ -112,6 +113,11 @@ def build_navigation_terrain_projection(
     )
     terrain_hierarchy = _normalize_terrain_hierarchy(raw_hierarchy)
     route_terrain_events = _normalize_route_terrain_events(raw_route_events)
+    terrain_validation = _workspace_terrain_validation(
+        project_root,
+        project,
+        raw_hierarchy,
+    )
     terrain_counts = terrain.get("counts", {}) if isinstance(terrain, dict) else {}
     dtm_grid = terrain.get("dtm_grid", {}) if isinstance(terrain, dict) else {}
     bbox_wgs84 = _normalize_bbox(dtm_grid.get("bbox_wgs84"))
@@ -179,6 +185,7 @@ def build_navigation_terrain_projection(
             "points": bounded_risk_candidates,
             "review_state": "human_review_required",
         },
+        "terrain_validation": terrain_validation,
         "feature_extraction": {
             "ridge": _structure_projection(
                 terrain,
@@ -279,6 +286,35 @@ def _workspace_terrain_bundle(
         _TERRAIN_BUNDLE_CACHE.pop(next(iter(_TERRAIN_BUNDLE_CACHE)))
     _TERRAIN_BUNDLE_CACHE[cache_key] = (hierarchy, route_events)
     return hierarchy, route_events
+
+
+def _workspace_terrain_validation(
+    project_root: Path,
+    project: dict[str, Any],
+    hierarchy: dict[str, Any],
+) -> dict[str, Any]:
+    raw_refs = project.get("terrain_expert_annotation_refs", [])
+    if not isinstance(raw_refs, list):
+        raw_refs = []
+    annotation_refs = list(
+        dict.fromkeys(
+            ref
+            for item in raw_refs
+            if (ref := _optional_ref(item)) is not None
+        )
+    )[:32]
+    reference_sets = [
+        payload
+        for ref in annotation_refs
+        if (payload := _read_json_ref(project_root, ref))
+    ]
+    policy_ref = _optional_ref(project.get("terrain_acceptance_policy_ref"))
+    policy = _read_json_ref(project_root, policy_ref) if policy_ref else None
+    return build_terrain_validation_receipt(
+        hierarchy,
+        reference_sets,
+        acceptance_policy=policy,
+    )
 
 
 def _load_navigation_terrain_inputs(
