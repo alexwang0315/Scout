@@ -14,7 +14,9 @@ PROJECT_ID = "permission_api_fixture"
 NOW = datetime(2026, 8, 2, 6, 0, tzinfo=timezone.utc)
 
 
-def _client(tmp_path: Path) -> tuple[TestClient, Path]:
+def _client(
+    tmp_path: Path, *, rich_reference: bool = False
+) -> tuple[TestClient, Path]:
     workspace_root = tmp_path / "workspace"
     project_root = workspace_root / PROJECT_ID
     seed_path = project_root / "outputs" / "contextual_permission" / "workbench_seed.json"
@@ -84,6 +86,62 @@ def _client(tmp_path: Path) -> tuple[TestClient, Path]:
         ),
         encoding="utf-8",
     )
+    if rich_reference:
+        project_path = project_root / "project.json"
+        project = json.loads(project_path.read_text(encoding="utf-8"))
+        project.update(
+            {
+                "reference_segment_timing_ref": "outputs/reference_segment_timing.json",
+                "retreat_routes_ref": "candidates/retreat_routes.json",
+            }
+        )
+        project_path.write_text(json.dumps(project), encoding="utf-8")
+        labels = ["Start", "Camp One", "CP 020", "Camp Two", "Finish"]
+        match_quality = {
+            f"node.{index}": {
+                "label": label,
+                "source_id": "cp.start" if index == 0 else "cp.finish" if index == 4 else f"cp.{index:03d}",
+                "source_kind": "checkpoint",
+                "route_distance_m": distance,
+            }
+            for index, (label, distance) in enumerate(
+                zip(labels, (0.0, 20_000.0, 40_000.0, 60_000.0, 90_000.0), strict=True)
+            )
+        }
+        segments = [
+            {
+                "segment_id": f"segment.{index + 1:03d}",
+                "from_node_name": labels[index],
+                "to_node_name": labels[index + 1],
+                "duration_minutes": {
+                    "p50": None if index == 1 else 180.0,
+                    "p75": None if index == 1 else 240.0,
+                },
+            }
+            for index in range(4)
+        ]
+        (project_root / "outputs" / "reference_segment_timing.json").write_text(
+            json.dumps(
+                {
+                    "artifact_kind": "reference_segment_timing",
+                    "segments": segments,
+                    "checkpoint_match_quality": match_quality,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (project_root / "candidates" / "retreat_routes.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "candidate_id": "retreat.reverse-primary",
+                        "label": "Return along reversed primary route",
+                        "confidence": "medium",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
     store_root = tmp_path / "permission_store"
     app = create_admin_app(
         pretrip_workspace_root=workspace_root,
@@ -175,6 +233,34 @@ def test_baseline_preview_keeps_human_and_reference_modes_no_write(tmp_path: Pat
     assert reference.json()["source_mode"] == "reference_gpx"
     assert human.json()["writes_performed"] is False
     assert reference.json()["writes_performed"] is False
+    assert not store_root.exists()
+
+
+def test_reference_gpx_generate_draft_returns_auto_proposal_for_compact_review(
+    tmp_path: Path,
+) -> None:
+    client, store_root = _client(tmp_path, rich_reference=True)
+
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/mission-baseline/generate-draft",
+        json={
+            "mode": "reference_gpx",
+            "reference_route_ref": "outputs/compiled_mission_graph.reviewed.json",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["proposal_profile"] == "ref_gpx_proposal_v1"
+    assert payload["proposal_summary"]["day_count"] >= 2
+    assert payload["proposal_summary"]["missing_p75_segment_count"] == 1
+    assert all(
+        day["primary_day_end_proposal"] is not None
+        for day in payload["days"]
+        if day["day_kind"] == "on_trail"
+    )
+    assert payload["review_requirements"]["safety_handoff_required"] is True
+    assert payload["writes_performed"] is False
     assert not store_root.exists()
 
 
@@ -493,6 +579,137 @@ def test_baseline_accept_marks_permission_projection_stale_without_runtime_rebin
     assert blocked.status_code == 200
     assert blocked.json()["status"] == "blocked"
     assert blocked.json()["error"]["code"] == "contextual_permission_projection_stale"
+    assert blocked.json()["rebuild"]["eligible"] is False
+
+    authoring_remains_available = client.post(
+        f"{prefix}/generate-draft",
+        json={
+            "mode": "reference_gpx",
+            "reference_route_ref": "outputs/compiled_mission_graph.reviewed.json",
+        },
+    )
+    assert authoring_remains_available.status_code == 200
+    assert authoring_remains_available.json()["writes_performed"] is False
+
+    (tmp_path / "workspace" / PROJECT_ID / "candidates" / "contextual_permission_rules.json").unlink()
+    authoring_survives_missing_derived_rules = client.post(
+        f"{prefix}/generate-draft",
+        json={
+            "mode": "reference_gpx",
+            "reference_route_ref": "outputs/compiled_mission_graph.reviewed.json",
+        },
+    )
+    assert authoring_survives_missing_derived_rules.status_code == 200
+    assert authoring_survives_missing_derived_rules.json()["writes_performed"] is False
+
+
+def test_explicit_rebuild_binds_reviewed_proposal_without_runtime_authority(
+    tmp_path: Path,
+) -> None:
+    client, _ = _client(tmp_path, rich_reference=True)
+    prefix = f"/admin/pretrip/projects/{PROJECT_ID}/mission-baseline"
+    generated = client.post(
+        f"{prefix}/generate-draft",
+        json={
+            "mode": "reference_gpx",
+            "reference_route_ref": "outputs/compiled_mission_graph.reviewed.json",
+        },
+    )
+    assert generated.status_code == 200
+    draft = generated.json()
+    requirements = draft["review_requirements"]
+    saved = client.post(
+        f"{prefix}/candidates",
+        json={
+            "draft": draft,
+            "expected_source_sha256": draft["source_sha256"],
+            "idempotency_key": "api-rebuild-save-001",
+            "explicit_confirmation": True,
+        },
+    )
+    assert saved.status_code == 200
+    candidate = saved.json()
+    accepted = client.post(
+        f"{prefix}/reviews/accept",
+        json={
+            "candidate_ref": candidate["version_ref"],
+            "candidate_sha256": candidate["version_sha256"],
+            "reviewer_alias": "leader-01",
+            "idempotency_key": "api-rebuild-accept-001",
+            "reviewed_day_ids": requirements["required_reviewed_day_ids"],
+            "acknowledged_uncertainty_ids": requirements[
+                "required_acknowledgment_uncertainty_ids"
+            ],
+            "safety_handoff_acknowledged": requirements[
+                "safety_handoff_required"
+            ],
+            "explicit_confirmation": True,
+        },
+    )
+    assert accepted.status_code == 200
+    reviewed = accepted.json()
+
+    blocked = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/contextual-permission-dashboard"
+    )
+    assert blocked.status_code == 200
+    assert blocked.json()["status"] == "blocked"
+    assert blocked.json()["rebuild"]["required"] is True
+    assert blocked.json()["rebuild"]["eligible"] is True
+    assert blocked.json()["rebuild"]["reviewed_baseline_sha256"] == reviewed[
+        "reviewed_baseline_sha256"
+    ]
+
+    rebuilt = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/contextual-permission-dashboard/rebuilds",
+        json={
+            "expected_reviewed_baseline_sha256": reviewed[
+                "reviewed_baseline_sha256"
+            ],
+            "idempotency_key": "api-permission-rebuild-001",
+            "explicit_confirmation": True,
+        },
+    )
+    assert rebuilt.status_code == 200
+    receipt = rebuilt.json()
+    assert receipt["reviewed_baseline_sha256"] == reviewed[
+        "reviewed_baseline_sha256"
+    ]
+    assert receipt["rule_review_state"] == "pending_review_only"
+    assert receipt["active_runtime_session_updated"] is False
+    assert receipt["runtime_safety_truth"] is False
+    assert receipt["departure_approval_granted"] is False
+    assert receipt["safety_api_called"] is False
+    assert receipt["outbound_action_performed"] is False
+
+    rebuilt_again = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/contextual-permission-dashboard/rebuilds",
+        json={
+            "expected_reviewed_baseline_sha256": reviewed[
+                "reviewed_baseline_sha256"
+            ],
+            "idempotency_key": "api-permission-rebuild-001",
+            "explicit_confirmation": True,
+        },
+    )
+    assert rebuilt_again.status_code == 200
+    assert rebuilt_again.json()["rebuild_sha256"] == receipt["rebuild_sha256"]
+
+    projection = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/contextual-permission-dashboard"
+    )
+    assert projection.status_code == 200
+    payload = projection.json()
+    assert payload["status"] == "degraded"
+    assert payload["baseline"]["baseline_sha256"] == reviewed[
+        "reviewed_baseline_sha256"
+    ]
+    assert payload["baseline"]["accepted_by_human"] is True
+    assert payload["baseline"][
+        "contextual_permission_rules_reviewed_by_human"
+    ] is False
+    assert payload["current_decision"]["decision"] == "ESCALATE"
+    assert payload["authority"]["runtime_authorization_performed"] is False
 
 
 def test_baseline_generate_and_patch_endpoints_are_explicit_and_versioned(

@@ -23,6 +23,7 @@ DEFAULT_CONTEXTUAL_PERMISSION_RULES_REF = Path(
     "candidates/contextual_permission_rules.json"
 )
 CONTEXTUAL_PERMISSION_REDUCER_VERSION = "contextual-permission.reducer.v1"
+BASELINE_AUTO_PROPOSAL_VERSION = "reference-gpx-auto-proposal.v1"
 _SAFE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
 _SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 _STORE_LOCK = threading.RLock()
@@ -216,6 +217,7 @@ class BaselineIdentity(WorkbenchModel):
     departure_approval_granted: bool = False
     contextual_permission_rules_ref: str | None = None
     contextual_permission_rules_sha256: str | None = None
+    contextual_permission_rules_reviewed_by_human: bool = True
     source_hashes: dict[str, str] = Field(default_factory=dict)
 
 
@@ -1043,6 +1045,199 @@ class BaselineAuthoringRequest(WorkbenchModel):
         return self
 
 
+class BaselineArtifactBinding(WorkbenchModel):
+    ref: str
+    sha256: str
+
+    @field_validator("sha256")
+    @classmethod
+    def validate_sha256(cls, value: str) -> str:
+        if not _SHA256_PATTERN.fullmatch(value):
+            raise ValueError("artifact binding requires a lowercase SHA-256 digest")
+        return value
+
+
+class BaselineRouteAnchor(WorkbenchModel):
+    anchor_id: str
+    display_label: str
+    artifact: BaselineArtifactBinding
+    route_order_m: float = Field(ge=0)
+
+
+class BaselineEtaProposal(WorkbenchModel):
+    state: Literal["complete_derived", "partial_derived", "unknown"]
+    method: Literal[
+        "sum_segment_quantiles",
+        "sum_supported_segment_quantiles",
+        "no_numeric_eta",
+    ]
+    method_version: Literal["1"] = "1"
+    confidence: Literal["medium", "low", "unknown"]
+    segment_p50_sum_minutes: float | None = Field(default=None, ge=0)
+    segment_p75_sum_minutes: float | None = Field(default=None, ge=0)
+    supported_segment_p50_sum_minutes: float | None = Field(default=None, ge=0)
+    supported_segment_p75_sum_minutes: float | None = Field(default=None, ge=0)
+    supporting_segment_ids: list[str] = Field(default_factory=list)
+    unsupported_segment_ids: list[str] = Field(default_factory=list)
+    gap_ids: list[str] = Field(default_factory=list)
+    reason: Literal[
+        "no_usable_segment_p75",
+        "timing_evidence_absent",
+        "segment_mapping_unavailable",
+    ] | None = None
+
+    @model_validator(mode="after")
+    def validate_eta_state(self) -> "BaselineEtaProposal":
+        if set(self.supporting_segment_ids).intersection(self.unsupported_segment_ids):
+            raise ValueError("supported and unsupported timing segments must be disjoint")
+        if self.state == "complete_derived":
+            if (
+                self.method != "sum_segment_quantiles"
+                or self.confidence != "medium"
+                or not self.supporting_segment_ids
+                or self.unsupported_segment_ids
+                or self.segment_p75_sum_minutes is None
+                or self.supported_segment_p50_sum_minutes is not None
+                or self.supported_segment_p75_sum_minutes is not None
+                or self.reason is not None
+            ):
+                raise ValueError("invalid complete-derived ETA shape")
+            if (
+                self.segment_p50_sum_minutes is not None
+                and self.segment_p50_sum_minutes > self.segment_p75_sum_minutes
+            ):
+                raise ValueError("complete p50 sum cannot exceed p75 sum")
+            return self
+        if self.state == "partial_derived":
+            if (
+                self.method != "sum_supported_segment_quantiles"
+                or self.confidence != "low"
+                or not self.supporting_segment_ids
+                or not self.unsupported_segment_ids
+                or not self.gap_ids
+                or self.supported_segment_p75_sum_minutes is None
+                or self.segment_p50_sum_minutes is not None
+                or self.segment_p75_sum_minutes is not None
+                or self.reason is not None
+            ):
+                raise ValueError("invalid partial-derived ETA shape")
+            if (
+                self.supported_segment_p50_sum_minutes is not None
+                and self.supported_segment_p50_sum_minutes
+                > self.supported_segment_p75_sum_minutes
+            ):
+                raise ValueError("supported p50 subtotal cannot exceed p75 subtotal")
+            return self
+        numeric_values = (
+            self.segment_p50_sum_minutes,
+            self.segment_p75_sum_minutes,
+            self.supported_segment_p50_sum_minutes,
+            self.supported_segment_p75_sum_minutes,
+        )
+        if (
+            self.method != "no_numeric_eta"
+            or self.confidence != "unknown"
+            or any(value is not None for value in numeric_values)
+            or self.supporting_segment_ids
+            or not self.unsupported_segment_ids
+            or not self.gap_ids
+            or self.reason is None
+        ):
+            raise ValueError("invalid unknown ETA shape")
+        return self
+
+
+class BaselineTargetProposal(WorkbenchModel):
+    proposal_id: str
+    kind: Literal["day_end", "retreat", "emergency_bivy"]
+    mission_day_id: str
+    target: BaselineRouteAnchor
+    confidence: Literal["high", "medium", "low", "unknown"]
+    rationale: str
+    evidence: list[BaselineArtifactBinding] = Field(min_length=1)
+    required_review_surface: Literal["permission", "safety_emergency"]
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    departure_approval_granted: bool = False
+
+    @model_validator(mode="after")
+    def validate_review_surface(self) -> "BaselineTargetProposal":
+        required = "permission" if self.kind == "day_end" else "safety_emergency"
+        if self.required_review_surface != required:
+            raise ValueError("target kind is routed to the wrong review surface")
+        return self
+
+
+class BaselineUncertainty(WorkbenchModel):
+    uncertainty_id: str
+    code: Literal[
+        "missing_historical_p75",
+        "destination_ambiguity",
+        "external_safety_review",
+        "insufficient_evidence",
+        "strategy_target_exceeded",
+    ]
+    affected_day_ids: list[str] = Field(default_factory=list)
+    affected_segment_ids: list[str] = Field(default_factory=list)
+    related_target_proposal_ids: list[str] = Field(default_factory=list)
+    summary: str
+    disposition: Literal["acknowledgeable", "blocking", "external_review_pending"]
+    required_review_surface: Literal["permission", "safety_emergency"]
+    evidence: list[BaselineArtifactBinding] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_uncertainty(self) -> "BaselineUncertainty":
+        if not (
+            self.affected_day_ids
+            or self.affected_segment_ids
+            or self.related_target_proposal_ids
+        ):
+            raise ValueError("uncertainty must identify an affected object")
+        valid_pair = (
+            self.disposition == "acknowledgeable"
+            and self.required_review_surface == "permission"
+        ) or (
+            self.disposition == "blocking"
+            and self.required_review_surface == "permission"
+        ) or (
+            self.disposition == "external_review_pending"
+            and self.required_review_surface == "safety_emergency"
+        )
+        if not valid_pair:
+            raise ValueError("invalid uncertainty disposition and review surface")
+        return self
+
+
+class BaselineReviewRequirements(WorkbenchModel):
+    contract_version: Literal["baseline_permission_review.v1"] = (
+        "baseline_permission_review.v1"
+    )
+    required_reviewed_day_ids: list[str] = Field(default_factory=list)
+    required_acknowledgment_uncertainty_ids: list[str] = Field(default_factory=list)
+    pending_safety_handoff_item_ids: list[str] = Field(default_factory=list)
+    safety_handoff_required: bool
+
+    @model_validator(mode="after")
+    def validate_handoff_requirement(self) -> "BaselineReviewRequirements":
+        if self.safety_handoff_required != bool(self.pending_safety_handoff_item_ids):
+            raise ValueError("Safety handoff requirement must match pending item IDs")
+        return self
+
+
+class BaselineProposalSummary(WorkbenchModel):
+    day_count: int = Field(ge=0)
+    route_length_m: float = Field(ge=0)
+    timing_segment_count: int = Field(ge=0)
+    observed_p75_segment_count: int = Field(ge=0)
+    missing_p75_segment_count: int = Field(ge=0)
+    permission_uncertainty_count: int = Field(ge=0)
+    safety_pending_count: int = Field(ge=0)
+    blocking_gap_count: int = Field(ge=0)
+    target_p75_minutes_per_day: int = Field(ge=1)
+    source_route_days_metadata: int | None = Field(default=None, ge=0)
+    source_route_days_planning_authority: bool = False
+
+
 class BaselineDayDraft(WorkbenchModel):
     mission_day_id: str
     source_text: str
@@ -1055,6 +1250,16 @@ class BaselineDayDraft(WorkbenchModel):
     operator_aliases: list[str] = Field(default_factory=list)
     coordinate_hints: list[dict[str, object]] = Field(default_factory=list)
     branch_candidates: list[dict[str, object]] = Field(default_factory=list)
+    start_anchor: BaselineRouteAnchor | None = None
+    primary_day_end_proposal: BaselineTargetProposal | None = None
+    eta_proposal: BaselineEtaProposal | None = None
+    segment_ids: list[str] = Field(default_factory=list)
+    retreat_candidates: list[BaselineTargetProposal] = Field(default_factory=list)
+    emergency_bivy_candidates: list[BaselineTargetProposal] = Field(
+        default_factory=list
+    )
+    uncertainty_ids: list[str] = Field(default_factory=list)
+    review_summary: str | None = None
 
 
 class MissionBaselineDraft(WorkbenchModel):
@@ -1077,6 +1282,16 @@ class MissionBaselineDraft(WorkbenchModel):
     patch_sha256: str | None = None
     validation_state: Literal["valid", "needs_review", "blocked"]
     unresolved_gaps: list[str]
+    proposal_profile: Literal["legacy_sparse", "ref_gpx_proposal_v1"] = (
+        "legacy_sparse"
+    )
+    proposal_strategy_id: str | None = None
+    proposal_strategy_version: str | None = None
+    timing_evidence: BaselineArtifactBinding | None = None
+    proposal_summary: BaselineProposalSummary | None = None
+    uncertainties: list[BaselineUncertainty] = Field(default_factory=list)
+    review_requirements: BaselineReviewRequirements | None = None
+    safety_handoff_summary: str | None = None
     writes_performed: bool = False
     candidate_only: bool = True
     runtime_safety_truth: bool = False
@@ -1182,6 +1397,18 @@ class BaselineReviewAcceptRequest(WorkbenchModel):
     reviewer_alias: str = Field(min_length=1, max_length=80)
     idempotency_key: str
     explicit_confirmation: bool
+    reviewed_day_ids: list[str] = Field(default_factory=list)
+    acknowledged_uncertainty_ids: list[str] = Field(default_factory=list)
+    safety_handoff_acknowledged: bool = False
+
+    @field_validator("reviewed_day_ids", "acknowledged_uncertainty_ids")
+    @classmethod
+    def normalize_review_ids(cls, value: list[str]) -> list[str]:
+        if any(not _SAFE_ID_PATTERN.fullmatch(item) for item in value):
+            raise ValueError("review identifiers must be safe stable IDs")
+        if len(value) != len(set(value)):
+            raise ValueError("review identifiers cannot contain duplicates")
+        return value
 
 
 class BaselineReviewAcceptReceipt(WorkbenchModel):
@@ -1193,11 +1420,61 @@ class BaselineReviewAcceptReceipt(WorkbenchModel):
     candidate_ref: str
     candidate_sha256: str
     stale_dependency_refs: list[str]
+    reviewed_day_ids: list[str] = Field(default_factory=list)
+    acknowledged_uncertainty_ids: list[str] = Field(default_factory=list)
+    safety_handoff_acknowledged: bool = False
     writes_performed: bool = True
     candidate_only: bool = True
     runtime_safety_truth: bool = False
     departure_approval_granted: bool = False
     final_mission_graph_generated: bool = False
+    active_runtime_session_updated: bool = False
+    safety_api_called: bool = False
+    outbound_action_performed: bool = False
+    outbound_transport_invoked: bool = False
+    external_send_performed: bool = False
+    hardware_control_performed: bool = False
+
+
+class ContextualPermissionProjectionRebuildRequest(WorkbenchModel):
+    expected_reviewed_baseline_sha256: str
+    idempotency_key: str
+    explicit_confirmation: bool
+
+    @field_validator("expected_reviewed_baseline_sha256")
+    @classmethod
+    def validate_expected_baseline_sha256(cls, value: str) -> str:
+        if not _SHA256_PATTERN.fullmatch(value):
+            raise ValueError("expected reviewed baseline must be a lowercase SHA-256 digest")
+        return value
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def validate_rebuild_idempotency_key(cls, value: str) -> str:
+        if not _SAFE_ID_PATTERN.fullmatch(value):
+            raise ValueError("invalid Contextual Permission rebuild idempotency key")
+        return value
+
+
+class ContextualPermissionProjectionRebuildReceipt(WorkbenchModel):
+    rebuild_id: str
+    rebuild_ref: str
+    rebuild_sha256: str
+    request_sha256: str
+    idempotency_key: str
+    reviewed_baseline_ref: str
+    reviewed_baseline_sha256: str
+    planned_eta_ref: str
+    planned_eta_sha256: str
+    contextual_permission_rules_ref: str
+    contextual_permission_rules_sha256: str
+    workbench_seed_ref: str
+    workbench_seed_sha256: str
+    rule_review_state: Literal["pending_review_only"]
+    writes_performed: bool = True
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    departure_approval_granted: bool = False
     active_runtime_session_updated: bool = False
     safety_api_called: bool = False
     outbound_action_performed: bool = False
@@ -1705,6 +1982,17 @@ def _file_sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _formatted_json_sha256(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+        default=_canonical_json_default,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _fixed_hash(label: str) -> str:
@@ -2418,11 +2706,13 @@ class ContextualPermissionWorkbench:
         store_root: Path,
         now_factory: Callable[[], datetime] | None = None,
         seed_override: ContextualPermissionWorkbenchSeed | None = None,
+        allow_stale_projection: bool = False,
     ) -> None:
         self.project_root = Path(project_root).expanduser().resolve()
         self.store_root = Path(store_root).expanduser().resolve()
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self._seed_override = seed_override
+        self._allow_stale_projection = allow_stale_projection
         self._seed = self._load_seed()
         self.project_id = self._seed.project_id
 
@@ -2475,6 +2765,11 @@ class ContextualPermissionWorkbench:
                 "project_identity_mismatch",
                 "Workbench seed does not match the selected project.",
             )
+        if self._allow_stale_projection:
+            # Baseline authoring and an explicit rebuild are independently
+            # source/hash-bound. A stale or invalid derived Permission rule/ETA
+            # must not make those recovery surfaces unreachable.
+            return seed
         source_hashes: dict[str, str] = {}
         for ref_key in (
             "compiled_mission_graph_reviewed_ref",
@@ -2558,14 +2853,6 @@ class ContextualPermissionWorkbench:
                     "contextual_permission_rule_mismatch",
                     f"Reviewed policy does not match plan node: {node.node_id}",
                 )
-        if not rules_artifact.reviewed_by_human and seed.baseline.accepted_by_human:
-            seed = seed.model_copy(
-                update={
-                    "baseline": seed.baseline.model_copy(
-                        update={"accepted_by_human": False, "immutable": False}
-                    )
-                }
-            )
         rules_sha256 = _file_sha256(rules_path)
         source_hashes["contextual_permission_rules_ref"] = rules_sha256
         evidence = []
@@ -2608,6 +2895,9 @@ class ContextualPermissionWorkbench:
                     update={
                         "contextual_permission_rules_ref": rules_ref,
                         "contextual_permission_rules_sha256": rules_sha256,
+                        "contextual_permission_rules_reviewed_by_human": (
+                            rules_artifact.reviewed_by_human
+                        ),
                         "source_hashes": source_hashes,
                     }
                 ),
@@ -3902,18 +4192,33 @@ class ContextualPermissionWorkbench:
         baseline_review_pending = (
             not self._seed.baseline.accepted_by_human
             or not self._seed.baseline.immutable
+            or not self._seed.baseline.contextual_permission_rules_reviewed_by_human
         )
         latest_event = ordered_events[-1] if ordered_events else None
         if baseline_review_pending:
             decision = "ESCALATE"
-            next_step = (
-                "Review the candidate baseline and resolve every daily endpoint before "
-                "enabling forward adjustment rules."
-            )
-            reason = (
-                "The Permission bootstrap is available for authoring, but its daily "
-                "itinerary or reviewed inputs are still incomplete."
-            )
+            if (
+                self._seed.baseline.accepted_by_human
+                and self._seed.baseline.immutable
+                and not self._seed.baseline.contextual_permission_rules_reviewed_by_human
+            ):
+                next_step = (
+                    "Review the baseline-bound adjustment policies separately; every "
+                    "policy remains fail-closed review_only."
+                )
+                reason = (
+                    "The human-reviewed daily endpoints are bound to this projection, "
+                    "but Contextual Permission adjustment rules have not been reviewed."
+                )
+            else:
+                next_step = (
+                    "Review the candidate baseline and resolve every daily endpoint before "
+                    "enabling forward adjustment rules."
+                )
+                reason = (
+                    "The Permission bootstrap is available for authoring, but its daily "
+                    "itinerary or reviewed inputs are still incomplete."
+                )
             advice = ScoutPaceAdvice(
                 recommendation_id="advice.bootstrap.review-required",
                 recommendation="insufficient_evidence",
@@ -4036,7 +4341,13 @@ class ContextualPermissionWorkbench:
             lens=projection_lens,
             available_lenses=["baseline", "replay"],
             lens_notice=(
-                "Reference-GPX bootstrap candidate · itinerary review pending · no runtime session merged"
+                "Reviewed baseline bound · adjustment-policy review pending · no runtime session merged"
+                if (
+                    self._seed.baseline.accepted_by_human
+                    and self._seed.baseline.immutable
+                    and not self._seed.baseline.contextual_permission_rules_reviewed_by_human
+                )
+                else "Reference-GPX bootstrap candidate · itinerary review pending · no runtime session merged"
                 if baseline_review_pending
                 else "Immutable reviewed baseline · no runtime session merged"
                 if projection_lens == "baseline"
@@ -5792,6 +6103,660 @@ class ContextualPermissionWorkbench:
             },
         )
 
+    def _load_optional_baseline_source(
+        self,
+        project: dict[str, object],
+        project_key: str,
+        *,
+        default_ref: str | None = None,
+    ) -> tuple[str, str, object] | None:
+        raw_ref = project.get(project_key) or default_ref
+        if not isinstance(raw_ref, str) or not raw_ref.strip():
+            return None
+        ref = raw_ref.strip()
+        path = self._resolve_project_ref(ref)
+        if not path.is_file():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContextualPermissionConflict(
+                "baseline_source_invalid",
+                f"The typed baseline source is invalid: {ref}",
+            ) from exc
+        return ref, _file_sha256(path), payload
+
+    @staticmethod
+    def _interpolate_route_distance(
+        route_point_index: int,
+        index_distance_pairs: list[tuple[int, float]],
+    ) -> float | None:
+        if len(index_distance_pairs) < 2:
+            return None
+        ordered = sorted(index_distance_pairs)
+        for (left_index, left_distance), (right_index, right_distance) in zip(
+            ordered,
+            ordered[1:],
+            strict=False,
+        ):
+            if not left_index <= route_point_index <= right_index:
+                continue
+            if right_index == left_index:
+                return left_distance
+            fraction = (route_point_index - left_index) / (right_index - left_index)
+            return left_distance + ((right_distance - left_distance) * fraction)
+        return None
+
+    def _build_reference_gpx_auto_draft(
+        self,
+        *,
+        project: dict[str, object],
+        route_ref: str,
+        route_sha: str,
+        timing_ref: str,
+        timing_sha: str,
+        timing_payload: object,
+    ) -> MissionBaselineDraft:
+        if not isinstance(timing_payload, dict):
+            raise ContextualPermissionConflict(
+                "reference_timing_invalid",
+                "Reference timing must be a typed object.",
+            )
+        raw_segments = timing_payload.get("segments")
+        raw_matches = timing_payload.get("checkpoint_match_quality")
+        if not isinstance(raw_segments, list) or not isinstance(raw_matches, dict):
+            raise ContextualPermissionConflict(
+                "reference_timing_invalid",
+                "Reference timing is missing ordered segments or route anchors.",
+            )
+        anchors = sorted(
+            (
+                {
+                    "label": str(value.get("label") or key),
+                    "source_id": str(value.get("source_id") or key),
+                    "source_kind": str(value.get("source_kind") or "checkpoint"),
+                    "distance_m": float(value["route_distance_m"]),
+                    "artifact_ref": timing_ref,
+                    "artifact_sha256": timing_sha,
+                    "confidence": "high",
+                    "classes": [],
+                }
+                for key, value in raw_matches.items()
+                if isinstance(value, dict)
+                and isinstance(value.get("route_distance_m"), (int, float))
+            ),
+            key=lambda item: float(item["distance_m"]),
+        )
+        if len(anchors) != len(raw_segments) + 1 or len(anchors) < 2:
+            raise ContextualPermissionConflict(
+                "reference_timing_alignment_invalid",
+                "Timing segments must align one-to-one with ordered route anchors.",
+            )
+
+        normalized_segments: list[dict[str, object]] = []
+        for index, raw_segment in enumerate(raw_segments):
+            if not isinstance(raw_segment, dict):
+                raise ContextualPermissionConflict(
+                    "reference_timing_invalid",
+                    "Every timing segment must be a typed object.",
+                )
+            start_anchor = anchors[index]
+            end_anchor = anchors[index + 1]
+            if (
+                str(raw_segment.get("from_node_name") or "")
+                != str(start_anchor["label"])
+                or str(raw_segment.get("to_node_name") or "")
+                != str(end_anchor["label"])
+            ):
+                raise ContextualPermissionConflict(
+                    "reference_timing_alignment_invalid",
+                    "Timing labels do not match the ordered route anchors.",
+                )
+            durations = raw_segment.get("duration_minutes")
+            durations = durations if isinstance(durations, dict) else {}
+            p50 = durations.get("p50")
+            p75 = durations.get("p75")
+            normalized_segments.append(
+                {
+                    "segment_id": str(
+                        raw_segment.get("segment_id") or f"timing.segment.{index + 1:03d}"
+                    ),
+                    "start_m": float(start_anchor["distance_m"]),
+                    "end_m": float(end_anchor["distance_m"]),
+                    "p50": float(p50) if isinstance(p50, (int, float)) else None,
+                    "p75": float(p75) if isinstance(p75, (int, float)) else None,
+                }
+            )
+
+        source_refs = [route_ref, timing_ref]
+        source_hashes = {route_ref: route_sha, timing_ref: timing_sha}
+        optional_sources = {
+            key: self._load_optional_baseline_source(project, key, default_ref=default_ref)
+            for key, default_ref in (
+                ("rest_area_candidates_ref", None),
+                ("mcp_candidates_ref", None),
+                ("retreat_routes_ref", None),
+                ("checkpoints_ref", "candidates/checkpoints.json"),
+            )
+        }
+        for source in optional_sources.values():
+            if source is None:
+                continue
+            source_refs.append(source[0])
+            source_hashes[source[0]] = source[1]
+
+        mcp_source = optional_sources["mcp_candidates_ref"]
+        mcp_by_label: dict[str, dict[str, object]] = {}
+        if mcp_source is not None and isinstance(mcp_source[2], dict):
+            mcp_by_label = {
+                str(item.get("label") or ""): item
+                for item in (mcp_source[2].get("mcp_candidates") or [])
+                if isinstance(item, dict) and item.get("label")
+            }
+        endpoint_candidates = [
+            {
+                **anchor,
+                "classes": list(
+                    (mcp_by_label.get(str(anchor["label"])) or {}).get("mcp_classes")
+                    or []
+                ),
+                "confidence": str(
+                    (mcp_by_label.get(str(anchor["label"])) or {}).get("confidence")
+                    or anchor["confidence"]
+                ),
+            }
+            for anchor in anchors
+        ]
+
+        checkpoint_source = optional_sources["checkpoints_ref"]
+        checkpoint_indexes: dict[str, int] = {}
+        if checkpoint_source is not None and isinstance(checkpoint_source[2], list):
+            checkpoint_indexes = {
+                str(item.get("candidate_id")): int(item["route_point_index"])
+                for item in checkpoint_source[2]
+                if isinstance(item, dict)
+                and item.get("candidate_id")
+                and isinstance(item.get("route_point_index"), int)
+            }
+        index_distance_pairs = [
+            (checkpoint_indexes[str(anchor["source_id"])], float(anchor["distance_m"]))
+            for anchor in anchors
+            if str(anchor["source_id"]) in checkpoint_indexes
+        ]
+        rest_source = optional_sources["rest_area_candidates_ref"]
+        rest_endpoints: list[dict[str, object]] = []
+        if rest_source is not None and isinstance(rest_source[2], dict):
+            for item in rest_source[2].get("candidates") or []:
+                if not isinstance(item, dict) or not isinstance(
+                    item.get("route_point_index"), int
+                ):
+                    continue
+                distance_m = self._interpolate_route_distance(
+                    int(item["route_point_index"]), index_distance_pairs
+                )
+                if distance_m is None:
+                    continue
+                rest_endpoints.append(
+                    {
+                        "label": str(item.get("label") or "Rest / camp candidate"),
+                        "source_id": str(
+                            item.get("candidate_id") or item.get("checkpoint_candidate_id")
+                        ),
+                        "source_kind": "rest_area",
+                        "distance_m": distance_m,
+                        "artifact_ref": rest_source[0],
+                        "artifact_sha256": rest_source[1],
+                        "confidence": str(item.get("confidence") or "medium"),
+                        "classes": ["rest_or_camp"],
+                    }
+                )
+        target_day_p75 = 480.0
+        route_length_m = float(anchors[-1]["distance_m"])
+        eligible_anchor_rows = [
+            (index, item)
+            for index, item in enumerate(endpoint_candidates)
+            if index > 0
+            and (
+                index == len(endpoint_candidates) - 1
+                or item.get("source_kind") == "checkpoint"
+                or "camp_or_hut"
+                in {str(value).casefold() for value in item.get("classes") or []}
+            )
+        ]
+        selected_boundaries: list[dict[str, object]] = []
+        current_anchor_index = 0
+        while current_anchor_index < len(anchors) - 1:
+            candidate_rows: list[dict[str, object]] = []
+            for end_index, item in eligible_anchor_rows:
+                if end_index <= current_anchor_index:
+                    continue
+                day_segments = normalized_segments[current_anchor_index:end_index]
+                missing_ids = [
+                    str(segment["segment_id"])
+                    for segment in day_segments
+                    if not isinstance(segment.get("p75"), (int, float))
+                ]
+                known_p75_sum = sum(
+                    float(segment["p75"])
+                    for segment in day_segments
+                    if isinstance(segment.get("p75"), (int, float))
+                )
+                candidate_rows.append(
+                    {
+                        "item": item,
+                        "end_index": end_index,
+                        "missing_ids": missing_ids,
+                        "known_p75_sum": known_p75_sum,
+                    }
+                )
+            if not candidate_rows:
+                raise ContextualPermissionConflict(
+                    "reference_day_segmentation_failed",
+                    "No deterministic destination candidate covers the remaining route.",
+                )
+            fully_supported = [
+                row for row in candidate_rows if not row["missing_ids"]
+            ]
+            within_target = [
+                row
+                for row in fully_supported
+                if float(row["known_p75_sum"]) <= target_day_p75
+            ]
+            if within_target:
+                chosen_row = max(within_target, key=lambda row: int(row["end_index"]))
+                target_exceeded = False
+            elif fully_supported:
+                chosen_row = min(fully_supported, key=lambda row: int(row["end_index"]))
+                target_exceeded = True
+            else:
+                chosen_row = min(
+                    candidate_rows,
+                    key=lambda row: (
+                        len(row["missing_ids"]),
+                        abs(float(row["known_p75_sum"]) - target_day_p75),
+                        int(row["end_index"]),
+                        str(row["item"]["artifact_ref"]),
+                        str(row["item"]["artifact_sha256"]),
+                    ),
+                )
+                target_exceeded = False
+            next_index = int(chosen_row["end_index"])
+            if next_index <= current_anchor_index:
+                raise ContextualPermissionConflict(
+                    "reference_day_segmentation_failed",
+                    "Automatic day segmentation did not advance along the route.",
+                )
+            selected_boundaries.append(
+                {
+                    **chosen_row,
+                    "start_index": current_anchor_index,
+                    "target_exceeded": target_exceeded,
+                }
+            )
+            current_anchor_index = next_index
+            if len(selected_boundaries) > 50:
+                raise ContextualPermissionConflict(
+                    "reference_day_segmentation_failed",
+                    "Automatic day segmentation exceeded the bounded day count.",
+                )
+
+        retreat_source = optional_sources["retreat_routes_ref"]
+        retreat_items = (
+            retreat_source[2]
+            if retreat_source is not None and isinstance(retreat_source[2], list)
+            else []
+        )
+        def anchor_binding(item: dict[str, object]) -> BaselineRouteAnchor:
+            return BaselineRouteAnchor(
+                anchor_id=str(item["source_id"]),
+                display_label=str(item["label"]),
+                artifact=BaselineArtifactBinding(
+                    ref=str(item["artifact_ref"]),
+                    sha256=str(item["artifact_sha256"]),
+                ),
+                route_order_m=round(float(item["distance_m"]), 1),
+            )
+
+        def target_proposal(
+            item: dict[str, object],
+            *,
+            day_id: str,
+            kind: Literal["day_end", "retreat", "emergency_bivy"],
+            review_surface: Literal["permission", "safety_emergency"],
+            rationale: str,
+        ) -> BaselineTargetProposal:
+            artifact_ref = str(item["artifact_ref"])
+            artifact_sha = str(item["artifact_sha256"])
+            return BaselineTargetProposal(
+                proposal_id=f"proposal.{_fixed_hash(f'{day_id}:{kind}:{item["source_id"]}:{artifact_sha}')[:20]}",
+                kind=kind,
+                mission_day_id=day_id,
+                target=anchor_binding(item),
+                confidence=(
+                    str(item.get("confidence"))
+                    if str(item.get("confidence")) in {"high", "medium", "low", "unknown"}
+                    else "unknown"
+                ),
+                rationale=rationale,
+                evidence=[BaselineArtifactBinding(ref=artifact_ref, sha256=artifact_sha)],
+                required_review_surface=review_surface,
+            )
+
+        days: list[BaselineDayDraft] = [
+            BaselineDayDraft(
+                mission_day_id="D0",
+                source_text="Reference route staging",
+                day_kind="logistics",
+                ordered_place_mentions=["Trailhead staging"],
+                resolved_targets=["Trailhead staging"],
+                resolved_target_refs={
+                    "Trailhead staging": "reviewed://route/trailhead-staging"
+                },
+                resolved_target_hashes={
+                    "Trailhead staging": _fixed_hash(
+                        f"{self.project_id}:trailhead-staging"
+                    )
+                },
+                unresolved_names=[],
+                review_summary="Logistics staging remains separate from on-trail days.",
+            )
+        ]
+        uncertainties: list[BaselineUncertainty] = []
+        generic_handoff_item_ids = [
+            f"branch:{str(item.get('candidate_id') or 'retreat.reversed-primary')}"
+            for item in retreat_items
+            if isinstance(item, dict)
+        ]
+        bivy_candidate_ids: list[str] = []
+        for ordinal, boundary in enumerate(selected_boundaries, 1):
+            day_id = f"D{ordinal}"
+            start_index = int(boundary["start_index"])
+            end_index = int(boundary["end_index"])
+            start_item = anchors[start_index]
+            end_item = boundary["item"]
+            start_distance_m = float(start_item["distance_m"])
+            end_distance_m = float(end_item["distance_m"])
+            overlapping_segments = normalized_segments[start_index:end_index]
+            segment_ids = [str(segment["segment_id"]) for segment in overlapping_segments]
+            unsupported_ids = [
+                str(segment["segment_id"])
+                for segment in overlapping_segments
+                if not isinstance(segment.get("p75"), (int, float))
+            ]
+            supporting_segments = [
+                segment
+                for segment in overlapping_segments
+                if isinstance(segment.get("p75"), (int, float))
+            ]
+            supporting_ids = [
+                str(segment["segment_id"]) for segment in supporting_segments
+            ]
+            gap_ids: list[str] = []
+            if unsupported_ids:
+                uncertainty_id = f"uncertainty.{_fixed_hash(f'{day_id}:{":".join(unsupported_ids)}')[:20]}"
+                gap_ids = [uncertainty_id]
+                uncertainties.append(
+                    BaselineUncertainty(
+                        uncertainty_id=uncertainty_id,
+                        code="missing_historical_p75",
+                        affected_day_ids=[day_id],
+                        affected_segment_ids=unsupported_ids,
+                        summary=(
+                            f"{len(unsupported_ids)} segment(s) have no usable historical "
+                            "p75; Scout does not fill them."
+                        ),
+                        disposition="acknowledgeable",
+                        required_review_surface="permission",
+                        evidence=[
+                            BaselineArtifactBinding(ref=timing_ref, sha256=timing_sha)
+                        ],
+                    )
+                )
+            if boundary["target_exceeded"]:
+                target_gap_id = f"uncertainty.{_fixed_hash(f'{day_id}:target-exceeded')[:20]}"
+                gap_ids.append(target_gap_id)
+                uncertainties.append(
+                    BaselineUncertainty(
+                        uncertainty_id=target_gap_id,
+                        code="strategy_target_exceeded",
+                        affected_day_ids=[day_id],
+                        affected_segment_ids=segment_ids,
+                        summary=(
+                            "The nearest fully supported destination exceeds the "
+                            "strategy timing target; the target is a proposal heuristic."
+                        ),
+                        disposition="acknowledgeable",
+                        required_review_surface="permission",
+                        evidence=[
+                            BaselineArtifactBinding(ref=timing_ref, sha256=timing_sha)
+                        ],
+                    )
+                )
+            supported_p75 = round(
+                sum(float(segment["p75"]) for segment in supporting_segments), 1
+            )
+            all_supported_p50 = bool(supporting_segments) and all(
+                isinstance(segment.get("p50"), (int, float))
+                for segment in supporting_segments
+            )
+            supported_p50 = (
+                round(sum(float(segment["p50"]) for segment in supporting_segments), 1)
+                if all_supported_p50
+                else None
+            )
+            if not unsupported_ids:
+                eta = BaselineEtaProposal(
+                    state="complete_derived",
+                    method="sum_segment_quantiles",
+                    confidence="medium",
+                    segment_p50_sum_minutes=supported_p50,
+                    segment_p75_sum_minutes=supported_p75,
+                    supporting_segment_ids=segment_ids,
+                )
+            elif supporting_ids:
+                eta = BaselineEtaProposal(
+                    state="partial_derived",
+                    method="sum_supported_segment_quantiles",
+                    confidence="low",
+                    supported_segment_p50_sum_minutes=supported_p50,
+                    supported_segment_p75_sum_minutes=supported_p75,
+                    supporting_segment_ids=supporting_ids,
+                    unsupported_segment_ids=unsupported_ids,
+                    gap_ids=gap_ids,
+                )
+            else:
+                eta = BaselineEtaProposal(
+                    state="unknown",
+                    method="no_numeric_eta",
+                    confidence="unknown",
+                    unsupported_segment_ids=unsupported_ids,
+                    gap_ids=gap_ids,
+                    reason="no_usable_segment_p75",
+                )
+            end_proposal = target_proposal(
+                end_item,
+                day_id=day_id,
+                kind="day_end",
+                review_surface="permission",
+                rationale=(
+                    "Scout-selected destination balancing the declared day-duration target, "
+                    "route order and available rest/camp evidence."
+                ),
+            )
+            bivy_rows = sorted(
+                (
+                    item
+                    for item in rest_endpoints
+                    if start_distance_m < float(item["distance_m"]) <= end_distance_m
+                ),
+                key=lambda item: abs(end_distance_m - float(item["distance_m"])),
+            )[:2]
+            bivy_candidates = [
+                target_proposal(
+                    item,
+                    day_id=day_id,
+                    kind="emergency_bivy",
+                    review_surface="safety_emergency",
+                    rationale=(
+                        "Candidate-only rest/camp evidence near this day interval; "
+                        "Safety / Emergency must review it."
+                    ),
+                )
+                for item in bivy_rows
+            ]
+            bivy_candidate_ids.extend(item.proposal_id for item in bivy_candidates)
+            days.append(
+                BaselineDayDraft(
+                    mission_day_id=day_id,
+                    source_text=f"{start_item['label']} -> {end_item['label']}",
+                    ordered_place_mentions=[
+                        str(start_item["label"]),
+                        str(end_item["label"]),
+                    ],
+                    resolved_targets=[str(end_item["label"])],
+                    resolved_target_refs={
+                        str(end_item["label"]): str(end_item["artifact_ref"])
+                    },
+                    resolved_target_hashes={
+                        str(end_item["label"]): str(end_item["artifact_sha256"])
+                    },
+                    unresolved_names=[],
+                    start_anchor=anchor_binding(start_item),
+                    primary_day_end_proposal=end_proposal,
+                    eta_proposal=eta,
+                    segment_ids=segment_ids,
+                    retreat_candidates=[],
+                    emergency_bivy_candidates=bivy_candidates,
+                    uncertainty_ids=gap_ids,
+                    review_summary=(
+                        f"{start_item['label']} → {end_item['label']} · "
+                        + (
+                            f"derived segment sums p50 {supported_p50:g} / p75 {supported_p75:g} min"
+                            if eta.state == "complete_derived" and supported_p50 is not None
+                            else f"derived segment p75 sum {supported_p75:g} min"
+                            if eta.state == "complete_derived"
+                            else f"supported p75 subtotal {supported_p75:g} min · {len(unsupported_ids)} segment(s) missing"
+                            if eta.state == "partial_derived"
+                            else f"ETA unknown · {len(unsupported_ids)} segment(s) without usable p75"
+                        )
+                    ),
+                )
+            )
+
+        pending_handoff_ids = list(dict.fromkeys(
+            [*generic_handoff_item_ids, *(f"target:{item}" for item in bivy_candidate_ids)]
+        ))
+        safety_required = bool(pending_handoff_ids)
+        if safety_required:
+            handoff_evidence = [
+                BaselineArtifactBinding(ref=source[0], sha256=source[1])
+                for source in (retreat_source, rest_source)
+                if source is not None
+            ]
+            uncertainties.append(
+                BaselineUncertainty(
+                    uncertainty_id=f"uncertainty.{_fixed_hash('safety-emergency-handoff')[:20]}",
+                    code="external_safety_review",
+                    affected_day_ids=[
+                        day.mission_day_id for day in days if day.day_kind == "on_trail"
+                    ],
+                    related_target_proposal_ids=bivy_candidate_ids,
+                    summary=(
+                        "Retreat and emergency-bivy items remain pending in "
+                        "Safety / Emergency; Permission cannot approve them."
+                    ),
+                    disposition="external_review_pending",
+                    required_review_surface="safety_emergency",
+                    evidence=handoff_evidence,
+                )
+            )
+        permission_uncertainty_ids = [
+            item.uncertainty_id
+            for item in uncertainties
+            if item.disposition == "acknowledgeable"
+            and item.required_review_surface == "permission"
+        ]
+        review_requirements = BaselineReviewRequirements(
+            required_reviewed_day_ids=[
+                day.mission_day_id for day in days if day.day_kind == "on_trail"
+            ],
+            required_acknowledgment_uncertainty_ids=permission_uncertainty_ids,
+            pending_safety_handoff_item_ids=pending_handoff_ids,
+            safety_handoff_required=safety_required,
+        )
+        source_refs = list(dict.fromkeys(source_refs))
+        source_hashes = {ref: source_hashes[ref] for ref in source_refs}
+        source = json.dumps(
+            {
+                "generator_version": BASELINE_AUTO_PROPOSAL_VERSION,
+                "source_hashes": source_hashes,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        source_sha = _fixed_hash(source)
+        missing_p75_count = sum(
+            1
+            for segment in normalized_segments
+            if not isinstance(segment.get("p75"), (int, float))
+        )
+        return MissionBaselineDraft(
+            artifact_kind="mission_baseline_candidate",
+            schema_version="missionBaselineCandidate.v1",
+            draft_id=f"baseline-draft.{source_sha[:16]}",
+            source_mode="reference_gpx",
+            source_sha256=source_sha,
+            source_text=source,
+            source_refs=source_refs,
+            source_hashes=source_hashes,
+            route_axis_validation={
+                "track_order": "pass",
+                "endpoint_continuity": "pass",
+                "resume_gaps": "pass",
+                "route_direction": "pass",
+            },
+            days=days,
+            assumptions=[
+                "Scout proposed destination-defined days using a 480-minute p75 target.",
+                (
+                    "Missing historical p75 values remain unsupported. Partial ETA "
+                    "objects expose only supported segment-quantile subtotals."
+                ),
+            ],
+            validation_state="valid",
+            unresolved_gaps=[],
+            proposal_profile="ref_gpx_proposal_v1",
+            proposal_strategy_id="destination-boundary.segment-quantile-target",
+            proposal_strategy_version=BASELINE_AUTO_PROPOSAL_VERSION,
+            timing_evidence=BaselineArtifactBinding(
+                ref=timing_ref,
+                sha256=timing_sha,
+            ),
+            proposal_summary=BaselineProposalSummary(
+                day_count=len(days) - 1,
+                route_length_m=round(route_length_m, 1),
+                timing_segment_count=len(normalized_segments),
+                observed_p75_segment_count=len(normalized_segments) - missing_p75_count,
+                missing_p75_segment_count=missing_p75_count,
+                permission_uncertainty_count=len(permission_uncertainty_ids),
+                safety_pending_count=len(pending_handoff_ids),
+                blocking_gap_count=0,
+                target_p75_minutes_per_day=int(target_day_p75),
+                source_route_days_metadata=(
+                    int(project["route_days"])
+                    if isinstance(project.get("route_days"), int)
+                    else None
+                ),
+            ),
+            uncertainties=uncertainties,
+            review_requirements=review_requirements,
+            safety_handoff_summary=(
+                f"{len(pending_handoff_ids)} item(s) pending Safety / Emergency review."
+                if safety_required
+                else "No Safety / Emergency handoff item was proposed."
+            ),
+        )
+
     def preview_baseline(self, request: BaselineAuthoringRequest) -> MissionBaselineDraft:
         if request.mode == "human_text":
             source = (request.human_text or "").strip()
@@ -5885,12 +6850,29 @@ class ContextualPermissionWorkbench:
             project = json.loads(
                 self._resolve_project_ref("project.json").read_text(encoding="utf-8")
             )
+            route_sha = _file_sha256(route_path)
+            timing_source = self._load_optional_baseline_source(
+                project, "reference_segment_timing_ref"
+            )
+            if project.get("reference_segment_timing_ref") and timing_source is None:
+                raise ContextualPermissionConflict(
+                    "reference_timing_missing",
+                    "The declared reference timing artifact is missing.",
+                )
+            if timing_source is not None:
+                return self._build_reference_gpx_auto_draft(
+                    project=project,
+                    route_ref=ref,
+                    route_sha=route_sha,
+                    timing_ref=timing_source[0],
+                    timing_sha=timing_source[1],
+                    timing_payload=timing_source[2],
+                )
             eta_path = self._resolve_project_ref(str(project["planned_eta_ref"]))
             eta = json.loads(eta_path.read_text(encoding="utf-8"))
             assumption = eta.get("assumption") if isinstance(eta, dict) else {}
             target = str((assumption or {}).get("day1_target_node_name") or "Reviewed day-end target")
             turn_back = str((assumption or {}).get("turn_back_checkpoint_node_name") or "Reviewed junction")
-            route_sha = _file_sha256(route_path)
             source = f"{ref}:{route_sha}"
             days = [
                 BaselineDayDraft(
@@ -5948,6 +6930,7 @@ class ContextualPermissionWorkbench:
             days=days,
             validation_state="needs_review" if unresolved else "valid",
             unresolved_gaps=unresolved,
+            proposal_profile="legacy_sparse",
         )
 
     def generate_baseline_draft(
@@ -6268,6 +7251,175 @@ class ContextualPermissionWorkbench:
             request_payload=request,
         )
 
+    def _recompute_baseline_review_requirements(
+        self, draft: MissionBaselineDraft
+    ) -> BaselineReviewRequirements:
+        day_ids = [
+            day.mission_day_id
+            for day in draft.days
+            if day.day_kind == "on_trail"
+            and day.primary_day_end_proposal is not None
+        ]
+        uncertainty_ids = [
+            item.uncertainty_id
+            for item in draft.uncertainties
+            if item.disposition == "acknowledgeable"
+            and item.required_review_surface == "permission"
+        ]
+        generic_handoff_ids: list[str] = []
+        for ref in draft.source_refs:
+            if "retreat" not in ref.casefold():
+                continue
+            expected_sha = draft.source_hashes.get(ref)
+            path = self._resolve_project_ref(ref)
+            if not expected_sha or not path.is_file() or _file_sha256(path) != expected_sha:
+                raise ContextualPermissionConflict(
+                    "baseline_source_binding_mismatch",
+                    f"The bound Safety / Emergency handoff source changed: {ref}",
+                )
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, list):
+                generic_handoff_ids.extend(
+                    f"branch:{str(item.get('candidate_id'))}"
+                    for item in payload
+                    if isinstance(item, dict) and item.get("candidate_id")
+                )
+        concrete_handoff_ids = [
+            f"target:{proposal.proposal_id}"
+            for day in draft.days
+            for proposal in [*day.retreat_candidates, *day.emergency_bivy_candidates]
+        ]
+        pending_ids = list(dict.fromkeys([*generic_handoff_ids, *concrete_handoff_ids]))
+        return BaselineReviewRequirements(
+            required_reviewed_day_ids=day_ids,
+            required_acknowledgment_uncertainty_ids=uncertainty_ids,
+            pending_safety_handoff_item_ids=pending_ids,
+            safety_handoff_required=bool(pending_ids),
+        )
+
+    def _validate_proposal_first_draft(self, draft: MissionBaselineDraft) -> None:
+        project = json.loads(
+            self._resolve_project_ref("project.json").read_text(encoding="utf-8")
+        )
+        rich_reference_declared = bool(project.get("reference_segment_timing_ref"))
+        proposal_fields_present = bool(
+            draft.timing_evidence
+            or draft.proposal_summary
+            or draft.review_requirements
+            or any(day.primary_day_end_proposal for day in draft.days)
+        )
+        if draft.proposal_profile == "legacy_sparse":
+            if proposal_fields_present or (
+                draft.source_mode == "reference_gpx" and rich_reference_declared
+            ):
+                raise ContextualPermissionConflict(
+                    "baseline_proposal_profile_downgrade",
+                    "A proposal-first Ref. GPX draft cannot use the legacy acceptance profile.",
+                )
+            return
+        if (
+            draft.source_mode != "reference_gpx"
+            or draft.proposal_strategy_id
+            != "destination-boundary.segment-quantile-target"
+            or draft.proposal_strategy_version != BASELINE_AUTO_PROPOSAL_VERSION
+            or draft.timing_evidence is None
+            or draft.proposal_summary is None
+            or draft.review_requirements is None
+        ):
+            raise ContextualPermissionConflict(
+                "baseline_proposal_contract_incomplete",
+                "The Ref. GPX proposal profile is missing its strategy, timing, summary, or review contract.",
+            )
+        if draft.unresolved_gaps or any(
+            item.disposition == "blocking" for item in draft.uncertainties
+        ):
+            raise ContextualPermissionConflict(
+                "baseline_promotion_blocked",
+                "Blocking baseline gaps cannot be acknowledged through compact review.",
+            )
+        timing_path = self._resolve_project_ref(draft.timing_evidence.ref)
+        if (
+            not timing_path.is_file()
+            or _file_sha256(timing_path) != draft.timing_evidence.sha256
+        ):
+            raise ContextualPermissionConflict(
+                "baseline_timing_binding_mismatch",
+                "The bound timing evidence is missing or changed.",
+            )
+        timing_payload = json.loads(timing_path.read_text(encoding="utf-8"))
+        timing_segments = (
+            timing_payload.get("segments") if isinstance(timing_payload, dict) else None
+        )
+        if not isinstance(timing_segments, list):
+            raise ContextualPermissionConflict(
+                "baseline_timing_binding_mismatch",
+                "The bound timing evidence has no ordered segment contract.",
+            )
+        source_segment_ids = [
+            str(item.get("segment_id"))
+            for item in timing_segments
+            if isinstance(item, dict) and item.get("segment_id")
+        ]
+        trail_days = [day for day in draft.days if day.day_kind == "on_trail"]
+        if not trail_days:
+            raise ContextualPermissionConflict(
+                "baseline_proposal_contract_incomplete",
+                "The proposal-first baseline contains no on-trail day.",
+            )
+        previous_end: BaselineRouteAnchor | None = None
+        proposed_segment_ids: list[str] = []
+        proposal_ids: set[str] = set()
+        for day in trail_days:
+            if (
+                day.start_anchor is None
+                or day.primary_day_end_proposal is None
+                or day.eta_proposal is None
+                or not day.segment_ids
+            ):
+                raise ContextualPermissionConflict(
+                    "baseline_proposal_contract_incomplete",
+                    f"{day.mission_day_id} is missing a start, day end, ETA, or segment list.",
+                )
+            if previous_end is not None and day.start_anchor != previous_end:
+                raise ContextualPermissionConflict(
+                    "baseline_day_continuity_invalid",
+                    "Each proposal day must start at the previous proposed day end.",
+                )
+            target = day.primary_day_end_proposal
+            if (
+                target.mission_day_id != day.mission_day_id
+                or target.kind != "day_end"
+                or target.target.route_order_m <= day.start_anchor.route_order_m
+                or target.proposal_id in proposal_ids
+            ):
+                raise ContextualPermissionConflict(
+                    "baseline_day_destination_invalid",
+                    f"{day.mission_day_id} has an invalid primary destination proposal.",
+                )
+            proposal_ids.add(target.proposal_id)
+            eta_ids = [
+                *day.eta_proposal.supporting_segment_ids,
+                *day.eta_proposal.unsupported_segment_ids,
+            ]
+            if set(eta_ids) != set(day.segment_ids) or len(eta_ids) != len(day.segment_ids):
+                raise ContextualPermissionConflict(
+                    "baseline_eta_segment_mismatch",
+                    f"{day.mission_day_id} ETA coverage does not match its segments.",
+                )
+            proposed_segment_ids.extend(day.segment_ids)
+            previous_end = target.target
+        if proposed_segment_ids != source_segment_ids:
+            raise ContextualPermissionConflict(
+                "baseline_segment_coverage_invalid",
+                "Proposal days must cover every timing segment exactly once and in order.",
+            )
+        expected_requirements = self._recompute_baseline_review_requirements(draft)
+        if draft.review_requirements != expected_requirements:
+            raise ContextualPermissionConflict(
+                "baseline_review_requirements_mismatch",
+                "Stored compact-review requirements do not match deterministic recomputation.",
+            )
+
     def _persist_baseline_candidate(
         self,
         *,
@@ -6277,6 +7429,7 @@ class ContextualPermissionWorkbench:
         parent_candidate: dict[str, object] | None,
         request_payload: WorkbenchModel,
     ) -> BaselineCandidateSaveReceipt:
+        self._validate_proposal_first_draft(draft)
         if not explicit_confirmation:
             raise ContextualPermissionConflict(
                 "explicit_confirmation_required",
@@ -6337,6 +7490,28 @@ class ContextualPermissionWorkbench:
             "draft": draft.model_dump(mode="json"),
             "unresolved_gaps": draft.unresolved_gaps,
             "validation_state": draft.validation_state,
+            "proposal_profile": draft.proposal_profile,
+            "proposal_strategy_id": draft.proposal_strategy_id,
+            "proposal_strategy_version": draft.proposal_strategy_version,
+            "timing_evidence": (
+                draft.timing_evidence.model_dump(mode="json")
+                if draft.timing_evidence is not None
+                else None
+            ),
+            "proposal_summary": (
+                draft.proposal_summary.model_dump(mode="json")
+                if draft.proposal_summary is not None
+                else None
+            ),
+            "uncertainties": [
+                item.model_dump(mode="json") for item in draft.uncertainties
+            ],
+            "review_requirements": (
+                draft.review_requirements.model_dump(mode="json")
+                if draft.review_requirements is not None
+                else None
+            ),
+            "safety_handoff_summary": draft.safety_handoff_summary,
             "promotion_gates": {
                 "route_critical_names_resolved": not draft.unresolved_gaps,
                 "route_axis_order_pass": draft.route_axis_validation.get("track_order")
@@ -6411,6 +7586,8 @@ class ContextualPermissionWorkbench:
             request.candidate_ref,
             request.candidate_sha256,
         )
+        candidate_draft = MissionBaselineDraft.model_validate(candidate.get("draft"))
+        self._validate_proposal_first_draft(candidate_draft)
         if not candidate.get("review_ready"):
             raise ContextualPermissionConflict(
                 "baseline_promotion_blocked",
@@ -6421,7 +7598,42 @@ class ContextualPermissionWorkbench:
                 "baseline_promotion_blocked",
                 "Every deterministic baseline promotion gate must pass.",
             )
-        request_sha = _digest(request)
+        proposal_first = candidate.get("proposal_profile") == "ref_gpx_proposal_v1"
+        review_requirements = candidate.get("review_requirements")
+        requirements = (
+            review_requirements if isinstance(review_requirements, dict) else {}
+        )
+        required_day_ids = list(requirements.get("required_reviewed_day_ids") or [])
+        required_uncertainty_ids = list(
+            requirements.get("required_acknowledgment_uncertainty_ids") or []
+        )
+        pending_handoff_ids = list(
+            requirements.get("pending_safety_handoff_item_ids") or []
+        )
+        safety_handoff_required = bool(requirements.get("safety_handoff_required"))
+        if proposal_first and (
+            set(request.reviewed_day_ids) != set(required_day_ids)
+            or set(request.acknowledged_uncertainty_ids)
+            != set(required_uncertainty_ids)
+            or request.safety_handoff_acknowledged != safety_handoff_required
+        ):
+            raise ContextualPermissionConflict(
+                "baseline_review_set_mismatch",
+                "The compact review must enumerate the exact day, uncertainty, and Safety / Emergency handoff sets.",
+            )
+        canonical_reviewed_day_ids = required_day_ids if proposal_first else request.reviewed_day_ids
+        canonical_uncertainty_ids = (
+            required_uncertainty_ids
+            if proposal_first
+            else request.acknowledged_uncertainty_ids
+        )
+        normalized_request = request.model_copy(
+            update={
+                "reviewed_day_ids": canonical_reviewed_day_ids,
+                "acknowledged_uncertainty_ids": canonical_uncertainty_ids,
+            }
+        )
+        request_sha = _digest(normalized_request)
         review_id = f"review.{_fixed_hash(request.idempotency_key)[:16]}"
         receipt_path = self._resolve_project_write_path(
             "reviews",
@@ -6441,6 +7653,23 @@ class ContextualPermissionWorkbench:
             "candidates/contextual_permission_rules.json",
             "outputs/planned_eta.json",
         ]
+        reviewed_day_end_bindings = [
+            {
+                "day_id": str(day["mission_day_id"]),
+                "proposal_id": str(day["primary_day_end_proposal"]["proposal_id"]),
+                "target_ref": str(
+                    day["primary_day_end_proposal"]["target"]["artifact"]["ref"]
+                ),
+                "target_sha256": str(
+                    day["primary_day_end_proposal"]["target"]["artifact"]["sha256"]
+                ),
+            }
+            for day in candidate.get("days") or []
+            if isinstance(day, dict)
+            and str(day.get("mission_day_id")) in canonical_reviewed_day_ids
+            and isinstance(day.get("primary_day_end_proposal"), dict)
+            and isinstance(day["primary_day_end_proposal"].get("target"), dict)
+        ]
         reviewed_payload: dict[str, object] = {
             "artifact_kind": "reviewed_mission_baseline",
             "schema_version": "reviewedMissionBaseline.v1",
@@ -6452,6 +7681,19 @@ class ContextualPermissionWorkbench:
             "source_mode": candidate["source_mode"],
             "source_sha256": candidate["source_sha256"],
             "days": candidate["days"],
+            "proposal_profile": candidate.get("proposal_profile"),
+            "proposal_strategy_id": candidate.get("proposal_strategy_id"),
+            "proposal_strategy_version": candidate.get("proposal_strategy_version"),
+            "timing_evidence": candidate.get("timing_evidence"),
+            "proposal_summary": candidate.get("proposal_summary"),
+            "uncertainties": candidate.get("uncertainties") or [],
+            "reviewed_day_ids": canonical_reviewed_day_ids,
+            "review_scope": "permission_day_end_only",
+            "reviewed_day_end_bindings": reviewed_day_end_bindings,
+            "acknowledged_uncertainty_ids": canonical_uncertainty_ids,
+            "safety_handoff_acknowledged": request.safety_handoff_acknowledged,
+            "pending_safety_handoff_item_ids": pending_handoff_ids,
+            "safety_handoff_scope": "visibility_and_cross_feature_handoff_only",
             "reviewer_alias": request.reviewer_alias,
             "accepted_at": self._now(),
             "candidate_only": True,
@@ -6479,6 +7721,13 @@ class ContextualPermissionWorkbench:
                 "reviewed_baseline_sha256"
             ],
             "reviewer_alias": request.reviewer_alias,
+            "reviewed_day_ids": canonical_reviewed_day_ids,
+            "review_scope": "permission_day_end_only",
+            "reviewed_day_end_bindings": reviewed_day_end_bindings,
+            "acknowledged_uncertainty_ids": canonical_uncertainty_ids,
+            "safety_handoff_acknowledged": request.safety_handoff_acknowledged,
+            "pending_safety_handoff_item_ids": pending_handoff_ids,
+            "safety_handoff_scope": "visibility_and_cross_feature_handoff_only",
             "stale_dependency_refs": stale_refs,
             "review_sha256": "0" * 64,
             "writes_performed": True,
@@ -6526,6 +7775,13 @@ class ContextualPermissionWorkbench:
             candidate_ref=request.candidate_ref,
             candidate_sha256=request.candidate_sha256,
             stale_dependency_refs=list(receipt_payload["stale_dependency_refs"]),
+            reviewed_day_ids=list(receipt_payload.get("reviewed_day_ids") or []),
+            acknowledged_uncertainty_ids=list(
+                receipt_payload.get("acknowledged_uncertainty_ids") or []
+            ),
+            safety_handoff_acknowledged=bool(
+                receipt_payload.get("safety_handoff_acknowledged")
+            ),
         )
 
     def _append_review_decision_log(self, receipt: dict[str, object]) -> None:
@@ -6577,6 +7833,799 @@ class ContextualPermissionWorkbench:
             "active_runtime_session_updated": False,
         }
         self._write_replace_json(marker_path, marker)
+
+    def rebuild_contextual_permission_projection(
+        self,
+        request: ContextualPermissionProjectionRebuildRequest,
+    ) -> ContextualPermissionProjectionRebuildReceipt:
+        if not request.explicit_confirmation:
+            raise ContextualPermissionConflict(
+                "explicit_confirmation_required",
+                "Contextual Permission projection rebuild requires explicit confirmation.",
+            )
+        project_path = self._resolve_project_ref("project.json")
+        project = json.loads(project_path.read_text(encoding="utf-8"))
+        reviewed_ref = str(project.get("reviewed_mission_baseline_ref") or "")
+        reviewed_sha256 = str(project.get("reviewed_mission_baseline_sha256") or "")
+        if not reviewed_ref or not _SHA256_PATTERN.fullmatch(reviewed_sha256):
+            raise ContextualPermissionConflict(
+                "reviewed_baseline_input_missing",
+                "A selected reviewed baseline is required before projection rebuild.",
+            )
+        if reviewed_sha256 != request.expected_reviewed_baseline_sha256:
+            raise ContextualPermissionConflict(
+                "reviewed_baseline_replaced",
+                "The selected reviewed baseline changed before projection rebuild.",
+            )
+        reviewed_path = self._resolve_project_ref(reviewed_ref)
+        try:
+            reviewed = json.loads(reviewed_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContextualPermissionConflict(
+                "invalid_reviewed_baseline",
+                "The selected reviewed baseline is unavailable or invalid.",
+            ) from exc
+        self._validate_selected_reviewed_baseline(
+            reviewed=reviewed,
+            reviewed_ref=reviewed_ref,
+            reviewed_sha256=reviewed_sha256,
+        )
+        days = [
+            BaselineDayDraft.model_validate(day)
+            for day in reviewed.get("days") or []
+            if isinstance(day, dict) and day.get("day_kind") == "on_trail"
+        ]
+        if not days or any(day.primary_day_end_proposal is None for day in days):
+            raise ContextualPermissionConflict(
+                "reviewed_baseline_missing_day_end_bindings",
+                "The selected baseline predates proposal-first day-end bindings; generate and accept a new Ref. GPX proposal first.",
+            )
+        reviewed_day_ids = list(reviewed.get("reviewed_day_ids") or [])
+        if reviewed_day_ids != [day.mission_day_id for day in days]:
+            raise ContextualPermissionConflict(
+                "reviewed_baseline_day_set_mismatch",
+                "The reviewed baseline does not enumerate the exact on-trail day set.",
+            )
+        review_id = str(reviewed.get("review_id") or "")
+        if not _SAFE_ID_PATTERN.fullmatch(review_id):
+            raise ContextualPermissionConflict(
+                "invalid_reviewed_baseline",
+                "The reviewed baseline has no safe acceptance receipt identity.",
+            )
+        review_receipt_ref = (
+            f"reviews/mission_baseline_accept_receipts/{review_id}.json"
+        )
+        review_receipt_path = self._resolve_project_ref(review_receipt_ref)
+        self._validate_baseline_review_receipt(
+            path=review_receipt_path,
+            reviewed_ref=reviewed_ref,
+            reviewed_sha256=reviewed_sha256,
+        )
+        review_receipt_sha256 = _file_sha256(review_receipt_path)
+        request_sha256 = _digest(request)
+        rebuild_id = f"permission-rebuild.{_fixed_hash(request.idempotency_key)[:16]}"
+        rebuild_path = self._resolve_project_write_path(
+            "reviews", "contextual_permission_rebuild_receipts", f"{rebuild_id}.json"
+        )
+        with _STORE_LOCK:
+            if rebuild_path.is_file():
+                return self._load_existing_projection_rebuild_receipt(
+                    rebuild_path,
+                    request_sha256=request_sha256,
+                )
+            plan_nodes = self._reviewed_baseline_plan_nodes(
+                reviewed_sha256=reviewed_sha256,
+                days=days,
+            )
+            rules = ContextualPermissionRulesArtifact(
+                artifact_kind="pretrip_contextual_permission_rules",
+                schema_version="contextual_permission_rules.v2",
+                project_id=self.project_id,
+                reviewed_baseline_ref=reviewed_ref,
+                reviewed_baseline_sha256=reviewed_sha256,
+                reviewed_by_human=False,
+                review_receipt_ref=review_receipt_ref,
+                review_receipt_sha256=review_receipt_sha256,
+                plan_node_policies=[
+                    ReviewedPlanNodePolicy(
+                        node_id=node.node_id,
+                        mission_day_id=node.mission_day_id,
+                        adjustment_policy=node.adjustment_policy,
+                        minimum_duration_minutes=node.minimum_duration_minutes,
+                        policy_ref=node.source_rule_ref,
+                        policy_sha256=node.source_rule_sha256,
+                        reviewed=False,
+                    )
+                    for node in plan_nodes
+                ],
+                candidate_only=True,
+                runtime_safety_truth=False,
+            )
+            rules_payload = rules.model_dump(mode="json")
+            rules_sha256 = _formatted_json_sha256(rules_payload)
+            planned_eta_ref = str(project.get("planned_eta_ref") or "outputs/planned_eta.json")
+            planned_eta_path = self._resolve_project_ref(planned_eta_ref)
+            planned_eta_payload = self._rebound_planned_eta(
+                path=planned_eta_path,
+                reviewed=reviewed,
+                reviewed_ref=reviewed_ref,
+                reviewed_sha256=reviewed_sha256,
+                days=days,
+            )
+            planned_eta_sha256 = _formatted_json_sha256(planned_eta_payload)
+            seed = self._rebound_workbench_seed(
+                project=project,
+                reviewed=reviewed,
+                reviewed_ref=reviewed_ref,
+                reviewed_sha256=reviewed_sha256,
+                review_receipt_ref=review_receipt_ref,
+                review_receipt_sha256=review_receipt_sha256,
+                rules_sha256=rules_sha256,
+                planned_eta_ref=planned_eta_ref,
+                planned_eta_sha256=planned_eta_sha256,
+                plan_nodes=plan_nodes,
+                days=days,
+            )
+            seed_payload = seed.model_dump(mode="json")
+            seed_sha256 = _formatted_json_sha256(seed_payload)
+            rules_ref = DEFAULT_CONTEXTUAL_PERMISSION_RULES_REF.as_posix()
+            seed_ref = DEFAULT_WORKBENCH_SEED_REF.as_posix()
+            receipt_payload: dict[str, object] = {
+                "rebuild_id": rebuild_id,
+                "rebuild_ref": rebuild_path.relative_to(self.project_root).as_posix(),
+                "rebuild_sha256": "0" * 64,
+                "request_sha256": request_sha256,
+                "idempotency_key": request.idempotency_key,
+                "reviewed_baseline_ref": reviewed_ref,
+                "reviewed_baseline_sha256": reviewed_sha256,
+                "planned_eta_ref": planned_eta_ref,
+                "planned_eta_sha256": planned_eta_sha256,
+                "contextual_permission_rules_ref": rules_ref,
+                "contextual_permission_rules_sha256": rules_sha256,
+                "workbench_seed_ref": seed_ref,
+                "workbench_seed_sha256": seed_sha256,
+                "rule_review_state": "pending_review_only",
+                "writes_performed": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "departure_approval_granted": False,
+                "active_runtime_session_updated": False,
+                "safety_api_called": False,
+                "outbound_action_performed": False,
+                "outbound_transport_invoked": False,
+                "external_send_performed": False,
+                "hardware_control_performed": False,
+            }
+            receipt_payload["rebuild_sha256"] = _digest(
+                {
+                    key: value
+                    for key, value in receipt_payload.items()
+                    if key != "rebuild_sha256"
+                }
+            )
+            receipt = ContextualPermissionProjectionRebuildReceipt.model_validate(
+                receipt_payload
+            )
+            rules_path = self._resolve_project_write_path(*Path(rules_ref).parts)
+            seed_path = self._resolve_project_write_path(*Path(seed_ref).parts)
+            stale_marker_path = self._resolve_project_write_path(
+                "outputs", "contextual_permission", "stale_after_baseline_acceptance.json"
+            )
+            updated_project = {
+                **project,
+                "planned_eta_ref": planned_eta_ref,
+                "contextual_permission_rules_ref": rules_ref,
+                "contextual_permission_bootstrap_ref": seed_ref,
+                "contextual_permission_baseline_candidate_ref": reviewed.get(
+                    "candidate_ref"
+                ),
+                "contextual_permission_baseline_candidate_sha256": reviewed.get(
+                    "candidate_sha256"
+                ),
+                "contextual_permission_bootstrap_state": (
+                    "baseline_bound_rule_review_pending"
+                ),
+                "contextual_permission_rule_count": len(plan_nodes),
+                "contextual_permission_projection_rebuild_ref": receipt.rebuild_ref,
+                "contextual_permission_projection_rebuild_sha256": (
+                    receipt.rebuild_sha256
+                ),
+                "contextual_permission_collection_updated_at": self._now(),
+            }
+            resolved_marker = {
+                "artifact_kind": "contextual_permission_dependency_staleness",
+                "schema_version": "contextualPermissionDependencyStaleness.v1",
+                "review_id": review_id,
+                "reviewed_baseline_sha256": reviewed_sha256,
+                "stale_dependency_refs": [],
+                "resolved_dependency_refs": [planned_eta_ref, rules_ref, seed_ref],
+                "requires_explicit_rebuild": False,
+                "rebuild_receipt_ref": receipt.rebuild_ref,
+                "rebuild_receipt_sha256": receipt.rebuild_sha256,
+                "active_runtime_session_updated": False,
+            }
+            self._write_replace_json(planned_eta_path, planned_eta_payload)
+            self._write_replace_json(rules_path, rules_payload)
+            self._write_replace_json(seed_path, seed_payload)
+            self._write_replace_json(stale_marker_path, resolved_marker)
+            self._write_replace_json(project_path, updated_project)
+            self._write_new_json(rebuild_path, receipt.model_dump(mode="json"))
+            return receipt
+
+    def _validate_selected_reviewed_baseline(
+        self,
+        *,
+        reviewed: object,
+        reviewed_ref: str,
+        reviewed_sha256: str,
+    ) -> None:
+        if not isinstance(reviewed, dict):
+            raise ContextualPermissionConflict(
+                "invalid_reviewed_baseline", "The reviewed baseline must be an object."
+            )
+        if (
+            reviewed.get("artifact_kind") != "reviewed_mission_baseline"
+            or reviewed.get("schema_version") != "reviewedMissionBaseline.v1"
+            or reviewed.get("reviewed_baseline_sha256") != reviewed_sha256
+        ):
+            raise ContextualPermissionConflict(
+                "invalid_reviewed_baseline", "The reviewed baseline contract is invalid."
+            )
+        computed = _digest(
+            {
+                key: value
+                for key, value in reviewed.items()
+                if key != "reviewed_baseline_sha256"
+            }
+        )
+        if computed != reviewed_sha256:
+            raise ContextualPermissionConflict(
+                "reviewed_baseline_hash_mismatch",
+                "The selected reviewed baseline no longer matches its immutable hash.",
+            )
+        candidate_ref = str(reviewed.get("candidate_ref") or "")
+        candidate_sha256 = str(reviewed.get("candidate_sha256") or "")
+        _, candidate = self._load_immutable_baseline_candidate(
+            candidate_ref,
+            candidate_sha256,
+        )
+        candidate_draft = MissionBaselineDraft.model_validate(candidate.get("draft"))
+        self._validate_proposal_first_draft(candidate_draft)
+        if (
+            candidate.get("baseline_id") != reviewed.get("baseline_id")
+            or candidate.get("version_id") != reviewed.get("version_id")
+            or reviewed.get("review_scope") != "permission_day_end_only"
+            or reviewed_ref == candidate_ref
+        ):
+            raise ContextualPermissionConflict(
+                "reviewed_baseline_lineage_mismatch",
+                "The reviewed baseline is not bound to its immutable proposal candidate.",
+            )
+
+    def _validate_baseline_review_receipt(
+        self,
+        *,
+        path: Path,
+        reviewed_ref: str,
+        reviewed_sha256: str,
+    ) -> None:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContextualPermissionConflict(
+                "baseline_review_receipt_missing",
+                "The reviewed baseline acceptance receipt is unavailable.",
+            ) from exc
+        if (
+            not isinstance(payload, dict)
+            or payload.get("artifact_kind") != "mission_baseline_review_decision"
+            or payload.get("reviewed_baseline_ref") != reviewed_ref
+            or payload.get("reviewed_baseline_sha256") != reviewed_sha256
+        ):
+            raise ContextualPermissionConflict(
+                "baseline_review_receipt_mismatch",
+                "The acceptance receipt does not bind the selected reviewed baseline.",
+            )
+        expected = _digest(
+            {key: value for key, value in payload.items() if key != "review_sha256"}
+        )
+        if payload.get("review_sha256") != expected:
+            raise ContextualPermissionConflict(
+                "baseline_review_receipt_hash_mismatch",
+                "The acceptance receipt no longer matches its immutable hash.",
+            )
+
+    def _load_existing_projection_rebuild_receipt(
+        self,
+        path: Path,
+        *,
+        request_sha256: str,
+    ) -> ContextualPermissionProjectionRebuildReceipt:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            receipt = ContextualPermissionProjectionRebuildReceipt.model_validate(
+                payload
+            )
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            raise ContextualPermissionConflict(
+                "invalid_projection_rebuild_receipt",
+                "The existing projection rebuild receipt is invalid.",
+            ) from exc
+        expected_rebuild_sha256 = _digest(
+            {
+                key: value
+                for key, value in payload.items()
+                if key != "rebuild_sha256"
+            }
+        )
+        if receipt.rebuild_sha256 != expected_rebuild_sha256:
+            raise ContextualPermissionConflict(
+                "projection_rebuild_receipt_hash_mismatch",
+                "The projection rebuild receipt no longer matches its immutable hash.",
+            )
+        if receipt.request_sha256 != request_sha256:
+            raise ContextualPermissionConflict(
+                "idempotency_conflict",
+                "The projection rebuild idempotency key was already used.",
+            )
+        for ref, expected_sha256 in (
+            (receipt.planned_eta_ref, receipt.planned_eta_sha256),
+            (
+                receipt.contextual_permission_rules_ref,
+                receipt.contextual_permission_rules_sha256,
+            ),
+            (receipt.workbench_seed_ref, receipt.workbench_seed_sha256),
+        ):
+            artifact_path = self._resolve_project_ref(ref)
+            if not artifact_path.is_file() or _file_sha256(artifact_path) != expected_sha256:
+                raise ContextualPermissionConflict(
+                    "projection_rebuild_artifact_mismatch",
+                    "A previously rebuilt projection artifact has changed.",
+                )
+        return receipt
+
+    def _reviewed_baseline_plan_nodes(
+        self,
+        *,
+        reviewed_sha256: str,
+        days: list[BaselineDayDraft],
+    ) -> list[RemainingPlanNode]:
+        nodes: list[RemainingPlanNode] = []
+        rules_ref = DEFAULT_CONTEXTUAL_PERMISSION_RULES_REF.as_posix()
+        for day in days:
+            proposal = day.primary_day_end_proposal
+            if proposal is None:  # pragma: no cover - guarded by caller
+                continue
+            eta = day.eta_proposal
+            baseline_minutes = (
+                int(round(eta.segment_p75_sum_minutes))
+                if eta is not None
+                and eta.state == "complete_derived"
+                and eta.segment_p75_sum_minutes is not None
+                else 0
+            )
+            eta_gap = (
+                "Segment p50/p75 sums are complete; the adjustment policy still requires separate review."
+                if eta is not None and eta.state == "complete_derived"
+                else "Whole-day duration remains unknown; supported subtotals are never promoted to a full-day ETA."
+            )
+            definitions = (
+                (
+                    f"node.route-axis.{day.mission_day_id}",
+                    "route_axis",
+                    f"{day.mission_day_id} route to {proposal.target.display_label}",
+                    baseline_minutes,
+                    False,
+                    eta_gap,
+                ),
+                (
+                    f"node.day-end.{day.mission_day_id}",
+                    "day_end_target",
+                    f"{day.mission_day_id} reviewed day end: {proposal.target.display_label}",
+                    0,
+                    True,
+                    "The destination binding is reviewed; arrival and day close still require their own receipts.",
+                ),
+                (
+                    f"node.reserve.{day.mission_day_id}",
+                    "weather_daylight_retreat_reserve",
+                    f"{day.mission_day_id} weather / daylight / retreat reserve",
+                    0,
+                    True,
+                    "Reserve size and retreat authority remain pending separate Permission and Safety / Emergency review.",
+                ),
+            )
+            for node_id, kind, label, duration, protected, quality in definitions:
+                policy_ref = f"{rules_ref}#{node_id}"
+                policy_sha256 = _fixed_hash(
+                    f"{reviewed_sha256}:{node_id}:review-only.v1"
+                )
+                nodes.append(
+                    RemainingPlanNode(
+                        node_id=node_id,
+                        action_id=kind,
+                        label=label,
+                        mission_day_id=day.mission_day_id,
+                        kind=kind,
+                        declared_adjustment_policy="review_only",
+                        adjustment_policy="review_only",
+                        cancellable=False,
+                        priority=100 if kind != "weather_daylight_retreat_reserve" else 95,
+                        policy_reason=(
+                            "Baseline acceptance reviewed day endpoints only; forward "
+                            "adjustment remains fail-closed until separately reviewed."
+                        ),
+                        policy_source=policy_ref,
+                        source_refs=[policy_ref, proposal.target.artifact.ref],
+                        baseline_duration_minutes=duration,
+                        minimum_duration_minutes=duration,
+                        discretionary_excess_minutes=0,
+                        available_reducible_minutes=0,
+                        applied_reduction_minutes=0,
+                        effective_duration_minutes=duration,
+                        absorbed_debt_minutes=0,
+                        protected=protected,
+                        adjustment_state="review_required",
+                        source_rule_ref=policy_ref,
+                        source_rule_sha256=policy_sha256,
+                        data_quality=[quality],
+                    )
+                )
+        return nodes
+
+    def _rebound_planned_eta(
+        self,
+        *,
+        path: Path,
+        reviewed: dict[str, object],
+        reviewed_ref: str,
+        reviewed_sha256: str,
+        days: list[BaselineDayDraft],
+    ) -> dict[str, object]:
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContextualPermissionConflict(
+                "invalid_planned_eta", "The existing planned ETA artifact is invalid."
+            ) from exc
+        if not isinstance(existing, dict):
+            raise ContextualPermissionConflict(
+                "invalid_planned_eta", "The planned ETA artifact must be an object."
+            )
+        source_refs = list(existing.get("source_refs") or [])
+        if reviewed_ref not in source_refs:
+            source_refs.append(reviewed_ref)
+        source_hashes = dict(existing.get("source_hashes") or {})
+        source_hashes[reviewed_ref] = reviewed_sha256
+        mission_day_estimates = []
+        for day in days:
+            eta = day.eta_proposal
+            mission_day_estimates.append(
+                {
+                    "mission_day_id": day.mission_day_id,
+                    "eta": eta.model_dump(mode="json") if eta is not None else None,
+                    "segment_ids": day.segment_ids,
+                    "primary_day_end_proposal_id": (
+                        day.primary_day_end_proposal.proposal_id
+                        if day.primary_day_end_proposal is not None
+                        else None
+                    ),
+                }
+            )
+        return {
+            **existing,
+            "artifact_kind": "pretrip_planned_eta",
+            "schema_version": "plannedEta.v1",
+            "project_id": self.project_id,
+            "plan_id": f"eta.permission.{reviewed_sha256[:16]}.v1",
+            "status": "baseline_bound_rule_review_pending",
+            "generated_at": self._now(),
+            "reviewed_baseline_ref": reviewed_ref,
+            "reviewed_baseline_sha256": reviewed_sha256,
+            "review_scope": reviewed.get("review_scope"),
+            "mission_day_estimates": mission_day_estimates,
+            "source_refs": source_refs,
+            "source_hashes": source_hashes,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "departure_approval_granted": False,
+            "external_api_calls_made": False,
+        }
+
+    def _rebound_workbench_seed(
+        self,
+        *,
+        project: dict[str, object],
+        reviewed: dict[str, object],
+        reviewed_ref: str,
+        reviewed_sha256: str,
+        review_receipt_ref: str,
+        review_receipt_sha256: str,
+        rules_sha256: str,
+        planned_eta_ref: str,
+        planned_eta_sha256: str,
+        plan_nodes: list[RemainingPlanNode],
+        days: list[BaselineDayDraft],
+    ) -> ContextualPermissionWorkbenchSeed:
+        first_day = days[0]
+        first_proposal = first_day.primary_day_end_proposal
+        if first_proposal is None:  # pragma: no cover - guarded by caller
+            raise ContextualPermissionConflict(
+                "reviewed_baseline_missing_day_end_bindings",
+                "The first mission day has no reviewed destination binding.",
+            )
+        target = first_proposal.target
+        next_day = days[1].mission_day_id if len(days) > 1 else None
+        graph_ref = str(project.get("compiled_mission_graph_reviewed_ref") or "")
+        graph_path = self._resolve_project_ref(graph_ref)
+        if not graph_path.is_file():
+            raise ContextualPermissionConflict(
+                "reviewed_baseline_input_missing",
+                "The reviewed mission graph is required for projection rebuild.",
+            )
+        graph_sha256 = _file_sha256(graph_path)
+        membership_sha256 = _fixed_hash(
+            f"{reviewed_sha256}:group.main:baseline-reviewed-membership"
+        )
+        day_instance_id = (
+            f"{first_day.mission_day_id}.instance.{reviewed_sha256[:12]}"
+        )
+        old_group = self._seed.movement_groups[0]
+        checklist_rows = []
+        pending_handoff_ids = list(
+            reviewed.get("pending_safety_handoff_item_ids") or []
+        )
+        for row in old_group.departure_checklist.rows:
+            if row.row_id == "route_navigation":
+                checklist_rows.append(
+                    row.model_copy(
+                        update={
+                            "state": "pass",
+                            "evidence_summary": (
+                                "Reviewed route axis and exact current-day destination are bound."
+                            ),
+                            "evidence_ref": reviewed_ref,
+                            "evidence_sha256": reviewed_sha256,
+                            "freshness": "not_applicable",
+                            "blocker": None,
+                        }
+                    )
+                )
+            elif row.row_id == "supplies_shelter" and pending_handoff_ids:
+                checklist_rows.append(
+                    row.model_copy(
+                        update={
+                            "state": "leader_check_required",
+                            "evidence_summary": (
+                                f"{len(pending_handoff_ids)} retreat/bivy handoff item(s) remain pending in Safety / Emergency."
+                            ),
+                            "blocker": "Safety / Emergency review remains required.",
+                        }
+                    )
+                )
+            else:
+                checklist_rows.append(row)
+        checklist = DepartureChecklistProjection(
+            checklist_id=f"departure.checklist.{first_day.mission_day_id}.{reviewed_sha256[:12]}",
+            checklist_sha256=_digest(
+                [row.model_dump(mode="json") for row in checklist_rows]
+            ),
+            pending_day_plan_sha256=reviewed_sha256,
+            rows=checklist_rows,
+            open_conflict_count=sum(row.state != "pass" for row in checklist_rows),
+            scout_suggestion_code="refresh_evidence",
+            scout_suggestion=(
+                "日終點已綁定；先審核 review-only 調整規則、天氣與行前六項檢核。"
+            ),
+            scout_suggestion_suspended=False,
+            can_confirm_departure=False,
+            mission_day_started=False,
+        )
+        day_end = DayEndProjection(
+            planned_target_label=target.display_label,
+            effective_target_label=target.display_label,
+            planned_target_ref=target.artifact.ref,
+            planned_target_sha256=target.artifact.sha256,
+            effective_target_ref=target.artifact.ref,
+            effective_target_sha256=target.artifact.sha256,
+            feasibility="unknown",
+            state="day_end_at_risk",
+            completion="open",
+            baseline_day_end_reached=False,
+            close_receipt_ref=None,
+        )
+        group = MovementGroupProjection(
+            group_id="group.main",
+            group_label=f"{self.project_id} main movement group",
+            formation_kind="baseline_reviewed",
+            membership_revision=1,
+            membership_sha256=membership_sha256,
+            participant_refs_hash=membership_sha256,
+            coordinator_ref="participant://leader-unassigned",
+            shared_dependency_refs=[],
+            shared_dependency_hashes=[],
+            formation_receipt_ref=review_receipt_ref,
+            formation_receipt_sha256=review_receipt_sha256,
+            status="not_started",
+            mission_day_id=first_day.mission_day_id,
+            mission_day_instance_id=day_instance_id,
+            day_end=day_end,
+            shelter_hold=ShelterHoldProjection(
+                hold_id=None,
+                state="not_required",
+                target_label=None,
+                calendar_days_elapsed=0,
+                mission_days_consumed=0,
+                next_step="Proceed only after separate departure and rule review.",
+            ),
+            pending_next_day=next_day,
+            departure_checklist=checklist,
+            activity_summary=ActivitySummary(
+                states={
+                    "route_travel": 0,
+                    "resting": 0,
+                    "lying": 0,
+                    "sleeping": 0,
+                    "resumed_movement": 0,
+                    "unknown": 1,
+                },
+                fresh_count=0,
+                stale_count=0,
+                contradiction_count=0,
+            ),
+            arrival_dwell=ArrivalDwellProjection(
+                state="idle",
+                elapsed_seconds=0,
+                dwell_remaining_seconds=600,
+                target_ref=target.artifact.ref,
+                target_sha256=target.artifact.sha256,
+                arrival_zone_ref=f"candidate://permission/{first_day.mission_day_id}/arrival-zone",
+                arrival_zone_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:arrival-zone"
+                ),
+                route_progress_ref="evidence://movement/not-started",
+                route_progress_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:movement:not-started"
+                ),
+                dwell_policy_ref="reviewed://dwell-policy/default-600s",
+                dwell_policy_sha256=_fixed_hash(
+                    f"{self.project_id}:dwell-policy:600s"
+                ),
+                individual_activity_summary_ref="evidence://activity/not-started",
+                individual_activity_summary_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:activity:not-started"
+                ),
+                target_match=False,
+                gnss_confidence="unknown",
+                manual_complete_available=False,
+                blocked_by=["Mission day has not started."],
+            ),
+            communication=CommunicationProjection(
+                policy_id=f"comm-window.{first_day.mission_day_id}.{reviewed_sha256[:12]}",
+                policy_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:communication:review-pending"
+                ),
+                state="unknown",
+                membership_revision=1,
+                route_scope_ref=graph_ref,
+                route_scope_sha256=graph_sha256,
+                route_scope_label="Reviewed route axis; communication window review pending",
+                viewpoint="local",
+                next_check_in_target=target.display_label,
+                baseline_window="pending separate review",
+                effective_window="pending separate review",
+                deadline_driver="Destination receipt only; wall-clock time cannot close the day.",
+                next_check_in_target_ref=target.artifact.ref,
+                next_check_in_target_sha256=target.artifact.sha256,
+                last_verified_receipt_ref=None,
+                local_group_contact_state="unknown",
+                remote_observed_contact_state="unknown",
+                scout_recommendation="monitor_reviewed_window",
+                contact_overdue=False,
+                emergency_declared=False,
+            ),
+            unexpected_separation=False,
+        )
+        evidence = [
+            BoundedSourceRef(
+                source_id="source.reviewed-baseline",
+                source_kind="reviewed_mission_baseline",
+                source_ref=reviewed_ref,
+                source_sha256=reviewed_sha256,
+                freshness="not_applicable",
+                summary="Human-reviewed day endpoints; Permission scope only.",
+            ),
+            BoundedSourceRef(
+                source_id="source.reviewed-graph",
+                source_kind="reviewed_mission_graph",
+                source_ref=graph_ref,
+                source_sha256=graph_sha256,
+                freshness="not_applicable",
+                summary="Reviewed route node order without departure authority.",
+            ),
+            BoundedSourceRef(
+                source_id="source.planned-eta",
+                source_kind="planned_eta",
+                source_ref=planned_eta_ref,
+                source_sha256=planned_eta_sha256,
+                freshness="not_applicable",
+                summary="Baseline-bound segment sums; partial subtotals remain visibly incomplete.",
+            ),
+        ]
+        timing_ref = project.get("reference_segment_timing_ref")
+        if isinstance(timing_ref, str) and timing_ref:
+            timing_path = self._resolve_project_ref(timing_ref)
+            if timing_path.is_file():
+                evidence.append(
+                    BoundedSourceRef(
+                        source_id="source.reference-segment-timing",
+                        source_kind="reference_segment_timing",
+                        source_ref=timing_ref,
+                        source_sha256=_file_sha256(timing_path),
+                        freshness="not_applicable",
+                        summary="Historical segment timing used only for candidate planning.",
+                    )
+                )
+        evidence.extend(
+            source
+            for source in self._seed.evidence
+            if source.source_kind == "normalized_weather_fact"
+        )
+        return ContextualPermissionWorkbenchSeed(
+            artifact_kind="contextual_permission_workbench_seed",
+            schema_version="contextualPermissionWorkbenchSeed.v1",
+            project_id=self.project_id,
+            lens="baseline",
+            replay_session_id=f"session.permission.{reviewed_sha256[:16]}.v1",
+            baseline=BaselineIdentity(
+                baseline_id=str(reviewed.get("baseline_id")),
+                revision_id=str(reviewed.get("version_id")),
+                baseline_sha256=reviewed_sha256,
+                reviewed_receipt_ref=review_receipt_ref,
+                source_mode=str(reviewed.get("source_mode")),
+                baseline_candidate_id=str(reviewed.get("baseline_id")),
+                baseline_version_id=str(reviewed.get("version_id")),
+                accepted_receipt_id=str(reviewed.get("review_id")),
+                immutable=True,
+                accepted_by_human=True,
+                candidate_only=True,
+                runtime_safety_truth=False,
+                departure_approval_granted=False,
+                contextual_permission_rules_ref=(
+                    DEFAULT_CONTEXTUAL_PERMISSION_RULES_REF.as_posix()
+                ),
+                contextual_permission_rules_sha256=rules_sha256,
+                contextual_permission_rules_reviewed_by_human=False,
+                source_hashes={
+                    "reviewed_mission_baseline_ref": reviewed_sha256,
+                    "planned_eta_ref": planned_eta_sha256,
+                    "compiled_mission_graph_reviewed_ref": graph_sha256,
+                },
+            ),
+            action_events=[],
+            remaining_plan=plan_nodes,
+            daily_review=DailyEmergencyReviewSession(
+                session_id=f"daily-review.{first_day.mission_day_id}.{reviewed_sha256[:12]}",
+                project_id=self.project_id,
+                mission_day_id=first_day.mission_day_id,
+                mission_day_instance_id=day_instance_id,
+                movement_group_id=group.group_id,
+                membership_revision=1,
+                mission_day_plan_ref=reviewed_ref,
+                mission_day_plan_sha256=reviewed_sha256,
+                review_generation=1,
+                state="not_started",
+                planned_day_end_target_ref=target.artifact.ref,
+                planned_day_end_target_sha256=target.artifact.sha256,
+                planned_day_end_target_label=target.display_label,
+                effective_day_end_target_ref=target.artifact.ref,
+                effective_day_end_target_sha256=target.artifact.sha256,
+                day_end_state="day_end_at_risk",
+                alternatives=[],
+            ),
+            movement_groups=[group],
+            evidence=evidence,
+        )
 
     def _validate_packet_request(
         self,
@@ -6775,6 +8824,8 @@ __all__ = [
     "ContactLossReviewRequest",
     "ContextualPermissionRulesArtifact",
     "ContextualPermissionConflict",
+    "ContextualPermissionProjectionRebuildRequest",
+    "ContextualPermissionProjectionRebuildReceipt",
     "ContextualPermissionWorkbench",
     "ContextualPermissionWorkbenchSeed",
     "DailyReviewInvalidationRequest",

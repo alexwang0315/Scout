@@ -151,6 +151,159 @@ def _workspace(tmp_path: Path) -> tuple[Path, Path]:
     return project_root, tmp_path / "store"
 
 
+def _add_rich_reference_proposal_sources(project_root: Path) -> None:
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project.update(
+        {
+            "reference_segment_timing_ref": "outputs/reference_segment_timing.json",
+            "rest_area_candidates_ref": "outputs/rest_area_candidates.json",
+            "mcp_candidates_ref": "outputs/mcp/mcp_candidates.json",
+            "retreat_routes_ref": "candidates/retreat_routes.json",
+        }
+    )
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+
+    missing_indexes = {0, 2, 5, 15, 17, 18}
+    labels = ["Start"] + [f"CP {index:03d}" for index in range(1, 21)] + ["Finish"]
+    labels[5] = "Camp Alpha"
+    labels[10] = "Shelter Bravo"
+    labels[15] = "Camp Charlie"
+    checkpoints = []
+    match_quality = {}
+    for index, label in enumerate(labels):
+        candidate_id = "cp.start" if index == 0 else "cp.finish" if index == 21 else f"cp.{index:03d}"
+        checkpoints.append(
+            {
+                "candidate_id": candidate_id,
+                "label": label,
+                "route_point_index": index * 100,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+        match_quality[f"workspace_node_{index + 1:03d}_{candidate_id}"] = {
+            "label": label,
+            "source_id": candidate_id,
+            "source_kind": "checkpoint",
+            "route_distance_m": round(index * (90_000 / 21), 1),
+        }
+    segments = []
+    for index in range(21):
+        missing = index in missing_indexes
+        segments.append(
+            {
+                "segment_id": f"timing.segment.{index + 1:03d}",
+                "from_node_name": labels[index],
+                "to_node_name": labels[index + 1],
+                "duration_minutes": {
+                    "p50": None if missing else 105.0 + (index % 3) * 5,
+                    "p75": None if missing else 135.0 + (index % 3) * 5,
+                },
+                "sample_count": 0 if missing else 3,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        )
+    timing_path = project_root / "outputs" / "reference_segment_timing.json"
+    timing_path.parent.mkdir(parents=True, exist_ok=True)
+    timing_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "reference_segment_timing",
+                "schema_version": "referenceSegmentTiming.v1",
+                "segments": segments,
+                "checkpoint_match_quality": match_quality,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    checkpoints_path = project_root / "candidates" / "checkpoints.json"
+    checkpoints_path.parent.mkdir(parents=True, exist_ok=True)
+    checkpoints_path.write_text(json.dumps(checkpoints), encoding="utf-8")
+
+    rest_candidates = [
+        {
+            "candidate_id": f"rest.candidate.{index:03d}",
+            "checkpoint_candidate_id": f"cp.rest.{index:03d}",
+            "label": f"Rest / camp candidate {index:03d}",
+            "route_point_index": route_point_index,
+            "confidence": "medium",
+            "review_state": "needs_review",
+        }
+        for index, route_point_index in enumerate((380, 780, 1180, 1580, 1980), 1)
+    ]
+    rest_path = project_root / "outputs" / "rest_area_candidates.json"
+    rest_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "rest_area_candidates",
+                "schema_version": "restAreaCandidates.v1",
+                "candidates": rest_candidates,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    mcp_path = project_root / "outputs" / "mcp" / "mcp_candidates.json"
+    mcp_path.parent.mkdir(parents=True, exist_ok=True)
+    mcp_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "mcp_candidates",
+                "mcp_candidates": [
+                    {
+                        "mcp_id": "mcp.camp-alpha",
+                        "label": "Camp Alpha",
+                        "mcp_classes": ["camp_or_hut"],
+                        "confidence": "high",
+                        "review_state": "needs_review",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                    {
+                        "mcp_id": "mcp.shelter-bravo",
+                        "label": "Shelter Bravo",
+                        "mcp_classes": ["camp_or_hut"],
+                        "confidence": "high",
+                        "review_state": "needs_review",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                ],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    retreat_path = project_root / "candidates" / "retreat_routes.json"
+    retreat_path.write_text(
+        json.dumps(
+            [
+                {
+                    "candidate_id": "retreat.reverse-primary",
+                    "label": "Return along reversed primary route",
+                    "confidence": "medium",
+                    "review_state": "needs_review",
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_contextual_permission_rules_are_required_and_baseline_bound(
     tmp_path: Path,
 ) -> None:
@@ -608,6 +761,261 @@ def test_baseline_human_and_reference_modes_converge_without_implicit_write(
     assert human.source_mode == "human_text"
     assert reference.source_mode == "reference_gpx"
     assert not list(workbench.store_root.rglob("baseline_candidates/*.json"))
+
+
+def test_reference_gpx_auto_proposes_days_eta_and_safety_handoff(
+    tmp_path: Path,
+) -> None:
+    project_root, store_root = _workspace(tmp_path)
+    _add_rich_reference_proposal_sources(project_root)
+    workbench = ContextualPermissionWorkbench(
+        project_root=project_root,
+        store_root=store_root,
+        now_factory=lambda: NOW,
+    )
+
+    draft = workbench.generate_baseline_draft(
+        BaselineAuthoringRequest(
+            mode="reference_gpx",
+            reference_route_ref="outputs/compiled_mission_graph.reviewed.json",
+        )
+    )
+    trail_days = [day for day in draft.days if day.day_kind == "on_trail"]
+
+    assert draft.proposal_profile == "ref_gpx_proposal_v1"
+    assert draft.proposal_summary is not None
+    assert draft.proposal_summary.timing_segment_count == 21
+    assert draft.proposal_summary.observed_p75_segment_count == 15
+    assert draft.proposal_summary.missing_p75_segment_count == 6
+    assert len(trail_days) > 1
+    assert all(day.primary_day_end_proposal is not None for day in trail_days)
+    assert all(day.eta_proposal is not None for day in trail_days)
+    assert all(day.review_summary for day in trail_days)
+    unsupported_ids = {
+        segment_id
+        for day in trail_days
+        for segment_id in (
+            day.eta_proposal.unsupported_segment_ids if day.eta_proposal else []
+        )
+    }
+    assert unsupported_ids == {
+        "timing.segment.001",
+        "timing.segment.003",
+        "timing.segment.006",
+        "timing.segment.016",
+        "timing.segment.018",
+        "timing.segment.019",
+    }
+    assert any(
+        uncertainty.disposition == "acknowledgeable"
+        for uncertainty in draft.uncertainties
+    )
+    assert draft.review_requirements is not None
+    assert draft.review_requirements.safety_handoff_required is True
+    assert draft.review_requirements.pending_safety_handoff_item_ids
+    assert "pending Safety / Emergency" in (draft.safety_handoff_summary or "")
+    assert draft.validation_state == "valid"
+    assert draft.unresolved_gaps == []
+    assert draft.writes_performed is False
+    assert draft.candidate_only is True
+
+
+def test_reference_gpx_review_requires_exact_compact_acknowledgment_sets(
+    tmp_path: Path,
+) -> None:
+    project_root, store_root = _workspace(tmp_path)
+    _add_rich_reference_proposal_sources(project_root)
+    workbench = ContextualPermissionWorkbench(
+        project_root=project_root,
+        store_root=store_root,
+        now_factory=lambda: NOW,
+    )
+    draft = workbench.generate_baseline_draft(
+        BaselineAuthoringRequest(
+            mode="reference_gpx",
+            reference_route_ref="outputs/compiled_mission_graph.reviewed.json",
+        )
+    )
+    saved = workbench.save_baseline_candidate(
+        BaselineCandidateSaveRequest(
+            draft=draft,
+            expected_source_sha256=draft.source_sha256,
+            idempotency_key="auto-proposal-save-001",
+            explicit_confirmation=True,
+        )
+    )
+
+    with pytest.raises(ContextualPermissionConflict) as incomplete:
+        workbench.accept_reviewed_baseline(
+            BaselineReviewAcceptRequest(
+                candidate_ref=saved.version_ref,
+                candidate_sha256=saved.version_sha256,
+                reviewer_alias="leader-01",
+                idempotency_key="auto-proposal-review-incomplete-001",
+                explicit_confirmation=True,
+            )
+        )
+    assert incomplete.value.code == "baseline_review_set_mismatch"
+
+    assert draft.review_requirements is not None
+    reviewed_day_ids = draft.review_requirements.required_reviewed_day_ids
+    acknowledged_uncertainty_ids = (
+        draft.review_requirements.required_acknowledgment_uncertainty_ids
+    )
+    receipt = workbench.accept_reviewed_baseline(
+        BaselineReviewAcceptRequest(
+            candidate_ref=saved.version_ref,
+            candidate_sha256=saved.version_sha256,
+            reviewer_alias="leader-01",
+            idempotency_key="auto-proposal-review-complete-001",
+            explicit_confirmation=True,
+            reviewed_day_ids=reviewed_day_ids,
+            acknowledged_uncertainty_ids=acknowledged_uncertainty_ids,
+            safety_handoff_acknowledged=True,
+        )
+    )
+
+    reviewed = json.loads(
+        (project_root / receipt.reviewed_baseline_ref).read_text(encoding="utf-8")
+    )
+    assert reviewed["reviewed_day_ids"] == reviewed_day_ids
+    assert reviewed["acknowledged_uncertainty_ids"] == acknowledged_uncertainty_ids
+    assert reviewed["safety_handoff_acknowledged"] is True
+    assert reviewed["review_scope"] == "permission_day_end_only"
+    assert reviewed["pending_safety_handoff_item_ids"]
+    assert (
+        reviewed["safety_handoff_scope"]
+        == "visibility_and_cross_feature_handoff_only"
+    )
+    assert reviewed["departure_approval_granted"] is False
+    assert reviewed["runtime_safety_truth"] is False
+
+
+def test_reference_gpx_partial_eta_never_fabricates_whole_day_duration(
+    tmp_path: Path,
+) -> None:
+    project_root, store_root = _workspace(tmp_path)
+    _add_rich_reference_proposal_sources(project_root)
+    draft = ContextualPermissionWorkbench(
+        project_root=project_root,
+        store_root=store_root,
+        now_factory=lambda: NOW,
+    ).generate_baseline_draft(
+        BaselineAuthoringRequest(
+            mode="reference_gpx",
+            reference_route_ref="outputs/compiled_mission_graph.reviewed.json",
+        )
+    )
+
+    partial_days = [
+        day
+        for day in draft.days
+        if day.eta_proposal is not None and day.eta_proposal.state == "partial_derived"
+    ]
+    unknown_days = [
+        day
+        for day in draft.days
+        if day.eta_proposal is not None and day.eta_proposal.state == "unknown"
+    ]
+
+    assert partial_days or unknown_days
+    for day in partial_days:
+        assert day.eta_proposal is not None
+        assert day.eta_proposal.segment_p50_sum_minutes is None
+        assert day.eta_proposal.segment_p75_sum_minutes is None
+        assert day.eta_proposal.supported_segment_p75_sum_minutes is not None
+        assert day.eta_proposal.unsupported_segment_ids
+    for day in unknown_days:
+        assert day.eta_proposal is not None
+        assert day.eta_proposal.segment_p50_sum_minutes is None
+        assert day.eta_proposal.segment_p75_sum_minutes is None
+        assert day.eta_proposal.supported_segment_p75_sum_minutes is None
+        assert day.eta_proposal.unsupported_segment_ids
+
+
+def test_proposal_profile_and_review_requirements_cannot_downgrade(
+    tmp_path: Path,
+) -> None:
+    project_root, store_root = _workspace(tmp_path)
+    _add_rich_reference_proposal_sources(project_root)
+    workbench = ContextualPermissionWorkbench(
+        project_root=project_root,
+        store_root=store_root,
+        now_factory=lambda: NOW,
+    )
+    draft = workbench.generate_baseline_draft(
+        BaselineAuthoringRequest(
+            mode="reference_gpx",
+            reference_route_ref="outputs/compiled_mission_graph.reviewed.json",
+        )
+    )
+
+    with pytest.raises(ContextualPermissionConflict) as downgraded:
+        workbench.save_baseline_candidate(
+            BaselineCandidateSaveRequest(
+                draft=draft.model_copy(update={"proposal_profile": "legacy_sparse"}),
+                expected_source_sha256=draft.source_sha256,
+                idempotency_key="proposal-profile-downgrade-001",
+                explicit_confirmation=True,
+            )
+        )
+    assert downgraded.value.code == "baseline_proposal_profile_downgrade"
+
+    assert draft.review_requirements is not None
+    tampered_requirements = draft.review_requirements.model_copy(
+        update={"required_reviewed_day_ids": draft.review_requirements.required_reviewed_day_ids[:-1]}
+    )
+    with pytest.raises(ContextualPermissionConflict) as tampered:
+        workbench.save_baseline_candidate(
+            BaselineCandidateSaveRequest(
+                draft=draft.model_copy(
+                    update={"review_requirements": tampered_requirements}
+                ),
+                expected_source_sha256=draft.source_sha256,
+                idempotency_key="proposal-requirements-tamper-001",
+                explicit_confirmation=True,
+            )
+        )
+    assert tampered.value.code == "baseline_review_requirements_mismatch"
+
+
+def test_imported_route_days_metadata_does_not_change_auto_segmentation(
+    tmp_path: Path,
+) -> None:
+    project_root, store_root = _workspace(tmp_path)
+    _add_rich_reference_proposal_sources(project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["route_days"] = 1
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    workbench = ContextualPermissionWorkbench(
+        project_root=project_root,
+        store_root=store_root,
+        now_factory=lambda: NOW,
+    )
+    request = BaselineAuthoringRequest(
+        mode="reference_gpx",
+        reference_route_ref="outputs/compiled_mission_graph.reviewed.json",
+    )
+    first = workbench.generate_baseline_draft(request)
+    project["route_days"] = 9
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    second = workbench.generate_baseline_draft(request)
+
+    first_targets = [
+        day.primary_day_end_proposal.target.anchor_id
+        for day in first.days
+        if day.primary_day_end_proposal is not None
+    ]
+    second_targets = [
+        day.primary_day_end_proposal.target.anchor_id
+        for day in second.days
+        if day.primary_day_end_proposal is not None
+    ]
+    assert first_targets == second_targets
+    assert [day.eta_proposal for day in first.days] == [
+        day.eta_proposal for day in second.days
+    ]
 
 
 def test_destination_and_group_states_are_not_clock_driven(tmp_path: Path) -> None:

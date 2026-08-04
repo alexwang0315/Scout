@@ -263,9 +263,51 @@ The reference-GPX-seeded path must:
 - produce route, checkpoint, elevation, timing, rest/camp, and branch candidates
   with source refs and hashes;
 - never equate historical timestamps with the intended current itinerary;
-- expose missing overnight, water, access, branch-return, and named-point
-  semantics as questions for Scout conversation rather than filling them by
-  assumption.
+- generate the most complete evidence-bound daily proposal possible before
+  asking the operator anything; only destination ambiguity, human intent, and
+  domain-authority decisions may become narrow questions;
+- preserve missing overnight, water, access, branch-return, named-point, and
+  timing semantics as typed gaps or pending cross-feature review. It must not
+  silently fill them or transfer computable planning work to the operator.
+
+#### Proposal-first clarification for `reference_gpx_seeded`
+
+`Generate from Ref. GPX` is a Scout proposal command, not an empty form
+generator. When the selected workspace contains a bound timing artifact and
+ordered route anchors, Scout must automatically propose:
+
+- destination-defined `D1...Dn` intervals independent of imported
+  `route_days` metadata;
+- one exact primary day-end target per proposed day;
+- complete, partial, or unknown timing evidence per day;
+- candidate-only emergency-bivy targets and route-level retreat/reversal
+  handoff items when the corresponding candidate artifacts exist;
+- one deterministic, compact Permission review-requirements object.
+
+New Ref. GPX proposals use the server-owned profile
+`ref_gpx_proposal_v1`. Sparse legacy fixtures may retain their existing path,
+but a newly generated rich proposal must never omit proposal-first fields and
+fall back to the legacy acceptance gate.
+
+The v1 timing contract is deliberately non-imputing:
+
+| ETA state | Allowed numeric content | Required presentation |
+| --- | --- | --- |
+| `complete_derived` | deterministic sums of the assigned segments' usable p50/p75 values | label as `Segment p50/p75 sum`; never an observed whole-day quantile |
+| `partial_derived` | deterministic subtotal for supported segments only | label as `Supported-segment subtotal`; state that it is not a whole-day ETA and no duration was inferred |
+| `unknown` | none | label as `Whole-day ETA unknown`; list the unsupported segment IDs |
+
+A missing p75 remains missing. It becomes one day-grouped, Permission-
+acknowledgeable uncertainty; the operator is never asked to invent a replacement
+duration. Primary day ends are selected only on ordered timing-segment
+boundaries under a versioned deterministic partition policy. Rest/camp and MCP
+labels alone do not create reviewed destinations, and retreat/bivy candidates
+never become primary day ends merely because they exist.
+
+The generic reversed-route retreat candidate remains a route-level
+Safety / Emergency handoff item until it has a concrete target binding and
+unambiguous day applicability. Permission can acknowledge that the handoff was
+shown; it cannot approve the route reversal.
 
 Scout conversation edits the baseline through typed proposed patches against a
 specific candidate hash. It must show additions, removals, reordered nodes,
@@ -314,6 +356,25 @@ Live Observer, and candidate simulation remain no-write operations.
 - the request binds the exact candidate ref/hash and includes an explicit
   confirmation plus reviewer identity/audit metadata.
 
+For `ref_gpx_proposal_v1`, candidate save and acceptance additionally recompute
+the same `baseline_permission_review.v1` requirements:
+
+```text
+required_reviewed_day_ids
+required_acknowledgment_uncertainty_ids
+pending_safety_handoff_item_ids
+safety_handoff_required
+```
+
+The compact review request must match the exact day and uncertainty sets and the
+exact handoff boolean. Omitted, duplicate, extra, unknown, stale, or cross-
+candidate IDs fail closed. The review receipt records
+`review_scope=permission_day_end_only`, enumerates every day-to-target
+proposal/ref/hash binding, and records
+`safety_handoff_scope=visibility_and_cross_feature_handoff_only`. These fields
+must never be interpreted as retreat, bivy, departure, or runtime-safety
+approval.
+
 Acceptance appends to `reviews/review_decision_log.json`, writes a new immutable
 reviewed artifact, and updates the selected project ref. It must not rewrite an
 older candidate/reviewed artifact, call a model, compile a Final MissionGraph,
@@ -321,6 +382,35 @@ grant Departure Approval, update an active runtime session, call `/safety/*`,
 or create runtime safety truth. Dependent permission/ETA artifacts whose bound
 baseline hash no longer matches become visibly stale and require an explicit
 rebuild or review before use.
+
+Projection staleness must not disable Baseline Authoring. Preview, proposal
+generation, candidate save/patch, and reviewed-baseline acceptance operate on
+their own source and candidate hashes and remain available while the older
+forward projection is fail-closed. The blocked Dashboard therefore keeps the
+authoring workbench visible and labels the old Current Decision as unavailable;
+it must not make the operator repair files outside the page.
+
+The explicit projection rebuild is a second, hash-bound action after baseline
+acceptance. It requires the exact currently selected
+`reviewed_mission_baseline_sha256`, an idempotency key, and explicit
+confirmation. The deterministic rebuild:
+
+- verifies the immutable reviewed baseline, candidate, review receipt, exact
+  reviewed day set, and every proposal-first day-end binding;
+- rewrites only the derived planned-ETA binding, fail-closed
+  `contextual_permission_rules.json`, bounded workbench seed, resolved-staleness
+  marker, project refs, and an append-only rebuild receipt;
+- leaves every adjustment policy `review_only` and unreviewed until a separate
+  Permission policy review exists;
+- creates a new candidate projection session identity but does not rebind or
+  update an active runtime session;
+- keeps departure approval, Safety / Emergency approval, runtime safety truth,
+  outbound effects, and hardware control false.
+
+A legacy reviewed baseline without exact proposal-first day-end bindings cannot
+be rebuilt into a usable projection. It fails with an actionable instruction to
+generate and accept a new Ref. GPX proposal; the server must not invent targets
+from the old sparse artifact.
 
 ### D-011 — Night alternatives require Safety / Emergency human review
 
@@ -2208,6 +2298,36 @@ validation status, unresolved blockers, selected route axis, and the exact
 workspace refs that will be appended or created. A successful Accept must show
 `Reviewed baseline · not departure approved` rather than a generic green-ready
 message.
+
+For a proposal-first Ref. GPX candidate, raw JSON must not be the primary review
+surface. The established workbench renders:
+
+1. one compact proposal summary showing route length, proposed day count,
+   usable/missing p75 counts, blockers, Safety / Emergency handoff count, and
+   imported `route_days` as non-authoritative metadata;
+2. ordered day cards showing start anchor, exact proposed day-end binding,
+   complete/partial/unknown timing evidence, uncertainty IDs, and day-scoped
+   emergency-bivy handoff candidates;
+3. a collapsed, read-only `Typed evidence payload` disclosure;
+4. one `Quick review` panel with no more than three controls:
+   - confirm every exact daily endpoint;
+   - acknowledge all listed Permission timing uncertainties when present;
+   - acknowledge the exact Safety / Emergency handoff as still pending when
+     present.
+
+The first Accept tap only opens the existing fixed confirmation sheet. The sheet
+summarizes the exact day, uncertainty, and pending handoff sets but adds no fourth
+checkbox. Only the final `Accept reviewed baseline` activation sends
+`explicit_confirmation=true`.
+
+At narrow widths the same DOM becomes one column. Day-end names, refs, hashes,
+and timing qualifiers wrap without truncation; review controls remain at least
+44 CSS pixels high; raw typed data uses pre-wrap; and the page must not acquire
+horizontal scrolling. The authority statement remains visible:
+
+> Permission confirms exact day-end targets and listed timing-gap
+> acknowledgments only. Retreat and emergency-bivy items remain pending Safety /
+> Emergency review. Departure and runtime safety are unchanged.
 
 ### 9.4 Safety / Emergency dedicated human-review interface
 
