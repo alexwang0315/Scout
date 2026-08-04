@@ -3172,6 +3172,38 @@ curl "http://127.0.0.1:9099/admin/pretrip/projects/<project_id>/contextual-permi
 Do not rerun GPX import, map preparation, risk generation, or the 32-layer
 pipeline merely to create this bootstrap. Those artifacts are read-only inputs.
 
+After `Accept Reviewed Baseline`, a previously loaded Permission projection is
+expected to return `contextual_permission_projection_stale`. This is a bounded
+dependency transition, not a reason to rerun the bootstrap with `--force`:
+that command is for the initial no-reviewed-itinerary state and must not be used
+to replace a selected reviewed baseline.
+
+The stale Dashboard must continue to expose `Generate from Ref. GPX`, candidate
+save, compact review, and acceptance. Once the newly accepted baseline contains
+proposal-first day-end bindings, use its **Rebuild from reviewed baseline**
+control and confirm the separate write. The equivalent API is:
+
+```bash
+curl -X POST \
+  "http://127.0.0.1:9099/admin/pretrip/projects/<project_id>/contextual-permission-dashboard/rebuilds" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expected_reviewed_baseline_sha256":"<64-char selected baseline hash>",
+    "idempotency_key":"permission-rebuild-<stable-id>",
+    "explicit_confirmation":true
+  }'
+```
+
+Accept only a receipt reporting `rule_review_state=pending_review_only`,
+`active_runtime_session_updated=false`, `runtime_safety_truth=false`, and
+`departure_approval_granted=false`. The next Dashboard GET should be
+`status=degraded` with the selected reviewed baseline bound and every adjustment
+policy still `review_only`. If rebuild reports
+`reviewed_baseline_missing_day_end_bindings`, the selected artifact is a legacy
+sparse review: return to the still-available authoring workbench, generate and
+accept a new proposal-first Ref. GPX baseline, then rebuild. Never infer missing
+day ends from that legacy artifact.
+
 ## Run Log: 2026-07-28 Timeline Evidence Producer Repair
 
 Target workspace:
