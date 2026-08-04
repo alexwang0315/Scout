@@ -20,6 +20,7 @@ from navigation_terrain_skeleton_workspace import (
 )
 from navigation_terrain_sources import build_workspace_source_ledger
 from navigation_terrain_topology import build_workspace_route_topology
+from navigation_terrain_validation import build_terrain_validation_receipt
 
 __all__ = [
     "WorkspaceTerrainEvidenceError",
@@ -30,6 +31,7 @@ __all__ = [
     "build_workspace_source_ledger",
     "build_workspace_terrain_hierarchy",
     "build_terrain_hierarchy_from_grid",
+    "build_terrain_validation_receipt",
     "classify_structure_neighborhood",
     "extract_dem_structure_candidates",
     "load_workspace_terrain_grid",

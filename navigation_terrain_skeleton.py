@@ -11,27 +11,16 @@ from navigation_terrain_dem import (
     WorkspaceTerrainEvidenceError,
     classify_structure_neighborhood,
 )
+from navigation_terrain_hydrology import extract_conditioned_mfd_drainage
+from navigation_terrain_morphometry import (
+    NEIGHBOR_OFFSETS,
+    build_tangent_candidate_graph,
+    constrained_smooth_path,
+    extract_morphometric_candidates,
+)
 
 Cell = tuple[float, float]
 Link = tuple[Cell, Cell]
-
-AXES: tuple[tuple[int, int], ...] = (
-    (1, 0),
-    (1, 1),
-    (0, 1),
-    (-1, 1),
-)
-NEIGHBOR_OFFSETS: tuple[tuple[int, int], ...] = (
-    (0, 1),
-    (1, 1),
-    (1, 0),
-    (1, -1),
-    (0, -1),
-    (-1, -1),
-    (-1, 0),
-    (-1, 1),
-)
-
 
 def build_terrain_hierarchy_from_grid(
     elevations: Mapping[tuple[float, float], float],
@@ -46,8 +35,10 @@ def build_terrain_hierarchy_from_grid(
 ) -> dict[str, Any]:
     """Build a candidate ridge/drainage hierarchy from a regular elevation grid.
 
-    This extracts terrain form, not trails. Cross-section extrema are linked
-    along their inferred landform axis, then compressed into a reusable graph.
+    This extracts terrain form, not trails. Ridge candidates come from
+    multi-scale curvature and subcell localization; drainage candidates come
+    from conditioned multi-flow-direction hydrology. Both are compressed into
+    reusable, candidate-only graphs.
     """
 
     grid = _normalize_grid(elevations)
@@ -68,43 +59,48 @@ def build_terrain_hierarchy_from_grid(
             "terrain hierarchy requires at least nine elevation cells"
         )
 
-    ridge_candidates = _cross_section_candidates(
-        grid,
-        resolution_m=resolution,
-        scales=scales,
-        threshold_m=threshold,
-        mode="ridge",
-    )
-    drainage_candidates = _cross_section_candidates(
-        grid,
-        resolution_m=resolution,
-        scales=scales,
-        threshold_m=threshold,
-        mode="drainage",
-    )
-    ridge_graph = _candidate_graph(
-        ridge_candidates,
-        resolution_m=resolution,
-        minimum_component_cells=minimum_component_cells,
-    )
-    drainage_graph = _candidate_graph(
-        drainage_candidates,
-        resolution_m=resolution,
-        minimum_component_cells=minimum_component_cells,
-    )
+    try:
+        ridge_candidates = extract_morphometric_candidates(
+            grid,
+            resolution_m=resolution,
+            scales=scales,
+            threshold_m=threshold,
+            mode="ridge",
+        )
+        ridge_graph = build_tangent_candidate_graph(
+            ridge_candidates,
+            resolution_m=resolution,
+            minimum_component_cells=minimum_component_cells,
+            elevations=grid,
+        )
+        drainage_candidates, drainage_graph, hydrology = (
+            extract_conditioned_mfd_drainage(
+                grid,
+                resolution_m=resolution,
+                scales=scales,
+                threshold_m=threshold,
+                minimum_component_cells=minimum_component_cells,
+            )
+        )
+    except ValueError as exc:
+        raise WorkspaceTerrainEvidenceError(str(exc)) from exc
     ridge_nodes, ridge_edges = _compress_network(
         ridge_graph,
         grid,
+        ridge_candidates,
         network_kind="ridge",
         source_refs=refs,
         max_edges=max_edges_per_network,
+        resolution_m=resolution,
     )
     drainage_nodes, drainage_edges = _compress_network(
         drainage_graph,
         grid,
+        drainage_candidates,
         network_kind="drainage",
         source_refs=refs,
         max_edges=max_edges_per_network,
+        resolution_m=resolution,
     )
     saddle_nodes = _saddle_nodes(
         grid,
@@ -126,7 +122,7 @@ def build_terrain_hierarchy_from_grid(
     public_nodes = [_public_node(item) for item in nodes]
 
     return {
-        "schema_version": "scout_navigation_terrain_hierarchy.v0",
+        "schema_version": "scout_navigation_terrain_hierarchy.v1",
         "artifact_kind": "dem_terrain_hierarchy_candidates",
         "status": "candidate_hierarchy" if edges else "not_prepared",
         "grid": {
@@ -137,12 +133,29 @@ def build_terrain_hierarchy_from_grid(
             "bbox_twd97": _grid_bbox(grid),
         },
         "method": {
-            "ridge_extraction": "multi_scale_cross_section_maxima_skeleton.v0",
-            "drainage_extraction": ("multi_scale_cross_section_minima_skeleton.v0"),
-            "hierarchy": "component_backbone_and_branch_compression.v0",
+            "ridge_extraction": "multi_scale_hessian_subcell_ridge_trace.v1",
+            "drainage_extraction": (
+                "conditioned_mfd_accumulation_valley_trace.v1"
+            ),
+            "geometry": "subcell_support_constrained_topology_trace.v1",
+            "hierarchy": "ridge_backbone_and_hydrologic_branch_compression.v1",
             "analysis_scales_cells": scales,
             "relief_threshold_m": threshold,
             "minimum_component_cells": minimum_component_cells,
+            "hydrology": hydrology,
+        },
+        "lineage": {
+            "dem_crs": "EPSG:3826",
+            "dem_vertical_datum": vertical_datum,
+            "dem_resolution_m": resolution,
+            "ridge_extractor": "multi_scale_hessian_subcell_ridge_trace.v1",
+            "drainage_extractor": (
+                "conditioned_mfd_accumulation_valley_trace.v1"
+            ),
+            "conditioning": hydrology.get("conditioning"),
+            "flow_model": hydrology.get("flow_model"),
+            "vectorization": "subcell_support_constrained_topology_trace.v1",
+            "source_refs": refs,
         },
         "ontology": {
             "terrain_edge_kinds": [
@@ -180,8 +193,12 @@ def build_terrain_hierarchy_from_grid(
         "limitations": [
             "DEM morphology does not prove that a trail exists or is walkable.",
             (
-                "Main/spur and trunk/tributary labels are graph hierarchy "
-                "candidates and require expert map or field review."
+                "Main/spur compatibility kinds remain candidate hierarchy labels; "
+                "they do not establish a named main ridge or walking route."
+            ),
+            (
+                "Drainage hierarchy is supported by conditioned MFD accumulation "
+                "but still requires hydrologic and expert reference validation."
             ),
             (
                 "Vegetation, cliffs, erosion, stream discharge, access, and "
@@ -204,100 +221,15 @@ def build_terrain_hierarchy_from_grid(
     }
 
 
-def _cross_section_candidates(
-    grid: Mapping[Cell, float],
-    *,
-    resolution_m: float,
-    scales: Sequence[int],
-    threshold_m: float,
-    mode: str,
-) -> dict[Cell, dict[str, Any]]:
-    candidates: dict[Cell, dict[str, Any]] = {}
-    for cell, center in grid.items():
-        best: tuple[float, int] | None = None
-        for axis_index, axis in enumerate(AXES):
-            normal = (-axis[1], axis[0])
-            differences = []
-            for scale in scales:
-                offset_x = normal[0] * resolution_m * scale
-                offset_y = normal[1] * resolution_m * scale
-                side_a = grid.get(_cell(cell[0] + offset_x, cell[1] + offset_y))
-                side_b = grid.get(_cell(cell[0] - offset_x, cell[1] - offset_y))
-                if side_a is None or side_b is None:
-                    continue
-                cross_mean = (side_a + side_b) / 2.0
-                differences.append(
-                    center - cross_mean if mode == "ridge" else cross_mean - center
-                )
-            if not differences:
-                continue
-            score = sum(differences) / len(differences)
-            if best is None or score > best[0]:
-                best = (score, axis_index)
-        if best is None or best[0] < threshold_m:
-            continue
-        candidates[cell] = {
-            "axis_index": best[1],
-            "score": round(best[0], 3),
-        }
-    return candidates
-
-
-def _candidate_graph(
-    candidates: Mapping[Cell, dict[str, Any]],
-    *,
-    resolution_m: float,
-    minimum_component_cells: int,
-) -> dict[Cell, set[Cell]]:
-    graph = {cell: set() for cell in candidates}
-    for cell, item in candidates.items():
-        axis = AXES[int(item["axis_index"])]
-        directed_neighbors = {
-            _cell(
-                cell[0] + sign * axis[0] * resolution_m,
-                cell[1] + sign * axis[1] * resolution_m,
-            )
-            for sign in (-1, 1)
-        }
-        for dx, dy in NEIGHBOR_OFFSETS:
-            neighbor = _cell(
-                cell[0] + dx * resolution_m,
-                cell[1] + dy * resolution_m,
-            )
-            if neighbor not in candidates:
-                continue
-            neighbor_axis = AXES[int(candidates[neighbor]["axis_index"])]
-            neighbor_points_back = cell in {
-                _cell(
-                    neighbor[0] + sign * neighbor_axis[0] * resolution_m,
-                    neighbor[1] + sign * neighbor_axis[1] * resolution_m,
-                )
-                for sign in (-1, 1)
-            }
-            if neighbor not in directed_neighbors and not neighbor_points_back:
-                continue
-            graph[cell].add(neighbor)
-            graph[neighbor].add(cell)
-    retained = {
-        cell
-        for component in _components(graph)
-        if len(component) >= minimum_component_cells
-        for cell in component
-    }
-    return {
-        cell: {neighbor for neighbor in neighbors if neighbor in retained}
-        for cell, neighbors in graph.items()
-        if cell in retained
-    }
-
-
 def _compress_network(
     graph: Mapping[Cell, set[Cell]],
     grid: Mapping[Cell, float],
+    geometry_by_cell: Mapping[Cell, dict[str, Any]],
     *,
     network_kind: str,
     source_refs: list[str],
     max_edges: int,
+    resolution_m: float,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     if not graph:
         return [], []
@@ -309,17 +241,51 @@ def _compress_network(
             for cell in component
         }
         backbone_links = _component_backbone_links(component_graph)
-        critical = {
-            cell for cell, neighbors in component_graph.items() if len(neighbors) != 2
-        }
+        if network_kind == "drainage":
+            incoming_count = {
+                cell: sum(
+                    1
+                    for source in component
+                    if geometry_by_cell.get(source, {}).get("downstream_cell") == cell
+                )
+                for cell in component
+            }
+            outgoing_count = {
+                cell: int(
+                    geometry_by_cell.get(cell, {}).get("downstream_cell")
+                    in component
+                )
+                for cell in component
+            }
+            critical = {
+                cell
+                for cell in component
+                if incoming_count[cell] != 1 or outgoing_count[cell] != 1
+            }
+        else:
+            critical = {
+                cell
+                for cell, neighbors in component_graph.items()
+                if len(neighbors) != 2
+            }
         if not critical:
             critical = {min(component)}
         component_endpoints = [
             cell for cell in component if len(component_graph[cell]) <= 1
         ]
-        drainage_outlet = min(
+        drainage_outlet = max(
             component_endpoints or [min(component)],
-            key=lambda cell: grid[cell],
+            key=lambda cell: (
+                float(geometry_by_cell.get(cell, {}).get("flow_accumulation", 0.0)),
+                -grid[cell],
+            ),
+        )
+        component_max_accumulation = max(
+            (
+                float(geometry_by_cell.get(cell, {}).get("flow_accumulation", 0.0))
+                for cell in component
+            ),
+            default=0.0,
         )
         for cell in critical:
             nodes[cell] = _network_node(
@@ -330,6 +296,7 @@ def _compress_network(
                 component_number=component_number,
                 drainage_outlet=drainage_outlet,
                 source_refs=source_refs,
+                geometry_by_cell=geometry_by_cell,
             )
         visited_links: set[Link] = set()
         for start in sorted(critical):
@@ -357,32 +324,50 @@ def _compress_network(
                         component_number=component_number,
                         drainage_outlet=drainage_outlet,
                         source_refs=source_refs,
+                        geometry_by_cell=geometry_by_cell,
                     )
+                if network_kind == "drainage" and float(
+                    geometry_by_cell.get(path[0], {}).get("flow_accumulation", 0.0)
+                ) > float(
+                    geometry_by_cell.get(path[-1], {}).get("flow_accumulation", 0.0)
+                ):
+                    path = list(reversed(path))
                 path_links = {_link(a, b) for a, b in zip(path, path[1:])}
                 backbone_ratio = (
                     len(path_links & backbone_links) / len(path_links)
                     if path_links
                     else 0.0
                 )
-                edge_kind = (
-                    "main_ridge_candidate"
-                    if network_kind == "ridge" and backbone_ratio >= 0.5
-                    else "spur_ridge_candidate"
-                    if network_kind == "ridge"
-                    else "drainage_trunk"
-                    if backbone_ratio >= 0.5
-                    else "tributary"
-                )
+                if network_kind == "ridge":
+                    edge_kind = (
+                        "main_ridge_candidate"
+                        if backbone_ratio >= 0.5
+                        else "spur_ridge_candidate"
+                    )
+                else:
+                    downstream_accumulation = float(
+                        geometry_by_cell.get(path[-1], {}).get(
+                            "flow_accumulation", 0.0
+                        )
+                    )
+                    edge_kind = (
+                        "drainage_trunk"
+                        if downstream_accumulation
+                        >= max(2.0, component_max_accumulation * 0.45)
+                        else "tributary"
+                    )
                 edge_records.append(
                     _network_edge(
                         path,
                         grid,
+                        geometry_by_cell,
                         edge_kind=edge_kind,
                         network_kind=network_kind,
                         component_number=component_number,
                         source_refs=source_refs,
-                        start_cell=start,
+                        start_cell=path[0],
                         end_cell=path[-1],
+                        resolution_m=resolution_m,
                     )
                 )
     ranked = sorted(
@@ -408,23 +393,48 @@ def _network_node(
     component_number: int,
     drainage_outlet: Cell,
     source_refs: list[str],
+    geometry_by_cell: Mapping[Cell, dict[str, Any]],
 ) -> dict[str, Any]:
     degree = len(graph.get(cell, set()))
     if network_kind == "ridge":
         kind = "ridge_divide_node" if degree >= 3 else "ridge_end_node"
-    elif degree >= 3:
-        kind = "drainage_confluence_node"
-    else:
-        kind = "drainage_outlet_node" if cell == drainage_outlet else "headwater_node"
+    geometry = geometry_by_cell.get(cell, {})
+    if network_kind == "drainage":
+        incoming_degree = sum(
+            1
+            for source in graph
+            if geometry_by_cell.get(source, {}).get("downstream_cell") == cell
+        )
+        outgoing_degree = int(geometry.get("downstream_cell") in graph)
+        if outgoing_degree == 0:
+            kind = "drainage_outlet_node"
+        elif incoming_degree >= 2:
+            kind = "drainage_confluence_node"
+        else:
+            kind = "headwater_node"
+        degree = incoming_degree + outgoing_degree
+    point = geometry.get("point", cell)
     return {
         "_cell": cell,
         "_network": network_kind,
         "_component_number": component_number,
         "kind": kind,
         "degree": degree,
-        "x_twd97": cell[0],
-        "y_twd97": cell[1],
-        "elevation_m": round(grid[cell], 2),
+        "incoming_degree": incoming_degree if network_kind == "drainage" else None,
+        "outgoing_degree": outgoing_degree if network_kind == "drainage" else None,
+        "x_twd97": round(float(point[0]), 3),
+        "y_twd97": round(float(point[1]), 3),
+        "elevation_m": round(float(geometry.get("elevation_m", grid[cell])), 2),
+        "conditioned_elevation_m": (
+            round(float(geometry["conditioned_elevation_m"]), 4)
+            if "conditioned_elevation_m" in geometry
+            else None
+        ),
+        "flow_accumulation": (
+            round(float(geometry["flow_accumulation"]), 4)
+            if "flow_accumulation" in geometry
+            else None
+        ),
         "source_refs": source_refs,
     }
 
@@ -432,6 +442,7 @@ def _network_node(
 def _network_edge(
     path: Sequence[Cell],
     grid: Mapping[Cell, float],
+    geometry_by_cell: Mapping[Cell, dict[str, Any]],
     *,
     edge_kind: str,
     network_kind: str,
@@ -439,12 +450,46 @@ def _network_edge(
     source_refs: list[str],
     start_cell: Cell,
     end_cell: Cell,
+    resolution_m: float,
 ) -> dict[str, Any]:
-    coordinates_twd97 = [[cell[0], cell[1], round(grid[cell], 2)] for cell in path]
+    raw_points = [
+        tuple(geometry_by_cell.get(cell, {}).get("point", cell))
+        for cell in path
+    ]
+    smoothed_points = constrained_smooth_path(
+        raw_points,
+        resolution_m=resolution_m,
+    )
+    raw_elevations = [
+        round(float(geometry_by_cell.get(cell, {}).get("elevation_m", grid[cell])), 2)
+        for cell in path
+    ]
+    conditioned_elevations = [
+        round(
+            float(
+                geometry_by_cell.get(cell, {}).get(
+                    "conditioned_elevation_m",
+                    geometry_by_cell.get(cell, {}).get("elevation_m", grid[cell]),
+                )
+            ),
+            4,
+        )
+        for cell in path
+    ]
+    coordinates_twd97 = [
+        [round(point[0], 3), round(point[1], 3), elevation]
+        for point, elevation in zip(smoothed_points, raw_elevations)
+    ]
     coordinates_wgs84 = []
-    for cell in path:
-        lat, lon = twd97_to_wgs84(cell[0], cell[1])
+    for point in smoothed_points:
+        lat, lon = twd97_to_wgs84(point[0], point[1])
         coordinates_wgs84.append([round(lon, 8), round(lat, 8)])
+    start_accumulation = float(
+        geometry_by_cell.get(path[0], {}).get("flow_accumulation", 0.0)
+    )
+    end_accumulation = float(
+        geometry_by_cell.get(path[-1], {}).get("flow_accumulation", 0.0)
+    )
     return {
         "_start_cell": start_cell,
         "_end_cell": end_cell,
@@ -454,7 +499,7 @@ def _network_edge(
         "coordinates_twd97": coordinates_twd97,
         "coordinates_wgs84": coordinates_wgs84,
         "length_m": round(
-            sum(_distance(a, b) for a, b in zip(path, path[1:])),
+            sum(math.dist(a, b) for a, b in zip(smoothed_points, smoothed_points[1:])),
             2,
         ),
         "watershed_boundary_candidate": network_kind == "ridge",
@@ -462,6 +507,42 @@ def _network_edge(
         "candidate_only": True,
         "runtime_safety_truth": False,
         "requires_human_review": True,
+        "geometry_method": "subcell_support_constrained_topology_trace.v1",
+        "maximum_lateral_adjustment_m": round(resolution_m * 0.35, 2),
+        "uncertainty_half_width_m": round(resolution_m * 3.0, 2),
+        "flow_supported": (
+            all(bool(geometry_by_cell.get(cell, {}).get("flow_supported")) for cell in path)
+            if network_kind == "drainage"
+            else False
+        ),
+        "flow_accumulation_start": round(start_accumulation, 4),
+        "flow_accumulation_end": round(end_accumulation, 4),
+        "conditioned_elevation_start_m": conditioned_elevations[0],
+        "conditioned_elevation_end_m": conditioned_elevations[-1],
+        "conditioned_elevation_profile_m": conditioned_elevations,
+        "raw_elevation_profile_m": raw_elevations,
+        "directed_downstream": network_kind == "drainage",
+        "strahler_order": (
+            max(
+                int(geometry_by_cell.get(cell, {}).get("strahler_order", 1))
+                for cell in path
+            )
+            if network_kind == "drainage"
+            else None
+        ),
+        "shreve_magnitude": (
+            max(
+                int(geometry_by_cell.get(cell, {}).get("shreve_magnitude", 1))
+                for cell in path
+            )
+            if network_kind == "drainage"
+            else None
+        ),
+        "classification_basis": (
+            "conditioned_mfd_contributing_area_and_stream_order"
+            if network_kind == "drainage"
+            else "component_backbone_candidate"
+        ),
     }
 
 
@@ -475,6 +556,13 @@ def _saddle_nodes(
 ) -> list[dict[str, Any]]:
     saddles = []
     for cell, center in grid.items():
+        if not _has_hessian_saddle_support(
+            cell,
+            grid,
+            resolution_m=resolution_m,
+            relief_threshold_m=relief_threshold_m,
+        ):
+            continue
         neighbors = [
             grid.get(
                 _cell(
@@ -527,6 +615,46 @@ def _saddle_nodes(
         if len(selected) >= 32:
             break
     return selected
+
+
+def _has_hessian_saddle_support(
+    cell: Cell,
+    grid: Mapping[Cell, float],
+    *,
+    resolution_m: float,
+    relief_threshold_m: float,
+) -> bool:
+    def elevation(dx: int, dy: int) -> float | None:
+        return grid.get(
+            _cell(
+                cell[0] + dx * resolution_m,
+                cell[1] + dy * resolution_m,
+            )
+        )
+
+    east, west = elevation(1, 0), elevation(-1, 0)
+    north, south = elevation(0, 1), elevation(0, -1)
+    northeast, northwest = elevation(1, 1), elevation(-1, 1)
+    southeast, southwest = elevation(1, -1), elevation(-1, -1)
+    values = (east, west, north, south, northeast, northwest, southeast, southwest)
+    if any(value is None for value in values):
+        return False
+    center = grid[cell]
+    scale = resolution_m * resolution_m
+    dxx = (float(east) - 2.0 * center + float(west)) / scale
+    dyy = (float(north) - 2.0 * center + float(south)) / scale
+    dxy = (
+        float(northeast)
+        - float(northwest)
+        - float(southeast)
+        + float(southwest)
+    ) / (4.0 * scale)
+    determinant = dxx * dyy - dxy * dxy
+    half_trace = (dxx + dyy) / 2.0
+    radius = math.hypot((dxx - dyy) / 2.0, dxy)
+    eigenvalues = (half_trace - radius, half_trace + radius)
+    minimum_response_m = min(abs(value) * scale for value in eigenvalues)
+    return determinant < -1e-12 and minimum_response_m >= relief_threshold_m * 0.5
 
 
 def _renumber_nodes(nodes: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:

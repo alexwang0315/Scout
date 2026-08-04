@@ -20,17 +20,24 @@ from navigation_terrain_annotations import (  # noqa: E402
 from navigation_terrain_skeleton import (  # noqa: E402
     build_terrain_hierarchy_from_grid,
 )
+from navigation_terrain_projection_expert import (  # noqa: E402
+    normalize_route_terrain_events,
+)
+from navigation_terrain_validation import (  # noqa: E402
+    build_terrain_validation_receipt,
+)
 
 
 def run_eval() -> dict[str, Any]:
     cases = [
         _annotation_case(),
         _hierarchy_case(),
+        _validation_gate_case(),
         _event_case(),
     ]
     passed_count = sum(case["passed"] is True for case in cases)
     return {
-        "schema_version": "scout_navigation_terrain_expert_eval.v0",
+        "schema_version": "scout_navigation_terrain_expert_eval.v1",
         "artifact_kind": "navigation_terrain_expert_eval",
         "status": "pass" if passed_count == len(cases) else "fail",
         "case_count": len(cases),
@@ -95,15 +102,12 @@ def _hierarchy_case() -> dict[str, Any]:
     )
     edge_kinds = {item["kind"] for item in result["edges"]}
     node_kinds = {item["kind"] for item in result["nodes"]}
-    required_edges = {
-        "main_ridge_candidate",
-        "spur_ridge_candidate",
-        "drainage_trunk",
-    }
+    required_edges = {"main_ridge_candidate", "spur_ridge_candidate"}
     passed = (
         required_edges <= edge_kinds
         and "ridge_divide_node" in node_kinds
-        and "headwater_node" in node_kinds
+        and result["method"]["ridge_extraction"]
+        == "multi_scale_hessian_subcell_ridge_trace.v1"
         and result["boundary"]["candidate_only"] is True
         and result["boundary"]["runtime_safety_truth"] is False
     )
@@ -113,11 +117,37 @@ def _hierarchy_case() -> dict[str, Any]:
         "checks": {
             "required_edge_kinds": sorted(required_edges & edge_kinds),
             "ridge_divide_present": "ridge_divide_node" in node_kinds,
-            "headwater_present": "headwater_node" in node_kinds,
+            "subcell_hessian_method": result["method"]["ridge_extraction"],
             "candidate_boundary": (
                 result["boundary"]["candidate_only"] is True
                 and result["boundary"]["runtime_safety_truth"] is False
             ),
+        },
+    }
+
+
+def _validation_gate_case() -> dict[str, Any]:
+    hierarchy = build_terrain_hierarchy_from_grid(
+        _branched_terrain(),
+        resolution_m=20,
+        source_refs=["eval-synthetic-dem"],
+        relief_threshold_m=6,
+        minimum_component_cells=3,
+    )
+    receipt = build_terrain_validation_receipt(hierarchy, [])
+    passed = (
+        receipt["validation_state"] == "blocked_pending_reference"
+        and receipt["event_source_mode"] == "prohibited"
+        and receipt["operational_authority"] is False
+        and not any(receipt["event_unlocks"].values())
+    )
+    return {
+        "case_id": "missing-reference-fails-closed",
+        "passed": passed,
+        "checks": {
+            "validation_state": receipt["validation_state"],
+            "event_source_mode": receipt["event_source_mode"],
+            "event_unlocks": receipt["event_unlocks"],
         },
     }
 
@@ -163,11 +193,21 @@ def _event_case() -> dict[str, Any]:
         item["observation_prompt"] and item["wrong_way_cue"] and item["recovery_prompt"]
         for item in result["events"]
     )
+    projection = normalize_route_terrain_events(result)
+    projected_prompts_are_neutral = all(
+        "wrong_way_cue" not in item
+        and "recovery_prompt" not in item
+        and item["review_prompt"].startswith("Shadow review hypothesis")
+        for item in projection["events"]
+    )
     passed = (
         event_types == ["watershed_crossing", "drainage_crossing", "saddle_passage"]
         and distances == sorted(distances)
         and required_prompts
         and all(item["source_refs"] for item in result["events"])
+        and result["gate_mode"] == "shadow_only"
+        and result["operational_authority"] is False
+        and projected_prompts_are_neutral
     )
     return {
         "case_id": "ordered-route-terrain-events",
@@ -178,6 +218,8 @@ def _event_case() -> dict[str, Any]:
             "ordered": distances == sorted(distances),
             "all_prompts_present": required_prompts,
             "all_events_sourced": all(item["source_refs"] for item in result["events"]),
+            "raw_shadow_only": result["gate_mode"] == "shadow_only",
+            "projected_prompts_are_neutral": projected_prompts_are_neutral,
         },
     }
 

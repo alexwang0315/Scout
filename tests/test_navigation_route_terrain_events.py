@@ -46,6 +46,7 @@ def test_route_terrain_join_emits_ordered_navigation_events() -> None:
     )
 
     assert result["status"] == "candidate_events"
+    assert result["schema_version"] == "scout_navigation_route_terrain_events.v1"
     assert [event["event_type"] for event in result["events"]] == [
         "watershed_crossing",
         "drainage_crossing",
@@ -59,8 +60,27 @@ def test_route_terrain_join_emits_ordered_navigation_events() -> None:
     ]
     assert all(event["wrong_way_cue"] for event in result["events"])
     assert all(event["source_refs"] == ["dem"] for event in result["events"])
+    assert all(
+        event["output_role"] == "shadow_event_candidate"
+        and event["gate_mode"] == "shadow_only"
+        and event["operational_authority"] is False
+        and event["effect_scope"] == "none"
+        for event in result["events"]
+    )
+    assert result["validation_state"] == "blocked_pending_reference"
+    assert result["gate_mode"] == "shadow_only"
+    assert result["operational_authority"] is False
+    assert result["blocked_reason"] == "geometry_reference_validation_missing"
+    assert result["lineage"]["source_hierarchy_schema_version"] == (
+        "scout_navigation_terrain_hierarchy.v0"
+    )
+    assert result["lineage"]["event_semantics"] == (
+        "shadow_route_terrain_event_semantics.v1"
+    )
     assert result["boundary"]["candidate_only"] is True
     assert result["boundary"]["runtime_safety_truth"] is False
+    assert result["boundary"]["shadow_only"] is True
+    assert result["boundary"]["effect_scope"] == "none"
 
 
 def test_route_terrain_join_classifies_aligned_ridge_as_transition() -> None:
@@ -112,3 +132,5 @@ def test_route_terrain_join_rejects_non_candidate_hierarchy() -> None:
 
     assert result["status"] == "rejected_boundary"
     assert result["events"] == []
+    assert result["gate_mode"] == "shadow_only"
+    assert result["operational_authority"] is False

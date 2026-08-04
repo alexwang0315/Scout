@@ -316,11 +316,20 @@ slope = atan(sqrt((dz/dx)^2 + (dz/dy)^2))
 Local relief and curvature help distinguish broad benches from sharp spurs.
 Topographic position can separate ridges, slopes, and valley bottoms.
 
-D8 drainage assigns each cell to the steepest lower neighbor, then accumulates
-upstream cells. High-accumulation trunks are valley/drainage candidates. A
-drainage line is not automatically a walkable valley route: waterfalls,
-incision, flood exposure, and dense vegetation are unmodeled until separately
-evidenced.
+The current Navigation hierarchy does not use a four-direction or D8 drainage
+trace. It conditions bounded DEM windows with a priority-flood epsilon surface,
+uses slope-weighted multiple-flow direction (MFD), accumulates contributing
+area, retains only curvature candidates supported by downstream flow, and
+records Strahler order plus Shreve magnitude. Large conditioning deltas are
+suppressed from channel geometry because a filled closed depression can create
+an artificial outlet trace. Raw elevation and conditioned elevation remain
+separate in the artifact.
+
+The dependency-free D8 command remains available only for legacy bounded
+experiments and teaching fixtures. Its output must not be substituted for the
+current hierarchy receipt. A drainage line is never automatically a walkable
+valley route: waterfalls, incision, flood exposure, and dense vegetation are
+unmodeled until separately evidenced.
 
 ### 9.3 Horizontal corridor candidates
 
@@ -392,11 +401,24 @@ drainage_trunk
 tributary
 ```
 
-The bounded construction implementation uses multi-scale cross-section maxima
-and minima, links candidates along the inferred landform axis, removes small
-components, compresses continuous cells into reusable edges, and labels the
-longest component backbone as main ridge or drainage trunk. The remaining
-branches become spur-ridge or tributary candidates.
+The bounded construction implementation now separates the two landform
+pipelines:
+
+- ridge: multi-scale Gaussian support, Hessian curvature response, sub-cell
+  localization, non-maximum suppression, tangent-aware graph tracing, and
+  bounded DEM-supported recovery of broad T/Y junctions;
+- drainage: priority-flood conditioning, slope-weighted MFD, contributing
+  area, downstream acyclic topology, confluences, Strahler order, and Shreve
+  magnitude;
+- saddle: neighborhood sign change plus an opposite-sign Hessian eigenvalue
+  gate, preventing a diagonal ridge from being mislabeled as a saddle;
+- geometry: at most 0.35 cell support-constrained smoothing, retaining raw
+  support points and a minimum candidate-support band of three cells.
+
+The graph-diameter label remains a compatibility candidate
+(`main_ridge_candidate`) rather than proof of a named principal divide.
+Drainage trunk/tributary labels are based on contributing area and stream
+order, not component diameter.
 
 This is a deterministic morphology hypothesis. It does not infer a trail,
 vegetation state, current surface condition, or walkability.
@@ -413,6 +435,21 @@ Expert sketches require an explicit evidence state:
 
 Only the second state is eligible for geometry comparison, and it remains
 candidate-only. A manually shifted screenshot is never geometry ground truth.
+
+Blind validation requires more than georeferencing. Every reference set must
+also declare an annotator ID, common reference-case ID, tuning or blind-holdout
+split, independent annotation, completed topology review, completed ambiguous-
+area review, and an uncertainty half-width for every line. At least two
+independent annotators must cover the same blind case. Their disagreement is a
+reported metric, not silently averaged away.
+
+`navigation_terrain_validation.py` measures lateral RMSE, symmetric H95,
+Hausdorff distance, discrete Fréchet distance, component/branch/junction error,
+orientation spectrum, grid-axis concentration, and hydrologic monotonicity. It
+contains no default promotion thresholds. Without an externally approved,
+baseline-linked policy, the result is
+`blocked_pending_acceptance_policy`; without qualified references it is
+`blocked_pending_reference`.
 
 ### 9.7 Route-to-terrain event join
 
@@ -434,13 +471,16 @@ Every event records:
 - route distance and off-route geometry distance;
 - crossing angle or aligned relation;
 - terrain feature and source references;
-- what terrain the user should observe;
-- a terrain-relative wrong-way cue;
-- a recovery prompt that asks the user to stop and re-check.
+- an offline observation hypothesis;
+- offline wrong-way and recovery text for shadow replay only.
 
-For example, “if sustained descent begins inside the gully, the crossing may
-have turned into a down-gully deviation” is more useful than only reporting a
-coordinate. It is still a review cue, not runtime safety truth.
+Before reference-bound validation and a separate event-type gate, every event
+is `shadow_only`, `operational_authority=false`, `effect_scope=none`, and
+`presentation_scope=developer_debug_only`. Missing or old authority fields fail
+closed. The general Dashboard projection removes wrong-way, recovery, and exact
+crossing-distance language; it can show only a neutral shadow-review
+hypothesis. Passing geometry alone never unlocks crossing, wrong-way, recovery,
+notification, live navigation state, or safety effects.
 
 ## 10. Shared topology instead of independent lines
 
@@ -474,7 +514,9 @@ edges. It does not choose a safe route.
 The successful Iroko overlay used:
 
 - eight separated, north-to-south horizontal bands (`H1–H8`);
-- D8 flow-accumulation trunks for longitudinal valleys (`V1–Vn`);
+- legacy D8 flow-accumulation trunks for longitudinal valleys (`V1–Vn`),
+  retained as provenance of the original experiment rather than the current
+  Navigation hierarchy method;
 - a probable envelope between H4 and H5;
 - a recombined hypothesis following H5, switching through V1 to H4, then
   passing IR-1, IR-2, and the station;
@@ -573,9 +615,11 @@ python tools/historical_dem_gpx_route_inference.py dem-d8 \
   --output <d8.json>
 ```
 
-The small dependency-free D8 function is appropriate for tests and bounded
-experiments. Large raster production should use a reviewed GDAL/rasterio/Whitebox
-adapter while preserving the same output/provenance contract.
+The small dependency-free D8 function is appropriate for legacy tests and
+bounded teaching experiments. It is not the current Navigation hierarchy
+extractor. Larger experiments should preserve the conditioned-MFD lineage and
+use a reviewed GDAL/rasterio/Whitebox adapter without weakening the output or
+provenance contract.
 
 ## 14. Validation and acceptance
 
@@ -590,6 +634,15 @@ A capability proof passes when:
 - contradictions and evidence gaps survive compilation;
 - JSON/GeoJSON and visual output agree;
 - candidate/runtime flags are correct;
+- arbitrary rotations, sinusoidal/S curves, Y junctions, saddles, broad/sharp
+  crests, multiple resolutions, flats, and depressions pass analytic
+  regressions;
+- downstream drainage geometry is monotonic on conditioned elevation and
+  increasing in contributing area;
+- expert baseline metrics are recorded before an acceptance policy is
+  approved;
+- absence of two independent blind references or an approved policy remains a
+  blocking receipt, never a silent pass;
 - the focused tests and skill validator pass.
 
 It does not pass merely because a line is visually plausible.
@@ -662,9 +715,16 @@ The next expert-reading construction slices are also implemented behind the
 facade:
 
 - `navigation_terrain_annotations.py` owns expert annotation semantics and
-  georeference eligibility;
+  georeference, independent-review, uncertainty, ambiguous-mask, and blind-
+  holdout eligibility;
+- `navigation_terrain_morphometry.py` owns multi-scale Hessian/sub-cell ridge
+  candidates and support-constrained topology tracing;
+- `navigation_terrain_hydrology.py` owns priority-flood conditioning, MFD,
+  accumulation, directed topology, and stream order;
 - `navigation_terrain_skeleton.py` owns continuous main/spur ridge and
   trunk/tributary graph extraction;
+- `navigation_terrain_validation.py` owns reference-bound geometry, topology,
+  orientation, and hydrologic metrics plus the fail-closed promotion receipt;
 - `navigation_terrain_skeleton_workspace.py` owns the prepared DEM adapter;
 - `navigation_route_terrain_events.py` owns ordered GPX-to-terrain events.
 
@@ -675,10 +735,14 @@ and workbench:
   sequence to WGS84 display geometry without exposing the raw DEM or GPX;
 - the projection returns at most 240 hierarchy edges, 500 nodes, and 80 ordered
   route-terrain events, with explicit source counts and truncation;
-- the Dashboard draws main/spur ridge candidates and trunk/tributary drainage
-  candidates as separate visual semantics;
-- the `路線事件` lens and timeline expose, for each event, what to observe,
-  wrong-route symptoms, and a recovery check;
+- the Dashboard draws only muted candidate-support bands by default; exact
+  hierarchy centerlines, glow, and authoritative “main” labels are disabled;
+- the event lens is explicitly a developer/QA shadow view. It exposes a neutral
+  review hypothesis and strips wrong-way, recovery, and exact crossing-
+  distance action language;
+- the projection always carries a terrain-validation receipt. With the current
+  workspaces' missing qualified expert references, it remains
+  `blocked_pending_reference` and `event_source_mode=prohibited`;
 - `tools/navigation_terrain_expert_eval.py` deterministically checks
   unreferenced expert annotation semantics, branched DEM topology, and ordered
   route-terrain events.

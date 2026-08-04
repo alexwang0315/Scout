@@ -26,6 +26,9 @@ NODE_EVENT_TYPES = {
     "drainage_confluence_node": "drainage_branch",
 }
 
+SHADOW_GATE_POLICY_VERSION = "route_terrain_shadow_gate.v1"
+SHADOW_BLOCKED_REASON = "geometry_reference_validation_missing"
+
 
 def build_route_terrain_events(
     route_points: Sequence[Mapping[str, Any]],
@@ -135,13 +138,15 @@ def build_route_terrain_events(
             "candidate_only": True,
             "runtime_safety_truth": False,
             "requires_human_review": True,
+            **_shadow_event_authority(),
         }
         for index, event in enumerate(bounded, start=1)
     ]
     return {
-        "schema_version": "scout_navigation_route_terrain_events.v0",
+        "schema_version": "scout_navigation_route_terrain_events.v1",
         "artifact_kind": "route_terrain_event_sequence",
         "status": "candidate_events" if events else "no_nearby_events",
+        **_shadow_event_authority(),
         "route_point_count": len(route),
         "candidate_event_count": len(deduped),
         "event_count": len(events),
@@ -154,14 +159,26 @@ def build_route_terrain_events(
             "dedupe_distance_m": dedupe_distance,
             "ordering": "route_distance_m_ascending",
         },
+        "lineage": {
+            "source_hierarchy_schema_version": terrain_hierarchy.get(
+                "schema_version"
+            ),
+            "source_hierarchy_lineage": terrain_hierarchy.get("lineage"),
+            "join_policy": "projected_polyline_nearest_segment_and_crossing.v0",
+            "join_tolerance_m": tolerance,
+            "crossing_angle_threshold_degrees": crossing_angle,
+            "event_semantics": "shadow_route_terrain_event_semantics.v1",
+            "gate_policy_version": SHADOW_GATE_POLICY_VERSION,
+        },
         "limitations": [
             (
                 "Events express route-to-terrain geometry, not trail "
                 "existence, current passability, or a go/no-go decision."
             ),
             (
-                "Wrong-way cues are terrain-relative review prompts and must "
-                "be calibrated against map, visibility, and field evidence."
+                "Observation, wrong-way, and recovery text is shadow-review "
+                "material only and cannot be promoted to user action without "
+                "reference-bound validation."
             ),
         ],
         "boundary": _candidate_boundary(),
@@ -687,9 +704,10 @@ def _acute_angle_degrees(
 
 def _empty_result(status: str, limitation: str) -> dict[str, Any]:
     return {
-        "schema_version": "scout_navigation_route_terrain_events.v0",
+        "schema_version": "scout_navigation_route_terrain_events.v1",
         "artifact_kind": "route_terrain_event_sequence",
         "status": status,
+        **_shadow_event_authority(),
         "route_point_count": 0,
         "candidate_event_count": 0,
         "event_count": 0,
@@ -708,6 +726,29 @@ def _candidate_boundary() -> dict[str, Any]:
         "human_review_required": True,
         "phase1_runtime_mutation_allowed": False,
         "safety_api_called": False,
+        "shadow_only": True,
+        "presentation_scope": "developer_debug_only",
+        "effect_scope": "none",
+        "event_source_mode": "shadow_only",
+        "operational_authority": False,
+        "validation_state": "blocked_pending_reference",
+        "gate_policy_version": SHADOW_GATE_POLICY_VERSION,
+    }
+
+
+def _shadow_event_authority() -> dict[str, Any]:
+    """Return the fail-closed authority carried by every terrain event artifact."""
+
+    return {
+        "output_role": "shadow_event_candidate",
+        "validation_state": "blocked_pending_reference",
+        "gate_mode": "shadow_only",
+        "operational_authority": False,
+        "presentation_scope": "developer_debug_only",
+        "effect_scope": "none",
+        "event_source_mode": "shadow_only",
+        "blocked_reason": SHADOW_BLOCKED_REASON,
+        "gate_policy_version": SHADOW_GATE_POLICY_VERSION,
     }
 
 
