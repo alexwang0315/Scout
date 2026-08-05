@@ -1,0 +1,121 @@
+{
+  "schema_version": "dashboardQualificationPhase2DeterminismAddendum.v2",
+  "artifact_id": "dashboard-internal-qualification-phase2-determinism-addendum-rev2",
+  "predecessor": {
+    "artifact": "docs/evals/dashboard-internal-qualification-phase2-determinism-addendum-rev1.json",
+    "canonical_sha256": "94f6e5605b58b27128071a291ace179e02adcfd46711011bd5f5ee1f28976239",
+    "serialized_sha256": "9a44fc9189a2554d5b3b86e526bee633187274f2e67753e440871792b95e9f7d",
+    "gpt_pro_disposition": "BLOCKED_WITH_PHASE3_CLOSURE_REV1_P3D05",
+    "supersession_reason": "Rev1 normalized the aggregate run-manifest digest without separately binding and comparing the complete retained and current QualificationRunManifest payloads."
+  },
+  "purpose": "Bind the complete retained and current Phase 2 run manifests, prove field-level equality except for the exact adapter digest changed by the deterministic scheduler correction, and prevent a non-adapter manifest change from passing Phase 3.",
+  "retained_joint_baseline": {
+    "phase2_closure_packet": "docs/evals/dashboard-internal-qualification-phase2-closure-rev2.json",
+    "phase2_closure_canonical_sha256": "76247f4e723ed6cc79144707ce103400d68f180f9ec16ab283d3d328e987c027",
+    "phase2_closure_serialized_sha256": "decf5f20f8e36a88f65e72b5278c323bbf4fc2d1a749d13c93519927e5bf6164",
+    "report": "outputs/qualification/contextual-permission-phase2-evidence-v7/result/qualification-report.json",
+    "report_canonical_sha256": "a7056c72a3ba9633e55e19e695801a03bbfb88335ba5b9a8b6ef993c1f41cc95",
+    "report_serialized_sha256": "26d154dad555a7108b3d21668aaf125394324f1d3a999a7bd36e1e145c7b1481",
+    "manifest_canonical_sha256": "2bbac7470466e0830f776694eb9a1e2b63223c27ff96c73d9c3f59ee3d0da589",
+    "manifest_payload": {
+      "run_id": "contextual-permission.phase2.16307d8ee5c9",
+      "phase1_prerequisite_sha256": "d9ffea5e169c874522bfe2da71244d10907b88b12301766450f661d0c7af84ed",
+      "component_sha256": [
+        ["engine", "9bd3aa9dbf4611251925c769ca860e9888c9608e283607abf0a618c3fc4466ea"],
+        ["model", "16307d8ee5c963745c8d4850418fc1e2fa210fd9146de89585b51df0caacecf6"],
+        ["oracle", "d06005028b067afd5a0b618023386dbaa91ea0306214ca58d2abc4ff67a47811"],
+        ["adapter", "fad65c06053ccadea234a6080e525cea85cc89771b1690b15946d5e2f27833fa"],
+        ["production", "8780183df653dd336309737844288b7885f9280b634f2b19a381df2c87ec0b4b"],
+        ["fixtures", "a5cd44407d6687cf60bd57f1e0a46327a1a0951023eb77bea7cdbce55cd955cd"],
+        ["history", "b003a76fcc6a3676a2aca72fde723d9216b737597a114d82fb13a58810d770ee"],
+        ["effects", "7a3637d37f71fa8fa0bb587c622e2ae49b22c9bb61a96c7f846e2c13f59e796f"],
+        ["bounds", "022e31c7fd1838ed130190a91f48a2adb0d4278e7b7fd161a2e031691c76b944"],
+        ["decisions", "68a94ff0136ec399e0f04590fc3c9cb37c97f25cc8f6d3415f05fab3d53e5f5b"],
+        ["faults", "4805c83b4ceecf7566ea50602c889b362217ee3a6a8e6e45c6f66a06ac7cb01d"],
+        ["concurrency", "d341977f16e710196c77770a96c541187c34ea7027779a56046259c5cdb9088c"],
+        ["mutants", "c3b7c7462e7a69d85046af22aa6f0b8f7442efa2c1913bbc179c46f6ac465c29"],
+        ["configuration", "f75a9326e7686dc59792827ee47fe6ad72f811bee0bb5cd447ad03740790ff48"]
+      ],
+      "deterministic_clock": "2026-08-04T00:00:00Z",
+      "deterministic_seed": 41
+    }
+  },
+  "current_deterministic_baseline": {
+    "report": "outputs/qualification/contextual-permission-phase2-evidence-v8/result/qualification-report.json",
+    "report_canonical_sha256": "0ed412162d4253d1b8e0d16b920430c789014d3d0535117130349b1bda10e98d",
+    "report_serialized_sha256": "97702d3a607e15e514706042238781e811bb5c8b9409103d2098f9871efd7bee",
+    "manifest_canonical_sha256": "d986e42b525628c53319e320637428992b34cd31787716d695a3488d4e7b5ed9",
+    "manifest_payload": {
+      "run_id": "contextual-permission.phase2.16307d8ee5c9",
+      "phase1_prerequisite_sha256": "d9ffea5e169c874522bfe2da71244d10907b88b12301766450f661d0c7af84ed",
+      "component_sha256": [
+        ["engine", "9bd3aa9dbf4611251925c769ca860e9888c9608e283607abf0a618c3fc4466ea"],
+        ["model", "16307d8ee5c963745c8d4850418fc1e2fa210fd9146de89585b51df0caacecf6"],
+        ["oracle", "d06005028b067afd5a0b618023386dbaa91ea0306214ca58d2abc4ff67a47811"],
+        ["adapter", "080df207ab6136605e4b7f470f2a65c99a0be30ba53ec7bc7c9f77c114b8b091"],
+        ["production", "8780183df653dd336309737844288b7885f9280b634f2b19a381df2c87ec0b4b"],
+        ["fixtures", "a5cd44407d6687cf60bd57f1e0a46327a1a0951023eb77bea7cdbce55cd955cd"],
+        ["history", "b003a76fcc6a3676a2aca72fde723d9216b737597a114d82fb13a58810d770ee"],
+        ["effects", "7a3637d37f71fa8fa0bb587c622e2ae49b22c9bb61a96c7f846e2c13f59e796f"],
+        ["bounds", "022e31c7fd1838ed130190a91f48a2adb0d4278e7b7fd161a2e031691c76b944"],
+        ["decisions", "68a94ff0136ec399e0f04590fc3c9cb37c97f25cc8f6d3415f05fab3d53e5f5b"],
+        ["faults", "4805c83b4ceecf7566ea50602c889b362217ee3a6a8e6e45c6f66a06ac7cb01d"],
+        ["concurrency", "d341977f16e710196c77770a96c541187c34ea7027779a56046259c5cdb9088c"],
+        ["mutants", "c3b7c7462e7a69d85046af22aa6f0b8f7442efa2c1913bbc179c46f6ac465c29"],
+        ["configuration", "f75a9326e7686dc59792827ee47fe6ad72f811bee0bb5cd447ad03740790ff48"]
+      ],
+      "deterministic_clock": "2026-08-04T00:00:00Z",
+      "deterministic_seed": 41
+    }
+  },
+  "field_level_equivalence": {
+    "allowed_changed_manifest_pointer": "/component_sha256/adapter",
+    "retained_adapter_sha256": "fad65c06053ccadea234a6080e525cea85cc89771b1690b15946d5e2f27833fa",
+    "current_adapter_sha256": "080df207ab6136605e4b7f470f2a65c99a0be30ba53ec7bc7c9f77c114b8b091",
+    "unchanged_component_names": [
+      "engine",
+      "model",
+      "oracle",
+      "production",
+      "fixtures",
+      "history",
+      "effects",
+      "bounds",
+      "decisions",
+      "faults",
+      "concurrency",
+      "mutants",
+      "configuration"
+    ],
+    "unchanged_manifest_fields": [
+      "run_id",
+      "phase1_prerequisite_sha256",
+      "deterministic_clock",
+      "deterministic_seed"
+    ],
+    "normalized_manifest_sha256": "9fd09a176cdad141a3d62f2d124ea07c5421e9f18bd3b77d94acb0c30096ccc1",
+    "normalized_report_sha256": "2905a18fd3d733752e9c26ecb7a412d66a47152f0a8fa7a3199f9bd943fb9a27",
+    "comparison_algorithm": "Validate each full manifest canonical hash; replace only the adapter component digest in each complete manifest payload with <adapter-source-bound>; require the complete normalized payloads to be byte-identical canonical JSON; hash that payload; in the report comparison replace run_manifest_sha256 with the validated normalized manifest hash and replace only the adapter component digest, then require exact normalized report hash equality.",
+    "any_other_manifest_or_report_delta": "PHASE2-REGRESSION"
+  },
+  "negative_canary": {
+    "mutant_id": "phase2-non-adapter-manifest-drift-accepted",
+    "mutation": "change the engine component digest while retaining every Phase 2 result field",
+    "required_detection": "PHASE2-REGRESSION",
+    "required_exit": "Phase 3 aggregate cannot exit zero"
+  },
+  "phase3_binding": {
+    "design_requirement": "P3D-05",
+    "old_joint_closure_remains_immutable": true,
+    "current_phase2_report_must_match_exactly": true,
+    "current_manifest_must_match_embedded_payload_exactly": true,
+    "normalized_manifest_and_report_hashes_are_aggregate_components": true,
+    "baseline_rotation_requires_phase3_closure_review_by_codex_and_gpt_pro": true
+  },
+  "non_claims": [
+    "This addendum does not rewrite the joint Phase 2 closure or report v7.",
+    "Only the adapter source digest is normalized; no engine, model, oracle, production, fixture, history, effect, bound, decision, fault, concurrency, mutant, configuration, clock, seed, run, or Phase 1 identity is ignored.",
+    "This addendum does not authorize runtime Diagnostic UI, production release, real-workspace mutation, runtime safety authority, outbound effects, or hardware control."
+  ],
+  "content_sha256": "52da07186d4fbe4a21413bf5bac31217be0bace1a401fe869f645aaf424090b3"
+}

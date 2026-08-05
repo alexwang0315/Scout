@@ -525,7 +525,6 @@ def _dashboard_body_index_sanitize_source_entry(source: dict[str, Any]) -> dict[
         "total_duration_min",
         "provider_metric_names",
         "provider_metric_summaries",
-        "imported_at",
     }
     sanitized = {key: source[key] for key in allowed_keys if key in source}
     source_sha = str(sanitized.get("sha256") or source.get("sha256") or "")
@@ -1056,7 +1055,8 @@ def _dashboard_body_index_snapshot_from_sources(
         "project_id": project_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "import_status": "imported" if sources else "not_imported",
-        "source_dir": str(source_dir),
+        "source_dir": None,
+        "source_provider": "local_health_export",
         "summary": summary,
         "coverage_cards": [
             ["Health exports", str(total_exports), "deduped local zip files"],
@@ -1083,7 +1083,10 @@ def _dashboard_body_index_snapshot_from_sources(
         "pressure_timeline": _dashboard_body_index_pressure_timeline(sources),
         "provider_metrics": provider_metrics,
         "provider_metric_summaries": provider_metric_summaries,
-        "source_index": sources,
+        "source_index": [
+            _dashboard_body_index_sanitize_source_entry(source)
+            for source in sources
+        ],
         "import_result": {
             **import_result,
             "processed_source_count": total_exports,

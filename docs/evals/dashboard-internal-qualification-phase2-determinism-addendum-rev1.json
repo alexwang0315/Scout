@@ -1,0 +1,72 @@
+{
+  "schema_version": "dashboardQualificationPhase2DeterminismAddendum.v1",
+  "artifact_id": "dashboard-internal-qualification-phase2-determinism-addendum-rev1",
+  "purpose": "Bind the jointly accepted Phase 2 closure to the current deterministic concurrency harness without weakening or replacing any retained Phase 2 obligation.",
+  "trigger": {
+    "phase3_failed_run": "outputs/qualification/dashboard-phase3-evidence-v1",
+    "observed_failure": "the retained Phase 2 rerun passed but its canonical report identity changed according to which different-idempotency-key contender won the admission race",
+    "root_cause": "schedule.same-snapshot-different-key.admission used a two-party admission barrier but left post-barrier lock acquisition to operating-system scheduling; the report serialized contender order and the winning rebuild receipt hash"
+  },
+  "retained_joint_baseline": {
+    "phase2_design_canonical_sha256": "f982b1f85cb324a697e6c74d27e173917553226493d8f652d5c2621b121b73bb",
+    "phase2_closure_packet": "docs/evals/dashboard-internal-qualification-phase2-closure-rev2.json",
+    "phase2_closure_canonical_sha256": "76247f4e723ed6cc79144707ce103400d68f180f9ec16ab283d3d328e987c027",
+    "phase2_closure_serialized_sha256": "decf5f20f8e36a88f65e72b5278c323bbf4fc2d1a749d13c93519927e5bf6164",
+    "report": "outputs/qualification/contextual-permission-phase2-evidence-v7/result/qualification-report.json",
+    "report_canonical_sha256": "a7056c72a3ba9633e55e19e695801a03bbfb88335ba5b9a8b6ef993c1f41cc95",
+    "report_serialized_sha256": "26d154dad555a7108b3d21668aaf125394324f1d3a999a7bd36e1e145c7b1481",
+    "adapter_component_sha256": "fad65c06053ccadea234a6080e525cea85cc89771b1690b15946d5e2f27833fa"
+  },
+  "current_deterministic_baseline": {
+    "report": "outputs/qualification/contextual-permission-phase2-evidence-v8/result/qualification-report.json",
+    "report_canonical_sha256": "0ed412162d4253d1b8e0d16b920430c789014d3d0535117130349b1bda10e98d",
+    "report_serialized_sha256": "97702d3a607e15e514706042238781e811bb5c8b9409103d2098f9871efd7bee",
+    "adapter_component_sha256": "080df207ab6136605e4b7f470f2a65c99a0be30ba53ec7bc7c9f77c114b8b091",
+    "repeated_phase3_embedded_report": "outputs/qualification/dashboard-phase3-evidence-v2/execution/phase2-result/qualification-report.json",
+    "repeated_report_canonical_sha256": "0ed412162d4253d1b8e0d16b920430c789014d3d0535117130349b1bda10e98d",
+    "repeated_report_serialized_sha256": "97702d3a607e15e514706042238781e811bb5c8b9409103d2098f9871efd7bee"
+  },
+  "deterministic_schedule_contract": {
+    "schedule_id": "schedule.same-snapshot-different-key.admission",
+    "precondition": "both contenders activate and complete the same admission snapshot before either proceeds past the controlled yield",
+    "selected_interleaving": "the left contender proceeds first; the right contender resumes only after the left contender reaches a terminal",
+    "required_observation": "left passes with a rebuild receipt and right is rejected with projection_rebuild_snapshot_conflict",
+    "why_semantics_are_preserved": "the schedule still proves that two independently admitted different-key commands cannot both commit the same snapshot; only the scheduler choice is made reproducible"
+  },
+  "exact_delta_contract": {
+    "allowed_changed_json_pointers": [
+      "/content_sha256",
+      "/report/run_manifest_component_sha256/adapter",
+      "/report/run_manifest_sha256"
+    ],
+    "all_other_report_fields_exactly_equal": true,
+    "verdict_equal": true,
+    "complete_equal": true,
+    "obligation_replay_effect_fault_concurrency_mutation_invariant_inventories_equal": true,
+    "semantic_normalization": {
+      "algorithm": "remove artifact content_sha256, replace report.run_manifest_sha256 with <source-bound>, and replace only the adapter digest in report.run_manifest_component_sha256 with <adapter-source-bound>, then hash canonical JSON",
+      "retained_joint_baseline_sha256": "3f7c719847c3f5da8069b00b591fdce1b9d7057e2dc30d95e394236cad72e071",
+      "current_deterministic_baseline_sha256": "3f7c719847c3f5da8069b00b591fdce1b9d7057e2dc30d95e394236cad72e071"
+    },
+    "any_additional_delta": "INVALID_PHASE2_LINEAGE"
+  },
+  "focused_regression": {
+    "test": "tests/qualification/test_contextual_permission_phase2.py::test_different_key_concurrency_report_is_stable_regardless_of_winner",
+    "red_evidence": "the uncorrected harness produced opposite winners and unequal detail payloads across two fresh runs",
+    "green_evidence": "the corrected harness produced the same ordered terminal evidence across two fresh runs",
+    "related_schedule_tests": "3 passed"
+  },
+  "phase3_binding": {
+    "design_requirement": "P3D-05",
+    "old_joint_closure_remains_immutable": true,
+    "current_phase2_rerun_must_equal_current_deterministic_baseline": true,
+    "aggregate_adapter_may_not_drop_or_reinterpret_phase2_cases": true,
+    "baseline_rotation_requires_phase3_closure_review_by_codex_and_gpt_pro": true
+  },
+  "non_claims": [
+    "This addendum does not reopen or rewrite the jointly accepted Phase 2 closure packet.",
+    "This addendum does not waive an obligation, mutant, fault cell, concurrency schedule, invariant, or effect boundary.",
+    "This addendum does not authorize runtime Diagnostic UI, production release, real-workspace mutation, runtime safety authority, outbound effects, or hardware control."
+  ],
+  "content_sha256": "94f6e5605b58b27128071a291ace179e02adcfd46711011bd5f5ee1f28976239"
+}

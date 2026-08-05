@@ -1,0 +1,316 @@
+{
+  "packet_id": "dashboard-internal-qualification.phase2-design.rev1",
+  "packet_schema_version": "dashboardInternalQualificationDesign.v1",
+  "created_on": "2026-08-04",
+  "review_state": "submitted_for_joint_design_review",
+  "content_sha256": "eee5d4d5dbbf7a67ddb7a02e2f16ed98c24b58660b21610f82630da5eb79ce04",
+  "hash_domain_contract": {
+    "canonical_content_sha256": "SHA-256 of canonical JSON with the content_sha256 member omitted",
+    "serialized_file_sha256": "SHA-256 of the complete UTF-8 JSON file including content_sha256 and formatting",
+    "identity_rule": "Both design verdicts bind canonical_content_sha256; serialized_file_sha256 verifies archived bytes only."
+  },
+  "prerequisite": {
+    "phase_1_packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev3",
+    "phase_1_canonical_content_sha256": "d9ffea5e169c874522bfe2da71244d10907b88b12301766450f661d0c7af84ed",
+    "phase_1_serialized_file_sha256": "1e06a6c4eb81a68ec243590f4a3c578ed38f53a4fa103c799e45c536de4e6dc2",
+    "codex_verdict": "AGREE",
+    "gpt_pro_verdict": "AGREE",
+    "phase_2_authorized": true
+  },
+  "design_source": {
+    "path": "docs/specs/scout-dashboard-internal-qualification.md",
+    "sha256": "dab13166c706256bff7572789e93c6ad1340cd2103b4b95d28ddd6bd033e4890",
+    "sections": [
+      "8.1",
+      "8.2",
+      "8.3",
+      "8.4",
+      "8.5",
+      "8.6",
+      "8.7",
+      "8.8",
+      "8.9"
+    ]
+  },
+  "scope": {
+    "phase": 2,
+    "proof_domain": "contextual_permission",
+    "purpose": "extract and prove a reusable internal qualification engine from the accepted Phase 1 mechanisms",
+    "runtime_ui_surface_added": false,
+    "active_workspace_mutated": false,
+    "allowed_workspace_modes": [
+      "new_isolated_temporary_root",
+      "explicit_read_only_snapshot"
+    ],
+    "phase_3_domain_coverage_claimed": false,
+    "productization_claimed": false
+  },
+  "architecture": {
+    "generic_modules": [
+      "contracts",
+      "explorer_and_scc",
+      "coverage",
+      "compatibility",
+      "effect_harness",
+      "fault_controller",
+      "mutation_runner",
+      "reporting"
+    ],
+    "domain_modules": [
+      "contextual_permission_model",
+      "contextual_permission_oracle",
+      "contextual_permission_production_adapter",
+      "contextual_permission_fixture_factory"
+    ],
+    "dependency_rules": [
+      "generic modules import no Dashboard production package",
+      "domain model and oracle import generic contracts but no production evaluator",
+      "oracle and production adapter cannot import each other",
+      "production adapter returns observations and cannot define expected outcomes",
+      "reporters cannot change canonical verdict or finding severity",
+      "engine accepts only an isolated fixture root or explicit read-only snapshot"
+    ],
+    "enforcement": [
+      "import audit",
+      "model-definition validation",
+      "negative dependency tests",
+      "output-root confinement tests"
+    ]
+  },
+  "immutable_contracts": {
+    "StateVector": [
+      "domain_id",
+      "state_id",
+      "semantic_axes",
+      "root_blockers",
+      "parent_and_evidence_identities",
+      "progress_signature",
+      "accepted_terminal",
+      "forbidden_effects"
+    ],
+    "TransitionSpec": [
+      "actor_and_intent",
+      "allowed_starts",
+      "command_id",
+      "expected_relation",
+      "advertised_repair_rank",
+      "allowed_effect_patterns",
+      "typed_failures",
+      "idempotency_fault_and_concurrency_obligations"
+    ],
+    "DomainModel": [
+      "contract_version",
+      "supported_starts",
+      "accepted_terminals",
+      "state_and_transition_registries",
+      "invariants",
+      "fixture_manifest",
+      "capability_registry",
+      "observation_to_state_projection",
+      "axis_completeness_declaration",
+      "search_bound_disclosure"
+    ],
+    "ObservedTransition": [
+      "source_and_target_observations",
+      "command_snapshot_and_evaluator_identities",
+      "status_and_typed_failure",
+      "attempted_and_final_effects",
+      "receipt_identities"
+    ],
+    "Finding_and_Counterexample": [
+      "stable_finding_id",
+      "severity",
+      "requirement_refs",
+      "minimized_path",
+      "identity_or_effect_mismatch",
+      "deterministic_reproduction_command"
+    ],
+    "QualificationReport": [
+      "packet_prerequisites",
+      "coverage_inventory",
+      "findings",
+      "unsupported_or_unresolved_states",
+      "mutation_matrix",
+      "fault_and_concurrency_results",
+      "resource_telemetry",
+      "authoritative_blocking_verdict"
+    ]
+  },
+  "model_validation": {
+    "blocking_cases": [
+      "duplicate identifiers",
+      "unknown transition references",
+      "missing supported start",
+      "accepted terminal with outgoing repair obligation",
+      "root blocker without recovery or explicit quarantine",
+      "missing effect allowlist or uninstrumented write primitive",
+      "undeclared semantic observation value",
+      "ignored observation field without non-semantic rationale",
+      "output path or symlink escape from result root"
+    ],
+    "unknown_value_rule": "Reject; never coerce an unknown production value to a known state.",
+    "execution_rule": "Invalid models fail before production execution."
+  },
+  "exploration_and_coverage": {
+    "finite_graph": "complete reachability plus SCC analysis with deterministic shortest counterexample",
+    "production_execution": "separately bounded; exhaustion is COVERAGE-INCOMPLETE and cannot pass",
+    "coverage_ledgers": [
+      "declarative_graph",
+      "supported_start_production_replays",
+      "decision_conditions",
+      "compatibility_capabilities",
+      "fault_points",
+      "concurrency_schedules",
+      "required_mutants"
+    ],
+    "decision_strategy": {
+      "small_tables": "exhaustive",
+      "larger_tables": "deterministic pairwise plus mandatory critical combinations",
+      "high_risk_boolean_gates": "MC/DC with explicit infeasibility witnesses",
+      "input_forms": [
+        "valid",
+        "false_when_applicable",
+        "missing",
+        "invalid"
+      ],
+      "capability_forms": [
+        "current",
+        "historical",
+        "unknown",
+        "explicitly_quarantined"
+      ]
+    },
+    "progress_rule": "Only semantic axes and immutable identities can prove progress; volatile-only change cannot."
+  },
+  "compatibility": {
+    "version_and_capability_are_distinct": true,
+    "allowed_historical_dispositions": [
+      "direct_support",
+      "executable_migration_to_supported_capability",
+      "explicit_quarantine_with_detection_reason_and_operator_recovery_or_export"
+    ],
+    "parseability_counts_as_support": false,
+    "missing_inventory_result": "COVERAGE-GAP"
+  },
+  "effects_faults_and_concurrency": {
+    "effect_capture": "record each configured append replace or delete attempt before invocation; classify project store outside runtime outbound hardware and capture final tree",
+    "required_fault_points": [
+      "before_first_durable_write",
+      "after_each_durable_write",
+      "before_pointer_activation",
+      "after_pointer_activation",
+      "before_journal_cleanup"
+    ],
+    "recovery_rule": "Each required fault point proves rollback or exact-key roll-forward using a fresh process or workbench instance.",
+    "required_deterministic_interleavings": [
+      "same_snapshot_same_idempotency_key",
+      "same_snapshot_different_idempotency_keys",
+      "upstream_identity_changes_between_admission_and_first_durable_write"
+    ],
+    "flaky_stress_loop_satisfies_requirement": false,
+    "forbidden_effect_classes": [
+      "canonical_store_write",
+      "outside_workspace_write",
+      "runtime_safety_truth_mutation",
+      "outbound_transport",
+      "external_send",
+      "hardware_control"
+    ]
+  },
+  "required_mutants": [
+    "schema_or_capability_drift_without_migration",
+    "hidden_prerequisite_or_removed_recovery_edge",
+    "read_command_predicate_divergence",
+    "volatile_only_progress",
+    "partial_write_marked_fresh",
+    "stale_review_or_dependency_marked_current",
+    "forbidden_effect",
+    "supported_start_removed",
+    "nonaccepted_terminal_mislabeled_pass"
+  ],
+  "mutation_policy": {
+    "execution": "deterministic differential execution",
+    "required_survivor_result": "MUTATION-SURVIVED",
+    "required_survivor_is_blocking": true
+  },
+  "outputs": {
+    "canonical_json": "authoritative verdict and evidence inventory",
+    "junit_xml": "verified projection preserving verdict and exact stable IDs and severities of every blocking item",
+    "text": "verified concise projection preserving verdict and exact stable IDs and severities of every blocking item",
+    "exit_codes": {
+      "0": "valid run with no blocking finding or unknown required obligation",
+      "1": "valid run with blocking evidence",
+      "2": "invalid model fixture output contract or runner; production execution did not begin"
+    },
+    "required_runner": "python3 tools/verify_dashboard_internal_qualification.py --domain contextual-permission --output-dir <isolated-result-root>"
+  },
+  "design_acceptance": [
+    {
+      "id": "P2D-01",
+      "requirement": "Enforced dependency direction keeps generic modules production-free and separates oracle from adapter."
+    },
+    {
+      "id": "P2D-02",
+      "requirement": "Immutable typed contracts cover state transition observation finding counterexample and report."
+    },
+    {
+      "id": "P2D-03",
+      "requirement": "Pre-execution validation rejects unknown semantics broken graph recovery instrumentation and path contracts."
+    },
+    {
+      "id": "P2D-04",
+      "requirement": "Complete finite exploration is separate from bounded production execution; incomplete coverage cannot pass."
+    },
+    {
+      "id": "P2D-05",
+      "requirement": "Decision coverage combines exhaustive pairwise critical-combination and MC/DC obligations."
+    },
+    {
+      "id": "P2D-06",
+      "requirement": "Historical capability requires direct support executable migration or explicit quarantine."
+    },
+    {
+      "id": "P2D-07",
+      "requirement": "Attempt-level effects named faults fresh-instance recovery and deterministic interleavings are first-class evidence."
+    },
+    {
+      "id": "P2D-08",
+      "requirement": "Every required mutant must be killed; survivors block."
+    },
+    {
+      "id": "P2D-09",
+      "requirement": "Canonical JSON owns the verdict; JUnit text and exit codes cannot hide or downgrade blockers."
+    },
+    {
+      "id": "P2D-10",
+      "requirement": "Phase 2 is Permission-only proof of reuse and preserves Phase 1 rev3 without Phase 3 or productization claims."
+    }
+  ],
+  "planned_implementation_evidence": [
+    "generic engine and self-test hashes",
+    "Permission adapter oracle and fixture hashes",
+    "independent-oracle import audit",
+    "model-definition negative tests",
+    "exhaustive pairwise and MC/DC evidence",
+    "complete supported-start production replay inventory",
+    "fault attempt-level effect and deterministic concurrency evidence",
+    "required mutant kill matrix",
+    "canonical JSON JUnit text projection and exit-code evidence"
+  ],
+  "non_claims": [
+    "Phase_2_implementation_complete",
+    "Phase_3_dashboard_domain_coverage",
+    "repository_wide_productization",
+    "active_workspace_mutation",
+    "runtime_safety_authority",
+    "external_side_effects"
+  ],
+  "requested_verdict": {
+    "allowed": [
+      "AGREE",
+      "AGREE_WITH_CHANGES",
+      "DISAGREE"
+    ],
+    "agreement_condition": "Both reviewers explicitly accept P2D-01 through P2D-10 against this exact canonical content hash before implementation starts."
+  }
+}

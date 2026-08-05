@@ -1,0 +1,85 @@
+{
+  "schema_version": "contextualPermissionTransitionEffectAllowlist.v1",
+  "transition_patterns": {
+    "legacy-generate": [],
+    "legacy-candidate-save": [
+      "candidates/mission_baselines/*/versions/*.json"
+    ],
+    "legacy-accept-rejected": [],
+    "proposal-generate": [],
+    "proposal-candidate-save": [
+      "candidates/mission_baselines/*/versions/*.json"
+    ],
+    "baseline-activate": [
+      "reviews/mission_baseline_accept_transactions/*.json",
+      "outputs/mission_baselines/*/reviewed/*.json",
+      "reviews/mission_baseline_accept_receipts/*.json",
+      "reviews/review_decision_log.json",
+      "project.json",
+      "outputs/contextual_permission/stale_after_baseline_acceptance.json"
+    ],
+    "baseline-activate-idempotent-retry": [],
+    "projection-admission-read": [],
+    "projection-rebuild": [
+      "reviews/contextual_permission_rebuild_transactions/*.json",
+      "outputs/planned_eta.json",
+      "candidates/contextual_permission_rules.json",
+      "outputs/contextual_permission/workbench_seed.json",
+      "project.json",
+      "outputs/contextual_permission/stale_after_baseline_acceptance.json",
+      "reviews/contextual_permission_rebuild_receipts/*.json"
+    ],
+    "projection-rebuild-idempotent-retry": [],
+    "rules-review": [
+      "reviews/contextual_permission_rule_reviews/*.json",
+      "candidates/contextual_permission_rules.json"
+    ],
+    "rules-review-idempotent-retry": [],
+    "ready-read": []
+  },
+  "fault_transition_patterns": {
+    "baseline-activate-interrupted": [
+      "reviews/mission_baseline_accept_transactions/*.json",
+      "outputs/mission_baselines/*/reviewed/*.json",
+      "reviews/mission_baseline_accept_receipts/*.json",
+      "reviews/review_decision_log.json",
+      "project.json"
+    ],
+    "baseline-activate-resume": [
+      "project.json",
+      "outputs/contextual_permission/stale_after_baseline_acceptance.json"
+    ],
+    "projection-rebuild-interrupted": [
+      "reviews/contextual_permission_rebuild_transactions/*.json",
+      "outputs/planned_eta.json",
+      "candidates/contextual_permission_rules.json",
+      "outputs/contextual_permission/workbench_seed.json"
+    ],
+    "projection-rebuild-resume": [
+      "outputs/planned_eta.json",
+      "candidates/contextual_permission_rules.json",
+      "outputs/contextual_permission/workbench_seed.json",
+      "project.json",
+      "outputs/contextual_permission/stale_after_baseline_acceptance.json",
+      "reviews/contextual_permission_rebuild_receipts/*.json"
+    ],
+    "projection-rebuild-post-recovery-rule-review": [
+      "reviews/contextual_permission_rule_reviews/*.json",
+      "candidates/contextual_permission_rules.json"
+    ]
+  },
+  "forbidden_scopes": [
+    "store",
+    "outside"
+  ],
+  "forbidden_effect_flags": [
+    "runtime_safety_truth",
+    "departure_approval_granted",
+    "active_runtime_session_updated",
+    "safety_api_called",
+    "outbound_action_performed",
+    "outbound_transport_invoked",
+    "external_send_performed",
+    "hardware_control_performed"
+  ]
+}

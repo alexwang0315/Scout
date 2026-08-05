@@ -1,0 +1,374 @@
+{
+  "packet_id": "dashboard-internal-qualification.contextual-permission.phase2.rev2",
+  "packet_schema_version": "dashboardInternalQualificationPhase2Closure.v1",
+  "created_on": "2026-08-04",
+  "review_state": "awaiting_gpt_pro_phase2_closure_verdict",
+  "content_sha256": "76247f4e723ed6cc79144707ce103400d68f180f9ec16ab283d3d328e987c027",
+  "hash_domain_contract": {
+    "canonical_content_sha256": "SHA-256 of canonical JSON with the content_sha256 member omitted",
+    "serialized_file_sha256": "SHA-256 of the complete UTF-8 JSON file including content_sha256 and formatting",
+    "identity_rule": "Both closure verdicts bind canonical_content_sha256; serialized_file_sha256 verifies archived bytes only."
+  },
+  "predecessor_lineage": {
+    "packet_id": "dashboard-internal-qualification.contextual-permission.phase2.rev1",
+    "canonical_content_sha256": "89040577fd605c83da37e80e364c5f29515885ec4228ee165dafe3fd021bf815",
+    "serialized_file_sha256": "e0b7859d480d1568e417ef680aea092ba4b7b7ea041c856f471e3c5a1ba43fea",
+    "codex_verdict": "AGREE_WITH_CHANGES_AFTER_GPT_REVIEW",
+    "gpt_pro_verdict": "AGREE_WITH_CHANGES",
+    "accepted_clauses": [
+      "P2D-01",
+      "P2D-02",
+      "P2D-03",
+      "P2D-04",
+      "P2D-05",
+      "P2D-06",
+      "P2D-09",
+      "P2D-10"
+    ],
+    "blocked_clauses": [
+      "P2D-07",
+      "P2D-08"
+    ],
+    "phase_3_authorized": false,
+    "supersession_reason": "Rev1 did not make the effect-class, fault-phase, and command-pair-by-yield coverage matrices executable and lacked a distinct required non-recovery transition-removal mutant."
+  },
+  "phase_2_design_prerequisite": {
+    "packet_id": "dashboard-internal-qualification.phase2-design.rev2",
+    "canonical_content_sha256": "f982b1f85cb324a697e6c74d27e173917553226493d8f652d5c2621b121b73bb",
+    "serialized_file_sha256": "434c9906953845fff7eba06d9908e474f2cfccad9b62d49c026941d19324ee0f",
+    "codex_verdict": "AGREE",
+    "gpt_pro_verdict": "AGREE",
+    "implementation_authorized": true
+  },
+  "phase_1_prerequisite": {
+    "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev3",
+    "canonical_content_sha256": "d9ffea5e169c874522bfe2da71244d10907b88b12301766450f661d0c7af84ed",
+    "serialized_file_sha256": "1e06a6c4eb81a68ec243590f4a3c578ed38f53a4fa103c799e45c536de4e6dc2",
+    "codex_verdict": "AGREE",
+    "gpt_pro_verdict": "AGREE",
+    "phase_1_complete": true
+  },
+  "scope": {
+    "phase": 2,
+    "proof_domain": "contextual_permission",
+    "purpose": "close the exact P2D-07 and P2D-08 evidence gaps while preserving every accepted Phase 2 rev2 design obligation",
+    "runtime_ui_surface_added": false,
+    "active_workspace_mutated": false,
+    "execution_roots": "new isolated roots only",
+    "phase_3_domain_coverage_claimed": false,
+    "productization_claimed": false,
+    "runtime_safety_authority_claimed": false
+  },
+  "authoritative_run": {
+    "run_id": "contextual-permission.phase2.16307d8ee5c9",
+    "command": "python3 tools/verify_dashboard_internal_qualification.py --domain contextual-permission --execution-dir outputs/qualification/contextual-permission-phase2-evidence-v7/execution --output-dir outputs/qualification/contextual-permission-phase2-evidence-v7/result",
+    "exit_status": 0,
+    "verdict": "pass",
+    "complete": true,
+    "artifact_schema_version": "dashboardQualificationArtifact.v1",
+    "report_schema_version": "dashboardQualificationReport.v2",
+    "canonical_content_sha256": "a7056c72a3ba9633e55e19e695801a03bbfb88335ba5b9a8b6ef993c1f41cc95",
+    "serialized_json_sha256": "26d154dad555a7108b3d21668aaf125394324f1d3a999a7bd36e1e145c7b1481",
+    "junit_sha256": "60e7302e4d442673a8b289c02c7d79024c4af0ea0cb17d48c2d886647645f72e",
+    "text_sha256": "e42fca76a66b7e5b949ac9581c9b7eab0d7dcd3302a35e9e91a62f670ae20c67",
+    "run_manifest_sha256": "2bbac7470466e0830f776694eb9a1e2b63223c27ff96c73d9c3f59ee3d0da589",
+    "counts": {
+      "reachable_states": 12,
+      "obligations": 30,
+      "production_or_quarantine_replays": 10,
+      "effect_class_audits": 7,
+      "effect_callsites": 142,
+      "effect_signatures_and_sensitive_imports": 20,
+      "effect_attempts": 41560,
+      "fault_matrix_cells": 39,
+      "required_faults": 27,
+      "not_applicable_fault_cells": 12,
+      "concurrency_conflict_pairs": 4,
+      "concurrency_schedules": 28,
+      "mutants": 11,
+      "invariants": 7,
+      "junit_testcases": 120,
+      "findings": 0,
+      "counterexamples": 0,
+      "unresolved_states": 0,
+      "failed_obligations": 0,
+      "surviving_mutants": 0
+    }
+  },
+  "run_manifest_component_sha256": {
+    "adapter": "fad65c06053ccadea234a6080e525cea85cc89771b1690b15946d5e2f27833fa",
+    "bounds": "022e31c7fd1838ed130190a91f48a2adb0d4278e7b7fd161a2e031691c76b944",
+    "concurrency": "d341977f16e710196c77770a96c541187c34ea7027779a56046259c5cdb9088c",
+    "configuration": "f75a9326e7686dc59792827ee47fe6ad72f811bee0bb5cd447ad03740790ff48",
+    "decisions": "68a94ff0136ec399e0f04590fc3c9cb37c97f25cc8f6d3415f05fab3d53e5f5b",
+    "effects": "7a3637d37f71fa8fa0bb587c622e2ae49b22c9bb61a96c7f846e2c13f59e796f",
+    "engine": "9bd3aa9dbf4611251925c769ca860e9888c9608e283607abf0a618c3fc4466ea",
+    "faults": "4805c83b4ceecf7566ea50602c889b362217ee3a6a8e6e45c6f66a06ac7cb01d",
+    "fixtures": "a5cd44407d6687cf60bd57f1e0a46327a1a0951023eb77bea7cdbce55cd955cd",
+    "history": "b003a76fcc6a3676a2aca72fde723d9216b737597a114d82fb13a58810d770ee",
+    "model": "16307d8ee5c963745c8d4850418fc1e2fa210fd9146de89585b51df0caacecf6",
+    "mutants": "c3b7c7462e7a69d85046af22aa6f0b8f7442efa2c1913bbc179c46f6ac465c29",
+    "oracle": "d06005028b067afd5a0b618023386dbaa91ea0306214ca58d2abc4ff67a47811",
+    "production": "8780183df653dd336309737844288b7885f9280b634f2b19a381df2c87ec0b4b"
+  },
+  "effect_surface_reconciliation": {
+    "production_refs": [
+      "scout_contextual_permission_workbench.py",
+      "scout_contextual_permission_workbench_api.py"
+    ],
+    "callsite_contract": "Every discovered effect callsite is source-ref/line/signature/operation/class bound; unknown or changed inventory is EFFECT-SURFACE-INCOMPLETE.",
+    "present_classes": [
+      "filesystem_store",
+      "canonical_store",
+      "harness_ipc"
+    ],
+    "absent_classes_with_static_audit_and_runtime_canary": [
+      "external_store_database",
+      "http_client",
+      "network_socket",
+      "subprocess",
+      "runtime_safety_adapter",
+      "outbound_sender",
+      "hardware_interface"
+    ],
+    "runtime_canary_contract": "Each absent-class invocation was recorded and blocked before primitive invocation; a missing, wrong-class, wrong-operation, or unblocked canary is blocking.",
+    "interception_corrections": [
+      "actual file-handle write and flush calls are wrapped and recorded",
+      "Path.replace and Path.rename validate the destination root before invocation",
+      "database, HTTP, network-socket, and subprocess primitives are intercepted",
+      "runtime/safety, outbound, and hardware policy probes are independently blocked"
+    ],
+    "result": "7 of 7 static/runtime class audits passed; 142 of 142 callsites classified; zero effect finding"
+  },
+  "fault_phase_matrix": {
+    "universe": "13 declared operations multiplied by before/inside/after equals 39 cells",
+    "required_phase_map": {
+      "fs.read": ["before", "inside", "after"],
+      "fs.mkdir": ["before", "after"],
+      "fs.open": ["before"],
+      "fs.temp_create": ["before"],
+      "fs.write": ["before", "inside", "after"],
+      "fs.flush": ["before", "inside", "after"],
+      "fs.fsync": ["before", "inside", "after"],
+      "fs.link": ["before", "after"],
+      "fs.replace": ["before", "after"],
+      "fs.delete": ["before", "after"],
+      "fs.lock": ["before", "after"],
+      "store.write": ["before", "inside", "after"],
+      "ipc.local_socket": []
+    },
+    "not_applicable_cells": [
+      "fs.mkdir:inside",
+      "fs.open:inside",
+      "fs.open:after",
+      "fs.temp_create:inside",
+      "fs.temp_create:after",
+      "fs.link:inside",
+      "fs.replace:inside",
+      "fs.delete:inside",
+      "fs.lock:inside",
+      "ipc.local_socket:before",
+      "ipc.local_socket:inside",
+      "ipc.local_socket:after"
+    ],
+    "not_applicable_rule": "Every excluded cell carries a machine-validated rationale: an atomic primitive has no independent partial boundary, or local IPC is harness-only; surrounding write primitives retain partial-failure coverage.",
+    "fresh_instance_rule": "Every required result must be activated, passed at an allowed terminal, and carry a unique non-empty fresh-workbench execution identity.",
+    "result": "27 of 27 required cells passed from 27 unique fresh workbenches; all 12 exclusions were explicit; no cell was missing or duplicated."
+  },
+  "concurrency_matrix": {
+    "shared_write_yields": [
+      "admission",
+      "journal-creation",
+      "planned-eta-write",
+      "rules-write",
+      "seed-write",
+      "stale-marker-write",
+      "project-pointer-activation",
+      "receipt-write",
+      "journal-cleanup"
+    ],
+    "conflict_pairs": [
+      {
+        "pair_id": "pair.same-snapshot-same-key",
+        "applicable_yields": 9,
+        "accepted_relation": "one shared receipt with no duplicate durable write"
+      },
+      {
+        "pair_id": "pair.same-snapshot-different-key",
+        "applicable_yields": 9,
+        "accepted_relation": "typed write-in-doubt rejection while a journal exists, otherwise deterministic snapshot conflict"
+      },
+      {
+        "pair_id": "pair.changed-upstream-identity",
+        "applicable_yields": 9,
+        "accepted_relation": "stale rejection at admission or serialized baseline activation after the in-flight rebuild"
+      },
+      {
+        "pair_id": "pair.recovery-versus-new-command",
+        "applicable_yields": 1,
+        "accepted_relation": "exact recovery wins and the genuinely new idempotency key is typed-rejected"
+      }
+    ],
+    "activation_rule": "Each result must prove the writer reached its exact yield and the contender either attempted/acquired the shared lock without overlap or reached an exact typed pre-lock terminal.",
+    "coverage_rule": "The validator derives the exact pair-by-applicable-yield cross-product and blocks one missing, duplicate, unactivated, failed, or non-fresh schedule.",
+    "result": "28 of 28 derived schedules passed with 28 unique execution identities and zero shared-write overlap."
+  },
+  "mutation_inventory": [
+    "mutant.schema-drift-without-migration",
+    "mutant.removed-recovery-edge",
+    "mutant.required-transition-removed",
+    "mutant.predicate-divergence",
+    "mutant.volatile-only-progress",
+    "mutant.partial-write-marked-fresh",
+    "mutant.stale-review-current",
+    "mutant.forbidden-outbound",
+    "mutant.supported-start-removed",
+    "mutant.nonterminal-replay-labeled-pass",
+    "mutant.omitted-semantic-observation-field"
+  ],
+  "mutation_closure": {
+    "required_transition_mutant": "save-proposal-candidate is a required non-recovery transition; isolated removal activates the exact site and is attributed to FLOW-BLOCKED for transition:save-proposal-candidate.",
+    "separation_rule": "The required-transition mutant is distinct from retry-interrupted-rebuild removal by mutation site, recovery classification, obligation, and result.",
+    "result": "11 of 11 mutants activated and were killed by their declared finding or exception mode; unrelated failures cannot count as kills."
+  },
+  "requirement_to_evidence": [
+    {
+      "acceptance_id": "P2D-01",
+      "status": "PASS",
+      "evidence": "Oracle/model dependency and observation provenance audits remain unchanged and passing."
+    },
+    {
+      "acceptance_id": "P2D-02",
+      "status": "PASS",
+      "evidence": "Frozen contracts now additionally bind callsites, effect-class results, fault cells, conflict pairs, activation, and execution identity."
+    },
+    {
+      "acceptance_id": "P2D-03",
+      "status": "PASS",
+      "evidence": "Negative tests reject one missing fault cell, one missing concurrency cell, an unclassified callsite, missing absent-class evidence, root escape, and unactivated/non-fresh results."
+    },
+    {
+      "acceptance_id": "P2D-04",
+      "status": "PASS",
+      "evidence": "30 obligations, 10 production/quarantine replays, complete graph exploration, and terminal/witness anti-forgery checks pass."
+    },
+    {
+      "acceptance_id": "P2D-05",
+      "status": "PASS",
+      "evidence": "16 exhaustive, deterministic pairwise plus four critical combinations, and four-condition MC/DC coverage remain passing."
+    },
+    {
+      "acceptance_id": "P2D-06",
+      "status": "PASS",
+      "evidence": "Provenance-bound capability inventory still reconciles direct support, executable migration, and typed quarantine."
+    },
+    {
+      "acceptance_id": "P2D-07",
+      "status": "PASS",
+      "evidence": "142 callsites, seven absent-class audits/canaries, all 39 fault cells with 27 fresh executions, and all 28 pair-by-yield schedules are manifest-enforced and executable."
+    },
+    {
+      "acceptance_id": "P2D-08",
+      "status": "PASS",
+      "evidence": "A distinct required non-recovery transition-removal mutant was added; all 11 mutants have isolated activation and exact attribution."
+    },
+    {
+      "acceptance_id": "P2D-09",
+      "status": "PASS",
+      "evidence": "Atomic canonical report round-trip, 120-case JUnit projection, text projection, hash verification, stale-root rejection, and total exit semantics pass."
+    },
+    {
+      "acceptance_id": "P2D-10",
+      "status": "PASS",
+      "evidence": "Phase 1 rev3 semantic regressions remain 78 passed; the proof remains Permission-only and claims no Phase 3 coverage."
+    }
+  ],
+  "qualification_defects_discovered_and_closed": [
+    {
+      "id": "qualification.file-handle-effect-undercount",
+      "resolution": "Audit wrappers now record the actual handle write and flush invocation instead of inferring flush from fsync."
+    },
+    {
+      "id": "qualification.path-move-destination-root-gap",
+      "resolution": "Path replace/rename validates and records the destination before invocation; an outside destination is blocked without mutation."
+    },
+    {
+      "id": "qualification.different-key-yield-oracle-too-narrow",
+      "resolution": "A contender may prove activation through exact typed pre-lock rejection when a pending journal exists; lock serialization remains required when no such terminal is reached."
+    },
+    {
+      "id": "qualification.required-transition-mutant-absent",
+      "resolution": "A separate non-recovery transition-removal mutation site and attributed FLOW-BLOCKED result were added."
+    }
+  ],
+  "executed_checks": [
+    {
+      "command": "pytest tests/qualification/test_engine.py tests/qualification/test_contextual_permission_phase2.py -q",
+      "result": "37 passed"
+    },
+    {
+      "command": "pytest tests/qualification/test_contextual_permission_phase1.py tests/test_scout_contextual_permission_workbench.py tests/test_scout_contextual_permission_workbench_api.py -q",
+      "result": "78 passed"
+    },
+    {
+      "command": "formal CLI v7 on new isolated execution and result roots",
+      "result": "exit 0; canonical PASS; complete true"
+    },
+    {
+      "command": "ruff check tests/qualification tools/verify_dashboard_internal_qualification.py",
+      "result": "pass"
+    },
+    {
+      "command": "py_compile, scoped git diff --check, and scoped secret-value pattern scan",
+      "result": "pass; no secret-value match"
+    },
+    {
+      "command": "recompute v7 run ID, run-manifest hash, component identities, fault cross-product, and concurrency cross-product from current code",
+      "result": "all exact identities and counts match"
+    }
+  ],
+  "artifact_sha256": {
+    "tests/qualification/contracts.py": "7c5b802f546be1b399b7519da8d895537bf49d34c065c5fc1e37bba3c4687b5c",
+    "tests/qualification/effects.py": "6a5475c0931f597162e896f81414888a141a07725c903c2e9da43940825d7f2f",
+    "tests/qualification/engine.py": "cd1c08c4a10de5940276742800bdab7dd5f0eaea279bbe84ab24bc569c7b8b70",
+    "tests/qualification/reporting.py": "47b0bfc332c1ae344fd3d30eb876480674fda9124935c59f11deaeec90f8356c",
+    "tests/qualification/test_engine.py": "ef0651aa573fdee07cc3b4d0430dc9edb64425a19c0127a2d62543e7cc3c3e83",
+    "tests/qualification/domains/contextual_permission_adapter.py": "fad65c06053ccadea234a6080e525cea85cc89771b1690b15946d5e2f27833fa",
+    "tests/qualification/domains/contextual_permission_runner.py": "0ca1fd24ee466941d6f0f7afc56b5a9f11dd4d34f93387bc902fcaecf575f106",
+    "tests/qualification/test_contextual_permission_phase2.py": "dbae0884cbda04675ebf26ac9a07d1151a234f90377b4804c2617aef3d8458e5",
+    "tools/verify_dashboard_internal_qualification.py": "5eaffa03a15f6615d1e639ef76c776664453e83c36753c54d9797f4897c9f4eb",
+    "scout_contextual_permission_workbench.py": "7cdd89bbd0fc74ec3149b3355d5c6e570f8d7f7875013ae5cb6512f2b066c5fe",
+    "scout_contextual_permission_workbench_api.py": "01c4dedc0d95a227fb338e3c80cced875ca6b277ae5cf1803ed2cea31b2fa890"
+  },
+  "not_claimed": [
+    "Phase_3_dashboard_domain_coverage",
+    "repository_wide_productization",
+    "runtime_Diagnostic_UI_coverage",
+    "active_workspace_mutation",
+    "runtime_safety_authority",
+    "external_side_effects",
+    "release_readiness"
+  ],
+  "required_phase_verdicts": {
+    "codex": "AGREE",
+    "gpt_pro": "pending_exact_packet_review"
+  },
+  "phase_3_authorized": false,
+  "requested_gpt_pro_response_contract": {
+    "packet_identity_required": true,
+    "allowed_verdicts": [
+      "AGREE",
+      "AGREE_WITH_CHANGES",
+      "DISAGREE"
+    ],
+    "required_fields": [
+      "canonical_content_sha256",
+      "verdict",
+      "P2D-01_through_P2D-10_disposition",
+      "blocking_gaps",
+      "claims_codex_must_verify_locally",
+      "phase_3_authorized"
+    ],
+    "agreement_condition": "GPT Pro must explicitly return AGREE with every P2D clause accepted, blocking gaps NONE, and Phase 3 authorized YES against this exact canonical content hash."
+  }
+}

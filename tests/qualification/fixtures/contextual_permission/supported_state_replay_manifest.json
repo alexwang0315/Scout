@@ -1,0 +1,79 @@
+{
+  "schema_version": "contextualPermissionSupportedStateReplayManifest.v1",
+  "replays": {
+    "no-baseline": {
+      "test_node_id": "test_no_baseline_start_replays_production_commands_to_ready",
+      "production_commands": [
+        "ContextualPermissionWorkbench.preview_baseline",
+        "ContextualPermissionWorkbench.save_baseline_candidate",
+        "ContextualPermissionWorkbench.accept_reviewed_baseline",
+        "ContextualPermissionWorkbench.rebuild_contextual_permission_projection",
+        "ContextualPermissionWorkbench.accept_contextual_permission_rules_review"
+      ],
+      "terminal_outcome": "ready"
+    },
+    "legacy-reviewed-missing": {
+      "test_node_id": "test_historical_migration_explicit_review_rebuild_and_rule_review_reach_ready",
+      "production_commands": [
+        "POST /mission-baseline/generate-draft",
+        "POST /mission-baseline/candidates",
+        "POST /mission-baseline/reviews/accept",
+        "POST /contextual-permission-dashboard/rebuilds",
+        "POST /contextual-permission-rules/reviews/accept"
+      ],
+      "terminal_outcome": "ready"
+    },
+    "legacy-reviewed-conflicting": {
+      "test_node_id": "test_legacy_conflicting_input_start_replays_repair_commands_to_ready",
+      "production_commands": [
+        "POST /mission-baseline/generate-draft (typed conflict)",
+        "repair reference_segment_timing fixture input",
+        "POST /mission-baseline/generate-draft",
+        "POST /mission-baseline/candidates",
+        "POST /mission-baseline/reviews/accept",
+        "POST /contextual-permission-dashboard/rebuilds",
+        "POST /contextual-permission-rules/reviews/accept"
+      ],
+      "terminal_outcome": "ready"
+    },
+    "proposal-current-stale": {
+      "test_node_id": "test_historical_migration_explicit_review_rebuild_and_rule_review_reach_ready",
+      "production_commands": [
+        "GET /contextual-permission-dashboard",
+        "POST /contextual-permission-dashboard/rebuilds",
+        "POST /contextual-permission-rules/reviews/accept"
+      ],
+      "terminal_outcome": "ready"
+    },
+    "projection-absent": {
+      "test_node_id": "test_projection_absent_start_replays_domain_rebuild_to_ready",
+      "production_commands": [
+        "ContextualPermissionWorkbench.projection_rebuild_admission",
+        "ContextualPermissionWorkbench.rebuild_contextual_permission_projection",
+        "ContextualPermissionWorkbench.accept_contextual_permission_rules_review"
+      ],
+      "terminal_outcome": "ready"
+    },
+    "proposal-superseded": {
+      "test_node_id": "test_superseded_proposal_start_replays_refresh_commands_to_ready",
+      "production_commands": [
+        "POST /contextual-permission-dashboard/rebuilds (stale precondition)",
+        "ContextualPermissionWorkbench.projection_rebuild_admission",
+        "ContextualPermissionWorkbench.rebuild_contextual_permission_projection",
+        "ContextualPermissionWorkbench.accept_contextual_permission_rules_review"
+      ],
+      "terminal_outcome": "ready"
+    },
+    "projection-write-in-doubt": {
+      "test_node_id": "test_rebuild_durable_write_interruption_blocks_then_rolls_forward_on_restart",
+      "production_commands": [
+        "POST /contextual-permission-dashboard/rebuilds (injected process loss)",
+        "GET /contextual-permission-dashboard (fail closed)",
+        "POST /contextual-permission-dashboard/rebuilds (same-key roll-forward)",
+        "POST /contextual-permission-rules/reviews/accept",
+        "GET /contextual-permission-dashboard (ready)"
+      ],
+      "terminal_outcome": "ready"
+    }
+  }
+}

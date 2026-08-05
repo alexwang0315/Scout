@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from scout_contextual_permission_workbench import (
     ArrivalDwellObservationRequest,
@@ -20,6 +19,7 @@ from scout_contextual_permission_workbench import (
     ContactLossReviewRequest,
     ContextualPermissionConflict,
     ContextualPermissionProjectionRebuildRequest,
+    ContextualPermissionRulesReviewRequest,
     ContextualPermissionWorkbench,
     DailyReviewInvalidationRequest,
     DayEndCloseCorrectionRequest,
@@ -40,6 +40,10 @@ from scout_contextual_permission_workbench import (
     OfflineMovementGroupIntent,
     ShelterHoldReviewRequest,
     build_reference_workbench_seed,
+)
+from scout_contextual_permission_rudy import (
+    render_daily_rudy_background,
+    rudy_cache_settings,
 )
 
 
@@ -129,19 +133,56 @@ def create_contextual_permission_workbench_router(
             if exc.code in {
                 "contextual_permission_seed_missing",
                 "reviewed_baseline_input_missing",
+                "invalid_reviewed_baseline",
+                "reviewed_baseline_hash_mismatch",
+                "reviewed_baseline_lineage_mismatch",
+                "baseline_candidate_missing",
+                "invalid_baseline_candidate",
+                "stale_candidate_hash",
+                "baseline_candidate_hash_mismatch",
+                "baseline_timing_binding_mismatch",
+                "baseline_review_receipt_missing",
+                "baseline_review_receipt_mismatch",
+                "baseline_review_receipt_hash_mismatch",
                 "contextual_permission_projection_stale",
+                "baseline_activation_write_in_doubt",
+                "contextual_permission_projection_write_in_doubt",
                 "contextual_permission_rules_missing",
                 "invalid_contextual_permission_rules",
                 "contextual_permission_rules_project_mismatch",
                 "contextual_permission_rules_baseline_mismatch",
+                "contextual_permission_rules_review_receipt_missing",
+                "contextual_permission_rules_review_receipt_hash_mismatch",
+                "contextual_permission_rules_review_receipt_mismatch",
                 "contextual_permission_rules_duplicate_node",
                 "contextual_permission_rule_missing",
                 "contextual_permission_rule_mismatch",
             }:
+                rebuild_admission = None
+                if exc.code in {
+                    "invalid_reviewed_baseline",
+                    "reviewed_baseline_hash_mismatch",
+                    "reviewed_baseline_lineage_mismatch",
+                    "baseline_candidate_missing",
+                    "invalid_baseline_candidate",
+                    "stale_candidate_hash",
+                    "baseline_candidate_hash_mismatch",
+                    "baseline_timing_binding_mismatch",
+                    "baseline_review_receipt_missing",
+                    "baseline_review_receipt_mismatch",
+                    "baseline_review_receipt_hash_mismatch",
+                    "contextual_permission_projection_stale",
+                    "baseline_activation_write_in_doubt",
+                    "contextual_permission_projection_write_in_doubt",
+                }:
+                    rebuild_admission = workbench_for(
+                        project_id, allow_stale_projection=True
+                    ).projection_rebuild_admission().model_dump(mode="json")
                 return _blocked_projection(
                     project_id,
                     exc,
                     project_root=project_root_for(project_id),
+                    rebuild_admission=rebuild_admission,
                 )
             raise _http_conflict(exc) from exc
 
@@ -170,6 +211,62 @@ def create_contextual_permission_workbench_router(
             )
         except ContextualPermissionConflict as exc:
             raise _http_conflict(exc) from exc
+
+    @router.get("/pretrip/projects/{project_id}/mission-baseline/map-context")
+    def mission_baseline_map_context(project_id: str) -> dict[str, object]:
+        try:
+            return workbench_for(
+                project_id, allow_stale_projection=True
+            ).baseline_map_context().model_dump(mode="json")
+        except ContextualPermissionConflict as exc:
+            raise _http_conflict(exc) from exc
+
+    @router.get(
+        "/pretrip/projects/{project_id}/mission-baseline/rudy-background.png"
+    )
+    def mission_baseline_rudy_background(
+        project_id: str,
+        west: float,
+        south: float,
+        east: float,
+        north: float,
+    ) -> Response:
+        try:
+            project_root = project_root_for(project_id)
+            context = workbench_for(
+                project_id, allow_stale_projection=True
+            ).baseline_map_context()
+            background = render_daily_rudy_background(
+                project_id=project_id,
+                context=context,
+                cache_settings=rudy_cache_settings(project_root),
+                west=west,
+                south=south,
+                east=east,
+                north=north,
+            )
+        except ContextualPermissionConflict as exc:
+            raise _http_conflict(exc) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "invalid_rudy_background", "message": str(exc)},
+            ) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "rudy_background_unavailable", "message": str(exc)},
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "rudy_background_render_failed", "message": str(exc)},
+            ) from exc
+        return Response(
+            background.body,
+            media_type="image/png",
+            headers=background.headers(),
+        )
 
     @router.post("/pretrip/projects/{project_id}/mission-baseline/generate-draft")
     def generate_mission_baseline_draft(
@@ -254,6 +351,22 @@ def create_contextual_permission_workbench_router(
             return workbench_for(
                 project_id, allow_stale_projection=True
             ).rebuild_contextual_permission_projection(request).model_dump(mode="json")
+        except ContextualPermissionConflict as exc:
+            raise _http_conflict(exc) from exc
+
+    @router.post(
+        "/pretrip/projects/{project_id}/contextual-permission-rules/reviews/accept"
+    )
+    def accept_contextual_permission_rules_review(
+        project_id: str,
+        request: ContextualPermissionRulesReviewRequest,
+    ) -> dict[str, object]:
+        try:
+            return workbench_for(
+                project_id, allow_stale_projection=True
+            ).accept_contextual_permission_rules_review(request).model_dump(
+                mode="json"
+            )
         except ContextualPermissionConflict as exc:
             raise _http_conflict(exc) from exc
 
@@ -715,6 +828,7 @@ def _blocked_projection(
     error: ContextualPermissionConflict,
     *,
     project_root: Path,
+    rebuild_admission: dict[str, object] | None = None,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
         "artifact_kind": "contextual_permission_dashboard_projection",
@@ -735,43 +849,11 @@ def _blocked_projection(
             "hardware_control_performed": False,
         },
     }
-    if error.code == "contextual_permission_projection_stale":
-        try:
-            project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            project = {}
-        if not isinstance(project, dict):
-            project = {}
-        reviewed_sha256 = project.get("reviewed_mission_baseline_sha256")
-        if isinstance(reviewed_sha256, str) and re.fullmatch(r"[a-f0-9]{64}", reviewed_sha256):
-            rebuild_eligible = False
-            reviewed_ref = project.get("reviewed_mission_baseline_ref")
-            if isinstance(reviewed_ref, str) and reviewed_ref:
-                reviewed_path = (project_root / reviewed_ref).resolve()
-                if project_root in reviewed_path.parents and reviewed_path.is_file():
-                    try:
-                        reviewed = json.loads(reviewed_path.read_text(encoding="utf-8"))
-                    except (OSError, json.JSONDecodeError):
-                        reviewed = {}
-                    if not isinstance(reviewed, dict):
-                        reviewed = {}
-                    trail_days = [
-                        day
-                        for day in reviewed.get("days") or []
-                        if isinstance(day, dict) and day.get("day_kind") == "on_trail"
-                    ]
-                    rebuild_eligible = (
-                        reviewed.get("proposal_profile") == "ref_gpx_proposal_v1"
-                        and bool(trail_days)
-                        and all(day.get("primary_day_end_proposal") for day in trail_days)
-                    )
-            payload["rebuild"] = {
-                "required": True,
-                "eligible": rebuild_eligible,
-                "reviewed_baseline_sha256": reviewed_sha256,
-                "explicit_confirmation_required": True,
-                "active_runtime_session_updated": False,
-            }
+    if rebuild_admission is not None:
+        payload["rebuild"] = {
+            **rebuild_admission,
+            "required": True,
+        }
     return payload
 
 

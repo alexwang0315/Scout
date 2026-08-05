@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +14,24 @@ from scout_contextual_permission_workbench import build_reference_workbench_seed
 
 PROJECT_ID = "permission_api_fixture"
 NOW = datetime(2026, 8, 2, 6, 0, tzinfo=timezone.utc)
+
+
+def _explicit_day_end_inputs() -> list[dict[str, str]]:
+    return [
+        {
+            "input_id": f"api-day-end-{index}",
+            "target_anchor_id": anchor_id,
+            "actor": "test_fixture_input",
+            "decision_ref": f"qualification://api-day-end/{index}",
+            "decision_sha256": hashlib.sha256(
+                f"api-day-end-{index}:{anchor_id}".encode("utf-8")
+            ).hexdigest(),
+        }
+        for index, anchor_id in enumerate(
+            ("cp.001", "cp.003", "cp.finish"),
+            start=1,
+        )
+    ]
 
 
 def _client(
@@ -91,8 +111,13 @@ def _client(
         project = json.loads(project_path.read_text(encoding="utf-8"))
         project.update(
             {
+                "admin_projection_ref": "outputs/admin_projection.json",
                 "reference_segment_timing_ref": "outputs/reference_segment_timing.json",
                 "retreat_routes_ref": "candidates/retreat_routes.json",
+                "imagery_tile_cache_root": str(tmp_path / "rudy_tiles"),
+                "imagery_tile_cache_source_id": "happyman_rudy_twmap",
+                "imagery_tile_cache_min_zoom": 5,
+                "imagery_tile_cache_max_zoom": 5,
             }
         )
         project_path.write_text(json.dumps(project), encoding="utf-8")
@@ -130,6 +155,26 @@ def _client(
             ),
             encoding="utf-8",
         )
+        (project_root / "outputs" / "admin_projection.json").write_text(
+            json.dumps(
+                {
+                    "artifact_kind": "pretrip_admin_projection",
+                    "route": {
+                        "distance_m": 90_000.0,
+                        "display_geometry": {
+                            "coordinates": [
+                                {
+                                    "lat": 23.56 - (index * 0.002),
+                                    "lon": 120.93 + (index * 0.003),
+                                }
+                                for index in range(17)
+                            ]
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         (project_root / "candidates" / "retreat_routes.json").write_text(
             json.dumps(
                 [
@@ -142,6 +187,15 @@ def _client(
             ),
             encoding="utf-8",
         )
+        from PIL import Image, ImageDraw
+
+        rudy_tile_path = tmp_path / "rudy_tiles" / PROJECT_ID / "imagery" / "5" / "26" / "13.png"
+        rudy_tile_path.parent.mkdir(parents=True, exist_ok=True)
+        rudy_tile = Image.new("RGB", (256, 256), color=(57, 79, 61))
+        draw = ImageDraw.Draw(rudy_tile)
+        draw.line((0, 210, 256, 42), fill=(220, 205, 149), width=5)
+        draw.text((18, 18), "RUDY FIXTURE", fill=(238, 239, 220))
+        rudy_tile.save(rudy_tile_path, format="PNG")
     store_root = tmp_path / "permission_store"
     app = create_admin_app(
         pretrip_workspace_root=workspace_root,
@@ -262,6 +316,66 @@ def test_reference_gpx_generate_draft_returns_auto_proposal_for_compact_review(
     assert payload["review_requirements"]["safety_handoff_required"] is True
     assert payload["writes_performed"] is False
     assert not store_root.exists()
+
+
+def test_mission_baseline_map_context_get_is_compact_and_no_write(
+    tmp_path: Path,
+) -> None:
+    client, store_root = _client(tmp_path, rich_reference=True)
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/mission-baseline/map-context"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifact_kind"] == "mission_baseline_map_context"
+    assert payload["schema_version"] == "missionBaselineMapContext.v1"
+    assert payload["route_length_m"] == 90_000.0
+    assert 2 <= len(payload["route_points"]) <= 600
+    assert payload["route_points"][0]["route_order_m"] == 0.0
+    assert payload["route_points"][-1]["route_order_m"] == 90_000.0
+    assert any(anchor["anchor_id"] == "cp.001" for anchor in payload["anchors"])
+    assert payload["presentation_only"] is True
+    assert payload["candidate_only"] is True
+    assert payload["runtime_safety_truth"] is False
+    assert payload["writes_performed"] is False
+    assert not store_root.exists()
+
+
+def test_mission_baseline_daily_rudy_background_is_one_read_only_png(
+    tmp_path: Path,
+) -> None:
+    client, store_root = _client(tmp_path, rich_reference=True)
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/mission-baseline/rudy-background.png",
+        params={
+            "west": 120.925,
+            "south": 23.50,
+            "east": 120.985,
+            "north": 23.565,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["x-scout-rudy-background"] == "single-composite-image"
+    assert response.headers["x-scout-imagery-source-id"] == "happyman_rudy_twmap"
+    assert response.headers["x-scout-writes-performed"] == "false"
+    assert int(response.headers["x-scout-source-tile-count"]) >= 1
+    from PIL import Image
+
+    with Image.open(io.BytesIO(response.content)) as image:
+        assert image.format == "PNG"
+        assert image.size == (760, 248)
+    assert not store_root.exists()
+
+    outside_route = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/mission-baseline/rudy-background.png",
+        params={"west": 10, "south": 10, "east": 11, "north": 11},
+    )
+    assert outside_route.status_code == 422
 
 
 def test_safety_emergency_review_uses_one_packet_and_append_only_receipt(
@@ -536,10 +650,12 @@ def test_cross_page_arrival_command_reduces_the_same_group_aggregate(
     assert closed["pending_next_day"] == "D2"
 
 
-def test_baseline_accept_marks_permission_projection_stale_without_runtime_rebind(
+def test_legacy_baseline_cannot_be_accepted_or_stale_permission_projection(
     tmp_path: Path,
 ) -> None:
     client, _ = _client(tmp_path)
+    project_path = tmp_path / "workspace" / PROJECT_ID / "project.json"
+    project_before = json.loads(project_path.read_text(encoding="utf-8"))
     prefix = f"/admin/pretrip/projects/{PROJECT_ID}/mission-baseline"
     draft_response = client.post(
         f"{prefix}/preview",
@@ -571,15 +687,14 @@ def test_baseline_accept_marks_permission_projection_stale_without_runtime_rebin
             "explicit_confirmation": True,
         },
     )
-    assert accepted.status_code == 200
-    assert accepted.json()["active_runtime_session_updated"] is False
-    blocked = client.get(
+    assert accepted.status_code == 409
+    assert accepted.json()["detail"]["code"] == "baseline_migration_required"
+    assert json.loads(project_path.read_text(encoding="utf-8")) == project_before
+    projection = client.get(
         f"/admin/pretrip/projects/{PROJECT_ID}/contextual-permission-dashboard"
     )
-    assert blocked.status_code == 200
-    assert blocked.json()["status"] == "blocked"
-    assert blocked.json()["error"]["code"] == "contextual_permission_projection_stale"
-    assert blocked.json()["rebuild"]["eligible"] is False
+    assert projection.status_code == 200
+    assert projection.json()["status"] == "ready"
 
     authoring_remains_available = client.post(
         f"{prefix}/generate-draft",
@@ -590,6 +705,8 @@ def test_baseline_accept_marks_permission_projection_stale_without_runtime_rebin
     )
     assert authoring_remains_available.status_code == 200
     assert authoring_remains_available.json()["writes_performed"] is False
+    assert authoring_remains_available.json()["validation_state"] == "blocked"
+    assert authoring_remains_available.json()["migration_state"] == "required"
 
     (tmp_path / "workspace" / PROJECT_ID / "candidates" / "contextual_permission_rules.json").unlink()
     authoring_survives_missing_derived_rules = client.post(
@@ -613,6 +730,7 @@ def test_explicit_rebuild_binds_reviewed_proposal_without_runtime_authority(
         json={
             "mode": "reference_gpx",
             "reference_route_ref": "outputs/compiled_mission_graph.reviewed.json",
+            "day_end_inputs": _explicit_day_end_inputs(),
         },
     )
     assert generated.status_code == 200
@@ -666,6 +784,12 @@ def test_explicit_rebuild_binds_reviewed_proposal_without_runtime_authority(
             "expected_reviewed_baseline_sha256": reviewed[
                 "reviewed_baseline_sha256"
             ],
+            "expected_admission_snapshot_sha256": blocked.json()["rebuild"][
+                "canonical_snapshot_sha256"
+            ],
+            "expected_evaluator_version": blocked.json()["rebuild"][
+                "evaluator_version"
+            ],
             "idempotency_key": "api-permission-rebuild-001",
             "explicit_confirmation": True,
         },
@@ -687,6 +811,12 @@ def test_explicit_rebuild_binds_reviewed_proposal_without_runtime_authority(
         json={
             "expected_reviewed_baseline_sha256": reviewed[
                 "reviewed_baseline_sha256"
+            ],
+            "expected_admission_snapshot_sha256": blocked.json()["rebuild"][
+                "canonical_snapshot_sha256"
+            ],
+            "expected_evaluator_version": blocked.json()["rebuild"][
+                "evaluator_version"
             ],
             "idempotency_key": "api-permission-rebuild-001",
             "explicit_confirmation": True,

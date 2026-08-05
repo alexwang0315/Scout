@@ -1,0 +1,353 @@
+{
+  "packet_id": "dashboard-internal-qualification.phase3-design.rev2",
+  "packet_schema_version": "dashboardInternalQualificationPhase3Design.v2",
+  "created_on": "2026-08-04",
+  "review_state": "submitted_for_joint_design_review",
+  "content_sha256": "5a3b14b3ea9fd64a086bb106b277140c0bb0ecc5ef3d6ed8415e347f43736112",
+  "hash_domain_contract": {
+    "canonical_content_sha256": "SHA-256 of canonical JSON with the content_sha256 member omitted",
+    "serialized_file_sha256": "SHA-256 of the complete UTF-8 JSON file including content_sha256 and formatting",
+    "identity_rule": "Both design verdicts bind canonical_content_sha256; serialized_file_sha256 verifies archived bytes only."
+  },
+  "predecessor_lineage": {
+    "path": "docs/evals/dashboard-internal-qualification-phase3-design.json",
+    "canonical_content_sha256": "9bfe427f0c596981f632d587af4400a5f2591ce34cd8e0a59fc8bf5f559b1dc8",
+    "serialized_file_sha256": "7053e33a27a4bbef752455e390c114228149aec052dbcaddd31e716caf92646f",
+    "disposition": "immutable_rejected_history",
+    "gpt_pro_verdict": "AGREE_WITH_CHANGES",
+    "phase_3_implementation_authorized": false
+  },
+  "prerequisites": {
+    "phase_2_design_canonical_sha256": "f982b1f85cb324a697e6c74d27e173917553226493d8f652d5c2621b121b73bb",
+    "phase_2_closure_canonical_sha256": "76247f4e723ed6cc79144707ce103400d68f180f9ec16ab283d3d328e987c027",
+    "phase_2_closure_serialized_sha256": "decf5f20f8e36a88f65e72b5278c323bbf4fc2d1a749d13c93519927e5bf6164",
+    "phase_2_report_canonical_sha256": "a7056c72a3ba9633e55e19e695801a03bbfb88335ba5b9a8b6ef993c1f41cc95",
+    "phase_2_report_serialized_sha256": "26d154dad555a7108b3d21668aaf125394324f1d3a999a7bd36e1e145c7b1481",
+    "phase_2_joint_verdict": "AGREE",
+    "phase_3_design_authorized": true
+  },
+  "design_source": {
+    "path": "docs/specs/scout-dashboard-internal-qualification.md",
+    "sha256": "6303a772e4be69b626f87708c97b162289f5fbc33c8678427dc4f3235b0e2a75",
+    "sections": ["9.1", "9.2", "9.3", "9.4", "9.5", "9.6", "9.7", "9.8", "9.9", "9.10", "9.11", "9.12", "9.13", "9.14", "9.15"]
+  },
+  "scope": {
+    "phase": 3,
+    "purpose": "source-complete multi-domain Dashboard program-logic qualification and aggregate pre-release gate",
+    "domain_count": 9,
+    "runtime_diagnostic_ui_is_oracle": false,
+    "runtime_diagnostic_ui_modified": false,
+    "real_active_workspace_read": false,
+    "real_active_workspace_mutated": false,
+    "runtime_safety_truth_mutated": false,
+    "external_outbound_or_hardware_invoked": false,
+    "construction_closure_uses_synthetic_workspace": true,
+    "production_readiness_claimed": false
+  },
+  "rev1_blocker_disposition": [
+    {
+      "clause": "P3D-01",
+      "status": "accepted",
+      "rev2_change": "DashboardExecutableEntrypointManifest closes backend lifecycle middleware dependency background WebSocket SSE CLI worker scheduler watcher tool and frontend event timer storage network worker postMessage and dynamic dispatch entrypoints; exclusions require absence of every semantic or effect contract."
+    },
+    {
+      "clause": "P3D-03",
+      "status": "accepted",
+      "rev2_change": "DomainRiskProfile derives a mechanical minimum tier from immutable hazard axes; gate decision coverage is tier-independent; every N/A binds absent callsites and an executable infeasibility witness."
+    },
+    {
+      "clause": "P3D-04",
+      "status": "accepted",
+      "rev2_change": "CrossDomainDependencyManifest is source and replay derived and reconciles exactly with the declared DAG; producer-consumer races are mandatory at every shared boundary."
+    },
+    {
+      "clause": "P3D-06",
+      "status": "accepted",
+      "rev2_change": "AuthorityBoundaryManifest closes artifact-to-authority sinks; confirmations and admissions bind exact subject and policy identities; sentinel taint checks cover persisted and all report log and exception projections."
+    },
+    {
+      "clause": "P3D-07",
+      "status": "accepted",
+      "rev2_change": "Total EffectOperationInventory normalizes every state-affecting primitive; fresh processes and workbenches are mandatory; CommandConflictManifest derives all intra and cross-domain conflict pairs from complete command resource sets."
+    },
+    {
+      "clause": "P3D-08",
+      "status": "accepted",
+      "rev2_change": "New isolated mutants target risk downgrade forged N/A non-route entrypoint dependency conflict receipt staleness workspace TOCTOU and stale or mixed aggregate evidence."
+    },
+    {
+      "clause": "P3D-09",
+      "status": "accepted",
+      "rev2_change": "WorkspaceInventorySnapshot completely enumerates no-follow metadata retains unknown entries detects path aliases mount changes hard links and concurrent mutation and binds release to matching before and after seals."
+    }
+  ],
+  "executable_entrypoint_manifest": {
+    "reachability_roots": [
+      "canonical Dashboard HTML and bootstrap script",
+      "Dashboard and admin app/router factories",
+      "registered HTTP WebSocket and SSE handlers",
+      "resolved dependencies middleware callbacks background tasks and lifecycle hooks",
+      "registered CLI worker scheduler watcher and tool callbacks reachable from Dashboard surfaces"
+    ],
+    "backend_entrypoint_classes": [
+      "http_method_path_handler",
+      "websocket_or_sse_handler",
+      "middleware",
+      "dependency",
+      "background_task",
+      "startup_lifespan_shutdown_hook",
+      "module_import_hook",
+      "cli_main",
+      "worker_or_scheduler_callback",
+      "watcher_callback",
+      "tool_registration_and_dispatch"
+    ],
+    "frontend_entrypoint_classes": [
+      "event_listener_or_property_handler",
+      "timer_interval_animation_callback",
+      "fetch_or_network_constructor",
+      "websocket_eventsource_worker",
+      "local_or_session_storage",
+      "postmessage_or_frame_bridge",
+      "data_route_or_object_map_dynamic_dispatch",
+      "startup_and_hashchange_dispatch"
+    ],
+    "record_fields": [
+      "entrypoint_id",
+      "source_ref",
+      "line",
+      "symbol",
+      "entrypoint_class",
+      "registration_site",
+      "reachable_target",
+      "semantic_classes",
+      "effect_classes",
+      "domain_id",
+      "disposition",
+      "source_sha256"
+    ],
+    "allowed_dispositions": ["qualified_domain", "presentation_only_shell", "separate_runtime_diagnostic", "executable_infeasibility_exclusion"],
+    "exclusion_rule": "An exclusion has zero semantic freshness authorization external-read or effect contract and carries an executable infeasibility witness.",
+    "unknown_syntax_or_dynamic_dispatch": "INVALID_RUN",
+    "duplicate_or_unmapped": "SURFACE-INVENTORY-DRIFT",
+    "tests_or_runtime_diagnostic_are_oracle": false
+  },
+  "canonical_route_disposition": [
+    ["home", "dashboard-shell-control"],
+    ["features-workspace", "workspace-lifecycle"],
+    ["features-import-new-trip", "workspace-lifecycle"],
+    ["features-country-material-pool", "workspace-lifecycle"],
+    ["map", "geospatial-weather-navigation"],
+    ["timeline", "dashboard-shell-control"],
+    ["features-lbs", "geospatial-weather-navigation"],
+    ["outdoor-route-context", "route-intelligence"],
+    ["outdoor-pace-fit", "route-intelligence"],
+    ["outdoor-pace-fit-body-index", "body-index-privacy"],
+    ["outdoor-permission", "contextual-permission"],
+    ["outdoor-architecture", "route-intelligence"],
+    ["outdoor-weather", "geospatial-weather-navigation"],
+    ["outdoor-navigation", "geospatial-weather-navigation"],
+    ["emergency", "safety-emergency"],
+    ["agent", "assistant-planner"],
+    ["living", "safety-emergency"],
+    ["surface-debug", "dashboard-shell-control"],
+    ["debug", "dashboard-shell-control"],
+    ["observer", "observer-hardware-boundary"],
+    ["settings", "dashboard-shell-control"],
+    ["diagnostic", "separate-runtime-diagnostic"]
+  ],
+  "domain_queue": [
+    ["contextual-permission", "inherited_phase_2"],
+    ["safety-emergency", 0],
+    ["workspace-lifecycle", 0],
+    ["geospatial-weather-navigation", 1],
+    ["route-intelligence", 1],
+    ["assistant-planner", 1],
+    ["body-index-privacy", 1],
+    ["observer-hardware-boundary", 1],
+    ["dashboard-shell-control", 2]
+  ],
+  "domain_risk_profile": {
+    "immutable_axes": [
+      "runtime_or_safety_authority",
+      "privacy_sensitivity",
+      "durable_publication",
+      "shared_writers",
+      "external_effects",
+      "human_confirmation",
+      "background_or_watch_execution",
+      "downstream_decision_impact"
+    ],
+    "axis_sources": ["entrypoint manifest", "effect inventory", "authority manifest", "command resource sets", "dependency manifest", "persisted capability inventory"],
+    "tier_zero_floor": "runtime or safety authority OR shared durable authority writer",
+    "tier_one_floor": "privacy sensitive OR durable writer OR human confirmation OR background/watch OR external effect OR downstream decision impact",
+    "tier_two_eligibility": "independently proved pure read presentation or browser-local shell logic with no downstream decision effect",
+    "declared_below_derived_floor": "INVALID_RUN",
+    "tier_independent_high_risk_decision_gates": ["safety", "privacy", "admission", "confirmation", "authorization", "authority transition"],
+    "decision_coverage": ["exhaustive small domains", "deterministic pairwise", "mandatory critical combinations", "MC/DC per high-risk Boolean condition"],
+    "not_applicable_contract": ["risk_profile_sha256", "exact_absent_callsite_set_sha256", "executable_infeasibility_witness_id", "witness_activation_proof"],
+    "forged_or_unactivated_not_applicable": "INVALID_RUN"
+  },
+  "per_domain_contract": {
+    "independent_observations": true,
+    "production_claims_define_oracle": false,
+    "required_state_contracts": ["finite semantic axes", "supported start states", "transitions", "terminals", "root blockers", "monotone recovery rank"],
+    "applicable_fixture_classes": ["current", "known historical", "malformed", "unknown version", "stale upstream", "interrupted write"],
+    "fixture_applicability_is_manifested": true,
+    "required_trajectories": ["production-backed success", "typed failure or quarantine", "every advertised recovery"],
+    "unknown_semantics": "INVALID_RUN",
+    "contextual_permission_rule": "exact Phase 2 report and semantics are rerun and cannot be replaced or diluted"
+  },
+  "cross_domain_dependency_manifest": {
+    "discovery_sources": [
+      "artifact write and publication callsites",
+      "artifact read and load callsites",
+      "command read and write sets",
+      "admission snapshots",
+      "parent identity and hash fields",
+      "persisted artifact refs and schema identities",
+      "tool plans and tool manifests",
+      "freshness and invalidation branches",
+      "instrumented production replay effect traces"
+    ],
+    "edge_fields": ["producer", "consumer", "producer_domain", "consumer_domain", "artifact_class", "join_fields", "freshness_rule", "invalidation_trigger", "recovery_transition", "authority_influence", "source_callsites"],
+    "declared_dag_must_equal_discovered_inventory": true,
+    "unknown_duplicate_unresolved_or_omitted_edge": "INVALID_RUN",
+    "expectations_derived_from_raw_identity_not_production_fresh_flag": true,
+    "edge_state_cases": ["unchanged", "upstream_changed", "consumer_missing", "consumer_stale", "wrong_parent", "mixed_generation"],
+    "accepted_outcomes": ["fully_rebuilt_matching_identity", "explicit_stale_with_executable_recovery", "typed_quarantine"],
+    "producer_consumer_yields": ["admission", "durable_publication", "pointer_activation", "invalidation", "recovery", "consumer_read"],
+    "shared_edge_race_cross_product_required": true,
+    "minimum_authority_edges": ["body_index_to_pace_advisory_only", "observer_to_deterministic_safety_admission_only", "assistant_direct_to_runtime_forbidden"]
+  },
+  "authority_boundary_manifest": {
+    "artifact_classes": ["raw", "candidate", "advisory", "normalized", "sanitized", "reviewed", "approved", "runtime_authoritative"],
+    "sink_classes": ["durable_publication", "runtime_state", "runtime_safety_truth", "outbound", "hardware"],
+    "source_to_sink_graph_source_derived": true,
+    "receipt_identity_fields": ["subject_id", "subject_sha256", "capability_id", "generation", "actor", "policy_version", "evaluator_version", "scope", "idempotency_key"],
+    "subject_or_policy_change_stales_receipt": true,
+    "generic_boolean_confirmation_sufficient": false,
+    "missing_identity_field_result": "AUTHORITY-RECEIPT-INCOMPLETE",
+    "private_sentinel_sources": ["raw route coordinate", "raw health value", "private filesystem path", "credential-like field", "exact private timestamp"],
+    "sentinel_sinks_checked": ["persisted artifacts", "findings", "canonical JSON", "JUnit", "text report", "captured logs", "exception messages"],
+    "sentinel_non_propagation_required": true,
+    "sanitized_derivative_requires_transform_and_identity_contract": true
+  },
+  "effect_operation_inventory": {
+    "source": "all state-affecting primitive callsites discovered from entrypoint-reachable production sources plus instrumented replay attempts",
+    "normalization_required": true,
+    "unknown_operation": "INVALID_RUN",
+    "minimum_operation_families": ["read", "open", "mkdir", "temp", "write", "flush", "fsync", "link", "replace", "delete", "lock", "store", "database", "http", "socket", "subprocess", "runtime safety adapter", "outbound", "hardware"],
+    "fault_phases": ["before", "inside", "after"],
+    "applicable_cell_requires": ["fresh_process_identity", "fresh_workbench_identity", "activation proof", "exact injected callsite and phase", "allowed typed terminal"],
+    "partial_publication_is_fresh": false,
+    "not_applicable_requires_risk_and_infeasibility_contract": true
+  },
+  "command_conflict_manifest": {
+    "command_fields": ["command_id", "domain_id", "entrypoint_id", "read_set", "write_set", "lock_set", "journal_set", "pointer_set", "receipt_set", "identity_set", "source_callsites", "replay_observations"],
+    "derivation": "static source inventory reconciled exactly with instrumented production replay sets",
+    "unresolved_or_inconsistent_resource_set": "INVALID_RUN",
+    "conflict_derivation": "all intra and cross-domain commands whose resource or identity sets conflict",
+    "schedule_derivation": "every conflict pair crossed with every applicable admission journal durable-write pointer receipt cleanup invalidation recovery and consumer-read yield",
+    "minimum_conflicts_where_applicable": ["same key retry", "different key command", "stale snapshot", "recovery versus genuinely new command", "watch start versus stop", "import versus publication", "producer refresh versus consumer read"],
+    "fresh_process_and_workbench_per_schedule": true,
+    "missing_pair_yield_or_activation": "INVALID_RUN"
+  },
+  "mutation_policy": {
+    "isolated": true,
+    "activation_required": true,
+    "exact_attribution_required": true,
+    "unrelated_crash_is_kill": false,
+    "required_classes": [
+      "all retained Phase 2 mutants",
+      "minimum risk tier downgraded",
+      "not applicable witness forged",
+      "non-route executable entrypoint removed",
+      "required cross-domain edge removed",
+      "required conflict pair removed",
+      "required shared yield removed",
+      "confirmation reused after subject hash change",
+      "admission reused after policy or generation change",
+      "workspace concurrent mutation accepted",
+      "workspace unknown entry omitted",
+      "workspace symlink hardlink or mount escape accepted",
+      "stale foreign-run or mixed-run domain evidence accepted by aggregate",
+      "privacy sentinel propagated",
+      "authority or candidate boundary bypassed",
+      "aggregate omitted domain",
+      "aggregate incomplete evidence exit zero"
+    ],
+    "survivor_result": "MUTATION-SURVIVED"
+  },
+  "workspace_inventory_snapshot": {
+    "explicit_root_required": true,
+    "read_only": true,
+    "complete_entry_enumeration": true,
+    "unknown_entries_retained_as_blocking_redacted_path_identities": true,
+    "content_reads": "only whitelisted metadata artifacts opened no-follow",
+    "entry_metadata": ["path_digest", "type", "device", "inode", "link_count", "size", "mtime_ns", "ctime_ns", "permitted_content_sha256"],
+    "root_metadata": ["device", "inode", "generation_marker_if_present"],
+    "path_rules": ["no symlink traversal", "no mount crossing", "permitted metadata link_count equals one", "no root escape", "opened file fstat matches enumerated lstat"],
+    "consistency": ["before seal", "inventory", "per-file post-read fstat", "after seal", "matching generation and manifest hashes", "repeat seal before release finalization"],
+    "concurrent_add_delete_replace_or_metadata_change": "INVALID_RUN",
+    "raw_route_or_health_payload_read": false,
+    "allowed_capability_dispositions": ["direct support", "executable migration", "typed quarantine non-ready"],
+    "release_binds_exact_snapshot_identity": true
+  },
+  "aggregate_contract": {
+    "construction_all": "nine domains plus dependency races entrypoint and surface reconciliation mutations and retained Phase 1 and 2 gates against generated synthetic workspace",
+    "release": "all plus exact explicit sealed workspace snapshot",
+    "release_without_workspace_snapshot": "INVALID_RUN",
+    "per_domain_report_identity_bound": ["run_id", "aggregate_run_id", "source_manifest_sha256", "domain_model_sha256", "workspace_snapshot_sha256_or_none"],
+    "stale_foreign_or_mixed_run_report": "INVALID_RUN",
+    "outputs": ["per-domain canonical JSON", "aggregate canonical JSON", "JUnit", "text"],
+    "finalization": ["temporary write", "fsync", "atomic replace", "reread", "schema validation", "content hash validation", "projection parity"],
+    "exit_zero": "complete invoked claim with every required case and no blocking finding",
+    "exit_one": "complete invoked claim with blocking findings",
+    "exit_two": "invalid incomplete unsafe stale mismatched omitted or partial evidence",
+    "omitted_domain_can_pass": false
+  },
+  "design_acceptance": [
+    {"id": "P3D-01", "requirement": "Source-derived surface and executable-entrypoint closure maps routes APIs handlers dependencies middleware lifecycle background CLI watch callbacks frontend events timers storage network and dynamic dispatch production symbols and persisted capabilities exactly once; semantic or effect exclusions need executable evidence and drift blocks."},
+    {"id": "P3D-02", "requirement": "Nine domain specs use independent observations and finite state terminal recovery contracts with current historical malformed stale and interrupted fixtures as applicable."},
+    {"id": "P3D-03", "requirement": "A source-bound hazard profile derives minimum risk tier and all obligations; downgrade blocks and each N/A has absent-callsite evidence plus an executable infeasibility witness."},
+    {"id": "P3D-04", "requirement": "A source-derived producer-consumer inventory exactly reconciles the DAG enforces identity freshness rebuild-or-stale closure blocks wrong and mixed generations and derives producer-consumer race schedules."},
+    {"id": "P3D-05", "requirement": "Contextual Permission is an exact retained Phase 2 prerequisite and cannot be weakened by the aggregate adapter."},
+    {"id": "P3D-06", "requirement": "A source-to-authority-sink manifest enforces safety privacy candidate confirmation and admission boundaries; receipts bind exact subject and policy identities and sentinels prove non-propagation through every output log and error projection."},
+    {"id": "P3D-07", "requirement": "A total effect-operation inventory and source plus replay-derived command resource sets derive all fault and intra or cross-domain schedule cells; faults use fresh processes and workbenches and every uncovered or unactivated cell blocks."},
+    {"id": "P3D-08", "requirement": "Domain and cross-domain mutants have isolated activation and exact attribution including tier N-A non-route entrypoint dependency conflict receipt staleness workspace TOCTOU stale or mixed aggregate and retained false-pass classes."},
+    {"id": "P3D-09", "requirement": "Explicit active-workspace inventory is a complete read-only metadata-bounded sealed snapshot; unknown entries block path aliases mounts hardlinks escape and concurrent mutation are detected and every capability reconciles to support migration or quarantine."},
+    {"id": "P3D-10", "requirement": "All and release modes have distinct claims; aggregate canonical identity atomic output projection parity exact run binding and total exit semantics prevent omitted-domain stale-run or incomplete-evidence passes."},
+    {"id": "P3D-11", "requirement": "Closure evidence includes focused domain and cross-domain tests retained Phase 1 and 2 regressions source-manifest recomputation and exact per-domain aggregate fault schedule mutation and projection reconciliation."},
+    {"id": "P3D-12", "requirement": "Phase 3 remains internal pre-release qualification separate from runtime Diagnostic UI and makes no unearned production real-workspace runtime-safety outbound or hardware claim."}
+  ],
+  "local_design_verification": {
+    "rev1_canonical_and_serialized_hashes_recomputed": true,
+    "phase_2_prerequisite_hashes_recomputed": true,
+    "canonical_routes_observed": 22,
+    "canonical_routes_dispositioned_in_rev2": 22,
+    "country_material_pool_has_semantic_local_state_and_trip_intake_defaults": true,
+    "lbs_reads_project_projection_and_emits_location_map_evidence": true,
+    "frontend_non_route_event_timer_storage_fetch_and_dynamic_dispatch_observed": true,
+    "backend_middleware_and_watcher_callbacks_observed": true,
+    "generic_confirmation_shapes_observed_and_not_presumed_authoritative": true,
+    "current_all_mode_exit": 2,
+    "real_private_workspace_inspected": false,
+    "claims_deferred_to_implementation": ["complete entrypoint reconciliation", "complete discovered dependency graph", "complete command resource sets", "all authority receipts fully bound", "active workspace snapshot feasibility"]
+  },
+  "non_claims": [
+    "phase_3_implementation_complete",
+    "runtime_diagnostic_replacement",
+    "real_active_workspace_qualified",
+    "production_readiness",
+    "repository_wide_productization",
+    "runtime_safety_authority",
+    "external_outbound",
+    "real_hardware_control"
+  ],
+  "requested_verdict": {
+    "allowed": ["AGREE", "AGREE_WITH_CHANGES", "DISAGREE"],
+    "agreement_condition": "Both reviewers explicitly accept P3D-01 through P3D-12 against this exact canonical content hash before Phase 3 implementation starts.",
+    "implementation_authorized_before_joint_agreement": false
+  }
+}

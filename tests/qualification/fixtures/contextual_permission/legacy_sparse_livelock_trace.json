@@ -1,0 +1,78 @@
+{
+  "fixture_id": "contextual-permission.legacy-sparse-livelock.v1",
+  "schema_version": "dashboardQualificationTrace.v1",
+  "supported_historical_start": true,
+  "source_evidence": [
+    "tests/test_scout_contextual_permission_workbench_api.py#test_baseline_accept_marks_permission_projection_stale_without_runtime_rebind",
+    "scout_contextual_permission_workbench.py#rebuild_contextual_permission_projection"
+  ],
+  "start_state_id": "legacy-reviewed-stale",
+  "states": [
+    {
+      "state_id": "legacy-reviewed-stale",
+      "baseline_capability": "legacy_sparse.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "missing",
+      "baseline_review_binding": "current",
+      "migration": "none",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "blocked",
+      "outcome": "invalid",
+      "root_blocker_ids": ["untyped:projection_rebuild_ineligible"],
+      "artifact_identity": "historical-reviewed-baseline"
+    },
+    {
+      "state_id": "regenerated-legacy-stale",
+      "baseline_capability": "legacy_sparse.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "missing",
+      "baseline_review_binding": "current",
+      "migration": "none",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "blocked",
+      "outcome": "invalid",
+      "root_blocker_ids": ["untyped:projection_rebuild_ineligible"],
+      "artifact_identity": "new-legacy-draft"
+    }
+  ],
+  "transitions": [
+    {
+      "transition_id": "generate-ref-gpx-legacy-1",
+      "source_state_id": "legacy-reviewed-stale",
+      "target_state_id": "regenerated-legacy-stale",
+      "actor": "repair_action",
+      "intent": "repair_action",
+      "advertised_as_recovery": true,
+      "typed_no_progress": false,
+      "http_status": 200,
+      "recovery_rank_before": 3,
+      "recovery_rank_after": 3,
+      "effects": [
+        "http_status:200",
+        "writes_performed:false",
+        "artifact_identity:new-legacy-draft"
+      ],
+      "forbidden_effects": []
+    },
+    {
+      "transition_id": "generate-ref-gpx-legacy-2",
+      "source_state_id": "regenerated-legacy-stale",
+      "target_state_id": "regenerated-legacy-stale",
+      "actor": "repair_action",
+      "intent": "repair_action",
+      "advertised_as_recovery": true,
+      "typed_no_progress": false,
+      "http_status": 200,
+      "recovery_rank_before": 3,
+      "recovery_rank_after": 3,
+      "effects": [
+        "http_status:200",
+        "writes_performed:false",
+        "artifact_identity:new-legacy-draft"
+      ],
+      "forbidden_effects": []
+    }
+  ]
+}

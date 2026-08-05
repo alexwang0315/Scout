@@ -1,0 +1,41 @@
+{
+  "schema_version": "contextualPermissionHistoricalCapabilityInventory.v1",
+  "source_paths": [
+    "scout_contextual_permission_workbench.py",
+    "tests/qualification/fixtures/contextual_permission/supported_state_catalog.json",
+    "docs/evals/dashboard-internal-qualification-phase1-closure-rev3.json"
+  ],
+  "records": [
+    {
+      "schema_version": "contextual-permission.capability.v1",
+      "capability_id": "legacy_sparse.v1",
+      "discovered_from": [
+        "scout_contextual_permission_workbench.py",
+        "tests/qualification/fixtures/contextual_permission/supported_state_catalog.json",
+        "docs/evals/dashboard-internal-qualification-phase1-closure-rev3.json"
+      ],
+      "disposition": "executable_migration",
+      "migration_or_recovery_id": "compatibility.legacy-to-ref-gpx"
+    },
+    {
+      "schema_version": "contextual-permission.capability.v1",
+      "capability_id": "ref_gpx_proposal.v1",
+      "discovered_from": [
+        "scout_contextual_permission_workbench.py",
+        "tests/qualification/fixtures/contextual_permission/supported_state_catalog.json",
+        "docs/evals/dashboard-internal-qualification-phase1-closure-rev3.json"
+      ],
+      "disposition": "direct_support"
+    },
+    {
+      "schema_version": "contextual-permission.capability.v1",
+      "capability_id": "unknown_or_unsupported",
+      "discovered_from": [
+        "scout_contextual_permission_workbench.py",
+        "tests/qualification/fixtures/contextual_permission/supported_state_catalog.json"
+      ],
+      "disposition": "quarantined",
+      "migration_or_recovery_id": "quarantine.unsupported"
+    }
+  ]
+}

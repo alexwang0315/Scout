@@ -1,0 +1,255 @@
+{
+  "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev3",
+  "packet_schema_version": "dashboardInternalQualificationClosure.v3",
+  "created_on": "2026-08-04",
+  "review_state": "awaiting_gpt_pro_rev3_verdict",
+  "content_sha256": "d9ffea5e169c874522bfe2da71244d10907b88b12301766450f661d0c7af84ed",
+  "hash_domain_contract": {
+    "canonical_content_sha256": "SHA-256 of canonical JSON with the content_sha256 member omitted",
+    "serialized_file_sha256": "SHA-256 of the complete UTF-8 JSON file including content_sha256 and formatting",
+    "identity_rule": "Review verdicts bind canonical_content_sha256; serialized_file_sha256 verifies the archived file bytes. They are intentionally distinct identities."
+  },
+  "predecessor_lineage": [
+    {
+      "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev1",
+      "canonical_content_sha256": "74a58ad238bdde9f609ea1bd19a71a8d0dbbbcda063f305cc359eb56471f429f",
+      "serialized_file_sha256": "ca1f0ba2f64cb16e340c25e1dca5272e87063d8fe8501ef5f06be5c26d128ea9",
+      "gpt_pro_verdict": "AGREE_WITH_CHANGES",
+      "superseded_by": "dashboard-internal-qualification.contextual-permission.phase1.rev2"
+    },
+    {
+      "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev2",
+      "canonical_content_sha256": "cf6551967ecd14404c2c6926940340cb2986a2023110bd1bdd754b9fd6f563ed",
+      "serialized_file_sha256": "d0478ce00f2add3a98ff870ce7670a27862764857b51c0851b60684ffa01647d",
+      "gpt_pro_verdict": "AGREE_WITH_CHANGES",
+      "superseded_by": "dashboard-internal-qualification.contextual-permission.phase1.rev3"
+    }
+  ],
+  "rev2_blocker_disposition": [
+    {
+      "blocker_id": "packet-lineage-hash-domain-ambiguity",
+      "status": "CLOSED",
+      "evidence": "hash_domain_contract and predecessor_lineage independently record the submitted canonical identity and archived serialized-file identity for rev1 and rev2"
+    },
+    {
+      "blocker_id": "projection-write-in-doubt-production-replay-nonterminal",
+      "status": "CLOSED",
+      "evidence": "the injected rebuild-crash replay now performs the production rule-review command after same-key roll-forward and independently observes projection=fresh, policy_review=current, outcome=ready, forbidden_effects=[]"
+    },
+    {
+      "blocker_id": "manifest-terminal-contract-too-weak",
+      "status": "CLOSED",
+      "evidence": "manifest validation now rejects any terminal_outcome outside ready or safely_blocked_for_migration; all seven current production replays declare ready"
+    }
+  ],
+  "scope": {
+    "domain": "contextual_permission",
+    "phase": 1,
+    "runtime_ui_surface_added": false,
+    "active_workspace_mutated": false,
+    "qualification_workspace_policy": "isolated_temporary_and_sanitized_fixture_only"
+  },
+  "contracts": {
+    "rebuild_command_id": "contextual_permission_projection_rebuild",
+    "rebuild_evaluator_version": "contextual-permission.projection-rebuild-admission.v1",
+    "baseline_migration_contract_version": "contextual-permission.baseline-migration.v1",
+    "baseline_capabilities": [
+      "legacy_sparse.v1",
+      "ref_gpx_proposal.v1"
+    ],
+    "accepted_production_replay_terminals": [
+      "ready",
+      "safely_blocked_for_migration"
+    ],
+    "supported_start_count": 7,
+    "supported_start_production_replay_count": 7,
+    "supported_start_unmapped_count": 0,
+    "current_supported_start_terminal_counts": {
+      "ready": 7,
+      "safely_blocked_for_migration": 0
+    },
+    "promotion_requires_explicit_day_end_input": true,
+    "automatic_day_end_proposal_is_review_ready": false
+  },
+  "artifact_sha256": {
+    "docs/specs/scout-dashboard-internal-qualification.md": "46532b4e7c0310900faf462d08486af1e1c9bd9b0178b59ae3e68f8578cfd213",
+    "scout_contextual_permission_workbench.py": "70abf08964801109189c1180b1fa7fc69911fcf16319f5e50f15227ddb755b53",
+    "scout_contextual_permission_workbench_api.py": "01c4dedc0d95a227fb338e3c80cced875ca6b277ae5cf1803ed2cea31b2fa890",
+    "tests/qualification/contextual_permission_phase1.py": "412fd8f1bb61001e75d63ca296d91c82a8348b1cede04710a5300289818e6194",
+    "tests/qualification/test_contextual_permission_phase1.py": "57b5e89a90193e8186c42437a7d7e30d7bc5f976acd97c6e0ce0466c131125ea",
+    "tests/qualification/fixtures/contextual_permission/legacy_sparse_livelock_trace.json": "2ca76938141cabea0bbc4f12352b1dde6675135174685f597f8d01f22922f502",
+    "tests/qualification/fixtures/contextual_permission/supported_state_catalog.json": "0088ba2b47392c84e87631981b73b4277695aeb0fee47b4de59acd8ece242839",
+    "tests/qualification/fixtures/contextual_permission/supported_state_replay_manifest.json": "e15158da85ecadd53a26adee0366cdaee71bf1cf4f73b8203ee8a64368a926b1",
+    "tests/qualification/fixtures/contextual_permission/transition_effect_allowlist.json": "3f51a71da882c0f7f4b7a02d8b09ef35f795baf8e3b393616e02d86c7886382c",
+    "tests/test_scout_contextual_permission_workbench.py": "48498b2f89f861fca3c6d50b53fa447d3c29b3e5b4e7924f411a40df4667d7a4",
+    "tests/test_scout_contextual_permission_workbench_api.py": "39a9f20a4d8728c90da6e15b31d454806938a5e94dc95b295ed7a83ac0402897",
+    "docs/admin/scout-dashboard-v0.1.html": "38a2b35a514223bf53d5760b2d7bc4b508cd6a6a4d1a14206e39adedb480880d",
+    "tests/test_scout_dashboard_page.py": "ec7b0969dfec37abdd81cd3037da9ca9f0d762643d1ee243a981dc9e61e5da7e"
+  },
+  "requirement_to_evidence": [
+    {
+      "acceptance_id": "AC-01",
+      "status": "PASS",
+      "evidence": [
+        "legacy_sparse_livelock_trace.json",
+        "test_historical_trace_reports_shortest_closed_livelock",
+        "closed non-terminal SCC and shortest two-transition counterexample"
+      ]
+    },
+    {
+      "acceptance_id": "AC-02",
+      "status": "PASS",
+      "evidence": [
+        "independent raw-artifact state extractor",
+        "test_historical_legacy_state_exposes_one_root_migration_contract",
+        "no production admission evaluator import or call"
+      ]
+    },
+    {
+      "acceptance_id": "AC-03",
+      "status": "PASS",
+      "evidence": [
+        "test_observed_admission_snapshot_rejects_upstream_replacement_without_writes",
+        "test_predicate_divergence_mutation_canary_fails"
+      ]
+    },
+    {
+      "acceptance_id": "AC-04",
+      "status": "PASS",
+      "evidence": [
+        "test_missing_reference_timing_is_typed_migration_no_progress",
+        "test_new_legacy_candidate_cannot_activate_or_stale_current_projection"
+      ]
+    },
+    {
+      "acceptance_id": "AC-05",
+      "status": "PASS",
+      "evidence": [
+        "test_day_end_targets_require_explicit_pre_candidate_input_provenance",
+        "explicit input ID, actor, decision ref and decision SHA bound before candidate creation",
+        "automatic proposal candidate review_ready=false"
+      ]
+    },
+    {
+      "acceptance_id": "AC-06",
+      "status": "PASS",
+      "evidence": [
+        "separate capability-discriminator mutation",
+        "separate source-baseline-hash mutation",
+        "separate current-dependency-hash mutation",
+        "separate migration-contract-version mutation",
+        "production and independent oracle both report non-ready"
+      ]
+    },
+    {
+      "acceptance_id": "AC-07",
+      "status": "PASS",
+      "evidence": [
+        "supported_state_replay_manifest.json maps 7 of 7 starts",
+        "the focused suite executes every named FastAPI/domain replay",
+        "manifest validation permits only ready or safely_blocked_for_migration",
+        "all seven current replays terminate at ready",
+        "projection-write-in-doubt replay independently observes fresh/current/ready after production rule review"
+      ]
+    },
+    {
+      "acceptance_id": "AC-08",
+      "status": "PASS",
+      "evidence": [
+        "test_baseline_activation_interruption_blocks_then_rolls_forward_on_restart",
+        "test_rebuild_durable_write_interruption_blocks_then_rolls_forward_on_restart",
+        "both journals precede multi-file effects and require exact-key recovery"
+      ]
+    },
+    {
+      "acceptance_id": "AC-09",
+      "status": "PASS",
+      "evidence": [
+        "attempt-level transition_effect_allowlist.json",
+        "13 normal/retry/read transitions",
+        "5 fault/resume/post-recovery transitions",
+        "transient journals observed before write",
+        "zero store or outside-workspace write attempts and zero forbidden flags"
+      ]
+    },
+    {
+      "acceptance_id": "AC-10",
+      "status": "PASS",
+      "evidence": [
+        "original defect fails",
+        "corrected production trajectories pass",
+        "progress, predicate, review-binding and forbidden-effect mutants fail"
+      ]
+    }
+  ],
+  "projection_write_in_doubt_terminal_witness": {
+    "trajectory": [
+      "inject process loss after workbench seed replace",
+      "restart reports contextual_permission_projection_write_in_doubt",
+      "same-key production rebuild rolls forward",
+      "production exact-node rule-review command succeeds",
+      "Dashboard reports ready",
+      "independent oracle reports projection=fresh",
+      "independent oracle reports policy_review=current",
+      "independent oracle reports outcome=ready"
+    ],
+    "forbidden_effects": [],
+    "journal_remaining_after_recovery": false
+  },
+  "effect_boundary": {
+    "instrumentation": "attempt_level_before_write_primitive",
+    "normal_transition_count": 13,
+    "fault_and_post_recovery_transition_count": 5,
+    "transient_journal_writes_observed": true,
+    "allowed_root": "pytest temporary project workspace",
+    "canonical_store_untouched": true,
+    "outside_workspace_write_attempts": 0,
+    "runtime_safety_truth": false,
+    "departure_approval_granted": false,
+    "active_runtime_session_updated": false,
+    "safety_api_called": false,
+    "outbound_action_performed": false,
+    "outbound_transport_invoked": false,
+    "external_send_performed": false,
+    "hardware_control_performed": false
+  },
+  "executed_checks": [
+    {
+      "command": "pytest tests/qualification/test_contextual_permission_phase1.py -q -rA",
+      "result": "26 passed"
+    },
+    {
+      "command": "pytest tests/test_scout_contextual_permission_workbench_api.py tests/test_scout_contextual_permission_workbench.py tests/qualification/test_contextual_permission_phase1.py -q",
+      "result": "78 passed"
+    },
+    {
+      "command": "ruff check on changed Permission and qualification modules",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m py_compile on production Permission and qualification modules",
+      "result": "pass"
+    },
+    {
+      "command": "pytest tests/test_scout_dashboard_page.py::test_contextual_permission_workbench_uses_typed_projection_and_dedicated_scope -q -rA",
+      "result": "1 passed"
+    },
+    {
+      "command": "git diff check, secret-pattern scan, packet JSON, predecessor hash-domain and artifact-hash verification",
+      "result": "pass"
+    }
+  ],
+  "not_claimed": [
+    "Phase_2_reusable_engine_completion",
+    "Phase_3_dashboard_domain_coverage",
+    "repository_wide_productization",
+    "real_active_workspace_mutation",
+    "runtime_safety_authority",
+    "external_side_effects"
+  ],
+  "required_phase_verdicts": {
+    "codex": "AGREE",
+    "gpt_pro": "pending_rev3_review"
+  },
+  "phase_2_authorized": false
+}
