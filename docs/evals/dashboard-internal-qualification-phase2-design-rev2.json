@@ -1,0 +1,426 @@
+{
+  "packet_id": "dashboard-internal-qualification.phase2-design.rev2",
+  "packet_schema_version": "dashboardInternalQualificationDesign.v2",
+  "created_on": "2026-08-04",
+  "review_state": "submitted_for_joint_design_review",
+  "content_sha256": "f982b1f85cb324a697e6c74d27e173917553226493d8f652d5c2621b121b73bb",
+  "hash_domain_contract": {
+    "canonical_content_sha256": "SHA-256 of canonical JSON with the content_sha256 member omitted",
+    "serialized_file_sha256": "SHA-256 of the complete UTF-8 JSON file including content_sha256 and formatting",
+    "identity_rule": "Both design verdicts bind canonical_content_sha256; serialized_file_sha256 verifies archived bytes only."
+  },
+  "predecessor_lineage": [
+    {
+      "packet_id": "dashboard-internal-qualification.phase2-design.rev1",
+      "canonical_content_sha256": "eee5d4d5dbbf7a67ddb7a02e2f16ed98c24b58660b21610f82630da5eb79ce04",
+      "serialized_file_sha256": "f744cd599544f0d665e3851fdfd4007a2cc9727613fb6cc82a70ef9861a2de2f",
+      "gpt_pro_verdict": "AGREE_WITH_CHANGES",
+      "implementation_authorized": false,
+      "superseded_by": "dashboard-internal-qualification.phase2-design.rev2"
+    }
+  ],
+  "phase_1_prerequisite": {
+    "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev3",
+    "canonical_content_sha256": "d9ffea5e169c874522bfe2da71244d10907b88b12301766450f661d0c7af84ed",
+    "serialized_file_sha256": "1e06a6c4eb81a68ec243590f4a3c578ed38f53a4fa103c799e45c536de4e6dc2",
+    "codex_verdict": "AGREE",
+    "gpt_pro_verdict": "AGREE",
+    "phase_1_complete": true
+  },
+  "design_source": {
+    "path": "docs/specs/scout-dashboard-internal-qualification.md",
+    "sha256": "28da1abe57ab9d255331ce97904111182ba11554acd2c2f02cab2c235f2d609a",
+    "sections": [
+      "8.1",
+      "8.2",
+      "8.3",
+      "8.4",
+      "8.5",
+      "8.6",
+      "8.7",
+      "8.8",
+      "8.9",
+      "8.10"
+    ]
+  },
+  "rev1_blocker_disposition": [
+    {
+      "clauses": ["P2D-01", "P2D-03"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "ObservationEnvelope classifies every field path by semantic provenance; production response claims and production semantic schemas defaults classifiers constants and helpers are barred from oracle expectation derivation."
+    },
+    {
+      "clauses": ["P2D-02", "P2D-09"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "QualificationRunManifest binds all engine domain production fixture inventory schedule mutant configuration clock seed and Phase 1 identities into the authoritative report."
+    },
+    {
+      "clauses": ["P2D-02", "P2D-03", "P2D-06"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "TerminalSpec distinguishes ready safe_external_action_required and quarantined; non-ready terminals may carry external obligations but never satisfy readiness or expose an immediate machine-repair edge."
+    },
+    {
+      "clauses": ["P2D-03", "P2D-04"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "Complete observation-field inventory and projection-equivalence validation reject semantic collisions and require an omitted-semantic-field canary."
+    },
+    {
+      "clauses": ["P2D-04"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "Production coverage maps every supported start and every required transition recovery blocker resolution compatibility path and terminal to a replay or explicit infeasibility witness."
+    },
+    {
+      "clauses": ["P2D-06"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "HistoricalCapabilityInventory reconciles provenance-bound production contracts classifiers release or migration manifests fixtures and predecessor packets before execution."
+    },
+    {
+      "clauses": ["P2D-03", "P2D-07", "P2D-10"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "EffectSurfaceManifest combines static inventory and runtime interception for reads filesystem store database network subprocess runtime outbound and hardware surfaces; undeclared attempts and read-root escapes block."
+    },
+    {
+      "clauses": ["P2D-07"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "Faults cover before inside and after applicable effect primitives; concurrency uses a conflict matrix and deterministic yields through every durable write cleanup and recovery."
+    },
+    {
+      "clauses": ["P2D-08"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "MutationSpec and MutationResult require isolated execution activation proof exercised obligation and exact expected finding or detection attribution."
+    },
+    {
+      "clauses": ["P2D-09"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "Unique clean result roots and atomic canonical finalize reread schema validation and hash verification precede projections; exit 2 covers any invalid or incomplete run even after production execution starts."
+    },
+    {
+      "clauses": ["P2D-10"],
+      "status": "CLOSED_IN_REV2_DESIGN",
+      "change": "Phase 2 must reproduce the exact Phase 1 rev3 defect dual witness terminal recovery effect and canary semantics; migration_required remains non-ready."
+    }
+  ],
+  "local_verification": {
+    "phase_2_rev1_canonical_hash_recomputed": true,
+    "phase_2_rev1_serialized_hash_recomputed": true,
+    "phase_1_rev3_canonical_hash_recomputed": true,
+    "phase_1_rev3_focused_replay": "26 passed",
+    "phase_1_rev3_artifact_hash_status": "all production fixture qualification API and Dashboard artifacts match; the living specification alone has expected Phase 2 design evolution",
+    "current_permission_effect_surface_evidence": [
+      "filesystem reads",
+      "mkdir",
+      "file open and advisory lock",
+      "temporary file creation",
+      "write flush and fsync",
+      "hard link",
+      "atomic replace",
+      "unlink cleanup"
+    ],
+    "historical_capability_sources_found": [
+      "production Pydantic literal contracts",
+      "production capability classification paths",
+      "retained qualification fixtures",
+      "predecessor closure packets"
+    ]
+  },
+  "scope": {
+    "phase": 2,
+    "proof_domain": "contextual_permission",
+    "purpose": "extract and prove a reusable internal qualification engine from accepted Phase 1 mechanisms",
+    "runtime_ui_surface_added": false,
+    "active_workspace_mutated": false,
+    "allowed_workspace_modes": [
+      "new_isolated_temporary_root",
+      "exact_hash_read_only_snapshot_for_proven_read_only_commands",
+      "copy_of_snapshot_in_new_isolated_root_for_mutating_commands"
+    ],
+    "phase_3_domain_coverage_claimed": false,
+    "productization_claimed": false
+  },
+  "qualification_run_manifest": {
+    "immutable_fields": [
+      "run_id",
+      "engine_hashes",
+      "domain_model_hash",
+      "oracle_hash",
+      "adapter_hash",
+      "production_file_or_revision_hashes",
+      "fixture_manifest_hash",
+      "historical_inventory_hash",
+      "effect_surface_hash",
+      "search_bound_hash",
+      "decision_table_hash",
+      "fault_schedule_hash",
+      "concurrency_schedule_hash",
+      "mutant_manifest_hash",
+      "configuration_hash",
+      "deterministic_clock",
+      "deterministic_seed",
+      "phase_1_prerequisite_hash"
+    ],
+    "mismatch_result": "INVALID_RUN",
+    "bound_into_authoritative_report": true
+  },
+  "semantic_independence": {
+    "observation_field_provenance_classes": [
+      "raw_persisted_fact",
+      "command_response_claim",
+      "exact_identity",
+      "attempted_effect",
+      "volatile_metadata"
+    ],
+    "production_claims_forbidden_as_oracle_inputs": [
+      "eligible",
+      "ready",
+      "blocker labels",
+      "recovery labels",
+      "capability labels",
+      "freshness labels"
+    ],
+    "oracle_imports_forbidden": [
+      "production DTOs",
+      "production generated semantic schemas",
+      "production defaults",
+      "production classifiers",
+      "production decision constants",
+      "production helper functions",
+      "production adapter"
+    ],
+    "adapter_imports_oracle": false,
+    "enforcement": [
+      "import audit",
+      "negative dependency tests",
+      "response-claim contamination canary",
+      "independent qualification decoder"
+    ]
+  },
+  "immutable_contracts": [
+    "QualificationRunManifest",
+    "ObservationEnvelope",
+    "StateVector",
+    "TerminalSpec",
+    "TransitionSpec",
+    "DomainModel",
+    "ObservedTransition",
+    "ObligationSpec",
+    "ObligationResult",
+    "EffectSurfaceManifest",
+    "FaultSpec",
+    "FaultResult",
+    "ConcurrencyScheduleSpec",
+    "ConcurrencyScheduleResult",
+    "HistoricalCapabilityInventory",
+    "MutationSpec",
+    "MutationResult",
+    "Finding",
+    "Counterexample",
+    "QualificationReport"
+  ],
+  "terminal_semantics": {
+    "kinds": [
+      "ready",
+      "safe_external_action_required",
+      "quarantined"
+    ],
+    "ready_rule": "No outstanding obligation and ready=true.",
+    "non_ready_rule": "May carry typed human input operator recovery or export obligations; ready=false and no immediately executable machine-repair transition.",
+    "migration_required_is_ready": false
+  },
+  "projection_and_validation": {
+    "field_inventory_classes": [
+      "semantic",
+      "identity_only",
+      "effect_only",
+      "volatile",
+      "ignored_with_rationale"
+    ],
+    "projection_equivalence_rule": "Observations differing in a contract-relevant field cannot collapse to one StateVector or progress signature without a named independently tested equivalence.",
+    "required_canary": "omitted_semantic_field",
+    "unknown_semantic_value_result": "INVALID_MODEL_OR_OBSERVATION",
+    "input_read_rule": "Every read is runtime-confined to the isolated root or exact-hash read-only snapshot; symlinks escapes mutations and undeclared reads block.",
+    "pre_execution_invalid_cases": [
+      "duplicate or broken graph identity",
+      "missing supported start",
+      "invalid terminal obligation",
+      "root blocker without recovery or quarantine",
+      "component identity mismatch",
+      "incomplete effect surface",
+      "historical inventory disagreement",
+      "output root escape"
+    ]
+  },
+  "exploration_and_coverage": {
+    "finite_graph": "complete reachability and SCC with stable-ID tie break for equal shortest counterexamples",
+    "production_exhaustion_result": "COVERAGE-INCOMPLETE",
+    "required_production_mappings": [
+      "every supported start",
+      "every required declarative transition",
+      "every advertised recovery",
+      "every typed blocker resolution",
+      "every compatibility or migration path",
+      "every accepted terminal"
+    ],
+    "mapping_alternative": "explicit provenance-bound infeasibility or quarantine witness",
+    "decision_coverage": {
+      "small_tables": "exhaustive",
+      "larger_tables": "deterministic pairwise plus mandatory critical combinations",
+      "high_risk_boolean_gates": "MC/DC or explicit infeasibility witness",
+      "input_forms": ["valid", "false_when_applicable", "missing", "invalid"],
+      "capability_forms": ["current", "historical", "unknown", "quarantined"]
+    },
+    "progress_rule": "Semantic axes and immutable identities only; volatile-only change cannot prove progress."
+  },
+  "historical_capability_inventory": {
+    "authoritative_sources": [
+      "production literal and schema contracts",
+      "production capability classification paths",
+      "declared release and migration manifests",
+      "retained accepted fixtures",
+      "predecessor closure packets"
+    ],
+    "source_identities_bound_to_run": true,
+    "discovered_declared_disagreement_result": "COVERAGE-GAP",
+    "allowed_dispositions": [
+      "direct_support",
+      "executable_migration_to_supported_capability",
+      "explicit_quarantine_with_detection_reason_and_operator_recovery_or_export"
+    ],
+    "parseability_counts_as_support": false
+  },
+  "effect_surface": {
+    "discovery": [
+      "static production call-site and import inventory",
+      "runtime effect interception",
+      "forbidden-effect canaries"
+    ],
+    "applicable_classes": [
+      "filesystem reads",
+      "mkdir open temporary-create write flush fsync link rename replace delete lock",
+      "canonical store and database",
+      "socket and HTTP client",
+      "subprocess",
+      "runtime and safety adapter",
+      "outbound sender",
+      "hardware interface"
+    ],
+    "absent_class_rule": "Requires negative call-site and import audit plus runtime canary.",
+    "undeclared_attempt_result": "FORBIDDEN-EFFECT",
+    "record_before_invocation": true,
+    "read_confinement_enforced": true
+  },
+  "fault_and_concurrency": {
+    "fault_generation": "derive before inside and after points from each applicable effect primitive",
+    "fault_examples": [
+      "partial append",
+      "temporary artifact",
+      "write flush and fsync",
+      "link and atomic replace",
+      "delete cleanup",
+      "journal and pointer"
+    ],
+    "allowed_fault_terminals": [
+      "complete_pre_state",
+      "complete_post_state",
+      "typed_exact_key_recoverable_write_in_doubt"
+    ],
+    "fresh_instance_required": true,
+    "concurrency_source": "domain-declared conflicting-command matrix",
+    "yield_points": [
+      "admission",
+      "journal creation",
+      "every durable write",
+      "pointer activation",
+      "cleanup",
+      "recovery"
+    ],
+    "required_schedules": [
+      "same snapshot same key",
+      "same snapshot different keys",
+      "changed upstream identity",
+      "recovery racing a new command",
+      "every declared conflicting pair at each applicable shared-state yield"
+    ],
+    "uncovered_result": "COVERAGE-INCOMPLETE"
+  },
+  "mutation_policy": {
+    "required_contracts": ["MutationSpec", "MutationResult"],
+    "required_fields": [
+      "mutant_id",
+      "exact_site_and_change",
+      "activation_proof",
+      "exercised_obligation",
+      "expected_stable_finding_or_detection_mode",
+      "observed_attributed_result"
+    ],
+    "execution": "isolated deterministic differential run per mutant",
+    "unrelated_failure_counts_as_kill": false,
+    "survivor_result": "MUTATION-SURVIVED",
+    "required_mutants": [
+      "schema_or_capability_drift_without_migration",
+      "hidden_prerequisite_or_removed_recovery_edge",
+      "read_command_predicate_divergence",
+      "volatile_only_progress",
+      "partial_write_marked_fresh",
+      "stale_review_or_dependency_marked_current",
+      "forbidden_effect",
+      "supported_start_or_required_transition_removed",
+      "nonaccepted_terminal_mislabeled_pass",
+      "omitted_semantic_observation_field"
+    ]
+  },
+  "outputs_and_exit": {
+    "result_root": "unique and empty; stale output is rejected or removed before execution",
+    "canonical_finalize": [
+      "write temporary canonical JSON",
+      "atomic replace",
+      "reread",
+      "schema validate",
+      "hash verify"
+    ],
+    "projection_source": "finalized canonical JSON only",
+    "projection_obligations": "JUnit and text preserve canonical verdict plus exact stable IDs and severities of all blocking or incomplete obligations.",
+    "exit_codes": {
+      "0": "all required obligations complete and finalized canonical report is clean",
+      "1": "complete valid finalized canonical report contains blocking findings",
+      "2": "any invalid or incomplete model fixture execution report projection or runner state before or after production execution"
+    }
+  },
+  "phase_1_semantic_regression": {
+    "bound_packet_sha256": "d9ffea5e169c874522bfe2da71244d10907b88b12301766450f661d0c7af84ed",
+    "required_outcomes": [
+      "original legacy livelock detected with shortest counterexample",
+      "production claim and independent oracle dual witness preserved",
+      "machine-only safe migration terminal remains non-ready",
+      "explicit external input path reaches ready",
+      "baseline activation crash and exact-key recovery preserved",
+      "projection rebuild crash exact-key recovery and rule review to ready preserved",
+      "attempt-level forbidden-effect boundaries preserved",
+      "all Phase 1 required canaries retain expected findings"
+    ],
+    "semantic_mismatch_result": "PHASE1-REGRESSION"
+  },
+  "design_acceptance": [
+    {"id": "P2D-01", "requirement": "Dependency and provenance enforcement prevents production semantic claims schemas defaults classifiers constants or helpers from defining oracle expectations."},
+    {"id": "P2D-02", "requirement": "Immutable contracts cover run identity observations states terminals transitions obligations effects faults schedules history mutations findings counterexamples and report."},
+    {"id": "P2D-03", "requirement": "Fail-closed validation rejects undeclared fields projection collisions graph recovery effect read output identity and unknown-semantic defects."},
+    {"id": "P2D-04", "requirement": "Complete finite exploration and transition-complete production replay coverage cannot convert incomplete evidence into pass."},
+    {"id": "P2D-05", "requirement": "Decision coverage combines exhaustive pairwise critical-combination and MC/DC obligations."},
+    {"id": "P2D-06", "requirement": "Provenance-bound historical discovery reconciles every accepted capability to support migration or quarantine."},
+    {"id": "P2D-07", "requirement": "Complete effect and read interception in-primitive faults fresh recovery conflict matrix and shared-state schedules are mandatory."},
+    {"id": "P2D-08", "requirement": "Every required mutant has activation and exact detection attribution; unrelated failures cannot kill it."},
+    {"id": "P2D-09", "requirement": "Run identity atomic canonical completion projections and total exit semantics cannot hide invalid stale or incomplete evidence."},
+    {"id": "P2D-10", "requirement": "Permission-only reuse proof exactly preserves Phase 1 rev3 defect terminal recovery effect and canary semantics with no Phase 3 or productization claim."}
+  ],
+  "non_claims": [
+    "Phase_2_implementation_complete",
+    "Phase_3_dashboard_domain_coverage",
+    "repository_wide_productization",
+    "active_workspace_mutation",
+    "runtime_safety_authority",
+    "external_side_effects"
+  ],
+  "requested_verdict": {
+    "allowed": ["AGREE", "AGREE_WITH_CHANGES", "DISAGREE"],
+    "agreement_condition": "Both reviewers explicitly accept P2D-01 through P2D-10 against this exact canonical content hash before implementation starts."
+  }
+}

@@ -1,0 +1,378 @@
+{
+  "packet_id": "dashboard-internal-qualification.contextual-permission.phase2.rev1",
+  "packet_schema_version": "dashboardInternalQualificationPhase2Closure.v1",
+  "created_on": "2026-08-04",
+  "review_state": "awaiting_gpt_pro_phase2_closure_verdict",
+  "content_sha256": "89040577fd605c83da37e80e364c5f29515885ec4228ee165dafe3fd021bf815",
+  "hash_domain_contract": {
+    "canonical_content_sha256": "SHA-256 of canonical JSON with the content_sha256 member omitted",
+    "serialized_file_sha256": "SHA-256 of the complete UTF-8 JSON file including content_sha256 and formatting",
+    "identity_rule": "Both closure verdicts bind canonical_content_sha256; serialized_file_sha256 verifies archived bytes only."
+  },
+  "phase_2_design_prerequisite": {
+    "packet_id": "dashboard-internal-qualification.phase2-design.rev2",
+    "canonical_content_sha256": "f982b1f85cb324a697e6c74d27e173917553226493d8f652d5c2621b121b73bb",
+    "serialized_file_sha256": "434c9906953845fff7eba06d9908e474f2cfccad9b62d49c026941d19324ee0f",
+    "codex_verdict": "AGREE",
+    "gpt_pro_verdict": "AGREE",
+    "implementation_authorized": true
+  },
+  "phase_1_prerequisite": {
+    "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev3",
+    "canonical_content_sha256": "d9ffea5e169c874522bfe2da71244d10907b88b12301766450f661d0c7af84ed",
+    "serialized_file_sha256": "1e06a6c4eb81a68ec243590f4a3c578ed38f53a4fa103c799e45c536de4e6dc2",
+    "codex_verdict": "AGREE",
+    "gpt_pro_verdict": "AGREE",
+    "phase_1_complete": true
+  },
+  "scope": {
+    "phase": 2,
+    "proof_domain": "contextual_permission",
+    "purpose": "prove one reusable pre-release program-logic qualification engine against the accepted Permission vertical slice",
+    "runtime_ui_surface_added": false,
+    "active_workspace_mutated": false,
+    "execution_roots": "new isolated roots only",
+    "phase_3_domain_coverage_claimed": false,
+    "productization_claimed": false,
+    "runtime_safety_authority_claimed": false
+  },
+  "authoritative_run": {
+    "run_id": "contextual-permission.phase2.712f5799d6f4",
+    "command": "python3 tools/verify_dashboard_internal_qualification.py --domain contextual-permission --execution-dir outputs/qualification/contextual-permission-phase2-evidence-v6/execution --output-dir outputs/qualification/contextual-permission-phase2-evidence-v6/result",
+    "exit_status": 0,
+    "verdict": "pass",
+    "complete": true,
+    "artifact_schema_version": "dashboardQualificationArtifact.v1",
+    "report_schema_version": "dashboardQualificationReport.v2",
+    "canonical_content_sha256": "a7e8f027c63d266b9caf8fb9604262724aca827d9e381d40f4e6f955514fb8c0",
+    "serialized_json_sha256": "42ea4f0ec1b496ad9e7a04177af4b113adc93d542a693353df6e8b4c35e80c81",
+    "junit_sha256": "eafc42b5f09b97db6f063db23c4208db01d329dbcbbc5ca2191a490cdebe15df",
+    "text_sha256": "f291ce9d6cce056d9d45bcedf11e2857244f9b334334b3da7b55bcd3b5365b4f",
+    "run_manifest_sha256": "156f98ee5785f0b823812da434c9dcb92b41451a056b610e93af381fe442275d",
+    "counts": {
+      "reachable_states": 12,
+      "obligations": 30,
+      "production_or_quarantine_replays": 10,
+      "faults": 14,
+      "concurrency_schedules": 5,
+      "mutants": 10,
+      "invariants": 7,
+      "effect_attempts": 17049,
+      "junit_testcases": 76,
+      "findings": 0,
+      "counterexamples": 0,
+      "unresolved_states": 0,
+      "failed_obligations": 0,
+      "surviving_mutants": 0
+    },
+    "quarantine_witness": {
+      "replay_id": "replay.quarantine.unsupported",
+      "witness_kind": "quarantine",
+      "status": "infeasible",
+      "observed_terminal_id": "terminal.quarantined-unsupported",
+      "meaning": "No machine mutation is permitted; the explicit typed quarantine and operator replace-or-export contract satisfy this non-ready witness."
+    }
+  },
+  "run_manifest_component_sha256": {
+    "adapter": "3f0044911200edb6d70f6afc0f222c002008226dcd9fb4be5574feb107275f0e",
+    "bounds": "022e31c7fd1838ed130190a91f48a2adb0d4278e7b7fd161a2e031691c76b944",
+    "concurrency": "4c6be4362df4fef862bba152e7c7cd0a6857eeff149b78916696940266c2b1e8",
+    "configuration": "f75a9326e7686dc59792827ee47fe6ad72f811bee0bb5cd447ad03740790ff48",
+    "decisions": "68a94ff0136ec399e0f04590fc3c9cb37c97f25cc8f6d3415f05fab3d53e5f5b",
+    "effects": "c267a2874d8c1662ccf75667814bdcb92c7b5cc0ae29f0fd6698fe7d5567624a",
+    "engine": "ca8c1a6789e61e499789045ca6275ca7e68dcf9af05b254c20ba4c42eacd8a66",
+    "faults": "dbe666d1607abc8150ad4365ed04cb87c7c72e49ae45dce577a6dca061108a95",
+    "fixtures": "a5cd44407d6687cf60bd57f1e0a46327a1a0951023eb77bea7cdbce55cd955cd",
+    "history": "b003a76fcc6a3676a2aca72fde723d9216b737597a114d82fb13a58810d770ee",
+    "model": "712f5799d6f47fcdc0e537d94923a3d29a058b3010b85cc9287d618cc5bb0ff5",
+    "mutants": "7206125b2d2d8e2a67e5b2afc723e6b727508a6c7155186b9e0cf61f67a4449d",
+    "oracle": "d06005028b067afd5a0b618023386dbaa91ea0306214ca58d2abc4ff67a47811",
+    "production": "8780183df653dd336309737844288b7885f9280b634f2b19a381df2c87ec0b4b"
+  },
+  "artifact_sha256": {
+    "tests/qualification/contracts.py": "fbd01a5beb5e218f65ae2673847e8ba05e4e49bfa77f6606bd07aaf31405ec16",
+    "tests/qualification/coverage.py": "2c12d504b66547337abfea67f0c41a255281c1423b38204d73aac50e5e05fed6",
+    "tests/qualification/effects.py": "4d9838a7ca6f35aecc1cf8b569dbdf1e6135c2e3c9e94a64e6c847515159e43d",
+    "tests/qualification/engine.py": "75610c54743c029407849ab6bddf3c8f2aa7f6a539a00e23f38cb9b817000d2d",
+    "tests/qualification/explorer.py": "9e2026abf50efd185f19658e194db5d09a00478eb8555fb85eee6c573b7d7f3a",
+    "tests/qualification/reporting.py": "4b9c8c82858a127944de8a7efa7f7405bee3f2242399fcef679e057d0d898213",
+    "tests/qualification/test_engine.py": "b77f589072e00f3e530b1ab50b69887258a28a021ba085957de5a365473cb674",
+    "tests/qualification/domains/contextual_permission_model.py": "59bc08b82dcc6b58c90344bde34177e301e70abc9a1495c1995f590c63413237",
+    "tests/qualification/domains/contextual_permission_oracle.py": "d06005028b067afd5a0b618023386dbaa91ea0306214ca58d2abc4ff67a47811",
+    "tests/qualification/domains/contextual_permission_adapter.py": "3f0044911200edb6d70f6afc0f222c002008226dcd9fb4be5574feb107275f0e",
+    "tests/qualification/domains/contextual_permission_history.py": "55656bd8f943d95feadb97b2bb5f1d709a409319f8ab3cf124853ca12cd96e6e",
+    "tests/qualification/domains/contextual_permission_runner.py": "8bd5c98afc36434da4f83edcc3328861f8d4c5497c56a1d769133b11a36714b5",
+    "tests/qualification/test_contextual_permission_phase2.py": "43f4322fa40193b94e0de8d09190b75a1656eb0e464075b343745e749589e237",
+    "tests/qualification/fixtures/contextual_permission/historical_capability_inventory.json": "4bd1ae9df2aaf4e0b6f3bb8bc37039583e66f5d4ee06be73f54bfc5455686338",
+    "tests/qualification/fixtures/contextual_permission/legacy_sparse_livelock_trace.json": "2ca76938141cabea0bbc4f12352b1dde6675135174685f597f8d01f22922f502",
+    "tests/qualification/fixtures/contextual_permission/supported_state_catalog.json": "0088ba2b47392c84e87631981b73b4277695aeb0fee47b4de59acd8ece242839",
+    "tests/qualification/fixtures/contextual_permission/supported_state_replay_manifest.json": "e15158da85ecadd53a26adee0366cdaee71bf1cf4f73b8203ee8a64368a926b1",
+    "tests/qualification/fixtures/contextual_permission/transition_effect_allowlist.json": "3f51a71da882c0f7f4b7a02d8b09ef35f795baf8e3b393616e02d86c7886382c",
+    "tools/verify_dashboard_internal_qualification.py": "5eaffa03a15f6615d1e639ef76c776664453e83c36753c54d9797f4897c9f4eb",
+    "scout_contextual_permission_workbench.py": "7cdd89bbd0fc74ec3149b3355d5c6e570f8d7f7875013ae5cb6512f2b066c5fe",
+    "scout_contextual_permission_workbench_api.py": "01c4dedc0d95a227fb338e3c80cced875ca6b277ae5cf1803ed2cea31b2fa890",
+    "tests/qualification/contextual_permission_phase1.py": "412fd8f1bb61001e75d63ca296d91c82a8348b1cede04710a5300289818e6194",
+    "tests/qualification/test_contextual_permission_phase1.py": "57b5e89a90193e8186c42437a7d7e30d7bc5f976acd97c6e0ce0466c131125ea",
+    "tests/test_scout_contextual_permission_workbench.py": "48498b2f89f861fca3c6d50b53fa447d3c29b3e5b4e7924f411a40df4667d7a4",
+    "tests/test_scout_contextual_permission_workbench_api.py": "39a9f20a4d8728c90da6e15b31d454806938a5e94dc95b295ed7a83ac0402897"
+  },
+  "requirement_to_evidence": [
+    {
+      "acceptance_id": "P2D-01",
+      "status": "PASS",
+      "evidence": [
+        "AST import audit forbids production and adapter imports from generic model/oracle modules",
+        "adapter import audit forbids oracle import",
+        "ObservationEnvelope provenance excludes command response claims from semantic oracle inputs",
+        "test_oracle_and_model_dependency_direction_excludes_production_semantics",
+        "test_model_rejects_semantic_response_claim_as_oracle_input"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-02",
+      "status": "PASS",
+      "evidence": [
+        "frozen contracts cover manifest observation state terminal transition observed transition obligation effect fault schedule history mutation finding counterexample invariant and report",
+        "test_contracts_are_immutable_and_canonical_hash_is_stable",
+        "7 of 7 required invariant results passed"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-03",
+      "status": "PASS",
+      "evidence": [
+        "negative tests reject unknown missing duplicate or wrong-provenance observation fields and adapter/inventory identity mismatch",
+        "projection-collision canary remains sensitive after named identity equivalence",
+        "broken graph terminal recovery effect read root manifest output and report contracts fail closed",
+        "test_observation_inventory_fails_closed_and_detects_projection_collision",
+        "test_named_identity_equivalence_does_not_hide_semantic_collision"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-04",
+      "status": "PASS",
+      "evidence": [
+        "complete deterministic reachability and Tarjan SCC exploration from every supported start",
+        "30 of 30 required obligations passed with 0 unresolved states and 0 counterexamples",
+        "9 executable production replays passed and 1 explicit quarantine witness reached its declared non-ready terminal",
+        "transition-only production replay cannot be mislabeled infeasible",
+        "quarantine witness status and terminal are now independently enforced",
+        "test_replay_witness_kind_and_terminal_cannot_be_mislabeled"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-05",
+      "status": "PASS",
+      "evidence": [
+        "16 exhaustive high-risk rebuild-admission Boolean cases",
+        "20 deterministic pairwise cases across capability input projection and review axes plus 4 mandatory critical combinations",
+        "MC/DC witnesses exist for all 4 high-risk gate conditions",
+        "decision:exhaustive decision:pairwise and decision:mcdc report obligations passed"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-06",
+      "status": "PASS",
+      "evidence": [
+        "provenance-bound inventory reconciles production contracts retained fixture and Phase 1 packet",
+        "legacy_sparse.v1 has executable migration",
+        "ref_gpx_proposal.v1 has direct support",
+        "unknown_or_unsupported has typed quarantine and replace-or-export recovery",
+        "historical mismatch mutant is killed by HISTORICAL-INVENTORY-MISMATCH"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-07",
+      "status": "PASS",
+      "evidence": [
+        "17049 effect attempts were classified before primitive invocation with no effect finding",
+        "14 of 14 fresh-root fault cases passed across temp-create partial-write flush fsync link replace delete journal pointer and cleanup paths",
+        "transaction cleanup fault produced typed write-in-doubt and fresh-instance exact-key recovery",
+        "5 of 5 deterministic schedules passed: same snapshot same key; same snapshot different keys; changed upstream identity; recovery versus retry; durable-write serialization",
+        "durable contender remained excluded across journal creation planned ETA rules seed stale marker project pointer receipt and journal cleanup with zero overlap"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-08",
+      "status": "PASS",
+      "evidence": [
+        "10 of 10 required mutants activated and were killed by their declared stable finding or exception mode",
+        "omitted-semantic-observation-field is an explicit MutationSpec and MutationResult",
+        "unrelated crash or non-attributed failure cannot count as a kill"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-09",
+      "status": "PASS",
+      "evidence": [
+        "unique result root and atomic canonical JSON finalize reread schema validation and content-hash verification",
+        "run manifest binds all 14 component identities and the Phase 1 prerequisite",
+        "JUnit contains exactly 76 stable evidence cases and is inventory-checked against canonical JSON",
+        "text preserves verdict blocking inventory counts reproduction command uncovered states counterexamples and surviving mutants",
+        "exit 0 means complete clean; exit 1 means complete blocking; exit 2 means invalid incomplete stale or unfinalized",
+        "test_report_finalization_is_atomic_authoritative_and_stale_safe"
+      ]
+    },
+    {
+      "acceptance_id": "P2D-10",
+      "status": "PASS",
+      "evidence": [
+        "Phase 1 rev3 prerequisite canonical identity is embedded in manifest and report",
+        "original historical livelock dual witness non-ready migration explicit-input ready path both crash recoveries effect boundaries and all required canaries replayed",
+        "Phase 1 focused suite: 26 passed",
+        "Permission domain API plus Phase 1 combined regression: 78 passed",
+        "no Phase 3 domain coverage or productization claim"
+      ]
+    }
+  ],
+  "fault_inventory": [
+    "fault.projection-rebuild.after-seed",
+    "fault.baseline-activation.after-pointer",
+    "fault.projection-rebuild.transaction-cleanup",
+    "fault.writer.replace.temp-create",
+    "fault.writer.replace.partial-write",
+    "fault.writer.replace.flush",
+    "fault.writer.replace.fsync",
+    "fault.writer.replace.atomic-replace",
+    "fault.writer.append.temp-create",
+    "fault.writer.append.partial-write",
+    "fault.writer.append.flush",
+    "fault.writer.append.fsync",
+    "fault.writer.append.link",
+    "fault.writer.append.cleanup-delete"
+  ],
+  "concurrency_inventory": [
+    "schedule.same-snapshot-same-key",
+    "schedule.same-snapshot-different-key",
+    "schedule.changed-upstream-identity",
+    "schedule.recovery-versus-retry",
+    "schedule.durable-write-serialization"
+  ],
+  "mutation_inventory": [
+    "mutant.schema-drift-without-migration",
+    "mutant.removed-recovery-edge",
+    "mutant.predicate-divergence",
+    "mutant.volatile-only-progress",
+    "mutant.partial-write-marked-fresh",
+    "mutant.stale-review-current",
+    "mutant.forbidden-outbound",
+    "mutant.supported-start-removed",
+    "mutant.nonterminal-replay-labeled-pass",
+    "mutant.omitted-semantic-observation-field"
+  ],
+  "defects_discovered_and_closed": [
+    {
+      "id": "production.same-snapshot-different-key-duplicate-write",
+      "status": "CLOSED",
+      "resolution": "admission snapshot identity is persisted in receipts and a second idempotency key is deterministically rejected under the store lock"
+    },
+    {
+      "id": "production.replace-writer-partial-temp-leak",
+      "status": "CLOSED",
+      "resolution": "mkstemp write flush fsync replace and bounded cleanup now preserve a complete pre-state on injected failure"
+    },
+    {
+      "id": "production.append-cleanup-transient-failure",
+      "status": "CLOSED",
+      "resolution": "temporary JSON cleanup performs one bounded retry while persistent filesystem failure remains visible"
+    },
+    {
+      "id": "qualification.missing-omitted-semantic-mutant",
+      "status": "CLOSED",
+      "resolution": "the tenth required mutant is now represented activated and attributed in the authoritative kill matrix"
+    },
+    {
+      "id": "qualification.sequential-test-mislabeled-concurrency",
+      "status": "CLOSED",
+      "resolution": "changed-upstream identity is now a real interleaved stale-command schedule and durable writes use an instrumented contested lock"
+    },
+    {
+      "id": "qualification.relative-entrypoint-path-divergence",
+      "status": "CLOSED",
+      "resolution": "all execution roots are normalized and a relative-path schedule test reproduces the actual CLI entrypoint form"
+    },
+    {
+      "id": "qualification.replay-witness-kind-false-pass",
+      "status": "CLOSED",
+      "resolution": "production infeasibility and quarantine status or terminal mislabeling now yields COVERAGE-INCOMPLETE"
+    },
+    {
+      "id": "qualification.junit-single-case-collapse",
+      "status": "CLOSED",
+      "resolution": "JUnit emits and self-validates one stable case for all 76 canonical evidence items"
+    }
+  ],
+  "superseded_evidence_runs": [
+    {
+      "version": "v3",
+      "status": "SUPERSEDED",
+      "reason": "local audit found missing mutant and incomplete concurrency/fault evidence"
+    },
+    {
+      "version": "v4",
+      "status": "REJECTED_EXIT_2",
+      "reason": "relative execution-path divergence produced CONCURRENCY-INCOMPLETE and INVARIANT-INCOMPLETE; fail-closed behavior worked"
+    },
+    {
+      "version": "v5",
+      "status": "SUPERSEDED",
+      "reason": "local audit found replay witness-kind and JUnit case-inventory gaps"
+    }
+  ],
+  "executed_checks": [
+    {
+      "command": "pytest tests/qualification/test_engine.py tests/qualification/test_contextual_permission_phase2.py -q",
+      "result": "34 passed"
+    },
+    {
+      "command": "pytest tests/test_scout_contextual_permission_workbench_api.py tests/test_scout_contextual_permission_workbench.py tests/qualification/test_contextual_permission_phase1.py -q",
+      "result": "78 passed"
+    },
+    {
+      "command": "ruff check on the complete Phase 2 qualification and changed Permission production surface",
+      "result": "pass"
+    },
+    {
+      "command": "formal CLI v6 on a new isolated execution and result root",
+      "result": "exit 0; canonical PASS; complete true"
+    },
+    {
+      "command": "git diff --check and scoped secret-value pattern scan",
+      "result": "pass; no secret-value match"
+    },
+    {
+      "command": "canonical hash recomputation for Phase 1 rev3 Phase 2 design rev2 and Phase 2 report v6",
+      "result": "all identities match"
+    }
+  ],
+  "not_claimed": [
+    "Phase_3_dashboard_domain_coverage",
+    "repository_wide_productization",
+    "runtime_Diagnostic_UI_coverage",
+    "active_workspace_mutation",
+    "runtime_safety_authority",
+    "external_side_effects",
+    "release_readiness"
+  ],
+  "required_phase_verdicts": {
+    "codex": "AGREE",
+    "gpt_pro": "pending_exact_packet_review"
+  },
+  "phase_3_authorized": false,
+  "requested_gpt_pro_response_contract": {
+    "packet_identity_required": true,
+    "allowed_verdicts": [
+      "AGREE",
+      "AGREE_WITH_CHANGES",
+      "DISAGREE"
+    ],
+    "required_fields": [
+      "canonical_content_sha256",
+      "verdict",
+      "P2D-01_through_P2D-10_disposition",
+      "blocking_gaps",
+      "phase_3_authorized"
+    ],
+    "agreement_condition": "GPT Pro must explicitly return AGREE with every P2D clause accepted, blocking gaps NONE, and Phase 3 authorized YES against this exact canonical content hash."
+  }
+}

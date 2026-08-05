@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import multiprocessing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,24 @@ from scout_contextual_permission_workbench import (
 
 NOW = datetime(2026, 8, 2, 6, 0, tzinfo=timezone.utc)
 PROJECT_ID = "permission_fixture"
+
+
+def _explicit_day_end_inputs() -> list[dict[str, str]]:
+    return [
+        {
+            "input_id": f"domain-day-end-{index}",
+            "target_anchor_id": anchor_id,
+            "actor": "test_fixture_input",
+            "decision_ref": f"qualification://domain-day-end/{index}",
+            "decision_sha256": hashlib.sha256(
+                f"domain-day-end-{index}:{anchor_id}".encode("utf-8")
+            ).hexdigest(),
+        }
+        for index, anchor_id in enumerate(
+            ("cp.007", "cp.014", "cp.finish"),
+            start=1,
+        )
+    ]
 
 
 def _append_only_race_worker(
@@ -156,6 +175,7 @@ def _add_rich_reference_proposal_sources(project_root: Path) -> None:
     project = json.loads(project_path.read_text(encoding="utf-8"))
     project.update(
         {
+            "admin_projection_ref": "outputs/admin_projection.json",
             "reference_segment_timing_ref": "outputs/reference_segment_timing.json",
             "rest_area_candidates_ref": "outputs/rest_area_candidates.json",
             "mcp_candidates_ref": "outputs/mcp/mcp_candidates.json",
@@ -219,6 +239,26 @@ def _add_rich_reference_proposal_sources(project_root: Path) -> None:
                 "boundary": {
                     "candidate_only": True,
                     "runtime_safety_truth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "outputs" / "admin_projection.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_admin_projection",
+                "route": {
+                    "distance_m": 90_000.0,
+                    "display_geometry": {
+                        "coordinates": [
+                            {
+                                "lat": 23.56 - (index * 0.001),
+                                "lon": 120.93 + (index * 0.0015),
+                            }
+                            for index in range(43)
+                        ]
+                    },
                 },
             }
         ),
@@ -820,6 +860,34 @@ def test_reference_gpx_auto_proposes_days_eta_and_safety_handoff(
     assert draft.candidate_only is True
 
 
+def test_baseline_map_context_is_compact_read_only_and_resolves_route_anchors(
+    tmp_path: Path,
+) -> None:
+    project_root, store_root = _workspace(tmp_path)
+    _add_rich_reference_proposal_sources(project_root)
+
+    context = ContextualPermissionWorkbench(
+        project_root=project_root,
+        store_root=store_root,
+        now_factory=lambda: NOW,
+        allow_stale_projection=True,
+    ).baseline_map_context()
+
+    assert context.artifact_kind == "mission_baseline_map_context"
+    assert context.schema_version == "missionBaselineMapContext.v1"
+    assert context.route_length_m == 90_000.0
+    assert 2 <= len(context.route_points) <= 600
+    assert context.route_points[0].route_order_m == 0.0
+    assert context.route_points[-1].route_order_m == 90_000.0
+    assert any(anchor.anchor_id == "cp.010" for anchor in context.anchors)
+    assert any(anchor.display_label == "Camp Alpha" for anchor in context.anchors)
+    assert context.presentation_only is True
+    assert context.candidate_only is True
+    assert context.runtime_safety_truth is False
+    assert context.writes_performed is False
+    assert not store_root.exists()
+
+
 def test_reference_gpx_review_requires_exact_compact_acknowledgment_sets(
     tmp_path: Path,
 ) -> None:
@@ -834,6 +902,7 @@ def test_reference_gpx_review_requires_exact_compact_acknowledgment_sets(
         BaselineAuthoringRequest(
             mode="reference_gpx",
             reference_route_ref="outputs/compiled_mission_graph.reviewed.json",
+            day_end_inputs=_explicit_day_end_inputs(),
         )
     )
     saved = workbench.save_baseline_candidate(

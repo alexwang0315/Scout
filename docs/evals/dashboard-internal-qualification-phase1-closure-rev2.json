@@ -1,0 +1,243 @@
+{
+  "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev2",
+  "packet_schema_version": "dashboardInternalQualificationClosure.v2",
+  "created_on": "2026-08-04",
+  "review_state": "awaiting_gpt_pro_rev2_verdict",
+  "content_sha256": "cf6551967ecd14404c2c6926940340cb2986a2023110bd1bdd754b9fd6f563ed",
+  "predecessor": {
+    "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev1",
+    "artifact_sha256": "ca1f0ba2f64cb16e340c25e1dca5272e87063d8fe8501ef5f06be5c26d128ea9",
+    "gpt_pro_verdict": "AGREE_WITH_CHANGES",
+    "phase_2_authorization": false,
+    "blocking_gap_ids": [
+      "AC-05-explicit-day-end-target-provenance",
+      "AC-06-separate-semantic-identity-mutations",
+      "AC-07-production-replay-every-supported-start",
+      "AC-08-baseline-activation-crash-recovery",
+      "AC-09-attempt-level-per-transition-effect-tracing"
+    ]
+  },
+  "scope": {
+    "domain": "contextual_permission",
+    "phase": 1,
+    "runtime_ui_surface_added": false,
+    "active_workspace_mutated": false,
+    "qualification_workspace_policy": "isolated_temporary_and_sanitized_fixture_only"
+  },
+  "contracts": {
+    "rebuild_command_id": "contextual_permission_projection_rebuild",
+    "rebuild_evaluator_version": "contextual-permission.projection-rebuild-admission.v1",
+    "baseline_migration_contract_version": "contextual-permission.baseline-migration.v1",
+    "baseline_capabilities": [
+      "legacy_sparse.v1",
+      "ref_gpx_proposal.v1"
+    ],
+    "supported_start_count": 7,
+    "promotion_requires_explicit_day_end_input": true,
+    "automatic_day_end_proposal_is_review_ready": false,
+    "progress_excludes": [
+      "http_200_alone",
+      "volatile_receipt_identity",
+      "timestamp_only_change",
+      "semantically_identical_artifact"
+    ]
+  },
+  "artifact_sha256": {
+    "docs/specs/scout-dashboard-internal-qualification.md": "2aed2eac06b3a711a6e159461bf74e22d1edc3662432e89f5f4f70765d39f817",
+    "scout_contextual_permission_workbench.py": "70abf08964801109189c1180b1fa7fc69911fcf16319f5e50f15227ddb755b53",
+    "scout_contextual_permission_workbench_api.py": "01c4dedc0d95a227fb338e3c80cced875ca6b277ae5cf1803ed2cea31b2fa890",
+    "tests/qualification/contextual_permission_phase1.py": "412fd8f1bb61001e75d63ca296d91c82a8348b1cede04710a5300289818e6194",
+    "tests/qualification/test_contextual_permission_phase1.py": "717c9efaef536f626368570281ddce173131dbfd72dd7b883472a647641f6dbf",
+    "tests/qualification/fixtures/contextual_permission/legacy_sparse_livelock_trace.json": "2ca76938141cabea0bbc4f12352b1dde6675135174685f597f8d01f22922f502",
+    "tests/qualification/fixtures/contextual_permission/supported_state_catalog.json": "0088ba2b47392c84e87631981b73b4277695aeb0fee47b4de59acd8ece242839",
+    "tests/qualification/fixtures/contextual_permission/supported_state_replay_manifest.json": "32117a31cf25e714b26eebb152a354076fc7c0d3e7e5dc164ac86ab52b89e1aa",
+    "tests/qualification/fixtures/contextual_permission/transition_effect_allowlist.json": "32edf7750105cba48389829fea7cf7cb87fa0752d1d9faa173b94eba2e8c194d",
+    "tests/test_scout_contextual_permission_workbench.py": "48498b2f89f861fca3c6d50b53fa447d3c29b3e5b4e7924f411a40df4667d7a4",
+    "tests/test_scout_contextual_permission_workbench_api.py": "39a9f20a4d8728c90da6e15b31d454806938a5e94dc95b295ed7a83ac0402897",
+    "docs/admin/scout-dashboard-v0.1.html": "38a2b35a514223bf53d5760b2d7bc4b508cd6a6a4d1a14206e39adedb480880d",
+    "tests/test_scout_dashboard_page.py": "ec7b0969dfec37abdd81cd3037da9ca9f0d762643d1ee243a981dc9e61e5da7e"
+  },
+  "requirement_to_evidence": [
+    {
+      "acceptance_id": "AC-01",
+      "status": "PASS",
+      "claim": "The uncorrected historical workflow is a closed non-terminal livelock with a shortest counterexample and no false HTTP-200 progress.",
+      "evidence": [
+        "legacy_sparse_livelock_trace.json",
+        "test_historical_trace_reports_shortest_closed_livelock",
+        "test_recovery_rank_mutation_canary_fails"
+      ]
+    },
+    {
+      "acceptance_id": "AC-02",
+      "status": "PASS",
+      "claim": "The independent extractor preserves orthogonal legacy, input, review, migration, projection, policy and effect axes.",
+      "evidence": [
+        "test_historical_legacy_state_exposes_one_root_migration_contract",
+        "extract_permission_state does not import the production admission evaluator"
+      ]
+    },
+    {
+      "acceptance_id": "AC-03",
+      "status": "PASS",
+      "claim": "Read-side and command admission bind the same command, canonical snapshot and evaluator; replacement returns stale_precondition with zero writes.",
+      "evidence": [
+        "test_observed_admission_snapshot_rejects_upstream_replacement_without_writes",
+        "test_predicate_divergence_mutation_canary_fails"
+      ]
+    },
+    {
+      "acceptance_id": "AC-04",
+      "status": "PASS",
+      "claim": "Missing timing is a typed no-write migration contract; new legacy artifacts cannot activate or claim progress.",
+      "evidence": [
+        "test_missing_reference_timing_is_typed_migration_no_progress",
+        "test_new_legacy_candidate_cannot_activate_or_stale_current_projection"
+      ]
+    },
+    {
+      "acceptance_id": "AC-05",
+      "status": "PASS",
+      "claim": "Every activatable day end comes from a separate pre-candidate explicit input with actor, input ID, decision ref and decision hash; machine-derived day ends remain non-review-ready.",
+      "evidence": [
+        "test_day_end_targets_require_explicit_pre_candidate_input_provenance",
+        "MissionBaselineDraft.day_end_input_contract_sha256",
+        "promotion_gates.explicit_day_end_inputs_bound"
+      ]
+    },
+    {
+      "acceptance_id": "AC-06",
+      "status": "PASS",
+      "claim": "Capability discriminator, source baseline hash, current timing hash and migration-contract version have separate semantic mutation witnesses and each invalidates review, projection and policy readiness.",
+      "evidence": [
+        "test_semantic_identity_mutations_break_the_ready_chain[capability-discriminator]",
+        "test_semantic_identity_mutations_break_the_ready_chain[source-baseline-hash]",
+        "test_current_dependency_hash_mutation_breaks_the_ready_chain",
+        "test_semantic_identity_mutations_break_the_ready_chain[migration-contract-version]"
+      ]
+    },
+    {
+      "acceptance_id": "AC-07",
+      "status": "PASS",
+      "claim": "Every declared supported start is bound to and exercised by a real FastAPI or production domain-command replay.",
+      "evidence": [
+        "supported_state_replay_manifest.json",
+        "test_required_state_catalog_covers_axes_and_all_supported_starts_escape",
+        "7 of 7 supported start IDs have named production replay tests"
+      ]
+    },
+    {
+      "acceptance_id": "AC-08",
+      "status": "PASS",
+      "claim": "Baseline activation and projection rebuild both journal before multi-file effects, fail closed after injected process loss and roll forward only under the exact same idempotent command.",
+      "evidence": [
+        "test_baseline_activation_interruption_blocks_then_rolls_forward_on_restart",
+        "test_rebuild_durable_write_interruption_blocks_then_rolls_forward_on_restart",
+        "baseline_activation_write_in_doubt",
+        "contextual_permission_projection_write_in_doubt"
+      ]
+    },
+    {
+      "acceptance_id": "AC-09",
+      "status": "PASS",
+      "claim": "Attempt-level instrumentation observes every production append/replace before execution, including transient journals, all normal transitions, retries, injected faults and resumes; all refs remain inside the temporary project allowlist.",
+      "evidence": [
+        "transition_effect_allowlist.json",
+        "test_every_phase1_command_transition_has_attempt_level_effect_tracing",
+        "fault_transition_patterns exercised by both interruption tests",
+        "canonical store absent after every witness"
+      ]
+    },
+    {
+      "acceptance_id": "AC-10",
+      "status": "PASS",
+      "claim": "Corrected trajectories pass and progress, predicate, review-binding and forbidden-effect mutants fail with the intended finding classes.",
+      "evidence": [
+        "test_recovery_rank_mutation_canary_fails",
+        "test_predicate_divergence_mutation_canary_fails",
+        "test_review_binding_mutation_canary_fails",
+        "test_forbidden_effect_mutation_canary_fails"
+      ]
+    }
+  ],
+  "supported_start_replay": {
+    "declared": 7,
+    "production_replayed": 7,
+    "unmapped": [],
+    "manifest_ref": "tests/qualification/fixtures/contextual_permission/supported_state_replay_manifest.json"
+  },
+  "fault_and_consistency_evidence": {
+    "baseline_activation_interruption": {
+      "fault_point": "after_project_pointer_atomic_replace_before_stale_marker",
+      "restart_projection": "baseline_activation_write_in_doubt",
+      "recovery": "same_idempotency_key_roll_forward",
+      "duplicate_review_decisions": 0,
+      "journal_remaining_after_recovery": false
+    },
+    "projection_rebuild_interruption": {
+      "fault_point": "after_workbench_seed_atomic_replace",
+      "restart_projection": "contextual_permission_projection_write_in_doubt",
+      "recovery": "same_idempotency_key_roll_forward",
+      "post_recovery_projection": "fresh_policy_pending",
+      "journal_remaining_after_recovery": false
+    },
+    "separate_semantic_mutations": [
+      "capability_discriminator",
+      "source_baseline_hash",
+      "current_dependency_hash",
+      "migration_contract_version"
+    ]
+  },
+  "effect_boundary": {
+    "instrumentation": "attempt_level_before_write_primitive",
+    "normal_transition_count": 13,
+    "fault_transition_count": 4,
+    "transient_journal_writes_observed": true,
+    "allowed_root": "pytest temporary project workspace",
+    "canonical_store_untouched": true,
+    "outside_workspace_write_attempts": 0,
+    "runtime_safety_truth": false,
+    "departure_approval_granted": false,
+    "active_runtime_session_updated": false,
+    "safety_api_called": false,
+    "outbound_action_performed": false,
+    "outbound_transport_invoked": false,
+    "external_send_performed": false,
+    "hardware_control_performed": false
+  },
+  "executed_checks": [
+    {
+      "command": "pytest tests/qualification/test_contextual_permission_phase1.py -q -rA",
+      "result": "26 passed"
+    },
+    {
+      "command": "pytest tests/test_scout_contextual_permission_workbench_api.py tests/test_scout_contextual_permission_workbench.py tests/qualification/test_contextual_permission_phase1.py -q",
+      "result": "exit 0; 78 tests collected and passed"
+    },
+    {
+      "command": "ruff check scout_contextual_permission_workbench.py scout_contextual_permission_workbench_api.py tests/qualification/contextual_permission_phase1.py tests/qualification/test_contextual_permission_phase1.py tests/test_scout_contextual_permission_workbench.py tests/test_scout_contextual_permission_workbench_api.py",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m py_compile on production Permission and qualification modules",
+      "result": "pass"
+    },
+    {
+      "command": "pytest tests/test_scout_dashboard_page.py::test_contextual_permission_workbench_uses_typed_projection_and_dedicated_scope -q -rA",
+      "result": "1 passed"
+    }
+  ],
+  "not_claimed": [
+    "Phase_2_reusable_engine_completion",
+    "Phase_3_dashboard_domain_coverage",
+    "repository_wide_productization",
+    "real_active_workspace_mutation",
+    "runtime_safety_authority",
+    "external_side_effects"
+  ],
+  "required_phase_verdicts": {
+    "codex": "AGREE",
+    "gpt_pro": "pending_rev2_review"
+  },
+  "phase_2_authorized": false
+}

@@ -413,6 +413,9 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
     assert payload["import_result"]["duplicate_source_count"] == 0
     assert payload["import_result"]["processed_source_count"] == 2
     assert payload["import_result"]["error_count"] == 0
+    assert payload["source_dir"] is None
+    assert payload["source_provider"] == "local_health_export"
+    assert all("imported_at" not in source for source in payload["source_index"])
     coverage = {row[0]: row[1] for row in payload["coverage_cards"]}
     assert coverage["Health exports"] == "2"
     assert coverage["Walking sessions"] == "2"
@@ -478,6 +481,8 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
     read_payload = read_response.json()
     assert read_payload["coverage_cards"] == second_payload["coverage_cards"]
     assert read_payload["summary"]["evidence_status"] == "available"
+    assert read_payload["source_dir"] is None
+    assert all("imported_at" not in source for source in read_payload["source_index"])
     serialized_read = json.dumps(read_payload, ensure_ascii=False)
     for forbidden_value in (
         "heartRateData",

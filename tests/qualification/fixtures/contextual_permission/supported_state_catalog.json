@@ -1,0 +1,329 @@
+{
+  "fixture_id": "contextual-permission.supported-state-catalog.v1",
+  "schema_version": "dashboardQualificationTrace.v1",
+  "supported_historical_start": true,
+  "source_evidence": [
+    "docs/specs/scout-dashboard-internal-qualification.md#required-permission-combinations"
+  ],
+  "start_state_id": "no-baseline",
+  "supported_start_state_ids": [
+    "no-baseline",
+    "legacy-reviewed-missing",
+    "legacy-reviewed-conflicting",
+    "proposal-current-stale",
+    "projection-absent",
+    "proposal-superseded",
+    "projection-write-in-doubt"
+  ],
+  "states": [
+    {
+      "state_id": "no-baseline",
+      "baseline_capability": "absent",
+      "baseline_lifecycle": "absent",
+      "required_inputs": "missing",
+      "baseline_review_binding": "none",
+      "migration": "none",
+      "projection": "absent",
+      "policy_review": "not_required",
+      "rebuild_admission": "blocked",
+      "outcome": "invalid",
+      "root_blocker_ids": ["reviewed_baseline_input_missing"]
+    },
+    {
+      "state_id": "legacy-candidate-missing",
+      "baseline_capability": "legacy_sparse.v1",
+      "baseline_lifecycle": "candidate",
+      "required_inputs": "missing",
+      "baseline_review_binding": "none",
+      "migration": "required",
+      "projection": "absent",
+      "policy_review": "not_required",
+      "rebuild_admission": "blocked",
+      "outcome": "safely_blocked_for_migration",
+      "root_blocker_ids": ["reference_segment_timing_missing"]
+    },
+    {
+      "state_id": "legacy-reviewed-missing",
+      "baseline_capability": "legacy_sparse.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "missing",
+      "baseline_review_binding": "current",
+      "migration": "required",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "blocked",
+      "outcome": "safely_blocked_for_migration",
+      "root_blocker_ids": ["baseline_migration_required"]
+    },
+    {
+      "state_id": "legacy-reviewed-conflicting",
+      "baseline_capability": "legacy_sparse.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "conflicting",
+      "baseline_review_binding": "current",
+      "migration": "blocked",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "blocked",
+      "outcome": "invalid",
+      "root_blocker_ids": ["reference_segment_timing_conflicting"]
+    },
+    {
+      "state_id": "proposal-migration-candidate",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "candidate",
+      "required_inputs": "complete",
+      "baseline_review_binding": "none",
+      "migration": "candidate",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "blocked",
+      "outcome": "invalid",
+      "root_blocker_ids": ["proposal_review_required"]
+    },
+    {
+      "state_id": "proposal-reviewed-pending",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "reviewed",
+      "required_inputs": "complete",
+      "baseline_review_binding": "current",
+      "migration": "review_pending",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "blocked",
+      "outcome": "invalid",
+      "root_blocker_ids": ["proposal_activation_required"]
+    },
+    {
+      "state_id": "proposal-current-stale",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "complete",
+      "baseline_review_binding": "current",
+      "migration": "accepted",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "eligible",
+      "outcome": "invalid",
+      "root_blocker_ids": ["projection_rebuild_required"]
+    },
+    {
+      "state_id": "projection-absent",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "complete",
+      "baseline_review_binding": "current",
+      "migration": "accepted",
+      "projection": "absent",
+      "policy_review": "not_required",
+      "rebuild_admission": "eligible",
+      "outcome": "invalid",
+      "root_blocker_ids": ["projection_rebuild_required"]
+    },
+    {
+      "state_id": "projection-fresh-policy-pending",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "complete",
+      "baseline_review_binding": "current",
+      "migration": "accepted",
+      "projection": "fresh",
+      "policy_review": "pending",
+      "rebuild_admission": "eligible",
+      "outcome": "invalid",
+      "root_blocker_ids": ["contextual_permission_rules_review_pending"]
+    },
+    {
+      "state_id": "qualified-ready",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "complete",
+      "baseline_review_binding": "current",
+      "migration": "accepted",
+      "projection": "fresh",
+      "policy_review": "current",
+      "rebuild_admission": "eligible",
+      "outcome": "ready",
+      "root_blocker_ids": []
+    },
+    {
+      "state_id": "proposal-superseded",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "superseded",
+      "required_inputs": "complete",
+      "baseline_review_binding": "stale",
+      "migration": "accepted",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "stale_precondition",
+      "outcome": "invalid",
+      "root_blocker_ids": ["projection_rebuild_stale_precondition"]
+    },
+    {
+      "state_id": "projection-write-in-doubt",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "complete",
+      "baseline_review_binding": "current",
+      "migration": "accepted",
+      "projection": "orphaned_or_write_in_doubt",
+      "policy_review": "stale",
+      "rebuild_admission": "blocked",
+      "outcome": "write_in_doubt",
+      "root_blocker_ids": ["contextual_permission_projection_write_in_doubt"]
+    },
+    {
+      "state_id": "corrupt-reviewed",
+      "baseline_capability": "unknown_or_unsupported",
+      "baseline_lifecycle": "current",
+      "required_inputs": "conflicting",
+      "baseline_review_binding": "stale",
+      "migration": "blocked",
+      "projection": "stale",
+      "policy_review": "stale",
+      "rebuild_admission": "blocked",
+      "outcome": "corrupt",
+      "root_blocker_ids": ["reviewed_baseline_hash_mismatch"]
+    },
+    {
+      "state_id": "quarantined-unsupported",
+      "baseline_capability": "unknown_or_unsupported",
+      "baseline_lifecycle": "superseded",
+      "required_inputs": "missing",
+      "baseline_review_binding": "none",
+      "migration": "blocked",
+      "projection": "absent",
+      "policy_review": "not_required",
+      "rebuild_admission": "blocked",
+      "outcome": "unsupported",
+      "root_blocker_ids": ["explicit_capability_quarantine"]
+    },
+    {
+      "state_id": "review-binding-invariant-breach",
+      "baseline_capability": "ref_gpx_proposal.v1",
+      "baseline_lifecycle": "current",
+      "required_inputs": "complete",
+      "baseline_review_binding": "stale",
+      "migration": "accepted",
+      "projection": "fresh",
+      "policy_review": "current",
+      "rebuild_admission": "eligible",
+      "outcome": "invariant_breach",
+      "root_blocker_ids": ["baseline_review_binding_stale"]
+    }
+  ],
+  "transitions": [
+    {
+      "transition_id": "author-legacy-candidate",
+      "source_state_id": "no-baseline",
+      "target_state_id": "legacy-candidate-missing",
+      "actor": "human_decision",
+      "intent": "human_decision"
+    },
+    {
+      "transition_id": "provide-proposal-inputs-from-candidate",
+      "source_state_id": "legacy-candidate-missing",
+      "target_state_id": "proposal-migration-candidate",
+      "actor": "test_fixture_input",
+      "intent": "human_decision",
+      "advertised_as_recovery": true,
+      "recovery_rank_before": 4,
+      "recovery_rank_after": 3
+    },
+    {
+      "transition_id": "provide-proposal-inputs-from-history",
+      "source_state_id": "legacy-reviewed-missing",
+      "target_state_id": "proposal-migration-candidate",
+      "actor": "test_fixture_input",
+      "intent": "human_decision",
+      "advertised_as_recovery": true,
+      "recovery_rank_before": 4,
+      "recovery_rank_after": 3
+    },
+    {
+      "transition_id": "replace-conflicting-inputs",
+      "source_state_id": "legacy-reviewed-conflicting",
+      "target_state_id": "proposal-migration-candidate",
+      "actor": "test_fixture_input",
+      "intent": "repair_action",
+      "advertised_as_recovery": true,
+      "recovery_rank_before": 5,
+      "recovery_rank_after": 3
+    },
+    {
+      "transition_id": "save-proposal-candidate",
+      "source_state_id": "proposal-migration-candidate",
+      "target_state_id": "proposal-reviewed-pending",
+      "actor": "human_decision",
+      "intent": "human_decision"
+    },
+    {
+      "transition_id": "accept-exact-proposal-review",
+      "source_state_id": "proposal-reviewed-pending",
+      "target_state_id": "proposal-current-stale",
+      "actor": "human_decision",
+      "intent": "human_decision"
+    },
+    {
+      "transition_id": "rebuild-stale-projection",
+      "source_state_id": "proposal-current-stale",
+      "target_state_id": "projection-fresh-policy-pending",
+      "actor": "repair_action",
+      "intent": "repair_action",
+      "advertised_as_recovery": true,
+      "recovery_rank_before": 2,
+      "recovery_rank_after": 1
+    },
+    {
+      "transition_id": "build-absent-projection",
+      "source_state_id": "projection-absent",
+      "target_state_id": "projection-fresh-policy-pending",
+      "actor": "repair_action",
+      "intent": "repair_action",
+      "advertised_as_recovery": true,
+      "recovery_rank_before": 2,
+      "recovery_rank_after": 1
+    },
+    {
+      "transition_id": "review-exact-rule-set",
+      "source_state_id": "projection-fresh-policy-pending",
+      "target_state_id": "qualified-ready",
+      "actor": "human_decision",
+      "intent": "human_decision",
+      "advertised_as_recovery": true,
+      "recovery_rank_before": 1,
+      "recovery_rank_after": 0
+    },
+    {
+      "transition_id": "refresh-superseded-selection",
+      "source_state_id": "proposal-superseded",
+      "target_state_id": "proposal-current-stale",
+      "actor": "human_decision",
+      "intent": "human_decision"
+    },
+    {
+      "transition_id": "retry-interrupted-rebuild",
+      "source_state_id": "projection-write-in-doubt",
+      "target_state_id": "projection-fresh-policy-pending",
+      "actor": "idempotent_retry",
+      "intent": "repair_action",
+      "advertised_as_recovery": true,
+      "recovery_rank_before": 2,
+      "recovery_rank_after": 1
+    },
+    {
+      "transition_id": "quarantine-corrupt-artifact",
+      "source_state_id": "corrupt-reviewed",
+      "target_state_id": "quarantined-unsupported",
+      "actor": "human_decision",
+      "intent": "repair_action"
+    },
+    {
+      "transition_id": "invalidate-invariant-breach",
+      "source_state_id": "review-binding-invariant-breach",
+      "target_state_id": "corrupt-reviewed",
+      "actor": "observation",
+      "intent": "observation"
+    }
+  ]
+}

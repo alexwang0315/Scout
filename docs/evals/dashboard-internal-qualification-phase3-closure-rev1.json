@@ -1,0 +1,376 @@
+{
+  "packet_id": "dashboard-internal-qualification.phase3-closure.rev1",
+  "packet_schema_version": "dashboardInternalQualificationPhase3Closure.v1",
+  "created_on": "2026-08-04",
+  "review_state": "awaiting_gpt_pro_phase3_closure_verdict",
+  "content_sha256": "7eac8aceddb033e465ef8d8825e34fac0918b3550f6e45e14678e04f846e97f7",
+  "hash_domain_contract": {
+    "canonical_content_sha256": "SHA-256 of canonical JSON with the content_sha256 member omitted",
+    "serialized_file_sha256": "SHA-256 of the complete UTF-8 JSON file including content_sha256 and formatting",
+    "identity_rule": "Codex and GPT Pro closure verdicts bind canonical_content_sha256; serialized_file_sha256 verifies archived bytes only."
+  },
+  "phase_3_design_prerequisite": {
+    "packet": "docs/evals/dashboard-internal-qualification-phase3-design-rev2.json",
+    "canonical_content_sha256": "5a3b14b3ea9fd64a086bb106b277140c0bb0ecc5ef3d6ed8415e347f43736112",
+    "serialized_file_sha256": "938f3693aefb1262c92057405cb15aa5d8390b8f67721eebe7e1f3e17a993540",
+    "codex_verdict": "AGREE",
+    "gpt_pro_verdict": "AGREE",
+    "accepted_clauses": [
+      "P3D-01",
+      "P3D-02",
+      "P3D-03",
+      "P3D-04",
+      "P3D-05",
+      "P3D-06",
+      "P3D-07",
+      "P3D-08",
+      "P3D-09",
+      "P3D-10",
+      "P3D-11",
+      "P3D-12"
+    ],
+    "implementation_authorized": true
+  },
+  "phase_2_prerequisite_lineage": {
+    "joint_closure_packet": "docs/evals/dashboard-internal-qualification-phase2-closure-rev2.json",
+    "joint_closure_canonical_sha256": "76247f4e723ed6cc79144707ce103400d68f180f9ec16ab283d3d328e987c027",
+    "joint_closure_serialized_sha256": "decf5f20f8e36a88f65e72b5278c323bbf4fc2d1a749d13c93519927e5bf6164",
+    "joint_closure_report_canonical_sha256": "a7056c72a3ba9633e55e19e695801a03bbfb88335ba5b9a8b6ef993c1f41cc95",
+    "determinism_addendum": "docs/evals/dashboard-internal-qualification-phase2-determinism-addendum-rev1.json",
+    "determinism_addendum_canonical_sha256": "94f6e5605b58b27128071a291ace179e02adcfd46711011bd5f5ee1f28976239",
+    "determinism_addendum_serialized_sha256": "9a44fc9189a2554d5b3b86e526bee633187274f2e67753e440871792b95e9f7d",
+    "current_report": "outputs/qualification/contextual-permission-phase2-evidence-v8/result/qualification-report.json",
+    "current_report_canonical_sha256": "0ed412162d4253d1b8e0d16b920430c789014d3d0535117130349b1bda10e98d",
+    "current_report_serialized_sha256": "97702d3a607e15e514706042238781e811bb5c8b9409103d2098f9871efd7bee",
+    "semantic_baseline_sha256": "3f7c719847c3f5da8069b00b591fdce1b9d7057e2dc30d95e394236cad72e071",
+    "lineage_rule": "The old joint closure remains immutable. The current rerun must exactly equal the deterministic report, and after normalizing only artifact content_sha256, report.run_manifest_sha256, and the adapter source digest, it must equal the old semantic baseline. Any other delta invalidates P3D-05.",
+    "result": "The v7 and v8 report payloads differ only in the three declared source-bound identities; all obligations, replays, effects, faults, concurrency results, mutations, invariants, verdict, and completeness fields are exactly equal."
+  },
+  "scope": {
+    "phase": 3,
+    "claim": "construction",
+    "purpose": "internal pre-release Dashboard program-logic qualification across every currently executable Dashboard domain",
+    "domain_count": 9,
+    "runtime_diagnostic_ui_changed": false,
+    "runtime_diagnostic_used_as_oracle": false,
+    "active_workspace_read": false,
+    "active_workspace_mutated": false,
+    "synthetic_workspace_only": true,
+    "productization_or_release_claimed": false,
+    "runtime_safety_authority_claimed": false,
+    "outbound_or_hardware_control_claimed": false
+  },
+  "implementation_surface": {
+    "entrypoint": "tools/verify_dashboard_internal_qualification.py",
+    "modules": [
+      "tests/qualification/phase3_contracts.py",
+      "tests/qualification/phase3_catalog.py",
+      "tests/qualification/phase3_discovery.py",
+      "tests/qualification/phase3_validation.py",
+      "tests/qualification/phase3_workspace.py",
+      "tests/qualification/phase3_replays.py",
+      "tests/qualification/phase3_workers.py",
+      "tests/qualification/phase3_execution.py",
+      "tests/qualification/phase3_reporting.py",
+      "tests/qualification/phase3_mutations.py",
+      "tests/qualification/phase3_runner.py"
+    ],
+    "test_modules": [
+      "tests/qualification/test_phase3_catalog.py",
+      "tests/qualification/test_phase3_discovery.py",
+      "tests/qualification/test_phase3_validation.py",
+      "tests/qualification/test_phase3_workspace.py",
+      "tests/qualification/test_phase3_replays.py",
+      "tests/qualification/test_phase3_execution.py",
+      "tests/qualification/test_phase3_reporting.py",
+      "tests/qualification/test_phase3_mutations.py",
+      "tests/qualification/test_phase3_runner.py"
+    ],
+    "production_corrections_discovered_by_qualification": [
+      {
+        "surface": "assistant_readiness_check.py",
+        "defect": "substring matching treated ordinary variables such as requests and max_model_requests as network effects",
+        "correction": "AST-bound import and callable-root detection preserves real requests/urllib/httpx/aiohttp findings without ordinary-noun false positives",
+        "regression": "tests/test_assistant_readiness_check.py::test_ordinary_request_budget_names_do_not_look_like_network_effects"
+      },
+      {
+        "surface": "admin_api.py Body Index projection",
+        "defect": "public projection retained the local source directory and imported_at metadata",
+        "correction": "source_dir is no longer exposed, source_provider is non-identifying, and every source_index read/write is sanitized",
+        "regression": "tests/test_scout_dashboard_page.py::test_scout_dashboard_body_index_import_dedupes_and_sanitizes"
+      },
+      {
+        "surface": "Phase 2 different-key concurrency harness",
+        "defect": "post-admission operating-system scheduling selected a random winner and changed the canonical report identity",
+        "correction": "both contenders still cross the admission barrier, then a deterministic left-first interleaving proves one commit and one exact snapshot conflict",
+        "regression": "tests/qualification/test_contextual_permission_phase2.py::test_different_key_concurrency_report_is_stable_regardless_of_winner"
+      }
+    ]
+  },
+  "failed_run_history": [
+    {
+      "root": "outputs/qualification/dashboard-phase3-evidence-v1",
+      "exit_status": 2,
+      "terminal": "retained Phase 2 canonical identity mismatch",
+      "finding": "the different-key concurrency winner and receipt hash were nondeterministic",
+      "disposition": "preserved; harness scheduler corrected; never promoted to closure evidence"
+    },
+    {
+      "root": "outputs/qualification/dashboard-phase3-evidence-v2",
+      "exit_status": 2,
+      "terminal": "retained Phase 2 canonical identity mismatch",
+      "finding": "the deterministic harness source correctly changed the source-bound adapter and run-manifest hashes while all semantic fields remained equal",
+      "disposition": "preserved; exact baseline lineage was made explicit in the determinism addendum; never promoted to closure evidence"
+    }
+  ],
+  "authoritative_all_run": {
+    "root": "outputs/qualification/dashboard-phase3-evidence-v3",
+    "command": "python3 tools/verify_dashboard_internal_qualification.py --all --execution-dir outputs/qualification/dashboard-phase3-evidence-v3/execution --output-dir outputs/qualification/dashboard-phase3-evidence-v3/result",
+    "run_id": "dashboard.phase3.ef0ad8c89138700713a9",
+    "exit_status": 0,
+    "claim": "construction",
+    "verdict": "pass",
+    "complete": true,
+    "aggregate_report": "outputs/qualification/dashboard-phase3-evidence-v3/result/qualification-report.json",
+    "aggregate_canonical_content_sha256": "2adfef7d6b0b36ed57974154fd89c695d79be21a28eda74d36fa544c37d58495",
+    "aggregate_serialized_json_sha256": "28f150d13f2d207d3b2f3a960b372d105c3a0343e0476bcb36b600cd520cf504",
+    "aggregate_junit_sha256": "7fc6b92f8d45955403b6e25c93640657e191c2b83d3cd3fec44adc17d9a2a237",
+    "aggregate_text_sha256": "e6274d9662e1589287357db9cd1e09d579f7a45dda398fa7aa6ce188a028412d",
+    "design_sha256": "5a3b14b3ea9fd64a086bb106b277140c0bb0ecc5ef3d6ed8415e347f43736112",
+    "phase2_report_sha256": "0ed412162d4253d1b8e0d16b920430c789014d3d0535117130349b1bda10e98d",
+    "repository_identity": "2b40017c369d5656e64ec617adcd72c0a76c13f5d789b6fd2a0f9c9b049a6f12",
+    "source_manifest_sha256": "0747efa4af247eb598d15bb93a125c0b833890367e394bb39e07c5d2348593fe",
+    "workspace_snapshot_sha256": "0a09ade332a547b7409f88074fc4bafc712a2fec8e84695615b88b5345552626",
+    "aggregate_cases": 50,
+    "aggregate_findings": 0,
+    "telemetry": {
+      "domain_count": 9,
+      "entrypoint_count": 397,
+      "effect_operation_count": 57,
+      "effect_callsite_count": 798,
+      "fault_cell_count": 171,
+      "command_conflict_schedule_count": 216,
+      "dependency_edge_count": 9,
+      "dependency_case_count": 54,
+      "dependency_race_schedule_count": 48,
+      "mutation_count": 27
+    }
+  },
+  "focused_run": {
+    "root": "outputs/qualification/dashboard-phase3-focused-shell-v1",
+    "command": "python3 tools/verify_dashboard_internal_qualification.py --domain dashboard-shell-control --execution-dir outputs/qualification/dashboard-phase3-focused-shell-v1/execution --output-dir outputs/qualification/dashboard-phase3-focused-shell-v1/result",
+    "run_id": "dashboard.phase3.focused.dashboard-shell-control.8601cf3713c0cc80",
+    "exit_status": 0,
+    "verdict": "pass",
+    "complete": true,
+    "canonical_content_sha256": "58e743f7f9097b3319f77daf0d8979accc20267766af18907c5eaf1063a5ce0b",
+    "serialized_json_sha256": "b787345b8d757e580dc943fe777d71b907bbca4c3c472073aa2e77a734fa3dec"
+  },
+  "domain_reports": [
+    {
+      "domain_id": "contextual-permission",
+      "aggregate_binding_sha256": "00ba85bb30ccedbc18f95c60361117cd945a952a88fb16919b02b308dc3c057e",
+      "artifact_content_sha256": "a6eb0a95385e28d4c376f945fd3a017e7aaaf0a0dc829925cee461031573d7be",
+      "serialized_json_sha256": "3eac1dfeb0fd1a9a902c372585e937a126ad8b158ef0f93237fcc58f225066c9",
+      "cases": 214,
+      "findings": 0,
+      "verdict": "pass"
+    },
+    {
+      "domain_id": "safety-emergency",
+      "aggregate_binding_sha256": "d1c30754de21282d78c2cabfec558bc4f13d276385036c807529436cf7195330",
+      "artifact_content_sha256": "6c71c44fcd93e1fdf6f4ef9211713ae295e6d28d809f2433d9e6cec52184b008",
+      "serialized_json_sha256": "1bf1d7cad6321276f34c434e76b350595996decf1eef513499bfcf292a50ccca",
+      "cases": 75,
+      "findings": 0,
+      "verdict": "pass"
+    },
+    {
+      "domain_id": "workspace-lifecycle",
+      "aggregate_binding_sha256": "9f6ab85d0c586bc709199ea623244a890182dc21dc15e17ed03136fef0358fe3",
+      "artifact_content_sha256": "a513de143817cd66cfd5624e3c9043f250e12db33483f471e7c5d883be59d076",
+      "serialized_json_sha256": "e261969323d108f9d37d620a90452158a194f1ac10e2ffeff1184ab4a7ec76f6",
+      "cases": 176,
+      "findings": 0,
+      "verdict": "pass"
+    },
+    {
+      "domain_id": "geospatial-weather-navigation",
+      "aggregate_binding_sha256": "231a80ba60ab69e1d4852ee62203c3a6cfd73ce91e97fbe476f9278e3b6362f8",
+      "artifact_content_sha256": "bd7b940979fb9c4b87615b113472ca16a5d6c76b68e89fa20cc6d14909543cca",
+      "serialized_json_sha256": "31067e605074304424ec28399f97788e81294fb0f067a98b2eae13c894e849cb",
+      "cases": 108,
+      "findings": 0,
+      "verdict": "pass"
+    },
+    {
+      "domain_id": "route-intelligence",
+      "aggregate_binding_sha256": "ef2ecc2181c5851755ebe6491c76dfd0948bf29d43e63ed5e2ff5804462c4732",
+      "artifact_content_sha256": "199003e658fa09cebc670b849747b9670fc50912cc7e4eff9e0ae739bf0db906",
+      "serialized_json_sha256": "75242770082fedd2245e77f8657f4a67c8f1eda0332ab476dd3e0d0ce5b71596",
+      "cases": 128,
+      "findings": 0,
+      "verdict": "pass"
+    },
+    {
+      "domain_id": "assistant-planner",
+      "aggregate_binding_sha256": "fb0c1c8fc9f7d6c89106b4a284f514055db8e00777b8cc66fcb38342e6649d45",
+      "artifact_content_sha256": "35fa48dac057044bf0e5348a41146249b68f3abf91fc1ddbee9da28add7bbfef",
+      "serialized_json_sha256": "8bdac29be6764d4dd905c42b3d399960e1be0c32c0b684fc9847107c39ae1660",
+      "cases": 22,
+      "findings": 0,
+      "verdict": "pass"
+    },
+    {
+      "domain_id": "body-index-privacy",
+      "aggregate_binding_sha256": "a9f69081e6e3fab8cfe2f3c8adb2d4082df292ef669d6a2bcb2906812afa7f53",
+      "artifact_content_sha256": "4ebdb7e0e77e35f66246209c54e853c195b7fcdcd19678b38b7fb4cd24bc7007",
+      "serialized_json_sha256": "99a77732012ed1019ef086b9579e6ca8325412f669dcc7de23a8700fc371f660",
+      "cases": 99,
+      "findings": 0,
+      "verdict": "pass"
+    },
+    {
+      "domain_id": "observer-hardware-boundary",
+      "aggregate_binding_sha256": "2b0827eadadbc2ecea5dc5cb068d5aa197ac2473ba4cef8f8426f567885bca62",
+      "artifact_content_sha256": "da6eb7b41d17a6ff9df96ce15d4647c03467ae8fdc661999788c42ea5af1e0fd",
+      "serialized_json_sha256": "50a18acea0324a9e759a62b0cba3e0e78e5ef00a94a8f81c31d6c0a069a81b9b",
+      "cases": 47,
+      "findings": 0,
+      "verdict": "pass"
+    },
+    {
+      "domain_id": "dashboard-shell-control",
+      "aggregate_binding_sha256": "bac01eb252eb0b29aeb723c98494ad36e9c0840488123ea609a266ae9d4ea0ac",
+      "artifact_content_sha256": "82736a637c8919c60b0c4dda7ebe0a7c4a8b63a3560bda9157f9ad8a0ccd2204",
+      "serialized_json_sha256": "fe9c99d2d980f2cbcfb55da7770cf905f16ed419af72fd7dbacb763f5bd961b6",
+      "cases": 13,
+      "findings": 0,
+      "verdict": "pass"
+    }
+  ],
+  "aggregate_case_inventory": {
+    "surface_entrypoint_closure": 1,
+    "risk_and_design_prerequisites": 2,
+    "workspace_seal": 1,
+    "effect_fault_conflict_dependency_matrices": 5,
+    "authority_boundaries": 7,
+    "private_sentinel_sinks": 7,
+    "mutations": 27,
+    "total": 50,
+    "all_activated": true,
+    "all_status": "passed"
+  },
+  "verification": {
+    "composite_command": "pytest -q tests/qualification tests/test_scout_contextual_permission_workbench.py tests/test_scout_contextual_permission_workbench_api.py tests/test_assistant_readiness_check.py tests/test_scout_dashboard_page.py::test_scout_dashboard_body_index_fresh_project_has_no_fabricated_evidence tests/test_scout_dashboard_page.py::test_scout_dashboard_body_index_all_invalid_import_stays_unavailable tests/test_scout_dashboard_page.py::test_scout_dashboard_body_index_import_dedupes_and_sanitizes",
+    "composite_result": "182 passed in 128.05s",
+    "phase3_tests": 47,
+    "phase2_and_engine_tests": 38,
+    "retained_phase1_and_permission_domain_api_tests": 78,
+    "readiness_and_body_index_regressions": 19,
+    "python_compile": "PASS",
+    "ruff": "PASS; zero issues on every changed Python implementation and test surface",
+    "focused_cli": "PASS",
+    "all_cli": "PASS",
+    "projection_parity": "PASS for aggregate and all nine domain canonical JSON, JUnit, and text projections",
+    "secret_and_scoped_diff_audit": "PASS; git diff --check returned zero and a value-safe six-rule scan across 30 scoped source, test, spec, and packet files found zero credential/private-key literals"
+  },
+  "requirement_to_evidence": [
+    {
+      "acceptance_id": "P3D-01",
+      "codex_status": "PASS",
+      "evidence": "The source-derived manifest reconciles all 22 routes and 397 backend/frontend executable entrypoints exactly once; Diagnostic is separately dispositioned and surface drift tests block removal or ambiguity."
+    },
+    {
+      "acceptance_id": "P3D-02",
+      "codex_status": "PASS",
+      "evidence": "Nine immutable domain specs each bind production refs, independent observations, finite starts/transitions/terminals/recoveries, typed fixtures, and a production replay; all nine domain reports are complete/pass with 882 total cases and zero findings."
+    },
+    {
+      "acceptance_id": "P3D-03",
+      "codex_status": "PASS",
+      "evidence": "Mechanical risk floors keep Contextual Permission, Safety, and Workspace at Tier 0, derive all obligations, reject downgrades, and bind every N/A to source/risk hashes and an activated executable witness."
+    },
+    {
+      "acceptance_id": "P3D-04",
+      "codex_status": "PASS",
+      "evidence": "Nine source-derived dependency edges execute 54 identity/freshness cases and 48 producer-consumer race schedules; omitted-edge, wrong-parent, mixed-generation, and stale-propagation false passes are blocking or killed."
+    },
+    {
+      "acceptance_id": "P3D-05",
+      "codex_status": "PASS",
+      "evidence": "The immutable joint Phase 2 closure, reviewed determinism addendum, exact current Phase 2 report, and semantic-baseline hash are all aggregate prerequisites; the Contextual Permission domain retains 30 obligations, 10 replays, 7 effect classes, 27 faults, 28 concurrency schedules, 11 mutants, and 7 invariants without dilution."
+    },
+    {
+      "acceptance_id": "P3D-06",
+      "codex_status": "PASS",
+      "evidence": "Seven source-to-authority boundaries enforce candidate/advisory/privacy/admission/outbound/hardware limits; identity-bound receipts stale on subject/policy/generation changes and seven private sentinel sinks prove non-propagation through artifacts/findings/JSON/JUnit/text/logs/errors."
+    },
+    {
+      "acceptance_id": "P3D-07",
+      "codex_status": "PASS",
+      "evidence": "The total inventory maps 798 callsites to 57 operations, derives 171 before/inside/after fault cells and 216 command-conflict schedules, and executes required cells in fresh subprocess/workbench identities with no uncovered or unactivated cell."
+    },
+    {
+      "acceptance_id": "P3D-08",
+      "codex_status": "PASS",
+      "evidence": "All 27 isolated mutants activate and are killed, including 11 retained Phase 2 mutants plus tier/N-A, non-route entrypoint, dependency/conflict/yield, receipt staleness, privacy, authority, workspace TOCTOU/path, and stale/mixed aggregate classes."
+    },
+    {
+      "acceptance_id": "P3D-09",
+      "codex_status": "PASS_FOR_CONSTRUCTION_CLAIM",
+      "evidence": "The metadata-only inventory seals device/inode/link/time/content identities, rejects unknown entries, symlinks, hardlinks, root escape and concurrent mutation, and reconciles support/migration/quarantine. The authoritative claim uses only a generated synthetic workspace; no release or real-workspace pass is claimed."
+    },
+    {
+      "acceptance_id": "P3D-10",
+      "codex_status": "PASS",
+      "evidence": "Domain, all-construction, and explicit release modes are mutually constrained; release requires a workspace inventory, construction forbids it, reports finalize atomically with exact aggregate/domain bindings and projection parity, and omitted/incomplete/foreign/mixed evidence cannot exit zero."
+    },
+    {
+      "acceptance_id": "P3D-11",
+      "codex_status": "PASS",
+      "evidence": "A persistent focused Dashboard Shell run, authoritative all-domain run, 182-test composite regression, source/hash recomputation, aggregate 50-case reconciliation, nine domain reports, and all output hashes are frozen in this packet."
+    },
+    {
+      "acceptance_id": "P3D-12",
+      "codex_status": "PASS",
+      "evidence": "The mechanism is confined to internal tests/tools/docs, keeps runtime Diagnostic separate, and explicitly withholds productization, active-workspace, release, runtime-safety-authority, outbound, and hardware-control claims."
+    }
+  ],
+  "codex_final_verdict": {
+    "verdict": "AGREE",
+    "accepted_clauses": [
+      "P3D-01",
+      "P3D-02",
+      "P3D-03",
+      "P3D-04",
+      "P3D-05",
+      "P3D-06",
+      "P3D-07",
+      "P3D-08",
+      "P3D-09",
+      "P3D-10",
+      "P3D-11",
+      "P3D-12"
+    ],
+    "blocking_gaps": [],
+    "qualification_status": "WORKING CONSTRUCTION GATE",
+    "phase_3_complete": false,
+    "reason_phase_3_remains_open": "GPT Pro must review this exact immutable packet and return a compatible clause-by-clause AGREE verdict."
+  },
+  "gpt_pro_review_request": {
+    "required_echo": "exact canonical content SHA-256 of this packet",
+    "required_disposition": "AGREE, AGREE_WITH_CHANGES, or DISAGREE for each P3D-01 through P3D-12",
+    "required_specific_review": "Decide whether the deterministic Phase 2 baseline lineage preserves exact P3D-05 semantics without silently reopening or weakening the joint Phase 2 closure.",
+    "required_claim_review": "Confirm that P3D-09 is construction-only and P3D-12 withholds release, real-workspace, production, runtime-safety-authority, outbound, and hardware claims.",
+    "completion_rule": "Phase 3 closes only if GPT Pro echoes the exact hash, accepts every clause without a blocking change, and its claim interpretation is compatible with Codex."
+  },
+  "non_claims": [
+    "No runtime Diagnostic UX or user-facing diagnostic check was added or used as an oracle.",
+    "No --release invocation or real active-workspace inventory was performed.",
+    "No repository-wide productization, production-readiness, deployment, performance-SLO, or release claim is made.",
+    "No raw GPX, raw health payload, exact private coordinate, .env value, browser/account state, or unrelated user artifact was read into qualification evidence.",
+    "No model output was allowed to mutate runtime safety truth.",
+    "No outbound message, production database mutation, hardware control, push, merge, or commit was performed."
+  ]
+}

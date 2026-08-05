@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import argparse
 import json
 from pathlib import Path
@@ -538,10 +539,16 @@ def _check_assistant_foundation_static_boundaries(root: Path) -> dict[str, Any]:
                 for token in forbidden_tokens
                 if token not in ASSISTANT_PROVIDER_ALLOWED_NETWORK_TOKENS
             )
+        network_tokens = set(ASSISTANT_PROVIDER_ALLOWED_NETWORK_TOKENS)
+        detected_network_tokens = _python_network_effect_tokens(source)
         missing.extend(
             f"assistant_foundation_forbidden_token:{relative_path}:{token}"
             for token in forbidden_tokens
-            if token in source
+            if (
+                token in detected_network_tokens
+                if token in network_tokens
+                else token in source
+            )
         )
 
     return {
@@ -549,6 +556,39 @@ def _check_assistant_foundation_static_boundaries(root: Path) -> dict[str, Any]:
         "scanned": scanned_paths,
         "missing": sorted(missing),
     }
+
+
+def _python_network_effect_tokens(source: str) -> set[str]:
+    """Find network packages as imports/calls without matching ordinary nouns."""
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {
+            token
+            for token in ASSISTANT_PROVIDER_ALLOWED_NETWORK_TOKENS
+            if token in source
+        }
+    detected: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules = (alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            modules = (node.module or "",)
+        else:
+            modules = ()
+        for module in modules:
+            root = module.split(".", 1)[0]
+            if root in ASSISTANT_PROVIDER_ALLOWED_NETWORK_TOKENS:
+                detected.add(root)
+        if not isinstance(node, ast.Call):
+            continue
+        value = node.func
+        while isinstance(value, ast.Attribute):
+            value = value.value
+        if isinstance(value, ast.Name) and value.id in ASSISTANT_PROVIDER_ALLOWED_NETWORK_TOKENS:
+            detected.add(value.id)
+    return detected
 
 
 def _check_server_opt_in_mount(root: Path) -> dict[str, Any]:

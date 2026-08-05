@@ -1,0 +1,329 @@
+{
+  "packet_id": "dashboard-internal-qualification.phase3-design.rev1",
+  "packet_schema_version": "dashboardInternalQualificationPhase3Design.v1",
+  "created_on": "2026-08-04",
+  "review_state": "submitted_for_joint_design_review",
+  "content_sha256": "9bfe427f0c596981f632d587af4400a5f2591ce34cd8e0a59fc8bf5f559b1dc8",
+  "hash_domain_contract": {
+    "canonical_content_sha256": "SHA-256 of canonical JSON with the content_sha256 member omitted",
+    "serialized_file_sha256": "SHA-256 of the complete UTF-8 JSON file including content_sha256 and formatting",
+    "identity_rule": "Both design verdicts bind canonical_content_sha256; serialized_file_sha256 verifies archived bytes only."
+  },
+  "prerequisites": {
+    "phase_2_design": {
+      "path": "docs/evals/dashboard-internal-qualification-phase2-design-rev2.json",
+      "canonical_content_sha256": "f982b1f85cb324a697e6c74d27e173917553226493d8f652d5c2621b121b73bb",
+      "serialized_file_sha256": "434c9906953845fff7eba06d9908e474f2cfccad9b62d49c026941d19324ee0f"
+    },
+    "phase_2_closure": {
+      "path": "docs/evals/dashboard-internal-qualification-phase2-closure-rev2.json",
+      "canonical_content_sha256": "76247f4e723ed6cc79144707ce103400d68f180f9ec16ab283d3d328e987c027",
+      "serialized_file_sha256": "decf5f20f8e36a88f65e72b5278c323bbf4fc2d1a749d13c93519927e5bf6164",
+      "codex_verdict": "AGREE",
+      "gpt_pro_verdict": "AGREE",
+      "phase_3_authorized": true
+    },
+    "phase_2_authoritative_report": {
+      "path": "outputs/qualification/contextual-permission-phase2-evidence-v7/result/qualification-report.json",
+      "canonical_content_sha256": "a7056c72a3ba9633e55e19e695801a03bbfb88335ba5b9a8b6ef993c1f41cc95",
+      "serialized_file_sha256": "26d154dad555a7108b3d21668aaf125394324f1d3a999a7bd36e1e145c7b1481"
+    }
+  },
+  "design_source": {
+    "path": "docs/specs/scout-dashboard-internal-qualification.md",
+    "sha256": "f313e224ad24a329ddc4cae9d2600ddb131658444d4dfadf4606cabe552d42ee",
+    "sections": [
+      "9.1",
+      "9.2",
+      "9.3",
+      "9.4",
+      "9.5",
+      "9.6",
+      "9.7",
+      "9.8",
+      "9.9",
+      "9.10",
+      "9.11",
+      "9.12",
+      "9.13",
+      "9.14"
+    ]
+  },
+  "scope": {
+    "phase": 3,
+    "purpose": "expand the jointly accepted reusable qualification engine across every implemented Dashboard domain and add a fail-closed aggregate pre-release command",
+    "runtime_diagnostic_ui_is_oracle": false,
+    "runtime_diagnostic_ui_modified": false,
+    "real_active_workspace_read": false,
+    "real_active_workspace_mutated": false,
+    "runtime_safety_truth_mutated": false,
+    "external_outbound_or_hardware_invoked": false,
+    "productization_claimed": false,
+    "construction_closure_uses_synthetic_workspace": true,
+    "release_claim_requires_explicit_workspace_inventory": true
+  },
+  "current_surface_observation": {
+    "canonical_dashboard_html": {
+      "path": "docs/admin/scout-dashboard-v0.1.html",
+      "serialized_file_sha256": "8240cac29722c4c087eabf66dcf0228b67b35df8c40e3289f2d0ff7e1ec8db87"
+    },
+    "navigation_route_count": 22,
+    "navigation_routes": [
+      ["home", "live", "dashboard-shell-control"],
+      ["features-workspace", "partial", "workspace-lifecycle"],
+      ["features-import-new-trip", "partial", "workspace-lifecycle"],
+      ["features-country-material-pool", "preview", "presentation-only-preview"],
+      ["map", "live", "geospatial-weather-navigation"],
+      ["timeline", "partial", "dashboard-shell-control"],
+      ["features-lbs", "preview", "presentation-only-preview"],
+      ["outdoor-route-context", "partial", "route-intelligence"],
+      ["outdoor-pace-fit", "partial", "route-intelligence"],
+      ["outdoor-pace-fit-body-index", "partial", "body-index-privacy"],
+      ["outdoor-permission", "partial", "contextual-permission"],
+      ["outdoor-architecture", "partial", "route-intelligence"],
+      ["outdoor-weather", "partial", "geospatial-weather-navigation"],
+      ["outdoor-navigation", "preview", "geospatial-weather-navigation"],
+      ["emergency", "partial", "safety-emergency"],
+      ["agent", "partial", "assistant-planner"],
+      ["living", "sandbox", "safety-emergency"],
+      ["surface-debug", "live", "dashboard-shell-control"],
+      ["debug", "partial", "dashboard-shell-control"],
+      ["observer", "preview", "observer-hardware-boundary"],
+      ["settings", "live", "dashboard-shell-control"],
+      ["diagnostic", "live", "separate-runtime-diagnostic"]
+    ],
+    "raw_admin_path_literal_count": 19,
+    "literal_count_is_not_coverage_oracle": true,
+    "dynamic_path_constructors_must_be_discovered": true,
+    "current_cli": {
+      "path": "tools/verify_dashboard_internal_qualification.py",
+      "sha256": "5eaffa03a15f6615d1e639ef76c776664453e83c36753c54d9797f4897c9f4eb",
+      "implemented_domain_choices": ["contextual-permission"],
+      "all_mode": "fail_closed_reserved_for_phase_3"
+    }
+  },
+  "surface_closure": {
+    "discovery_sources": [
+      "canonical Dashboard data-route and data-route-truth attributes",
+      "Dashboard API literals and dynamic path constructors",
+      "FastAPI route templates and handler symbols",
+      "handler-reachable production module symbols",
+      "persisted artifact_kind schema_version and capability literals",
+      "tool manifests invoked by Dashboard handlers"
+    ],
+    "required_dispositions": [
+      "qualified_domain",
+      "presentation_only_shell_contract",
+      "separate_runtime_diagnostic",
+      "evidence_backed_no_executable_contract_exclusion"
+    ],
+    "preview_rule": "Preview maturity does not exclude an executable production contract.",
+    "unknown_or_duplicate_result": "SURFACE-INVENTORY-DRIFT",
+    "source_snapshot_bound_to_run": true,
+    "tests_or_runtime_diagnostic_as_inventory_oracle": false
+  },
+  "domain_queue": [
+    {
+      "domain_id": "contextual-permission",
+      "risk_tier": "inherited_phase_2",
+      "ui_routes": ["outdoor-permission"],
+      "production_refs": ["scout_contextual_permission_workbench.py", "scout_contextual_permission_workbench_api.py"],
+      "coverage_contract": "exact retained Phase 2 semantic and evidence gate; no replacement adapter"
+    },
+    {
+      "domain_id": "safety-emergency",
+      "risk_tier": 0,
+      "ui_routes": ["emergency", "living"],
+      "production_refs": ["safety_api.py", "scout_runtime_safety_gate_models.py", "scout_runtime_safety_reducer.py", "scout_runtime_safety_state_store.py", "scout_emergency_mobile_closed_loop_sandbox.py", "scout_emergency_mobile_closed_loop_api.py"],
+      "mandatory_boundaries": ["deterministic runtime owns safety truth", "candidate and sandbox outputs have no runtime authority", "approval receipt precedes any simulated transport", "no real outbound"]
+    },
+    {
+      "domain_id": "workspace-lifecycle",
+      "risk_tier": 0,
+      "ui_routes": ["features-workspace", "features-import-new-trip"],
+      "production_refs": ["pretrip_import.py", "pretrip_layer_preparation.py", "pretrip_workspace_project.py", "pretrip_workspace_edit.py", "dashboard_connected_preparation.py", "dashboard_workspace_operations.py", "dashboard_workspace_publication.py", "admin_api.py"],
+      "mandatory_boundaries": ["preview does not publish", "publication is atomic", "same-key retry is idempotent", "stale snapshot cannot overwrite", "partial preparation is non-ready"]
+    },
+    {
+      "domain_id": "geospatial-weather-navigation",
+      "risk_tier": 1,
+      "ui_routes": ["map", "outdoor-weather", "outdoor-navigation"],
+      "production_refs": ["admin_weather_overlay.py", "scout_weather_integration.py", "weather_grid_store.py", "weather_imagery_freshness.py", "weather_imagery_tile_cache.py", "admin_imagery_sources.py", "admin_local_raster_source.py", "admin_local_raster_tiles.py", "scout_navigation_terrain_tool.py", "admin_api.py"],
+      "mandatory_boundaries": ["route hash and provider freshness are explicit", "cache identity cannot imply data freshness", "missing or delayed imagery is non-ready", "projections remain candidate-only", "no network during qualification"]
+    },
+    {
+      "domain_id": "route-intelligence",
+      "risk_tier": 1,
+      "ui_routes": ["outdoor-route-context", "outdoor-architecture", "outdoor-pace-fit"],
+      "production_refs": ["scout_route_context_tool.py", "scout_route_architecture_tool.py", "scout_pace_guardian_tool.py", "scout_pace_coefficient_builder.py", "admin_api.py"],
+      "mandatory_boundaries": ["route identity binds every projection", "advisory output is not safety truth", "missing evidence remains visible", "regeneration requires explicit action"]
+    },
+    {
+      "domain_id": "assistant-planner",
+      "risk_tier": 1,
+      "ui_routes": ["agent"],
+      "production_refs": ["assistant_api.py", "admin_assistant_context.py", "assistant_models.py", "assistant_readiness_check.py", "assistant_skill_router.py", "assistant_workspace_total_info.py", "scout_ai_assistant_workflow_eval.py", "scout_workspace_query_tool.py"],
+      "mandatory_boundaries": ["readiness is distinct from answer success", "model output is advice not state truth", "tool effects require deterministic authorization", "no provider network in qualification"]
+    },
+    {
+      "domain_id": "body-index-privacy",
+      "risk_tier": 1,
+      "ui_routes": ["outdoor-pace-fit-body-index"],
+      "production_refs": ["admin_api.py", "scout_pace_coefficient_builder.py"],
+      "mandatory_boundaries": ["only sanitized aggregate fields are public", "dedup uses bounded source identity", "watch start requires confirmation", "qualification does not read real health exports"]
+    },
+    {
+      "domain_id": "observer-hardware-boundary",
+      "risk_tier": 1,
+      "ui_routes": ["observer"],
+      "production_refs": ["scout_sensorlogger_mqtt_observer.py", "scout_local_mqtt_broker_harness.py", "ingress_observer_supervisor.py", "scout_gnss_hardware_observer.py"],
+      "mandatory_boundaries": ["normalization precedes admission", "observer cannot publish from Dashboard", "hardware and non-loopback network are blocked", "stale observations cannot mutate safety truth"]
+    },
+    {
+      "domain_id": "dashboard-shell-control",
+      "risk_tier": 2,
+      "ui_routes": ["home", "timeline", "surface-debug", "debug", "settings"],
+      "production_refs": ["docs/admin/scout-dashboard-v0.1.html", "admin_api.py"],
+      "mandatory_boundaries": ["initial render and data load do not perform mutation", "settings reject credentials unsafe protocols and query secrets", "debug surfaces are read-only", "runtime Diagnostic remains separate from qualification"]
+    }
+  ],
+  "per_domain_contract": {
+    "immutable_types": [
+      "DashboardSurfaceManifest",
+      "DashboardSurfaceRecord",
+      "DashboardDomainSpec",
+      "DashboardDomainResult",
+      "DashboardScenarioSpec",
+      "DashboardScenarioResult",
+      "DependencyEdgeSpec",
+      "DependencyCaseSpec",
+      "DependencyCaseResult",
+      "WorkspaceCapabilityRecord",
+      "WorkspaceInventoryResult",
+      "AggregateRunManifest",
+      "AggregateQualificationReport"
+    ],
+    "minimum_state_fixtures": ["current", "known_historical", "malformed", "unknown_version", "stale_upstream", "interrupted_write"],
+    "fixture_applicability_is_manifested": true,
+    "minimum_trajectories": ["production_backed_success", "typed_failure_or_quarantine", "every_advertised_recovery"],
+    "production_response_claims_define_oracle": false,
+    "unknown_semantics_result": "INVALID_RUN",
+    "risk_tier_zero": "transition complete plus full applicable fault and conflict matrices",
+    "risk_tier_one": "transition complete plus full discovered effect classes durable faults and shared-writer conflicts",
+    "risk_tier_two": "complete surface validation startup no-write and boundary coverage with evidence-backed N/A durability cells"
+  },
+  "cross_domain_dependencies": [
+    ["workspace.publication_identity", "route.identity", ["project_id", "publication_sha256"]],
+    ["route.identity", "route-context.projection", ["project_id", "route_sha256"]],
+    ["route.identity", "weather.projection", ["project_id", "route_sha256", "provider_snapshot_sha256"]],
+    ["route.identity", "navigation.projection", ["project_id", "route_sha256", "terrain_source_sha256"]],
+    ["route.identity", "architecture.projection", ["project_id", "route_sha256"]],
+    ["route.identity", "pace.projection", ["project_id", "route_sha256", "reference_timing_sha256"]],
+    ["route-context.reference-timing", "mission-baseline", ["project_id", "route_sha256", "reference_timing_sha256"]],
+    ["mission-baseline.permission-rules", "contextual-permission.projection", ["project_id", "baseline_sha256", "rules_sha256"]],
+    ["contextual-permission.planned-eta", "safety-emergency.review-packet", ["project_id", "projection_sha256", "planned_eta_sha256"]],
+    ["body-index.sanitized-summary", "pace.advisory", ["project_id", "sanitized_summary_sha256"]],
+    ["observer.normalized-evidence", "safety.deterministic-admission", ["source_id", "evidence_sha256"]],
+    ["assistant.candidate-output", "runtime-state", ["forbidden_direct_edge"]]
+  ],
+  "dependency_case_cross_product": ["unchanged", "upstream_changed", "consumer_missing", "consumer_stale", "wrong_parent", "mixed_generation"],
+  "dependency_allowed_outcomes": ["fully_rebuilt_with_matching_identity", "explicit_stale_with_executable_recovery", "typed_quarantine"],
+  "dependency_blocking_outcomes": ["fresh_flag_with_identity_mismatch", "mixed_parent_generation", "skipped_invalidation", "candidate_to_runtime_truth", "observer_bypasses_deterministic_admission"],
+  "effects_and_privacy": {
+    "workspace_modes": ["unique_synthetic_temporary_root", "explicit_metadata_only_workspace_inventory"],
+    "never_read": [".env values", "browser or account state", "raw GPX", "raw health exports", "exact private coordinates", "unrelated user artifacts"],
+    "effect_classes": ["filesystem", "database_or_store", "http_client", "network_socket", "subprocess", "runtime_or_safety_adapter", "outbound_sender", "hardware_interface"],
+    "record_before_invocation": true,
+    "allowed_writes": "current synthetic execution root only",
+    "default_blocked_before_invocation": ["network", "real_database", "subprocess", "outbound", "hardware", "production_state", "runtime_safety_truth"],
+    "synthetic_loopback_requires_exact_declaration": true,
+    "absent_class_rule": "static negative audit plus invocation-blocked runtime canary",
+    "unclassified_result": "INVALID_RUN"
+  },
+  "fault_and_concurrency": {
+    "fault_derivation": "every discovered durable operation crossed with before inside and after phases; applicability and rationale are validated",
+    "fault_operations": ["read", "open", "mkdir", "temp", "write", "flush", "fsync", "link", "replace", "delete", "lock", "store"],
+    "fresh_execution_identity": true,
+    "allowed_fault_terminals": ["unchanged", "recoverable_by_exact_command", "typed_quarantine_or_fail_closed"],
+    "partial_publication_is_fresh": false,
+    "concurrency_derivation": "every declared conflicting command pair crossed with every applicable shared-state yield",
+    "shared_yields": ["admission", "journal_creation", "durable_write", "pointer_activation", "receipt_write", "cleanup"],
+    "minimum_conflict_classes_where_applicable": ["same_key_retry", "different_key_command", "stale_snapshot", "recovery_vs_new_command", "import_vs_publication", "refresh_vs_read", "watch_start_vs_stop"],
+    "missing_or_unactivated_result": "INVALID_RUN"
+  },
+  "mutation_policy": {
+    "isolated": true,
+    "activation_required": true,
+    "exact_attribution_required": true,
+    "unrelated_crash_is_kill": false,
+    "required_classes": ["retained_phase_2", "required_transition_removed", "advertised_recovery_removed", "unknown_capability_accepted", "surface_record_dropped", "dependency_edge_removed", "stale_propagation_skipped", "wrong_identity_compared", "mixed_generation_accepted", "fresh_before_durable_completion", "privacy_redaction_bypassed", "effect_allowlist_bypassed", "safety_admission_bypassed", "explicit_confirmation_bypassed", "candidate_boundary_bypassed", "aggregate_domain_omitted", "aggregate_incomplete_exit_zero"],
+    "survivor_result": "MUTATION-SURVIVED"
+  },
+  "workspace_inventory": {
+    "explicit_path_required": true,
+    "read_only": true,
+    "path_confined": true,
+    "whitelisted_metadata_only": true,
+    "raw_route_or_health_payload_read": false,
+    "allowed_dispositions": ["direct_support", "executable_migration", "typed_quarantine_non_ready"],
+    "unknown_or_mixed_result": "blocking",
+    "construction_fixture": "generated synthetic compatibility workspace",
+    "release_mode": "--release --workspace-inventory PATH",
+    "release_without_explicit_inventory": "INVALID_RUN"
+  },
+  "aggregate_command": {
+    "domain_mode": "--domain DOMAIN --execution-dir UNIQUE_ROOT --output-dir UNIQUE_ROOT",
+    "all_mode": "--all --execution-dir UNIQUE_ROOT --output-dir UNIQUE_ROOT",
+    "release_mode": "--release --workspace-inventory PATH --execution-dir UNIQUE_ROOT --output-dir UNIQUE_ROOT",
+    "all_required_components": ["nine_domain_queue", "cross_domain_dag", "surface_and_api_reconciliation", "aggregate_mutations", "retained_phase_1_and_2_gates"],
+    "outputs": ["aggregate_canonical_json", "per_domain_canonical_json", "junit", "text"],
+    "manifest_components": ["source", "spec", "fixtures", "dependencies", "effects", "mutations", "per_domain_reports", "phase_1_and_2_prerequisites", "configuration"],
+    "finalization": ["write_temporary", "fsync", "atomic_replace", "reread", "schema_validate", "hash_verify", "projection_parity"],
+    "exit_codes": {
+      "0": "complete evidence and no blocking finding for the invoked claim",
+      "1": "complete evidence with one or more blocking findings",
+      "2": "invalid incomplete unsafe stale mismatched or partially reported evidence"
+    },
+    "omitted_domain_can_pass": false
+  },
+  "design_acceptance": [
+    {"id": "P3D-01", "requirement": "Source-derived surface closure maps every implemented Dashboard route invoked API handler production symbol and persisted capability to one qualified domain or evidence-backed exclusion; drift blocks."},
+    {"id": "P3D-02", "requirement": "Nine domain specs use independent observations and finite state terminal recovery contracts with current historical malformed stale and interrupted fixtures as applicable."},
+    {"id": "P3D-03", "requirement": "Risk-tier rules derive transition decision effect fault concurrency invariant and mutation obligations without allowing counts or not-applicable labels to hide missing coverage."},
+    {"id": "P3D-04", "requirement": "The cross-domain dependency DAG enforces parent identity freshness rebuild-or-stale closure and blocks wrong-parent or mixed-generation artifacts."},
+    {"id": "P3D-05", "requirement": "Contextual Permission is an exact retained Phase 2 prerequisite and cannot be weakened by the aggregate adapter."},
+    {"id": "P3D-06", "requirement": "Safety privacy candidate-only explicit-confirmation deterministic-admission and no-outbound/no-hardware boundaries are executable invariants with before-invocation effect evidence."},
+    {"id": "P3D-07", "requirement": "Durable-operation-by-fault-phase and conflict-pair-by-shared-yield matrices are derived per domain use fresh identities and fail closed on every uncovered or unactivated cell."},
+    {"id": "P3D-08", "requirement": "Domain and cross-domain mutants have isolated activation and exact attribution including surface dependency identity publication privacy effect and aggregate false-pass mutants."},
+    {"id": "P3D-09", "requirement": "Explicit active-workspace inventory is read-only metadata-whitelisted path-confined privacy-bounded and reconciles every persisted capability to support migration or quarantine."},
+    {"id": "P3D-10", "requirement": "All and release modes have distinct claims; aggregate canonical identity atomic output projection parity and total exit semantics prevent omitted-domain or incomplete-evidence passes."},
+    {"id": "P3D-11", "requirement": "Closure evidence includes focused domain and cross-domain tests retained Phase 1 and 2 regressions source-manifest recomputation and exact per-domain and aggregate case reconciliation."},
+    {"id": "P3D-12", "requirement": "Phase 3 remains internal pre-release qualification separate from runtime Diagnostic UI and makes no unearned production real-workspace runtime-safety outbound or hardware claim."}
+  ],
+  "local_design_verification": {
+    "phase_2_closure_hash_recomputed": true,
+    "phase_2_report_hash_recomputed": true,
+    "dashboard_navigation_routes_observed": 22,
+    "all_navigation_routes_dispositioned": true,
+    "preview_routes_with_executable_contract_not_silently_excluded": ["outdoor-navigation", "observer"],
+    "explicit_presentation_only_preview_candidates": ["features-country-material-pool", "features-lbs"],
+    "current_all_mode_verified_fail_closed": true,
+    "production_source_refs_verified_present": true,
+    "real_private_workspace_inspected": false
+  },
+  "non_claims": [
+    "phase_3_implementation_complete",
+    "runtime_diagnostic_replacement",
+    "real_active_workspace_qualified",
+    "production_readiness",
+    "repository_wide_productization",
+    "runtime_safety_authority",
+    "external_outbound",
+    "real_hardware_control"
+  ],
+  "requested_verdict": {
+    "allowed": ["AGREE", "AGREE_WITH_CHANGES", "DISAGREE"],
+    "agreement_condition": "Both reviewers explicitly accept P3D-01 through P3D-12 against this exact canonical content hash before Phase 3 implementation starts.",
+    "implementation_authorized_before_joint_agreement": false
+  }
+}
