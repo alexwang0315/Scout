@@ -7,7 +7,7 @@
 空狀態、跨頁一致性，以及操作後不應發生的副作用。
 
 - 目標：100 個可執行、可判定、可留證據的主檢查項目。
-- 目前版本：36 / 100。
+- 目前版本：37 / 100。
 - 維護狀態：持續記錄中。
 - 起始日期：2026-07-28。
 - 維護方式：本對話串中新增或修改的檢查項目，持續追加到本文件。
@@ -50,14 +50,14 @@
 ## Dashboard Diagnostic UI
 
 Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前的
-`DASH-001～DASH-036`。
+`DASH-001～DASH-037`。
 
 - 尚未測試：灰燈。
 - 測試中：黃燈與 `測試中`。
 - 測試通過：綠燈與 `測試通過`。
 - 測試失敗：紅燈與 `測試失敗`，並顯示失敗原因。
 - 每題都有獨立的 `重新測試`。
-- 頁首 `Diag all` 依序執行 36 題，避免大型 project projection API
+- 頁首 `Diag all` 依序執行 37 題，避免大型 project projection API
   同時被大量呼叫。
 
 Diagnostic UI 是即時、read-only 的快速診斷層。它只使用 UI contract、
@@ -75,7 +75,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 |---|---|
 | 全域與 Overview | DASH-001、DASH-002、DASH-011 |
 | Plan Trip 與 Workspace | DASH-003、DASH-007、DASH-012～DASH-014 |
-| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030 |
+| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030、DASH-037 |
 | Exploring for Six Axis | DASH-008、DASH-018～DASH-025、DASH-031～DASH-036 |
 | Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015 |
 
@@ -84,7 +84,7 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 通過條件；只有具備可操作 UI、API／artifact 與明確 PASS／FAIL 證據的功能
 才會成為正式檢查項目。
 
-## 目前可驗收的 36 項功能
+## 目前可驗收的 37 項功能
 
 ### DASH-001 Dashboard 啟動、入口與必要 API 可用
 
@@ -1262,9 +1262,61 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
   network 攔截結果為 0 POST。
 - 缺陷編號：
 
+### DASH-037 Navigation、Architecture、Weather 動態圖磚倍率切換
+
+- 頁面／範圍：Exploring for Six Axis → Navigation、Architecture、Weather。
+- 頁面分類：Map & Evidence。
+- 優先級：P0。
+
+檢查步驟：
+
+1. 依序開啟 Navigation、Architecture、Weather，先按 Fit，等待目前
+   Rudy+TW tile generation 完成，再記錄地圖倍率、active tile Z／
+   `TILEMATRIX` 與 Network request 水位。
+2. 每張圖先按一次 `+`；確認 Fit Z13 切到 Z14，且地圖倍率與 active tile
+   都完成第一段上升。
+3. 繼續按 `+` 到地圖倍率超過 `2x`；要求 active tile 與新增 request 進入
+   Z15，明確跨過 `preparedMaxZoom=14`，不能只反覆縮放 Z14。
+4. 比較兩段操作新增的 Rudy+TW resource requests；proxy path 的 `{z}` 或 WMTS
+   的 `TILEMATRIX` 必須依序包含 Z14、Z15，且 source 仍是
+   `happyman_rudy_twmap`。
+5. 比較載入完成後 active tile DOM 的 `data-raster-tile`／
+   `data-dashboard-rudy-tile` 與 viewport dataset；兩者必須等於新 request Z，
+   不得只改 `data-map-zoom` 後拉伸舊 Z14 圖磚。
+6. 核對 Navigation／Architecture 的共用 updater 使用 native `maxZoom`，
+   Weather 由 live `state.zoom` 推導 matrix；`preparedMaxZoom` 只能描述已準備
+   範圍，不得作為互動縮放上限。
+7. 檢查換磚期間保留上一個完整 generation；新 generation 全部成功後才切換，
+   並確認向量 route／evidence 沒有漂移、必要 request 無 4xx/5xx、console 無錯。
+
+通過條件：
+
+- Navigation、Architecture、Weather 三頁都必須先完成 Z13→Z14，再完成
+  Z14→Z15；兩段都有實際 resource request，active tile Z 也同步上升。
+- UI zoom、request matrix、active tile matrix 三者一致；任何一頁停在 Z14 放大
+  舊圖、只更新文字標籤或只產生 request 卻未切換 active generation 都是 FAIL。
+- Navigation／Architecture 不得以 `preparedMaxZoom` 截斷 shared updater；Weather
+  不得以固定 max matrix 阻止 live zoom 推進。
+- 三頁仍使用 Rudy+TW allowlisted proxy／tile source，不得為了通過而退回單一圖片
+  或未核准底圖。
+
+證據／結果：
+
+- 結果：`FAIL`（2026-08-04，Chromium，真實 Rudy+TW proxy requests）。
+- 契約證據：System → Diagnostic 的 DASH-037 通過；Navigation、Architecture 與
+  Weather 都能由 Fit Z13 產生第一次 Z14 與跨越 prepared ceiling 的 Z15 request
+  contract，且 shared updater／Weather live zoom selector 均未以
+  `preparedMaxZoom=14` 作互動上限。
+- 瀏覽器證據：三張圖的 Network 都實際出現 Z13、Z14、Z15。Architecture 完成
+  active Z13→Z14→Z15；Navigation 與 Weather 的 Z15 generation 因
+  `/imagery/15/27420/14126.png` 經本機 allowlisted proxy 穩定回 500 而保留上一個
+  完整 Z14 generation，因此未誤判為通過。獨立 GET 重測同一路徑仍為 HTTP 500。
+- 缺陷編號：`DASH-MAP-REG-002`（未修正；Z cap regression 已排除，剩餘為
+  Z15 單磚取得失敗導致 Navigation／Weather 無法完成 generation swap）。
+
 ## 後續項目收錄門檻
 
-下一個可用編號為 `DASH-037`。新項目只有在功能已實作，且具備可操作 UI、
+下一個可用編號為 `DASH-038`。新項目只有在功能已實作，且具備可操作 UI、
 API／artifact、測試資料與明確 PASS／FAIL 條件時才加入。未完成、未接線、
 preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
@@ -1272,6 +1324,7 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
+| 2026-08-04 | 新增 DASH-037，禁止 Navigation、Architecture、Weather 在高倍率停用動態換磚；要求 Z13→Z14 與跨 prepared ceiling 的 Z14→Z15 都有同步 UI、active tile 與 Network request 證據。 |
 | 2026-08-03 | Chromium 完成 36/36 Diag all：32 PASS、4 個現況資料／服務 FAIL；DASH-031～036 全數 PASS，且 9/9 Dashboard 地圖完成真實操作回歸，全程 0 POST。 |
 | 2026-08-03 | 新增 DASH-031～036，驗證 Contextual Permission read API、Workbench、Forward Projection、Safety / Emergency 邊界、Evidence lineage 與明確 no-write simulation。 |
 | 2026-07-28 | 主 Map 保留完整 canonical layers；其餘 7 張 Dashboard 地圖統一為 Rudy+TW-only basemap、page-local vectors、停用 wheel zoom，並以 Chromium 驗證 8/8 操作一致。 |

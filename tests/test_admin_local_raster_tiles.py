@@ -422,6 +422,84 @@ def test_raster_tile_proxy_serves_cropped_parent_cache_fallback(tmp_path):
         assert image.convert("RGBA").getpixel((128, 128))[:3] == (0, 255, 0)
 
 
+def test_raster_tile_proxy_prefers_requested_native_zoom_before_parent_fallback(
+    tmp_path,
+):
+    parent_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        1,
+        1,
+        1,
+        cache_root=tmp_path,
+    )
+    parent_path.parent.mkdir(parents=True)
+    parent_path.write_bytes(_quadrant_png())
+    source = imagery_source_for_project({"imagery_source_id": "nlsc_photo2"})
+    remote_body = b"\x89PNG\r\n\x1a\nnative-z2"
+    calls = []
+
+    def fake_fetcher(imagery_source, z, x, y, *, timeout_seconds):
+        calls.append((imagery_source["source_id"], z, x, y, timeout_seconds))
+        return RemoteImageryTile(
+            body=remote_body,
+            media_type="image/png",
+            source_id="nlsc_photo2",
+            url="https://example.test/tiles/2/3/2.png",
+            body_sha256="native-z2-sha",
+        )
+
+    payload = load_or_build_raster_tile_payload(
+        "chilai_nanhua_day1",
+        "imagery",
+        2,
+        3,
+        2,
+        cache_root=tmp_path,
+        imagery_source=source,
+        allow_remote_fetch=True,
+        prefer_native_zoom=True,
+        remote_fetch_timeout_seconds=1.5,
+        remote_fetcher=fake_fetcher,
+    )
+
+    assert payload.source == "remote_fetch_cache_fill"
+    assert payload.body == remote_body
+    assert calls == [("nlsc_photo2", 2, 3, 2, 1.5)]
+
+
+def test_raster_tile_proxy_never_substitutes_parent_for_native_zoom(tmp_path):
+    parent_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        1,
+        1,
+        1,
+        cache_root=tmp_path,
+    )
+    parent_path.parent.mkdir(parents=True)
+    parent_path.write_bytes(_quadrant_png())
+    source = imagery_source_for_project({"imagery_source_id": "nlsc_photo2"})
+
+    def failing_fetcher(*_args, **_kwargs):
+        raise TimeoutError("native tile unavailable")
+
+    with pytest.raises(TimeoutError, match="native tile unavailable"):
+        load_or_build_raster_tile_payload(
+            "chilai_nanhua_day1",
+            "imagery",
+            2,
+            3,
+            2,
+            cache_root=tmp_path,
+            imagery_source=source,
+            allow_remote_fetch=True,
+            prefer_native_zoom=True,
+            remote_fetch_timeout_seconds=0.25,
+            remote_fetcher=failing_fetcher,
+        )
+
+
 def test_raster_tile_proxy_contract_and_validation(tmp_path):
     contract = build_local_raster_tile_proxy_contract(cache_root=tmp_path)
 

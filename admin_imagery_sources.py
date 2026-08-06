@@ -149,27 +149,25 @@ DEFAULT_IMAGERY_SOURCE_REGISTRY: dict[str, Any] = {
             "label": "Rudy Map + TWMap",
             "label_zh": "魯地圖 + TWMap style",
             "provider": "Happyman / Rudy Map",
-            "source_kind": "wmts_kvp_tile",
+            "source_kind": "xyz_tile",
             "ocr_capable": True,
             "label_extraction_roles": list(RUDY_MAP_LABEL_EXTRACTION_ROLES),
             "map_label_source_priority": "highest",
             "map_label_evidence_policy": "candidate_only_review_required",
             **_happyman_wmts_metadata("rudy_twmap"),
             "url_template": (
-                "https://tile.happyman.idv.tw/mp/service?"
-                "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
-                "&LAYER=rudy_twmap&STYLE=default&TILEMATRIXSET=gm_grid"
-                "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png"
+                "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png"
             ),
-            "tile_order": "wmts_kvp_z_y_x",
+            "tile_order": "z_x_y",
             "media_type": "image/png",
             "min_zoom": 5,
             "max_zoom": 20,
-            "attribution": "魯地圖 / Happyman WMTS",
+            "attribution": "魯地圖 / Happyman XYZ tiles",
             "cache_policy": "local_cache_then_remote_fetch_when_explicit",
             "requires_explicit_remote_fetch": True,
             "notes_zh": [
                 "魯地圖加 TWMap style，適合與正射影像做比較。",
+                "Dashboard 動態圖磚使用官方 moi_osm z/x/y 路徑；WMTS metadata 僅保留相容性與稽核。",
                 *RUDY_MAP_LABEL_NOTES_ZH,
             ],
         },

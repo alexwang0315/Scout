@@ -6134,8 +6134,11 @@ def create_admin_router(
         x: int,
         y: int,
         source_id: str | None = None,
+        native: bool = False,
     ) -> Response:
         try:
+            if native and not source_id:
+                raise ValueError("native tile fetch requires source_id")
             project = _pretrip_project_payload_for_tiles(
                 pretrip_workspace_root,
                 project_id=project_id,
@@ -6158,8 +6161,15 @@ def create_admin_router(
                 ),
                 fallback_enabled=_raster_tile_fallback_enabled_from_env(),
                 imagery_source=imagery_source,
-                allow_remote_fetch=_imagery_remote_fetch_enabled_from_env(),
-                remote_fetch_timeout_seconds=_imagery_remote_fetch_timeout_from_env(),
+                allow_remote_fetch=(
+                    native or _imagery_remote_fetch_enabled_from_env()
+                ),
+                prefer_native_zoom=native,
+                remote_fetch_timeout_seconds=(
+                    min(_imagery_remote_fetch_timeout_from_env(), 3.0)
+                    if native
+                    else _imagery_remote_fetch_timeout_from_env()
+                ),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -9426,6 +9436,9 @@ def _raster_tile_cache_root_for_project(
     manifest_ref = project.get("raster_tile_manifest_ref")
     manifest_path = _safe_pretrip_project_ref_path(project_root, manifest_ref)
     if manifest_path is None or not manifest_path.exists():
+        adjacent_cache_root = project_root.parent / "scout-local-data" / "raster-tiles"
+        if (adjacent_cache_root / project_id).is_dir():
+            return adjacent_cache_root
         return _raster_tile_cache_root_from_env()
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -9434,6 +9447,9 @@ def _raster_tile_cache_root_for_project(
     manifest_cache_root = manifest.get("cache_root")
     if isinstance(manifest_cache_root, str) and manifest_cache_root.strip():
         return Path(manifest_cache_root).expanduser()
+    adjacent_cache_root = project_root.parent / "scout-local-data" / "raster-tiles"
+    if (adjacent_cache_root / project_id).is_dir():
+        return adjacent_cache_root
     return _raster_tile_cache_root_from_env()
 
 
