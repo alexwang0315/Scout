@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scout.dashboardQualificationReviewItem.v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "capability_id",
+    "status",
+    "machine_state",
+    "abstraction_level",
+    "primary_layer",
+    "defect_nature",
+    "severity",
+    "impact_scope",
+    "reproducibility",
+    "confidence",
+    "observed_behavior",
+    "expected_behavior",
+    "root_cause_status",
+    "evidence_refs",
+    "suggested_disposition",
+    "merge_recommendation"
+  ],
+  "properties": {
+    "schema": {
+      "const": "scout.dashboardQualificationReviewItem.v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^SCOUT-Q-[0-9]{4,}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capability_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "OPEN",
+        "AWAITING_HUMAN_REVIEW",
+        "APPROVED_FOR_FIX",
+        "DEFERRED",
+        "KNOWN_ISSUE",
+        "REJECTED",
+        "RESOLVED"
+      ]
+    },
+    "machine_state": {
+      "enum": [
+        "FAIL",
+        "FLAKY",
+        "BLOCKED",
+        "INSUFFICIENT_EVIDENCE"
+      ]
+    },
+    "abstraction_level": {
+      "enum": [
+        "HIGH_LEVEL",
+        "MID_LEVEL",
+        "LOW_LEVEL",
+        "CROSS_CUTTING",
+        "UNKNOWN"
+      ]
+    },
+    "primary_layer": {
+      "enum": [
+        "UI_PRESENTATION",
+        "CLIENT_STATE",
+        "APPLICATION_SERVICE",
+        "DOMAIN_LOGIC",
+        "AUTHORITY_PERMISSION",
+        "API_CONTRACT",
+        "INTEGRATION_ADAPTER",
+        "PERSISTENCE_DATA",
+        "RUNTIME_INFRASTRUCTURE",
+        "SECURITY_PRIVACY",
+        "OBSERVABILITY_PROVENANCE",
+        "TEST_HARNESS_FIXTURE",
+        "CI_QUALIFICATION",
+        "DOCUMENTATION_COPY",
+        "UNKNOWN"
+      ]
+    },
+    "secondary_layers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "defect_nature": {
+      "enum": [
+        "LOGIC_ERROR",
+        "CODING_BUG",
+        "CONTRACT_MISMATCH",
+        "STATE_CONSISTENCY",
+        "SECURITY_OR_AUTHORITY_VIOLATION",
+        "DATA_QUALITY",
+        "UX_ACCESSIBILITY",
+        "PERFORMANCE_RELIABILITY",
+        "TEST_DEFECT",
+        "CI_ENVIRONMENT",
+        "SPEC_AMBIGUITY",
+        "EXPECTED_NOT_IMPLEMENTED",
+        "UNKNOWN"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "S1_TRIVIAL",
+        "S2_LOW",
+        "S3_MODERATE",
+        "S4_HIGH",
+        "S5_CRITICAL"
+      ]
+    },
+    "impact_scope": {
+      "enum": [
+        "SINGLE_CONTROL",
+        "SINGLE_CAPABILITY",
+        "SINGLE_SURFACE",
+        "MULTI_SURFACE",
+        "SYSTEM_WIDE",
+        "UNKNOWN"
+      ]
+    },
+    "reproducibility": {
+      "enum": [
+        "ALWAYS",
+        "INTERMITTENT",
+        "ENVIRONMENT_SPECIFIC",
+        "DATA_SPECIFIC",
+        "NOT_REPRODUCED",
+        "UNKNOWN"
+      ]
+    },
+    "confidence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "user_exposure": {
+      "enum": [
+        "NONE_INTERNAL",
+        "TEST_ONLY",
+        "LIMITED_USERS",
+        "ALL_USERS",
+        "SAFETY_CRITICAL_USERS",
+        "UNKNOWN"
+      ]
+    },
+    "data_effect": {
+      "enum": [
+        "NONE",
+        "TRANSIENT",
+        "STALE",
+        "INCORRECT_PERSISTED",
+        "LOSS",
+        "CORRUPTION",
+        "UNKNOWN"
+      ]
+    },
+    "authority_effect": {
+      "enum": [
+        "NONE",
+        "PRESENTATION_ONLY",
+        "MISLEADING_CLAIM",
+        "UNAUTHORIZED_ACTION",
+        "FALSE_RUNTIME_TRUTH",
+        "UNKNOWN"
+      ]
+    },
+    "fix_risk": {
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "UNKNOWN"
+      ]
+    },
+    "observed_behavior": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expected_behavior": {
+      "type": "string",
+      "minLength": 1
+    },
+    "root_cause_status": {
+      "enum": [
+        "CONFIRMED",
+        "PROBABLE",
+        "HYPOTHESIS",
+        "UNKNOWN"
+      ]
+    },
+    "root_cause_hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "proposed_fix_scope": {
+      "type": "string"
+    },
+    "alternatives": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "regression_tests_required": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "suggested_disposition": {
+      "enum": [
+        "APPROVE_FIX",
+        "REJECT_FIX",
+        "DEFER",
+        "KNOWN_ISSUE",
+        "SPEC_CHANGE",
+        "REQUEST_MORE_EVIDENCE"
+      ]
+    },
+    "merge_recommendation": {
+      "enum": [
+        "BLOCK",
+        "ALLOW_WITH_HUMAN_EXCEPTION",
+        "ALLOW"
+      ]
+    },
+    "human_decision": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

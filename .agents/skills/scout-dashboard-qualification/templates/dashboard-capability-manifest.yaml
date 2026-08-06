@@ -1,0 +1,26 @@
+schema: scout.dashboardCapabilityManifest.v1
+version: 1
+surfaces:
+  - id: example_surface
+    route: /example
+    capabilities:
+      - id: example.capability
+        criticality: P1
+        status: operational
+        expected_behavior:
+          - User action produces the documented visible result.
+          - Successful action is confirmed by the server.
+        forbidden_behavior:
+          - UI must not claim persistence when the server rejected the action.
+        required_tests:
+          - happy_path
+          - server_rejection
+          - refresh_persistence
+          - mobile_completion
+        required_evidence:
+          - ui
+          - network
+          - server_state
+        authority_boundary:
+          source: server
+          runtime_authority: false
