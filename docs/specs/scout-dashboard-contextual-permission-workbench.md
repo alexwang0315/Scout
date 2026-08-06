@@ -309,6 +309,64 @@ Safety / Emergency handoff item until it has a concrete target binding and
 unambiguous day applicability. Permission can acknowledge that the handoff was
 shown; it cannot approve the route reversal.
 
+#### Daily route sketch and compact review hierarchy
+
+Every proposal-first on-trail day must render one bounded route sketch inside
+its day card. This is not a second full GIS surface and must not expose the
+32-layer control set. Its sole operator question is: **what physical part of
+the route does this day represent?**
+
+Each sketch uses exactly one same-origin Rudy+TW PNG as its geographic
+background. The server may compose that PNG from several already prepared
+local-cache tiles, but the browser receives one image file rather than a DOM
+tile grid. The fixed `760 x 248` image is clipped to the same Web Mercator
+bounds used by the SVG route overlay. The endpoint accepts only a finite,
+route-containing bbox, performs no remote fetch and no cache write, and returns
+`candidate_only=true`, `runtime_safety_truth=false`, and
+`writes_performed=false` headers. If the cached image is unavailable, the card
+must say `Rudy unavailable · route only`; it must not substitute an unapproved
+basemap or imply that geographic context was loaded.
+
+The sketch must use actual prepared route geometry clipped to the day's exact
+`start_anchor.route_order_m` and proposed day-end `route_order_m`. It shows:
+
+- the day's route shape, start, proposed end, and intermediate proposal anchors;
+- the exact route-kilometre range and day distance;
+- endpoint coordinates from the bounded route projection;
+- named MCP context inside the interval and the nearest named point before and
+  after it, including their along-route distance from the day boundary.
+
+Visible overlay labels prioritize the exact day start/end, every named place,
+and every `source_kind=mcp` anchor. Unnamed intermediate checkpoints remain as
+markers, with at most two generic CP labels per day sketch. Named/MCP labels use
+a high-contrast halo above the dimmed Rudy image so background labels do not
+erase the reviewed candidate identity.
+
+Thus a synthetic label such as `CP 100 -> CP 116` remains the immutable anchor
+identity but is presented as a physical interval, for example `50.0-58.0 km`,
+with its actual line shape, endpoint coordinates, and context such as
+`after Gongshan / before left-traverse cliff`. A missing named point must remain
+explicit; the UI must not invent a place name.
+
+Map data comes from a separate read-only
+`missionBaselineMapContext.v1` presentation projection. It is sampled to at
+most 600 ordered points, hash-binds its route-geometry and timing sources, and
+reports `presentation_only=true`, `candidate_only=true`,
+`runtime_safety_truth=false`, and `writes_performed=false`. Coordinates are not
+copied into the immutable baseline candidate or acceptance receipt. Failure to
+load this optional projection leaves kilometre and CP review available with a
+clear map-unavailable state; it never widens authority or silently substitutes
+synthetic geometry.
+
+Desktop lays day cards in two columns; mobile uses one column. Each map remains
+visible by default, while ETA explanation, handoff prose, segment IDs, refs,
+hashes, and the complete typed payload stay collapsed until requested. The
+proposal header is limited to route length, day count, timing coverage, Safety
+handoff count, and one short authority sentence. On the default Baseline lens,
+Baseline Authoring appears before Current Decision, remaining-plan, ledger,
+Safety, and simulation content. Those secondary projections live in one
+collapsed `Projection details` disclosure; Replay may open it by default.
+
 Scout conversation edits the baseline through typed proposed patches against a
 specific candidate hash. It must show additions, removals, reordered nodes,
 new assumptions, and unresolved items; prose conversation must not silently

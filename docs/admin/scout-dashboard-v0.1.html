@@ -7803,11 +7803,49 @@
       display: none;
     }
 
+    .permission-projection-details {
+      margin-top: 12px;
+      border: 1px solid var(--permission-line);
+      background: rgba(6, 15, 11, .72);
+    }
+
+    .permission-projection-details > summary {
+      min-height: 52px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      color: #e7ece4;
+      font-size: 12px;
+    }
+
+    .permission-projection-details > summary strong {
+      color: #93a79c;
+      font: 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      text-align: right;
+    }
+
+    .permission-projection-details[open] > summary {
+      border-bottom: 1px solid var(--permission-line);
+      margin-bottom: 12px;
+    }
+
     .permission-authoring-grid {
       display: grid;
       grid-template-columns: minmax(260px, .7fr) minmax(0, 1.3fr);
       gap: 12px;
     }
+
+    .permission-authoring-toolbar {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .permission-authoring-toolbar .permission-authoring-actions { margin-top: 0; }
 
     .permission-authoring-source textarea,
     .permission-authoring-source select,
@@ -7833,10 +7871,11 @@
     }
 
     .permission-baseline-preview {
-      min-height: 142px;
-      padding: 12px;
-      border: 1px dashed rgba(233, 234, 220, .18);
-      background: rgba(4, 10, 8, .42);
+      min-height: 0;
+      margin-top: 12px;
+      padding: 0;
+      border: 0;
+      background: transparent;
     }
 
     .permission-baseline-preview pre {
@@ -7854,7 +7893,7 @@
 
     .permission-proposal-summary {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       border: 1px solid var(--permission-line);
       background: rgba(10, 24, 18, .78);
     }
@@ -7866,7 +7905,7 @@
       border-bottom: 1px solid var(--permission-line);
     }
 
-    .permission-proposal-stat:nth-child(3n) { border-right: 0; }
+    .permission-proposal-stat:nth-child(4n) { border-right: 0; }
     .permission-proposal-stat span,
     .permission-day-label {
       display: block;
@@ -7893,16 +7932,23 @@
       line-height: 1.5;
     }
 
-    .permission-day-stack { display: grid; gap: 8px; }
+    .permission-day-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
 
     .permission-day-card {
       display: grid;
-      gap: 9px;
+      gap: 0;
       min-width: 0;
-      padding: 11px;
+      padding: 0;
+      overflow: hidden;
       border: 1px solid var(--permission-line);
       background: #09130f;
     }
+
+    .permission-day-card-head { padding: 11px 12px 9px; }
 
     .permission-day-card-head,
     .permission-day-route,
@@ -7919,6 +7965,167 @@
       color: #f0f0e8;
       font: 600 17px/1.2 Georgia, serif;
     }
+
+    .permission-day-map {
+      position: relative;
+      margin: 0;
+      border-block: 1px solid rgba(233, 234, 220, .12);
+      background: #06100c;
+    }
+
+    .permission-day-map svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      min-height: 178px;
+      max-height: 228px;
+    }
+
+    .permission-day-map [data-permission-rudy-background="true"] {
+      opacity: .88;
+    }
+
+    .permission-day-map .permission-day-map-dim {
+      fill: #06100c;
+      opacity: .24;
+    }
+
+    .permission-day-map.is-rudy-unavailable [data-permission-rudy-background="true"] {
+      opacity: 0;
+    }
+
+    .permission-day-map text {
+      fill: #f1ead2;
+      stroke: #06100c;
+      stroke-width: 5px;
+      paint-order: stroke;
+      font: 600 17px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .permission-day-map .permission-day-map-north {
+      fill: #7fa396;
+      font-size: 14px;
+    }
+
+    .permission-day-map g.is-mcp text {
+      fill: #d8f5f2;
+      font-size: 18px;
+    }
+
+    .permission-day-map g.is-secondary-label text { font-size: 14px; }
+
+    .permission-day-map .permission-day-map-label-bg {
+      fill: rgba(3, 9, 7, .82);
+      stroke: rgba(232, 213, 145, .35);
+      stroke-width: 1px;
+    }
+
+    .permission-day-map g.is-mcp .permission-day-map-label-bg {
+      stroke: rgba(91, 169, 183, .8);
+    }
+
+    .permission-day-map .permission-day-map-label-leader {
+      stroke: rgba(241, 234, 210, .74);
+      stroke-width: 1.5px;
+    }
+
+    .permission-day-map circle {
+      fill: #07100c;
+      stroke: #dce6dc;
+      stroke-width: 3px;
+    }
+
+    .permission-day-map circle.is-endpoint { fill: #df7459; stroke: #fff0cf; }
+    .permission-day-map circle.is-named { fill: #5ba9b7; stroke: #d7f4f5; }
+    .permission-day-map circle.is-cp { fill: #07100c; stroke: #e8d591; }
+
+    .permission-day-map figcaption {
+      position: absolute;
+      right: 8px;
+      bottom: 6px;
+      padding: 3px 5px;
+      background: rgba(3, 9, 7, .82);
+      color: #8fa398;
+      font: 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .permission-day-map-source {
+      position: absolute;
+      left: 8px;
+      top: 7px;
+      padding: 3px 5px;
+      border: 1px solid rgba(215, 244, 245, .34);
+      background: rgba(3, 9, 7, .8);
+      color: #cbe6e2;
+      font: 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .permission-day-map.is-rudy-unavailable .permission-day-map-source {
+      border-color: rgba(225, 116, 89, .5);
+      color: #f0a08c;
+    }
+
+    .permission-day-map.is-unavailable {
+      min-height: 150px;
+      padding: 28px 14px;
+      display: grid;
+      place-content: center;
+      gap: 5px;
+      text-align: center;
+      color: #9daea4;
+    }
+
+    .permission-day-location {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-bottom: 1px solid rgba(233, 234, 220, .1);
+    }
+
+    .permission-day-location > div { min-width: 0; padding: 9px 11px; }
+    .permission-day-location > div + div { border-left: 1px solid rgba(233, 234, 220, .1); }
+    .permission-day-location strong { display: block; margin-top: 2px; color: #f0f0e8; font-size: 13px; }
+    .permission-day-location small { display: block; margin-top: 3px; color: #8ea198; font: 9px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+
+    .permission-day-context {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: baseline;
+      padding: 9px 11px;
+      color: #b8c6bd;
+      font-size: 11px;
+      line-height: 1.4;
+      border-bottom: 1px solid rgba(233, 234, 220, .1);
+    }
+
+    .permission-day-context strong { color: #e8d591; white-space: nowrap; }
+
+    .permission-day-brief {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 11px;
+      color: #aebdb4;
+      font: 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .permission-day-details { border-top: 1px solid rgba(233, 234, 220, .1); }
+    .permission-day-details > summary {
+      min-height: 44px;
+      padding: 12px;
+      cursor: pointer;
+      color: #dce5dc;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .permission-day-details .permission-day-timing,
+    .permission-day-details .permission-safety-handoff,
+    .permission-day-details .permission-day-evidence { margin: 0 11px 10px; }
 
     .permission-day-route > div { min-width: 0; flex: 1; }
 
@@ -8386,11 +8593,23 @@
       }
 
       .permission-proposal-summary { grid-template-columns: 1fr 1fr; }
-      .permission-proposal-stat:nth-child(3n) { border-right: 1px solid var(--permission-line); }
+      .permission-authoring-toolbar { grid-template-columns: 1fr; }
+      .permission-authoring-toolbar .permission-authoring-actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .permission-day-grid { grid-template-columns: 1fr; }
+      .permission-projection-details > summary { min-height: 56px; font-size: 16px; }
+      .permission-projection-details > summary strong { font-size: 12px; }
+      .permission-proposal-stat:nth-child(4n) { border-right: 1px solid var(--permission-line); }
       .permission-proposal-stat:nth-child(2n) { border-right: 0; }
       .permission-day-card-head,
       .permission-day-route,
       .permission-day-meta { display: grid; grid-template-columns: 1fr; }
+      .permission-day-map svg { min-height: 188px; }
+      .permission-day-map text { font-size: 19px; }
+      .permission-day-location strong { font-size: 16px; }
+      .permission-day-location small,
+      .permission-day-context,
+      .permission-day-brief,
+      .permission-day-details > summary { font-size: 14px; }
       .permission-review-control { min-height: 52px; font-size: 16px; }
       .permission-authority-note,
       .permission-day-timing p,
@@ -9326,6 +9545,8 @@
       permissionBaselineMode: "human_text",
       permissionBaselineText: "D0: city - trailhead C0\nD1: C0 - reviewed junction - reviewed camp C1",
       permissionBaselineDraft: null,
+      permissionBaselineMapContext: null,
+      permissionBaselineMapStatus: "idle",
       permissionBaselineSavedCandidate: null,
       permissionBaselinePatchText: "",
       permissionBaselinePatchPreview: null,
@@ -10337,6 +10558,25 @@
 
     function permissionDailyReviewPath(candidateProjectId, missionDayInstanceId) {
       return `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/safety-emergency/mission-days/${encodeURIComponent(missionDayInstanceId)}/night-review`;
+    }
+
+    function permissionBaselineMapContextPath(candidateProjectId) {
+      return `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/mission-baseline/map-context`;
+    }
+
+    async function loadPermissionBaselineMapContext(candidateProjectId) {
+      state.permissionBaselineMapStatus = "loading";
+      try {
+        state.permissionBaselineMapContext = await fetchJson(
+          permissionBaselineMapContextPath(candidateProjectId),
+          {timeoutMs: FETCH_TIMEOUT_MS},
+        );
+        state.permissionBaselineMapStatus = "ready";
+      } catch (error) {
+        state.permissionBaselineMapContext = null;
+        state.permissionBaselineMapStatus = `unavailable · ${String(error?.message || error)}`;
+      }
+      return state.permissionBaselineMapContext;
     }
 
     async function loadPermissionData() {
@@ -15829,6 +16069,292 @@
       `;
     }
 
+    function permissionFormatRouteKm(value) {
+      return Number.isFinite(Number(value)) ? `${(Number(value) / 1000).toFixed(1)} km` : "—";
+    }
+
+    function permissionFormatCoordinate(value, axis) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "coordinate unavailable";
+      const positive = axis === "lat" ? "N" : "E";
+      const negative = axis === "lat" ? "S" : "W";
+      return `${numeric < 0 ? negative : positive}${Math.abs(numeric).toFixed(5)}`;
+    }
+
+    function permissionCompactAnchorLabel(value) {
+      return String(value || "Route point")
+        .replace(/^CP\s+(\d+)$/i, "CP$1")
+        .replace(/^Rest area \/ camp area\s+(\d+)$/i, "Rest/Camp $1");
+    }
+
+    function permissionMercatorPoint(lat, lon) {
+      const boundedLat = Math.max(-85.05112878, Math.min(85.05112878, Number(lat)));
+      const radians = boundedLat * Math.PI / 180;
+      return {
+        x: (Number(lon) + 180) / 360,
+        y: (1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2,
+      };
+    }
+
+    function permissionMercatorLatitude(y) {
+      return Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
+    }
+
+    function permissionDayMapBounds(points, width, height) {
+      const normalized = points.map(point => permissionMercatorPoint(point.lat, point.lon));
+      let minX = Math.min(...normalized.map(point => point.x));
+      let maxX = Math.max(...normalized.map(point => point.x));
+      let minY = Math.min(...normalized.map(point => point.y));
+      let maxY = Math.max(...normalized.map(point => point.y));
+      const minimumSpan = 1 / (2 ** 17);
+      let spanX = Math.max(maxX - minX, minimumSpan);
+      let spanY = Math.max(maxY - minY, minimumSpan);
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      spanX *= 1.18;
+      spanY *= 1.18;
+      const targetAspect = width / height;
+      if (spanX / spanY < targetAspect) spanX = spanY * targetAspect;
+      else spanY = spanX / targetAspect;
+      minX = centerX - spanX / 2;
+      maxX = centerX + spanX / 2;
+      minY = centerY - spanY / 2;
+      maxY = centerY + spanY / 2;
+      if (minX < 0) { maxX -= minX; minX = 0; }
+      if (maxX > 1) { minX -= maxX - 1; maxX = 1; }
+      if (minY < 0) { maxY -= minY; minY = 0; }
+      if (maxY > 1) { minY -= maxY - 1; maxY = 1; }
+      return {
+        normalized: {minX, maxX, minY, maxY},
+        wgs84: {
+          west: minX * 360 - 180,
+          east: maxX * 360 - 180,
+          north: permissionMercatorLatitude(minY),
+          south: permissionMercatorLatitude(maxY),
+        },
+      };
+    }
+
+    function permissionRudyBackgroundUrl(bounds) {
+      const candidateProjectId = state.permissionBaselineMapContext?.project_id || projectId();
+      const params = new URLSearchParams({
+        west: Number(bounds.west).toFixed(7),
+        south: Number(bounds.south).toFixed(7),
+        east: Number(bounds.east).toFixed(7),
+        north: Number(bounds.north).toFixed(7),
+      });
+      return `${apiBase()}/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/mission-baseline/rudy-background.png?${params.toString()}`;
+    }
+
+    function permissionMapAnchors() {
+      return asArray(state.permissionBaselineMapContext?.anchors)
+        .filter(anchor => Number.isFinite(Number(anchor?.route_order_m)))
+        .slice()
+        .sort((left, right) => Number(left.route_order_m) - Number(right.route_order_m));
+    }
+
+    function permissionMapAnchor(anchorId, routeOrderM) {
+      const anchors = permissionMapAnchors();
+      const exact = anchors.find(anchor => String(anchor.anchor_id || "") === String(anchorId || ""));
+      if (exact) return exact;
+      if (!Number.isFinite(Number(routeOrderM))) return null;
+      return anchors.reduce((nearest, anchor) => {
+        if (!nearest) return anchor;
+        return Math.abs(Number(anchor.route_order_m) - Number(routeOrderM))
+          < Math.abs(Number(nearest.route_order_m) - Number(routeOrderM)) ? anchor : nearest;
+      }, null);
+    }
+
+    function permissionDayAnchorContext(day) {
+      const startM = Number(day?.start_anchor?.route_order_m);
+      const endM = Number(day?.primary_day_end_proposal?.target?.route_order_m);
+      if (!Number.isFinite(startM) || !Number.isFinite(endM)) return "Route context unavailable";
+      const named = permissionMapAnchors().filter(anchor => anchor.named_context === true);
+      const inside = named.filter(anchor => Number(anchor.route_order_m) >= startM && Number(anchor.route_order_m) <= endM);
+      const before = named.filter(anchor => Number(anchor.route_order_m) < startM).at(-1);
+      const after = named.find(anchor => Number(anchor.route_order_m) > endM);
+      const context = [];
+      if (before) context.push(`${permissionCompactAnchorLabel(before.display_label)}後 ${((startM - Number(before.route_order_m)) / 1000).toFixed(1)} km`);
+      if (inside.length) context.push(`途經 ${inside.map(anchor => permissionCompactAnchorLabel(anchor.display_label)).join("、")}`);
+      if (after) context.push(`距 ${permissionCompactAnchorLabel(after.display_label)} ${((Number(after.route_order_m) - endM) / 1000).toFixed(1)} km`);
+      return context.join(" · ") || "此路段尚無已命名地標；以實際線形、公里與座標定位";
+    }
+
+    function permissionDayMapGeometry(day) {
+      const startM = Number(day?.start_anchor?.route_order_m);
+      const endM = Number(day?.primary_day_end_proposal?.target?.route_order_m);
+      const sourcePoints = asArray(state.permissionBaselineMapContext?.route_points)
+        .map(point => ({
+          routeOrderM: Number(point?.route_order_m),
+          lat: Number(point?.lat),
+          lon: Number(point?.lon),
+        }))
+        .filter(point => Number.isFinite(point.routeOrderM) && Number.isFinite(point.lat) && Number.isFinite(point.lon));
+      if (!Number.isFinite(startM) || !Number.isFinite(endM) || endM <= startM || sourcePoints.length < 2) return null;
+      const startAnchor = permissionMapAnchor(day?.start_anchor?.anchor_id, startM);
+      const endAnchor = permissionMapAnchor(day?.primary_day_end_proposal?.target?.anchor_id, endM);
+      const routePoints = sourcePoints
+        .filter(point => point.routeOrderM >= startM && point.routeOrderM <= endM)
+        .concat([
+          startAnchor ? {routeOrderM: startM, lat: Number(startAnchor.lat), lon: Number(startAnchor.lon)} : null,
+          endAnchor ? {routeOrderM: endM, lat: Number(endAnchor.lat), lon: Number(endAnchor.lon)} : null,
+        ].filter(Boolean))
+        .sort((left, right) => left.routeOrderM - right.routeOrderM)
+        .filter((point, index, rows) => index === 0 || Math.abs(point.routeOrderM - rows[index - 1].routeOrderM) > .1);
+      if (routePoints.length < 2) return null;
+      const width = 760;
+      const height = 248;
+      const dayAnchors = permissionMapAnchors()
+        .filter(anchor => Number(anchor.route_order_m) >= startM && Number(anchor.route_order_m) <= endM)
+        .filter(anchor => Number.isFinite(Number(anchor.lat)) && Number.isFinite(Number(anchor.lon)));
+      const bounds = permissionDayMapBounds(routePoints.concat(dayAnchors), width, height);
+      const project = point => {
+        const normalized = permissionMercatorPoint(point.lat, point.lon);
+        return {
+          x: ((normalized.x - bounds.normalized.minX) / (bounds.normalized.maxX - bounds.normalized.minX)) * width,
+          y: ((normalized.y - bounds.normalized.minY) / (bounds.normalized.maxY - bounds.normalized.minY)) * height,
+        };
+      };
+      const path = routePoints.map((point, index) => {
+        const projected = project(point);
+        return `${index ? "L" : "M"}${projected.x.toFixed(1)} ${projected.y.toFixed(1)}`;
+      }).join(" ");
+      const anchors = dayAnchors.map(anchor => ({...anchor, projected: project(anchor)}));
+      return {width, height, path, anchors, startM, endM, bounds: bounds.wgs84};
+    }
+
+    function permissionDailyLabelAnchors(geometry) {
+      const rows = geometry.anchors.map(anchor => {
+        const endpoint = Math.abs(Number(anchor.route_order_m) - geometry.startM) < 1
+          || Math.abs(Number(anchor.route_order_m) - geometry.endM) < 1;
+        const isMcp = anchor.source_kind === "mcp" || String(anchor.anchor_id || "").startsWith("mcp.");
+        return {anchor, endpoint, isMcp, priority: endpoint || isMcp || anchor.named_context === true};
+      });
+      const generic = rows.filter(row => !row.priority);
+      const genericLabels = generic.length <= 2
+        ? generic
+        : [generic[Math.floor((generic.length - 1) / 3)], generic[Math.floor((generic.length - 1) * 2 / 3)]];
+      const genericIds = new Set(genericLabels.map(row => row.anchor.anchor_id));
+      const visibleRows = rows.map(row => ({
+        ...row,
+        showLabel: row.priority || genericIds.has(row.anchor.anchor_id),
+      }));
+      const occupied = [
+        {left: 0, top: 0, right: 158, bottom: 27},
+        {left: geometry.width - 72, top: 0, right: geometry.width, bottom: 42},
+      ];
+      const placements = new Map();
+      const labelWidth = value => Math.max(46, Math.min(190, Array.from(value).reduce(
+        (width, character) => width + (character.charCodeAt(0) > 255 ? 17 : 9),
+        16,
+      )));
+      const overlapArea = (left, right) => {
+        const width = Math.max(0, Math.min(left.right, right.right) - Math.max(left.left, right.left));
+        const height = Math.max(0, Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top));
+        return width * height;
+      };
+      visibleRows
+        .filter(row => row.showLabel)
+        .slice()
+        .sort((left, right) => Number(right.isMcp) - Number(left.isMcp)
+          || Number(right.endpoint) - Number(left.endpoint)
+          || Number(right.anchor.named_context === true) - Number(left.anchor.named_context === true))
+        .forEach(row => {
+          const label = permissionCompactAnchorLabel(row.anchor.display_label);
+          const width = labelWidth(label);
+          const markerX = row.anchor.projected.x;
+          const markerY = row.anchor.projected.y;
+          const rawCandidates = [
+            {x: markerX, y: markerY - 15},
+            {x: markerX, y: markerY + 34},
+            {x: markerX + width / 2 + 18, y: markerY + 7},
+            {x: markerX - width / 2 - 18, y: markerY + 7},
+            {x: markerX, y: markerY - 43},
+            {x: markerX, y: markerY + 60},
+          ];
+          const candidates = rawCandidates.map(candidate => {
+            const x = Math.max(width / 2 + 7, Math.min(geometry.width - width / 2 - 7, candidate.x));
+            const y = Math.max(29, Math.min(geometry.height - 9, candidate.y));
+            const rect = {left: x - width / 2, top: y - 20, right: x + width / 2, bottom: y + 6};
+            const score = occupied.reduce((total, item) => total + overlapArea(rect, item), 0);
+            return {x, y, width, rect, score};
+          });
+          const placement = candidates.sort((left, right) => left.score - right.score)[0];
+          occupied.push(placement.rect);
+          placements.set(row.anchor.anchor_id, placement);
+        });
+      return visibleRows.map(row => ({
+        ...row,
+        placement: placements.get(row.anchor.anchor_id) || null,
+      }));
+    }
+
+    function renderPermissionDayMap(day) {
+      const geometry = permissionDayMapGeometry(day);
+      const dayId = String(day?.mission_day_id || "day").replace(/[^A-Za-z0-9_-]/g, "-");
+      if (!geometry) {
+        return `<div class="permission-day-map is-unavailable" data-permission-day-map="${escapeHtml(dayId)}"><strong>Route sketch unavailable</strong><span>${escapeHtml(state.permissionBaselineMapStatus || "map context unavailable")} · CP range and route kilometres remain visible.</span></div>`;
+      }
+      const markerRows = permissionDailyLabelAnchors(geometry).map(row => {
+        const {anchor, endpoint, isMcp, showLabel, placement} = row;
+        const label = permissionCompactAnchorLabel(anchor.display_label);
+        return `
+          <g class="${isMcp ? "is-mcp" : showLabel && !row.priority ? "is-secondary-label" : ""}" data-permission-map-anchor="${escapeHtml(anchor.anchor_id || "")}" data-permission-map-anchor-kind="${escapeHtml(anchor.source_kind || "checkpoint")}" data-permission-map-label-priority="${row.priority ? "primary" : showLabel ? "secondary" : "marker-only"}">
+            <circle cx="${anchor.projected.x.toFixed(1)}" cy="${anchor.projected.y.toFixed(1)}" r="${endpoint ? 8 : isMcp || anchor.named_context ? 6 : 4}" class="${endpoint ? "is-endpoint" : isMcp || anchor.named_context ? "is-named" : "is-cp"}"></circle>
+            ${showLabel && placement ? `
+              <line x1="${anchor.projected.x.toFixed(1)}" y1="${anchor.projected.y.toFixed(1)}" x2="${placement.x.toFixed(1)}" y2="${(placement.y - 8).toFixed(1)}" class="permission-day-map-label-leader"></line>
+              <rect x="${placement.rect.left.toFixed(1)}" y="${placement.rect.top.toFixed(1)}" width="${placement.width.toFixed(1)}" height="26" rx="3" class="permission-day-map-label-bg"></rect>
+              <text x="${placement.x.toFixed(1)}" y="${placement.y.toFixed(1)}" text-anchor="middle">${escapeHtml(label)}</text>
+            ` : ""}
+          </g>
+        `;
+      }).join("");
+      const rudyBackgroundUrl = permissionRudyBackgroundUrl(geometry.bounds);
+      return `
+        <figure class="permission-day-map" data-permission-day-map="${escapeHtml(dayId)}" data-map-presentation-only="true" data-candidate-only="true" data-route-start-m="${geometry.startM.toFixed(1)}" data-route-end-m="${geometry.endM.toFixed(1)}" data-rudy-background-status="loading">
+          <svg viewBox="0 0 ${geometry.width} ${geometry.height}" role="img" aria-label="${escapeHtml(`${day?.mission_day_id || "Day"} actual route geometry from ${day?.start_anchor?.display_label || "start"} to ${day?.primary_day_end_proposal?.target?.display_label || "end"}`)}">
+            <rect width="760" height="248" fill="#06100c"></rect>
+            <image href="${escapeHtml(rudyBackgroundUrl)}" x="0" y="0" width="760" height="248" preserveAspectRatio="none" data-permission-rudy-background="true" data-rudy-image-policy="single-composite"></image>
+            <rect width="760" height="248" class="permission-day-map-dim"></rect>
+            <path d="${geometry.path}" fill="none" stroke="#101912" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" opacity=".82"></path>
+            <path d="${geometry.path}" fill="none" stroke="#e8d591" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 12"></path>
+            ${markerRows}
+            <text x="727" y="27" text-anchor="middle" class="permission-day-map-north">N↑</text>
+          </svg>
+          <span class="permission-day-map-source" data-permission-rudy-status>Rudy+TW · loading</span>
+          <figcaption>單一 Rudy 影像 · 實際路線幾何</figcaption>
+        </figure>
+      `;
+    }
+
+    function bindPermissionRudyBackgrounds() {
+      document.querySelectorAll('[data-permission-rudy-background="true"]').forEach(image => {
+        if (image.dataset.permissionRudyBound === "true") return;
+        image.dataset.permissionRudyBound = "true";
+        const figure = image.closest("[data-permission-day-map]");
+        const status = figure?.querySelector("[data-permission-rudy-status]");
+        image.addEventListener("load", () => {
+          if (!figure) return;
+          figure.dataset.rudyBackgroundStatus = "ready";
+          figure.classList.remove("is-rudy-unavailable");
+          if (status) status.textContent = "Rudy+TW · single image";
+        }, {once: true});
+        image.addEventListener("error", () => {
+          if (!figure) return;
+          figure.dataset.rudyBackgroundStatus = "unavailable";
+          figure.classList.add("is-rudy-unavailable");
+          if (status) status.textContent = "Rudy unavailable · route only";
+        }, {once: true});
+      });
+    }
+
+    function permissionEtaHeadline(day) {
+      const eta = day?.eta_proposal || {};
+      if (eta.state === "complete_derived") return `p75 segment sum ${permissionFormatMinutes(eta.segment_p75_sum_minutes)}`;
+      if (eta.state === "partial_derived") return `Known p75 subtotal ${permissionFormatMinutes(eta.supported_segment_p75_sum_minutes)} · ${asArray(eta.unsupported_segment_ids).length} gap`;
+      return "Whole-day ETA unknown";
+    }
+
     function renderPermissionBaselineProposal(draft) {
       if (!draft) {
         return `
@@ -15860,36 +16386,42 @@
         const artifact = target.artifact || {};
         const handoffCount = asArray(day.retreat_candidates).length + asArray(day.emergency_bivy_candidates).length;
         const eta = day.eta_proposal || {};
+        const startMapAnchor = permissionMapAnchor(start.anchor_id, start.route_order_m) || {};
+        const endMapAnchor = permissionMapAnchor(target.anchor_id, target.route_order_m) || {};
+        const dayDistanceM = Math.max(0, Number(target.route_order_m || 0) - Number(start.route_order_m || 0));
         return `
           <article class="permission-day-card" data-permission-proposal-day="${escapeHtml(day.mission_day_id || "")}">
             <div class="permission-day-card-head">
-              <div><span class="permission-day-label">${escapeHtml(day.mission_day_id || "Day")}</span><h4>${escapeHtml(start.display_label || "Route start")} → ${escapeHtml(target.display_label || "Proposed day end")}</h4></div>
+              <div><span class="permission-day-label">${escapeHtml(day.mission_day_id || "Day")} · ${permissionFormatRouteKm(start.route_order_m)}–${permissionFormatRouteKm(target.route_order_m)}</span><h4>${escapeHtml(permissionCompactAnchorLabel(start.display_label || "Route start"))} → ${escapeHtml(permissionCompactAnchorLabel(target.display_label || "Proposed day end"))}</h4></div>
               <span class="chip ${eta.state === "complete_derived" ? "good" : eta.state === "partial_derived" ? "warn" : "bad"}">${escapeHtml(String(eta.state || "unknown").replaceAll("_", " "))}</span>
             </div>
-            <div class="permission-day-route">
-              <div><span class="permission-day-label">Start anchor</span><strong>${escapeHtml(start.display_label || "Unknown")}</strong><code>${escapeHtml(start.anchor_id || "unbound")}</code></div>
-              <div><span class="permission-day-label">Proposed day end</span><strong>${escapeHtml(target.display_label || "Unknown")}</strong><code>${escapeHtml(proposal.proposal_id || "unbound")} · ${escapeHtml(String(artifact.sha256 || "").slice(0, 12) || "no hash")}</code></div>
+            ${renderPermissionDayMap(day)}
+            <div class="permission-day-location" aria-label="Day endpoint locations">
+              <div><span class="permission-day-label">Start · ${permissionFormatRouteKm(start.route_order_m)}</span><strong>${escapeHtml(permissionCompactAnchorLabel(start.display_label || "Unknown"))}</strong><small>${escapeHtml(permissionFormatCoordinate(startMapAnchor.lat, "lat"))} · ${escapeHtml(permissionFormatCoordinate(startMapAnchor.lon, "lon"))}</small></div>
+              <div><span class="permission-day-label">End · ${permissionFormatRouteKm(target.route_order_m)}</span><strong>${escapeHtml(permissionCompactAnchorLabel(target.display_label || "Unknown"))}</strong><small>${escapeHtml(permissionFormatCoordinate(endMapAnchor.lat, "lat"))} · ${escapeHtml(permissionFormatCoordinate(endMapAnchor.lon, "lon"))}</small></div>
             </div>
-            ${renderPermissionEta(day)}
-            ${handoffCount ? `<div class="permission-safety-handoff"><strong>Safety / Emergency handoff pending</strong><br>${handoffCount} concrete candidate${handoffCount === 1 ? " is" : "s are"} recorded for separate review. Permission does not approve or reject them.</div>` : ""}
-            <details class="permission-day-evidence"><summary>Inspect evidence bindings</summary><div>${escapeHtml(asArray(day.segment_ids).join(", ") || "No segment IDs")}<br>${escapeHtml(artifact.ref || "No target ref")}<br>${escapeHtml(asArray(eta.unsupported_segment_ids).length ? `Missing p75: ${asArray(eta.unsupported_segment_ids).join(", ")}` : "Complete p75 coverage")}</div></details>
+            <div class="permission-day-context"><strong>${permissionFormatRouteKm(dayDistanceM)} today</strong><span>${escapeHtml(permissionDayAnchorContext(day))}</span></div>
+            <div class="permission-day-brief"><span>${escapeHtml(permissionEtaHeadline(day))}</span><span>${handoffCount ? `${handoffCount} Safety handoff` : "No Safety handoff"}</span></div>
+            <details class="permission-day-details"><summary>Day route, ETA & evidence</summary>
+              ${renderPermissionEta(day)}
+              ${handoffCount ? `<div class="permission-safety-handoff"><strong>Pending Safety / Emergency</strong> · ${handoffCount} candidate${handoffCount === 1 ? "" : "s"}; not approved here.</div>` : ""}
+              <div class="permission-day-evidence">${escapeHtml(asArray(day.segment_ids).join(", ") || "No segment IDs")}<br>${escapeHtml(proposal.proposal_id || "unbound")} · ${escapeHtml(String(artifact.sha256 || "").slice(0, 12) || "no hash")}<br>${escapeHtml(artifact.ref || "No target ref")}<br>${escapeHtml(asArray(eta.unsupported_segment_ids).length ? `Missing p75: ${asArray(eta.unsupported_segment_ids).join(", ")}` : "Complete p75 coverage")}</div>
+            </details>
           </article>
         `;
       }).join("");
       return `
         <div class="permission-proposal-shell" data-permission-scout-auto-proposal="true">
           <div><span class="permission-day-label">Scout auto proposal</span><h4>Proposal-first daily itinerary</h4></div>
-          <div class="permission-authority-note">Permission confirms exact day-end targets and listed timing-gap acknowledgments only. Retreat and emergency-bivy items remain <strong>Pending Safety / Emergency</strong>. Departure and runtime safety are not changed here.</div>
+          <div class="permission-authority-note">Review scope: exact day ends + timing gaps. Safety handoffs stay pending; no departure/runtime authority.</div>
           <div class="permission-proposal-summary">
             <div class="permission-proposal-stat"><span>Route</span><strong>${Number(summary.route_length_m || 0) ? `${(Number(summary.route_length_m) / 1000).toFixed(1)} km` : "—"}</strong></div>
             <div class="permission-proposal-stat"><span>Proposed days</span><strong>${Number(summary.day_count || trailDays.length)}</strong></div>
             <div class="permission-proposal-stat"><span>Timing</span><strong>${Number(summary.observed_p75_segment_count || 0)} usable / ${Number(summary.missing_p75_segment_count || 0)} missing p75</strong></div>
-            <div class="permission-proposal-stat"><span>Blockers</span><strong>${Number(summary.blocking_gap_count || 0)}</strong></div>
             <div class="permission-proposal-stat"><span>Safety handoff</span><strong>${requirements.handoffIds.length} pending</strong></div>
-            <div class="permission-proposal-stat"><span>Source route_days</span><strong>${routeDaysMetadata == null ? "unreviewed metadata" : `${routeDaysMetadata} · not used as plan`}</strong></div>
           </div>
-          <div class="permission-day-stack">${dayCards}</div>
-          <details class="permission-typed-payload"><summary>Typed evidence payload</summary><pre>${escapeHtml(JSON.stringify(draft, null, 2))}</pre></details>
+          <div class="permission-day-grid">${dayCards}</div>
+          <details class="permission-typed-payload"><summary>Technical payload · route_days ${routeDaysMetadata == null ? "unreviewed" : `${routeDaysMetadata}, not planning authority`}</summary><pre>${escapeHtml(JSON.stringify(draft, null, 2))}</pre></details>
         </div>
       `;
     }
@@ -15925,7 +16457,7 @@
               <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "human_text"}" class="${state.permissionBaselineMode === "human_text" ? "is-active" : ""}" data-permission-baseline-mode="human_text">Human Design</button>
               <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "reference_gpx"}" class="${state.permissionBaselineMode === "reference_gpx" ? "is-active" : ""}" data-permission-baseline-mode="reference_gpx">Generate from Ref. GPX</button>
             </div>
-            <div class="permission-authoring-grid" style="margin-top:12px">
+            <div class="permission-authoring-toolbar" style="margin-top:12px">
               <div class="permission-authoring-source">
                 ${state.permissionBaselineMode === "human_text" ? `
                   <textarea data-permission-baseline-text="true" aria-label="Ideal-state itinerary text" placeholder="D0: city - trailhead C0&#10;D1: C0 - junction - reviewed camp C1">${escapeHtml(state.permissionBaselineText || "D0: city - trailhead C0\nD1: C0 - reviewed junction - reviewed camp C1")}</textarea>
@@ -15933,14 +16465,14 @@
                   <label class="permission-eyebrow" for="permissionBaselineRoute">Reference route axis</label>
                   <select id="permissionBaselineRoute" data-permission-baseline-ref="true"><option value="outputs/compiled_mission_graph.reviewed.json">Reviewed mission graph route axis</option></select>
                 `}
-                <div class="permission-authoring-actions">
-                  <button type="button" class="permission-button" data-permission-baseline-preview="true">Preview source</button>
-                  <button type="button" class="permission-button" data-permission-baseline-generate="true">Generate typed draft</button>
-                </div>
               </div>
-              <div class="permission-baseline-preview" aria-live="polite">
-                ${renderPermissionBaselineProposal(state.permissionBaselineDraft)}
+              <div class="permission-authoring-actions">
+                <button type="button" class="permission-button" data-permission-baseline-preview="true">Preview source</button>
+                <button type="button" class="permission-button" data-permission-baseline-generate="true">Generate typed draft</button>
               </div>
+            </div>
+            <div class="permission-baseline-preview" aria-live="polite">
+              ${renderPermissionBaselineProposal(state.permissionBaselineDraft)}
             </div>
             <div class="permission-authoring-actions">
               <button type="button" class="permission-button is-warning" data-permission-baseline-save="true" ${state.permissionBaselineDraft ? "" : "disabled aria-disabled=\"true\" title=\"Generate and validate a draft first\""}>Save candidate version</button>
@@ -16102,6 +16634,11 @@
               </ul>
             </div>
           ` : ""}
+
+          ${renderPermissionBaselineAuthoring()}
+
+          <details class="permission-projection-details" data-permission-projection-details="true" ${projection.lens === "baseline" ? "" : "open"}>
+            <summary><span>Projection details</span><strong>${escapeHtml(decision.decision || "UNKNOWN")} · ${nodes.length} plan nodes · ${asArray(projection.evidence).length} evidence sources</strong></summary>
 
           <div class="permission-mobile-switcher" role="tablist" aria-label="Permission mobile views">
             ${[["now", "Now"], ["remaining", "Remaining"], ["safety", "Safety"], ["evidence", "Evidence"]].map(([view, label]) => `
@@ -16270,7 +16807,7 @@
             </aside>
           </div>
 
-          ${renderPermissionBaselineAuthoring()}
+          </details>
 
           <div class="permission-boundary-banner">candidate_only=true · runtime_safety_truth=false · no live safety API call · no Phase 1 mutation · no outbound · no hardware control · no raw health, GPX, precise location history or private timestamp projection</div>
           ${renderPermissionBaselineConfirmationSheet()}
@@ -23224,6 +23761,12 @@
           payload,
         );
         state.permissionBaselineDraft = draft;
+        if (draft.proposal_profile === "ref_gpx_proposal_v1") {
+          await loadPermissionBaselineMapContext(candidateProjectId);
+        } else {
+          state.permissionBaselineMapContext = null;
+          state.permissionBaselineMapStatus = "not_applicable";
+        }
         state.permissionBaselinePatchPreview = null;
         resetPermissionBaselineReviewChecks();
         state.permissionBaselineStatus = draft.proposal_profile === "ref_gpx_proposal_v1"
@@ -23322,10 +23865,15 @@
         } else if (pending.kind === "rebuild") {
           const rebuild = state.permissionProjection?.rebuild || {};
           if (!rebuild.reviewed_baseline_sha256) throw new Error("Selected reviewed baseline hash is unavailable");
+          if (!rebuild.canonical_snapshot_sha256 || !rebuild.evaluator_version) {
+            throw new Error("Projection rebuild admission snapshot is unavailable");
+          }
           const result = await postJson(
             `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/contextual-permission-dashboard/rebuilds`,
             {
               expected_reviewed_baseline_sha256: rebuild.reviewed_baseline_sha256,
+              expected_admission_snapshot_sha256: rebuild.canonical_snapshot_sha256,
+              expected_evaluator_version: rebuild.evaluator_version,
               idempotency_key: pending.idempotencyKey,
               explicit_confirmation: true,
             },
@@ -23601,6 +24149,7 @@
     }
 
     function bindPermissionControls() {
+      bindPermissionRudyBackgrounds();
       document.querySelectorAll("[data-permission-lens-select]").forEach(button => {
         button.addEventListener("click", async () => {
           const lens = button.dataset.permissionLensSelect || "baseline";
@@ -23666,6 +24215,8 @@
         button.addEventListener("click", () => {
           state.permissionBaselineMode = button.dataset.permissionBaselineMode || "human_text";
           state.permissionBaselineDraft = null;
+          state.permissionBaselineMapContext = null;
+          state.permissionBaselineMapStatus = "idle";
           state.permissionBaselineSavedCandidate = null;
           state.permissionBaselinePatchText = "";
           state.permissionBaselinePatchPreview = null;
@@ -23677,6 +24228,8 @@
       document.querySelector("[data-permission-baseline-text]")?.addEventListener("input", event => {
         state.permissionBaselineText = String(event.currentTarget.value || "");
         state.permissionBaselineDraft = null;
+        state.permissionBaselineMapContext = null;
+        state.permissionBaselineMapStatus = "idle";
         state.permissionBaselineSavedCandidate = null;
         state.permissionBaselinePatchText = "";
         state.permissionBaselinePatchPreview = null;
