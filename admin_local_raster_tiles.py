@@ -581,6 +581,7 @@ def load_or_build_raster_tile_payload(
     fallback_enabled: bool = True,
     imagery_source: Mapping[str, Any] | None = None,
     allow_remote_fetch: bool = False,
+    prefer_native_zoom: bool = False,
     remote_fetch_timeout_seconds: float = 10.0,
     remote_fetcher: Any = fetch_remote_imagery_tile,
 ) -> AdminRasterTilePayload:
@@ -606,6 +607,34 @@ def load_or_build_raster_tile_payload(
                 else None
             ),
         )
+    def fetch_native_payload() -> AdminRasterTilePayload:
+        remote_tile = remote_fetcher(
+            imagery_source,
+            int(z),
+            int(x),
+            int(y),
+            timeout_seconds=remote_fetch_timeout_seconds,
+        )
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(remote_tile.body)
+        return AdminRasterTilePayload(
+            body=remote_tile.body,
+            media_type=_tile_media_type(
+                remote_tile.body,
+                default=remote_tile.media_type,
+            ),
+            source="remote_fetch_cache_fill",
+            cache_path=cache_path,
+            body_sha256=remote_tile.body_sha256,
+            imagery_source_id=remote_tile.source_id,
+            remote_url_sha256=hashlib.sha256(
+                remote_tile.url.encode("utf-8")
+            ).hexdigest(),
+        )
+
+    if prefer_native_zoom and allow_remote_fetch and imagery_source is not None:
+        return fetch_native_payload()
+
     parent_payload = _parent_raster_cache_tile_payload(
         project_id,
         layer_id,
@@ -620,26 +649,7 @@ def load_or_build_raster_tile_payload(
         return parent_payload
     if allow_remote_fetch and imagery_source is not None:
         try:
-            remote_tile = remote_fetcher(
-                imagery_source,
-                int(z),
-                int(x),
-                int(y),
-                timeout_seconds=remote_fetch_timeout_seconds,
-            )
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_bytes(remote_tile.body)
-            return AdminRasterTilePayload(
-                body=remote_tile.body,
-                media_type=_tile_media_type(remote_tile.body, default=remote_tile.media_type),
-                source="remote_fetch_cache_fill",
-                cache_path=cache_path,
-                body_sha256=remote_tile.body_sha256,
-                imagery_source_id=remote_tile.source_id,
-                remote_url_sha256=hashlib.sha256(
-                    remote_tile.url.encode("utf-8")
-                ).hexdigest(),
-            )
+            return fetch_native_payload()
         except Exception:
             if not fallback_enabled:
                 raise

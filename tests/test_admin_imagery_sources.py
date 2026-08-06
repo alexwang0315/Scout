@@ -55,6 +55,7 @@ def test_default_registry_exposes_allowlisted_sources_without_raw_urls():
         if source["source_id"] == "happyman_rudy_twmap"
     )
     assert rudy_twmap["ocr_capable"] is True
+    assert rudy_twmap["source_kind"] == "xyz_tile"
     assert rudy_twmap["map_label_source_priority"] == "highest"
     assert "trail_mileage_k_anchor" in rudy_twmap["label_extraction_roles"]
     assert "road_mileage_stone" in rudy_twmap["label_extraction_roles"]
@@ -66,6 +67,9 @@ def test_imagery_tile_url_preserves_source_specific_tile_order():
     nlsc = imagery_source_for_project({"imagery_source_id": "nlsc_photo2"})
     atis = imagery_source_for_project({"imagery_source_id": "happyman_atis"})
     rudy = imagery_source_for_project({"imagery_source_id": "happyman_rudy"})
+    rudy_twmap = imagery_source_for_project(
+        {"imagery_source_id": "happyman_rudy_twmap"}
+    )
 
     assert imagery_tile_url(nlsc, 14, 13708, 7063).endswith(
         "/EPSG:3857/14/7063/13708"
@@ -79,6 +83,9 @@ def test_imagery_tile_url_preserves_source_specific_tile_order():
     assert "TILEROW=3534" in rudy_url
     assert "TILECOL=6853" in rudy_url
     assert "TILEMATRIX=05" in imagery_tile_url(rudy, 5, 26, 13)
+    assert imagery_tile_url(rudy_twmap, 15, 27418, 14126).endswith(
+        "/map/moi_osm/15/27418/14126.png"
+    )
 
 
 def test_custom_registry_can_override_default_source(tmp_path: Path):

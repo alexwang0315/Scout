@@ -6518,7 +6518,7 @@
 
     .navigation-terrain-legend {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 1px;
       border-top: 1px solid var(--terrain-rule);
       background: var(--terrain-rule);
@@ -6560,6 +6560,10 @@
 
     .navigation-terrain-legend [data-navigation-legend-kind="drainage"] strong::before {
       background: var(--navigation-drainage);
+    }
+
+    .navigation-terrain-legend [data-navigation-legend-kind="tributary"] strong::before {
+      background: var(--navigation-tributary);
     }
 
     .navigation-terrain-legend [data-navigation-legend-kind="event"] strong::before {
@@ -8735,7 +8739,7 @@
       "surface-debug": Object.freeze({maturity: "live", surface: "Operational", data: "Runtime + replay evidence", action: "Diagnostics · projected clear is explicit", verification: "Full page verified", provenance: "Per-event provenance", mode: "Operational"}),
       "debug": Object.freeze({maturity: "partial", surface: "Operational", data: "Runtime + replay evidence", action: "Read-only · retry", verification: "Endpoints + tabs verified", provenance: "Per-event provenance", mode: "Technical Prototype"}),
       "settings": Object.freeze({maturity: "live", surface: "Operational", data: "Browser-local settings", action: "Local browser mutation only", verification: "Validation + save path", provenance: "Browser settings", mode: "Operational"}),
-      "diagnostic": Object.freeze({maturity: "live", surface: "Ready", data: "30 checks not run", action: "Read-only diagnostics", verification: "Awaiting Diag all", provenance: "Dashboard UI + same-origin GET APIs", mode: "Operational"}),
+      "diagnostic": Object.freeze({maturity: "live", surface: "Ready", data: "37 checks not run", action: "Read-only diagnostics", verification: "Awaiting Diag all", provenance: "Dashboard UI + same-origin GET APIs", mode: "Operational"}),
       "outdoor-permission": Object.freeze({maturity: "partial", surface: "Operational workbench", data: "Loading typed projection", action: "Inspect + explicit candidate simulation", verification: "Awaiting hash-bound projection", provenance: "Reviewed baseline + forward event reducer", mode: "Candidate-only"}),
       "observer": Object.freeze({maturity: "preview", surface: "Technical prototype", data: "Projected ingress · broker unverified", action: "Read-only · no publish", verification: "Connection/data lifecycle unverified", provenance: "Debug ingress references", mode: "Technical Prototype"}),
       "outdoor-architecture": Object.freeze({maturity: "partial", surface: "Operational analysis", data: "Loading route architecture evidence", action: "Read-only candidate analysis", verification: "Awaiting route topology projection", provenance: "Pretrip workspace + historical GPX aggregates", mode: "Candidate analysis"}),
@@ -8752,6 +8756,7 @@
       hardware: ["debug"],
       living: ["living"],
     });
+    let diagnosticCheck037Runner = null;
     const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([
       {id: "DASH-001", category: "Global / Overview", title: "Dashboard 啟動、入口與必要 API", description: "確認 Dashboard、workspace 與 project read APIs 可用。", run: diagnosticCheck001},
       {id: "DASH-002", category: "Global / Overview", title: "全站導覽、路由與返回狀態", description: "確認現有 route contract 與 Diagnostic 導覽位置。", run: diagnosticCheck002},
@@ -8789,6 +8794,7 @@
       {id: "DASH-034", category: "Exploring for Six Axis / Contextual Permission", title: "Safety / Emergency 專屬決策與權限邊界", description: "確認 Permission 只提供 handoff，沒有 night-travel 決策或 runtime/outbound authority。", run: diagnosticCheck034},
       {id: "DASH-035", category: "Exploring for Six Axis / Contextual Permission", title: "Contextual Permission Evidence lineage 與隱私邊界", description: "確認 source/cause 為 hash-bound bounded refs，缺口可見且沒有 raw GPX、健康或私人路徑。", run: diagnosticCheck035},
       {id: "DASH-036", category: "Exploring for Six Axis / Contextual Permission", title: "Candidate Simulation 明確觸發與 no-write contract", description: "只檢查 explicit Run wiring；Diagnostic 本身不送出 simulation POST。", run: diagnosticCheck036},
+      {id: "DASH-037", category: "Map & Evidence", title: "Navigation、Architecture、Weather 動態圖磚倍率切換", description: "從 Fit 放大並跨過 prepared Z14 時，確認地圖倍率與 Rudy+TW request Z／TILEMATRIX 同步上升，不得拉伸前一層圖磚冒充原生倍率。", run: (...args) => diagnosticCheck037Runner(...args)},
     ]);
     const loadedDataScopes = new Set();
     const dataScopePromises = new Map();
@@ -9006,18 +9012,17 @@
     ]);
 
     const DASHBOARD_RUDY_TILE_SOURCE = Object.freeze({
-      sourceKind: "wmts_kvp_tile",
-      wmtsEndpoint: "https://tile.happyman.idv.tw/mp/service",
-      wmtsLayer: "rudy_twmap",
-      wmtsStyle: "default",
-      wmtsTileMatrixSet: "gm_grid",
-      wmtsFormat: "image/png",
-      wmtsVersion: "1.0.0",
+      sourceKind: "scout_proxy_tile",
+      sourceId: "happyman_rudy_twmap",
+      cacheLayerId: "imagery",
+      initialMaxZoom: 13,
+      preparedMaxZoom: 14,
       minZoom: 5,
-      maxZoom: 19,
+      maxZoom: 20,
     });
     const DASHBOARD_RUDY_VIEWBOX = Object.freeze({width: 1000, height: 392});
     const DASHBOARD_RUDY_INITIAL_TILE_LIMIT = 24;
+    const DASHBOARD_RUDY_TILE_SWAP_TIMEOUT_MS = 12000;
     const NAVIGATION_RUDY_TILE_SOURCE = DASHBOARD_RUDY_TILE_SOURCE;
     const NAVIGATION_RUDY_VIEWBOX = DASHBOARD_RUDY_VIEWBOX;
     const NAVIGATION_RUDY_INITIAL_TILE_LIMIT = DASHBOARD_RUDY_INITIAL_TILE_LIMIT;
@@ -9507,7 +9512,7 @@
       debug: ["Debug Message", "read-only runtime and projection messages"],
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
-      diagnostic: ["Diagnostic", "36 read-only Dashboard checks"],
+      diagnostic: ["Diagnostic", "37 read-only Dashboard checks"],
     };
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -14868,7 +14873,11 @@
       ]);
       diagnosticRequire(navigation && typeof navigation === "object", "Navigation Terrain Intelligence is unavailable.");
       diagnosticRequire(navigation.boundary?.runtime_safety_truth === false, "Navigation projection boundary is not candidate-only.");
-      diagnosticRequire(NAVIGATION_RUDY_TILE_SOURCE.wmtsLayer === "rudy_twmap", "Navigation basemap is not Rudy+TW.");
+      diagnosticRequire(
+        NAVIGATION_RUDY_TILE_SOURCE.sourceKind === "scout_proxy_tile"
+          && NAVIGATION_RUDY_TILE_SOURCE.sourceId === "happyman_rudy_twmap",
+        "Navigation basemap is not Rudy+TW.",
+      );
       const routeCount = Number(navigation.route_samples?.rendered_count || asArray(navigation.route_samples?.points).length || 0);
       const root = diagnosticMarkupRoot(diagnosticRenderWithState(
         {project, adminProjection: project, navigationTerrainData: navigation},
@@ -15366,6 +15375,166 @@
       diagnosticRequire(simulation.includes("Current Decision not replaced"), "Candidate simulation may replace the stored Current Decision.");
       return "Initial projection GET-only · inputs become dirty · explicit Run only · simulation no-write and does not replace Current Decision";
     }
+
+    function diagnosticRudyTileMatrixFromUrl(value) {
+      const raw = String(value || "").replaceAll("&amp;", "&");
+      if (!raw) return null;
+      try {
+        const parsed = new URL(raw, window.location.href);
+        for (const [key, candidate] of parsed.searchParams.entries()) {
+          if (key.toUpperCase() !== "TILEMATRIX") continue;
+          const matrix = Number(candidate);
+          if (Number.isInteger(matrix) && matrix >= 0) return matrix;
+        }
+        const segments = parsed.pathname.split("/").filter(Boolean);
+        const tileName = segments.at(-1) || "";
+        const x = Number(segments.at(-2));
+        const z = Number(segments.at(-3));
+        if (/^\d+\.png$/i.test(tileName) && Number.isInteger(x) && Number.isInteger(z)) {
+          return z;
+        }
+      } catch (_error) {
+        return null;
+      }
+      return null;
+    }
+
+    function diagnosticRudyTileMatricesFromMarkup(markup) {
+      return Array.from(String(markup || "").matchAll(/\bhref="([^"]+)"/g))
+        .map(match => diagnosticRudyTileMatrixFromUrl(match[1]))
+        .filter(Number.isInteger);
+    }
+
+    function diagnosticDynamicRudyTileContract(label, surfaceId) {
+      const bounds = {west: 121.272, east: 121.278, north: 24.142, south: 24.136};
+      const initialMatrix = navigationRudyBaseZoom(bounds);
+      const zoomAfterOneClick = 1.25;
+      const firstMatrix = Math.min(
+        NAVIGATION_RUDY_TILE_SOURCE.maxZoom,
+        initialMatrix + Math.ceil(Math.log2(zoomAfterOneClick)),
+      );
+      diagnosticRequire(
+        firstMatrix > initialMatrix,
+        `${label} first Zoom in remains at Z${initialMatrix}.`,
+      );
+      const highMatrix = Math.min(
+        NAVIGATION_RUDY_TILE_SOURCE.maxZoom,
+        NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom + 1,
+      );
+      diagnosticRequire(
+        highMatrix > NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom,
+        `${label} cannot request a matrix above prepared Z${NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom}.`,
+      );
+      const initialMatrices = diagnosticRudyTileMatricesFromMarkup(
+        navigationRudyTileImages(bounds, bounds, initialMatrix, 1000, 392, surfaceId),
+      );
+      const firstMatrices = diagnosticRudyTileMatricesFromMarkup(
+        navigationRudyTileImages(bounds, bounds, firstMatrix, 1000, 392, surfaceId),
+      );
+      const highMatrices = diagnosticRudyTileMatricesFromMarkup(
+        navigationRudyTileImages(bounds, bounds, highMatrix, 1000, 392, surfaceId),
+      );
+      diagnosticRequire(initialMatrices.length > 0, `${label} generated no Fit-state Rudy+TW tile requests.`);
+      diagnosticRequire(firstMatrices.length > 0, `${label} generated no first-zoom Rudy+TW tile requests.`);
+      diagnosticRequire(highMatrices.length > 0, `${label} generated no above-prepared Rudy+TW tile requests.`);
+      diagnosticRequire(
+        initialMatrices.every(matrix => matrix === initialMatrix),
+        `${label} Fit-state tile requests do not match Z${initialMatrix}.`,
+      );
+      diagnosticRequire(
+        firstMatrices.every(matrix => matrix === firstMatrix),
+        `${label} first Zoom in requests do not switch to Z${firstMatrix}.`,
+      );
+      diagnosticRequire(
+        highMatrices.every(matrix => matrix === highMatrix),
+        `${label} high zoom requests do not cross prepared Z${NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom}.`,
+      );
+      return {
+        label,
+        initialMatrix,
+        firstMatrix,
+        highMatrix,
+        requestCount: firstMatrices.length + highMatrices.length,
+      };
+    }
+
+    function diagnosticWeatherRudyTileContract(pretripHtml) {
+      const source = String(pretripHtml || "");
+      const definition = source.split("\n")
+        .find(line => line.includes('{layerId: "rudy-twmap"')) || "";
+      const numericField = field => Number(
+        definition.match(new RegExp(`${field}:\\s*(\\d+)`))?.[1],
+      );
+      const initialMatrix = numericField("initialMaxZoom");
+      const preparedMatrix = numericField("preparedMaxZoom");
+      const maxMatrix = numericField("maxZoom");
+      diagnosticRequire(definition.includes('sourceKind: "scout_proxy_tile"'), "Weather Rudy+TW does not use the Scout tile proxy.");
+      diagnosticRequire(Number.isInteger(initialMatrix), "Weather Rudy+TW initial matrix is missing.");
+      diagnosticRequire(Number.isInteger(preparedMatrix), "Weather Rudy+TW prepared matrix is missing.");
+      diagnosticRequire(Number.isInteger(maxMatrix), "Weather Rudy+TW maximum matrix is missing.");
+      diagnosticRequire(
+        maxMatrix > preparedMatrix && preparedMatrix > initialMatrix,
+        `Weather Rudy+TW dynamic range is invalid: initial Z${initialMatrix}, prepared Z${preparedMatrix}, max Z${maxMatrix}.`,
+      );
+      const zoomSelector = source.split("function chooseRasterZoom", 2)[1]
+        ?.split("function osmTileCoverage", 1)[0] || "";
+      diagnosticRequire(
+        zoomSelector.includes("definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))"),
+        "Weather tile selection does not derive its matrix from the live map zoom.",
+      );
+      diagnosticRequire(!zoomSelector.includes("preparedMaxZoom"), "Weather tile selection is capped at preparedMaxZoom.");
+      diagnosticRequire(source.includes("function mapInteractionMaxZoom()"), "Weather map interaction has no native matrix ceiling.");
+      diagnosticRequire(source.includes("nativeMaxZoom - initialZoom"), "Weather interaction ceiling is not derived from the native matrix range.");
+      diagnosticRequire(source.includes("source_id=${encodeURIComponent(definition.sourceId)}&native=1"), "Weather Rudy+TW request does not opt into native dynamic tiles.");
+      const firstMatrix = Math.min(
+        maxMatrix,
+        initialMatrix + Math.ceil(Math.log2(1.25)),
+      );
+      diagnosticRequire(firstMatrix > initialMatrix, `Weather first Zoom in remains at Z${initialMatrix}.`);
+      const highMatrix = Math.min(maxMatrix, preparedMatrix + 1);
+      diagnosticRequire(highMatrix > preparedMatrix, `Weather cannot request a matrix above prepared Z${preparedMatrix}.`);
+      return {label: "Weather", initialMatrix, firstMatrix, highMatrix};
+    }
+
+    async function diagnosticCheck037() {
+      const updater = diagnosticCompactSource(updateDashboardRudyTileLayer);
+      const baseZoom = diagnosticCompactSource(navigationRudyBaseZoom);
+      diagnosticRequire(
+        updater.includes("NAVIGATION_RUDY_TILE_SOURCE.maxZoom"),
+        "Navigation/Architecture tile updater does not use the native maxZoom ceiling.",
+      );
+      diagnosticRequire(
+        !updater.includes("NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom"),
+        "Navigation/Architecture tile updater is capped at preparedMaxZoom.",
+      );
+      diagnosticRequire(
+        baseZoom.includes("NAVIGATION_RUDY_TILE_SOURCE.initialMaxZoom"),
+        "Navigation/Architecture Fit state does not start from the bounded initial matrix.",
+      );
+      diagnosticRequire(
+        NAVIGATION_RUDY_TILE_SOURCE.maxZoom > NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom,
+        "Navigation/Architecture native maxZoom does not exceed the prepared tile ceiling.",
+      );
+      const navigationRenderer = diagnosticCompactSource(renderNavigationWorkspaceMap);
+      const architectureRenderer = diagnosticCompactSource(renderArchitectureMap);
+      diagnosticRequire(navigationRenderer.includes("renderNavigationRudyTileLayer"), "Navigation is not wired to the dynamic Rudy+TW tile layer.");
+      diagnosticRequire(architectureRenderer.includes("renderDashboardRudyTileLayer"), "Architecture is not wired to the dynamic Rudy+TW tile layer.");
+
+      const nativeContracts = [
+        diagnosticDynamicRudyTileContract("Navigation", "navigation-map"),
+        diagnosticDynamicRudyTileContract("Architecture", "architecture-map"),
+      ];
+      const pretrip = await diagnosticEnvelope(
+        `/admin/pretrip?projectId=${encodeURIComponent(projectId())}`,
+        {text: true, timeoutMs: 60000},
+      );
+      const weatherContract = diagnosticWeatherRudyTileContract(pretrip.data);
+      const contracts = [...nativeContracts, weatherContract];
+      return contracts
+        .map(contract => `${contract.label} Z${contract.initialMatrix}→Z${contract.firstMatrix}→Z${contract.highMatrix}`)
+        .join(" · ") + " · request URL/TILEMATRIX contract crosses prepared Z14";
+    }
+    diagnosticCheck037Runner = diagnosticCheck037;
 
     function updateDiagnosticDom(caseId = null) {
       const item = caseId ? DASHBOARD_DIAGNOSTIC_CASES.find(candidate => candidate.id === caseId) : null;
@@ -17022,7 +17191,7 @@
     }
 
     function navigationRudyBaseZoom(bounds, maxTiles = NAVIGATION_RUDY_INITIAL_TILE_LIMIT) {
-      let zoom = NAVIGATION_RUDY_TILE_SOURCE.maxZoom;
+      let zoom = NAVIGATION_RUDY_TILE_SOURCE.initialMaxZoom;
       while (
         zoom > NAVIGATION_RUDY_TILE_SOURCE.minZoom
         && navigationRudyTileCount(bounds, zoom) > maxTiles
@@ -17031,19 +17200,15 @@
     }
 
     function navigationRudyTileUrl(zoom, x, y) {
-      const params = new URLSearchParams({
-        SERVICE: "WMTS",
-        REQUEST: "GetTile",
-        VERSION: NAVIGATION_RUDY_TILE_SOURCE.wmtsVersion,
-        LAYER: NAVIGATION_RUDY_TILE_SOURCE.wmtsLayer,
-        STYLE: NAVIGATION_RUDY_TILE_SOURCE.wmtsStyle,
-        TILEMATRIXSET: NAVIGATION_RUDY_TILE_SOURCE.wmtsTileMatrixSet,
-        TILEMATRIX: String(zoom).padStart(2, "0"),
-        TILEROW: String(y),
-        TILECOL: String(x),
-        FORMAT: NAVIGATION_RUDY_TILE_SOURCE.wmtsFormat,
-      });
-      return `${NAVIGATION_RUDY_TILE_SOURCE.wmtsEndpoint}?${params.toString()}`;
+      const path = [
+        "/admin/tiles/imagery",
+        encodeURIComponent(projectId()),
+        encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.cacheLayerId),
+        String(zoom),
+        String(x),
+        `${String(y)}.png`,
+      ].join("/");
+      return `${path}?source_id=${encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.sourceId)}&native=1`;
     }
 
     function navigationRudyTileLongitude(x, zoom) {
@@ -17123,6 +17288,9 @@
           data-dashboard-map-surface="${escapeHtml(surfaceId)}"
           ${navigationSurface ? `data-navigation-rudy-tile-layer="true" data-navigation-rudy-tile-zoom="${baseZoom}" data-navigation-rudy-tile-key="${escapeHtml(navigationRudyTileKey(normalized, baseZoom))}"` : ""}
           data-rudy-base-zoom="${baseZoom}"
+          data-dashboard-rudy-active-map-zoom="1"
+          data-dashboard-rudy-active-map-x="0"
+          data-dashboard-rudy-active-map-y="0"
           data-rudy-west="${normalized.west}"
           data-rudy-east="${normalized.east}"
           data-rudy-north="${normalized.north}"
@@ -17181,6 +17349,132 @@
       };
     }
 
+    function discardDashboardPendingRudyTileGeneration(tileLayer) {
+      const pendingGenerations = Array.from(tileLayer.querySelectorAll(
+        '[data-dashboard-rudy-tile-generation="pending"]',
+      ));
+      pendingGenerations.forEach(pendingGeneration => {
+        pendingGeneration.querySelectorAll("image").forEach(image => {
+          image.removeAttribute("href");
+        });
+        pendingGeneration.remove();
+      });
+      const discarded = Boolean(
+        tileLayer.dataset.dashboardRudyPendingTileKey
+        || pendingGenerations.length,
+      );
+      delete tileLayer.dataset.dashboardRudyPendingTileKey;
+      return discarded;
+    }
+
+    function stageDashboardRudyTileGeneration(
+      viewport,
+      tileLayer,
+      markup,
+      tileKey,
+      effectiveZoom,
+      requestedViewState = {},
+    ) {
+      if (tileLayer.dataset.dashboardRudyPendingTileKey === tileKey) return false;
+      discardDashboardPendingRudyTileGeneration(tileLayer);
+
+      const candidate = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      candidate.setAttribute("data-dashboard-rudy-tile-generation", "pending");
+      candidate.setAttribute("aria-hidden", "true");
+      candidate.style.opacity = "0";
+      candidate.style.pointerEvents = "none";
+      candidate.innerHTML = markup;
+      const candidateImages = Array.from(candidate.querySelectorAll("image"));
+      if (!candidateImages.length) return false;
+      const fallbackViewState = {
+        zoom: Math.max(1, Number(tileLayer.dataset.dashboardRudyActiveMapZoom) || 1),
+        x: Number(tileLayer.dataset.dashboardRudyActiveMapX) || 0,
+        y: Number(tileLayer.dataset.dashboardRudyActiveMapY) || 0,
+      };
+      const nextViewState = {
+        zoom: Math.max(1, Number(requestedViewState.zoom) || 1),
+        x: Number(requestedViewState.x) || 0,
+        y: Number(requestedViewState.y) || 0,
+      };
+
+      let loadedCount = 0;
+      let settled = false;
+      let timeoutId = null;
+      tileLayer.dataset.dashboardRudyPendingTileKey = tileKey;
+      viewport.dataset.dashboardTileLoadState = "loading";
+
+      const clearPendingState = () => {
+        if (tileLayer.dataset.dashboardRudyPendingTileKey === tileKey) {
+          delete tileLayer.dataset.dashboardRudyPendingTileKey;
+        }
+      };
+      const discardCandidate = (reason = "load-error") => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        candidateImages.forEach(candidateImage => {
+          candidateImage.removeAttribute("href");
+        });
+        candidate.remove();
+        const isCurrentGeneration = tileLayer.dataset.dashboardRudyPendingTileKey === tileKey;
+        clearPendingState();
+        if (isCurrentGeneration) {
+          viewport.dataset.dashboardTileLoadState = "retained-previous";
+          viewport.dispatchEvent(new CustomEvent("dashboard-rudy-tile-generation-failed", {
+            detail: {tileKey, effectiveZoom, fallbackViewState, reason},
+          }));
+        }
+      };
+      const promoteCandidate = () => {
+        if (settled) return;
+        if (tileLayer.dataset.dashboardRudyPendingTileKey !== tileKey) {
+          discardCandidate();
+          return;
+        }
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        Array.from(tileLayer.children).forEach(child => {
+          if (child !== candidate) child.remove();
+        });
+        candidate.setAttribute("data-dashboard-rudy-tile-generation", "active");
+        candidate.style.removeProperty("opacity");
+        candidate.style.removeProperty("pointer-events");
+        tileLayer.dataset.dashboardRudyTileKey = tileKey;
+        tileLayer.dataset.navigationRudyTileKey = tileKey;
+        tileLayer.dataset.dashboardRudyTileZoom = String(effectiveZoom);
+        tileLayer.dataset.navigationRudyTileZoom = String(effectiveZoom);
+        tileLayer.dataset.dashboardRudyActiveMapZoom = String(nextViewState.zoom);
+        tileLayer.dataset.dashboardRudyActiveMapX = String(nextViewState.x);
+        tileLayer.dataset.dashboardRudyActiveMapY = String(nextViewState.y);
+        viewport.dataset.dashboardTileZoom = String(effectiveZoom);
+        viewport.dataset.navigationTileZoom = String(effectiveZoom);
+        viewport.dataset.dashboardTileLoadState = "ready";
+        viewport.querySelectorAll(
+          "[data-dashboard-rudy-zoom-label], [data-navigation-rudy-zoom-label]",
+        ).forEach(zoomLabel => { zoomLabel.textContent = String(effectiveZoom); });
+        clearPendingState();
+        enforceDashboardMapRenderPolicy(viewport);
+      };
+
+      candidateImages.forEach(candidateImage => {
+        candidateImage.addEventListener("load", () => {
+          if (settled) return;
+          loadedCount += 1;
+          if (loadedCount !== candidateImages.length) return;
+          promoteCandidate();
+        }, {once: true});
+        candidateImage.addEventListener("error", () => {
+          discardCandidate("load-error");
+        }, {once: true});
+      });
+      tileLayer.appendChild(candidate);
+      timeoutId = window.setTimeout(
+        () => discardCandidate("timeout"),
+        DASHBOARD_RUDY_TILE_SWAP_TIMEOUT_MS,
+      );
+      return true;
+    }
+
     function updateDashboardRudyTileLayer(viewport, viewState) {
       const tileLayer = viewport.querySelector('[data-dashboard-rudy-tile-layer="true"]');
       if (!tileLayer) return;
@@ -17213,24 +17507,28 @@
         1,
         Number(tileLayer.dataset.rudyViewboxHeight) || DASHBOARD_RUDY_VIEWBOX.height,
       );
-      tileLayer.dataset.dashboardRudyTileZoom = String(effectiveZoom);
-      viewport.dataset.dashboardTileZoom = String(effectiveZoom);
-      tileLayer.dataset.navigationRudyTileZoom = String(effectiveZoom);
-      viewport.dataset.navigationTileZoom = String(effectiveZoom);
-      viewport.querySelectorAll(
-        "[data-dashboard-rudy-zoom-label], [data-navigation-rudy-zoom-label]",
-      ).forEach(zoomLabel => { zoomLabel.textContent = String(effectiveZoom); });
-      if (tileLayer.dataset.dashboardRudyTileKey === tileKey) return;
-      tileLayer.innerHTML = navigationRudyTileImages(
-        fullBounds,
-        visibleBounds,
+      if (tileLayer.dataset.dashboardRudyTileKey === tileKey) {
+        if (tileLayer.dataset.dashboardRudyPendingTileKey !== tileKey) {
+          discardDashboardPendingRudyTileGeneration(tileLayer);
+          viewport.dataset.dashboardTileLoadState = "ready";
+        }
+        return;
+      }
+      stageDashboardRudyTileGeneration(
+        viewport,
+        tileLayer,
+        navigationRudyTileImages(
+          fullBounds,
+          visibleBounds,
+          effectiveZoom,
+          width,
+          height,
+          surfaceId,
+        ),
+        tileKey,
         effectiveZoom,
-        width,
-        height,
-        surfaceId,
+        viewState,
       );
-      tileLayer.dataset.dashboardRudyTileKey = tileKey;
-      tileLayer.dataset.navigationRudyTileKey = tileKey;
       enforceDashboardMapRenderPolicy(viewport);
     }
 
@@ -17555,7 +17853,7 @@
       `;
       const mapOverlay = `
           <div class="navigation-workspace-map-status" data-navigation-terrain-validation="${escapeHtml(validationState)}"><strong>Rudy+TW · z<span data-navigation-rudy-zoom-label>${baseZoom}</span></strong>${escapeHtml(statusText)}</div>
-          <div class="navigation-workspace-scale">${escapeHtml(`dynamic WMTS · ${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m DEM analysis`)}</div>
+          <div class="navigation-workspace-scale">${escapeHtml(`cached Scout tiles · ${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m DEM analysis`)}</div>
       `;
       return renderDashboardMapViewport("navigation-workspace-map",
         "Rudy+TW tiled terrain intelligence map",
@@ -17888,10 +18186,11 @@
                     : renderNavigationWorkspaceLoading(snapshot)}
                 <div class="navigation-terrain-legend" aria-label="Terrain map legend">
                 ${sourceMode === "workspace" ? `
-                    <span data-navigation-legend-kind="basemap"><strong>Rudy+TW</strong><br>dynamic WMTS tiles</span>
+                    <span data-navigation-legend-kind="basemap"><strong>Rudy+TW</strong><br>cached Scout tiles</span>
                     <span data-navigation-legend-kind="route"><strong>洋紅路線</strong><br>bounded route samples</span>
                     <span data-navigation-legend-kind="ridge"><strong>橘色稜脊</strong><br>稜脊／分水界候選</span>
-                    <span data-navigation-legend-kind="drainage"><strong>深藍谷地</strong><br>集水／支流候選</span>
+                    <span data-navigation-legend-kind="drainage"><strong>深藍主谷</strong><br>集水骨幹候選</span>
+                    <span data-navigation-legend-kind="tributary"><strong>藍綠支谷</strong><br>連通谷地候選 · 未水文複核</span>
                     <span data-navigation-legend-kind="event"><strong>紅色事件點</strong><br>離線 shadow candidate</span>
                   ` : `
                     <span><strong>綠實線</strong><br>稜線骨架</span>
@@ -18741,7 +19040,7 @@
           <div class="architecture-map-legend-head"><strong>${escapeHtml(architectureLensLabel())}</strong><span>${escapeHtml(architectureLensLegendSubtitle())}</span></div>
           ${renderArchitectureLensLegend()}
           <div class="architecture-map-legend-symbols"><span class="architecture-map-legend-symbol is-selected">Amber glow · selected segment</span><span class="architecture-map-legend-symbol is-cp">Amber diamond · difficulty CP</span><span class="architecture-map-legend-symbol is-mcp">Cyan point · MCP</span><span class="architecture-map-legend-symbol is-checkpoint">White point · route anchor</span></div>
-          <div class="architecture-map-legend-meta">Rudy+TW WMTS basemap · ${formatInteger(mapData.coordinateSegments.length)} workspace segment geometries from <span class="mono">${escapeHtml(mapData.sourcePath)}</span> · full golden-route scope retained; crowd gaps render as no observed bin · page-local styling over the existing <span class="mono">segments</span> data group · no 33rd Scout layer.</div>
+          <div class="architecture-map-legend-meta">Rudy+TW cached Scout tiles · ${formatInteger(mapData.coordinateSegments.length)} workspace segment geometries from <span class="mono">${escapeHtml(mapData.sourcePath)}</span> · full golden-route scope retained; crowd gaps render as no observed bin · page-local styling over the existing <span class="mono">segments</span> data group · no 33rd Scout layer.</div>
         </div>
       ` : `<div class="architecture-empty"><div><strong>Route map projection unavailable.</strong>${bins.length ? "The demand vectors are loaded, but display geometry is missing." : "Route display geometry is missing."}</div></div>`;
       return `
@@ -19998,6 +20297,20 @@
         if (message) announce(message);
       };
 
+      const onRudyTileGenerationFailed = (event) => {
+        const fallbackViewState = event.detail?.fallbackViewState;
+        const fallbackZoom = Number(fallbackViewState?.zoom);
+        if (!Number.isFinite(fallbackZoom)) return;
+        viewState = clampedState({
+          ...viewState,
+          zoom: Math.max(1, Math.min(maxZoom, fallbackZoom)),
+          x: Number(fallbackViewState?.x) || 0,
+          y: Number(fallbackViewState?.y) || 0,
+        });
+        viewport.dataset.dashboardTileLoadState = "native-unavailable-retained-previous";
+        apply(`Native Rudy+TW Z${event.detail?.effectiveZoom || "?"} tiles are incomplete. The previous complete view was retained.`);
+      };
+
       const pointInViewport = (event) => {
         const rect = viewport.getBoundingClientRect();
         return {
@@ -20227,6 +20540,7 @@
       viewport.addEventListener("pointercancel", event => finishPointer(event, true));
       if (wheelZoomEnabled) viewport.addEventListener("wheel", onWheel, {passive: false});
       viewport.addEventListener("keydown", onKeyDown);
+      viewport.addEventListener("dashboard-rudy-tile-generation-failed", onRudyTileGenerationFailed);
       viewport.addEventListener("click", (event) => {
         if (!suppressNextClick) return;
         suppressNextClick = false;

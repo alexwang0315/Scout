@@ -221,9 +221,18 @@ def test_pretrip_admin_map_segments_render_from_display_geometry_first():
     assert "zoom-selection" in html
     assert "beginMapRectangleZoom" in html
     assert "zoomMapToBox" in html
-    assert "zoomMapOutFromBox" in html
-    assert "Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor))" in html
-    assert "isZoomOutDrag" in html
+    assert "zoomMapOutFromBox" not in html
+    assert "isZoomOutDrag" not in html
+    zoom_to_box = html.split("function zoomMapToBox", 1)[1].split(
+        "function selectionZoomFactor", 1
+    )[0]
+    finish_box_zoom = html.split("function finishMapRectangleZoom", 1)[1].split(
+        "function cancelMapRectangleZoom", 1
+    )[0]
+    assert "const currentViewport = mapViewportBox();" in zoom_to_box
+    assert "state.zoom * factor" in zoom_to_box
+    assert "zoomMapToBox(box);" in finish_box_zoom
+    assert "zoomMapOutFromBox" not in finish_box_zoom
     assert "let treeClickFocusTimer = null;" in html
     assert "function scheduleTreeClickFocus(item)" in html
     assert "window.clearTimeout(treeClickFocusTimer);" in html
@@ -939,6 +948,65 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "environment_risk_derivative_layers" in html
     assert "environment-risk-derivative" in html
     assert 'type.includes("environment") || type.includes("gee_") || type.includes("cwa_")' in html
+
+
+def test_weather_map_preserves_previous_tiles_until_replacement_generation_loads():
+    html = PAGE.read_text(encoding="utf-8")
+    raster_swap = html.split(
+        "function replaceRasterLayerWhenReady", 1
+    )[1].split("function renderRasterBasemapLayers", 1)[0]
+    raster_refresh = html.split(
+        "function renderRasterBasemapLayers", 1
+    )[1].split("function applyMapViewport", 1)[0]
+
+    assert 'data-tile-generation="pending"' in html
+    assert 'image.addEventListener("load"' in raster_swap
+    assert 'image.addEventListener("error"' in raster_swap
+    assert "rememberRudyMapView" in raster_swap
+    assert "restoreRudyMapViewAfterTileFailure" in raster_refresh
+    assert "RASTER_TILE_SWAP_TIMEOUT_MS" in raster_swap
+    assert "if (loadedCount !== images.length) return;" in raster_swap
+    assert "group.dataset.pendingTileGenerationKey !== generationKey" in raster_swap
+    assert "promoteCandidate();" in raster_swap
+    assert "function discardPendingRasterLayerGeneration(" in html
+    assert "if (generationKey === group.dataset.activeTileGenerationKey)" in raster_swap
+    assert "discardPendingRasterLayerGeneration(group);" in raster_swap
+    assert "replaceRasterLayerWhenReady(imageryGroup" in raster_refresh
+    assert "replaceRasterLayerWhenReady(rasterGroup" in raster_refresh
+    assert "replaceRasterLayerWhenReady(osmGroup" in raster_refresh
+    assert "imageryGroup.replaceChildren();" not in raster_refresh
+    assert "rasterGroup.replaceChildren();" not in raster_refresh
+    assert "osmGroup.replaceChildren();" not in raster_refresh
+
+
+def test_weather_rudy_twmap_uses_scout_cache_proxy_instead_of_direct_wmts():
+    html = PAGE.read_text(encoding="utf-8")
+    definition = next(
+        line for line in html.splitlines() if '{layerId: "rudy-twmap"' in line
+    )
+
+    assert 'sourceKind: "scout_proxy_tile"' in definition
+    assert 'sourceId: "happyman_rudy_twmap"' in definition
+    assert 'cacheLayerId: "imagery"' in definition
+    assert 'initialMaxZoom: 13' in definition
+    assert 'preparedMaxZoom: 14' in definition
+    assert 'maxZoom: 20' in definition
+    assert "wmtsLayer" not in definition
+    assert "const RUDY_TWMAP_MAX_TILES = 24" in html
+    assert (
+        'const effectiveMaxTiles = layerId === "rudy-twmap" '
+        '? Math.min(maxTiles, RUDY_TWMAP_MAX_TILES) : maxTiles;'
+        in html
+    )
+    assert "tileCountForZoom(bounds, zoom) > effectiveMaxTiles" in html
+    assert "definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))" in html
+    assert "function mapInteractionMaxZoom()" in html
+    assert 'document.getElementById("zoomIn")' in html
+    assert 'state.zoom >= mapInteractionMaxZoom() - 0.001' in html
+    assert 'layerInputChecked("rudy-twmap")' in html
+    assert 'if (definition.sourceKind === "scout_proxy_tile")' in html
+    assert '"admin/tiles/imagery"' in html
+    assert "source_id=${encodeURIComponent(definition.sourceId)}&native=1" in html
 
 
 def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():

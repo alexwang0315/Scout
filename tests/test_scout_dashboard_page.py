@@ -1607,8 +1607,8 @@ def test_weather_embedded_map_defaults_to_rudy_tw_and_cwa_imagery_only() -> None
         "renderTerrainMetadata(terrainGroup, view, bounds);"
         in pretrip_html
     )
-    assert 'wmtsLayer: "rudy_twmap"' in pretrip_html
-    assert 'sourceKind: "wmts_kvp_tile"' in pretrip_html
+    assert 'sourceKind: "xyz_tile"' in pretrip_html
+    assert "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png" in pretrip_html
     assert "renderRasterBasemapLayers(state.view);" in map_viewport_adapter
 
 
@@ -2004,7 +2004,9 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "--navigation-route: #d1005d;" in html
     assert "--navigation-ridge: #ef5b0c;" in html
     assert "--navigation-drainage: #006eb8;" in html
+    assert "--navigation-tributary: #008f9c;" in html
     assert "--navigation-event: #d72f20;" in html
+    assert '[data-navigation-legend-kind="tributary"]' in html
     assert "navigation-workspace-route-halo" in html
     assert 'data-dashboard-map-screen-stroke="7"' in html
     assert 'data-dashboard-map-screen-stroke="4.5"' in html
@@ -2018,10 +2020,14 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     for legend_label in (
         "洋紅路線",
         "橘色稜脊",
-        "深藍谷地",
+        "深藍主谷",
+        "藍綠支谷",
         "紅色事件點",
     ):
         assert legend_label in navigation
+
+    assert "集水骨幹候選" in navigation
+    assert "連通谷地候選 · 未水文複核" in navigation
 
     for lens, label in (
         ("structure", "地形結構"),
@@ -2113,12 +2119,19 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     tile_refresh = html.split(
         "function updateDashboardRudyTileLayer", 1
     )[1].split("function updateNavigationRudyTileLayer", 1)[0]
+    tile_generation = html.split(
+        "function stageDashboardRudyTileGeneration", 1
+    )[1].split("function updateDashboardRudyTileLayer", 1)[0]
 
     for marker in (
         "const DASHBOARD_RUDY_TILE_SOURCE",
         "const NAVIGATION_RUDY_TILE_SOURCE",
-        'sourceKind: "wmts_kvp_tile"',
-        'wmtsLayer: "rudy_twmap"',
+        'sourceKind: "scout_proxy_tile"',
+        'sourceId: "happyman_rudy_twmap"',
+        'cacheLayerId: "imagery"',
+        'initialMaxZoom: 13',
+        'preparedMaxZoom: 14',
+        'maxZoom: 20',
         "function navigationMercatorY(",
         "function navigationRudyTileRange(",
         "function navigationRudyBaseZoom(",
@@ -2126,6 +2139,7 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
         "function navigationRudyTileImages(",
         "function navigationRudyVisibleBounds(",
         "function renderDashboardRudyTileLayer(",
+        "function stageDashboardRudyTileGeneration(",
         "function updateDashboardRudyTileLayer(",
         "function updateNavigationRudyTileLayer(",
         "Math.log2(viewState.zoom)",
@@ -2164,6 +2178,40 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     )
     assert "Math.ceil(Math.log2(viewState.zoom))" in tile_refresh
     assert "Math.round(Math.log2(viewState.zoom))" not in tile_refresh
+    assert '"/admin/tiles/imagery"' in html
+    assert "encodeURIComponent(projectId())" in html
+    assert "source_id=${encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.sourceId)}&native=1" in html
+    assert "let zoom = NAVIGATION_RUDY_TILE_SOURCE.initialMaxZoom" in html
+    assert "NAVIGATION_RUDY_TILE_SOURCE.maxZoom," in tile_refresh
+    assert "NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom," not in tile_refresh
+    assert "NAVIGATION_RUDY_TILE_SOURCE.maxZoom - baseZoom" in html
+    assert "cached Scout tiles" in html
+    assert "tile.happyman.idv.tw" not in html.split(
+        "function navigationRudyTileUrl", 1
+    )[1].split("function navigationRudyTileLongitude", 1)[0]
+    assert "URLSearchParams" not in html.split(
+        "function navigationRudyTileUrl", 1
+    )[1].split("function navigationRudyTileLongitude", 1)[0]
+    assert "tileLayer.innerHTML =" not in tile_refresh
+    assert 'data-dashboard-rudy-tile-generation="pending"' in html
+    assert 'candidateImage.addEventListener("load"' in tile_generation
+    assert 'candidateImage.addEventListener("error"' in tile_generation
+    assert 'data-dashboard-rudy-active-map-zoom="1"' in html
+    assert 'new CustomEvent("dashboard-rudy-tile-generation-failed"' in tile_generation
+    assert "fallbackViewState" in tile_generation
+    assert (
+        'viewport.addEventListener("dashboard-rudy-tile-generation-failed", '
+        "onRudyTileGenerationFailed)"
+        in map_controller
+    )
+    assert "DASHBOARD_RUDY_TILE_SWAP_TIMEOUT_MS" in tile_generation
+    assert "if (loadedCount !== candidateImages.length) return;" in tile_generation
+    assert "tileLayer.dataset.dashboardRudyPendingTileKey !== tileKey" in tile_generation
+    assert "discardCandidate();" in tile_generation
+    assert "promoteCandidate();" in tile_generation
+    assert "function discardDashboardPendingRudyTileGeneration(" in html
+    assert "if (tileLayer.dataset.dashboardRudyTileKey === tileKey) {" in tile_refresh
+    assert "discardDashboardPendingRudyTileGeneration(tileLayer);" in tile_refresh
 
 
 def test_dashboard_map_zoom_does_not_precompose_dynamic_rudy_tile_stage() -> None:
@@ -3981,7 +4029,7 @@ process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, fai
     assert payload["successReceipt"]["reloadDisabled"] is False
 
 
-def test_dashboard_diagnostic_page_runs_36_read_only_checks() -> None:
+def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     settings_nav = (
@@ -3996,15 +4044,15 @@ def test_dashboard_diagnostic_page_runs_36_read_only_checks() -> None:
     assert diagnostic_nav in html
     assert html.index(diagnostic_nav) > html.index(settings_nav)
     assert '"diagnostic": Object.freeze' in html
-    assert 'diagnostic: ["Diagnostic", "36 read-only Dashboard checks"]' in html
+    assert 'diagnostic: ["Diagnostic", "37 read-only Dashboard checks"]' in html
     assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
 
     case_source = html.split(
         "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
     )[1].split("]);", 1)[0]
-    for index in range(1, 37):
+    for index in range(1, 38):
         assert f'id: "DASH-{index:03d}"' in case_source
-    assert case_source.count('id: "DASH-') == 36
+    assert case_source.count('id: "DASH-') == 37
     assert "postJson(" not in case_source
 
     for marker in (
@@ -4019,6 +4067,7 @@ def test_dashboard_diagnostic_page_runs_36_read_only_checks() -> None:
         "async function diagnosticCheck034()",
         "async function diagnosticCheck035()",
         "async function diagnosticCheck036()",
+        "async function diagnosticCheck037()",
         "所有 Dashboard 地圖 evidence hover hint",
         "所有 Dashboard 地圖框選縮放與鍵盤平移",
         "所有 Dashboard 地圖圖磚、向量與單圖例外政策",
@@ -4030,10 +4079,13 @@ def test_dashboard_diagnostic_page_runs_36_read_only_checks() -> None:
         "Safety / Emergency 專屬決策與權限邊界",
         "Contextual Permission Evidence lineage 與隱私邊界",
         "Candidate Simulation 明確觸發與 no-write contract",
+        "Navigation、Architecture、Weather 動態圖磚倍率切換",
         "DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES",
         "const DASHBOARD_MAP_SURFACES = Object.freeze([",
         "diagnosticMapSurfaceSources",
         "function diagnosticZeroCountEvidenceCategories(",
+        "function diagnosticRudyTileMatrixFromUrl(",
+        "function diagnosticDynamicRudyTileContract(",
         "function diagnosticPermissionProjection(",
         "function diagnosticPermissionRoot(",
         "function diagnosticRequireNoAuthority(",
@@ -4141,6 +4193,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "async function diagnosticCheck034()",
         "async function diagnosticCheck035()",
         "async function diagnosticCheck036()",
+        "async function diagnosticCheck037()",
         'artifact_kind === "contextual_permission_dashboard_projection"',
         'schema_version === "contextualPermissionDashboard.v1"',
         'data-contextual-permission-workbench="ready"',
@@ -4149,6 +4202,11 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         'cause.source_kind !== "human_operation"',
         "Inputs changed · not evaluated.",
         "Current Decision not replaced",
+        "NAVIGATION_RUDY_TILE_SOURCE.maxZoom",
+        "firstMatrix > initialMatrix",
+        "NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom + 1",
+        "request URL/TILEMATRIX contract crosses prepared Z14",
+        "definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))",
     ):
         assert marker in diagnostic_source
 
@@ -4176,7 +4234,17 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "DASH-035",
     ):
         assert f'"{case_id}"' in browser_smoke
-    assert "const expectedDiagnosticCount = 36" in browser_smoke
+    assert "const expectedDiagnosticCount = 37" in browser_smoke
+    assert '"DASH-037"' in browser_smoke
+    assert "function tileMatrixFromUrl(" in browser_smoke
+    assert "dynamicTileMatrix" in browser_smoke
+    assert "networkTileMatrices" in browser_smoke
+    assert "firstActiveMatrix" in browser_smoke
+    assert "function advancePastPreparedTileMatrix(" in browser_smoke
+    assert "activeMatrix: highTileState.matrix" in browser_smoke
+    assert "networkTileMatrices.includes(surface.targetMatrix)" in browser_smoke
+    assert "dynamicTileFailures" in browser_smoke
+    assert "preparedMatrix: 14, targetMatrix: 15" in browser_smoke
     assert '"emergency-review-map"' in browser_smoke
     assert 'includes("9 Dashboard maps")' in browser_smoke
     assert "dataDependentDiagnosticIds" in browser_smoke

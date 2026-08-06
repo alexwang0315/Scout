@@ -1817,6 +1817,43 @@ def test_admin_imagery_tile_proxy_api_uses_workspace_project_cache_root(
     assert response.content == cached_path.read_bytes()
 
 
+def test_admin_imagery_tile_proxy_api_discovers_adjacent_shared_cache_root(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.delenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT", raising=False)
+    workspace_root = tmp_path / "workspaces"
+    project_id = "chilai_nanhua_day1"
+    project_root = workspace_root / project_id
+    shared_cache_root = workspace_root / "scout-local-data" / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": project_id}, sort_keys=True),
+        encoding="utf-8",
+    )
+    cached_path = raster_tile_cache_path(
+        project_id,
+        "imagery",
+        5,
+        26,
+        13,
+        cache_root=shared_cache_root,
+    )
+    cached_path.parent.mkdir(parents=True)
+    cached_path.write_bytes(b"\x89PNG\r\n\x1a\nshared-rudy-tile")
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/tiles/imagery/{project_id}/imagery/5/26/13.png"
+        "?source_id=happyman_rudy_twmap"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "local_cache"
+    assert response.headers["x-scout-imagery-source-id"] == "happyman_rudy_twmap"
+    assert response.content == cached_path.read_bytes()
+
+
 def test_admin_imagery_tile_proxy_api_returns_transparent_fallback(
     monkeypatch, tmp_path
 ):
@@ -1957,6 +1994,64 @@ def test_admin_imagery_tile_proxy_api_can_fill_named_rudy_layer_from_source_id(
         cache_root=cache_root,
     )
     assert cached_path.read_bytes() == remote_body
+
+
+def test_admin_imagery_tile_proxy_api_native_zoom_uses_explicit_xyz_source(
+    monkeypatch,
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    project_id = "chilai_nanhua_day1"
+    project_root = workspace_root / project_id
+    cache_root = tmp_path / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SCOUT_ADMIN_IMAGERY_REMOTE_FETCH", raising=False)
+    remote_body = b"\x89PNG\r\n\x1a\nrudy-twmap-z15"
+    requested = []
+
+    class FakeResponse:
+        headers = {"Content-Type": "image/png"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return remote_body
+
+    def fake_urlopen(request, timeout):
+        requested.append((request.full_url, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/tiles/imagery/{project_id}/imagery/15/27418/14126.png"
+        "?source_id=happyman_rudy_twmap&native=1"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "remote_fetch_cache_fill"
+    assert response.headers["x-scout-imagery-source-id"] == "happyman_rudy_twmap"
+    assert requested == [
+        (
+            "https://tile.happyman.idv.tw/map/moi_osm/15/27418/14126.png",
+            3.0,
+        )
+    ]
 
 
 def test_admin_imagery_tile_proxy_api_rejects_invalid_identity():

@@ -1688,7 +1688,7 @@
               <button id="zoomOut" class="tool-button compact" type="button" title="Zoom out" aria-label="Zoom out">-</button>
               <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
               <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
-              <button id="boxZoomMode" class="tool-button compact" type="button" title="Point or rectangle zoom: click to zoom in, drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
+              <button id="boxZoomMode" class="tool-button compact" type="button" title="Persistent box zoom: click or drag in any direction to zoom in; use minus to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
               <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
               <details class="layer-menu">
                 <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
@@ -2213,10 +2213,12 @@
     const OSM_TARGET_ZOOM = 17;
     const OSM_MAX_TILES = 64;
     const RASTER_MAX_TILES = 64;
+    const RUDY_TWMAP_MAX_TILES = 24;
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
     const OSM_TILE_CACHE_BUST = "offline-fallback-v13";
     const RASTER_TILE_CACHE_BUST = "wmts-runtime-v1";
+    const RASTER_TILE_SWAP_TIMEOUT_MS = 12000;
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const HAPPYMAN_WMTS_ENDPOINT = "https://tile.happyman.idv.tw/mp/service";
     const HAPPYMAN_WMTS_BASE = {
@@ -2233,7 +2235,7 @@
     const RASTER_SOURCE_LAYER_DEFINITIONS = [
       {layerId: "imagery", sourceId: "nlsc_photo2", label: "Imagery", sourceKind: "wmts_tile", urlTemplate: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}", tileOrder: "z_y_x", minZoom: 5, maxZoom: 19, opacity: 0.92},
       {layerId: "rudy", sourceId: "happyman_rudy", label: "Rudy", wmtsLayer: "rudy", opacity: 0.94, ...HAPPYMAN_WMTS_BASE},
-      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", wmtsLayer: "rudy_twmap", opacity: 0.9, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", sourceKind: "scout_proxy_tile", cacheLayerId: "imagery", initialMaxZoom: 13, preparedMaxZoom: 14, minZoom: 5, maxZoom: 20, opacity: 0.9},
       {layerId: "relief", sourceId: "happyman_colorrelief", label: "Relief", wmtsLayer: "colorrelief", opacity: 0.58, ...HAPPYMAN_WMTS_BASE},
       {layerId: "geology", sourceId: "happyman_geo2016", label: "Geology", wmtsLayer: "geo2016", opacity: 0.52, ...HAPPYMAN_WMTS_BASE},
       {layerId: "topo-5k", sourceId: "happyman_tw5k2000", label: "Topo 5K", wmtsLayer: "tw5k2000", opacity: 0.82, ...HAPPYMAN_WMTS_BASE},
@@ -2460,8 +2462,13 @@
       const layer = rasterLayerFor(view, layerId);
       const definition = rasterSourceDefinitionFor(layerId, layer);
       const parsed = parseZoomRange(layer.raster_tile_zoom_range || layer.zoom_range);
-      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
-      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
+      const forceDefinitionRange = layerId === "rudy-twmap";
+      const min = Number(forceDefinitionRange
+        ? definition?.minZoom
+        : layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
+      const max = Number(forceDefinitionRange
+        ? definition?.maxZoom
+        : layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
       const safeMin = Number.isFinite(min) ? clamp(Math.round(min), OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
       const safeMax = Number.isFinite(max) ? clamp(Math.round(max), safeMin, OSM_MAX_ZOOM) : OSM_TARGET_ZOOM;
       return {min: safeMin, max: safeMax};
@@ -2979,6 +2986,19 @@
         .replaceAll("{y}", String(y));
     }
     function wmtsTileUrl(definition, z, x, y) {
+      if (definition.sourceKind === "scout_proxy_tile") {
+        const tileBase = location.protocol === "file:" ? apiBase() : location.origin;
+        const path = [
+          tileBase,
+          "admin/tiles/imagery",
+          encodeURIComponent(PROJECT_ID),
+          encodeURIComponent(definition.cacheLayerId),
+          String(z),
+          String(x),
+          `${String(y)}.png`
+        ].join("/");
+        return `${path}?source_id=${encodeURIComponent(definition.sourceId)}&native=1`;
+      }
       if (definition.sourceKind === "wmts_kvp_tile") {
         const params = new URLSearchParams({
           SERVICE: "WMTS",
@@ -3027,8 +3047,16 @@
     }
     function chooseRasterZoom(view, bounds, maxTiles = RASTER_MAX_TILES, layerId = "imagery") {
       const range = rasterZoomRangeFor(view, layerId);
-      let zoom = range.max;
-      while (zoom > range.min && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
+      const effectiveMaxTiles = layerId === "rudy-twmap" ? Math.min(maxTiles, RUDY_TWMAP_MAX_TILES) : maxTiles;
+      const definition = rasterSourceDefinitionFor(layerId, rasterLayerFor(view, layerId));
+      let zoom = layerId === "rudy-twmap"
+        ? clamp(
+            definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom))),
+            range.min,
+            range.max,
+          )
+        : range.max;
+      while (zoom > range.min && tileCountForZoom(bounds, zoom) > effectiveMaxTiles) zoom -= 1;
       return zoom;
     }
     function osmTileCoverage(bounds, zoom = null) {
@@ -4145,25 +4173,193 @@
       const minY = (MAP_HEIGHT - height) / 2 + state.panY;
       return {minX, minY, width, height};
     }
+    function rasterLayerTileGenerationKey(root) {
+      const imageKeys = [...root.querySelectorAll("image")].map(image => [
+        image.getAttribute("data-raster-tile") || image.getAttribute("data-osm-tile") || "tile",
+        image.getAttribute("href") || "",
+      ].join("@"));
+      if (imageKeys.length) return imageKeys.join("|");
+      return `non-tile:${root.childElementCount}:${String(root.textContent || "").trim()}`;
+    }
+    function mapViewStateSnapshot() {
+      return {
+        zoom: Math.max(1, Number(state.zoom) || 1),
+        panX: Number(state.panX) || 0,
+        panY: Number(state.panY) || 0,
+      };
+    }
+    function rememberRudyMapView(group, snapshot = mapViewStateSnapshot()) {
+      if (group?.dataset?.layerGroup !== "rudy-twmap") return;
+      group.dataset.activeMapZoom = String(snapshot.zoom);
+      group.dataset.activeMapPanX = String(snapshot.panX);
+      group.dataset.activeMapPanY = String(snapshot.panY);
+    }
+    function restoreRudyMapViewAfterTileFailure(group, reason = "load-error") {
+      if (group?.dataset?.layerGroup !== "rudy-twmap") return;
+      const failedZoom = Math.max(1, Number(state.zoom) || 1);
+      const failedTileZoom = chooseRasterZoom(
+        state.view,
+        visibleBoundsFor(state.view) || boundsFor(state.view),
+        RASTER_MAX_TILES,
+        "rudy-twmap",
+      );
+      const fallbackZoom = Math.max(1, Number(group.dataset.activeMapZoom) || 1);
+      state.zoom = fallbackZoom;
+      state.panX = Number(group.dataset.activeMapPanX) || 0;
+      state.panY = Number(group.dataset.activeMapPanY) || 0;
+      group.dataset.nativeTileFailure = reason;
+      clampMapPan();
+      applyMapViewport();
+      updateMapZoomIndicator(`native Z${failedTileZoom} unavailable · previous complete view retained`);
+      state.lastFailedNativeMapZoom = failedZoom;
+    }
+    function markRasterLayerGenerationActive(group) {
+      group.dataset.activeTileGenerationKey = rasterLayerTileGenerationKey(group);
+      group.dataset.tileGenerationState = "ready";
+      rememberRudyMapView(group);
+    }
+    function discardPendingRasterLayerGeneration(group) {
+      const pendingGenerations = Array.from(
+        group.querySelectorAll('[data-tile-generation="pending"]'),
+      );
+      pendingGenerations.forEach(pending => {
+        pending.querySelectorAll("image").forEach(image => image.removeAttribute("href"));
+        pending.remove();
+      });
+      const discarded = Boolean(
+        group.dataset.pendingTileGenerationKey
+        || pendingGenerations.length,
+      );
+      delete group.dataset.pendingTileGenerationKey;
+      return discarded;
+    }
+    function replaceRasterLayerWhenReady(group, renderCandidate, onFailure = null) {
+      const requestedViewState = mapViewStateSnapshot();
+      const candidate = el("g", {
+        "data-tile-generation": "pending",
+        opacity: "0",
+        "pointer-events": "none",
+        "aria-hidden": "true",
+      });
+      renderCandidate(candidate);
+      const generationKey = rasterLayerTileGenerationKey(candidate);
+      if (generationKey === group.dataset.activeTileGenerationKey) {
+        candidate.querySelectorAll("image").forEach(image => image.removeAttribute("href"));
+        if (group.dataset.pendingTileGenerationKey !== generationKey) {
+          discardPendingRasterLayerGeneration(group);
+          group.dataset.tileGenerationState = "ready";
+        }
+        return false;
+      }
+      if (generationKey === group.dataset.pendingTileGenerationKey) {
+        candidate.querySelectorAll("image").forEach(image => image.removeAttribute("href"));
+        return false;
+      }
+
+      discardPendingRasterLayerGeneration(group);
+      const images = [...candidate.querySelectorAll("image")];
+      if (!images.length) {
+        group.replaceChildren(...Array.from(candidate.childNodes));
+        group.dataset.activeTileGenerationKey = generationKey;
+        delete group.dataset.pendingTileGenerationKey;
+        group.dataset.tileGenerationState = "ready";
+        return true;
+      }
+
+      const initialHrefs = new Map();
+      images.forEach(image => {
+        initialHrefs.set(image, image.getAttribute("href") || "");
+        image.removeAttribute("href");
+      });
+      let loadedCount = 0;
+      let settled = false;
+      let timeoutId = null;
+      group.dataset.pendingTileGenerationKey = generationKey;
+      group.dataset.tileGenerationState = "loading";
+
+      const clearPendingState = () => {
+        if (group.dataset.pendingTileGenerationKey === generationKey) {
+          delete group.dataset.pendingTileGenerationKey;
+        }
+      };
+      const discardCandidate = (reason = "load-error") => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        images.forEach(image => image.removeAttribute("href"));
+        candidate.remove();
+        const isCurrentGeneration = group.dataset.pendingTileGenerationKey === generationKey;
+        clearPendingState();
+        if (isCurrentGeneration) {
+          group.dataset.tileGenerationState = "retained-previous";
+          onFailure?.({group, generationKey, reason});
+        }
+      };
+      const promoteCandidate = () => {
+        if (settled) return;
+        if (group.dataset.pendingTileGenerationKey !== generationKey) {
+          discardCandidate();
+          return;
+        }
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        Array.from(group.children).forEach(child => {
+          if (child !== candidate) child.remove();
+        });
+        candidate.setAttribute("data-tile-generation", "active");
+        candidate.removeAttribute("opacity");
+        candidate.removeAttribute("pointer-events");
+        group.dataset.activeTileGenerationKey = generationKey;
+        group.dataset.tileGenerationState = "ready";
+        rememberRudyMapView(group, requestedViewState);
+        clearPendingState();
+        enforceMapRenderPolicy(svg);
+      };
+
+      images.forEach(image => {
+        image.addEventListener("load", () => {
+          if (settled || image.dataset.tileGenerationLoaded === "true") return;
+          image.dataset.tileGenerationLoaded = "true";
+          loadedCount += 1;
+          if (loadedCount !== images.length) return;
+          promoteCandidate();
+        });
+        image.addEventListener("error", () => {
+          discardCandidate("load-error");
+        }, {once: true});
+      });
+      group.appendChild(candidate);
+      images.forEach(image => image.setAttribute("href", initialHrefs.get(image)));
+      timeoutId = window.setTimeout(
+        () => discardCandidate("timeout"),
+        RASTER_TILE_SWAP_TIMEOUT_MS,
+      );
+      return true;
+    }
     function renderRasterBasemapLayers(view) {
       if (!view) return;
       const bounds = boundsFor(view);
       const coverageBounds = visibleBoundsFor(view) || bounds;
       const imageryGroup = svg.querySelector('[data-layer-group="imagery"]');
       if (imageryGroup) {
-        imageryGroup.replaceChildren();
-        if (layerInputChecked("imagery")) renderRasterLayer(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, "imagery", coverageBounds);
+        replaceRasterLayerWhenReady(imageryGroup, candidate => {
+          if (layerInputChecked("imagery")) renderRasterLayer(candidate, view, bounds, MAP_WIDTH, MAP_HEIGHT, "imagery", coverageBounds);
+        });
       }
       RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
         const rasterGroup = svg.querySelector(`[data-layer-group="${selectorValue(layer.layerId)}"]`);
         if (!rasterGroup) return;
-        rasterGroup.replaceChildren();
-        if (layerInputChecked(layer.layerId)) renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+        replaceRasterLayerWhenReady(rasterGroup, candidate => {
+          if (layerInputChecked(layer.layerId)) renderRasterLayer(candidate, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+        }, layer.layerId === "rudy-twmap"
+          ? ({reason}) => restoreRudyMapViewAfterTileFailure(rasterGroup, reason)
+          : null);
       });
       const osmGroup = svg.querySelector('[data-layer-group="osm"]');
       if (osmGroup) {
-        osmGroup.replaceChildren();
-        if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
+        replaceRasterLayerWhenReady(osmGroup, candidate => {
+          if (layerInputChecked("osm")) renderOsmBasemap(candidate, view, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
+        });
       }
       enforceMapRenderPolicy(svg);
     }
@@ -4221,6 +4417,10 @@
       if (!svg.contains(event.target)) state.mapKeyboardActive = false;
     }
     function updateMapZoomIndicator(extraLabel = "") {
+      const zoomIn = document.getElementById("zoomIn");
+      const zoomOut = document.getElementById("zoomOut");
+      if (zoomIn) zoomIn.disabled = state.zoom >= mapInteractionMaxZoom() - 0.001;
+      if (zoomOut) zoomOut.disabled = state.zoom <= MAP_MIN_ZOOM + 0.001;
       const node = document.getElementById("zoomLevel");
       if (!node) return;
       const zoomText = `${state.zoom.toFixed(2)}x`;
@@ -4321,6 +4521,13 @@
       state.panX = Math.max(-limitX, Math.min(limitX, state.panX));
       state.panY = Math.max(-limitY, Math.min(limitY, state.panY));
     }
+    function mapInteractionMaxZoom() {
+      if (!layerInputChecked("rudy-twmap")) return MAP_MAX_ZOOM;
+      const definition = RASTER_SOURCE_LAYER_BY_ID["rudy-twmap"];
+      const initialZoom = Number(definition?.initialMaxZoom) || 13;
+      const nativeMaxZoom = Number(definition?.maxZoom) || initialZoom;
+      return Math.max(1, 2 ** Math.max(0, nativeMaxZoom - initialZoom));
+    }
     function panMap(dx, dy) {
       state.panX += dx / state.zoom;
       state.panY += dy / state.zoom;
@@ -4329,7 +4536,7 @@
     }
     function zoomMap(direction) {
       const nextZoom = direction > 0 ? state.zoom * MAP_ZOOM_STEP_FACTOR : state.zoom / MAP_ZOOM_STEP_FACTOR;
-      state.zoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, nextZoom));
+      state.zoom = Math.max(MAP_MIN_ZOOM, Math.min(mapInteractionMaxZoom(), nextZoom));
       clampMapPan();
       applyMapViewport();
       highlightMapFor(state.selected);
@@ -4599,7 +4806,7 @@
       const heightMeters = metersBetween(bounds.south, centerLon, bounds.north, centerLon);
       const widthZoom = widthMeters / FOCUS_POINT_VIEWPORT_M;
       const heightZoom = heightMeters / FOCUS_POINT_VIEWPORT_M;
-      return Math.max(1.2, Math.min(MAP_MAX_ZOOM, Math.max(widthZoom, heightZoom)));
+      return Math.max(1.2, Math.min(mapInteractionMaxZoom(), Math.max(widthZoom, heightZoom)));
     }
     function currentViewportRangeM() {
       if (!state.view) return Number.POSITIVE_INFINITY;
@@ -4905,9 +5112,9 @@
         && box.width <= FOCUS_POINT_BOX_THRESHOLD
         && box.height <= FOCUS_POINT_BOX_THRESHOLD;
       if (isPointSized) {
-        return pointFocusZoom() || Math.max(1.2, Math.min(MAP_MAX_ZOOM, fitZoom, FOCUS_PATH_MAX_ZOOM));
+        return pointFocusZoom() || Math.max(1.2, Math.min(mapInteractionMaxZoom(), fitZoom, FOCUS_PATH_MAX_ZOOM));
       }
-      return Math.max(1.2, Math.min(MAP_MAX_ZOOM, fitZoom, FOCUS_PATH_MAX_ZOOM));
+      return Math.max(1.2, Math.min(mapInteractionMaxZoom(), fitZoom, FOCUS_PATH_MAX_ZOOM));
     }
     function mapBoxFor(item) {
       const pointItem = pointFocusItemFor(item);
@@ -4953,7 +5160,11 @@
       point.x = event.clientX;
       point.y = event.clientY;
       const local = point.matrixTransform(matrix.inverse());
-      return {x: local.x, y: local.y};
+      const viewport = mapViewportBox();
+      return {
+        x: Math.max(viewport.minX, Math.min(viewport.minX + viewport.width, local.x)),
+        y: Math.max(viewport.minY, Math.min(viewport.minY + viewport.height, local.y)),
+      };
     }
     function boxFromPoints(start, end) {
       const left = Math.min(start.x, end.x);
@@ -4978,7 +5189,15 @@
     }
     function zoomMapToBox(box) {
       if (!box || box.width <= 0 || box.height <= 0) return false;
-      const targetZoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.min(MAP_WIDTH / box.width, MAP_HEIGHT / box.height)));
+      const currentViewport = mapViewportBox();
+      const factor = Math.max(1, Math.min(
+        currentViewport.width / box.width,
+        currentViewport.height / box.height,
+      ));
+      const targetZoom = Math.max(
+        MAP_MIN_ZOOM,
+        Math.min(mapInteractionMaxZoom(), state.zoom * factor),
+      );
       state.zoom = targetZoom;
       state.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
       state.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
@@ -4999,19 +5218,6 @@
     }
     function eventScreenY(selection) {
       return selection.currentScreenY ?? selection.screenY;
-    }
-    function zoomMapOutFromBox(box, zoomFactor = null) {
-      if (!box || box.width <= 0 || box.height <= 0) return false;
-      const rawFactor = zoomFactor || Math.max(1, Math.min(MAP_WIDTH / box.width, MAP_HEIGHT / box.height));
-      const factor = state.zoom > 1 ? Math.min(rawFactor, state.zoom) : rawFactor;
-      state.zoom = Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor));
-      clampMapPan();
-      applyMapViewport();
-      highlightMapFor(state.selected);
-      return true;
-    }
-    function isZoomOutDrag(selection) {
-      return selection.current.x < selection.start.x && selection.current.y < selection.start.y;
     }
     function beginMapPointerPan(event) {
       if (state.mapInteractionMode !== "pan" || event.button !== 0) return;
@@ -5101,8 +5307,7 @@
       if (!selection) return;
       if (selection.moved) {
         const box = boxFromPoints(selection.start, selection.current);
-        if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
-        else zoomMapToBox(box);
+        zoomMapToBox(box);
       } else {
         zoomMap(1);
         if (onClick) onClick(event);
@@ -6423,16 +6628,19 @@
 
       const imageryGroup = el("g", {"data-layer-group": "imagery"});
       if (layerInputChecked("imagery")) renderRasterLayer(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, "imagery", coverageBounds);
+      markRasterLayerGenerationActive(imageryGroup);
       svg.appendChild(imageryGroup);
 
       RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
         const rasterGroup = el("g", {"data-layer-group": layer.layerId});
         if (layerInputChecked(layer.layerId)) renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+        markRasterLayerGenerationActive(rasterGroup);
         svg.appendChild(rasterGroup);
       });
 
       const osmGroup = el("g", {"data-layer-group": "osm"});
       if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
+      markRasterLayerGenerationActive(osmGroup);
       svg.appendChild(osmGroup);
 
       const corridorGroup = el("g", {"data-layer-group": "corridors"});
