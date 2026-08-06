@@ -1,0 +1,60 @@
+name: Scout Dashboard Qualification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-qualification:
+    name: Scout Deterministic Qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npm run qualification:validate-manifest
+      - run: npm run build
+      - run: docker compose -f compose.qualification.yml up -d
+      - run: npm run qualification:seed
+      - run: npm run test:e2e:qualification
+      - if: always()
+        run: npm run qualification:bundle
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scout-dashboard-qualification-${{ github.sha }}
+          path: artifacts/qualification/
+          retention-days: 90
+
+  independent-review:
+    name: Scout Independent Evidence Review
+    needs: deterministic-qualification
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: scout-dashboard-qualification-${{ github.sha }}
+          path: artifacts/qualification/
+      - run: npm run qualification:verify-evidence
+      - run: npm run qualification:gpt-review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - run: npm run qualification:enforce-verdict
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scout-dashboard-reviewed-${{ github.sha }}
+          path: artifacts/qualification/

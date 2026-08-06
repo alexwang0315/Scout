@@ -1,0 +1,37 @@
+schema: scout.dashboardQualificationReviewItem.v1
+id: SCOUT-Q-0001
+title: Malformed GPX is shown as validated
+capability_id: trip_intake.gpx_validate
+status: AWAITING_HUMAN_REVIEW
+machine_state: FAIL
+abstraction_level: HIGH_LEVEL
+primary_layer: DOMAIN_LOGIC
+secondary_layers: [API_CONTRACT, UI_PRESENTATION]
+defect_nature: LOGIC_ERROR
+severity: S4_HIGH
+impact_scope: SINGLE_CAPABILITY
+reproducibility: ALWAYS
+confidence: 88
+user_exposure: ALL_USERS
+data_effect: INCORRECT_PERSISTED
+authority_effect: MISLEADING_CLAIM
+fix_risk: MEDIUM
+observed_behavior: Malformed GPX produces a visible validation-success state and a persisted candidate.
+expected_behavior: Parse failure must block validation and must not create a validated candidate.
+root_cause_status: HYPOTHESIS
+root_cause_hypotheses:
+  - cause: Frontend accepts transport success without checking parser result.
+    confidence: 75
+evidence_refs:
+  - results.json#trip-intake-malformed-gpx
+  - traces/trip-intake-malformed-gpx.zip
+  - network/malformed-gpx.json
+proposed_fix_scope: Inspect validation result mapping in the Trip Intake client and server candidate-creation guard; no patch applied.
+alternatives:
+  - Request more evidence by querying server artifact state directly.
+regression_tests_required:
+  - malformed GPX returns parse failure
+  - no candidate is persisted after parse failure
+suggested_disposition: APPROVE_FIX
+merge_recommendation: BLOCK
+human_decision: null
