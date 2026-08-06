@@ -2792,6 +2792,8 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "Rebuild after new proposal" in permission_page
     assert "data-permission-projection-rebuild" in html
     assert "contextual-permission-dashboard/rebuilds" in html
+    assert "expected_admission_snapshot_sha256" in html
+    assert "expected_evaluator_version" in html
     assert "rules remain review_only" in html
     assert 'data-contextual-permission-workbench="${isDegraded ? "degraded" : "ready"}"' in permission_page
     assert "Permission bootstrap needs itinerary review" in permission_page
@@ -2804,6 +2806,22 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "Baseline Authoring Workbench" in html
     assert "Scout auto proposal" in html
     assert "Quick review" in html
+    assert "mission-baseline/map-context" in html
+    assert "mission-baseline/rudy-background.png" in html
+    assert "data-permission-day-map" in html
+    assert 'data-permission-rudy-background="true"' in html
+    assert 'data-rudy-image-policy="single-composite"' in html
+    assert "permission-day-grid" in html
+    assert "permissionDayAnchorContext" in html
+    assert "permissionDailyLabelAnchors" in html
+    assert 'anchor.source_kind === "mcp"' in html
+    assert "permissionFormatCoordinate" in html
+    assert "Day route, ETA & evidence" in html
+    assert 'data-permission-projection-details="true"' in permission_page
+    ready_page = permission_page.split("const isDegraded", 1)[1]
+    assert ready_page.index("${renderPermissionBaselineAuthoring()}") < ready_page.index(
+        'data-permission-projection-details="true"'
+    )
     assert "Mobile quick flow" in permission_page
     assert "Pending Safety / Emergency" in html
     assert "reviewed_day_ids" in html
@@ -2996,6 +3014,9 @@ def test_permission_and_emergency_mobile_controls_remain_large_and_complete() ->
     assert "Mobile quick flow" in html
     assert 'class="permission-card" data-permission-baseline-authoring="true"' in html
     assert "complete at most three checks, then accept" in html
+    assert ".permission-day-grid" in styles
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in styles
+    assert ".permission-day-grid { grid-template-columns: 1fr; }" in styles
 
 
 def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:

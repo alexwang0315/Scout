@@ -3189,6 +3189,8 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "expected_reviewed_baseline_sha256":"<64-char selected baseline hash>",
+    "expected_admission_snapshot_sha256":"<64-char rebuild admission snapshot hash>",
+    "expected_evaluator_version":"contextual-permission.projection-rebuild-admission.v1",
     "idempotency_key":"permission-rebuild-<stable-id>",
     "explicit_confirmation":true
   }'
