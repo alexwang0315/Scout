@@ -4052,6 +4052,83 @@
       grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
     }
 
+    .runtime-log-index {
+      display: grid;
+      gap: 12px;
+    }
+
+    .runtime-log-index-current {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .runtime-log-index-current small,
+    .runtime-log-index-label {
+      color: var(--muted);
+      font: 800 10px/1.2 var(--mono);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .runtime-log-index-current strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--paper);
+      font: 600 20px/1.1 var(--mono);
+    }
+
+    .runtime-log-index-row {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .runtime-log-index-label {
+      padding-top: 9px;
+    }
+
+    .runtime-log-index-buttons {
+      display: flex;
+      gap: 7px;
+      min-width: 0;
+      overflow-x: auto;
+      padding: 1px 1px 5px;
+      scrollbar-width: thin;
+    }
+
+    .runtime-log-index-button {
+      display: grid;
+      gap: 2px;
+      flex: 0 0 auto;
+      min-width: 78px;
+      padding: 8px 10px;
+      border-color: var(--line);
+      background: rgba(255, 255, 255, .025);
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .runtime-log-index-button span {
+      color: inherit;
+      font: 700 12px/1.2 var(--mono);
+    }
+
+    .runtime-log-index-button small {
+      color: var(--muted);
+      font: 9px/1.2 var(--mono);
+    }
+
+    .runtime-log-index-button[aria-pressed="true"] {
+      border-color: var(--cyan);
+      background: rgba(86, 191, 213, .11);
+      color: var(--paper);
+      box-shadow: inset 0 -2px 0 var(--cyan);
+    }
+
     .runtime-audit-health-grid,
     .runtime-audit-coverage-grid {
       display: grid;
@@ -8850,7 +8927,7 @@
           <summary><span class="mark"></span><span>System</span></summary>
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="living" data-route-truth="sandbox"><span class="mark"></span><span>Living</span></button>
-            <button class="nav-item" type="button" data-route="runtime-audit" data-route-truth="live"><span class="mark"></span><span>Runtime Activity</span></button>
+            <button class="nav-item" type="button" data-route="runtime-audit" data-route-truth="live"><span class="mark"></span><span>Logs</span></button>
             <button class="nav-item" type="button" data-route="surface-debug" data-route-truth="live"><span class="mark"></span><span>Debug Surface</span></button>
             <button class="nav-item" type="button" data-route="debug" data-route-truth="partial"><span class="mark"></span><span>Debug Message</span></button>
             <button class="nav-item" type="button" data-route="observer" data-route-truth="preview"><span class="mark"></span><span>MQTT / Observer</span></button>
@@ -9523,6 +9600,9 @@
         outcome: "",
         runtimeInstanceId: "",
       },
+      runtimeAuditSelectedDate: runtimeAuditLocalDateKey(),
+      runtimeAuditSelectedMonth: runtimeAuditLocalMonthKey(),
+      runtimeAuditUtcOffsetMinutes: -new Date().getTimezoneOffset(),
       diagnosticResults: Object.fromEntries(
         DASHBOARD_DIAGNOSTIC_CASES.map(item => [item.id, {
           status: "idle",
@@ -9789,7 +9869,7 @@
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
       diagnostic: ["Diagnostic", "37 read-only Dashboard checks"],
-      "runtime-audit": ["Runtime Activity", "統一運行紀錄、API 成敗與 workspace I/O"],
+      "runtime-audit": ["Logs", "以日／月索引檢視統一運行紀錄、API 成敗與 workspace I/O"],
     };
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -10606,6 +10686,11 @@
       refreshCurrentDataView();
       const filters = state.runtimeAuditFilters || {};
       const params = new URLSearchParams({limit: String(limit)});
+      state.runtimeAuditSelectedDate = state.runtimeAuditSelectedDate || runtimeAuditLocalDateKey();
+      state.runtimeAuditSelectedMonth = state.runtimeAuditSelectedMonth || state.runtimeAuditSelectedDate.slice(0, 7);
+      params.set("date", state.runtimeAuditSelectedDate);
+      params.set("utc_offset_minutes", String(state.runtimeAuditUtcOffsetMinutes));
+      params.set("include_all", "true");
       if (filters.category) params.set("category", filters.category);
       if (filters.outcome) params.set("outcome", filters.outcome);
       if (filters.runtimeInstanceId) {
@@ -11244,7 +11329,7 @@
       }
       if (route === "runtime-audit") {
         const payload = state.runtimeAuditData || {};
-        const summary = payload.summary || {};
+        const summary = payload.selected_summary || payload.summary || {};
         const integrity = payload.integrity || {};
         const writerHealth = payload.writer_health || {};
         const coverage = payload.coverage || {};
@@ -11257,8 +11342,8 @@
             : partialCoverage
               ? "Partial coverage"
               : "Operational";
-        truth.data = `${formatInteger(summary.total_events)} records · ${formatInteger(failed)} failures · ${formatInteger(summary.internal_api_calls)} internal API calls`;
-        truth.action = "Read-only filters and manual refresh";
+        truth.data = `${state.runtimeAuditSelectedDate} · ${formatInteger(summary.total_events)} records · ${formatInteger(failed)} failures · ${formatInteger(summary.internal_api_calls)} internal API calls`;
+        truth.action = "Read-only month/day index, filters and manual refresh";
         truth.verification = writerHealth.status === "degraded"
           ? `Writer degraded · ${formatInteger(writerHealth.dropped_event_count)} dropped audit events`
           : integrity.verified === true
@@ -14285,6 +14370,82 @@
       `;
     }
 
+    function runtimeAuditLocalDateKey(value = new Date()) {
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, "0");
+      const day = String(value.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function runtimeAuditLocalMonthKey(value = new Date()) {
+      return runtimeAuditLocalDateKey(value).slice(0, 7);
+    }
+
+    function runtimeAuditDayLabel(value) {
+      const [year, month, day] = String(value || "").split("-");
+      return year && month && day ? `${month}/${day}` : value || "日期未知";
+    }
+
+    function runtimeAuditMonthLabel(value) {
+      const [year, month] = String(value || "").split("-");
+      return year && month ? `${year}/${month}` : value || "月份未知";
+    }
+
+    function runtimeAuditEnsureIndexItem(items, key) {
+      const resolved = asArray(items);
+      return resolved.some(item => item?.key === key)
+        ? resolved
+        : [{key, event_count: 0}, ...resolved];
+    }
+
+    function renderRuntimeAuditDateIndex(dateIndex) {
+      const selectedDay = state.runtimeAuditSelectedDate || runtimeAuditLocalDateKey();
+      const selectedMonth = state.runtimeAuditSelectedMonth || selectedDay.slice(0, 7);
+      const months = runtimeAuditEnsureIndexItem(dateIndex?.months, selectedMonth);
+      const monthDays = runtimeAuditEnsureIndexItem(
+        asArray(dateIndex?.days).filter(item => String(item?.key || "").startsWith(`${selectedMonth}-`)),
+        selectedDay,
+      ).filter(item => String(item?.key || "").startsWith(`${selectedMonth}-`));
+      const isToday = selectedDay === runtimeAuditLocalDateKey();
+      return `
+        <section class="panel" data-runtime-audit-date-index="true">
+          <div class="panel-body runtime-log-index">
+            <div class="runtime-log-index-current">
+              <div><small>Runtime Activity · Date Index</small><strong>${escapeHtml(selectedDay)}</strong></div>
+              <button type="button" data-runtime-audit-today aria-pressed="${isToday ? "true" : "false"}">今天</button>
+            </div>
+            <div class="runtime-log-index-row">
+              <span class="runtime-log-index-label">月份</span>
+              <div class="runtime-log-index-buttons" role="group" aria-label="Log 月份索引">
+                ${months.map(item => `
+                  <button
+                    type="button"
+                    class="runtime-log-index-button"
+                    data-runtime-audit-month="${escapeHtml(item.key)}"
+                    aria-pressed="${item.key === selectedMonth ? "true" : "false"}"
+                  ><span>${escapeHtml(runtimeAuditMonthLabel(item.key))}</span><small>${formatInteger(item.event_count)} events</small></button>
+                `).join("")}
+              </div>
+            </div>
+            <div class="runtime-log-index-row">
+              <span class="runtime-log-index-label">日期</span>
+              <div class="runtime-log-index-buttons" role="group" aria-label="Log 日期索引">
+                ${monthDays.map(item => `
+                  <button
+                    type="button"
+                    class="runtime-log-index-button"
+                    data-runtime-audit-day="${escapeHtml(item.key)}"
+                    title="${escapeHtml(item.key)}"
+                    aria-pressed="${item.key === selectedDay ? "true" : "false"}"
+                  ><span>${escapeHtml(runtimeAuditDayLabel(item.key))}</span><small>${formatInteger(item.event_count)} events</small></button>
+                `).join("")}
+              </div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
     function runtimeAuditCategoryLabel(category) {
       return ({
         runtime: "系統生命週期",
@@ -14393,7 +14554,8 @@
 
     function renderRuntimeAuditPage() {
       const payload = state.runtimeAuditData || {};
-      const summary = payload.summary || {};
+      const summary = payload.selected_summary || payload.summary || {};
+      const dateIndex = payload.date_index || {};
       const integrity = payload.integrity || {};
       const writerHealth = payload.writer_health || {};
       const coverage = payload.coverage || {};
@@ -14420,14 +14582,16 @@
         <div class="diagnostic-page runtime-audit-page" data-runtime-audit-page="true">
           <section class="diagnostic-command">
             <div>
-              <h3>統一運行紀錄</h3>
+              <span class="eyebrow">Runtime Activity</span>
+              <h3>Logs</h3>
               <p>把 Scout 的開啟／結束、內部 API、外部資料服務、Workspace 讀寫、AI 與排程工作收在同一條可追查時間線。這是 <strong>telemetry only</strong>，只用來回答「有沒有跑、成功或失敗、碰了什麼資料」，不會成為 runtime safety truth。</p>
             </div>
             <button type="button" data-runtime-audit-refresh ${loading ? "disabled" : ""}>${loading ? "讀取中…" : "重新整理"}</button>
           </section>
+          ${renderRuntimeAuditDateIndex(dateIndex)}
           <section class="diagnostic-summary" aria-label="Runtime activity summary">
             ${[
-              ["total", "全部紀錄", summary.total_events],
+              ["total", "當日紀錄", summary.total_events],
               ["failed", "失敗", summary.failed_events],
               ["internal-api", "內部 API", summary.internal_api_calls],
               ["provider", "外部 API", summary.provider_calls],
@@ -14483,12 +14647,12 @@
             </div>
           </section>
           <section class="diagnostic-category">
-            <div class="diagnostic-category-header"><h3>運行時間線</h3><span>${formatInteger(events.length)} shown</span></div>
+            <div class="diagnostic-category-header"><h3>${escapeHtml(state.runtimeAuditSelectedDate)} Logs</h3><span>${formatInteger(events.length)} / ${formatInteger(dateIndex.matched_event_count)} shown</span></div>
             <p class="boundary-note"><strong>資料誠信：</strong>沒有紀錄不代表沒有執行；只代表該功能尚未接入 Ledger、紀錄已超過保留期限，或 audit 本身處於 degraded。UI 不會用空白冒充成功。</p>
             <div class="diagnostic-case-list">
               ${events.length
                 ? events.map(renderRuntimeAuditEvent).join("")
-                : `<div class="empty-state"><strong>目前篩選條件下沒有紀錄</strong><span>沒有紀錄不代表沒有執行；請查看完整性狀態或切回「全部歷史」。</span></div>`}
+                : `<div class="empty-state"><strong>這一天目前沒有紀錄</strong><span>沒有紀錄不代表沒有執行；請查看完整性狀態，或從上方日期索引切換到其他日期。</span></div>`}
             </div>
           </section>
         </div>
@@ -24916,6 +25080,14 @@
     }
 
     function bindRuntimeAuditControls() {
+      const reloadRuntimeLogs = async () => {
+        try {
+          await loadDataScope("runtime_audit", {force: true});
+          if (state.route === "runtime-audit") renderTruthStrip(state.route);
+        } catch (_error) {
+          // The page renders its typed degraded state from runtimeAuditError.
+        }
+      };
       document.querySelectorAll("[data-runtime-audit-filter]").forEach((control) => {
         control.addEventListener("change", async () => {
           const key = control.dataset.runtimeAuditFilter;
@@ -24923,20 +25095,38 @@
             ...(state.runtimeAuditFilters || {}),
             [key]: control.value || "",
           };
-          try {
-            await loadDataScope("runtime_audit", {force: true});
-          } catch (_error) {
-            // The page renders its typed degraded state from runtimeAuditError.
-          }
+          await reloadRuntimeLogs();
         });
       });
-      document.querySelector("[data-runtime-audit-refresh]")?.addEventListener("click", async () => {
-        try {
-          await loadDataScope("runtime_audit", {force: true});
-        } catch (_error) {
-          // The page renders its typed degraded state from runtimeAuditError.
-        }
+      document.querySelectorAll("[data-runtime-audit-month]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const month = button.dataset.runtimeAuditMonth;
+          if (!/^\d{4}-\d{2}$/.test(month || "")) return;
+          const availableDays = asArray(state.runtimeAuditData?.date_index?.days)
+            .filter(item => String(item?.key || "").startsWith(`${month}-`));
+          const today = runtimeAuditLocalDateKey();
+          state.runtimeAuditSelectedMonth = month;
+          state.runtimeAuditSelectedDate = month === runtimeAuditLocalMonthKey()
+            ? today
+            : availableDays[0]?.key || `${month}-01`;
+          await reloadRuntimeLogs();
+        });
       });
+      document.querySelectorAll("[data-runtime-audit-day]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const day = button.dataset.runtimeAuditDay;
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(day || "")) return;
+          state.runtimeAuditSelectedDate = day;
+          state.runtimeAuditSelectedMonth = day.slice(0, 7);
+          await reloadRuntimeLogs();
+        });
+      });
+      document.querySelector("[data-runtime-audit-today]")?.addEventListener("click", async () => {
+        state.runtimeAuditSelectedDate = runtimeAuditLocalDateKey();
+        state.runtimeAuditSelectedMonth = runtimeAuditLocalMonthKey();
+        await reloadRuntimeLogs();
+      });
+      document.querySelector("[data-runtime-audit-refresh]")?.addEventListener("click", reloadRuntimeLogs);
     }
 
     function bindSurfaceFrameHealth(frame) {

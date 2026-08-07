@@ -20,7 +20,7 @@ artifacts.
 ## 2. Scope and current status
 
 The v0.1 implementation is mounted on the Scout Dashboard FastAPI runtime and is
-displayed under **System -> Runtime Activity**.
+displayed under **System -> Logs** (the Runtime Activity surface).
 
 Current instrumentation coverage:
 
@@ -296,6 +296,9 @@ Filters:
 - `category`
 - `runtime_instance_id`
 - `workspace_id`
+- `date` as a valid `YYYY-MM-DD` local calendar day
+- `utc_offset_minutes` from `-720` to `840`
+- `include_all=true`, permitted only with `date`, to return the complete day
 - `limit` from 1 to 500
 
 Response schema: `scout_runtime_audit_list.v1`
@@ -303,7 +306,10 @@ Response schema: `scout_runtime_audit_list.v1`
 The response includes:
 
 - aggregate counts, including represented internal API calls;
+- aggregate counts for the selected day/filter set;
 - filtered events;
+- day and month indexes with event counts in the requested UTC offset;
+- the selected day, its month, returned count, and explicit truncation state;
 - available runtime instances;
 - integrity result;
 - writer health;
@@ -313,6 +319,11 @@ The response includes:
 The endpoint is `Cache-Control: no-store`. Reading the endpoint is itself an
 internal request, but it is recorded only after that response is constructed,
 so a response never recursively contains its own event.
+
+The Dashboard always opens **System -> Logs** on the browser's current local
+day. Daily reads send `include_all=true`, so the initial timeline contains all
+verified events recorded for today rather than a recent-history slice. Month
+buttons choose the visible calendar month; day buttons choose the exact day.
 
 ## 10. Privacy and security rules
 
@@ -345,7 +356,8 @@ Focused v0.1 tests must prove:
 - audit writer failure degrades audit health without failing Scout operations;
 - Dashboard lifecycle, HTTP, workspace, provider, job, and agent paths emit the
   expected payload-free events;
-- Dashboard Runtime Activity shows coverage and truthful empty-state language.
+- Dashboard Logs defaults to today's complete local-day view, exposes month/day
+  indexes, and keeps coverage plus truthful empty-state language.
 
 ## 12. Promotion debt
 

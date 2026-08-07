@@ -8,7 +8,7 @@ import re
 import tempfile
 import threading
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Iterable
 from urllib.parse import urlsplit, urlunsplit
@@ -19,6 +19,8 @@ from runtime_audit_models import (
     RuntimeAuditEvent,
     RuntimeAuditCoverage,
     RuntimeAuditCoverageItem,
+    RuntimeAuditDateIndex,
+    RuntimeAuditDateIndexItem,
     RuntimeAuditIntegrity,
     RuntimeAuditListResponse,
     RuntimeAuditManifest,
@@ -665,13 +667,18 @@ class FileRuntimeAuditLedger:
         category: str | None = None,
         runtime_instance_id: str | None = None,
         workspace_id: str | None = None,
-        limit: int = 100,
+        day: str | None = None,
+        utc_offset_minutes: int = 0,
+        limit: int | None = 100,
     ) -> RuntimeAuditListResponse:
+        selected_day = _validated_day_key(day)
+        selected_month = selected_day[:7] if selected_day is not None else None
+        timezone_offset = _validated_timezone_offset(utc_offset_minutes)
         events, errors, instance_ids = self._read_all_events()
         integrity = self._verify_grouped_events(events, errors=errors)
         verified_events = self._verified_prefix_events(events)
         summary = _summarize(verified_events)
-        filtered = [
+        base_filtered = [
             event
             for event in verified_events
             if (event_type is None or event.event_type == event_type)
@@ -683,8 +690,46 @@ class FileRuntimeAuditLedger:
             )
             and (workspace_id is None or event.workspace_id == workspace_id)
         ]
+        day_counts = Counter(
+            _event_local_day(event, timezone_offset_minutes=timezone_offset)
+            for event in base_filtered
+        )
+        month_counts: Counter[str] = Counter()
+        for day_key, event_count in day_counts.items():
+            month_counts[day_key[:7]] += event_count
+        filtered = [
+            event
+            for event in base_filtered
+            if selected_day is None
+            or _event_local_day(
+                event,
+                timezone_offset_minutes=timezone_offset,
+            )
+            == selected_day
+        ]
+        selected_summary = _summarize(filtered)
         filtered.sort(key=lambda event: (event.recorded_at, event.sequence), reverse=True)
-        bounded_limit = max(1, min(int(limit), 500))
+        if limit is None:
+            returned_events = filtered
+        else:
+            bounded_limit = max(1, min(int(limit), 500))
+            returned_events = filtered[:bounded_limit]
+        date_index = RuntimeAuditDateIndex(
+            timezone_offset_minutes=timezone_offset,
+            selected_day=selected_day,
+            selected_month=selected_month,
+            days=[
+                RuntimeAuditDateIndexItem(key=key, event_count=day_counts[key])
+                for key in sorted(day_counts, reverse=True)
+            ],
+            months=[
+                RuntimeAuditDateIndexItem(key=key, event_count=month_counts[key])
+                for key in sorted(month_counts, reverse=True)
+            ],
+            matched_event_count=len(filtered),
+            returned_event_count=len(returned_events),
+            truncated=len(returned_events) < len(filtered),
+        )
         writer_health = RuntimeAuditWriterHealth(
             status="degraded" if self._dropped_event_count else "healthy",
             dropped_event_count=self._dropped_event_count,
@@ -702,9 +747,11 @@ class FileRuntimeAuditLedger:
             status=status,
             current_runtime_instance_id=self.runtime_instance_id,
             summary=summary,
+            selected_summary=selected_summary,
             integrity=integrity,
-            events=filtered[:bounded_limit],
+            events=returned_events,
             available_runtime_instances=sorted(instance_ids, reverse=True),
+            date_index=date_index,
             coverage=_DEFAULT_COVERAGE,
             writer_health=writer_health,
         )
@@ -1141,6 +1188,35 @@ def _write_all(descriptor: int, payload: bytes) -> None:
         if written <= 0:
             raise OSError("runtime audit write made no progress")
         remaining = remaining[written:]
+
+
+def _validated_day_key(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+    except ValueError as exc:
+        raise ValueError("day must be a valid YYYY-MM-DD date") from exc
+
+
+def _validated_timezone_offset(value: int) -> int:
+    resolved = int(value)
+    if not -720 <= resolved <= 840:
+        raise ValueError("utc_offset_minutes must be between -720 and 840")
+    return resolved
+
+
+def _event_local_day(
+    event: RuntimeAuditEvent,
+    *,
+    timezone_offset_minutes: int,
+) -> str:
+    timestamp = event.occurred_at or event.recorded_at
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    local_timezone = timezone(timedelta(minutes=timezone_offset_minutes))
+    return parsed.astimezone(local_timezone).date().isoformat()
 
 
 def _summarize(events: Iterable[RuntimeAuditEvent]) -> RuntimeAuditSummary:
