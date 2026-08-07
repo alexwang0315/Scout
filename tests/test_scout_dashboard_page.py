@@ -784,7 +784,7 @@ def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
     assert "routeUsesEmbeddedFrame(state.route)" in html
     assert 'return route === "map" || route === "agent" || route.startsWith("surface-");' in html
     assert "routeUsesWideFrame(route)" in html
-    assert 'return route === "agent" || route === "debug" || route === "diagnostic" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
+    assert 'return route === "agent" || route === "debug" || route === "diagnostic" || route === "runtime-audit" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
     assert "routeUsesFullFrame(route)" in html
     assert 'return route === "map";' in html
     project_loader = html.split("async function loadProjectData()", 1)[1].split(
@@ -3088,7 +3088,7 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "function routeContextBriefingSrc()" in html
     assert "function renderRouteBriefingMetaBlock" in html
     assert "return projectId();" in html
-    assert 'return route === "agent" || route === "debug" || route === "diagnostic" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
+    assert 'return route === "agent" || route === "debug" || route === "diagnostic" || route === "runtime-audit" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";' in html
     assert 'decisionBand(force.decision, "Scout AI route-context trip briefing loaded"' not in html
     assert "/admin/pretrip/projects/${project}/briefings/route-context" in html
     assert "data-route-context-briefing=\"true\"" in html

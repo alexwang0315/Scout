@@ -8,6 +8,7 @@ import secrets
 import sys
 import tempfile
 import threading
+import time
 import zipfile
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -169,6 +170,8 @@ from scout_runtime_physiologic_integration import (
 )
 from scout_runtime_physiologic_pipeline import build_health_auto_export_physio_analysis
 from scout_env import load_scout_env_files
+from runtime_audit_api import create_runtime_audit_ledger, install_runtime_audit
+from runtime_audit_ledger import FileRuntimeAuditLedger
 from scout_emergency_mobile_closed_loop_api import (
     create_emergency_mobile_closed_loop_router,
     create_emergency_mobile_ui_router,
@@ -2157,10 +2160,13 @@ class DashboardConnectedPreparationRequest(BaseModel):
 
 def _connected_preparation_manager_from_env(
     workspace_root: Path,
+    *,
+    runtime_audit: FileRuntimeAuditLedger | None = None,
 ) -> DashboardConnectedPreparationManager:
     return create_dashboard_connected_preparation_manager(
         repo_root=ROOT,
         workspace_root=workspace_root,
+        runtime_audit=runtime_audit,
     )
 
 
@@ -2178,6 +2184,8 @@ def create_admin_app(
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
     connected_preparation_manager: Any | None = None,
+    runtime_audit_root: Path | None = None,
+    runtime_audit_ledger: FileRuntimeAuditLedger | None = None,
 ) -> FastAPI:
     resolved_alpha_sandbox_enabled = (
         alpha_sandbox_enabled
@@ -2187,10 +2195,22 @@ def create_admin_app(
     )
     app = FastAPI(title="Scout Fusion Admin API")
     app.add_middleware(GZipMiddleware, minimum_size=1_024, compresslevel=5)
+    resolved_runtime_audit = runtime_audit_ledger or create_runtime_audit_ledger(
+        root=runtime_audit_root,
+    )
+    _validate_runtime_audit_storage_boundary(
+        resolved_runtime_audit.root,
+        workspace_root=pretrip_workspace_root,
+    )
     resolved_connected_preparation_manager = connected_preparation_manager
     if resolved_connected_preparation_manager is None and pretrip_workspace_root is not None:
         resolved_connected_preparation_manager = _connected_preparation_manager_from_env(
-            pretrip_workspace_root
+            pretrip_workspace_root,
+            runtime_audit=resolved_runtime_audit,
+        )
+    elif hasattr(resolved_connected_preparation_manager, "set_runtime_audit"):
+        resolved_connected_preparation_manager.set_runtime_audit(
+            resolved_runtime_audit
         )
     app.state.connected_preparation_manager = resolved_connected_preparation_manager
     workspace_publication = getattr(
@@ -2230,6 +2250,7 @@ def create_admin_app(
             ),
             now_factory=now_factory,
             connected_preparation_manager=resolved_connected_preparation_manager,
+            runtime_audit=resolved_runtime_audit,
         )
     )
     app.include_router(create_emergency_mobile_ui_router())
@@ -2237,6 +2258,12 @@ def create_admin_app(
         app.include_router(create_alpha_simulation_ui_router())
     if hasattr(resolved_connected_preparation_manager, "stop"):
         app.router.on_shutdown.append(resolved_connected_preparation_manager.stop)
+    install_runtime_audit(
+        app,
+        ledger=resolved_runtime_audit,
+        application="scout-dashboard",
+        runtime_profile=os.getenv("SCOUT_RUNTIME_PROFILE", "dev") or "dev",
+    )
     return app
 
 
@@ -2257,6 +2284,8 @@ def create_dashboard_app(
     assistant_enabled: bool | None = None,
     assistant_provider: Any | None = None,
     assistant_environ: Mapping[str, str] | None = None,
+    runtime_audit_root: Path | None = None,
+    runtime_audit_ledger: FileRuntimeAuditLedger | None = None,
 ) -> FastAPI:
     """Create the Mac/dashboard server with the real Scout Assistant API mounted."""
 
@@ -2280,6 +2309,8 @@ def create_dashboard_app(
         ),
         now_factory=now_factory,
         connected_preparation_manager=connected_preparation_manager,
+        runtime_audit_root=runtime_audit_root,
+        runtime_audit_ledger=runtime_audit_ledger,
     )
     resolved_assistant_enabled = (
         assistant_enabled
@@ -2348,6 +2379,7 @@ def create_dashboard_app(
                 environ=provider_environ,
             ),
             query_preparation=weather_query_preparation,
+            runtime_audit=app.state.runtime_audit,
         )
     )
     app.state.assistant_api_mounted = True
@@ -2368,6 +2400,24 @@ def _dashboard_workspace_root(
         return Path(configured).expanduser()
     conventional_root = Path.home() / "workspace"
     return conventional_root if conventional_root.exists() else None
+
+
+def _validate_runtime_audit_storage_boundary(
+    audit_root: Path,
+    *,
+    workspace_root: Path | None,
+) -> None:
+    if workspace_root is None:
+        return
+    resolved_audit_root = Path(audit_root).expanduser().resolve()
+    resolved_workspace_root = Path(workspace_root).expanduser().resolve()
+    if (
+        resolved_audit_root == resolved_workspace_root
+        or resolved_workspace_root in resolved_audit_root.parents
+    ):
+        raise ValueError(
+            "runtime audit storage must remain outside the monitored workspace"
+        )
 
 
 def _true_like(value: str | None) -> bool:
@@ -2528,6 +2578,7 @@ def create_admin_router(
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
     connected_preparation_manager: Any | None = None,
+    runtime_audit: FileRuntimeAuditLedger | None = None,
 ) -> APIRouter:
     load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
@@ -2725,6 +2776,20 @@ def create_admin_router(
             Path(context["resolved_project_root"]),
             project_id=context["project_id"],
         )
+        if runtime_audit is not None:
+            runtime_audit.record_workspace_io(
+                operation="read-operation-requests",
+                workspace_id=context["project_id"],
+                artifact_kind="workspace_operation_request",
+                artifact_ref=WORKSPACE_OPERATION_REQUESTS_REF,
+                record_count=len(requests),
+                byte_count=len(
+                    json.dumps(requests, ensure_ascii=False).encode("utf-8")
+                ),
+                module="admin-api",
+                feature="workspace-operations",
+                summary="Workspace operation requests read",
+            )
         return {
             "project_id": context["project_id"],
             "requests": requests,
@@ -2768,6 +2833,20 @@ def create_admin_router(
             )
         except (FileNotFoundError, ValueError, OSError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if runtime_audit is not None:
+            runtime_audit.record_workspace_io(
+                operation="write-operation-request",
+                workspace_id=context["project_id"],
+                artifact_kind="workspace_operation_request",
+                artifact_ref=WORKSPACE_OPERATION_REQUESTS_REF,
+                record_count=1,
+                byte_count=len(
+                    json.dumps(record, ensure_ascii=False).encode("utf-8")
+                ),
+                module="admin-api",
+                feature="workspace-operations",
+                summary="Workspace operation request appended",
+            )
         return {
             "project_id": context["project_id"],
             "request": record,
@@ -4805,11 +4884,16 @@ def create_admin_router(
         runtime_status = build_weather_api_runtime_status()
         live_weather_snapshot = None
         if runtime_status.ready and runtime_status.provider == OPEN_METEO_PROVIDER:
+            provider_started_at = time.perf_counter()
+            provider_outcome = "succeeded"
+            provider_error_code = None
             try:
                 live_weather_snapshot = fetch_open_meteo_weather_snapshot(
                     view["route"]["bounds"]
                 )
             except Exception as exc:
+                provider_outcome = "failed"
+                provider_error_code = type(exc).__name__
                 live_weather_snapshot = {
                     "artifact_kind": "open_meteo_weather_snapshot",
                     "status": "live_summary_failed",
@@ -4820,6 +4904,26 @@ def create_admin_router(
                     "human_review_required": True,
                     "error_summary": str(exc),
                 }
+            finally:
+                if runtime_audit is not None:
+                    runtime_audit.record_provider_call(
+                        provider=OPEN_METEO_PROVIDER,
+                        operation="fetch-weather-snapshot",
+                        outcome=provider_outcome,
+                        workspace_id=project_id,
+                        duration_ms=max(
+                            0,
+                            int((time.perf_counter() - provider_started_at) * 1000),
+                        ),
+                        record_count=(
+                            1
+                            if isinstance(live_weather_snapshot, dict)
+                            and provider_outcome == "succeeded"
+                            else 0
+                        ),
+                        error_code=provider_error_code,
+                        feature="weather-overlay",
+                    )
         return build_pretrip_weather_overlay(
             weather_payload,
             runtime_status=runtime_status,
@@ -5914,6 +6018,21 @@ def create_admin_router(
         except (ValueError, KeyError, OSError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+        if runtime_audit is not None:
+            layer_records = manifest.get("layers")
+            runtime_audit.record_workspace_io(
+                operation="write-layer-preparation",
+                workspace_id=project_id,
+                artifact_kind="pretrip_layer_preparation_result",
+                artifact_ref="pretrip-layer-preparation",
+                record_count=(
+                    len(layer_records) if isinstance(layer_records, list) else None
+                ),
+                byte_count=None,
+                module="admin-api",
+                feature="pretrip-layer-preparation",
+                summary="Pre-trip layer preparation artifacts persisted",
+            )
         return {
             "project_id": project_id,
             "artifact_kind": "pretrip_layer_preparation_result",

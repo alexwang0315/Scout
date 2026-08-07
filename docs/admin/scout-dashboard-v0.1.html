@@ -4022,7 +4022,7 @@
 
     .diagnostic-summary {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -4046,6 +4046,48 @@
       margin-top: 5px;
       color: var(--paper);
       font: 600 22px/1 var(--mono);
+    }
+
+    .runtime-audit-page .diagnostic-summary {
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    }
+
+    .runtime-audit-health-grid,
+    .runtime-audit-coverage-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 8px;
+    }
+
+    .runtime-audit-health-card,
+    .runtime-audit-coverage-card {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, .025);
+    }
+
+    .runtime-audit-health-card > span,
+    .runtime-audit-coverage-card > span:first-child {
+      color: var(--muted);
+      font: 10px/1.2 var(--mono);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .runtime-audit-health-card strong,
+    .runtime-audit-coverage-card strong {
+      color: var(--paper);
+      font-size: 13px;
+    }
+
+    .runtime-audit-health-card small,
+    .runtime-audit-coverage-card small {
+      color: var(--muted);
+      line-height: 1.45;
     }
 
     .diagnostic-category {
@@ -8808,6 +8850,7 @@
           <summary><span class="mark"></span><span>System</span></summary>
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="living" data-route-truth="sandbox"><span class="mark"></span><span>Living</span></button>
+            <button class="nav-item" type="button" data-route="runtime-audit" data-route-truth="live"><span class="mark"></span><span>Runtime Activity</span></button>
             <button class="nav-item" type="button" data-route="surface-debug" data-route-truth="live"><span class="mark"></span><span>Debug Surface</span></button>
             <button class="nav-item" type="button" data-route="debug" data-route-truth="partial"><span class="mark"></span><span>Debug Message</span></button>
             <button class="nav-item" type="button" data-route="observer" data-route-truth="preview"><span class="mark"></span><span>MQTT / Observer</span></button>
@@ -8923,6 +8966,7 @@
     const DASHBOARD_LIVING_PATH = "/admin/dashboard/living";
     const LIVING_REFRESH_INTERVAL_MS = 3000;
     const TRIP_INTAKE_VALIDATE_PATH = "/admin/dashboard/trip-intake/validate";
+    const RUNTIME_AUDIT_PATH = "/admin/runtime-audit";
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 640;
     const MAP_PADDING = 58;
@@ -8955,6 +8999,7 @@
       "emergency": Object.freeze({maturity: "partial", surface: "Operational prototype", data: "Loading shared daily review", action: "Human review receipt only · no runtime authority", verification: "Packet revalidation required", provenance: "Contextual Permission + Safety / Emergency receipt store", mode: "Candidate review"}),
       "outdoor-weather": Object.freeze({maturity: "partial", surface: "Operational", data: "Cache-only loading", action: "Read-only", verification: "State handling verified", provenance: "CWA prepared cache", mode: "Operational"}),
       "agent": Object.freeze({maturity: "partial", surface: "Degraded", data: "Local evidence context", action: "Operator-triggered model request", verification: "Connection not checked", provenance: "Provider configured · readiness unknown", mode: "Operational"}),
+      "runtime-audit": Object.freeze({maturity: "live", surface: "Operational", data: "Loading unified runtime records", action: "Read-only filters and refresh", verification: "Hash-chain check pending", provenance: "Local append-only telemetry ledger", mode: "Telemetry only"}),
       "surface-debug": Object.freeze({maturity: "live", surface: "Operational", data: "Runtime + replay evidence", action: "Diagnostics · projected clear is explicit", verification: "Full page verified", provenance: "Per-event provenance", mode: "Operational"}),
       "debug": Object.freeze({maturity: "partial", surface: "Operational", data: "Runtime + replay evidence", action: "Read-only · retry", verification: "Endpoints + tabs verified", provenance: "Per-event provenance", mode: "Technical Prototype"}),
       "settings": Object.freeze({maturity: "live", surface: "Operational", data: "Browser-local settings", action: "Local browser mutation only", verification: "Validation + save path", provenance: "Browser settings", mode: "Operational"}),
@@ -8974,6 +9019,7 @@
       debug: ["debug"],
       hardware: ["debug"],
       living: ["living"],
+      runtime_audit: ["runtime-audit"],
     });
     let diagnosticCheck037Runner = null;
     const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([
@@ -9459,6 +9505,7 @@
       "outdoor-weather",
       "outdoor-navigation",
       "diagnostic",
+      "runtime-audit",
     ]));
 
     const state = {
@@ -9468,6 +9515,14 @@
       workspaceContext: null,
       workspaceCatalogStatus: "idle",
       workspaceOperationRequests: [],
+      runtimeAuditData: null,
+      runtimeAuditStatus: "idle",
+      runtimeAuditError: "",
+      runtimeAuditFilters: {
+        category: "",
+        outcome: "",
+        runtimeInstanceId: "",
+      },
       diagnosticResults: Object.fromEntries(
         DASHBOARD_DIAGNOSTIC_CASES.map(item => [item.id, {
           status: "idle",
@@ -9734,6 +9789,7 @@
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
       diagnostic: ["Diagnostic", "37 read-only Dashboard checks"],
+      "runtime-audit": ["Runtime Activity", "統一運行紀錄、API 成敗與 workspace I/O"],
     };
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -10541,6 +10597,34 @@
       if (scope === "debug") return loadDebugData();
       if (scope === "hardware") return loadHardwareData();
       if (scope === "living") return loadLivingData();
+      if (scope === "runtime_audit") return loadRuntimeAuditData();
+    }
+
+    async function loadRuntimeAuditData({limit = 200} = {}) {
+      state.runtimeAuditStatus = "loading";
+      state.runtimeAuditError = "";
+      refreshCurrentDataView();
+      const filters = state.runtimeAuditFilters || {};
+      const params = new URLSearchParams({limit: String(limit)});
+      if (filters.category) params.set("category", filters.category);
+      if (filters.outcome) params.set("outcome", filters.outcome);
+      if (filters.runtimeInstanceId) {
+        params.set("runtime_instance_id", filters.runtimeInstanceId);
+      }
+      try {
+        state.runtimeAuditData = await fetchJson(
+          `${RUNTIME_AUDIT_PATH}?${params.toString()}`,
+          {timeoutMs: FETCH_TIMEOUT_MS},
+        );
+        state.runtimeAuditStatus = state.runtimeAuditData?.status || "ready";
+        return state.runtimeAuditData;
+      } catch (error) {
+        state.runtimeAuditStatus = "error";
+        state.runtimeAuditError = String(error?.message || error || "Runtime activity unavailable");
+        throw error;
+      } finally {
+        refreshCurrentDataView();
+      }
     }
 
     async function loadLivingData() {
@@ -10967,7 +11051,7 @@
       if (route === "outdoor-architecture") return true;
       if (route === "outdoor-navigation") return true;
       if (route === "outdoor-permission") return true;
-      return route === "agent" || route === "debug" || route === "diagnostic" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";
+      return route === "agent" || route === "debug" || route === "diagnostic" || route === "runtime-audit" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";
     }
 
     function routeUsesFullFrame(route) {
@@ -11157,6 +11241,33 @@
         truth.data = provenance.label;
         truth.provenance = provenance.replayCount ? "Per-event provenance · fixture/replay present" : "Per-event provenance";
         if (provenance.replayCount && !provenance.runtimeCount) truth.surface = "Degraded truth context";
+      }
+      if (route === "runtime-audit") {
+        const payload = state.runtimeAuditData || {};
+        const summary = payload.summary || {};
+        const integrity = payload.integrity || {};
+        const writerHealth = payload.writer_health || {};
+        const coverage = payload.coverage || {};
+        const failed = Number(summary.failed_events || 0);
+        const partialCoverage = Object.values(coverage).some(item => item?.status !== "covered");
+        truth.surface = state.runtimeAuditStatus === "error"
+          ? "Unavailable"
+          : payload.status === "degraded" || integrity.verified === false || writerHealth.status === "degraded"
+            ? "Degraded"
+            : partialCoverage
+              ? "Partial coverage"
+              : "Operational";
+        truth.data = `${formatInteger(summary.total_events)} records · ${formatInteger(failed)} failures · ${formatInteger(summary.internal_api_calls)} internal API calls`;
+        truth.action = "Read-only filters and manual refresh";
+        truth.verification = writerHealth.status === "degraded"
+          ? `Writer degraded · ${formatInteger(writerHealth.dropped_event_count)} dropped audit events`
+          : integrity.verified === true
+          ? `Hash chain verified · ${formatInteger(integrity.checked_event_count)} events`
+          : integrity.verified === false
+            ? `Integrity warning · ${integrity.first_error_code || "unknown"}`
+            : "Hash-chain check pending";
+        truth.provenance = "Local append-only Runtime Audit Ledger";
+        truth.mode = "Telemetry only · never runtime safety truth";
       }
       if (route === "features-import-new-trip") {
         const validation = state.importTripValidation || {};
@@ -11444,6 +11555,7 @@
       if (route === "observer") return renderObserverPage();
       if (route === "settings") return renderSettingsPage();
       if (route === "diagnostic") return renderDiagnosticPage();
+      if (route === "runtime-audit") return renderRuntimeAuditPage();
       return renderHomePage();
     }
 
@@ -14173,9 +14285,220 @@
       `;
     }
 
+    function runtimeAuditCategoryLabel(category) {
+      return ({
+        runtime: "系統生命週期",
+        dashboard: "Dashboard / 內部 API",
+        provider: "外部資料服務",
+        workspace: "Workspace 讀寫",
+        agent: "Scout AI",
+        job: "排程與背景工作",
+        audit: "紀錄系統本身",
+      })[category] || category || "其他";
+    }
+
+    function runtimeAuditOutcomeLabel(outcome) {
+      return ({
+        started: "已啟動",
+        succeeded: "成功",
+        failed: "失敗",
+        rejected: "已拒絕",
+        cancelled: "已取消",
+        timed_out: "逾時",
+        degraded: "降級完成",
+        unknown: "尚無法判定",
+      })[outcome] || outcome || "未知";
+    }
+
+    function runtimeAuditTone(outcome) {
+      if (outcome === "succeeded" || outcome === "started") return "ok";
+      if (outcome === "failed" || outcome === "timed_out") return "bad";
+      return "warn";
+    }
+
+    function runtimeAuditCoverageLabel(key) {
+      return ({
+        runtime_lifecycle: "開啟與結束",
+        internal_http: "內部 API",
+        external_provider: "外部 API",
+        workspace_io: "Workspace 讀寫",
+        agent_runs: "Scout AI",
+        background_jobs: "排程與背景工作",
+      })[key] || key;
+    }
+
+    function runtimeAuditCoverageStatus(status) {
+      return ({
+        covered: "已涵蓋",
+        partial: "部分涵蓋",
+        not_instrumented: "尚未接入",
+      })[status] || "未知";
+    }
+
+    function runtimeAuditCoverageDetail(detailCode) {
+      return ({
+        "fastapi-lifecycle-and-lazy-request-start": "Dashboard server 的啟動、正常結束與非正常中斷偵測已接入。",
+        "fastapi-middleware-with-tile-success-aggregation": "一般請求逐筆記錄；高頻成功圖磚請求會聚合，失敗仍逐筆保留。",
+        "assistant-connected-preparation-and-open-meteo-covered": "目前涵蓋 Assistant、Connected Preparation 與 Open-Meteo；其他 provider 尚未全部統一。",
+        "dashboard-high-risk-writes-covered-direct-paths-remain": "已涵蓋 Dashboard 主要讀寫路徑；仍有繞過統一儲存介面的直接檔案操作。",
+        "dashboard-assistant-covered-other-agent-entrypoints-remain": "Dashboard Assistant 已接入；其他 agent entrypoint 尚待整合。",
+        "connected-preparation-covered-other-jobs-remain": "Connected Preparation 已接入；其他背景工作尚未全部整合。",
+      })[detailCode] || detailCode || "尚無覆蓋說明";
+    }
+
+    function runtimeAuditTime(value) {
+      if (!value) return "時間未記錄";
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime())
+        ? String(value)
+        : parsed.toLocaleString([], {hour12: false});
+    }
+
+    function renderRuntimeAuditEvent(event) {
+      const counts = [
+        event.record_count != null && Number.isFinite(Number(event.record_count)) ? `${formatInteger(event.record_count)} 筆資料` : "",
+        event.byte_count != null && Number.isFinite(Number(event.byte_count)) ? `${formatInteger(event.byte_count)} bytes` : "",
+        event.duration_ms != null && Number.isFinite(Number(event.duration_ms)) ? `${formatInteger(event.duration_ms)} ms` : "",
+      ].filter(Boolean).join(" · ") || "本事件沒有數量資訊";
+      const related = [event.module, event.feature].filter(Boolean).join(" / ") || "未標示";
+      const provider = event.provider ? ` · ${event.provider}` : "";
+      const detail = event.detail || event.error_code || event.detail_code || "沒有額外說明";
+      return `
+        <article class="diagnostic-case" data-runtime-audit-event="${escapeHtml(event.event_id || "unknown")}" data-runtime-audit-outcome="${escapeHtml(event.outcome || "unknown")}">
+          <div class="diagnostic-case-copy">
+            <span class="diagnostic-case-id">${escapeHtml(runtimeAuditCategoryLabel(event.category))} · ${escapeHtml(event.subcategory || "未分類")}</span>
+            <h4>${escapeHtml(event.summary || "未命名事件")}</h4>
+            <p>${escapeHtml(runtimeAuditTime(event.occurred_at || event.recorded_at))} · ${escapeHtml(counts)}${escapeHtml(provider)}</p>
+          </div>
+          <div class="diagnostic-result">
+            <div class="diagnostic-status">
+              <span class="chip ${runtimeAuditTone(event.outcome)}">${escapeHtml(runtimeAuditOutcomeLabel(event.outcome))}</span>
+            </div>
+            <p class="diagnostic-result-detail">${escapeHtml(related)}</p>
+          </div>
+          <details>
+            <summary>查看紀錄細節</summary>
+            <div class="metric-line">
+              <div class="metric-row"><span>大項目 / 小項目</span><strong>${escapeHtml(runtimeAuditCategoryLabel(event.category))} / ${escapeHtml(event.subcategory || "未分類")}</strong></div>
+              <div class="metric-row"><span>動作</span><strong>${escapeHtml(event.operation || "未標示")}</strong></div>
+              <div class="metric-row"><span>額外說明</span><strong>${escapeHtml(detail)}</strong></div>
+              <div class="metric-row"><span>相關模組 / 功能</span><strong>${escapeHtml(related)}</strong></div>
+              <div class="metric-row"><span>Workspace</span><strong>${escapeHtml(event.workspace_id || "不適用")}</strong></div>
+              <div class="metric-row"><span>紀錄 ID</span><strong class="mono">${escapeHtml(event.event_id || "-")}</strong></div>
+            </div>
+          </details>
+        </article>
+      `;
+    }
+
+    function renderRuntimeAuditPage() {
+      const payload = state.runtimeAuditData || {};
+      const summary = payload.summary || {};
+      const integrity = payload.integrity || {};
+      const writerHealth = payload.writer_health || {};
+      const coverage = payload.coverage || {};
+      const events = asArray(payload.events);
+      const filters = state.runtimeAuditFilters || {};
+      const instances = asArray(payload.available_runtime_instances);
+      const loading = state.runtimeAuditStatus === "loading";
+      const failed = state.runtimeAuditStatus === "error";
+      const partialCoverage = Object.values(coverage).some(item => item?.status !== "covered");
+      const statusText = failed
+        ? `無法讀取統一運行紀錄：${state.runtimeAuditError || "原因未知"}`
+        : loading
+          ? "正在讀取目前與歷史 runtime 紀錄…"
+          : writerHealth.status === "degraded"
+            ? `紀錄器降級 · ${formatInteger(writerHealth.dropped_event_count)} 個 audit event 未能寫入`
+          : integrity.verified === true && partialCoverage
+            ? `Hash chain 已驗證 · 目前為部分覆蓋`
+          : integrity.verified === true
+            ? `Hash chain 已驗證 · ${formatInteger(integrity.checked_event_count)} events`
+            : integrity.verified === false
+              ? `完整性警告 · ${integrity.first_error_code || "原因未知"}`
+              : "尚未完成完整性檢查";
+      return `
+        <div class="diagnostic-page runtime-audit-page" data-runtime-audit-page="true">
+          <section class="diagnostic-command">
+            <div>
+              <h3>統一運行紀錄</h3>
+              <p>把 Scout 的開啟／結束、內部 API、外部資料服務、Workspace 讀寫、AI 與排程工作收在同一條可追查時間線。這是 <strong>telemetry only</strong>，只用來回答「有沒有跑、成功或失敗、碰了什麼資料」，不會成為 runtime safety truth。</p>
+            </div>
+            <button type="button" data-runtime-audit-refresh ${loading ? "disabled" : ""}>${loading ? "讀取中…" : "重新整理"}</button>
+          </section>
+          <section class="diagnostic-summary" aria-label="Runtime activity summary">
+            ${[
+              ["total", "全部紀錄", summary.total_events],
+              ["failed", "失敗", summary.failed_events],
+              ["internal-api", "內部 API", summary.internal_api_calls],
+              ["provider", "外部 API", summary.provider_calls],
+              ["workspace", "Workspace I/O", Number(summary.workspace_reads || 0) + Number(summary.workspace_writes || 0)],
+              ["agent", "AI 執行", summary.agent_runs],
+              ["jobs", "排程工作", summary.background_jobs],
+            ].map(([key, label, value]) => `
+              <div class="diagnostic-summary-card">
+                <span>${escapeHtml(label)}</span>
+                <strong data-runtime-audit-summary="${escapeHtml(key)}">${formatInteger(value)}</strong>
+              </div>
+            `).join("")}
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h3>紀錄可信度</h3><span class="chip ${writerHealth.status === "degraded" || integrity.verified === false ? "bad" : partialCoverage ? "warn" : "ok"}">${writerHealth.status === "degraded" ? "Writer degraded" : partialCoverage ? "Partial coverage" : "Healthy"}</span></div>
+            <div class="panel-body runtime-audit-health-grid">
+              <div class="runtime-audit-health-card"><span>Writer health</span><strong>${writerHealth.status === "degraded" ? "降級" : "正常"}</strong><small>${writerHealth.status === "degraded" ? `${formatInteger(writerHealth.dropped_event_count)} 個 audit event 未能寫入 · ${escapeHtml(writerHealth.last_error_code || "unknown")}` : "目前程序未回報遺失事件"}</small></div>
+              <div class="runtime-audit-health-card"><span>Integrity</span><strong>${integrity.verified === true ? "順序與內容未偵測到破損" : integrity.verified === false ? "偵測到完整性問題" : "尚未驗證"}</strong><small>Hash chain 只能檢查損壞與順序，不代表防竄改或來源簽章。</small></div>
+              <div class="runtime-audit-health-card"><span>Retention</span><strong>手動保留</strong><small>目前會輪替事件檔，但尚未啟用自動刪除；保留政策不會被 UI 冒充為已完成。</small></div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h3>功能覆蓋率</h3><span>${Object.keys(coverage).length || 0} 類</span></div>
+            <div class="panel-body runtime-audit-coverage-grid">
+              ${Object.entries(coverage).map(([key, item]) => `
+                <div class="runtime-audit-coverage-card">
+                  <span>${escapeHtml(runtimeAuditCoverageLabel(key))}</span>
+                  <strong><span class="chip ${item?.status === "covered" ? "ok" : item?.status === "not_instrumented" ? "bad" : "warn"}">${escapeHtml(runtimeAuditCoverageStatus(item?.status))}</span></strong>
+                  <small>${escapeHtml(runtimeAuditCoverageDetail(item?.detail_code))}</small>
+                </div>
+              `).join("") || `<div class="empty-state"><strong>覆蓋資訊尚未回傳</strong><span>不能因沒有 coverage metadata 就宣稱完整。</span></div>`}
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h3>篩選時間線</h3><span class="chip ${failed || integrity.verified === false ? "bad" : loading ? "warn" : "ok"}">${escapeHtml(statusText)}</span></div>
+            <div class="panel-body">
+              <div class="force-list">
+                <div class="force-row">
+                  <label class="label-stack"><strong>大項目</strong><select data-runtime-audit-filter="category">
+                    <option value="">全部</option>
+                    ${["runtime", "dashboard", "provider", "workspace", "agent", "job", "audit"].map(value => `<option value="${value}" ${filters.category === value ? "selected" : ""}>${escapeHtml(runtimeAuditCategoryLabel(value))}</option>`).join("")}
+                  </select></label>
+                  <label class="label-stack"><strong>結果</strong><select data-runtime-audit-filter="outcome">
+                    <option value="">全部</option>
+                    ${["started", "succeeded", "failed", "rejected", "timed_out", "degraded", "unknown"].map(value => `<option value="${value}" ${filters.outcome === value ? "selected" : ""}>${escapeHtml(runtimeAuditOutcomeLabel(value))}</option>`).join("")}
+                  </select></label>
+                  <label class="label-stack"><strong>Runtime</strong><select data-runtime-audit-filter="runtimeInstanceId">
+                    <option value="">全部歷史</option>
+                    ${instances.map(value => `<option value="${escapeHtml(value)}" ${filters.runtimeInstanceId === value ? "selected" : ""}>${escapeHtml(value === payload.current_runtime_instance_id ? `目前 · ${value}` : value)}</option>`).join("")}
+                  </select></label>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="diagnostic-category">
+            <div class="diagnostic-category-header"><h3>運行時間線</h3><span>${formatInteger(events.length)} shown</span></div>
+            <p class="boundary-note"><strong>資料誠信：</strong>沒有紀錄不代表沒有執行；只代表該功能尚未接入 Ledger、紀錄已超過保留期限，或 audit 本身處於 degraded。UI 不會用空白冒充成功。</p>
+            <div class="diagnostic-case-list">
+              ${events.length
+                ? events.map(renderRuntimeAuditEvent).join("")
+                : `<div class="empty-state"><strong>目前篩選條件下沒有紀錄</strong><span>沒有紀錄不代表沒有執行；請查看完整性狀態或切回「全部歷史」。</span></div>`}
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
     function diagnosticStatusLabel(status) {
       if (status === "running") return "測試中";
       if (status === "passed") return "測試通過";
+      if (status === "warning") return "測試提醒";
       if (status === "failed") return "測試失敗";
       return "尚未測試";
     }
@@ -24484,6 +24807,7 @@
     }
 
     function bindRenderedControls() {
+      bindRuntimeAuditControls();
       bindDiagnosticControls();
       bindLivingControls();
       bindPermissionControls();
@@ -24589,6 +24913,30 @@
           }
         });
       }
+    }
+
+    function bindRuntimeAuditControls() {
+      document.querySelectorAll("[data-runtime-audit-filter]").forEach((control) => {
+        control.addEventListener("change", async () => {
+          const key = control.dataset.runtimeAuditFilter;
+          state.runtimeAuditFilters = {
+            ...(state.runtimeAuditFilters || {}),
+            [key]: control.value || "",
+          };
+          try {
+            await loadDataScope("runtime_audit", {force: true});
+          } catch (_error) {
+            // The page renders its typed degraded state from runtimeAuditError.
+          }
+        });
+      });
+      document.querySelector("[data-runtime-audit-refresh]")?.addEventListener("click", async () => {
+        try {
+          await loadDataScope("runtime_audit", {force: true});
+        } catch (_error) {
+          // The page renders its typed degraded state from runtimeAuditError.
+        }
+      });
     }
 
     function bindSurfaceFrameHealth(frame) {
