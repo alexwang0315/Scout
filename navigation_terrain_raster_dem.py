@@ -25,6 +25,7 @@ DEFAULT_TERRAIN_DEM_MANIFEST_REF = "outputs/navigation/terrain_rgb/manifest.json
 DEFAULT_TERRAIN_DEM_ZOOM = 13
 DEFAULT_TERRAIN_DEM_TILE_SIZE = 256
 TERRAIN_DEM_SCHEMA_VERSION = "scout_navigation_terrain_dem.v1"
+TERRAIN_DEM_RESAMPLING = "nearest"
 _SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -198,6 +199,7 @@ def prepare_navigation_terrain_dem_tiles(
             x,
             y,
             tile_size=tile_size,
+            resample_mode=TERRAIN_DEM_RESAMPLING,
         )
         if _png_is_fully_supported(body):
             rendered_tiles[(x, y)] = body
@@ -243,6 +245,7 @@ def prepare_navigation_terrain_dem_tiles(
         "project_id": resolved_project_id,
         "prepared_at": timestamp,
         "encoding": "mapbox",
+        "resampling": TERRAIN_DEM_RESAMPLING,
         "tile_size": tile_size,
         "minzoom": zoom,
         "maxzoom": zoom,
@@ -272,6 +275,7 @@ def prepare_navigation_terrain_dem_tiles(
             "Only a fully source-supported rectangular tile block is published.",
             "Areas outside the published block remain unavailable; no elevation is synthesized.",
             "The 20 m source grid is presentation evidence and is not increased in resolution.",
+            "Nearest-neighbor tile sampling preserves Terrain RGB elevation codes without inventing interpolated heights.",
         ],
         "boundary": {
             "candidate_only": True,
@@ -315,6 +319,10 @@ def load_navigation_terrain_dem_manifest(
         raise TerrainDemPreparationError("terrain DEM project_id mismatch")
     if manifest.get("encoding") != "mapbox":
         raise TerrainDemPreparationError("terrain DEM must use mapbox encoding")
+    if manifest.get("resampling") != TERRAIN_DEM_RESAMPLING:
+        raise TerrainDemPreparationError(
+            "terrain DEM must preserve encoded elevations with nearest resampling"
+        )
     if manifest.get("nodata_policy") != "exclude_incomplete_tiles":
         raise TerrainDemPreparationError("terrain DEM nodata policy is unsafe")
     return manifest
@@ -398,7 +406,13 @@ def _load_dtm_grid_image(
 
     elevations = np.full((height, width), np.nan, dtype=np.float32)
     tile_ids: list[str] = []
-    fingerprint_parts = [terrain_sha256, coverage_sha256, str(zoom), str(tile_size)]
+    fingerprint_parts = [
+        terrain_sha256,
+        coverage_sha256,
+        str(zoom),
+        str(tile_size),
+        TERRAIN_DEM_RESAMPLING,
+    ]
     for raw_tile in raw_tiles:
         if not isinstance(raw_tile, Mapping):
             continue

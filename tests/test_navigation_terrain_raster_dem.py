@@ -55,7 +55,7 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
     grid_path = source_root / "demo.grd"
     grid_path.write_text(
         "".join(
-            f"{column * 20} {160 - row * 20} {1000 + row * 10 + column}\n"
+            f"{column * 20} {160 - row * 20} {3107.1 if column < 4 else 3107.2}\n"
             for row in range(8)
             for column in range(8)
         ),
@@ -115,12 +115,13 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
         project_root,
         project_id=project_id,
         zoom=z,
-        tile_size=8,
+        tile_size=16,
         prepared_at="2026-08-07T06:00:00Z",
     )
 
     assert result["status"] == "ready"
     assert result["encoding"] == "mapbox"
+    assert result["resampling"] == "nearest"
     assert result["nodata_policy"] == "exclude_incomplete_tiles"
     assert result["tile_block"] == {
         "x_min": x,
@@ -131,12 +132,14 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
     tile_path = project_root / result["tiles_ref"] / str(z) / str(x) / f"{y}.png"
     with Image.open(tile_path) as image:
         rgba = image.convert("RGBA")
-        assert rgba.size == (8, 8)
+        assert rgba.size == (16, 16)
         assert set(rgba.getchannel("A").get_flattened_data()) == {255}
-        assert decode_mapbox_terrain_rgb(rgba.getpixel((4, 4))[:3]) == pytest.approx(
-            1044.0,
-            abs=12.0,
-        )
+        decoded = [
+            decode_mapbox_terrain_rgb(pixel[:3])
+            for pixel in rgba.get_flattened_data()
+        ]
+        assert min(decoded) >= 3107.0
+        assert max(decoded) <= 3107.3
 
     project = json.loads((project_root / "project.json").read_text())
     assert project["navigation_terrain_dem_manifest_ref"] == result["manifest_ref"]

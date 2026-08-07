@@ -230,6 +230,7 @@ def render_raster_tile_png(
     y: int,
     *,
     tile_size: int = DEFAULT_RASTER_TILE_SIZE,
+    resample_mode: str | None = None,
 ) -> bytes:
     _validate_raster_source_manifest(source_manifest)
     validate_osm_tile_coords(z, x, y)
@@ -259,7 +260,14 @@ def render_raster_tile_png(
         return _png_bytes(tile_image)
 
     crop = image.crop(src_box)
-    resized = crop.resize((dst_box[2] - dst_box[0], dst_box[3] - dst_box[1]))
+    output_size = (dst_box[2] - dst_box[0], dst_box[3] - dst_box[1])
+    if resample_mode is None:
+        resized = crop.resize(output_size)
+    elif resample_mode == "nearest":
+        nearest = getattr(getattr(Image, "Resampling", Image), "NEAREST")
+        resized = crop.resize(output_size, resample=nearest)
+    else:
+        raise ValueError("resample_mode must be None or nearest")
     tile_image.paste(resized, (dst_box[0], dst_box[1]))
     return _png_bytes(tile_image)
 

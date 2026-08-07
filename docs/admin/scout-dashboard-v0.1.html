@@ -19549,6 +19549,15 @@
       `;
     }
 
+    function navigationTerrainRudyOpacity(mode) {
+      return mode === "3d" ? .38 : 1;
+    }
+
+    function navigationTerrainMinimumReviewZoom(dem, mode) {
+      const sourceZoom = Number(dem?.minzoom || 13);
+      return mode === "3d" ? sourceZoom : Math.max(5, sourceZoom - 2);
+    }
+
     function renderNavigationTerrainMapLibreHost(snapshot, mode) {
       const dem = snapshot?.terrain_raster_dem || {};
       const ready = dem.status === "ready"
@@ -19556,8 +19565,11 @@
         && Boolean(navigationRudyBounds(dem.bounds_wgs84));
       const isTerrain = mode === "3d";
       const evidenceDomain = navigationTerrainEvidenceDomain();
+      const rudyOpacity = navigationTerrainRudyOpacity(mode);
       const sourceLabel = evidenceDomain === "observed"
-        ? "Rudy+TW + prepared DEM"
+        ? isTerrain
+          ? `Rudy+TW ${(rudyOpacity * 100).toFixed(0)}% terrain texture + prepared DEM`
+          : "Rudy+TW flat evidence map"
         : evidenceDomain === "prior"
           ? "Prepared DEM + non-spatial learned prior"
           : "Prepared DEM only";
@@ -19576,6 +19588,10 @@
             data-navigation-maplibre-map="${escapeHtml(mode)}"
             data-navigation-maplibre-status="${ready ? "pending" : "not-prepared"}"
             data-navigation-evidence-domain="${escapeHtml(evidenceDomain)}"
+            data-navigation-rudy-opacity="${navigationTerrainRudyOpacity(mode)}"
+            data-navigation-rudy-fade-duration="0"
+            data-navigation-map-surface-geometry="${mode === "3d" ? "terrain" : "flat"}"
+            data-navigation-terrain-min-review-zoom="${navigationTerrainMinimumReviewZoom(dem, mode)}"
             data-dashboard-map-surface="navigation-map"
             data-dashboard-basemap-layer="${evidenceDomain === "observed" ? "rudy-twmap" : "none"}"
             data-dashboard-basemap-policy="rudy-twmap-only"
@@ -19819,35 +19835,39 @@
         Number(dem.minzoom) + 3,
         thick,
       ];
+      const hillshadeLayer = {
+        id: "scout-terrain-hillshade",
+        type: "hillshade",
+        source: "scout-terrain-hillshade-dem",
+        paint: {
+          "hillshade-exaggeration": mode === "3d" ? 1 : .9,
+          "hillshade-illumination-direction": 315,
+          "hillshade-shadow-color": "#07110e",
+          "hillshade-highlight-color": revealObservedContext ? "#fff8d9" : "#d9edbb",
+          "hillshade-accent-color": "#d56a16",
+        },
+      };
+      const rudyLayer = {
+        id: "scout-rudy-tw",
+        type: "raster",
+        source: "scout-rudy-tw",
+        paint: {
+          "raster-opacity": navigationTerrainRudyOpacity(mode),
+          "raster-fade-duration": 0,
+          "raster-resampling": "linear",
+          "raster-brightness-max": mode === "3d" ? .84 : 1,
+          "raster-contrast": mode === "3d" ? .24 : 0,
+          "raster-saturation": mode === "3d" ? -.14 : 0,
+        },
+      };
       const layers = [
         {
           id: "scout-terrain-background",
           type: "background",
           paint: {"background-color": revealObservedContext ? "#d9ddd6" : "#193227"},
         },
-        ...(revealObservedContext ? [{
-          id: "scout-rudy-tw",
-          type: "raster",
-          source: "scout-rudy-tw",
-          paint: {
-            "raster-opacity": .96,
-            "raster-resampling": "linear",
-            "raster-contrast": .12,
-            "raster-saturation": -.08,
-          },
-        }] : []),
-        {
-          id: "scout-terrain-hillshade",
-          type: "hillshade",
-          source: "scout-terrain-hillshade-dem",
-          paint: {
-            "hillshade-exaggeration": mode === "3d" ? .72 : .9,
-            "hillshade-illumination-direction": 315,
-            "hillshade-shadow-color": "#07110e",
-            "hillshade-highlight-color": revealObservedContext ? "#fff8d9" : "#d9edbb",
-            "hillshade-accent-color": "#d56a16",
-          },
-        },
+        hillshadeLayer,
+        ...(revealObservedContext ? [rudyLayer] : []),
         {
           id: "scout-drainage-trunk",
           type: "line",
@@ -19992,6 +20012,10 @@
         pitch: mode === "3d" ? 58 : 0,
         bearing: mode === "3d" ? -28 : 0,
       });
+      const minimumReviewZoom = navigationTerrainMinimumReviewZoom(dem, mode);
+      if (mode === "3d" && map.getZoom() < minimumReviewZoom) {
+        map.jumpTo({zoom: minimumReviewZoom, pitch: 58, bearing: -28});
+      }
     }
 
     function synchronizeNavigationTerrainMapLibre(sourceEntry) {
@@ -19999,7 +20023,17 @@
       navigationTerrainMapLibreRuntime.synchronizing = true;
       try {
         const center = sourceEntry.map.getCenter();
-        const zoom = sourceEntry.map.getZoom();
+        const terrainZoomFloor = navigationTerrainMapLibreRuntime.maps.reduce(
+          (floor, entry) => entry.mode === "3d"
+            ? Math.max(floor, entry.map.getMinZoom())
+            : floor,
+          Number.NEGATIVE_INFINITY,
+        );
+        const sourceZoom = sourceEntry.map.getZoom();
+        const zoom = Number.isFinite(terrainZoomFloor)
+          ? Math.max(sourceZoom, terrainZoomFloor)
+          : sourceZoom;
+        if (zoom !== sourceZoom) sourceEntry.map.jumpTo({center, zoom});
         navigationTerrainMapLibreRuntime.maps.forEach(entry => {
           if (entry === sourceEntry) return;
           entry.map.jumpTo({center, zoom});
@@ -20051,7 +20085,7 @@
             zoom: Number(dem.minzoom || 13) - .55,
             pitch: mode === "3d" ? 58 : 0,
             bearing: mode === "3d" ? -28 : 0,
-            minZoom: Math.max(5, Number(dem.minzoom || 13) - 2),
+            minZoom: navigationTerrainMinimumReviewZoom(dem, mode),
             maxZoom: Math.min(20, Number(dem.maxzoom || 13) + 4),
             maxPitch: 80,
             scrollZoom: false,
@@ -20087,8 +20121,13 @@
             host.dataset.navigationMaplibreVersion = String(maplibregl.getVersion?.() || "6.2.0");
             updateCameraEvidence();
             if (status) {
+              const rudyBlend = host.dataset.navigationEvidenceDomain === "observed"
+                ? mode === "3d"
+                  ? `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% terrain texture`
+                  : "Rudy+TW 100% flat map · DEM shading hidden"
+                : "Rudy+TW off";
               status.dataset.navigationMaplibreState = "ready";
-              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D TERRAIN" : "MAPLIBRE 2D EVIDENCE"} · READY</strong>${formatInteger(dem.tile_count)} complete Terrain RGB tiles · Z${formatInteger(dem.minzoom)} source · ${valueOrDash(dem.source_cell_resolution_m)}m cells · wheel/double-click zoom disabled`;
+              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D TERRAIN" : "MAPLIBRE 2D EVIDENCE"} · READY</strong>${formatInteger(dem.tile_count)} complete Terrain RGB tiles · Z${formatInteger(dem.minzoom)} source floor · ${rudyBlend} · ${valueOrDash(dem.source_cell_resolution_m)}m cells · wheel/double-click zoom disabled`;
             }
           });
           map.on("move", () => synchronizeNavigationTerrainMapLibre(entry));
