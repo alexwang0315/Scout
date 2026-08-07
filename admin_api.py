@@ -9590,6 +9590,17 @@ def _navigation_terrain_dem_public_manifest(
             "bounds_wgs84": None,
             "boundary": boundary,
         }
+    except TerrainDemPreparationError:
+        return {
+            "schema_version": "scout_navigation_terrain_dem.v1",
+            "artifact_kind": "navigation_terrain_raster_dem_tiles",
+            "project_id": project_id,
+            "status": "invalid",
+            "preparation_required": True,
+            "tile_url_template": None,
+            "bounds_wgs84": None,
+            "boundary": boundary,
+        }
 
     return {
         "schema_version": manifest.get("schema_version"),
@@ -9598,6 +9609,7 @@ def _navigation_terrain_dem_public_manifest(
         "status": manifest.get("status"),
         "prepared_at": manifest.get("prepared_at"),
         "encoding": manifest.get("encoding"),
+        "resampling": manifest.get("resampling"),
         "tile_size": manifest.get("tile_size"),
         "minzoom": manifest.get("minzoom"),
         "maxzoom": manifest.get("maxzoom"),

@@ -210,6 +210,7 @@ def test_navigation_terrain_dem_manifest_and_tile_are_read_only_allowlisted(
                 "status": "ready",
                 "prepared_at": "2026-08-07T07:00:00Z",
                 "encoding": "mapbox",
+                "resampling": "nearest",
                 "tile_size": 256,
                 "minzoom": 13,
                 "maxzoom": 13,
@@ -281,6 +282,7 @@ def test_navigation_terrain_dem_manifest_and_tile_are_read_only_allowlisted(
     assert manifest_response.status_code == 200
     assert manifest_response.json()["status"] == "ready"
     assert manifest_response.json()["tile_count"] == 1
+    assert manifest_response.json()["resampling"] == "nearest"
     assert manifest_response.json()["boundary"]["candidate_only"] is True
     assert manifest_response.json()["boundary"]["workspace_file_mutation_allowed"] is False
     assert tile_response.status_code == 200
@@ -2215,6 +2217,20 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert 'source: "scout-terrain-dem"' in html
     assert 'source: "scout-terrain-hillshade-dem"' in html
     assert 'source: "scout-terrain-candidates"' in html
+    assert 'function navigationTerrainRudyOpacity(mode)' in html
+    assert 'return mode === "3d" ? .38 : 1;' in html
+    assert '"raster-opacity": navigationTerrainRudyOpacity(mode)' in html
+    assert '"raster-fade-duration": 0' in html
+    assert '"raster-contrast": mode === "3d" ? .24 : 0' in html
+    assert '"raster-saturation": mode === "3d" ? -.14 : 0' in html
+    assert 'hillshadeLayer,\n        ...(revealObservedContext ? [rudyLayer] : [])' in html
+    assert 'mode === "3d" ? "terrain" : "flat"' in html
+    assert 'data-navigation-rudy-opacity="${navigationTerrainRudyOpacity(mode)}"' in html
+    assert 'function navigationTerrainMinimumReviewZoom(dem, mode)' in html
+    assert 'return mode === "3d" ? sourceZoom : Math.max(5, sourceZoom - 2);' in html
+    assert 'data-navigation-terrain-min-review-zoom="${navigationTerrainMinimumReviewZoom(dem, mode)}"' in html
+    assert 'const terrainZoomFloor = navigationTerrainMapLibreRuntime.maps.reduce(' in html
+    assert 'source floor · ${rudyBlend}' in html
     assert 'data-dashboard-map-screen-stroke="7"' in html
     assert 'data-dashboard-map-screen-stroke="4.5"' in html
     assert 'data-navigation-structure-label-visibility="selected-only"' in html
