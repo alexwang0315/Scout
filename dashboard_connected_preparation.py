@@ -16,6 +16,7 @@ from dashboard_workspace_publication import (
     WorkspacePreparationBusyError,
 )
 from scout_env import ScoutEnvLoadResult, load_scout_env_files
+from runtime_audit_ledger import FileRuntimeAuditLedger
 from weather_imagery_tile_cache import project_cwa_imagery_cache_root
 
 
@@ -50,6 +51,7 @@ def create_dashboard_connected_preparation_manager(
     repo_root: Path = ROOT,
     environ: MutableMapping[str, str] | None = None,
     initial_env_load_result: ScoutEnvLoadResult | None = None,
+    runtime_audit: FileRuntimeAuditLedger | None = None,
 ) -> "DashboardConnectedPreparationManager":
     source = environ if environ is not None else os.environ
     interval_value = str(
@@ -65,6 +67,7 @@ def create_dashboard_connected_preparation_manager(
         refresh_interval_seconds=interval_seconds,
         environ=environ,
         initial_env_load_result=initial_env_load_result,
+        runtime_audit=runtime_audit,
     )
 
 
@@ -88,6 +91,7 @@ class DashboardConnectedPreparationManager:
         timer_factory: TimerFactory = threading.Timer,
         now_factory: NowFactory | None = None,
         workspace_publication: DashboardWorkspacePublication | None = None,
+        runtime_audit: FileRuntimeAuditLedger | None = None,
     ) -> None:
         self.workspace_root = Path(workspace_root).expanduser().resolve()
         self.repo_root = Path(repo_root).expanduser().resolve()
@@ -106,11 +110,18 @@ class DashboardConnectedPreparationManager:
             workspace_publication
             or DashboardWorkspacePublication(self.workspace_root)
         )
+        self.runtime_audit = runtime_audit
         self._lock = threading.RLock()
         self._state_changed = threading.Condition(self._lock)
         self._states: dict[str, dict[str, Any]] = {}
         self._timers: dict[str, Any] = {}
         self._stopped = False
+
+    def set_runtime_audit(
+        self,
+        runtime_audit: FileRuntimeAuditLedger | None,
+    ) -> None:
+        self.runtime_audit = runtime_audit
 
     def trigger(
         self,
@@ -339,7 +350,93 @@ class DashboardConnectedPreparationManager:
             prior_runs = int((self._states.get(project_id) or {}).get("runCount") or 0)
             self._states[project_id] = {**result, "runCount": prior_runs + 1}
             self._state_changed.notify_all()
-            return dict(self._states[project_id])
+            recorded_result = dict(self._states[project_id])
+        self._record_runtime_audit(
+            project_id,
+            result=recorded_result,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+        return recorded_result
+
+    def _record_runtime_audit(
+        self,
+        project_id: str,
+        *,
+        result: Mapping[str, Any],
+        started_at: datetime,
+        completed_at: datetime,
+    ) -> None:
+        audit = self.runtime_audit
+        if audit is None:
+            return
+        status = str(result.get("status") or "unknown")
+        outcome = (
+            "failed"
+            if status == "failed"
+            else "degraded"
+            if status in {"partial", "busy"}
+            else "succeeded"
+            if status == "ready"
+            else "unknown"
+        )
+        duration_ms = max(
+            0,
+            int((completed_at - started_at).total_seconds() * 1000),
+        )
+        artifact_refs = result.get("artifactRefs")
+        artifact_count = len(artifact_refs) if isinstance(artifact_refs, Mapping) else 0
+        error = result.get("lastError")
+        error_code = (
+            str(error.get("type"))
+            if isinstance(error, Mapping) and error.get("type")
+            else None
+        )
+        audit.record_background_job(
+            workspace_id=project_id,
+            job="connected-preparation",
+            outcome=outcome,
+            duration_ms=duration_ms,
+            provider_call_count=None,
+            record_count=artifact_count,
+            error_code=error_code,
+            summary="Connected preparation refresh completed",
+        )
+        if result.get("publicationStatus") == "published":
+            audit.record_workspace_io(
+                operation="write-connected-preparation-publication",
+                workspace_id=project_id,
+                artifact_kind="connected_preparation_publication",
+                artifact_ref="connected-preparation-publication",
+                record_count=artifact_count,
+                byte_count=None,
+                outcome="succeeded",
+                module="dashboard-connected-preparation",
+                feature="scheduled-refresh",
+                summary="Connected preparation workspace snapshot published",
+                duration_ms=duration_ms,
+            )
+        provider_activity = result.get("providerActivity")
+        if not isinstance(provider_activity, Mapping):
+            return
+        for provider_name, activity in provider_activity.items():
+            if not isinstance(activity, Mapping) or not activity.get("attempted"):
+                continue
+            provider_outcome = str(activity.get("outcome") or "unknown")
+            audit.record_provider_call(
+                provider=str(provider_name),
+                operation="refresh-evidence",
+                outcome=provider_outcome,
+                workspace_id=project_id,
+                duration_ms=None,
+                record_count=None,
+                error_code=(
+                    str(activity.get("errorCode"))
+                    if activity.get("errorCode")
+                    else None
+                ),
+                feature="connected-preparation",
+            )
 
     def _schedule_next(self, project_id: str) -> None:
         with self._lock:
@@ -483,6 +580,8 @@ class DashboardConnectedPreparationManager:
             "weatherImagery": project.get("cwa_weather_imagery_status"),
             "gee": project.get("gee_environment_status"),
         }
+        cwa_external = bool(project.get("cwa_external_api_calls_made"))
+        gee_external = bool(project.get("gee_external_api_calls_made"))
         failed_components = [
             key
             for key, value in component_statuses.items()
@@ -520,6 +619,36 @@ class DashboardConnectedPreparationManager:
             "credentialValuesExposed": env_result.credential_values_exposed,
             "envFilesLoaded": list(env_result.loaded_files),
             "componentStatuses": component_statuses,
+            "providerActivity": {
+                "cwa": {
+                    "attempted": cwa_external,
+                    "outcome": (
+                        "failed"
+                        if any(
+                            key in failed_components
+                            for key in ("cwaWeather", "rainfallGrid", "weatherImagery")
+                        )
+                        else "succeeded"
+                        if cwa_external
+                        else "unknown"
+                    ),
+                },
+                "gee": {
+                    "attempted": gee_external,
+                    "outcome": (
+                        "failed"
+                        if "gee" in failed_components
+                        else "succeeded"
+                        if gee_external
+                        else "unknown"
+                    ),
+                },
+                "overpass": {
+                    "attempted": False,
+                    "outcome": "unknown",
+                    "detailCode": "call-count-not-exposed-by-current-manifest",
+                },
+            },
             "failedComponents": failed_components,
             "artifactRefs": artifact_refs,
             **dict(publication),

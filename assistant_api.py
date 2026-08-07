@@ -22,6 +22,7 @@ from assistant_models import (
     ScoutAssistantResponse,
 )
 from assistant_provider import FailedAssistantProvider, MockAssistantProvider, ScoutAssistantProvider
+from runtime_audit_ledger import FileRuntimeAuditLedger
 from assistant_skill_router import (
     PRETRIP_FULL_WORKFLOW_SOURCE_ID,
     PRETRIP_TOOL_PLANNER_SKILL_ID,
@@ -44,6 +45,7 @@ def create_assistant_app(
     context_resolver: AssistantContextResolver | None = None,
     provider_status: dict[str, object] | None = None,
     query_preparation: AssistantQueryPreparation | None = None,
+    runtime_audit: FileRuntimeAuditLedger | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Scout Cross-Surface Assistant API")
     app.include_router(
@@ -52,6 +54,7 @@ def create_assistant_app(
             context_resolver=context_resolver,
             provider_status=provider_status,
             query_preparation=query_preparation,
+            runtime_audit=runtime_audit,
         )
     )
     return app
@@ -63,6 +66,7 @@ def create_assistant_router(
     context_resolver: AssistantContextResolver | None = None,
     provider_status: dict[str, object] | None = None,
     query_preparation: AssistantQueryPreparation | None = None,
+    runtime_audit: FileRuntimeAuditLedger | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/assistant", tags=["assistant"])
     resolved_provider = provider or MockAssistantProvider()
@@ -80,12 +84,30 @@ def create_assistant_router(
         sources = resolved_context(query)
         if preparation_source is not None:
             sources = [preparation_source, *sources]
-        return answer_assistant_query_safely(
+        response = answer_assistant_query_safely(
             resolved_provider,
             query,
             sources=sources,
             started_at=started_at,
         )
+        observability = response.observability
+        if runtime_audit is not None and observability is not None:
+            runtime_audit.record_agent_run(
+                workspace_id=query.project_id,
+                provider=observability.provider_class,
+                model=(
+                    observability.local_model_name
+                    or observability.model_profile_used
+                ),
+                duration_ms=observability.latency_ms,
+                safe_failure=observability.safe_failure,
+                request_count=observability.request_count,
+                tool_call_count=observability.tool_call_count,
+                retry_count=observability.retry_count,
+                input_tokens=observability.input_tokens,
+                output_tokens=observability.output_tokens,
+            )
+        return response
 
     @router.get("/status")
     def assistant_status() -> dict[str, object]:
