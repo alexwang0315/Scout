@@ -181,7 +181,7 @@ class DashboardWorkspacePublication:
         self._read_handles: dict[str, list[_GenerationLockHandle]] = {}
         self._recovery_guard = threading.Lock()
         self._recovery_outcomes: dict[str, dict[str, Any]] = {}
-        self._validate_coordinator_directories(
+        self._ensure_coordinator_directories(
             self.private_root,
             self.staging_root,
             self.journal_root,
@@ -592,8 +592,8 @@ class DashboardWorkspacePublication:
         else:
             local_lock.acquire_read()
         try:
-            file_lock = _acquire_file_lock(
-                self.lock_root / "generation" / f"{project_id}.lock",
+            file_lock = _acquire_directory_lock(
+                self.lock_root / "generation",
                 exclusive=write,
                 blocking=True,
             )
@@ -632,6 +632,12 @@ class DashboardWorkspacePublication:
                     raise WorkspaceRecoveryError(
                         "publication coordinator path is not a directory"
                     )
+
+    def _ensure_coordinator_directories(self, *directories: Path) -> None:
+        self._validate_coordinator_directories(*directories)
+        for directory in directories:
+            directory.mkdir(parents=True, exist_ok=True)
+        self._validate_coordinator_directories(*directories)
 
     def _load_journal_for_staged(
         self,
@@ -907,6 +913,36 @@ def _acquire_file_lock(
         path,
         os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
         0o600,
+    )
+    operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+    if not blocking:
+        operation |= fcntl.LOCK_NB
+    try:
+        fcntl.flock(descriptor, operation)
+    except BlockingIOError as exc:
+        os.close(descriptor)
+        raise _FileLockBusyError(str(path)) from exc
+    except Exception:
+        os.close(descriptor)
+        raise
+    return _FileLockHandle(descriptor=descriptor, path=path)
+
+
+def _acquire_directory_lock(
+    path: Path,
+    *,
+    exclusive: bool,
+    blocking: bool,
+) -> _FileLockHandle:
+    """Lock an existing coordinator directory without creating GET artifacts."""
+
+    if path.is_symlink() or not path.is_dir():
+        raise WorkspaceRecoveryError("coordinator lock directory is invalid")
+    descriptor = os.open(
+        path,
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_DIRECTORY", 0),
     )
     operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
     if not blocking:

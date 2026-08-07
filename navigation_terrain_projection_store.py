@@ -218,6 +218,52 @@ def resolve_navigation_terrain_projection(
     )
 
 
+def inspect_navigation_terrain_projection(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    project_id: str,
+) -> NavigationTerrainProjectionResolution:
+    """Inspect persisted Navigation evidence without starting or writing preparation."""
+
+    root = project_root.resolve()
+    fingerprint = navigation_terrain_input_fingerprint(root, project)
+    persisted = load_persisted_navigation_terrain_projection(
+        root,
+        project,
+        input_fingerprint=fingerprint,
+    )
+    if persisted is not None:
+        return NavigationTerrainProjectionResolution(
+            http_status=200,
+            payload=_with_delivery(
+                persisted,
+                served_from="persisted_workspace_artifact",
+            ),
+        )
+
+    raw_ref = project.get("navigation_terrain_projection_ref")
+    projection_ref = (
+        str(raw_ref).strip()
+        if isinstance(raw_ref, str) and raw_ref.strip()
+        else NAVIGATION_TERRAIN_PROJECTION_REF
+    )
+    artifact_exists = _safe_project_path(root, projection_ref).is_file()
+    return NavigationTerrainProjectionResolution(
+        http_status=200,
+        payload=_not_prepared_payload(
+            project_id=project_id,
+            input_fingerprint=fingerprint,
+            source_ref=projection_ref,
+            reason=(
+                "persisted_projection_stale_or_invalid"
+                if artifact_exists
+                else "persisted_projection_missing"
+            ),
+        ),
+    )
+
+
 def load_persisted_navigation_terrain_projection(
     project_root: Path,
     project: dict[str, Any],
@@ -355,6 +401,40 @@ def _failed_payload(
     }
 
 
+def _not_prepared_payload(
+    *,
+    project_id: str,
+    input_fingerprint: str,
+    source_ref: str,
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": NAVIGATION_TERRAIN_SCHEMA_VERSION,
+        "artifact_kind": NAVIGATION_TERRAIN_PROJECTION_STATUS_ARTIFACT_KIND,
+        "project_id": project_id,
+        "status": "not_prepared",
+        "projection_state": "not_prepared",
+        "preparation_required": True,
+        "reason": reason,
+        "input_fingerprint": input_fingerprint,
+        "source_ref": source_ref,
+        "retry_after_ms": None,
+        "summary": (
+            "No current persisted Navigation terrain projection is available. "
+            "Run the explicit pre-trip terrain preparation workflow to create one."
+        ),
+        "projection_delivery": {
+            "served_from": "read_only_inspection",
+            "synchronous_rebuild_performed": False,
+            "preparation_started": False,
+        },
+        "boundary": {
+            **_candidate_boundary(),
+            "workspace_file_mutation_allowed": False,
+        },
+    }
+
+
 def _with_delivery(
     payload: dict[str, Any],
     *,
@@ -448,6 +528,7 @@ __all__ = [
     "NavigationTerrainProjectionCoordinator",
     "NavigationTerrainProjectionResolution",
     "compile_navigation_terrain_projection",
+    "inspect_navigation_terrain_projection",
     "load_persisted_navigation_terrain_projection",
     "navigation_terrain_input_fingerprint",
     "resolve_navigation_terrain_projection",

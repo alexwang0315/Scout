@@ -15358,14 +15358,17 @@
       const groups = pretripEvidenceGroups(project);
       const groupGaps = groups
         .filter(group => Number(group.count) === 0)
-        .map(group => `${group.tabId} / ${group.title} (${group.zeroState || "unexplained zero"})`);
+        .map(group => `${group.tabId} / ${group.title} [${group.zeroReasonCode || "fixture_or_projection_omission"}] (${group.zeroState || "fixture or projection returned no items"})`);
       const timelineGaps = asArray(project.evidence_timeline?.categories)
         .filter(item => Number(item.count) === 0)
         .map(item => {
           const reason = ["capability_timeline", "rest_intervals"].includes(item.category_id)
             ? "completed GPX not imported"
             : "source unavailable";
-          return `default / Evidence Timeline / ${item.label || item.category_id || "unnamed category"} (${reason})`;
+          const reasonCode = ["capability_timeline", "rest_intervals"].includes(item.category_id)
+            ? "not_imported"
+            : "source_unavailable";
+          return `default / Evidence Timeline / ${item.label || item.category_id || "unnamed category"} [${reasonCode}] (${reason})`;
         });
       return [...new Set([...groupGaps, ...timelineGaps])];
     }
@@ -18658,10 +18661,13 @@
       const error = state.dataScopeErrors?.navigation_terrain;
       const preparing = snapshot.status === "preparing";
       const failed = snapshot.status === "failed";
+      const notPrepared = ["not_prepared", "stale"].includes(snapshot.status);
       const stateLabel = preparing
         ? "preparing"
         : failed
           ? "failed"
+          : notPrepared
+            ? "not-prepared"
           : error
             ? "unavailable"
             : "loading";
@@ -18669,19 +18675,39 @@
         ? "Workspace terrain projection is preparing."
         : failed
           ? "Workspace terrain projection failed."
+          : notPrepared
+            ? "No terrain projection has been prepared."
           : error
             ? "Workspace terrain projection unavailable."
             : "Loading workspace terrain evidence.";
       const detail = preparing
-        ? (snapshot.summary || "Compiling prepared DTM and route evidence. This page will update automatically.")
+        ? (snapshot.summary || "An explicit pre-trip preparation is compiling DTM and route evidence.")
         : failed
           ? (snapshot.summary || "The prepared evidence could not be projected. Review the workspace inputs and retry.")
+          : notPrepared
+            ? (snapshot.summary || "Run explicit pre-trip terrain preparation; opening Dashboard never starts or writes preparation.")
           : (error || "Reading prepared DTM raster, route samples, and review candidates.");
-      return `
-        <div class="navigation-workspace-map" data-navigation-workspace-map="${stateLabel}" aria-live="polite">
-          <div class="architecture-empty"><div><strong>${escapeHtml(title)}</strong>${escapeHtml(detail)}</div></div>
-        </div>
+      const mapContent = `
+        <svg viewBox="0 0 1000 392" role="img" aria-label="Navigation terrain evidence ${escapeHtml(stateLabel)}">
+          <rect width="1000" height="392" fill="#101813"></rect>
+          <path d="M0 98 H1000 M0 196 H1000 M0 294 H1000 M250 0 V392 M500 0 V392 M750 0 V392" stroke="rgba(233,234,220,.08)" stroke-width="1" fill="none"></path>
+        </svg>
       `;
+      const mapOverlay = `
+        <div class="navigation-workspace-map-status" aria-live="polite"><strong>${escapeHtml(title)}</strong>${escapeHtml(detail)}</div>
+        <div class="navigation-workspace-scale">No terrain vectors or tiles are claimed in this state.</div>
+      `;
+      return renderDashboardMapViewport("navigation-workspace-map",
+        "Navigation terrain evidence map shell",
+        mapContent,
+        {
+          className: "navigation-workspace-map",
+          attributes: `data-navigation-workspace-map="${stateLabel}" data-navigation-evidence-state="${stateLabel}" data-navigation-basemap-layer="none" data-dashboard-basemap-layer="none" data-dashboard-basemap-policy="rudy-twmap-only"`,
+          overlayHtml: mapOverlay,
+          renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
+          wheelZoom: false,
+        },
+      );
     }
 
     function renderNavigationPage(force) {
@@ -22249,6 +22275,15 @@
         const sourceItems = asArray(rawItems);
         const items = sourceItems.map((item, index) => normalizeEvidenceRow(mapper(item), item, `${tabId}:${title}:${index}`));
         const count = Number.isFinite(Number(options.displayCount)) ? Number(options.displayCount) : sourceItems.length;
+        const zeroState = options.zeroState || "fixture or projection returned no items";
+        const zeroReasonCode = options.zeroReasonCode || ({
+          "source checked · no matches": "source_checked_no_matches",
+          "source unavailable": "source_unavailable",
+          "prepared · no candidates": "prepared_no_candidates",
+          "no candidates": "source_checked_no_matches",
+          "completed GPX not imported": "not_imported",
+          "not imported": "not_imported",
+        }[zeroState] || "fixture_or_projection_omission");
         groups.push({
           tabId,
           title,
@@ -22256,7 +22291,8 @@
           count,
           items,
           emptyNote: options.emptyNote || "",
-          zeroState: options.zeroState || "",
+          zeroState,
+          zeroReasonCode,
         });
       };
       state.evidenceItemsBySource = {};

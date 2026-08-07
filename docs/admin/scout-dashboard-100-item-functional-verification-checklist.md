@@ -1324,6 +1324,7 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
+| 2026-08-06 | 內部 qualification remediation：Weather 的 Fit→第一次 `+` 完成 Z13→Z14 active generation；ready fixture 補齊本地可推導 Evidence 與五份 candidate-only Route Context variants；所有 Evidence 零值加入 typed reason，zero-evidence fixture 改為只讀 200 空投影。DASH-030 仍對任何真實零值維持紅燈。 |
 | 2026-08-04 | 新增 DASH-037，禁止 Navigation、Architecture、Weather 在高倍率停用動態換磚；要求 Z13→Z14 與跨 prepared ceiling 的 Z14→Z15 都有同步 UI、active tile 與 Network request 證據。 |
 | 2026-08-03 | Chromium 完成 36/36 Diag all：32 PASS、4 個現況資料／服務 FAIL；DASH-031～036 全數 PASS，且 9/9 Dashboard 地圖完成真實操作回歸，全程 0 POST。 |
 | 2026-08-03 | 新增 DASH-031～036，驗證 Contextual Permission read API、Workbench、Forward Projection、Safety / Emergency 邊界、Evidence lineage 與明確 no-write simulation。 |

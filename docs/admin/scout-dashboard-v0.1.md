@@ -46,6 +46,64 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-08-06 - Apply approved internal qualification remediation
+
+User request:
+
+- Apply the recommendations from the hash-bound internal Dashboard
+  qualification review.
+
+Implementation:
+
+- Bound the approved dispositions for `SCOUT-Q-0009`, `SCOUT-Q-0010`, and
+  `SCOUT-Q-0012` through `SCOUT-Q-0015` to commit
+  `59cdfb4122a9feb868ce281d6bc4c1b7eb4c3a50` and evidence root
+  `0870f8b0947eb3595c5711ebf873dc28b6e5684cee4f2c74a7dd511e2c46c17c`.
+- Updated the stale documentation assertions to treat `AGENTS.md` as active
+  policy rather than a Phase 9 status record, while retaining its stronger
+  fail-closed generated-code network boundary.
+- Isolated raster-label accounting from the workstation tile cache and scoped
+  the raster layer-order assertion to its owning `renderMap` function.
+- Raised Weather's dedicated, still-bounded Rudy+TW viewport allowance to 160
+  tiles. The qualification seed now covers the full Fit and first-zoom viewport
+  without runtime cache writes.
+- Added five clearly synthetic, candidate-only Route Context variant fixtures;
+  no model or external provider is represented as having run.
+- Derived ready-fixture Boss Points, Mileage Tags, risk score points, calibrated
+  heatmap, and CWA/GEE value projections only from existing local fixture
+  artifacts.
+- Every zero Evidence group now carries a typed reason code distinguishing
+  source no-match, source unavailable, prepared empty, not imported, and
+  fixture/projection omission. `DASH-030` remains red whenever any category is
+  zero; typed reasons do not convert empty evidence into a false pass.
+- The deliberate zero-evidence fixture now returns read-only HTTP 200 empty
+  projections for compact, admin-projection, and debug-event reads instead of
+  producing 404/500 noise.
+
+Boundary:
+
+- All added qualification content is synthetic, candidate-only, and explicitly
+  `runtime_safety_truth=false`.
+- No positive Overpass, OSM, CWA, GEE, or model result was fabricated to remove
+  a legitimate zero count.
+- Qualification remains blocked from `QUALIFIED` until the independent reviewer
+  credential is supplied through authorized secret management; no verdict is
+  fabricated in its absence.
+
+Verification:
+
+- Deterministic Dashboard qualification slice: `251 passed`.
+- Repository package baseline: `17 passed`.
+- Qualification bootstrap: `15 passed`.
+- Ruff, JavaScript parse, package lint, package typecheck, and diff whitespace
+  checks: passed.
+- Chromium Weather proof: Fit `Z13 / 1.00x`; first `+` promoted the complete
+  active generation to `Z14 / 1.25x` after 140 native HTTP 200 tile responses,
+  with zero workspace mutation.
+- Chromium `Diag all`: `36 passed / 1 failed`; only `DASH-030` remains red with
+  13 typed zero categories. Route variants now pass and no unexplained zero
+  remains in the bounded ready fixture.
+
 ### 2026-07-29 - Record recurring tile-map visual regression
 
 Defect ID: `DASH-MAP-REG-001`.

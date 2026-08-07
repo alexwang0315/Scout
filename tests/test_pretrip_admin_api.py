@@ -3391,6 +3391,7 @@ def test_pretrip_review_decision_api_rejects_duplicate_candidate_ref_append(tmp_
     assert persisted_log["counts"]["accepted_count"] == 2
     assert persisted_log["counts"]["rejected_count"] == 1
     assert persisted_log["decisions"][-1]["decision"] == "accepted"
+    assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
 
 
 def test_pretrip_review_decision_batch_preview_is_no_write():

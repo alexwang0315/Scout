@@ -865,7 +865,10 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert reload_body.index("const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);") < reload_body.index(
         "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay"
     )
-    assert "await osmPbfVectorPromise;" in reload_body
+    enhancement_barrier = reload_body.split(
+        "const enhancementResults = await Promise.allSettled([", 1
+    )[1].split("]);", 1)[0]
+    assert "osmPbfVectorPromise" in enhancement_barrier
     assert "Weather API overlay" in html
     assert html.index('"Risk Score", view.risk_score?.points') < html.index(
         '"Baseline Risk", view.risk_ribbon?.segments'
@@ -879,10 +882,13 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert html.index('data-layer-group": "imagery"') < html.index(
         'data-layer-group": "osm"'
     )
-    assert html.index("renderRasterLayer(imageryGroup") < html.index(
+    render_map_body = html.split("function renderMap(view)", 1)[1].split(
+        "function scheduleTreeClickFocus", 1
+    )[0]
+    assert render_map_body.index("renderRasterLayer(imageryGroup") < render_map_body.index(
         "RASTER_OVERLAY_LAYER_DEFINITIONS.forEach"
     )
-    assert html.index("RASTER_OVERLAY_LAYER_DEFINITIONS.forEach") < html.index(
+    assert render_map_body.index("RASTER_OVERLAY_LAYER_DEFINITIONS.forEach") < render_map_body.index(
         "renderOsmBasemap(osmGroup"
     )
     assert html.index('data-layer-group": "reference-tracks"') < html.index(
@@ -992,10 +998,10 @@ def test_weather_rudy_twmap_uses_scout_cache_proxy_instead_of_direct_wmts():
     assert 'preparedMaxZoom: 14' in definition
     assert 'maxZoom: 20' in definition
     assert "wmtsLayer" not in definition
-    assert "const RUDY_TWMAP_MAX_TILES = 24" in html
+    assert "const RUDY_TWMAP_MAX_TILES = 160" in html
     assert (
         'const effectiveMaxTiles = layerId === "rudy-twmap" '
-        '? Math.min(maxTiles, RUDY_TWMAP_MAX_TILES) : maxTiles;'
+        '? RUDY_TWMAP_MAX_TILES : maxTiles;'
         in html
     )
     assert "tileCountForZoom(bounds, zoom) > effectiveMaxTiles" in html

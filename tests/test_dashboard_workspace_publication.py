@@ -382,6 +382,29 @@ def test_publication_waits_for_active_dashboard_reader_before_exchange(
     assert _read_generation(live_root) == "new"
 
 
+def test_dashboard_read_lock_does_not_persist_workspace_artifacts(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+    publication = DashboardWorkspacePublication(workspace_root)
+    before = {
+        path.relative_to(workspace_root).as_posix(): path.read_bytes()
+        for path in workspace_root.rglob("*")
+        if path.is_file()
+    }
+
+    with publication.read_snapshot(PROJECT_ID):
+        assert _read_generation(workspace_root / PROJECT_ID) == "old"
+
+    after = {
+        path.relative_to(workspace_root).as_posix(): path.read_bytes()
+        for path in workspace_root.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+
+
 def test_publication_waits_for_reader_in_another_process_before_exchange(
     tmp_path: Path,
 ) -> None:
