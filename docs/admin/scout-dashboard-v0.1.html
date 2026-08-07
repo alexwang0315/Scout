@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Scout Dashboard v0.1 alpha admin shell">
   <link rel="icon" href="data:">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.2.0/dist/maplibre-gl.css" crossorigin="anonymous">
   <title>Scout Dashboard v0.1</title>
   <style>
     :root {
@@ -4280,6 +4281,19 @@
       box-shadow: 0 0 0 4px rgba(77, 201, 135, .12), 0 0 14px rgba(77, 201, 135, .28);
     }
 
+    .diagnostic-case[data-diagnostic-status="warning"] {
+      border-color: rgba(213, 166, 66, .5);
+    }
+
+    .diagnostic-case[data-diagnostic-status="warning"] .diagnostic-status {
+      color: var(--warn);
+    }
+
+    .diagnostic-case[data-diagnostic-status="warning"] .diagnostic-light {
+      background: var(--warn);
+      box-shadow: 0 0 0 4px rgba(213, 166, 66, .13), 0 0 16px rgba(213, 166, 66, .28);
+    }
+
     .diagnostic-case[data-diagnostic-status="failed"] {
       border-color: rgba(208, 99, 99, .58);
     }
@@ -6438,6 +6452,529 @@
       box-shadow: 0 16px 34px rgba(0, 0, 0, .18);
     }
 
+    .navigation-terrain-review-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid var(--terrain-rule);
+      background:
+        linear-gradient(100deg, rgba(239, 91, 12, .12), transparent 34%),
+        linear-gradient(145deg, #15241d, #09110e);
+    }
+
+    .navigation-terrain-review-title small,
+    .navigation-terrain-review-controls small {
+      display: block;
+      color: #7f9388;
+      font: 800 9px var(--mono);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .navigation-terrain-boundary-strip {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(255, 107, 74, .48);
+      background: linear-gradient(90deg, rgba(139, 26, 11, .9), rgba(47, 14, 8, .94));
+      color: #fff5e9;
+    }
+
+    .navigation-terrain-boundary-strip > strong {
+      font: 900 11px var(--mono);
+      letter-spacing: .04em;
+    }
+
+    .navigation-terrain-boundary-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      justify-content: flex-start;
+    }
+
+    .navigation-terrain-boundary-chips span {
+      padding: 4px 6px;
+      border: 1px solid rgba(255, 245, 233, .2);
+      background: rgba(4, 9, 6, .42);
+      color: #f7dbc6;
+      font: 800 8px var(--mono);
+      letter-spacing: .035em;
+    }
+
+    .navigation-terrain-review-title h3 {
+      margin: 5px 0 4px;
+      color: #f2f3e9;
+      font-size: 18px;
+      letter-spacing: -.02em;
+    }
+
+    .navigation-terrain-review-title p {
+      margin: 0;
+      max-width: 760px;
+      color: #9eaea5;
+      font-size: 10px;
+      line-height: 1.5;
+    }
+
+    .navigation-terrain-review-controls {
+      display: grid;
+      gap: 8px;
+      justify-items: end;
+    }
+
+    .navigation-terrain-view-switch,
+    .navigation-terrain-z-switch,
+    .navigation-terrain-domain-switch {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .navigation-terrain-view-switch button,
+    .navigation-terrain-z-switch button,
+    .navigation-terrain-domain-switch button {
+      min-height: 32px;
+      padding: 6px 9px;
+      border: 1px solid rgba(233, 234, 220, .17);
+      background: #0c1712;
+      color: #a2b2a9;
+      font: 800 9px var(--mono);
+      letter-spacing: .035em;
+    }
+
+    .navigation-terrain-view-switch button[aria-pressed="true"],
+    .navigation-terrain-z-switch button[aria-pressed="true"],
+    .navigation-terrain-domain-switch button[aria-pressed="true"] {
+      border-color: var(--terrain-lime);
+      color: #f0f4de;
+      background: #26331e;
+      box-shadow: inset 0 -2px 0 var(--terrain-lime);
+    }
+
+    .navigation-terrain-domain-switch button[aria-pressed="true"] {
+      border-color: var(--terrain-cyan);
+      background: #12313a;
+      box-shadow: inset 0 -2px 0 var(--terrain-cyan);
+    }
+
+    .navigation-terrain-review-stage {
+      display: grid;
+      min-width: 0;
+      background: #050906;
+    }
+
+    .navigation-terrain-review-stage[data-navigation-terrain-view="split"] {
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, .92fr);
+      gap: 1px;
+      background: var(--terrain-rule);
+    }
+
+    .navigation-terrain-review-stage > * { min-width: 0; }
+
+    .navigation-terrain-view-pane {
+      position: relative;
+      min-width: 0;
+      background: #06100c;
+    }
+
+    .navigation-terrain-pane-label {
+      position: absolute;
+      z-index: 7;
+      left: 12px;
+      bottom: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 8px;
+      border: 1px solid rgba(233, 234, 220, .16);
+      background: rgba(5, 11, 8, .84);
+      color: #dce5d8;
+      font: 800 9px var(--mono);
+      letter-spacing: .06em;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .navigation-terrain-pane-label::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--terrain-cyan);
+      box-shadow: 0 0 0 2px rgba(98, 184, 198, .18);
+    }
+
+    .navigation-terrain-maplibre-shell {
+      position: relative;
+      width: 100%;
+      min-height: 460px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 72% 12%, rgba(183, 207, 99, .12), transparent 31%),
+        linear-gradient(155deg, #15241d, #050a07 72%);
+    }
+
+    .navigation-terrain-maplibre-map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      min-height: 460px;
+      background: #0a1510;
+    }
+
+    .navigation-terrain-review-stage:not([data-navigation-terrain-view="split"])
+    .navigation-terrain-maplibre-shell,
+    .navigation-terrain-review-stage:not([data-navigation-terrain-view="split"])
+    .navigation-terrain-maplibre-map {
+      min-height: 590px;
+    }
+
+    .navigation-terrain-maplibre-state {
+      position: absolute;
+      z-index: 8;
+      top: 12px;
+      left: 12px;
+      max-width: min(390px, calc(100% - 92px));
+      padding: 9px 11px;
+      border: 1px solid rgba(233, 234, 220, .25);
+      background: rgba(5, 11, 8, .9);
+      color: #a9bbb0;
+      font-size: 10px;
+      line-height: 1.45;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .navigation-terrain-maplibre-state strong {
+      display: block;
+      margin-bottom: 2px;
+      color: #f4f4e9;
+      font: 900 11px var(--mono);
+      letter-spacing: .055em;
+    }
+
+    .navigation-terrain-maplibre-state[data-navigation-maplibre-state="ready"] {
+      border-color: rgba(183, 207, 99, .48);
+    }
+
+    .navigation-terrain-maplibre-state[data-navigation-maplibre-state="failed"] {
+      border-color: rgba(255, 107, 74, .68);
+      color: #ffd0c3;
+    }
+
+    .navigation-terrain-maplibre-fit {
+      position: absolute;
+      z-index: 9;
+      top: 110px;
+      right: 10px;
+      min-width: 32px;
+      min-height: 32px;
+      padding: 5px 7px;
+      border: 1px solid rgba(233, 234, 220, .32);
+      border-radius: 4px;
+      background: rgba(9, 19, 15, .94);
+      color: #f2f2e8;
+      font: 900 9px var(--mono);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .3);
+    }
+
+    .navigation-terrain-maplibre-shell .maplibregl-ctrl-top-right {
+      top: 10px;
+      right: 10px;
+    }
+
+    .navigation-terrain-maplibre-shell .maplibregl-ctrl-group {
+      border: 1px solid rgba(233, 234, 220, .28);
+      background: rgba(9, 19, 15, .94);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .3);
+    }
+
+    .navigation-terrain-maplibre-shell .maplibregl-ctrl-group button {
+      width: 32px;
+      height: 32px;
+      min-height: 32px;
+      border: 0;
+      border-bottom: 1px solid rgba(233, 234, 220, .14);
+      border-radius: 0;
+      background-color: transparent;
+    }
+
+    .navigation-terrain-maplibre-shell .maplibregl-ctrl-group button:last-child {
+      border-bottom: 0;
+    }
+
+    .navigation-terrain-maplibre-shell .maplibregl-ctrl-icon {
+      filter: invert(1) brightness(1.6);
+    }
+
+    .navigation-terrain-maplibre-shell .maplibregl-ctrl-attrib {
+      max-width: calc(100% - 24px);
+      background: rgba(5, 11, 8, .78);
+      color: #dce6df;
+      font-size: 9px;
+    }
+
+    .navigation-terrain-maplibre-shell .maplibregl-ctrl-attrib a {
+      color: #dce6df;
+    }
+
+    .navigation-terrain-maplibre-shell canvas:focus-visible {
+      outline: 3px solid var(--terrain-cyan);
+      outline-offset: -3px;
+    }
+
+    .navigation-terrain-mesh {
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      min-height: 400px;
+      aspect-ratio: 432 / 169;
+      background:
+        radial-gradient(circle at 72% 12%, rgba(183, 207, 99, .08), transparent 30%),
+        linear-gradient(155deg, #101d17, #050a07 72%);
+    }
+
+    .navigation-terrain-mesh svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .navigation-terrain-mesh-face {
+      stroke: rgba(4, 10, 7, .34);
+      stroke-width: .55;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .navigation-terrain-mesh-line {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      paint-order: stroke;
+    }
+
+    .navigation-terrain-mesh-line.is-ridge {
+      stroke: var(--navigation-ridge);
+      stroke-width: 3.5;
+      filter: drop-shadow(0 1px 1px #04100a);
+    }
+
+    .navigation-terrain-mesh-line.is-drainage {
+      stroke: #0089d6;
+      stroke-width: 3.2;
+      stroke-dasharray: 7 3;
+      filter: drop-shadow(0 1px 1px #04100a);
+    }
+
+    .navigation-terrain-mesh-line.is-route {
+      stroke: var(--navigation-route);
+      stroke-width: 4.2;
+      filter: drop-shadow(0 0 2px #fff) drop-shadow(0 1px 2px #030806);
+    }
+
+    .navigation-terrain-mesh-saddle {
+      fill: #ffd54b;
+      stroke: #07110e;
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .navigation-terrain-mesh-status {
+      position: absolute;
+      z-index: 4;
+      top: 12px;
+      right: 12px;
+      max-width: min(310px, calc(100% - 24px));
+      padding: 9px 11px;
+      border: 1px solid rgba(233, 234, 220, .17);
+      background: rgba(5, 11, 8, .87);
+      color: #9fb0a6;
+      font-size: 9px;
+      line-height: 1.45;
+      backdrop-filter: blur(8px);
+    }
+
+    .navigation-terrain-mesh-status strong {
+      display: block;
+      color: #eef1e5;
+      font: 800 10px var(--mono);
+      letter-spacing: .06em;
+    }
+
+    .navigation-review-queue {
+      border: 1px solid var(--terrain-rule);
+      background: #0d1713;
+    }
+
+    .navigation-terrain-evidence-inspector {
+      display: grid;
+      grid-template-columns: minmax(240px, .85fr) minmax(0, 1.15fr);
+      gap: 1px;
+      border-top: 1px solid var(--terrain-rule);
+      background: var(--terrain-rule);
+    }
+
+    .navigation-terrain-profile,
+    .navigation-terrain-support-audit {
+      min-width: 0;
+      padding: 13px;
+      background: #0b1510;
+    }
+
+    .navigation-terrain-inspector-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+    }
+
+    .navigation-terrain-inspector-head strong {
+      color: #f0f1e7;
+      font: 900 10px var(--mono);
+      letter-spacing: .055em;
+    }
+
+    .navigation-terrain-inspector-head small {
+      color: #84968c;
+      font: 800 8px var(--mono);
+      text-transform: uppercase;
+    }
+
+    .navigation-terrain-profile svg {
+      display: block;
+      width: 100%;
+      height: 88px;
+      border: 1px solid rgba(233, 234, 220, .12);
+      background: #07100c;
+    }
+
+    .navigation-terrain-support-meter {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .navigation-terrain-support-meter div {
+      min-width: 0;
+      padding: 7px;
+      border: 1px solid rgba(233, 234, 220, .12);
+      background: rgba(233, 234, 220, .035);
+    }
+
+    .navigation-terrain-support-meter small,
+    .navigation-terrain-support-meter strong {
+      display: block;
+    }
+
+    .navigation-terrain-support-meter small {
+      color: #82948a;
+      font: 800 7px var(--mono);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .navigation-terrain-support-meter strong {
+      margin-top: 3px;
+      color: #edf0e5;
+      font-size: 10px;
+      overflow-wrap: anywhere;
+    }
+
+    .navigation-terrain-audit-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .navigation-terrain-audit-badges span {
+      padding: 5px 7px;
+      border: 1px solid rgba(183, 207, 99, .24);
+      background: rgba(183, 207, 99, .07);
+      color: #cfdfa1;
+      font: 900 8px var(--mono);
+      letter-spacing: .045em;
+    }
+
+    .navigation-terrain-audit-badges span.is-blocker {
+      border-color: rgba(255, 107, 74, .5);
+      background: rgba(255, 107, 74, .1);
+      color: #ffb29e;
+    }
+
+    .navigation-review-queue-body {
+      display: grid;
+      gap: 9px;
+      padding: 13px;
+    }
+
+    .navigation-review-selected {
+      padding: 10px;
+      border-left: 3px solid var(--terrain-amber);
+      background: rgba(240, 174, 59, .07);
+    }
+
+    .navigation-review-selected small,
+    .navigation-review-selected strong,
+    .navigation-review-selected span {
+      display: block;
+    }
+
+    .navigation-review-selected small {
+      color: #84968c;
+      font: 800 8px var(--mono);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .navigation-review-selected strong {
+      margin-top: 4px;
+      color: #eef0e5;
+      font-size: 12px;
+    }
+
+    .navigation-review-selected span {
+      margin-top: 4px;
+      color: #9bac9f;
+      font-size: 9px;
+      line-height: 1.45;
+    }
+
+    .navigation-review-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .navigation-review-actions button {
+      min-height: 38px;
+      padding: 7px 5px;
+      border: 1px solid rgba(233, 234, 220, .15);
+      background: #14211b;
+      color: #a8b8ad;
+      font-size: 9px;
+    }
+
+    .navigation-review-actions button[aria-pressed="true"] {
+      border-color: var(--terrain-cyan);
+      color: #ecf5f2;
+      box-shadow: inset 0 -2px 0 var(--terrain-cyan);
+    }
+
+    .navigation-review-boundary {
+      margin: 0;
+      color: #768a7f;
+      font-size: 9px;
+      line-height: 1.45;
+    }
+
     .navigation-terrain-map-head,
     .navigation-terrain-detail-head,
     .navigation-reading-head {
@@ -7396,8 +7933,12 @@
       }
       .navigation-terrain-workspace { grid-template-columns: 1fr; }
       .navigation-terrain-side { grid-template-columns: 1fr 1fr; }
+      .navigation-terrain-evidence-inspector { grid-template-columns: 1fr; }
       .navigation-evidence-workbench { grid-template-columns: 1fr 1fr; }
       .navigation-reading-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .navigation-terrain-review-stage[data-navigation-terrain-view="split"] {
+        grid-template-columns: 1fr 1fr;
+      }
     }
 
     @media (max-width: 720px) {
@@ -7415,6 +7956,16 @@
       }
       .navigation-terrain-map svg { width: 720px; }
       .navigation-terrain-legend { grid-template-columns: 1fr 1fr; }
+      .navigation-terrain-review-bar { grid-template-columns: 1fr; }
+      .navigation-terrain-review-controls { justify-items: start; }
+      .navigation-terrain-view-switch,
+      .navigation-terrain-z-switch,
+      .navigation-terrain-domain-switch { justify-content: flex-start; }
+      .navigation-terrain-boundary-strip { grid-template-columns: 1fr; }
+      .navigation-terrain-boundary-chips { justify-content: flex-start; }
+      .navigation-terrain-review-stage[data-navigation-terrain-view="split"] {
+        grid-template-columns: 1fr;
+      }
       .navigation-workspace-map {
         min-height: 330px;
         aspect-ratio: auto;
@@ -7425,8 +7976,21 @@
         max-width: none;
       }
       .navigation-workspace-map { overflow-x: hidden; }
+      .navigation-terrain-mesh {
+        min-height: 330px;
+        aspect-ratio: auto;
+      }
+      .navigation-terrain-maplibre-shell,
+      .navigation-terrain-maplibre-map,
+      .navigation-terrain-review-stage:not([data-navigation-terrain-view="split"])
+      .navigation-terrain-maplibre-shell,
+      .navigation-terrain-review-stage:not([data-navigation-terrain-view="split"])
+      .navigation-terrain-maplibre-map {
+        min-height: 430px;
+      }
       .navigation-feature-gap-grid,
       .navigation-live-metrics { grid-template-columns: 1fr; }
+      .navigation-terrain-support-meter { grid-template-columns: 1fr 1fr; }
       .navigation-terrain-side { grid-template-columns: 1fr; }
       .navigation-evidence-workbench { grid-template-columns: 1fr; }
       .navigation-reading-list { grid-template-columns: 1fr; }
@@ -9129,7 +9693,7 @@
       {id: "DASH-027", category: "Map & Evidence", title: "所有 Dashboard 地圖框選縮放與鍵盤平移", description: "確認目前 registry 內每張地圖都支援矩形框選放大／縮小、方向鍵平移，並停用滑鼠滾輪縮放。", run: diagnosticCheck027},
       {id: "DASH-028", category: "Map & Evidence", title: "所有 Dashboard 地圖圖磚、向量與單圖例外政策", description: "確認主 Map 保留完整圖層，其餘 8 張圖只用 Rudy+TW basemap；單一圖片僅限明確允許的主題 overlay。", run: diagnosticCheck028},
       {id: "DASH-029", category: "Map & Evidence", title: "所有 Dashboard 地圖基本 Zoom、Pan 與 Fit", description: "確認目前 registry 內每張地圖都具備按鈕／框選縮放、滑鼠平移與 Fit／Reset。", run: diagnosticCheck029},
-      {id: "DASH-030", category: "Map & Evidence", title: "Evidence 是否有計數為 0 的類別", description: "確認 Evidence 群組與 Evidence Timeline 子類別沒有 count=0；若有則列出類別名稱。", run: diagnosticCheck030},
+      {id: "DASH-030", category: "Map & Evidence", title: "Evidence 是否有計數為 0 的類別", description: "確認 Evidence 群組與 Evidence Timeline 子類別的 count=0 都有原因；合理且具 typed reason 的零值顯示黃燈，無法解釋的零值顯示紅燈。", run: diagnosticCheck030},
       {id: "DASH-031", category: "Exploring for Six Axis / Contextual Permission", title: "Contextual Permission 專案範圍與只讀 API", description: "確認 selected project、schema 與 candidate/no-authority 邊界；只執行 GET。", run: diagnosticCheck031},
       {id: "DASH-032", category: "Exploring for Six Axis / Contextual Permission", title: "Contextual Permission Workbench 與行動版檢視", description: "確認 Current Decision、Remaining Mission、Risk Budget、Evidence、Map 與四個 mobile views。", run: diagnosticCheck032},
       {id: "DASH-033", category: "Exploring for Six Axis / Contextual Permission", title: "Immutable Baseline、Forward Projection 與調整政策", description: "比較 Baseline/Replay，確認 hash binding、debt once 與三種 plan-node adjustment policy。", run: diagnosticCheck033},
@@ -9368,6 +9932,13 @@
     const NAVIGATION_RUDY_TILE_SOURCE = DASHBOARD_RUDY_TILE_SOURCE;
     const NAVIGATION_RUDY_VIEWBOX = DASHBOARD_RUDY_VIEWBOX;
     const NAVIGATION_RUDY_INITIAL_TILE_LIMIT = DASHBOARD_RUDY_INITIAL_TILE_LIMIT;
+    const NAVIGATION_MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.2.0/dist/maplibre-gl.mjs";
+    const navigationTerrainMapLibreRuntime = {
+      generation: 0,
+      maps: [],
+      modulePromise: null,
+      synchronizing: false,
+    };
 
     const WEATHER_LAYER_DEFINITIONS = Object.freeze([
       {id: "soil-moisture", label: "Soil moisture", detail: "SMAP L4 hydrology context"},
@@ -9729,6 +10300,12 @@
       navigationSelectedFeatureId: "saddle-west",
       navigationTerrainLens: "structure",
       navigationTerrainSourceMode: "workspace",
+      navigationTerrainViewMode: "split",
+      navigationTerrainEvidenceDomain: "observed",
+      navigationTerrainVerticalExaggeration: 1.5,
+      navigationTerrainReviewDrafts: {},
+      navigationTerrainReviewArtifactFingerprint: "",
+      navigationSelectedHierarchyEdgeId: "",
       navigationTerrainData: null,
       navigationTerrainPollTimer: null,
       navigationSelectedLivePointId: "",
@@ -10824,10 +11401,22 @@
 
     async function loadNavigationTerrainData() {
       try {
-        state.navigationTerrainData = await fetchJson(
+        const nextNavigationTerrainData = await fetchJson(
           `/admin/pretrip/projects/${encodeURIComponent(projectId())}/navigation-terrain-intelligence`,
           {timeoutMs: NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS},
         );
+        const nextFingerprint = String(
+          nextNavigationTerrainData?.projection_compilation?.input_fingerprint || "",
+        );
+        if (
+          nextFingerprint
+          && state.navigationTerrainReviewArtifactFingerprint
+          && nextFingerprint !== state.navigationTerrainReviewArtifactFingerprint
+        ) {
+          state.navigationTerrainReviewDrafts = {};
+        }
+        state.navigationTerrainReviewArtifactFingerprint = nextFingerprint;
+        state.navigationTerrainData = nextNavigationTerrainData;
       } catch (error) {
         stopNavigationTerrainPolling();
         state.navigationTerrainData = null;
@@ -10852,6 +11441,10 @@
       const firstTerrainEvent = asArray(state.navigationTerrainData?.route_terrain_events?.events)[0];
       if (!state.navigationSelectedTerrainEventId && firstTerrainEvent?.id) {
         state.navigationSelectedTerrainEventId = String(firstTerrainEvent.id);
+      }
+      const firstHierarchyEdge = asArray(state.navigationTerrainData?.terrain_hierarchy?.edges)[0];
+      if (!state.navigationSelectedHierarchyEdgeId && firstHierarchyEdge?.id) {
+        state.navigationSelectedHierarchyEdgeId = String(firstHierarchyEdge.id);
       }
       return state.navigationTerrainData;
     }
@@ -11543,6 +12136,7 @@
     }
 
     function render() {
+      destroyNavigationTerrainMapLibre();
       const workspace = document.getElementById("workspace");
       const evidence = document.getElementById("dashboardEvidence");
       const contentGrid = document.querySelector(".content-grid");
@@ -11599,6 +12193,9 @@
       }
       evidence.innerHTML = renderEvidenceDrawer(route);
       bindRenderedControls();
+      if (route === "outdoor-navigation") {
+        void initializeNavigationTerrainMapLibre();
+      }
       if (route === "map") {
         dashboardMap.focus?.({ preventScroll: true });
       } else if (route === "agent") {
@@ -14683,6 +15280,7 @@
         idle: results.filter(result => result.status === "idle").length,
         running: results.filter(result => result.status === "running").length,
         passed: results.filter(result => result.status === "passed").length,
+        warning: results.filter(result => result.status === "warning").length,
         failed: results.filter(result => result.status === "failed").length,
       };
     }
@@ -14736,6 +15334,7 @@
             ${[
               ["total", "Total", summary.total],
               ["passed", "Passed", summary.passed],
+              ["warning", "Warnings", summary.warning],
               ["failed", "Failed", summary.failed],
               ["running", "Running", summary.running],
               ["idle", "Not run", summary.idle],
@@ -14779,6 +15378,10 @@
 
     function diagnosticRequire(condition, message) {
       if (!condition) throw new Error(message);
+    }
+
+    function diagnosticWarning(detail) {
+      return {status: "warning", detail};
     }
 
     function diagnosticMarkupRoot(markup) {
@@ -15865,12 +16468,22 @@
       const groups = pretripEvidenceGroups(project);
       diagnosticRequire(groups.length > 0, "No Evidence categories were returned.");
       const zeroCountCategories = diagnosticZeroCountEvidenceCategories(project);
+      const unexplainedZeroCountCategories = zeroCountCategories.filter(item =>
+        item.includes("[fixture_or_projection_omission]"),
+      );
+      const unexplainedNames = unexplainedZeroCountCategories.slice(0, 8).join(", ");
+      const unexplainedRemaining = Math.max(0, unexplainedZeroCountCategories.length - 8);
+      diagnosticRequire(
+        unexplainedZeroCountCategories.length === 0,
+        `${unexplainedZeroCountCategories.length} Evidence categories count=0: ${unexplainedNames}${unexplainedRemaining ? ` (+${unexplainedRemaining} more)` : ""}`,
+      );
       const visibleNames = zeroCountCategories.slice(0, 8).join(", ");
       const remaining = Math.max(0, zeroCountCategories.length - 8);
-      diagnosticRequire(
-        zeroCountCategories.length === 0,
-        `${zeroCountCategories.length} Evidence categories count=0: ${visibleNames}${remaining ? ` (+${remaining} more)` : ""}`,
-      );
+      if (zeroCountCategories.length > 0) {
+        return diagnosticWarning(
+          `${zeroCountCategories.length} Evidence categories count=0 with typed reasons: ${visibleNames}${remaining ? ` (+${remaining} more)` : ""}`,
+        );
+      }
       return `${groups.length} Evidence groups checked · no count=0 categories`;
     }
 
@@ -16303,10 +16916,11 @@
       });
       updateDiagnosticDom(caseId);
       try {
-        const detail = await item.run();
+        const outcome = await item.run();
+        const warning = outcome?.status === "warning";
         diagnosticSetResult(caseId, {
-          status: "passed",
-          detail: diagnosticSafeDetail(detail),
+          status: warning ? "warning" : "passed",
+          detail: diagnosticSafeDetail(warning ? outcome.detail : outcome),
           durationMs: performance.now() - startedAt,
           checkedAt: new Date().toISOString(),
         });
@@ -18147,6 +18761,8 @@
         status: error ? "unavailable" : "loading",
         project_id: projectId(),
         terrain_surface: {overlays: [], slope_class_counts: {}},
+        terrain_mesh: {status: "not_prepared", vertices: [], triangles: [], sampling: {adds_source_resolution: false}},
+        terrain_passage_prior: {status: "not_prepared", source_path_counts: {}, dominant_patterns: [], learning_contract: {osm_absence_semantics: "unknown", negative_labels_created: false}},
         route_samples: {source_count: 0, rendered_count: 0, points: []},
         risk_candidates: {source_count: 0, rendered_count: 0, points: []},
         feature_extraction: {},
@@ -18704,13 +19320,936 @@
       return Math.max(2, Math.min(96, halfWidthM * 2 * pixelsPerM));
     }
 
+    function navigationTerrainMeshProject(vertex, mesh, verticalExaggeration = 1) {
+      const minimumElevation = Number(mesh?.minimum_elevation_m);
+      const maximumElevation = Number(mesh?.maximum_elevation_m);
+      const elevationRange = Math.max(1, maximumElevation - minimumElevation);
+      const normalizedElevation = (
+        Number(vertex?.elevation_m) - minimumElevation
+      ) / elevationRange;
+      const worldX = (Number(vertex?.u) - .5) * 660;
+      const worldY = (.5 - Number(vertex?.v)) * 440;
+      return {
+        x: 500 + worldX * .85 - worldY * .5,
+        y: 286 + worldX * .1 + worldY * .28
+          - normalizedElevation * 150 * Number(verticalExaggeration || 1),
+        depth: worldY * .72 + worldX * .1,
+        normalizedElevation,
+      };
+    }
+
+    function navigationTerrainMeshNearestVertex(mesh, u, v) {
+      const columns = Math.max(1, Number(mesh?.sampled_column_count || 1));
+      const rows = Math.max(1, Number(mesh?.sampled_row_count || 1));
+      const vertices = asArray(mesh?.vertices);
+      if (mesh?.sampling?.horizontal_method === "deterministic_supported_source_quad_sampling") {
+        return vertices.reduce((nearest, vertex) => {
+          if (!vertex?.supported) return nearest;
+          const distance = (Number(vertex.u) - u) ** 2 + (Number(vertex.v) - v) ** 2;
+          return !nearest || distance < nearest.distance ? {vertex, distance} : nearest;
+        }, null)?.vertex || null;
+      }
+      const targetColumn = Math.max(0, Math.min(columns - 1, Math.round(u * (columns - 1))));
+      const targetRow = Math.max(0, Math.min(rows - 1, Math.round(v * (rows - 1))));
+      for (let radius = 0; radius < Math.max(columns, rows); radius += 1) {
+        const candidates = [];
+        for (let row = Math.max(0, targetRow - radius); row <= Math.min(rows - 1, targetRow + radius); row += 1) {
+          for (let column = Math.max(0, targetColumn - radius); column <= Math.min(columns - 1, targetColumn + radius); column += 1) {
+            if (radius && Math.abs(column - targetColumn) < radius && Math.abs(row - targetRow) < radius) continue;
+            const vertex = vertices[row * columns + column];
+            if (vertex?.supported) candidates.push(vertex);
+          }
+        }
+        if (candidates.length) {
+          return candidates.reduce((nearest, vertex) => {
+            const distance = (Number(vertex.u) - u) ** 2 + (Number(vertex.v) - v) ** 2;
+            return !nearest || distance < nearest.distance ? {vertex, distance} : nearest;
+          }, null)?.vertex || null;
+        }
+      }
+      return null;
+    }
+
+    function navigationTerrainMeshCoordinate(
+      point,
+      mesh,
+      bounds,
+      verticalExaggeration = 1,
+    ) {
+      const normalizedBounds = navigationRudyBounds(bounds);
+      const lon = Number(point?.lon);
+      const lat = Number(point?.lat);
+      if (!normalizedBounds || !Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+      const u = (lon - normalizedBounds.west) / (normalizedBounds.east - normalizedBounds.west);
+      const v = (lat - normalizedBounds.south) / (normalizedBounds.north - normalizedBounds.south);
+      if (u < -.03 || u > 1.03 || v < -.03 || v > 1.03) return null;
+      const supportVertex = navigationTerrainMeshNearestVertex(mesh, u, v);
+      if (!supportVertex) return null;
+      return navigationTerrainMeshProject(
+        {...supportVertex, u, v},
+        mesh,
+        verticalExaggeration,
+      );
+    }
+
+    function navigationTerrainMeshOverlayPath(
+      points,
+      mesh,
+      bounds,
+      verticalExaggeration,
+    ) {
+      return asArray(points)
+        .map(point => navigationTerrainMeshCoordinate(point, mesh, bounds, verticalExaggeration))
+        .filter(Boolean)
+        .map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+        .join(" ");
+    }
+
+    function navigationTerrainMeshFaceColor(normalizedElevation, relief) {
+      const normalized = Math.max(0, Math.min(1, Number(normalizedElevation || 0)));
+      const hue = 148 - normalized * 102;
+      const saturation = 31 + normalized * 13;
+      const lightness = 22 + normalized * 25 - Math.min(7, Number(relief || 0) * .08);
+      return `hsl(${hue.toFixed(0)} ${saturation.toFixed(0)}% ${lightness.toFixed(0)}%)`;
+    }
+
+    function navigationTerrainEvidenceDomain() {
+      return ["terrain", "observed", "prior"].includes(state.navigationTerrainEvidenceDomain)
+        ? state.navigationTerrainEvidenceDomain
+        : "terrain";
+    }
+
+    function renderNavigationTerrainTopDownLayer(mesh) {
+      if (mesh?.status !== "visualization_mesh") {
+        return '<rect width="1000" height="392" fill="#07100c"></rect>';
+      }
+      const vertices = asArray(mesh.vertices);
+      const minimum = Number(mesh.minimum_elevation_m || 0);
+      const span = Math.max(1, Number(mesh.maximum_elevation_m || 0) - minimum);
+      const faces = asArray(mesh.triangles).map(triangle => {
+        const source = asArray(triangle).map(id => vertices[Number(id)]);
+        if (source.length !== 3 || source.some(point => !point?.supported)) return "";
+        const elevationValues = source.map(point => Number(point.elevation_m));
+        const normalizedElevation = (
+          elevationValues.reduce((sum, value) => sum + value, 0) / elevationValues.length
+          - minimum
+        ) / span;
+        const points = source
+          .map(point => `${(Number(point.u) * 1000).toFixed(1)},${((1 - Number(point.v)) * 392).toFixed(1)}`)
+          .join(" ");
+        return `<polygon points="${points}" fill="${navigationTerrainMeshFaceColor(normalizedElevation, Math.max(...elevationValues) - Math.min(...elevationValues))}" stroke="rgba(233,234,220,.09)" stroke-width=".55"></polygon>`;
+      }).join("");
+      return `
+        <rect width="1000" height="392" fill="#07100c"></rect>
+        ${faces}
+        <path d="M0 98 H1000 M0 196 H1000 M0 294 H1000 M250 0 V392 M500 0 V392 M750 0 V392" stroke="rgba(233,234,220,.07)" stroke-width="1" fill="none"></path>
+      `;
+    }
+
+    function renderNavigationTerrainMesh(snapshot) {
+      const mesh = snapshot?.terrain_mesh || {};
+      const bounds = snapshot?.terrain_surface?.bbox_wgs84;
+      const verticalExaggeration = [1, 1.5, 2].includes(
+        Number(state.navigationTerrainVerticalExaggeration),
+      ) ? Number(state.navigationTerrainVerticalExaggeration) : 1;
+      if (mesh.status !== "visualization_mesh" || !asArray(mesh.triangles).length) {
+        return `
+          <div class="navigation-terrain-mesh" data-navigation-terrain-3d="true" data-navigation-terrain-mesh-status="not-prepared">
+            <div class="navigation-terrain-mesh-status"><strong>3D TERRAIN · NOT PREPARED</strong>目前工作區沒有可安全投影的 bounded DEM mesh；不以平面假模型填補。</div>
+          </div>
+        `;
+      }
+      const vertices = asArray(mesh.vertices);
+      const projectedVertices = vertices.map(vertex => (
+        vertex?.supported
+          ? navigationTerrainMeshProject(vertex, mesh, verticalExaggeration)
+          : null
+      ));
+      const faces = asArray(mesh.triangles)
+        .map(triangle => {
+          const ids = asArray(triangle).map(Number);
+          const projected = ids.map(id => projectedVertices[id]);
+          const source = ids.map(id => vertices[id]);
+          if (projected.some(point => !point) || source.some(point => !point?.supported)) return null;
+          const elevationValues = source.map(point => Number(point.elevation_m));
+          const normalizedElevation = projected.reduce((sum, point) => sum + point.normalizedElevation, 0) / projected.length;
+          return {
+            depth: projected.reduce((sum, point) => sum + point.depth, 0) / projected.length,
+            points: projected.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" "),
+            fill: navigationTerrainMeshFaceColor(
+              normalizedElevation,
+              Math.max(...elevationValues) - Math.min(...elevationValues),
+            ),
+          };
+        })
+        .filter(Boolean)
+        .sort((left, right) => left.depth - right.depth);
+      const lens = state.navigationTerrainLens || "structure";
+      const evidenceDomain = navigationTerrainEvidenceDomain();
+      const hierarchyPaths = ["structure", "events"].includes(lens)
+        ? asArray(snapshot?.terrain_hierarchy?.edges).map(edge => ({
+            ...edge,
+            path: navigationTerrainMeshOverlayPath(
+              sampleCoordinates(asArray(edge.coordinates), 18),
+              mesh,
+              bounds,
+              verticalExaggeration,
+            ),
+          })).filter(edge => edge.path)
+        : [];
+      const routePath = evidenceDomain === "observed"
+        ? navigationTerrainMeshOverlayPath(
+            sampleCoordinates(asArray(snapshot?.route_samples?.points), 120),
+            mesh,
+            bounds,
+            verticalExaggeration,
+          )
+        : "";
+      const saddlePoints = asArray(snapshot?.terrain_hierarchy?.nodes)
+        .filter(node => node.kind === "saddle_node")
+        .map(node => ({
+          ...node,
+          position: navigationTerrainMeshCoordinate(node, mesh, bounds, verticalExaggeration),
+        }))
+        .filter(node => node.position);
+      return `
+        <div
+          class="navigation-terrain-mesh"
+          data-navigation-terrain-3d="true"
+          data-navigation-terrain-mesh-status="visualization-mesh"
+          data-navigation-terrain-vertical-exaggeration="${verticalExaggeration}"
+        >
+          <svg viewBox="0 0 1000 392" role="img" aria-label="Bounded DEM 2.5D terrain mesh with synchronized ridge, drainage, saddle and route candidates">
+            <rect width="1000" height="392" fill="#07100c"></rect>
+            ${faces.map(face => `<polygon class="navigation-terrain-mesh-face" points="${face.points}" fill="${face.fill}"></polygon>`).join("")}
+            ${hierarchyPaths.map(edge => `
+              <path
+                class="navigation-terrain-mesh-line ${["drainage_trunk", "tributary"].includes(edge.kind) ? "is-drainage" : "is-ridge"}"
+                data-navigation-terrain-3d-edge-kind="${escapeHtml(edge.kind)}"
+                data-navigation-terrain-select-edge="${escapeHtml(edge.id)}"
+                role="button"
+                tabindex="0"
+                d="${edge.path}"
+              ><title>${escapeHtml(navigationTerrainHierarchyLabel(edge.kind))} · snapped to display mesh</title></path>
+            `).join("")}
+            ${routePath ? `<path class="navigation-terrain-mesh-line is-route" data-navigation-terrain-3d-route="true" d="${routePath}"><title>Prepared GPX baseline · candidate context only</title></path>` : ""}
+            ${lens === "structure" ? saddlePoints.map(node => `
+              <g transform="translate(${node.position.x.toFixed(1)} ${node.position.y.toFixed(1)})" data-navigation-terrain-3d-saddle="${escapeHtml(node.id)}">
+                <path class="navigation-terrain-mesh-saddle" d="M0 -8 L8 0 L0 8 L-8 0 Z"></path>
+                <title>鞍部候選 · ${escapeHtml(node.id)} · human review required</title>
+              </g>
+            `).join("") : ""}
+          </svg>
+          <div class="navigation-terrain-mesh-status">
+            <strong>ORTHOGRAPHIC 2.5D · C1 · AZ 315° · ELEV 35° · ${verticalExaggeration.toFixed(1)}× Z</strong>
+            ${formatInteger(mesh.vertex_count)} vertices · ${formatInteger(mesh.triangle_count)} faces · ${valueOrDash(mesh.source_cell_resolution_m)}m source cells<br>
+            視覺化抽稀，不增加 DEM 原始解析度；缺值保留為洞。${verticalExaggeration > 1 ? " Vertical exaggeration — visual only." : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderNavigationTerrainMapLibreHost(snapshot, mode) {
+      const dem = snapshot?.terrain_raster_dem || {};
+      const ready = dem.status === "ready"
+        && Boolean(dem.tile_url_template)
+        && Boolean(navigationRudyBounds(dem.bounds_wgs84));
+      const isTerrain = mode === "3d";
+      const evidenceDomain = navigationTerrainEvidenceDomain();
+      const sourceLabel = evidenceDomain === "observed"
+        ? "Rudy+TW + prepared DEM"
+        : evidenceDomain === "prior"
+          ? "Prepared DEM + non-spatial learned prior"
+          : "Prepared DEM only";
+      const stateText = ready
+        ? `${formatInteger(dem.tile_count)} complete Z${formatInteger(dem.minzoom)} Terrain RGB tiles · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${sourceLabel}`
+        : "Prepared Terrain RGB tiles are unavailable. The workbench will not synthesize a flat or gap-filled surface.";
+      return `
+        <div
+          class="navigation-terrain-maplibre-shell"
+          data-navigation-maplibre-shell="${escapeHtml(mode)}"
+          ${isTerrain ? 'data-navigation-terrain-3d="true"' : 'data-navigation-workspace-map="true"'}
+          data-navigation-terrain-dem-status="${escapeHtml(dem.status || "not_prepared")}"
+        >
+          <div
+            class="navigation-terrain-maplibre-map"
+            data-navigation-maplibre-map="${escapeHtml(mode)}"
+            data-navigation-maplibre-status="${ready ? "pending" : "not-prepared"}"
+            data-navigation-evidence-domain="${escapeHtml(evidenceDomain)}"
+            data-dashboard-map-surface="navigation-map"
+            data-dashboard-basemap-layer="${evidenceDomain === "observed" ? "rudy-twmap" : "none"}"
+            data-dashboard-basemap-policy="rudy-twmap-only"
+            tabindex="0"
+            role="application"
+            aria-label="${isTerrain ? "Interactive MapLibre 3D terrain review map" : "Interactive MapLibre 2D terrain evidence map"}"
+            aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0"
+          ></div>
+          <button
+            type="button"
+            class="navigation-terrain-maplibre-fit"
+            data-navigation-maplibre-fit="${escapeHtml(mode)}"
+            ${ready ? "" : "disabled"}
+          >FIT</button>
+          <div
+            class="navigation-terrain-maplibre-state"
+            data-navigation-maplibre-state="${ready ? "loading" : "failed"}"
+            aria-live="polite"
+          ><strong>${isTerrain ? "MAPLIBRE 3D TERRAIN" : "MAPLIBRE 2D EVIDENCE"}</strong>${escapeHtml(stateText)}</div>
+        </div>
+      `;
+    }
+
+    function renderNavigationTerrainReviewWorkbench(
+      snapshot,
+      selectedPoint,
+      selectedStructurePoint,
+      selectedEvent,
+    ) {
+      const viewMode = ["map", "terrain", "split"].includes(state.navigationTerrainViewMode)
+        ? state.navigationTerrainViewMode
+        : "split";
+      const verticalExaggeration = Number(state.navigationTerrainVerticalExaggeration || 1);
+      const evidenceDomain = navigationTerrainEvidenceDomain();
+      const mesh = snapshot?.terrain_mesh || {};
+      const terrainDem = snapshot?.terrain_raster_dem || {};
+      const mapPane = `
+        <div class="navigation-terrain-view-pane" data-navigation-terrain-pane="2d">
+          ${renderNavigationTerrainMapLibreHost(snapshot, "2d")}
+          <span class="navigation-terrain-pane-label">${evidenceDomain === "observed" ? "2D 觀測脈絡 · Rudy+TW" : evidenceDomain === "prior" ? "2D DEM · 學習先驗已揭露" : "2D DEM 地形證據"}</span>
+        </div>
+      `;
+      const terrainPane = `
+        <div class="navigation-terrain-view-pane" data-navigation-terrain-pane="3d">
+          ${renderNavigationTerrainMapLibreHost(snapshot, "3d")}
+          <span class="navigation-terrain-pane-label">MAPLIBRE 3D 地形形態複核</span>
+        </div>
+      `;
+      return `
+        <div class="navigation-terrain-boundary-strip" data-navigation-candidate-only-strip="true">
+          <strong>CANDIDATE-ONLY TERRAIN REVIEW — Not trail existence, passability, legality, or safety truth</strong>
+          <div class="navigation-terrain-boundary-chips">
+            <span>DEM spacing: ${valueOrDash(terrainDem.source_cell_resolution_m || mesh.source_cell_resolution_m)} m</span>
+            <span>Terrain RGB: ${escapeHtml(terrainDem.encoding || "not prepared")}</span>
+            <span>Adds source resolution: No</span>
+            <span>Z: ${verticalExaggeration.toFixed(1)}×</span>
+            <span>Camera: MapLibre perspective / north-up 2D</span>
+            <span>Draft review: Unsaved</span>
+          </div>
+        </div>
+        <div class="navigation-terrain-review-bar" data-navigation-terrain-review-workbench="true">
+          <div class="navigation-terrain-review-title">
+            <small>SCOUT · TERRAIN READING / HUMAN REVIEW</small>
+            <h3>地形判讀與人工審核工作台</h3>
+            <p>同時檢查等高線、DEM 形態、地形骨架與路線關係；所有線面仍是候選證據，不是步道、通行或安全結論。</p>
+          </div>
+          <div class="navigation-terrain-review-controls">
+            <small>證據域明示 · 視圖同步 · Z exaggeration 明示</small>
+            <div class="navigation-terrain-domain-switch" role="group" aria-label="Terrain evidence domain">
+              ${[
+                ["terrain", "Terrain Evidence Only"],
+                ["observed", "Reveal Observed Context"],
+                ["prior", "Reveal Learned Prior"],
+              ].map(([mode, label]) => `<button type="button" data-navigation-terrain-evidence-domain="${mode}" aria-pressed="${evidenceDomain === mode ? "true" : "false"}">${label}</button>`).join("")}
+            </div>
+            <div class="navigation-terrain-view-switch" role="group" aria-label="Terrain review view">
+              ${[
+                ["map", "2D Evidence"],
+                ["terrain", "3D Terrain"],
+                ["split", "Split Review"],
+              ].map(([mode, label]) => `<button type="button" data-navigation-terrain-view="${mode}" aria-pressed="${viewMode === mode ? "true" : "false"}">${label}</button>`).join("")}
+            </div>
+            <div class="navigation-terrain-z-switch" role="group" aria-label="Vertical exaggeration">
+              ${[1, 1.5, 2].map(value => `<button type="button" data-navigation-terrain-vertical-exaggeration="${value}" aria-pressed="${verticalExaggeration === value ? "true" : "false"}">Z ${value.toFixed(1)}×</button>`).join("")}
+            </div>
+          </div>
+        </div>
+        <div class="navigation-terrain-review-stage" data-navigation-terrain-view="${viewMode}">
+          ${viewMode === "terrain" ? terrainPane : viewMode === "map" ? mapPane : `${mapPane}${terrainPane}`}
+        </div>
+        ${renderNavigationTerrainEvidenceInspector(snapshot)}
+      `;
+    }
+
+    function navigationTerrainMapLibreCoordinates(points) {
+      return asArray(points)
+        .map(point => [Number(point?.lon), Number(point?.lat)])
+        .filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
+    }
+
+    function navigationTerrainMapLibreFeatureCollection(snapshot) {
+      const features = [];
+      asArray(snapshot?.terrain_hierarchy?.edges).forEach(edge => {
+        const coordinates = navigationTerrainMapLibreCoordinates(edge?.coordinates);
+        if (coordinates.length < 2) return;
+        features.push({
+          type: "Feature",
+          geometry: {type: "LineString", coordinates},
+          properties: {
+            id: String(edge?.id || ""),
+            kind: String(edge?.kind || "terrain_candidate"),
+            feature_class: "terrain_hierarchy",
+            label: navigationTerrainHierarchyLabel(edge?.kind),
+            candidate_only: true,
+          },
+        });
+      });
+      asArray(snapshot?.terrain_hierarchy?.nodes)
+        .filter(node => node?.kind === "saddle_node")
+        .forEach(node => {
+          const coordinates = navigationTerrainMapLibreCoordinates([node]);
+          if (!coordinates.length) return;
+          features.push({
+            type: "Feature",
+            geometry: {type: "Point", coordinates: coordinates[0]},
+            properties: {
+              id: String(node?.id || ""),
+              kind: "saddle_node",
+              feature_class: "saddle",
+              label: "鞍部候選",
+              candidate_only: true,
+            },
+          });
+        });
+      if (navigationTerrainEvidenceDomain() === "observed") {
+        const routeCoordinates = navigationTerrainMapLibreCoordinates(
+          snapshot?.route_samples?.points,
+        );
+        if (routeCoordinates.length >= 2) {
+          features.push({
+            type: "Feature",
+            geometry: {type: "LineString", coordinates: routeCoordinates},
+            properties: {
+              id: "prepared-route-baseline",
+              kind: "observed_route",
+              feature_class: "observed_route",
+              label: "Prepared GPX baseline",
+              candidate_only: true,
+            },
+          });
+        }
+        if (state.navigationTerrainLens === "events") {
+          asArray(snapshot?.route_terrain_events?.events).forEach(event => {
+            const coordinates = navigationTerrainMapLibreCoordinates([event]);
+            if (!coordinates.length) return;
+            features.push({
+              type: "Feature",
+              geometry: {type: "Point", coordinates: coordinates[0]},
+              properties: {
+                id: String(event?.id || ""),
+                kind: "terrain_event",
+                feature_class: "terrain_event",
+                label: navigationTerrainEventLabel(event?.event_type),
+                candidate_only: true,
+              },
+            });
+          });
+        }
+      }
+      return {type: "FeatureCollection", features};
+    }
+
+    function navigationTerrainMapLibreBounds(dem) {
+      const bounds = navigationRudyBounds(dem?.bounds_wgs84);
+      return bounds
+        ? [[bounds.west, bounds.south], [bounds.east, bounds.north]]
+        : null;
+    }
+
+    function navigationTerrainRudyTileTemplate() {
+      return [
+        "/admin/tiles/imagery",
+        encodeURIComponent(projectId()),
+        encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.cacheLayerId),
+        "{z}",
+        "{x}",
+        "{y}.png",
+      ].join("/")
+        + `?source_id=${encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.sourceId)}&native=1`;
+    }
+
+    function navigationTerrainMapLibreStyle(snapshot, mode) {
+      const dem = snapshot.terrain_raster_dem;
+      const evidenceDomain = navigationTerrainEvidenceDomain();
+      const revealObservedContext = evidenceDomain === "observed";
+      const demBounds = navigationRudyBounds(dem.bounds_wgs84);
+      const sources = {
+        "scout-terrain-dem": {
+          type: "raster-dem",
+          tiles: [dem.tile_url_template],
+          tileSize: Number(dem.tile_size || 256),
+          minzoom: Number(dem.minzoom),
+          maxzoom: Number(dem.maxzoom),
+          bounds: [demBounds.west, demBounds.south, demBounds.east, demBounds.north],
+          encoding: "mapbox",
+          attribution: "Prepared Scout DTM · candidate-only",
+        },
+        "scout-terrain-hillshade-dem": {
+          type: "raster-dem",
+          tiles: [dem.tile_url_template],
+          tileSize: Number(dem.tile_size || 256),
+          minzoom: Number(dem.minzoom),
+          maxzoom: Number(dem.maxzoom),
+          bounds: [demBounds.west, demBounds.south, demBounds.east, demBounds.north],
+          encoding: "mapbox",
+          attribution: "Prepared Scout DTM hillshade · candidate-only",
+        },
+        "scout-terrain-candidates": {
+          type: "geojson",
+          data: navigationTerrainMapLibreFeatureCollection(snapshot),
+          lineMetrics: true,
+          attribution: "Scout candidate morphology · human review required",
+        },
+      };
+      if (revealObservedContext) {
+        sources["scout-rudy-tw"] = {
+          type: "raster",
+          tiles: [navigationTerrainRudyTileTemplate()],
+          tileSize: 256,
+          minzoom: NAVIGATION_RUDY_TILE_SOURCE.minZoom,
+          maxzoom: NAVIGATION_RUDY_TILE_SOURCE.maxZoom,
+          attribution: "Rudy+TW · external observed context",
+        };
+      }
+      const lineWidth = (thin, thick) => [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        Number(dem.minzoom),
+        thin,
+        Number(dem.minzoom) + 3,
+        thick,
+      ];
+      const layers = [
+        {
+          id: "scout-terrain-background",
+          type: "background",
+          paint: {"background-color": revealObservedContext ? "#d9ddd6" : "#193227"},
+        },
+        ...(revealObservedContext ? [{
+          id: "scout-rudy-tw",
+          type: "raster",
+          source: "scout-rudy-tw",
+          paint: {
+            "raster-opacity": .96,
+            "raster-resampling": "linear",
+            "raster-contrast": .12,
+            "raster-saturation": -.08,
+          },
+        }] : []),
+        {
+          id: "scout-terrain-hillshade",
+          type: "hillshade",
+          source: "scout-terrain-hillshade-dem",
+          paint: {
+            "hillshade-exaggeration": mode === "3d" ? .72 : .9,
+            "hillshade-illumination-direction": 315,
+            "hillshade-shadow-color": "#07110e",
+            "hillshade-highlight-color": revealObservedContext ? "#fff8d9" : "#d9edbb",
+            "hillshade-accent-color": "#d56a16",
+          },
+        },
+        {
+          id: "scout-drainage-trunk",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "drainage_trunk"],
+          paint: {
+            "line-color": "#0057b8",
+            "line-width": lineWidth(3.4, 6.2),
+            "line-opacity": .96,
+            "line-blur": 0,
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-drainage-tributary",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "tributary"],
+          paint: {
+            "line-color": "#00a7b8",
+            "line-width": lineWidth(2.8, 5.2),
+            "line-opacity": .98,
+            "line-dasharray": [2, 1.2],
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-ridge-main",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "main_ridge_candidate"],
+          paint: {
+            "line-color": "#ff5a00",
+            "line-width": lineWidth(3.6, 6.6),
+            "line-opacity": .98,
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-ridge-spur",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "spur_ridge_candidate"],
+          paint: {
+            "line-color": "#ffb000",
+            "line-width": lineWidth(2.8, 5.2),
+            "line-opacity": .98,
+            "line-dasharray": [3, 1.3],
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-route-halo",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "observed_route"],
+          paint: {
+            "line-color": "#07110e",
+            "line-width": lineWidth(7, 11),
+            "line-opacity": .9,
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-route",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "observed_route"],
+          paint: {
+            "line-color": "#e00067",
+            "line-width": lineWidth(4, 7),
+            "line-opacity": 1,
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-saddles",
+          type: "circle",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "saddle_node"],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], Number(dem.minzoom), 5.5, Number(dem.minzoom) + 3, 9],
+            "circle-color": "#ffd400",
+            "circle-stroke-color": "#07110e",
+            "circle-stroke-width": 2.5,
+            "circle-opacity": 1,
+          },
+        },
+        {
+          id: "scout-terrain-events",
+          type: "circle",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "terrain_event"],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], Number(dem.minzoom), 4.5, Number(dem.minzoom) + 3, 7.5],
+            "circle-color": "#e43120",
+            "circle-stroke-color": "#fff2de",
+            "circle-stroke-width": 1.8,
+          },
+        },
+      ];
+      return {
+        version: 8,
+        sources,
+        layers,
+        ...(mode === "3d" ? {
+          terrain: {
+            source: "scout-terrain-dem",
+            exaggeration: Number(state.navigationTerrainVerticalExaggeration || 1),
+          },
+          sky: {},
+        } : {}),
+      };
+    }
+
+    function destroyNavigationTerrainMapLibre() {
+      navigationTerrainMapLibreRuntime.generation += 1;
+      const maps = navigationTerrainMapLibreRuntime.maps.splice(0);
+      maps.forEach(entry => {
+        try {
+          entry.map.remove();
+        } catch (_error) {
+          // The prior Dashboard render may already have detached the canvas.
+        }
+      });
+      navigationTerrainMapLibreRuntime.synchronizing = false;
+    }
+
+    function loadNavigationTerrainMapLibre() {
+      if (!navigationTerrainMapLibreRuntime.modulePromise) {
+        navigationTerrainMapLibreRuntime.modulePromise = import(NAVIGATION_MAPLIBRE_MODULE_URL);
+      }
+      return navigationTerrainMapLibreRuntime.modulePromise;
+    }
+
+    function fitNavigationTerrainMapLibre(map, dem, mode) {
+      const bounds = navigationTerrainMapLibreBounds(dem);
+      if (!bounds) return;
+      map.fitBounds(bounds, {
+        padding: mode === "3d" ? 54 : 36,
+        duration: 0,
+        pitch: mode === "3d" ? 58 : 0,
+        bearing: mode === "3d" ? -28 : 0,
+      });
+    }
+
+    function synchronizeNavigationTerrainMapLibre(sourceEntry) {
+      if (navigationTerrainMapLibreRuntime.synchronizing) return;
+      navigationTerrainMapLibreRuntime.synchronizing = true;
+      try {
+        const center = sourceEntry.map.getCenter();
+        const zoom = sourceEntry.map.getZoom();
+        navigationTerrainMapLibreRuntime.maps.forEach(entry => {
+          if (entry === sourceEntry) return;
+          entry.map.jumpTo({center, zoom});
+        });
+      } finally {
+        navigationTerrainMapLibreRuntime.synchronizing = false;
+      }
+    }
+
+    async function initializeNavigationTerrainMapLibre() {
+      const hosts = [...document.querySelectorAll("[data-navigation-maplibre-map]")];
+      if (!hosts.length || state.route !== "outdoor-navigation") return;
+      const snapshot = navigationTerrainSnapshot();
+      const dem = snapshot?.terrain_raster_dem || {};
+      if (
+        dem.status !== "ready"
+        || !dem.tile_url_template
+        || !navigationTerrainMapLibreBounds(dem)
+      ) return;
+      const generation = navigationTerrainMapLibreRuntime.generation;
+      let maplibregl;
+      try {
+        maplibregl = await loadNavigationTerrainMapLibre();
+      } catch (error) {
+        hosts.forEach(host => {
+          host.dataset.navigationMaplibreStatus = "failed";
+          const status = host.parentElement?.querySelector("[data-navigation-maplibre-state]");
+          if (status) {
+            status.dataset.navigationMaplibreState = "failed";
+            status.innerHTML = `<strong>MAPLIBRE UNAVAILABLE</strong>${escapeHtml(error?.message || String(error))}`;
+          }
+        });
+        return;
+      }
+      if (generation !== navigationTerrainMapLibreRuntime.generation) return;
+      hosts.forEach(host => {
+        const mode = host.dataset.navigationMaplibreMap === "3d" ? "3d" : "2d";
+        const demBounds = navigationRudyBounds(dem.bounds_wgs84);
+        const center = [
+          (demBounds.west + demBounds.east) / 2,
+          (demBounds.south + demBounds.north) / 2,
+        ];
+        const status = host.parentElement?.querySelector("[data-navigation-maplibre-state]");
+        try {
+          const map = new maplibregl.Map({
+            container: host,
+            style: navigationTerrainMapLibreStyle(snapshot, mode),
+            center,
+            zoom: Number(dem.minzoom || 13) - .55,
+            pitch: mode === "3d" ? 58 : 0,
+            bearing: mode === "3d" ? -28 : 0,
+            minZoom: Math.max(5, Number(dem.minzoom || 13) - 2),
+            maxZoom: Math.min(20, Number(dem.maxzoom || 13) + 4),
+            maxPitch: 80,
+            scrollZoom: false,
+            doubleClickZoom: false,
+            boxZoom: true,
+            dragPan: true,
+            dragRotate: mode === "3d",
+            keyboard: true,
+            attributionControl: true,
+            canvasContextAttributes: {antialias: true},
+          });
+          const entry = {map, mode, host};
+          navigationTerrainMapLibreRuntime.maps.push(entry);
+          const updateCameraEvidence = () => {
+            const cameraCenter = map.getCenter();
+            host.dataset.dashboardTileZoom = String(Math.floor(map.getZoom()));
+            host.dataset.navigationMaplibreZoom = map.getZoom().toFixed(3);
+            host.dataset.navigationMaplibreCenter = `${cameraCenter.lng.toFixed(6)},${cameraCenter.lat.toFixed(6)}`;
+            host.dataset.navigationMaplibrePitch = map.getPitch().toFixed(1);
+            host.dataset.navigationMaplibreBearing = map.getBearing().toFixed(1);
+          };
+          map.scrollZoom.disable();
+          map.doubleClickZoom.disable();
+          map.addControl(new maplibregl.NavigationControl({
+            visualizePitch: mode === "3d",
+            showZoom: true,
+            showCompass: true,
+          }), "top-right");
+          map.once("load", () => {
+            if (generation !== navigationTerrainMapLibreRuntime.generation) return;
+            fitNavigationTerrainMapLibre(map, dem, mode);
+            host.dataset.navigationMaplibreStatus = "ready";
+            host.dataset.navigationMaplibreVersion = String(maplibregl.getVersion?.() || "6.2.0");
+            updateCameraEvidence();
+            if (status) {
+              status.dataset.navigationMaplibreState = "ready";
+              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D TERRAIN" : "MAPLIBRE 2D EVIDENCE"} · READY</strong>${formatInteger(dem.tile_count)} complete Terrain RGB tiles · Z${formatInteger(dem.minzoom)} source · ${valueOrDash(dem.source_cell_resolution_m)}m cells · wheel/double-click zoom disabled`;
+            }
+          });
+          map.on("move", () => synchronizeNavigationTerrainMapLibre(entry));
+          map.on("moveend", updateCameraEvidence);
+          map.on("error", event => {
+            host.dataset.navigationMaplibreStatus = "failed";
+            if (status) {
+              status.dataset.navigationMaplibreState = "failed";
+              status.innerHTML = `<strong>MAPLIBRE TILE / WEBGL ERROR</strong>${escapeHtml(event?.error?.message || "Terrain renderer reported an error")}`;
+            }
+          });
+          map.on("click", event => {
+            const layers = [
+              "scout-ridge-main",
+              "scout-ridge-spur",
+              "scout-drainage-trunk",
+              "scout-drainage-tributary",
+            ].filter(layerId => map.getLayer(layerId));
+            const feature = map.queryRenderedFeatures(event.point, {layers})[0];
+            const edgeId = String(feature?.properties?.id || "");
+            if (!edgeId) return;
+            state.navigationSelectedHierarchyEdgeId = edgeId;
+            window.setTimeout(() => render(), 0);
+          });
+          host.addEventListener("keydown", event => {
+            if (event.key !== "0") return;
+            event.preventDefault();
+            fitNavigationTerrainMapLibre(map, dem, mode);
+          });
+          const fitButton = host.parentElement?.querySelector(
+            `[data-navigation-maplibre-fit="${cssEscape(mode)}"]`,
+          );
+          fitButton?.addEventListener("click", () => {
+            fitNavigationTerrainMapLibre(map, dem, mode);
+            host.focus({preventScroll: true});
+          });
+        } catch (error) {
+          host.dataset.navigationMaplibreStatus = "failed";
+          if (status) {
+            status.dataset.navigationMaplibreState = "failed";
+            status.innerHTML = `<strong>MAPLIBRE INITIALIZATION FAILED</strong>${escapeHtml(error?.message || String(error))}`;
+          }
+        }
+      });
+    }
+
+    function navigationTerrainSelectedHierarchyEdge(snapshot) {
+      const edges = asArray(snapshot?.terrain_hierarchy?.edges);
+      return edges.find(edge => edge.id === state.navigationSelectedHierarchyEdgeId)
+        || edges[0]
+        || null;
+    }
+
+    function navigationTerrainProfilePath(values) {
+      const samples = asArray(values).map(Number).filter(Number.isFinite);
+      if (samples.length < 2) return "";
+      const minimum = Math.min(...samples);
+      const span = Math.max(1, Math.max(...samples) - minimum);
+      return samples.map((value, index) => {
+        const x = 12 + index / (samples.length - 1) * 396;
+        const y = 76 - (value - minimum) / span * 60;
+        return `${index ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`;
+      }).join(" ");
+    }
+
+    function renderNavigationTerrainEvidenceInspector(snapshot) {
+      const edge = navigationTerrainSelectedHierarchyEdge(snapshot);
+      if (!edge) return "";
+      const audit = edge.source_support_audit || {};
+      const profilePath = navigationTerrainProfilePath(edge.elevation_profile_m);
+      const blockers = [
+        Number(audit.unsupported_length_m || 0) > 0 ? "CROSSES UNSUPPORTED AREA" : "SOURCE CHAIN SUPPORTED",
+        edge.boundary_censored_hierarchy ? "BOUNDARY-AFFECTED" : "BOUNDARY INDEPENDENT",
+        Number(audit.longest_unsupported_run_m || 0) > 0 ? "LONG BRIDGE" : "NO UNSUPPORTED RUN",
+        audit.render_geometry_within_support_envelope === false ? "DISPLAY GEOMETRY OUTSIDE SUPPORT" : "DISPLAY INSIDE SUPPORT",
+      ];
+      return `
+        <section class="navigation-terrain-evidence-inspector" data-navigation-terrain-evidence-inspector="true" data-navigation-selected-edge="${escapeHtml(edge.id)}">
+          <div class="navigation-terrain-profile">
+            <div class="navigation-terrain-inspector-head"><strong>SELECTED FEATURE CROSS-SECTION</strong><small>${escapeHtml(edge.id)} · ${escapeHtml(navigationTerrainHierarchyLabel(edge.kind))}</small></div>
+            <svg viewBox="0 0 420 88" role="img" aria-label="Selected terrain candidate elevation cross-section">
+              <path d="M12 76 H408 M12 16 V76" stroke="rgba(233,234,220,.16)" fill="none"></path>
+              ${profilePath ? `<path d="${profilePath}" stroke="#b7cf63" stroke-width="2.5" fill="none" vector-effect="non-scaling-stroke"></path>` : '<text x="210" y="48" text-anchor="middle" fill="#819288" font-size="10">profile not prepared</text>'}
+            </svg>
+          </div>
+          <div class="navigation-terrain-support-audit">
+            <div class="navigation-terrain-inspector-head"><strong>SOURCE SUPPORT / RENDER AUDIT</strong><small>${escapeHtml(audit.audit_method || "not_prepared")}</small></div>
+            <div class="navigation-terrain-support-meter">
+              <div><small>Source-supported length</small><strong>${valueOrDash(audit.supported_length_m)} m</strong></div>
+              <div><small>Unsupported length</small><strong>${valueOrDash(audit.unsupported_length_m)} m</strong></div>
+              <div><small>Longest unsupported run</small><strong>${valueOrDash(audit.longest_unsupported_run_m)} m</strong></div>
+              <div><small>Backbone support ratio</small><strong>${valueOrDash(edge.backbone_support_ratio)}</strong></div>
+              <div><small>Render displacement p95</small><strong>${valueOrDash(audit.render_displacement_p95_m)} m</strong></div>
+              <div><small>Render displacement max</small><strong>${valueOrDash(audit.render_displacement_max_m)} m</strong></div>
+              <div><small>Touches analysis boundary</small><strong>${String(Boolean(audit.touches_analysis_boundary))}</strong></div>
+              <div><small>Saddle relation</small><strong>proximity only</strong></div>
+            </div>
+            <div class="navigation-terrain-audit-badges">
+              ${blockers.map(label => `<span class="${["SOURCE CHAIN SUPPORTED", "BOUNDARY INDEPENDENT", "NO UNSUPPORTED RUN", "DISPLAY INSIDE SUPPORT"].includes(label) ? "" : "is-blocker"}">${escapeHtml(label)}</span>`).join("")}
+              <span>External-context overlap: non-causal</span>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderNavigationReviewQueue(
+      snapshot,
+      selectedPoint,
+      selectedStructurePoint,
+      selectedEvent,
+    ) {
+      const lens = state.navigationTerrainLens || "structure";
+      const selected = lens === "events"
+        ? selectedEvent
+        : lens === "structure"
+          ? selectedStructurePoint
+          : selectedPoint;
+      const selectedId = String(selected?.id || "");
+      const selectedLabel = lens === "events"
+        ? navigationTerrainEventLabel(selected?.event_type)
+        : lens === "structure"
+          ? `${navigationStructureLabel(selected?.feature_kind)}候選`
+          : "Terrain pressure candidate";
+      const decision = state.navigationTerrainReviewDrafts?.[selectedId] || "";
+      const relationCount = asArray(snapshot?.terrain_hierarchy?.saddle_relations).length;
+      return `
+        <section class="navigation-review-queue" data-navigation-human-review-queue="true">
+          <div class="navigation-reading-head">
+            <div><h3>Human Review Draft</h3><p>把判讀分歧留下來，不直接改寫 terrain truth。</p></div>
+            <span class="chip ${decision ? "info" : "warn"}">UNSAVED LOCAL DRAFT · ${decision || "unreviewed"}</span>
+          </div>
+          <div class="navigation-review-queue-body">
+            <div class="navigation-review-selected">
+              <small>Selected evidence · ${escapeHtml(selectedId || "none")}</small>
+              <strong>${escapeHtml(selectedId ? selectedLabel : "尚未選取候選")}</strong>
+              <span>${formatInteger(relationCount)} saddle↔ridge proximity relations · geometry remains candidate-only.</span>
+            </div>
+            <div class="navigation-review-actions" role="group" aria-label="Local terrain review draft">
+              ${[
+                ["support", "支持候選"],
+                ["ambiguous", "標記模糊"],
+                ["reject", "反駁候選"],
+              ].map(([value, label]) => `<button type="button" data-navigation-review-decision="${value}" data-navigation-review-target="${escapeHtml(selectedId)}" aria-pressed="${decision === value ? "true" : "false"}" ${selectedId ? "" : "disabled"}>${label}</button>`).join("")}
+            </div>
+            <p class="navigation-review-boundary">本頁只保存暫存審核狀態；候選 artifact fingerprint 改變即清除，且不進入 export、metric、Safety、Emergency、偏航提示或 runtime safety truth。</p>
+          </div>
+        </section>
+      `;
+    }
+
     function renderNavigationWorkspaceMap(snapshot, selectedPoint, selectedStructurePoint, selectedEvent) {
       const lens = state.navigationTerrainLens || "structure";
+      const evidenceDomain = navigationTerrainEvidenceDomain();
+      const revealObservedContext = evidenceDomain === "observed";
+      const revealLearnedPrior = evidenceDomain === "prior";
       const terrainValidation = snapshot?.terrain_validation || {};
       const validationState = terrainValidation.validation_state || "blocked_pending_reference";
       const bounds = snapshot?.terrain_surface?.bbox_wgs84;
       const baseZoom = navigationRudyBaseZoom(bounds);
-      const routePath = navigationTerrainRoutePath(snapshot);
+      const routePath = revealObservedContext ? navigationTerrainRoutePath(snapshot) : "";
       const pressurePoints = asArray(snapshot?.route_samples?.points)
         .filter((_point, index) => index % 8 === 0)
         .map(point => ({
@@ -18749,7 +20288,11 @@
         .filter(event => event.position);
       const structureGap = ["ridge", "valley", "saddle"]
         .filter(kind => !["candidate_vectors", "candidate_points"].includes(snapshot?.feature_extraction?.[kind]?.status));
-      const statusText = lens === "structure" && hierarchyEdges.length
+      const statusText = evidenceDomain === "terrain"
+        ? `DEM-derived terrain evidence only；Rudy+TW、GPX、OSM/Overpass 與 learned prior 均未載入本視圖。${hierarchyEdges.length} 個低權威候選支持區。`
+        : revealLearnedPrior
+          ? `Learned prior 已明示揭露；僅顯示聚合地形模式，不捏造空間路線或可通行中心線。`
+          : lens === "structure" && hierarchyEdges.length
         ? `${hierarchyEdges.length} 個低權威候選支持區；不是精確中心線。Geometry gate: ${validationState}。`
         : lens === "events"
           ? `${terrainEvents.length} 個 GPX × terrain shadow candidates；${validationState}，紅圈只供離線 QA。`
@@ -18765,14 +20308,18 @@
             <defs>
               <marker id="navigationWorkspaceRetreatArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#d1005d" stroke="#07110e" stroke-width="1"></path></marker>
             </defs>
-            <rect width="1000" height="392" fill="#101813"></rect>
-            ${renderNavigationRudyTileLayer(bounds, baseZoom)}
+            ${revealObservedContext
+              ? `<rect width="1000" height="392" fill="#101813"></rect>${renderNavigationRudyTileLayer(bounds, baseZoom)}`
+              : renderNavigationTerrainTopDownLayer(snapshot?.terrain_mesh || {})}
             ${["structure", "events"].includes(lens) ? hierarchyEdges.map(edge => `
               <path
                 class="navigation-terrain-hierarchy-band"
                 data-navigation-terrain-band="true"
                 data-navigation-terrain-edge-kind="${escapeHtml(edge.kind)}"
                 data-navigation-terrain-edge-id="${escapeHtml(edge.id)}"
+                data-navigation-terrain-select-edge="${escapeHtml(edge.id)}"
+                role="button"
+                tabindex="0"
                 data-dashboard-map-hint-source="navigation-hierarchy-evidence"
                 data-dashboard-map-hint-title="${escapeHtml(navigationTerrainHierarchyLabel(edge.kind))}"
                 data-dashboard-map-hint-summary="${escapeHtml(`${formatDistanceKm(edge.length_m)} · visual candidate support, not a confidence interval or event source`)}"
@@ -18786,7 +20333,7 @@
               <path class="navigation-workspace-route-halo" data-navigation-route-halo="true" data-dashboard-map-screen-stroke="7" vector-effect="non-scaling-stroke" d="${routePath}"></path>
               <path class="navigation-workspace-route" data-navigation-route-path="true" data-dashboard-map-screen-stroke="4.5" vector-effect="non-scaling-stroke" d="${routePath}" ${lens === "retreat" ? 'marker-start="url(#navigationWorkspaceRetreatArrow)"' : ""}></path>
             ` : ""}
-            ${lens === "pressure" ? pressurePoints.map(point => `
+            ${revealObservedContext && lens === "pressure" ? pressurePoints.map(point => `
               <g
                 data-dashboard-map-screen-symbol="true"
                 data-dashboard-map-symbol-x="${point.position.x.toFixed(1)}"
@@ -18831,7 +20378,7 @@
                 <title>${escapeHtml(`${point.feature_kind} candidate · TPI ${valueOrDash(point.tpi_m)}m · local relief ${valueOrDash(point.local_relief_m)}m`)}</title>
               </g>
             `).join("") : ""}
-            ${riskPoints.map(point => `
+            ${revealObservedContext ? riskPoints.map(point => `
               <g
                 class="navigation-live-point"
                 data-dashboard-map-screen-symbol="true"
@@ -18852,8 +20399,8 @@
                 <text x="0" y="3">${point.index}</text>
                 <title>${escapeHtml(point.reason || "Terrain pressure candidate requires review")}</title>
               </g>
-            `).join("")}
-            ${lens === "events" ? terrainEvents.map(event => `
+            `).join("") : ""}
+            ${revealObservedContext && lens === "events" ? terrainEvents.map(event => `
               <g
                 class="navigation-terrain-event"
                 data-navigation-shadow-event="true"
@@ -18879,15 +20426,15 @@
           </svg>
       `;
       const mapOverlay = `
-          <div class="navigation-workspace-map-status" data-navigation-terrain-validation="${escapeHtml(validationState)}"><strong>Rudy+TW · z<span data-navigation-rudy-zoom-label>${baseZoom}</span></strong>${escapeHtml(statusText)}</div>
-          <div class="navigation-workspace-scale">${escapeHtml(`cached Scout tiles · ${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m DEM analysis`)}</div>
+          <div class="navigation-workspace-map-status" data-navigation-terrain-validation="${escapeHtml(validationState)}"><strong>${revealObservedContext ? `Rudy+TW · z<span data-navigation-rudy-zoom-label>${baseZoom}</span> · EXTERNAL CONTEXT` : revealLearnedPrior ? "DEM + TERRAIN_PASSAGE_PRIOR · LEARNED CANDIDATE" : "PREPARED DEM · TERRAIN EVIDENCE ONLY"}</strong>${escapeHtml(statusText)}</div>
+          <div class="navigation-workspace-scale">${escapeHtml(revealObservedContext ? `cached Scout tiles · ${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m DEM analysis` : `${valueOrDash(snapshot?.terrain_surface?.cell_resolution_m)}m DEM · no external basemap loaded`)}</div>
       `;
       return renderDashboardMapViewport("navigation-workspace-map",
-        "Rudy+TW tiled terrain intelligence map",
+        revealObservedContext ? "Rudy+TW observed-context terrain map" : "DEM-derived terrain evidence map",
         mapContent,
         {
           className: "navigation-workspace-map",
-          attributes: `data-navigation-workspace-map="true" data-navigation-basemap-layer="rudy-twmap" data-dashboard-basemap-layer="rudy-twmap" data-dashboard-basemap-policy="rudy-twmap-only" data-navigation-tile-zoom="${baseZoom}"`,
+          attributes: `data-navigation-workspace-map="true" data-navigation-evidence-domain="${evidenceDomain}" data-navigation-basemap-layer="${revealObservedContext ? "rudy-twmap" : "dem-derived"}" data-dashboard-basemap-layer="${revealObservedContext ? "rudy-twmap" : "none"}" data-dashboard-basemap-policy="rudy-twmap-only" data-navigation-tile-zoom="${baseZoom}"`,
           overlayHtml: mapOverlay,
           renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
           wheelZoom: false,
@@ -19133,12 +20680,83 @@
       `;
     }
 
-    function renderNavigationEvidenceWorkbench(snapshot) {
+    function navigationPassagePatternLabel(pattern) {
+      return String(pattern || "")
+        .replaceAll("slope_00_10", "坡度 0–10°")
+        .replaceAll("slope_10_20", "坡度 10–20°")
+        .replaceAll("slope_20_30", "坡度 20–30°")
+        .replaceAll("slope_30_40", "坡度 30–40°")
+        .replaceAll("slope_40_plus", "坡度 40°+")
+        .replaceAll("contour_following", "沿等高線")
+        .replaceAll("oblique", "斜切坡")
+        .replaceAll("fall_line", "順落差")
+        .replaceAll("no_nearby_terrain_candidate", "未貼近骨架候選")
+        .replaceAll("locally_convex", "局部凸地")
+        .replaceAll("locally_concave", "局部凹地")
+        .replaceAll("locally_neutral", "局部中性")
+        .replaceAll("|", " · ");
+    }
+
+    function renderNavigationPassagePrior(snapshot) {
+      const prior = snapshot?.terrain_passage_prior || {};
+      const contract = prior.learning_contract || {};
+      const patterns = asArray(prior.dominant_patterns).slice(0, 4);
+      const sourceCounts = prior.source_path_counts || {};
+      if (navigationTerrainEvidenceDomain() !== "prior") {
+        return `
+          <section class="navigation-evidence-panel" data-navigation-terrain-passage-prior="locked">
+            <h3>Observed Passage Pattern Prior</h3>
+            <p>Learned prior is unavailable in this evidence domain. Use “Reveal Learned Prior” to inspect it with explicit provenance separation.</p>
+            <div class="navigation-evidence-list"><div class="navigation-evidence-row"><small>SEALED PU BRANCH</small><strong>Unknown ≠ negative</strong><em>No feedback into terrain extraction · no trail-existence label.</em></div></div>
+          </section>
+        `;
+      }
       return `
-        <div class="navigation-evidence-workbench" data-navigation-evidence-workbench="true">
+        <section class="navigation-evidence-panel" data-navigation-terrain-passage-prior="true">
+          <h3>Observed Passage Pattern Prior</h3>
+          <p>GPX + OSM/Overpass 與 DEM／等高線形態疊合；只描述已觀測的人類路徑偏好。</p>
+          <div class="navigation-evidence-metrics">
+            <div class="navigation-evidence-metric"><small>Paths</small><strong>${formatInteger(prior.source_path_count || 0)}</strong></div>
+            <div class="navigation-evidence-metric"><small>Samples</small><strong>${formatInteger(prior.observation_count || 0)}</strong></div>
+            <div class="navigation-evidence-metric"><small>Model</small><strong>PU prior</strong></div>
+          </div>
+          <div class="navigation-evidence-list">
+            <div class="navigation-evidence-row"><small>Source balance</small><strong>${escapeHtml(`GPX ${formatInteger((sourceCounts.gpx_observed || 0) + (sourceCounts.gpx_reference || 0))} · OSM ${formatInteger(sourceCounts.osm_overpass_trail || 0)}`)}</strong><em>provider bias retained · classifier trained=${String(Boolean(contract.classifier_trained))} · duplicates removed=${formatInteger(prior?.sampling?.duplicate_path_count || 0)}</em></div>
+            ${patterns.length ? patterns.map((item, index) => `<div class="navigation-evidence-row"><small>Observed pattern ${String(index + 1).padStart(2, "0")}</small><strong>${escapeHtml(navigationPassagePatternLabel(item.pattern))}</strong><em>${formatInteger(item.count)} samples · ${(Number(item.share || 0) * 100).toFixed(1)}% of supported observations</em></div>`).join("") : '<div class="navigation-evidence-row"><small>not prepared</small><strong>No supported observed patterns</strong><em>不從空白地區捏造負樣本。</em></div>'}
+            <div class="navigation-evidence-row"><small>Unknown ≠ negative</small><strong>OSM absence: ${escapeHtml(contract.osm_absence_semantics || "unknown")}</strong><em>Rudy+TW=${escapeHtml(contract.rudy_tw_role || "visual reference only")} · 不證明可通行。</em></div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderNavigationEvidenceWorkbench(snapshot) {
+      const evidenceDomain = navigationTerrainEvidenceDomain();
+      if (evidenceDomain === "terrain") {
+        return `
+          <div class="navigation-evidence-workbench" data-navigation-evidence-workbench="terrain-only">
+            <section class="navigation-evidence-panel" data-navigation-external-context-gate="locked">
+              <h3>External Evidence Locked</h3>
+              <p>Terrain Evidence Only 模式不載入 GPX、OSM/Overpass、Rudy+TW 或 learned prior；避免用既有路線反向證明 DEM 候選。</p>
+              <div class="navigation-evidence-list"><div class="navigation-evidence-row"><small>Evidence domain</small><strong>DEM-derived morphology / hierarchy only</strong><em>Use an explicit reveal control to inspect non-causal overlap.</em></div></div>
+            </section>
+            ${renderNavigationEvidenceGaps(snapshot)}
+          </div>
+        `;
+      }
+      if (evidenceDomain === "prior") {
+        return `
+          <div class="navigation-evidence-workbench" data-navigation-evidence-workbench="learned-prior">
+            ${renderNavigationPassagePrior(snapshot)}
+            ${renderNavigationEvidenceGaps(snapshot)}
+          </div>
+        `;
+      }
+      return `
+        <div class="navigation-evidence-workbench" data-navigation-evidence-workbench="observed-context">
           ${renderNavigationSourceLedger(snapshot)}
           ${renderNavigationOrderedClues(snapshot)}
           ${renderNavigationTopology(snapshot)}
+          ${renderNavigationPassagePrior(snapshot)}
           ${renderNavigationEvidenceGaps(snapshot)}
         </div>
       `;
@@ -19202,6 +20820,7 @@
       const selected = features.find(feature => feature.id === state.navigationSelectedFeatureId) || features[2];
       const lens = state.navigationTerrainLens || "structure";
       const sourceMode = "workspace";
+      const evidenceDomain = navigationTerrainEvidenceDomain();
       const snapshot = navigationTerrainSnapshot();
       const liveReady = !["loading", "unavailable", "preparing", "failed"].includes(snapshot.status)
         && Boolean(snapshot?.terrain_surface?.bbox_wgs84);
@@ -19219,29 +20838,46 @@
               <section class="navigation-terrain-map-panel">
                 ${renderNavigationReadingChecklist()}
                 <div class="navigation-terrain-lenses" role="group" aria-label="Terrain reading lenses">
-                  ${[
-                    ["structure", "地形結構"],
-                    ["pressure", "坡度壓力"],
-                    ["risk", "風險地形"],
-                    ["retreat", "撤退方向"],
-                    ...(sourceMode === "workspace" ? [["events", "Shadow 事件"]] : []),
-                  ].map(([lensId, label]) => `
+                  ${(evidenceDomain === "observed" ? [
+                      ["structure", "地形結構"],
+                      ["pressure", "坡度壓力"],
+                      ["risk", "風險地形"],
+                      ["retreat", "撤退方向"],
+                      ...(sourceMode === "workspace" ? [["events", "Shadow 事件"]] : []),
+                    ] : [["structure", "地形結構"]]).map(([lensId, label]) => `
                     <button type="button" data-navigation-terrain-lens="${lensId}" aria-pressed="${lens === lensId ? "true" : "false"}">${escapeHtml(label)}</button>
                   `).join("")}
                 </div>
                 ${sourceMode === "training"
                   ? renderNavigationTerrainMap(features, selected)
                   : liveReady
-                    ? renderNavigationWorkspaceMap(snapshot, selectedLivePoint, selectedStructurePoint, selectedTerrainEvent)
+                    ? renderNavigationTerrainReviewWorkbench(
+                        snapshot,
+                        selectedLivePoint,
+                        selectedStructurePoint,
+                        selectedTerrainEvent,
+                      )
                     : renderNavigationWorkspaceLoading(snapshot)}
                 <div class="navigation-terrain-legend" aria-label="Terrain map legend">
-                ${sourceMode === "workspace" ? `
+                ${sourceMode === "workspace" && evidenceDomain === "observed" ? `
                     <span data-navigation-legend-kind="basemap"><strong>Rudy+TW</strong><br>cached Scout tiles</span>
                     <span data-navigation-legend-kind="route"><strong>洋紅路線</strong><br>bounded route samples</span>
                     <span data-navigation-legend-kind="ridge"><strong>橘色稜脊</strong><br>稜脊／分水界候選</span>
                     <span data-navigation-legend-kind="drainage"><strong>深藍主谷</strong><br>集水骨幹候選</span>
                     <span data-navigation-legend-kind="tributary"><strong>藍綠支谷</strong><br>連通谷地候選 · 未水文複核</span>
                     <span data-navigation-legend-kind="event"><strong>紅色事件點</strong><br>離線 shadow candidate</span>
+                  ` : sourceMode === "workspace" && evidenceDomain === "prior" ? `
+                    <span data-navigation-legend-kind="dem"><strong>DEM 地形面</strong><br>20m source support</span>
+                    <span data-navigation-legend-kind="ridge"><strong>橘色稜脊</strong><br>DEM-derived candidate</span>
+                    <span data-navigation-legend-kind="drainage"><strong>深藍谷線</strong><br>DEM-derived candidate</span>
+                    <span data-navigation-legend-kind="prior"><strong>PU 地形先驗</strong><br>GPX + OSM aggregate · no spatial line</span>
+                    <span data-navigation-legend-kind="unknown"><strong>未標記 ≠ 不可走</strong><br>OSM absence remains unknown</span>
+                  ` : sourceMode === "workspace" ? `
+                    <span data-navigation-legend-kind="dem"><strong>DEM 地形面</strong><br>prepared source support</span>
+                    <span data-navigation-legend-kind="ridge"><strong>橘色稜脊</strong><br>DEM-derived candidate</span>
+                    <span data-navigation-legend-kind="drainage"><strong>深藍主谷</strong><br>DEM-derived candidate</span>
+                    <span data-navigation-legend-kind="tributary"><strong>藍綠支谷</strong><br>DEM-derived candidate</span>
+                    <span data-navigation-legend-kind="saddle"><strong>黃色鞍部</strong><br>proximity only</span>
                   ` : `
                     <span><strong>綠實線</strong><br>稜線骨架</span>
                     <span><strong>藍虛線</strong><br>谷線／撤退方向</span>
@@ -19250,12 +20886,15 @@
                   `}
                 </div>
               </section>
-              ${sourceMode === "workspace" && liveReady ? renderNavigationTerrainEventTimeline(snapshot, selectedTerrainEvent) : ""}
+              ${sourceMode === "workspace" && liveReady && evidenceDomain === "observed" ? renderNavigationTerrainEventTimeline(snapshot, selectedTerrainEvent) : ""}
             </div>
             <aside class="navigation-terrain-side">
               ${sourceMode === "workspace"
                 ? renderNavigationWorkspaceDetail(snapshot, selectedLivePoint, selectedStructurePoint, selectedTerrainEvent)
                 : renderNavigationTerrainDetail(selected)}
+              ${sourceMode === "workspace" && liveReady
+                ? renderNavigationReviewQueue(snapshot, selectedLivePoint, selectedStructurePoint, selectedTerrainEvent)
+                : ""}
               <p class="navigation-boundary-note"><strong>判讀邊界：</strong> 等高線與 DEM 能指出「哪裡值得注意」，不能單獨證明步道存在、目前可通行或適合獨攀。Workspace risk candidates 也不能直接命名為崩壁、溪谷或曝露地形；需要來源與人工複核。</p>
             </aside>
           </div>
@@ -23603,6 +25242,71 @@
           rerenderNavigation(
             `[data-navigation-terrain-source="${cssEscape(state.navigationTerrainSourceMode)}"]`,
           );
+        });
+      });
+      shell.querySelectorAll("button[data-navigation-terrain-view]").forEach(button => {
+        button.addEventListener("click", () => {
+          const mode = button.dataset.navigationTerrainView || "split";
+          state.navigationTerrainViewMode = ["map", "terrain", "split"].includes(mode)
+            ? mode
+            : "split";
+          rerenderNavigation(
+            `button[data-navigation-terrain-view="${cssEscape(state.navigationTerrainViewMode)}"]`,
+          );
+        });
+      });
+      shell.querySelectorAll("button[data-navigation-terrain-evidence-domain]").forEach(button => {
+        button.addEventListener("click", () => {
+          const domain = button.dataset.navigationTerrainEvidenceDomain || "terrain";
+          state.navigationTerrainEvidenceDomain = ["terrain", "observed", "prior"].includes(domain)
+            ? domain
+            : "terrain";
+          if (state.navigationTerrainEvidenceDomain !== "observed") {
+            state.navigationTerrainLens = "structure";
+          }
+          rerenderNavigation(
+            `button[data-navigation-terrain-evidence-domain="${cssEscape(state.navigationTerrainEvidenceDomain)}"]`,
+          );
+        });
+      });
+      shell.querySelectorAll("button[data-navigation-terrain-vertical-exaggeration]").forEach(button => {
+        button.addEventListener("click", () => {
+          const value = Number(button.dataset.navigationTerrainVerticalExaggeration);
+          state.navigationTerrainVerticalExaggeration = [1, 1.5, 2].includes(value)
+            ? value
+            : 1;
+          rerenderNavigation(
+            `button[data-navigation-terrain-vertical-exaggeration="${state.navigationTerrainVerticalExaggeration}"]`,
+          );
+        });
+      });
+      shell.querySelectorAll("button[data-navigation-review-decision]").forEach(button => {
+        button.addEventListener("click", () => {
+          const targetId = button.dataset.navigationReviewTarget || "";
+          const decision = button.dataset.navigationReviewDecision || "";
+          if (!targetId || !["support", "ambiguous", "reject"].includes(decision)) return;
+          state.navigationTerrainReviewDrafts = {
+            ...(state.navigationTerrainReviewDrafts || {}),
+            [targetId]: decision,
+          };
+          rerenderNavigation(
+            `[data-navigation-review-decision="${cssEscape(decision)}"]`,
+          );
+        });
+      });
+      shell.querySelectorAll("[data-navigation-terrain-select-edge]").forEach(target => {
+        const selectHierarchyEdge = event => {
+          event.stopPropagation();
+          state.navigationSelectedHierarchyEdgeId = target.dataset.navigationTerrainSelectEdge || "";
+          rerenderNavigation(
+            `[data-navigation-selected-edge="${cssEscape(state.navigationSelectedHierarchyEdgeId)}"]`,
+          );
+        };
+        target.addEventListener("click", selectHierarchyEdge);
+        target.addEventListener("keydown", event => {
+          if (!["Enter", " ", "Spacebar"].includes(event.key)) return;
+          event.preventDefault();
+          selectHierarchyEdge(event);
         });
       });
       shell.querySelectorAll("[data-navigation-live-point-id]").forEach(target => {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import time
@@ -177,6 +178,116 @@ def test_navigation_terrain_intelligence_api_projects_bounded_workspace_evidence
     assert payload["boundary"]["candidate_only"] is True
     assert payload["boundary"]["runtime_safety_truth"] is False
     assert payload["boundary"]["safe_or_walkable"] == "not_determined"
+    assert payload["terrain_raster_dem"]["status"] == "not_prepared"
+    assert payload["terrain_raster_dem"]["preparation_required"] is True
+    assert payload["terrain_raster_dem"]["boundary"]["runtime_safety_truth"] is False
+
+
+def test_navigation_terrain_dem_manifest_and_tile_are_read_only_allowlisted(
+    tmp_path: Path,
+) -> None:
+    project_id = "navigation-terrain-dem-demo"
+    project_root = tmp_path / project_id
+    manifest_ref = "outputs/navigation/terrain_rgb/manifest.json"
+    tile_ref = "outputs/navigation/terrain_rgb/version/tiles/13/6854/3532.png"
+    tile_body = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c6360606060000000050001a5f645400000000049454e44"
+        "ae426082"
+    )
+    tile_sha256 = hashlib.sha256(tile_body).hexdigest()
+    tile_path = project_root / tile_ref
+    tile_path.parent.mkdir(parents=True)
+    tile_path.write_bytes(tile_body)
+    manifest_path = project_root / manifest_ref
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "scout_navigation_terrain_dem.v1",
+                "artifact_kind": "navigation_terrain_raster_dem_tiles",
+                "project_id": project_id,
+                "status": "ready",
+                "prepared_at": "2026-08-07T07:00:00Z",
+                "encoding": "mapbox",
+                "tile_size": 256,
+                "minzoom": 13,
+                "maxzoom": 13,
+                "tile_count": 1,
+                "tile_block": {
+                    "x_min": 6854,
+                    "x_max": 6854,
+                    "y_min": 3532,
+                    "y_max": 3532,
+                },
+                "bounds_wgs84": {
+                    "west": 121.201171875,
+                    "south": 24.006326198751132,
+                    "east": 121.2451171875,
+                    "north": 24.04646399966659,
+                },
+                "source_cell_resolution_m": 20,
+                "source_supported_cell_count": 65536,
+                "source_fingerprint": "a" * 64,
+                "coverage_strategy": "largest_complete_slippy_tile_block",
+                "nodata_policy": "exclude_incomplete_tiles",
+                "alpha_nodata_supported": False,
+                "tile_url_template": (
+                    f"/admin/pretrip/projects/{project_id}/terrain-dem/"
+                    "{z}/{x}/{y}.png"
+                ),
+                "tiles": [
+                    {
+                        "z": 13,
+                        "x": 6854,
+                        "y": 3532,
+                        "source_ref": tile_ref,
+                        "sha256": tile_sha256,
+                    }
+                ],
+                "limitations": ["candidate-only visualization"],
+                "boundary": {
+                    "candidate_only": True,
+                    "human_review_required": True,
+                    "runtime_safety_truth": False,
+                    "safe_or_walkable": "not_determined",
+                    "unsupported_cells_encoded_as_terrain": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "navigation_terrain_dem_manifest_ref": manifest_ref,
+            }
+        ),
+        encoding="utf-8",
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    manifest_response = client.get(
+        f"/admin/pretrip/projects/{project_id}/terrain-dem/manifest"
+    )
+    tile_response = client.get(
+        f"/admin/pretrip/projects/{project_id}/terrain-dem/13/6854/3532.png"
+    )
+    missing_response = client.get(
+        f"/admin/pretrip/projects/{project_id}/terrain-dem/13/6855/3532.png"
+    )
+
+    assert manifest_response.status_code == 200
+    assert manifest_response.json()["status"] == "ready"
+    assert manifest_response.json()["tile_count"] == 1
+    assert manifest_response.json()["boundary"]["candidate_only"] is True
+    assert manifest_response.json()["boundary"]["workspace_file_mutation_allowed"] is False
+    assert tile_response.status_code == 200
+    assert tile_response.content == tile_body
+    assert tile_response.headers["x-scout-terrain-dem-hash"] == tile_sha256
+    assert tile_response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert missing_response.status_code == 404
 
 
 def test_navigation_terrain_intelligence_api_returns_read_only_status_without_blocking(
@@ -1996,14 +2107,29 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "navigationSelectedTerrainEventId",
         "navigationTerrainLens",
         "navigationTerrainSourceMode",
+        "navigationTerrainViewMode",
+        "navigationTerrainEvidenceDomain",
+        "navigationTerrainVerticalExaggeration",
+        "navigationTerrainReviewArtifactFingerprint",
+        "navigationSelectedHierarchyEdgeId",
             "navigationTerrainData",
             "terrain_validation",
         "loadNavigationTerrainData",
         "function renderNavigationWorkspaceMap(",
+        "function renderNavigationTerrainMesh(",
+        "function renderNavigationTerrainMapLibreHost(",
+        "function navigationTerrainMapLibreFeatureCollection(",
+        "function navigationTerrainMapLibreStyle(",
+        "async function initializeNavigationTerrainMapLibre(",
+        "function destroyNavigationTerrainMapLibre(",
+        "function renderNavigationTerrainReviewWorkbench(",
+        "function renderNavigationTerrainEvidenceInspector(",
+        "function renderNavigationTerrainTopDownLayer(",
         "function renderNavigationFeatureExtraction(",
         "function renderNavigationSourceLedger(",
         "function renderNavigationOrderedClues(",
         "function renderNavigationTopology(",
+        "function renderNavigationPassagePrior(",
         "function renderNavigationEvidenceGaps(",
         "function renderNavigationEvidenceWorkbench(",
         "function navigationTerrainHierarchyPath(",
@@ -2011,6 +2137,16 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "function renderNavigationTerrainEventTimeline(",
         "function renderNavigationTerrainEventDetail(",
         'data-navigation-workspace-map="true"',
+        'data-navigation-terrain-review-workbench="true"',
+        'data-navigation-terrain-view="',
+        'data-navigation-terrain-vertical-exaggeration="',
+        'data-navigation-terrain-evidence-domain="',
+        'data-navigation-candidate-only-strip="true"',
+        'data-navigation-terrain-evidence-inspector="true"',
+        'data-navigation-terrain-3d="true"',
+        'data-navigation-maplibre-map="',
+        'data-navigation-maplibre-fit="',
+        'data-navigation-maplibre-state="',
         'data-navigation-structure-point-id="',
         'data-navigation-structure-kind="',
         'data-navigation-route-path="true"',
@@ -2022,9 +2158,27 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         'data-navigation-source-ledger="true"',
         'data-navigation-ordered-clues="true"',
         'data-navigation-route-topology="true"',
+        'data-navigation-terrain-passage-prior="true"',
         'data-navigation-historical-option="',
         'data-navigation-evidence-gaps="true"',
         "Workspace DEM + candidate morphology",
+        "2D Evidence",
+        "3D Terrain",
+        "Split Review",
+        "地形判讀與人工審核工作台",
+        "不增加 DEM 原始解析度",
+        "Observed Passage Pattern Prior",
+        "Unknown ≠ negative",
+        "Terrain Evidence Only",
+        "Reveal Observed Context",
+        "Reveal Learned Prior",
+        "CANDIDATE-ONLY TERRAIN REVIEW",
+        "MAPLIBRE 3D TERRAIN",
+        "MAPLIBRE 2D EVIDENCE",
+        "UNSAVED LOCAL DRAFT",
+        "SOURCE SUPPORT / RENDER AUDIT",
+        "External-context overlap: non-causal",
+        "no external basemap loaded",
         "Prepared DTM + GPX source ledger",
         "候選支持區",
         "Shadow 事件假說",
@@ -2050,6 +2204,17 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "--navigation-event: #d72f20;" in html
     assert '[data-navigation-legend-kind="tributary"]' in html
     assert "navigation-workspace-route-halo" in html
+    assert 'maplibre-gl@6.2.0/dist/maplibre-gl.mjs' in html
+    assert 'type: "raster-dem"' in html
+    assert 'encoding: "mapbox"' in html
+    assert 'scrollZoom: false' in html
+    assert 'doubleClickZoom: false' in html
+    assert 'boxZoom: true' in html
+    assert 'dragPan: true' in html
+    assert 'keyboard: true' in html
+    assert 'source: "scout-terrain-dem"' in html
+    assert 'source: "scout-terrain-hillshade-dem"' in html
+    assert 'source: "scout-terrain-candidates"' in html
     assert 'data-dashboard-map-screen-stroke="7"' in html
     assert 'data-dashboard-map-screen-stroke="4.5"' in html
     assert 'data-navigation-structure-label-visibility="selected-only"' in html
@@ -4203,9 +4368,11 @@ def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
         'data-diagnostic-action="retest"',
         'data-diagnostic-status="running"',
         'data-diagnostic-status="passed"',
+        'data-diagnostic-status="warning"',
         'data-diagnostic-status="failed"',
         "測試中",
         "測試通過",
+        "測試提醒",
         "測試失敗",
         "重新測試",
         "Diag all",
@@ -4220,9 +4387,16 @@ def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
     )[1].split("async function runAllDashboardDiagnostics()", 1)[0]
     assert "postJson(" not in runner
     assert 'status: "running"' in runner
-    assert 'status: "passed"' in runner
+    assert 'status: warning ? "warning" : "passed"' in runner
     assert 'status: "failed"' in runner
     assert "performance.now()" in runner
+
+    check_030 = html.split(
+        "async function diagnosticCheck030()", 1
+    )[1].split("async function diagnosticCheck031()", 1)[0]
+    assert "unexplainedZeroCountCategories" in check_030
+    assert "return diagnosticWarning(" in check_030
+    assert 'includes("[fixture_or_projection_omission]")' in check_030
 
 
 def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() -> None:

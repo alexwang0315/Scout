@@ -844,8 +844,14 @@ def _tile_paste_box(
         return None
     left = math.floor((float(bbox["west"]) - float(tile_bbox["west"])) / lon_span * tile_size)
     right = math.ceil((float(bbox["east"]) - float(tile_bbox["west"])) / lon_span * tile_size)
-    top = math.floor((_lat_to_global_pixel_y(float(bbox["north"]), z) - y * tile_size))
-    bottom = math.ceil((_lat_to_global_pixel_y(float(bbox["south"]), z) - y * tile_size))
+    top = math.floor(
+        _lat_to_global_pixel_y(float(bbox["north"]), z, tile_size=tile_size)
+        - y * tile_size
+    )
+    bottom = math.ceil(
+        _lat_to_global_pixel_y(float(bbox["south"]), z, tile_size=tile_size)
+        - y * tile_size
+    )
     left = max(0, min(tile_size, left))
     right = max(0, min(tile_size, right))
     top = max(0, min(tile_size, top))
@@ -1029,8 +1035,13 @@ def _lat_to_tile_float(lat: float, zoom: int) -> float:
     )
 
 
-def _lat_to_global_pixel_y(lat: float, zoom: int) -> float:
-    return _lat_to_tile_float(lat, zoom) * DEFAULT_RASTER_TILE_SIZE
+def _lat_to_global_pixel_y(
+    lat: float,
+    zoom: int,
+    *,
+    tile_size: int = DEFAULT_RASTER_TILE_SIZE,
+) -> float:
+    return _lat_to_tile_float(lat, zoom) * tile_size
 
 
 def _tile_index(value: float, zoom: int) -> int:
