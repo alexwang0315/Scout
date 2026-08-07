@@ -1,0 +1,110 @@
+schema: scout.dashboardCapabilityManifest.v1
+version: 1
+baseline_policy: independently_reviewed_qualified_only
+surfaces:
+  - id: system-diagnostic
+    route: /admin/dashboard#diagnostic
+    capabilities:
+      - id: dashboard.diagnostic.controls
+        criticality: P1
+        status: operational
+        owner: dashboard
+        expected_behavior:
+          - Diagnostic appears immediately after Settings.
+          - Diag all and every individual Retest control expose running, passed, and failed states.
+        forbidden_behavior:
+          - One failed case must not suppress the terminal result of another case.
+        required_tests: [desktop_controls, mobile_no_overflow, isolated_case_continuation]
+        required_evidence: [ui, trace, video]
+        authority_boundary: {source: browser, runtime_authority: false}
+      - id: dashboard.diagnostic.read_only
+        criticality: P0
+        status: operational
+        owner: dashboard
+        expected_behavior:
+          - Opening Dashboard and running Diag all leaves the sealed workspace byte-identical.
+          - Diagnostic performs no POST, preparation, generation, outbound, or hardware action.
+        forbidden_behavior:
+          - A GET or Diagnostic check must not create artifacts, locks, or project metadata.
+        required_tests: [dashboard_open_no_write, diag_all_no_write, zero_post_requests]
+        required_evidence: [ui, network, server_state, trace]
+        authority_boundary: {source: server, runtime_authority: false}
+  - id: outdoor-navigation
+    route: /admin/dashboard#outdoor-navigation
+    capabilities:
+      - id: dashboard.navigation.partial_data_shell
+        criticality: P0
+        status: operational
+        owner: navigation
+        expected_behavior:
+          - Preparing, unavailable, stale, and not-prepared states preserve the canonical map and control shell.
+          - Empty states truthfully disclose that no terrain vectors or tiles are claimed.
+        forbidden_behavior:
+          - Reading a missing projection must not start preparation or imply ready terrain evidence.
+        required_tests: [missing_projection_get, partial_map_shell, explicit_preparation_only]
+        required_evidence: [ui, network, server_state]
+        authority_boundary: {source: server, runtime_authority: false}
+      - id: dashboard.maps.dynamic_rudy_tiles
+        criticality: P0
+        status: operational
+        owner: maps
+        expected_behavior:
+          - Navigation, Architecture, and Weather advance active Rudy tile matrices after zoom.
+          - UI zoom, active DOM matrix, and successful native tile requests agree.
+        forbidden_behavior:
+          - A stretched retained matrix or failed target request must not be reported as successful native zoom.
+        required_tests: [navigation_dynamic_tiles, architecture_dynamic_tiles, weather_dynamic_tiles]
+        required_evidence: [ui, network, trace, video]
+        authority_boundary: {source: browser, runtime_authority: false}
+  - id: contextual-permission
+    route: /admin/dashboard#outdoor-permission
+    capabilities:
+      - id: dashboard.permission.fail_closed
+        criticality: P0
+        status: operational
+        owner: permission
+        expected_behavior:
+          - Missing, stale, or incompatible projections render a blocked state with an actionable explanation.
+          - Ready and degraded fixtures remain visibly candidate-only.
+        forbidden_behavior:
+          - Permission presentation must not authorize departure, retreat, bivy, Safety, Emergency, outbound, or hardware effects.
+        required_tests: [ready_candidate_boundary, blocked_missing_seed, stale_baseline]
+        required_evidence: [ui, network, server_state, trace]
+        authority_boundary: {source: server, runtime_authority: false}
+  - id: qualification-infrastructure
+    route: internal://dashboard-qualification
+    capabilities:
+      - id: qualification.evidence.integrity
+        criticality: P0
+        status: operational
+        owner: qualification
+        expected_behavior:
+          - Every evidence file is SHA-256 indexed and independently verifiable.
+          - A changed or missing indexed file fails verification.
+        forbidden_behavior:
+          - Narrative claims must not override machine evidence or hash mismatches.
+        required_tests: [manifest_schema, evidence_tamper, intentional_p0_regression]
+        required_evidence: [manifest, server_state]
+        authority_boundary: {source: none, runtime_authority: false}
+      - id: qualification.fixture.active_p0_matrix
+        criticality: P0
+        status: operational
+        owner: qualification
+        expected_behavior:
+          - Synthetic fixtures cover ready, degraded, blocked, stale, partial, zero-evidence, and Assistant enabled/disabled states.
+        forbidden_behavior:
+          - Private workspaces or fixture evidence must not be represented as runtime truth.
+        required_tests: [fixture_matrix_schema, candidate_boundary, no_write_fixture]
+        required_evidence: [manifest, server_state]
+        authority_boundary: {source: none, runtime_authority: false}
+      - id: qualification.deterministic_regression_baseline
+        criticality: P1
+        status: operational
+        owner: qualification
+        expected_behavior:
+          - Focused Dashboard remediation tests and the configured repository regression baseline pass without skipped failures.
+        forbidden_behavior:
+          - Browser success must not hide a failing deterministic contract test.
+        required_tests: [dashboard_focused_pytest, repository_package_pytest]
+        required_evidence: [junit, server_state]
+        authority_boundary: {source: none, runtime_authority: false}

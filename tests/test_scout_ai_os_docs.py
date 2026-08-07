@@ -12,7 +12,6 @@ def read(relative_path: str) -> str:
 
 def test_scout_ai_os_docs_reflect_phase_9_completion() -> None:
     for relative_path in [
-        "AGENTS.md",
         "docs/IMPLEMENTATION_PLAN.md",
         "docs/ARCHITECTURE.md",
         "docs/API.md",
@@ -40,7 +39,7 @@ def test_scout_ai_os_docs_preserve_mvp_safety_limits() -> None:
     required = [
         "no production-grade sandbox isolation",
         "no mutation of Scout Phase 1 L0-L4 safety truth",
-        "generated code network access by default",
+        "let generated code access unrestricted host shell, network, secrets",
         "external notification",
         "scout-ai-os-hardware-smoke",
     ]

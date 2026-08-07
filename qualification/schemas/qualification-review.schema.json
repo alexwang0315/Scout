@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scout.dashboardQualificationReview.v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "commit_sha",
+    "evidence_root_sha256",
+    "verdict",
+    "merge_permitted",
+    "capability_verdicts",
+    "p0_blockers",
+    "p1_blockers",
+    "flaky_tests",
+    "evidence_insufficiencies",
+    "coverage_gaps",
+    "facts",
+    "inferences",
+    "unknowns",
+    "rationale",
+    "no_modifications_made"
+  ],
+  "properties": {
+    "schema": {"const": "scout.dashboardQualificationReview.v1"},
+    "commit_sha": {"type": "string", "minLength": 7},
+    "evidence_root_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "verdict": {"enum": ["QUALIFIED", "QUALIFIED_WITH_LIMITATIONS", "NEEDS_CORRECTION", "BLOCKED", "INSUFFICIENT_EVIDENCE"]},
+    "merge_permitted": {"type": "boolean"},
+    "capability_verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["capability_id", "state", "rationale"],
+        "properties": {
+          "capability_id": {"type": "string"},
+          "state": {"enum": ["PASS", "FAIL", "FLAKY", "BLOCKED", "NOT_IMPLEMENTED", "INSUFFICIENT_EVIDENCE"]},
+          "rationale": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "p0_blockers": {"type": "array", "items": {"type": "string"}},
+    "p1_blockers": {"type": "array", "items": {"type": "string"}},
+    "flaky_tests": {"type": "array", "items": {"type": "string"}},
+    "evidence_insufficiencies": {"type": "array", "items": {"type": "string"}},
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+    "facts": {"type": "array", "items": {"type": "string"}},
+    "inferences": {"type": "array", "items": {"type": "string"}},
+    "unknowns": {"type": "array", "items": {"type": "string"}},
+    "rationale": {"type": "string"},
+    "no_modifications_made": {"const": true}
+  },
+  "additionalProperties": false
+}

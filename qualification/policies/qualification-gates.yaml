@@ -1,0 +1,13 @@
+schema: scout.dashboardQualificationGates.v1
+blocking_states:
+  P0: [FAIL, FLAKY, BLOCKED, INSUFFICIENT_EVIDENCE, NOT_IMPLEMENTED]
+  P1: [FAIL, FLAKY, BLOCKED, INSUFFICIENT_EVIDENCE]
+  P2: [BLOCKED]
+global_blocks:
+  - manifest_mismatch
+  - evidence_hash_mismatch
+  - unreviewed_changed_capability
+  - unapproved_auto_fix
+  - reviewer_needs_correction
+trusted_baseline_verdicts: [QUALIFIED]
+retry_pass_state: FLAKY

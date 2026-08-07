@@ -66,7 +66,7 @@ from navigation_terrain_projection import (
     NavigationTerrainProjectionError,
 )
 from navigation_terrain_projection_store import (
-    resolve_navigation_terrain_projection,
+    inspect_navigation_terrain_projection,
 )
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
@@ -4691,7 +4691,7 @@ def create_admin_router(
                 raise NavigationTerrainProjectionError(
                     "pre-trip project must be an object"
                 )
-            resolution = resolve_navigation_terrain_projection(
+            resolution = inspect_navigation_terrain_projection(
                 project_root,
                 project,
                 project_id=project_id,

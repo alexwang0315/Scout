@@ -179,7 +179,7 @@ def test_navigation_terrain_intelligence_api_projects_bounded_workspace_evidence
     assert payload["boundary"]["safe_or_walkable"] == "not_determined"
 
 
-def test_navigation_terrain_intelligence_api_returns_preparing_without_blocking(
+def test_navigation_terrain_intelligence_api_returns_read_only_status_without_blocking(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -192,19 +192,21 @@ def test_navigation_terrain_intelligence_api_returns_preparing_without_blocking(
     )
     monkeypatch.setattr(
         admin_api,
-        "resolve_navigation_terrain_projection",
+        "inspect_navigation_terrain_projection",
         lambda *_args, **_kwargs: NavigationTerrainProjectionResolution(
-            http_status=202,
+            http_status=200,
             payload={
                 "schema_version": "scout_navigation_terrain_intelligence.v0",
                 "artifact_kind": "navigation_terrain_intelligence_projection_status",
                 "project_id": project_id,
-                "status": "preparing",
-                "projection_state": "preparing",
-                "retry_after_ms": 1000,
+                "status": "not_prepared",
+                "projection_state": "not_prepared",
+                "preparation_required": True,
+                "retry_after_ms": None,
                 "boundary": {
                     "candidate_only": True,
                     "runtime_safety_truth": False,
+                    "workspace_file_mutation_allowed": False,
                 },
             },
         ),
@@ -215,9 +217,48 @@ def test_navigation_terrain_intelligence_api_returns_preparing_without_blocking(
         f"/admin/pretrip/projects/{project_id}/navigation-terrain-intelligence"
     )
 
-    assert response.status_code == 202
-    assert response.json()["status"] == "preparing"
-    assert response.json()["retry_after_ms"] == 1000
+    assert response.status_code == 200
+    assert response.json()["status"] == "not_prepared"
+    assert response.json()["preparation_required"] is True
+    assert response.json()["retry_after_ms"] is None
+
+
+def test_navigation_terrain_intelligence_get_does_not_prepare_or_write(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "navigation-terrain-read-only"
+    project_root = tmp_path / project_id
+    project_root.mkdir()
+    project_path = project_root / "project.json"
+    project_path.write_text(
+        json.dumps({"project_id": project_id}),
+        encoding="utf-8",
+    )
+    original_project = project_path.read_bytes()
+
+    def reject_write_resolver(*_args, **_kwargs):
+        raise AssertionError("GET must not start Navigation projection preparation")
+
+    monkeypatch.setattr(
+        "navigation_terrain_projection_store.resolve_navigation_terrain_projection",
+        reject_write_resolver,
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{project_id}/navigation-terrain-intelligence"
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "not_prepared"
+    assert payload["projection_state"] == "not_prepared"
+    assert payload["preparation_required"] is True
+    assert payload["boundary"]["workspace_file_mutation_allowed"] is False
+    assert project_path.read_bytes() == original_project
+    assert not (project_root / "outputs" / "navigation").exists()
+    assert not (project_root / ".scout-connected-preparation").exists()
 
 
 def test_scout_dashboard_living_closed_loop_contract() -> None:
@@ -1607,8 +1648,9 @@ def test_weather_embedded_map_defaults_to_rudy_tw_and_cwa_imagery_only() -> None
         "renderTerrainMetadata(terrainGroup, view, bounds);"
         in pretrip_html
     )
-    assert 'sourceKind: "xyz_tile"' in pretrip_html
-    assert "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png" in pretrip_html
+    assert 'sourceKind: "scout_proxy_tile"' in pretrip_html
+    assert 'sourceId: "happyman_rudy_twmap"' in pretrip_html
+    assert 'cacheLayerId: "imagery"' in pretrip_html
     assert "renderRasterBasemapLayers(state.view);" in map_viewport_adapter
 
 
@@ -2103,6 +2145,19 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "尚未由目前 terrain pipeline 抽取" in html
     assert "P0、P1、P2 不合併成一個安全分數" in html
     assert "reference GPX 不自動升格成替代路線" in html
+
+
+def test_navigation_partial_states_preserve_truthful_map_control_shell() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    loading_renderer = html.split(
+        "function renderNavigationWorkspaceLoading(snapshot)", 1
+    )[1].split("function renderNavigationPage(force)", 1)[0]
+
+    assert 'renderDashboardMapViewport("navigation-workspace-map"' in loading_renderer
+    assert 'data-navigation-workspace-map="${stateLabel}"' in loading_renderer
+    assert 'data-dashboard-basemap-policy="rudy-twmap-only"' in loading_renderer
+    assert 'data-navigation-evidence-state="${stateLabel}"' in loading_renderer
+    assert "No terrain projection has been prepared" in loading_renderer
 
 
 def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoom() -> None:
@@ -4112,7 +4167,10 @@ def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
         "function diagnosticRequireNoAuthority(",
         ".filter(group => Number(group.count) === 0)",
         ".filter(item => Number(item.count) === 0)",
-        'group.zeroState || "unexplained zero"',
+        'group.zeroReasonCode || "fixture_or_projection_omission"',
+        '"source_checked_no_matches"',
+        '"source_unavailable"',
+        '"prepared_no_candidates"',
         'const reason = ["capability_timeline", "rest_intervals"].includes(item.category_id)',
         "Evidence categories count=0:",
     ):

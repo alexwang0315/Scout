@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scout.dashboardQualificationEvidence.v1",
+  "type": "object",
+  "required": ["schema", "commit_sha", "manifest_sha256", "evidence_root_sha256", "machine_verdict"],
+  "properties": {
+    "schema": {"const": "scout.dashboardQualificationEvidence.v1"},
+    "commit_sha": {"type": "string", "minLength": 7},
+    "manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidence_root_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "machine_verdict": {"enum": ["PASS", "FAIL", "FLAKY", "BLOCKED", "NOT_IMPLEMENTED", "INSUFFICIENT_EVIDENCE"]},
+    "merge_permitted": {"type": "boolean"}
+  },
+  "additionalProperties": true
+}

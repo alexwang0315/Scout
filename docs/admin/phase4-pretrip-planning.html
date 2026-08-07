@@ -2213,7 +2213,7 @@
     const OSM_TARGET_ZOOM = 17;
     const OSM_MAX_TILES = 64;
     const RASTER_MAX_TILES = 64;
-    const RUDY_TWMAP_MAX_TILES = 24;
+    const RUDY_TWMAP_MAX_TILES = 160;
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
     const OSM_TILE_CACHE_BUST = "offline-fallback-v13";
@@ -3047,7 +3047,7 @@
     }
     function chooseRasterZoom(view, bounds, maxTiles = RASTER_MAX_TILES, layerId = "imagery") {
       const range = rasterZoomRangeFor(view, layerId);
-      const effectiveMaxTiles = layerId === "rudy-twmap" ? Math.min(maxTiles, RUDY_TWMAP_MAX_TILES) : maxTiles;
+      const effectiveMaxTiles = layerId === "rudy-twmap" ? RUDY_TWMAP_MAX_TILES : maxTiles;
       const definition = rasterSourceDefinitionFor(layerId, rasterLayerFor(view, layerId));
       let zoom = layerId === "rudy-twmap"
         ? clamp(

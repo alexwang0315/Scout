@@ -589,6 +589,7 @@ def test_raster_tile_proxy_can_fill_cache_from_explicit_imagery_source(tmp_path)
     )
     assert cached.source == "local_cache"
     assert cached.body == remote_body
+    assert cached.headers()["X-Scout-Imagery-Source-Id"] == "nlsc_photo2"
 
 
 def _quadrant_png() -> bytes:
@@ -607,7 +608,6 @@ def _quadrant_png() -> bytes:
     output = io.BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
-    assert cached.headers()["X-Scout-Imagery-Source-Id"] == "nlsc_photo2"
 
 
 def test_tile_bounds_are_wgs84_slippy_bounds():

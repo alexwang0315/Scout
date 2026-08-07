@@ -446,6 +446,7 @@ def test_raster_label_ocr_derives_tile_records_from_map_preparation_plan(
     project = {
         "project_id": "chilai_nanhua_day1",
         "raster_label_plan_ref": "outputs/layers/plans/raster_label_plan.json",
+        "imagery_tile_cache_root": str(tmp_path / "isolated-raster-cache"),
     }
     (project_root / "project.json").write_text(
         json.dumps(project, ensure_ascii=False),
