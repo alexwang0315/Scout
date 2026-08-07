@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from fastapi import APIRouter, FastAPI, Query, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
 from runtime_audit_ledger import DEFAULT_RUNTIME_AUDIT_ROOT, FileRuntimeAuditLedger
@@ -119,15 +120,25 @@ def create_runtime_audit_router(
         category: str | None = None,
         runtime_instance_id: str | None = None,
         workspace_id: str | None = None,
+        day: date | None = Query(default=None, alias="date"),
+        utc_offset_minutes: int = Query(default=0, ge=-720, le=840),
+        include_all: bool = False,
         limit: int = Query(default=100, ge=1, le=500),
     ) -> JSONResponse:
+        if include_all and day is None:
+            raise HTTPException(
+                status_code=422,
+                detail="include_all requires a date filter",
+            )
         payload = ledger.query(
             event_type=event_type,
             outcome=outcome,
             category=category,
             runtime_instance_id=runtime_instance_id,
             workspace_id=workspace_id,
-            limit=limit,
+            day=day.isoformat() if day is not None else None,
+            utc_offset_minutes=utc_offset_minutes,
+            limit=None if include_all else limit,
         )
         return JSONResponse(
             payload.model_dump(mode="json"),

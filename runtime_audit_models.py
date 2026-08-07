@@ -47,6 +47,7 @@ RuntimeAuditCategory = Literal[
 _SAFE_SLUG_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
 _SAFE_WORKSPACE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
 _SHA256_PATTERN = r"^[a-f0-9]{64}$"
+_DATE_INDEX_KEY_PATTERN = r"^\d{4}-\d{2}(?:-\d{2})?$"
 
 
 class RuntimeAuditRecordInput(BaseModel):
@@ -196,6 +197,32 @@ class RuntimeAuditWriterHealth(BaseModel):
     last_error_code: str | None = Field(default=None, pattern=_SAFE_SLUG_PATTERN)
 
 
+class RuntimeAuditDateIndexItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(pattern=_DATE_INDEX_KEY_PATTERN)
+    event_count: int = Field(ge=0)
+
+
+class RuntimeAuditDateIndex(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timezone_offset_minutes: int = Field(ge=-720, le=840)
+    selected_day: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+    )
+    selected_month: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-\d{2}$",
+    )
+    days: list[RuntimeAuditDateIndexItem] = Field(default_factory=list)
+    months: list[RuntimeAuditDateIndexItem] = Field(default_factory=list)
+    matched_event_count: int = Field(ge=0)
+    returned_event_count: int = Field(ge=0)
+    truncated: bool
+
+
 class RuntimeAuditListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -206,9 +233,11 @@ class RuntimeAuditListResponse(BaseModel):
     status: Literal["ready", "empty", "degraded"]
     current_runtime_instance_id: str
     summary: RuntimeAuditSummary
+    selected_summary: RuntimeAuditSummary
     integrity: RuntimeAuditIntegrity
     events: list[RuntimeAuditEvent] = Field(default_factory=list)
     available_runtime_instances: list[str] = Field(default_factory=list)
+    date_index: RuntimeAuditDateIndex
     boundary: RuntimeAuditBoundary = Field(default_factory=RuntimeAuditBoundary)
     coverage: RuntimeAuditCoverage
     writer_health: RuntimeAuditWriterHealth
@@ -259,6 +288,8 @@ __all__ = [
     "RuntimeAuditCategory",
     "RuntimeAuditCoverage",
     "RuntimeAuditCoverageItem",
+    "RuntimeAuditDateIndex",
+    "RuntimeAuditDateIndexItem",
     "RuntimeAuditEvent",
     "RuntimeAuditEventType",
     "RuntimeAuditIntegrity",

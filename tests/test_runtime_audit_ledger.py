@@ -122,6 +122,88 @@ def test_file_ledger_is_append_only_hash_chained_rotated_and_queryable(
         assert stat.S_IMODE(path.stat().st_mode) & 0o077 == 0
 
 
+def test_query_builds_local_day_and_month_indexes(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    clock.value = datetime(2026, 8, 6, 15, 59, tzinfo=timezone.utc)
+    ledger = FileRuntimeAuditLedger(
+        root=tmp_path / "audit",
+        runtime_instance_id="runtime-date-index",
+        now_factory=clock.now,
+    )
+    ledger.start(application="scout-dashboard", runtime_profile="test")
+    clock.value = datetime(2026, 8, 6, 16, 1, tzinfo=timezone.utc)
+    ledger.append(_record())
+    clock.value = datetime(2026, 9, 1, 2, 0, tzinfo=timezone.utc)
+    ledger.append(_record())
+
+    august_seventh = ledger.query(
+        day="2026-08-07",
+        utc_offset_minutes=480,
+        limit=None,
+    )
+
+    assert august_seventh.date_index.timezone_offset_minutes == 480
+    assert august_seventh.date_index.selected_day == "2026-08-07"
+    assert august_seventh.date_index.selected_month == "2026-08"
+    assert august_seventh.date_index.matched_event_count == 1
+    assert august_seventh.date_index.returned_event_count == 1
+    assert august_seventh.date_index.truncated is False
+    assert august_seventh.selected_summary.total_events == 1
+    assert [item.key for item in august_seventh.date_index.days] == [
+        "2026-09-01",
+        "2026-08-07",
+        "2026-08-06",
+    ]
+    assert [item.event_count for item in august_seventh.date_index.days] == [
+        1,
+        1,
+        1,
+    ]
+    assert [item.key for item in august_seventh.date_index.months] == [
+        "2026-09",
+        "2026-08",
+    ]
+    assert [item.event_count for item in august_seventh.date_index.months] == [
+        1,
+        2,
+    ]
+
+
+def test_query_can_return_every_event_for_one_day_without_the_history_cap(
+    tmp_path: Path,
+) -> None:
+    clock = Clock()
+    ledger = FileRuntimeAuditLedger(
+        root=tmp_path / "audit",
+        runtime_instance_id="runtime-complete-day",
+        now_factory=clock.now,
+        max_events_per_file=1_000,
+    )
+    ledger.start(application="scout-dashboard", runtime_profile="test")
+    for _ in range(505):
+        ledger.append(_record())
+
+    complete_day = ledger.query(
+        day="2026-08-07",
+        utc_offset_minutes=480,
+        limit=None,
+    )
+    capped_day = ledger.query(
+        day="2026-08-07",
+        utc_offset_minutes=480,
+        limit=500,
+    )
+
+    assert len(complete_day.events) == 506
+    assert complete_day.date_index.matched_event_count == 506
+    assert complete_day.date_index.returned_event_count == 506
+    assert complete_day.date_index.truncated is False
+    assert len(capped_day.events) == 500
+    assert capped_day.date_index.truncated is True
+
+
 def test_ledger_redacts_secret_query_absolute_home_and_precise_coordinates(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

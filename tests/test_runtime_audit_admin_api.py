@@ -101,6 +101,46 @@ def test_admin_runtime_audit_api_records_lifecycle_http_and_workspace_io(
     assert not any("runtime_audit" in path.name for path in workspace_root.rglob("*"))
 
 
+def test_runtime_audit_api_accepts_a_complete_local_day_query(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+    ledger = FileRuntimeAuditLedger(
+        root=tmp_path / "audit",
+        runtime_instance_id="runtime-api-date-index",
+    )
+    original_query = ledger.query
+
+    def capture_query(**kwargs: object):
+        observed.update(kwargs)
+        return original_query(**kwargs)
+
+    monkeypatch.setattr(ledger, "query", capture_query)
+    app = create_admin_app(runtime_audit_ledger=ledger)
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/admin/runtime-audit",
+            params={
+                "date": "2026-08-07",
+                "utc_offset_minutes": 480,
+                "include_all": "true",
+            },
+        )
+        invalid = client.get(
+            "/admin/runtime-audit",
+            params={"include_all": "true"},
+        )
+
+    assert response.status_code == 200
+    assert observed["day"] == "2026-08-07"
+    assert observed["utc_offset_minutes"] == 480
+    assert observed["limit"] is None
+    assert response.json()["date_index"]["selected_day"] == "2026-08-07"
+    assert invalid.status_code == 422
+
+
 def test_dashboard_assistant_run_is_recorded_without_question_or_answer(
     tmp_path: Path,
 ) -> None:
