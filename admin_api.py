@@ -69,6 +69,11 @@ from navigation_terrain_projection import (
 from navigation_terrain_projection_store import (
     inspect_navigation_terrain_projection,
 )
+from navigation_terrain_raster_dem import (
+    TerrainDemPreparationError,
+    load_navigation_terrain_dem_manifest,
+    navigation_terrain_dem_tile,
+)
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
     build_pretrip_admin_view,
@@ -4775,15 +4780,104 @@ def create_admin_router(
                 project,
                 project_id=project_id,
             )
+            payload = {
+                **resolution.payload,
+                "terrain_raster_dem": _navigation_terrain_dem_public_manifest(
+                    project_root,
+                    project,
+                    project_id=project_id,
+                ),
+            }
             return JSONResponse(
                 status_code=resolution.http_status,
-                content=resolution.payload,
+                content=payload,
                 headers={"Cache-Control": "no-store"},
             )
         except (json.JSONDecodeError, OSError, NavigationTerrainProjectionError) as exc:
             raise HTTPException(
                 status_code=422,
                 detail="Navigation terrain projection could not be prepared",
+            ) from exc
+
+    @router.get("/pretrip/projects/{project_id}/terrain-dem/manifest")
+    def pretrip_project_terrain_dem_manifest(project_id: str) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+            if not isinstance(project, dict):
+                raise TerrainDemPreparationError(
+                    "pre-trip project must be an object"
+                )
+            payload = _navigation_terrain_dem_public_manifest(
+                project_root,
+                project,
+                project_id=project_id,
+            )
+            return JSONResponse(
+                status_code=200,
+                content=payload,
+                headers={"Cache-Control": "no-store"},
+            )
+        except (json.JSONDecodeError, OSError, TerrainDemPreparationError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Navigation terrain DEM manifest is invalid",
+            ) from exc
+
+    @router.get("/pretrip/projects/{project_id}/terrain-dem/{z}/{x}/{y}.png")
+    def pretrip_project_terrain_dem_tile(
+        project_id: str,
+        z: int,
+        x: int,
+        y: int,
+    ) -> Response:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+            if not isinstance(project, dict):
+                raise TerrainDemPreparationError(
+                    "pre-trip project must be an object"
+                )
+            _manifest, tile_path, tile_sha256 = navigation_terrain_dem_tile(
+                project_root,
+                project,
+                z=z,
+                x=x,
+                y=y,
+            )
+            return Response(
+                tile_path.read_bytes(),
+                media_type="image/png",
+                headers={
+                    "Cache-Control": "no-cache, max-age=0, must-revalidate",
+                    "X-Scout-Terrain-Dem-Hash": tile_sha256,
+                    "X-Scout-Candidate-Only": "true",
+                    "X-Scout-Runtime-Safety-Truth": "false",
+                },
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Navigation terrain DEM tile is not prepared",
+            ) from exc
+        except (json.JSONDecodeError, OSError, TerrainDemPreparationError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Navigation terrain DEM tile is invalid",
             ) from exc
 
     @router.get("/pretrip/projects/{project_id}/terrain-overlays/{mode}.png")
@@ -5403,9 +5497,42 @@ def create_admin_router(
         projection = _load_pretrip_rainfall_projection(
             project_root,
             project if isinstance(project, dict) else {},
-            required=True,
+            required=False,
         )
-        assert projection is not None
+        if projection is None:
+            if project.get("cwa_rainfall_route_projection_ref"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="configured rainfall route projection is missing",
+                )
+            return {
+                "schemaVersion": "cwa_route_grid_overlay.v1",
+                "artifactKind": "cwa_route_grid_overlay",
+                "projectId": project_id,
+                "status": "not_prepared",
+                "gridCells": [],
+                "products": [],
+                "bboxWgs84": None,
+                "legend": {},
+                "routeRef": None,
+                "routeSha256": None,
+                "pairId": None,
+                "pairVerification": "not_applicable",
+                "emptyReason": {
+                    "code": "rainfall_projection_not_prepared",
+                    "message": "Optional rainfall route projection has not been prepared.",
+                    "nextAction": "Run explicit connected preparation only when rainfall overlay evidence is required.",
+                },
+                "cachePolicy": {
+                    "adminReadIsCacheOnly": True,
+                    "upstreamFetchOnRead": False,
+                },
+                "boundary": {
+                    "candidateOnly": True,
+                    "runtimeSafetyTruth": False,
+                    "mobileGridProcessing": False,
+                },
+            }
         artifact_project_id = projection.get("projectId")
         if artifact_project_id is not None and artifact_project_id != project_id:
             raise HTTPException(
@@ -9435,6 +9562,61 @@ def _pretrip_workspace_review_log_path(
 
     candidate = project_root / "reviews" / "review_decision_log.json"
     return candidate if candidate.exists() else None
+
+
+def _navigation_terrain_dem_public_manifest(
+    project_root: Path,
+    project: Mapping[str, Any],
+    *,
+    project_id: str,
+) -> dict[str, Any]:
+    boundary = {
+        "candidate_only": True,
+        "human_review_required": True,
+        "runtime_safety_truth": False,
+        "safe_or_walkable": "not_determined",
+        "workspace_file_mutation_allowed": False,
+    }
+    try:
+        manifest = load_navigation_terrain_dem_manifest(project_root, project)
+    except FileNotFoundError:
+        return {
+            "schema_version": "scout_navigation_terrain_dem.v1",
+            "artifact_kind": "navigation_terrain_raster_dem_tiles",
+            "project_id": project_id,
+            "status": "not_prepared",
+            "preparation_required": True,
+            "tile_url_template": None,
+            "bounds_wgs84": None,
+            "boundary": boundary,
+        }
+
+    return {
+        "schema_version": manifest.get("schema_version"),
+        "artifact_kind": manifest.get("artifact_kind"),
+        "project_id": manifest.get("project_id"),
+        "status": manifest.get("status"),
+        "prepared_at": manifest.get("prepared_at"),
+        "encoding": manifest.get("encoding"),
+        "tile_size": manifest.get("tile_size"),
+        "minzoom": manifest.get("minzoom"),
+        "maxzoom": manifest.get("maxzoom"),
+        "tile_count": manifest.get("tile_count"),
+        "tile_url_template": manifest.get("tile_url_template"),
+        "bounds_wgs84": manifest.get("bounds_wgs84"),
+        "source_cell_resolution_m": manifest.get("source_cell_resolution_m"),
+        "source_supported_cell_count": manifest.get("source_supported_cell_count"),
+        "source_fingerprint": manifest.get("source_fingerprint"),
+        "coverage_strategy": manifest.get("coverage_strategy"),
+        "nodata_policy": manifest.get("nodata_policy"),
+        "alpha_nodata_supported": manifest.get("alpha_nodata_supported"),
+        "limitations": manifest.get("limitations", []),
+        "boundary": {
+            **boundary,
+            **dict(manifest.get("boundary") or {}),
+            "workspace_file_mutation_allowed": False,
+        },
+    }
 
 
 def _pretrip_workspace_project_root(
