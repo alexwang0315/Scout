@@ -343,6 +343,35 @@ def test_mission_baseline_map_context_get_is_compact_and_no_write(
     assert not store_root.exists()
 
 
+def test_mission_baseline_map_context_empty_anchor_rows_are_typed_not_prepared(
+    tmp_path: Path,
+) -> None:
+    client, store_root = _client(tmp_path, rich_reference=True)
+    project_root = tmp_path / "workspace" / PROJECT_ID
+    timing_path = project_root / "outputs" / "reference_segment_timing.json"
+    timing = json.loads(timing_path.read_text(encoding="utf-8"))
+    timing["checkpoint_match_quality"] = {
+        key: {
+            field: value
+            for field, value in row.items()
+            if field != "route_distance_m"
+        }
+        for key, row in timing["checkpoint_match_quality"].items()
+    }
+    timing_path.write_text(json.dumps(timing), encoding="utf-8")
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/mission-baseline/map-context"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "baseline_map_anchors_missing",
+        "message": "Reference timing has fewer than two valid ordered route anchors.",
+    }
+    assert not store_root.exists()
+
+
 def test_mission_baseline_daily_rudy_background_is_one_read_only_png(
     tmp_path: Path,
 ) -> None:
