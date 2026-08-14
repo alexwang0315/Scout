@@ -1,8 +1,11 @@
 schema: scout.dashboardQualificationReviewItem.v1
 id: SCOUT-Q-0001
+candidate_finding_id: SCOUT-CANDIDATE-0001
 title: Malformed GPX is shown as validated
 capability_id: trip_intake.gpx_validate
 status: AWAITING_HUMAN_REVIEW
+confirmation_status: GPT_PRO_CONFIRMED
+gpt_pro_review_ref: gpt-pro-collaboration/<ledger>/final-report.md#SCOUT-CANDIDATE-0001
 machine_state: FAIL
 abstraction_level: HIGH_LEVEL
 primary_layer: DOMAIN_LOGIC

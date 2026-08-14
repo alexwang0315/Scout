@@ -2,18 +2,84 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "scout.dashboardQualificationReview.v1",
   "type": "object",
-  "required": ["schema", "commit_sha", "evidence_root_sha256", "verdict", "merge_permitted"],
+  "required": [
+    "schema",
+    "commit_sha",
+    "evidence_root_sha256",
+    "runtime_attestation_sha256",
+    "review_channel",
+    "collaboration_ledger_ref",
+    "review_completed_at",
+    "finding_verdicts",
+    "visual_review",
+    "verdict",
+    "merge_permitted",
+    "no_modifications_made",
+    "human_confirmation_required"
+  ],
   "properties": {
     "schema": {"const": "scout.dashboardQualificationReview.v1"},
     "commit_sha": {"type": "string", "minLength": 7},
     "evidence_root_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "runtime_attestation_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "review_channel": {"const": "gpt-pro-collaboration-in-app-browser"},
+    "collaboration_ledger_ref": {"type": "string", "minLength": 1},
+    "review_completed_at": {"type": "string", "format": "date-time"},
+    "finding_verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidate_finding_id", "verdict", "rationale", "evidence_refs", "requires_human_disposition"],
+        "properties": {
+          "candidate_finding_id": {"type": "string", "pattern": "^SCOUT-CANDIDATE-[0-9]{4,}$"},
+          "verdict": {"enum": ["CONFIRMED", "DISPUTED", "INSUFFICIENT_EVIDENCE"]},
+          "rationale": {"type": "string", "minLength": 1},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}},
+          "requires_human_disposition": {"type": "boolean"},
+          "strongest_counterargument": {"type": "string"},
+          "uncertainty": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "visual_review": {
+      "type": "object",
+      "required": [
+        "all_bound_screenshots_inspected",
+        "inspected_screenshot_refs",
+        "blur_findings",
+        "occlusion_findings",
+        "clipping_findings",
+        "overlap_findings",
+        "low_resolution_findings",
+        "rationale"
+      ],
+      "properties": {
+        "all_bound_screenshots_inspected": {"const": true},
+        "inspected_screenshot_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "blur_findings": {"type": "array", "items": {"type": "string"}},
+        "occlusion_findings": {"type": "array", "items": {"type": "string"}},
+        "clipping_findings": {"type": "array", "items": {"type": "string"}},
+        "overlap_findings": {"type": "array", "items": {"type": "string"}},
+        "low_resolution_findings": {"type": "array", "items": {"type": "string"}},
+        "rationale": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
     "verdict": {
       "enum": ["QUALIFIED", "QUALIFIED_WITH_LIMITATIONS", "NEEDS_CORRECTION", "BLOCKED", "INSUFFICIENT_EVIDENCE"]
     },
     "merge_permitted": {"type": "boolean"},
     "p0_blockers": {"type": "array", "items": {"type": "string"}},
     "p1_blockers": {"type": "array", "items": {"type": "string"}},
-    "coverage_gaps": {"type": "array", "items": {"type": "string"}}
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}},
+    "no_modifications_made": {"const": true},
+    "human_confirmation_required": {"const": true}
   },
   "additionalProperties": true
 }

@@ -5,9 +5,12 @@
   "required": [
     "schema",
     "id",
+    "candidate_finding_id",
     "title",
     "capability_id",
     "status",
+    "confirmation_status",
+    "gpt_pro_review_ref",
     "machine_state",
     "abstraction_level",
     "primary_layer",
@@ -31,6 +34,10 @@
       "type": "string",
       "pattern": "^SCOUT-Q-[0-9]{4,}$"
     },
+    "candidate_finding_id": {
+      "type": "string",
+      "pattern": "^SCOUT-CANDIDATE-[0-9]{4,}$"
+    },
     "title": {
       "type": "string",
       "minLength": 1
@@ -49,6 +56,16 @@
         "REJECTED",
         "RESOLVED"
       ]
+    },
+    "confirmation_status": {
+      "enum": [
+        "GPT_PRO_CONFIRMED",
+        "GPT_PRO_INSUFFICIENT_EVIDENCE"
+      ]
+    },
+    "gpt_pro_review_ref": {
+      "type": "string",
+      "minLength": 1
     },
     "machine_state": {
       "enum": [

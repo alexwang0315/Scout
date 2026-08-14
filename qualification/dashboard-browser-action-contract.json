@@ -1,0 +1,94 @@
+{
+  "schema": "scout.dashboardBrowserActionContract.v1",
+  "version": 1,
+  "official_mode": {
+    "runtime_provenance": "live_operational_dashboard",
+    "pre_existing_runtime_required": true,
+    "browser_operation_required": true,
+    "contract_tests_are_dashboard_evidence": false,
+    "zero_unmapped_controls_required": true,
+    "zero_unreviewed_visual_states_required": true
+  },
+  "profiles": [
+    {"id": "desktop", "width": 1440, "height": 1000},
+    {"id": "large-mobile", "width": 390, "height": 844}
+  ],
+  "routes": [
+    {"id": "home", "require_control_census": true, "require_visual_audit": true},
+    {"id": "features-workspace", "require_control_census": true, "require_visual_audit": true},
+    {"id": "features-import-new-trip", "require_control_census": true, "require_visual_audit": true},
+    {"id": "features-country-material-pool", "require_control_census": true, "require_visual_audit": true},
+    {"id": "map", "require_control_census": true, "require_visual_audit": true},
+    {"id": "timeline", "require_control_census": true, "require_visual_audit": true},
+    {"id": "features-lbs", "require_control_census": true, "require_visual_audit": true},
+    {"id": "outdoor-route-context", "require_control_census": true, "require_visual_audit": true},
+    {"id": "outdoor-pace-fit", "require_control_census": true, "require_visual_audit": true},
+    {"id": "outdoor-pace-fit-body-index", "require_control_census": true, "require_visual_audit": true},
+    {"id": "outdoor-permission", "require_control_census": true, "require_visual_audit": true},
+    {"id": "outdoor-architecture", "require_control_census": true, "require_visual_audit": true},
+    {"id": "outdoor-weather", "require_control_census": true, "require_visual_audit": true},
+    {"id": "outdoor-navigation", "require_control_census": true, "require_visual_audit": true},
+    {"id": "emergency", "require_control_census": true, "require_visual_audit": true},
+    {"id": "agent", "require_control_census": true, "require_visual_audit": true},
+    {"id": "living", "require_control_census": true, "require_visual_audit": true},
+    {"id": "runtime-audit", "require_control_census": true, "require_visual_audit": true},
+    {"id": "surface-debug", "require_control_census": true, "require_visual_audit": true},
+    {"id": "debug", "require_control_census": true, "require_visual_audit": true},
+    {"id": "observer", "require_control_census": true, "require_visual_audit": true},
+    {"id": "settings", "require_control_census": true, "require_visual_audit": true},
+    {"id": "diagnostic", "require_control_census": true, "require_visual_audit": true}
+  ],
+  "map_surfaces": [
+    {"id": "overview-map", "route": "home", "kind": "native", "viewport_id": "overview-map"},
+    {"id": "lbs-map", "route": "features-lbs", "kind": "native", "viewport_id": "lbs-map"},
+    {"id": "permission-map", "route": "outdoor-permission", "kind": "native", "viewport_id": "permission-map"},
+    {"id": "emergency-review-map", "route": "emergency", "kind": "native", "viewport_id": "emergency-review-map"},
+    {"id": "pace-fit-map", "route": "outdoor-pace-fit", "kind": "native", "viewport_id": "pace-fit-map"},
+    {"id": "navigation-map", "route": "outdoor-navigation", "kind": "native", "viewport_id": "navigation-workspace-map"},
+    {"id": "architecture-map", "route": "outdoor-architecture", "kind": "native", "viewport_id": "architecture-map"},
+    {"id": "map", "route": "map", "kind": "embedded-pretrip", "frame_selector": "#pretripMapFrame", "layer_scope": "pretrip"},
+    {"id": "weather-map", "route": "outdoor-weather", "kind": "embedded-pretrip", "frame_selector": "[data-weather-cwa-map-frame=\"true\"]", "layer_scope": "weather"}
+  ],
+  "required_map_gestures": [
+    "fit",
+    "zoom_in",
+    "zoom_out",
+    "mouse_pan",
+    "keyboard_pan",
+    "rectangle_zoom"
+  ],
+  "required_map_content": {
+    "render_policy": "tile-vector-approved-single-image",
+    "vector_content_required": true,
+    "tile_or_approved_single_image_required": true,
+    "successful_raster_request_required_when_tile_visible": true,
+    "all_exposed_layer_controls_must_be_toggled": true,
+    "enabled_layer_must_have_visible_rendered_content": true
+  },
+  "control_coverage": {
+    "interactive_selector": "button, a[href], input, select, textarea, summary, [role=button], [role=tab], [tabindex]:not([tabindex=\"-1\"])",
+    "include_embedded_frames": true,
+    "disabled_controls_require_executable_state": true,
+    "delegated_controls_require_passing_specialist_case": true,
+    "allowed_terminal_states": ["OPERATED", "DELEGATED", "GUARD_VERIFIED"],
+    "blocking_terminal_states": ["UNMAPPED", "MISSING_AFTER_RELOAD", "NOT_EXERCISED", "NO_STATE_CHANGE", "NO_VISUAL_CHANGE", "EFFECT_AUTHORIZATION_REQUIRED"],
+    "mutation_actions_require_explicit_authorization": true,
+    "browser_local_state_is_not_server_persistence_evidence": true
+  },
+  "visual_quality": {
+    "max_horizontal_overflow_px": 1,
+    "max_occluded_controls": 0,
+    "max_overlapping_control_pairs": 0,
+    "max_blurred_elements": 0,
+    "max_broken_images": 0,
+    "max_low_resolution_rasters": 0,
+    "max_unexplained_clipped_text": 0,
+    "minimum_readable_font_px": 10,
+    "minimum_screenshot_luminance_stddev": 5,
+    "minimum_screenshot_edge_density": 0.002,
+    "minimum_screenshot_laplacian_variance": 12,
+    "screenshot_before_after_each_operation": true,
+    "full_route_scroll_evidence_required": true,
+    "independent_visual_review_required": true
+  }
+}

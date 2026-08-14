@@ -16,6 +16,7 @@ VALID_STATES = {
     "NOT_IMPLEMENTED",
     "INSUFFICIENT_EVIDENCE",
 }
+OFFICIAL_RUNTIME_STATUSES = {"operational"}
 
 
 def evaluate_results(
@@ -26,15 +27,26 @@ def evaluate_results(
     blocking_states = policy.get("blocking_states") or {}
     blockers: list[dict[str, str]] = []
     normalized_results: dict[str, str] = {}
+    excluded_capabilities: list[dict[str, str]] = []
 
     for surface in manifest.get("surfaces") or []:
         for capability in surface.get("capabilities") or []:
             capability_id = str(capability.get("id") or "")
             criticality = str(capability.get("criticality") or "P2")
+            capability_status = str(capability.get("status") or "not_implemented")
             state = str(results.get(capability_id) or "INSUFFICIENT_EVIDENCE")
             if state not in VALID_STATES:
                 state = "INSUFFICIENT_EVIDENCE"
             normalized_results[capability_id] = state
+            if capability_status not in OFFICIAL_RUNTIME_STATUSES:
+                excluded_capabilities.append(
+                    {
+                        "capability_id": capability_id,
+                        "status": capability_status,
+                        "reason": "not_an_active_operational_runtime_capability",
+                    }
+                )
+                continue
             if state in set(blocking_states.get(criticality) or []):
                 blockers.append(
                     {
@@ -56,6 +68,7 @@ def evaluate_results(
         "merge_permitted": not blockers,
         "results": normalized_results,
         "blockers": blockers,
+        "excluded_capabilities": excluded_capabilities,
     }
 
 

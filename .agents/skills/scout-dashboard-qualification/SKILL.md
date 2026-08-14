@@ -1,6 +1,6 @@
 ---
 name: scout-dashboard-qualification
-version: 1.2.0
+version: 1.5.0
 description: Run Scout Dashboard browser qualification at any time, after changes, before merge, or before release using Playwright, Codex, immutable evidence bundles, baseline comparison, human review gates, and independent GPT review.
 triggers:
   - qualify scout dashboard
@@ -26,7 +26,7 @@ The skill establishes a producer-reviewer separation:
 
 1. Playwright is the deterministic browser-test authority.
 2. Codex acts as implementation-aware test operator and exploratory tester.
-3. GPT acts as an independent, read-only qualification reviewer.
+3. GPT Pro, reached only through `$gpt-pro-collaboration` in the Codex in-app browser, acts as an independent, read-only qualification reviewer.
 4. GitHub Actions enforces merge gates.
 5. Every verdict is bound to an immutable evidence bundle.
 6. Failed tests are classified and presented at a Human Review Gate before any implementation change.
@@ -43,22 +43,72 @@ The skill must never treat an AI narrative as proof of functionality.
 - UI confirmation alone is insufficient for persistent or authoritative actions.
 - Operational, candidate, shadow, projection, fixture, historical, sandbox, and runtime states must remain distinct.
 - Smoke or fixture evidence must never be represented as runtime truth.
+- Official qualification must connect to a pre-existing real Scout runtime Dashboard. The qualification runner must not start, seed, replace, or stop that runtime.
+- The exact runtime URL, port, selected real workspace, initial/final reachability, and runtime continuity evidence must be recorded. A missing or restarted runtime is `INSUFFICIENT_EVIDENCE` or `BLOCKED`, never PASS.
+- Browser qualification must exercise the visible Dashboard through browser operations. Direct API, unit, fixture, DOM-construction, or screenshot-only evidence may supplement but never replace the browser run.
+- Qualification contract tests validate the qualification machinery only. Their count and result must be reported separately and can never be counted as Dashboard functions tested, browser actions completed, or visual states qualified.
+- Official full qualification must load `qualification/dashboard-browser-action-contract.json`, reconcile it with the live navigation, and fail if any contracted route, visible control, map surface, layer control, browser action, or visual state lacks evidence.
+- Every ordinary interactive control must be operated in the browser and have before/after UI state plus before/after screenshot evidence. A DOM node, event-handler string, API response, or enabled checkbox alone is not success.
+- The control census includes the main document and every rendered embedded frame. A control inside the Map or Weather iframe is not covered merely because the parent iframe is visible.
+- A disabled control or a select with only one runtime value is unexercised, not proof of the function. Official qualification needs a real project/state where the function can execute, unless a separate explicit guard-state capability is being verified.
+- A delegated control counts only when its named specialist browser case passes; delegation is routing, never evidence by itself.
+- Every Dashboard map surface must receive real Fit, zoom-in, zoom-out, mouse-pan, keyboard-pan, and rectangle-zoom input. A successful click without a changed map view is FAIL.
+- Every exposed map layer must be switched off and on through the rendered control. The enabled state must contain visible rendered tile, vector, point, line, polygon, or specifically approved single-image content.
+- Visual acceptance is blocking. Unintended blur, low-resolution raster upscaling, broken imagery, clipped text, horizontal overflow, covered controls, overlapping controls, blank states, or unreadable text cannot pass.
+- Pixel/DOM heuristics supplement rather than replace independent visual inspection. GPT Pro must inspect every hash-bound route/action screenshot before returning a visual verdict.
+- Synthetic, fixture, replay-only, or temporary-workspace runs are harness-development evidence only and are permanently ineligible for an official verdict or trusted baseline.
 - GPT reviewer must not modify implementation or tests.
 - Codex operator must not issue the final qualification verdict.
+- Direct model/API review is not a substitute for `$gpt-pro-collaboration`; the independent review must be performed through the Codex in-app browser and bound to its resumable ledger.
 - Evidence hashes must match before review begins.
+- Every bound screenshot's filename extension and declared media type must match its detected magic bytes. A mismatch blocks sealing and review; never relabel JPEG bytes as PNG.
+- Evidence-root canonicalization must explicitly declare UTF-8 relative-path sorting and the exact `{sha256}  {path}\n` line format. The root hash must not depend on unspecified list or hash-line ordering.
 - Qualification is read-only by default: no production code, test expectation, fixture, manifest semantics, or contract may be changed merely because a test failed.
-- A failed item must be recorded, classified, evidenced, and submitted for explicit human disposition before remediation.
+- A failed observation must be preserved as a candidate finding; after GPT Pro review, any confirmed or blocking item must be classified, evidenced, and submitted for explicit human disposition before remediation.
 - Only an explicit APPROVE_FIX or SPEC_CHANGE decision authorizes a subsequent modification phase.
 - The skill must be callable on demand at any time, even when no feature or PR context is supplied.
 - On-demand runs must default to read-only regression qualification and compare the current revision with the most recent trusted qualified baseline.
 - Previously passing capabilities that now fail, become flaky, lose evidence, or change semantics must be classified as regressions and highlighted separately.
+- Machine and exploratory failures are candidate findings until GPT Pro reviews the sealed live-runtime evidence. Candidate findings must not be written as confirmed issues.
+- Every qualification round must end by presenting GPT-Pro-reviewed findings to the user for explicit human disposition. No remediation or specification addition may begin before the matching issue receives `APPROVE_FIX` or `SPEC_CHANGE`.
+
+## Mandatory live-runtime browser gate
+
+An official qualification round is valid only when all of the following are true:
+
+1. A real Scout runtime Dashboard is already running before evidence collection begins.
+2. Its base URL and port are explicitly resolved and recorded; do not silently assume port 9099.
+3. The selected project exists in the runtime workspace catalog and is not a qualification fixture, temporary seed, synthetic workspace, or replay server.
+4. The runner connects to that runtime without starting or stopping any server and verifies the same runtime remains reachable for the entire round.
+5. Playwright operates the rendered Dashboard, including navigation, controls, individual Diagnostic retests, Diag all, applicable map interactions, and observed error states.
+6. Applicable authoritative or persistent behavior is corroborated by browser-observed network responses and server/artifact state.
+7. All active capabilities in scope are exercised. Missing real runtime state coverage remains `INSUFFICIENT_EVIDENCE`; never fill the gap with a fixture.
+8. All routes and visible controls in both the main document and embedded frames reconcile with the browser action contract. Zero unmapped, disabled-only, or unexercised controls is required.
+9. All nine contracted map surfaces complete the six required browser gestures; embedded maps also operate every visible directional pan control. Every exposed canonical/Weather layer, layer preset, and CWA display control completes its rendered behavior check.
+10. Desktop and large-mobile route states have full scroll screenshots and pass the visual-quality gate. The number of Python/JavaScript contract tests is never reported as Dashboard feature coverage.
+
+The official command must fail closed when the runtime URL or project cannot be resolved. A fixture harness may exist behind an explicit `--fixture-harness`-style opt-in, but its output must state `official_qualification_eligible=false`, must not be promoted to a baseline, and must not create confirmed issue records.
+
+## Finding, review, and human-confirmation lifecycle
+
+The order is mandatory and cannot be collapsed:
+
+1. `candidate-findings.json`: Codex records browser-observed failures, warnings, contradictions, and evidence gaps as unconfirmed candidate findings.
+2. Seal and hash the live-runtime evidence bundle. No evidence-producing test or expected behavior may change afterward.
+3. Load `$gpt-pro-collaboration`, use the Codex in-app browser, and submit bounded review packets to GPT Pro. The ledger must bind the review to commit SHA, evidence root SHA-256, runtime-attestation SHA-256, and candidate finding IDs.
+4. GPT Pro marks each candidate `CONFIRMED`, `DISPUTED`, or `INSUFFICIENT_EVIDENCE`, with evidence references and uncertainty. GPT Pro cannot erase a machine FAIL.
+5. Only `CONFIRMED` or still-blocking `INSUFFICIENT_EVIDENCE` findings may be materialized into `review-items.json`; each record must reference the GPT Pro review and start as `AWAITING_HUMAN_REVIEW`.
+6. Codex summarizes the round in this conversation and asks the user for a finding-specific Human Review Gate decision.
+7. Only `APPROVE_FIX` authorizes the bounded repair described for that issue. Only `SPEC_CHANGE` authorizes adding or changing specification/contract behavior. All other decisions preserve the no-change gate.
+
+Neither a deterministic failure nor GPT Pro agreement is human authorization to repair or extend the specification.
 
 
 ## Human Review Gate and no-auto-fix policy
 
 Qualification and remediation are separate phases. During Bootstrap, Feature qualification, Full regression, and Review only modes, the operator must stop after evidence collection, classification, and proposed remediation. It must not automatically patch implementation code, loosen assertions, rewrite expected behavior, alter fixtures, or reclassify capability status to make the suite pass.
 
-For every failed, flaky, blocked, contradictory, or evidence-insufficient item, create a durable review item and wait for one explicit human decision:
+For every GPT-Pro-reviewed failed, flaky, blocked, contradictory, or evidence-insufficient item, create a durable review item with its GPT Pro review reference and wait for one explicit human decision:
 
 - `APPROVE_FIX`: authorize a bounded implementation/test repair matching the approved proposal.
 - `REJECT_FIX`: preserve the repository and record why the proposed repair is rejected.
@@ -67,7 +117,7 @@ For every failed, flaky, blocked, contradictory, or evidence-insufficient item, 
 - `SPEC_CHANGE`: treat the observed mismatch as a specification decision; update contracts/tests only in a separately authorized change.
 - `REQUEST_MORE_EVIDENCE`: run additional read-only diagnostics without modifying behavior.
 
-A human decision must bind to the issue ID, evidence root SHA-256, commit SHA, proposed scope, and decision timestamp. Silence, prior general approval, or a passing retry is not authorization.
+A human decision must bind to the issue ID, evidence root SHA-256, runtime-attestation SHA-256, GPT Pro collaboration ledger/review reference, commit SHA, proposed scope, and decision timestamp. Silence, prior general approval, GPT Pro agreement, or a passing retry is not authorization.
 
 ## Defect classification taxonomy
 
@@ -158,9 +208,12 @@ Each item must include:
 
 ```yaml
 id: SCOUT-Q-0001
+candidate_finding_id: SCOUT-CANDIDATE-0001
 title: concise factual title
 capability_id: trip_intake.gpx_validate
 status: OPEN | AWAITING_HUMAN_REVIEW | APPROVED_FOR_FIX | DEFERRED | KNOWN_ISSUE | REJECTED | RESOLVED
+confirmation_status: GPT_PRO_CONFIRMED | GPT_PRO_INSUFFICIENT_EVIDENCE
+gpt_pro_review_ref: collaboration ledger and finding-level review reference
 machine_state: FAIL | FLAKY | BLOCKED | INSUFFICIENT_EVIDENCE
 abstraction_level: HIGH_LEVEL | MID_LEVEL | LOW_LEVEL | CROSS_CUTTING | UNKNOWN
 primary_layer: DOMAIN_LOGIC
@@ -186,6 +239,8 @@ suggested_disposition: APPROVE_FIX
 merge_recommendation: BLOCK | ALLOW_WITH_HUMAN_EXCEPTION | ALLOW
 human_decision: null
 ```
+
+Do not allocate a `SCOUT-Q-*` ID or write this canonical record before GPT Pro completes the finding-level review. Browser observations remain `SCOUT-CANDIDATE-*` entries until then.
 
 The generated review summary must group items by severity, abstraction level, system layer, defect nature, and merge recommendation.
 
@@ -213,8 +268,10 @@ The generated review summary must group items by severity, abstraction level, sy
 The skill should locate or request only when impossible to infer:
 
 - Scout repository root.
-- Dashboard start command or compose file.
-- Test environment configuration.
+- Exact base URL and port of an already-running real runtime Dashboard.
+- Real runtime project/workspace ID and read-only runtime environment context.
+- Dashboard start command or compose file for operator reference only; qualification must not start the runtime itself.
+- Test environment configuration and runtime continuity evidence.
 - Changed commit or PR diff.
 - Existing Playwright configuration, if any.
 - Existing Scout contracts and qualification packets.
@@ -228,9 +285,12 @@ Create or maintain:
 ```text
 qualification/
   dashboard-capability-manifest.yaml
+  dashboard-browser-action-contract.json
   schemas/
+    dashboard-browser-action-contract.schema.json
     dashboard-capability-manifest.schema.json
     qualification-evidence.schema.json
+    qualification-review-item.schema.json
     qualification-review.schema.json
   prompts/
     codex-operator.md
@@ -253,16 +313,16 @@ Use when the qualification system does not yet exist.
 1. Inventory Dashboard routes, capabilities, API boundaries, and state classifications.
 2. Identify P0/P1/P2 criticality.
 3. Create the capability manifest.
-4. Establish deterministic test environment and fixtures.
+4. Establish deterministic harness fixtures for test-development only, and separately connect the official qualification slice to an already-running real runtime Dashboard.
 5. Implement one vertical slice containing:
    - one normal workflow,
    - one fail-closed boundary,
    - one mobile viewport,
    - one server persistence assertion,
    - one intentional regression proving merge blocking.
-6. Generate evidence bundle.
-7. Run independent review.
-8. Classify every non-pass item and open the Human Review Gate.
+6. Generate a live-runtime evidence bundle; fixture output cannot satisfy this step.
+7. Run independent review through `$gpt-pro-collaboration` in the Codex in-app browser.
+8. Classify every GPT-Pro-reviewed non-pass item and open the Human Review Gate.
 9. Report coverage gaps without claiming full Dashboard qualification.
 10. Do not remediate until explicitly authorized.
 
@@ -274,23 +334,23 @@ Use after a new feature or behavior change.
 2. Map changed code to capability IDs.
 3. Fail if changed user-visible behavior lacks manifest coverage.
 4. Update positive, negative, persistence, and authority-boundary tests.
-5. Run deterministic browser suite.
+5. Connect to the pre-existing real runtime and run the deterministic browser suite against it; never substitute a seeded fixture server.
 6. Run Codex exploratory pass focused on changed surfaces and adjacent flows.
 7. Seal evidence bundle.
-8. Run independent GPT review.
-9. Produce classified review items and independent verdict.
-10. Stop at the Human Review Gate; do not remediate without an explicit bound decision.
+8. Run independent GPT Pro review through `$gpt-pro-collaboration` and the Codex in-app browser.
+9. Produce classified review items only for reviewed findings and bind the independent verdict to the collaboration ledger.
+10. Present every reviewed item to the user and stop at the Human Review Gate; do not remediate or add specification without an explicit bound decision.
 
 ### Mode C — Full regression
 
 Use before release or milestone closure.
 
-1. Execute all active operational capabilities.
+1. Execute all active operational capabilities through browser operations on the already-running real runtime Dashboard.
 2. Verify NOT_IMPLEMENTED and intent-only surfaces are not overclaimed.
 3. Run desktop and large-mobile profiles.
 4. Inspect skipped tests, retries, console errors, failed requests, and stale artifacts.
 5. Produce release-bound qualification packet.
-6. Classify non-pass items and stop at the Human Review Gate.
+6. Submit the sealed packet to GPT Pro, classify reviewed non-pass items, present them to the user, and stop at the Human Review Gate.
 
 ### Mode D — Review only
 
@@ -299,7 +359,7 @@ Use when evidence already exists.
 1. Verify hashes.
 2. Read raw evidence, not only summaries.
 3. Evaluate each capability.
-4. Produce independent verdict.
+4. Use `$gpt-pro-collaboration` in the Codex in-app browser to produce the independent verdict; reject packets without live-runtime attestation.
 5. Do not modify code or tests.
 6. Classify review items and await human disposition.
 
@@ -320,9 +380,9 @@ Use whenever the user asks to check Scout now, regardless of whether a feature w
    - `RESOLVED_SINCE_BASELINE`: prior non-pass item now passes, without automatically closing its human review record.
    - `UNCHANGED_PASS`, `UNCHANGED_NON_PASS`, or `NEW_CAPABILITY`.
 7. Run Codex exploratory testing on changed, adjacent, and historically fragile surfaces.
-8. Seal a new evidence bundle and run independent GPT review.
-9. Create or update classified review items. Do not patch any code, test, fixture, manifest semantics, or expected result.
-10. Present the Human Review Gate with a concise section titled `Regressions introduced since last qualified baseline`.
+8. Seal a new live-runtime evidence bundle and run independent GPT Pro review through `$gpt-pro-collaboration`.
+9. Create or update classified review items only after that review. Do not patch any code, test, fixture, manifest semantics, or expected result.
+10. Present every reviewed issue for human confirmation, including a concise section titled `Regressions introduced since last qualified baseline`, and stop.
 
 If no trusted baseline exists, continue the run as an initial full qualification and return `NO_TRUSTED_BASELINE`; do not invent a comparison result.
 
@@ -334,7 +394,7 @@ npm run qualification:check:full
 npm run qualification:check:smoke
 ```
 
-A successful on-demand run creates a new immutable packet but must not silently promote it to the trusted baseline. Baseline promotion requires a verified independent verdict and the repository's configured human or merge policy.
+A successful on-demand run creates a new immutable packet but must not silently promote it to the trusted baseline. Baseline promotion requires live-runtime attestation, a verified GPT Pro collaboration verdict, and the repository's configured human or merge policy. Historical fixture/synthetic packets are never trusted baselines even if their old verdict says `QUALIFIED`.
 
 ## Capability manifest contract
 
@@ -368,6 +428,18 @@ A changed capability without manifest coverage is a blocking manifest mismatch.
 
 ## Browser qualification rules
 
+Playwright must connect to the explicitly recorded real runtime URL. The runner must not call a fixture server factory, seed a temporary workspace, reserve an ephemeral Dashboard port, or terminate the runtime. Browser action evidence must include the clicked control or route, timestamp, resulting UI state, and correlated network observations.
+
+The full browser run is inventory-driven:
+
+1. Reconcile all rendered navigation routes with `dashboard-browser-action-contract.json`.
+2. On desktop and large-mobile, open every route, physically scroll its complete rendered height, and capture each visible viewport state.
+3. Discover every visible `button`, link, input, select, textarea, summary, tab, role-button, and keyboard-focusable control in the main document and every rendered embedded frame. Operate it or bind it to a specialist browser case. `UNMAPPED`, `NOT_EXERCISED`, `MISSING_AFTER_RELOAD`, `NO_STATE_CHANGE`, `NO_VISUAL_CHANGE`, and `EFFECT_AUTHORIZATION_REQUIRED` are blocking coverage gaps. Disabled controls and single-value selects remain `NOT_EXERCISED` until a real executable state is supplied.
+4. For persistent, outbound, hardware, preparation, generation, or other effectful controls, use only an explicitly authorized, reversible, real QA runtime/project. Without that authority, preserve the control as `EFFECT_AUTHORIZATION_REQUIRED`; do not click it and do not claim full qualification.
+5. Exercise all contracted maps and layers using real mouse and keyboard input. For embedded maps, also operate all four directional pan buttons, every layer preset, and every CWA product/window/timeline/opacity/play control. Validate the changed view/render group and browser-observed raster requests, not merely the control state.
+6. Save before/after screenshots for every operation. Machine-check blur filters, sharpness, raster resolution, broken images, text clipping/readability, overflow, occlusion, and interactive overlap.
+7. Require GPT Pro to inspect every bound screenshot. A screenshot path, screenshot count, or machine sharpness score is not independent visual confirmation.
+
 Every authoritative or persistent action should verify three layers where applicable:
 
 1. Visible UI state.
@@ -383,7 +455,7 @@ Additionally capture:
 - Playwright trace,
 - test video on failure or retry,
 - viewport dimensions,
-- fixture provenance,
+- runtime provenance and continuity attestation,
 - server contract identifiers.
 
 ## Codex operator role
@@ -411,7 +483,7 @@ Codex may not:
 
 ## GPT reviewer role
 
-Load and follow `templates/gpt-reviewer.md`.
+Load and follow `templates/gpt-reviewer.md`, then load `$gpt-pro-collaboration` and `$browser:control-in-app-browser`. The only accepted official reviewer channel is a GPT Pro dialogue operated through the Codex in-app browser. A direct OpenAI API call, local model, prose-only Codex review, or standalone browser does not satisfy this gate.
 
 Reviewer must:
 
@@ -421,6 +493,9 @@ Reviewer must:
 - separate fact, inference, and unknown,
 - reject unsupported PASS claims,
 - bind verdict to commit and evidence hashes.
+- reject a packet whose runtime attestation is missing, synthetic, fixture-backed, temporary, discontinuous, or not hash-bound;
+- return a finding-level `CONFIRMED | DISPUTED | INSUFFICIENT_EVIDENCE` decision;
+- preserve its resumable collaboration ledger reference in the qualification packet.
 
 ## Evidence bundle
 
@@ -432,6 +507,13 @@ artifacts/qualification/<commit-sha>/
   git-diff.patch
   build-info.json
   environment.json
+  runtime-attestation.json
+  browser-action-contract.snapshot.json
+  browser-action-log.json
+  browser-control-inventory.json
+  browser-visual-audit.json
+  browser-map-interactions.json
+  browser-layer-interactions.json
   playwright-report/
   junit.xml
   results.json
@@ -443,17 +525,20 @@ artifacts/qualification/<commit-sha>/
   page-errors.json
   failed-requests.json
   exploratory-findings.json
+  candidate-findings.json
   coverage-map.json
   evidence-index.json
   machine-verdict.json
   reviewer-input.json
+  gpt-pro-review-status.json
+  gpt-pro-review-reference.json
   reviewer-verdict.json
   review-items.json
   human-decisions.json
   qualification-summary.md
 ```
 
-`evidence-index.json` must contain SHA-256 hashes for every required evidence file.
+`evidence-index.json` must contain SHA-256 hashes for every required evidence file, a magic-byte-derived media type for every bound screenshot, and an explicit `root_canonicalization` object declaring the relative-path sort key, encoding, line format, and digest algorithm.
 
 ## Default Scout P0 boundaries
 
@@ -499,22 +584,29 @@ Block merge on:
 - any unresolved S5 or S4 item,
 - any issue awaiting required human review,
 - any attempted unapproved auto-fix.
+- runtime URL/project not explicitly resolved or runtime continuity not proven,
+- synthetic, fixture, or temporary evidence presented as official qualification,
+- GPT Pro collaboration review missing or not bound to the sealed evidence,
+- a reviewed issue missing its required human disposition before repair or specification work.
 
 ## Final response format
 
 Always report:
 
 1. Scope and commit under review.
-2. Machine verdict.
-3. Independent reviewer verdict.
-4. P0/P1 blockers.
-5. Flaky tests.
-6. Coverage gaps.
-7. Classified correction items grouped by severity, layer, abstraction level, and defect nature.
-8. Human decisions required and proposed fix scopes.
-9. Evidence artifact path.
-10. Exact commands and exit codes.
-11. Whether merge/release is permitted.
-12. Explicit confirmation that no unapproved modification was made.
+2. Exact runtime URL, port, project ID, continuity result, and runtime-attestation hash.
+3. Provisional machine verdict.
+4. Independent GPT Pro verdict and collaboration ledger reference, or `AWAITING_GPT_PRO_REVIEW`.
+5. P0/P1 blockers.
+6. Flaky tests.
+7. Coverage gaps.
+8. Candidate findings and their GPT Pro confirmation state.
+9. Classified correction items grouped by severity, layer, abstraction level, and defect nature.
+10. Human decisions required and proposed fix or specification scopes; explicitly stop for the user's confirmation after every round.
+11. Evidence artifact path.
+12. Exact commands and exit codes.
+13. Whether merge/release is permitted.
+14. Explicit confirmation that no unapproved modification was made.
+15. Contract-test count separately from live browser counts: routes opened, controls operated, map surfaces/gestures completed, layers toggled, screenshots visually inspected, and any unexercised/effect-authorization gaps.
 
 Never say “all functions are normal” unless every manifest capability in scope is qualified.

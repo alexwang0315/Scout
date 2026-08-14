@@ -8044,6 +8044,26 @@
         detail: cwaImageryStateSnapshot()
       }));
     }
+    function syncCwaImageryPlaybackControls() {
+      const maxFrames = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length, 1);
+      const playableFrameCount = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length);
+      if (playableFrameCount < 2 && cwaImageryUi.playTimer) {
+        clearInterval(cwaImageryUi.playTimer);
+        cwaImageryUi.playTimer = null;
+      }
+      cwaImageryUi.frameIndex = Math.min(cwaImageryUi.frameIndex, maxFrames - 1);
+      document.querySelectorAll("[data-cwa-imagery-timeline]").forEach(input => {
+        input.max = String(maxFrames - 1);
+        input.value = String(cwaImageryUi.frameIndex);
+        input.disabled = playableFrameCount < 2;
+      });
+      document.querySelectorAll("[data-cwa-imagery-play]").forEach(button => {
+        button.disabled = playableFrameCount < 2;
+        const playing = !button.disabled && Boolean(cwaImageryUi.playTimer);
+        button.textContent = playing ? "Pause" : "Play";
+        button.setAttribute("aria-pressed", playing ? "true" : "false");
+      });
+    }
     function syncCwaImageryControls() {
       const products = new Map();
       ["radar", "satellite"].forEach(family => {
@@ -8078,25 +8098,7 @@
       document.querySelectorAll("[data-cwa-rainfall-opacity]").forEach(input => {
         input.value = String(Math.round(cwaImageryUi.rainfallOpacity * 100));
       });
-      const maxFrames = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length, 1);
-      const playableFrameCount = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length);
-      if (playableFrameCount < 2 && cwaImageryUi.playTimer) {
-        clearInterval(cwaImageryUi.playTimer);
-        cwaImageryUi.playTimer = null;
-      }
-      cwaImageryUi.frameIndex = Math.min(cwaImageryUi.frameIndex, maxFrames - 1);
-      document.querySelectorAll("[data-cwa-imagery-timeline]").forEach(input => {
-        input.max = String(maxFrames - 1);
-        input.value = String(cwaImageryUi.frameIndex);
-        input.disabled = playableFrameCount < 2;
-      });
-      document.querySelectorAll("[data-cwa-imagery-play]").forEach(button => {
-        button.disabled = playableFrameCount < 2;
-        if (button.disabled) {
-          button.textContent = "Play";
-          button.setAttribute("aria-pressed", "false");
-        }
-      });
+      syncCwaImageryPlaybackControls();
       const current = selectedCwaImageryFrame("radar") || selectedCwaImageryFrame("satellite");
       const rainfall = cwaRainfallProductMetadata();
       const rainfallCells = Number(rainfall?.availableCellCount || 0);
@@ -8196,6 +8198,28 @@
         return nextView;
       }
     }
+    function setCwaImageryPlaying(playing) {
+      const playableFrameCount = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length);
+      if (!playing || playableFrameCount < 2) {
+        if (cwaImageryUi.playTimer) clearInterval(cwaImageryUi.playTimer);
+        cwaImageryUi.playTimer = null;
+        syncCwaImageryPlaybackControls();
+        publishCwaImageryState();
+        return cwaImageryStateSnapshot();
+      }
+      if (!cwaImageryUi.playTimer) {
+        cwaImageryUi.playTimer = setInterval(() => {
+          const maxFrames = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length, 1);
+          cwaImageryUi.frameIndex = (cwaImageryUi.frameIndex + 1) % maxFrames;
+          syncCwaImageryPlaybackControls();
+          renderCurrentCwaImagerySurface();
+          publishCwaImageryState();
+        }, 700);
+      }
+      syncCwaImageryPlaybackControls();
+      publishCwaImageryState();
+      return cwaImageryStateSnapshot();
+    }
     function bindCwaWeatherImageryControls() {
       document.querySelectorAll("[data-cwa-rainfall-product]").forEach(select => {
         select.addEventListener("change", () => {
@@ -8240,20 +8264,7 @@
       });
       document.querySelectorAll("[data-cwa-imagery-play]").forEach(button => {
         button.addEventListener("click", () => {
-          const playableFrameCount = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length);
-          if (playableFrameCount < 2) return;
-          if (cwaImageryUi.playTimer) {
-            clearInterval(cwaImageryUi.playTimer); cwaImageryUi.playTimer = null;
-            button.textContent = "Play"; button.setAttribute("aria-pressed", "false");
-            syncCwaImageryControls(); publishCwaImageryState(); return;
-          }
-          button.textContent = "Pause"; button.setAttribute("aria-pressed", "true");
-          cwaImageryUi.playTimer = setInterval(() => {
-            const maxFrames = Math.max(cwaImageryFrames("radar").length, cwaImageryFrames("satellite").length, 1);
-            cwaImageryUi.frameIndex = (cwaImageryUi.frameIndex + 1) % maxFrames;
-            syncCwaImageryControls(); renderCurrentCwaImagerySurface();
-          }, 700);
-          publishCwaImageryState();
+          setCwaImageryPlaying(!Boolean(cwaImageryUi.playTimer));
         });
       });
       syncCwaImageryControls();
@@ -8318,10 +8329,7 @@
         return cwaImageryStateSnapshot();
       },
       setPlaying: playing => {
-        if (cwaImageryStateSnapshot().maxFrameIndex < 1) return cwaImageryStateSnapshot();
-        const active = Boolean(cwaImageryUi.playTimer);
-        if (Boolean(playing) !== active) document.querySelector("[data-cwa-imagery-play]")?.click();
-        return cwaImageryStateSnapshot();
+        return setCwaImageryPlaying(Boolean(playing));
       }
     });
     function renderProjectView(view) {

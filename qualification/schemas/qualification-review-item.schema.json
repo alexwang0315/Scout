@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scout.dashboardQualificationReviewItem.v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "candidate_finding_id",
+    "title",
+    "capability_id",
+    "status",
+    "confirmation_status",
+    "gpt_pro_review_ref",
+    "machine_state",
+    "severity",
+    "observed_behavior",
+    "expected_behavior",
+    "evidence_refs",
+    "suggested_disposition",
+    "human_decision"
+  ],
+  "properties": {
+    "schema": {"const": "scout.dashboardQualificationReviewItem.v1"},
+    "id": {"type": "string", "pattern": "^SCOUT-Q-[0-9]{4,}$"},
+    "candidate_finding_id": {"type": "string", "pattern": "^SCOUT-CANDIDATE-[0-9]{4,}$"},
+    "title": {"type": "string", "minLength": 1},
+    "capability_id": {"type": "string", "minLength": 1},
+    "status": {
+      "enum": [
+        "AWAITING_HUMAN_REVIEW",
+        "APPROVED_FOR_FIX",
+        "DEFERRED",
+        "KNOWN_ISSUE",
+        "REJECTED",
+        "RESOLVED"
+      ]
+    },
+    "confirmation_status": {
+      "enum": ["GPT_PRO_CONFIRMED", "GPT_PRO_INSUFFICIENT_EVIDENCE"]
+    },
+    "gpt_pro_review_ref": {"type": "string", "minLength": 1},
+    "machine_state": {
+      "enum": ["FAIL", "FLAKY", "BLOCKED", "INSUFFICIENT_EVIDENCE"]
+    },
+    "severity": {
+      "enum": ["S1_TRIVIAL", "S2_LOW", "S3_MODERATE", "S4_HIGH", "S5_CRITICAL"]
+    },
+    "observed_behavior": {"type": "string", "minLength": 1},
+    "expected_behavior": {"type": "string", "minLength": 1},
+    "evidence_refs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "suggested_disposition": {
+      "enum": [
+        "APPROVE_FIX",
+        "REJECT_FIX",
+        "DEFER",
+        "KNOWN_ISSUE",
+        "SPEC_CHANGE",
+        "REQUEST_MORE_EVIDENCE"
+      ]
+    },
+    "human_decision": {"type": ["object", "null"]}
+  },
+  "additionalProperties": true
+}

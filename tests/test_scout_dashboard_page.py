@@ -1881,6 +1881,27 @@ def test_scout_dashboard_map_route_removes_header_without_losing_mobile_navigati
     assert 'state.route === "map" ? "dashboardMapNavToggle"' in html
 
 
+def test_mobile_navigation_route_keeps_visible_global_sidebar_opener() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    mobile_override = html.split(
+        "/* qualification-mobile-navigation-global-opener */", 1
+    )[1].split("@media (max-width: 760px)", 1)[0]
+
+    assert ".dashboard-shell.is-page-header-hidden .topbar {" in mobile_override
+    assert "display: flex;" in mobile_override
+    assert "min-height: 56px;" in mobile_override
+    assert (
+        ".dashboard-shell.is-page-header-hidden .dashboard-frame {"
+        in mobile_override
+    )
+    assert "grid-template-rows: auto minmax(0, 1fr);" in mobile_override
+    assert ".dashboard-shell.is-page-header-hidden .topbar-title-row h2" in mobile_override
+    assert ".dashboard-shell.is-page-header-hidden .status-strip" in mobile_override
+    assert "display: none;" in mobile_override
+    assert "width: 44px;" in html.split(".dashboard-nav-toggle {", 1)[1].split("}", 1)[0]
+
+
 def test_weather_hydrology_controls_are_owned_by_six_axis_weather_not_map() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
@@ -2361,6 +2382,31 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "尚未由目前 terrain pipeline 抽取" in html
     assert "P0、P1、P2 不合併成一個安全分數" in html
     assert "reference GPX 不自動升格成替代路線" in html
+
+
+def test_navigation_maplibre_uses_the_canvas_as_its_single_keyboard_surface() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    keyboard_surface = html.split(
+        "function configureNavigationTerrainMapLibreKeyboardSurface", 1
+    )[1].split("function fitNavigationTerrainMapLibre", 1)[0]
+    initializer = html.split(
+        "async function initializeNavigationTerrainMapLibre()", 1
+    )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
+
+    assert 'const canvas = map.getCanvas();' in keyboard_surface
+    assert 'host.removeAttribute("tabindex");' in keyboard_surface
+    assert 'host.removeAttribute("role");' in keyboard_surface
+    assert 'host.removeAttribute("aria-keyshortcuts");' in keyboard_surface
+    assert 'canvas.setAttribute("role", "application");' in keyboard_surface
+    assert 'canvas.setAttribute("aria-label", label);' in keyboard_surface
+    assert 'canvas.setAttribute("aria-keyshortcuts", shortcuts);' in keyboard_surface
+    assert 'canvas.dataset.navigationMaplibreKeyboardSurface = mode;' in keyboard_surface
+    assert (
+        "const keyboardSurface = configureNavigationTerrainMapLibreKeyboardSurface("
+        in initializer
+    )
+    assert "keyboardSurface.focus({preventScroll: true});" in initializer
+    assert "host.focus({preventScroll: true});" not in initializer
 
 
 def test_navigation_uses_vector_map_when_terrain_rgb_is_not_prepared() -> None:
@@ -3681,13 +3727,146 @@ def test_dashboard_cwa_truth_state_play_guard_and_single_product_contract() -> N
     assert 'weatherCwaProduct: "radar"' in html
     assert "play.disabled = Number(snapshot.maxFrameIndex || 0) < 1;" in html
     assert "rainfallStatus.textContent = dashboardCwaRainfallStatusText" in html
-
     assert "function cwaDerivedStatus" in pretrip_html
     assert 'productId: "radar"' in pretrip_html
     assert "playableFrameCount < 2" in pretrip_html
     assert "button.disabled = playableFrameCount < 2" in pretrip_html
     assert "freshness:" in pretrip_html
     assert "coverageStatus:" in pretrip_html
+
+
+def test_weather_cwa_playback_uses_direct_stop_and_lightweight_tick_sync() -> None:
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+
+    playback_sync = pretrip_html.split(
+        "function syncCwaImageryPlaybackControls()", 1
+    )[1].split("function syncCwaImageryControls()", 1)[0]
+    playback_transition = pretrip_html.split(
+        "function setCwaImageryPlaying(playing)", 1
+    )[1].split("function bindCwaWeatherImageryControls()", 1)[0]
+    controller = pretrip_html.split(
+        "window.scoutCwaImageryController = Object.freeze({", 1
+    )[1].split("function renderProjectView(view)", 1)[0]
+
+    assert "data-cwa-imagery-timeline" in playback_sync
+    assert "data-cwa-imagery-play" in playback_sync
+    assert "clearInterval(cwaImageryUi.playTimer);" in playback_transition
+    assert "cwaImageryUi.playTimer = null;" in playback_transition
+    assert "syncCwaImageryPlaybackControls();" in playback_transition
+    interval_tick = playback_transition.split("setInterval(() => {", 1)[1].split(
+        "}, 700);", 1
+    )[0]
+    assert "syncCwaImageryPlaybackControls();" in interval_tick
+    assert "syncCwaImageryControls();" not in interval_tick
+    assert "return setCwaImageryPlaying(Boolean(playing));" in controller
+    assert 'document.querySelector("[data-cwa-imagery-play]")?.click()' not in controller
+
+
+def test_weather_cwa_playback_stop_clears_timer_and_can_restart() -> None:
+    pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
+    playback_sync = "function syncCwaImageryPlaybackControls()" + pretrip_html.split(
+        "function syncCwaImageryPlaybackControls()", 1
+    )[1].split("function syncCwaImageryControls()", 1)[0]
+    playback_transition = "function setCwaImageryPlaying(playing)" + pretrip_html.split(
+        "function setCwaImageryPlaying(playing)", 1
+    )[1].split("function bindCwaWeatherImageryControls()", 1)[0]
+    node_program = "\n".join(
+        (
+            """
+const timelines = [{max: "", value: "", disabled: false}];
+const buttons = [{disabled: false, textContent: "Play", attrs: {}, setAttribute(name, value) { this.attrs[name] = value; }}];
+const document = {querySelectorAll(selector) {
+  if (selector === "[data-cwa-imagery-timeline]") return timelines;
+  if (selector === "[data-cwa-imagery-play]") return buttons;
+  return [];
+}};
+const frames = [{id: 0}, {id: 1}, {id: 2}];
+const cwaImageryUi = {frameIndex: 0, playTimer: null};
+const timers = new Map();
+let nextTimer = 1;
+let publishCalls = 0;
+let renderCalls = 0;
+function cwaImageryFrames() { return frames; }
+function setInterval(callback, delay) { const id = nextTimer++; timers.set(id, {callback, delay}); return id; }
+function clearInterval(id) { timers.delete(id); }
+function publishCwaImageryState() { publishCalls += 1; }
+function renderCurrentCwaImagerySurface() { renderCalls += 1; }
+function cwaImageryStateSnapshot() {
+  return {frameIndex: cwaImageryUi.frameIndex, maxFrameIndex: frames.length - 1, playing: Boolean(cwaImageryUi.playTimer)};
+}
+""",
+            playback_sync,
+            playback_transition,
+            """
+const started = setCwaImageryPlaying(true);
+const firstTimer = cwaImageryUi.playTimer;
+timers.get(firstTimer).callback();
+const frameAfterFirstTick = cwaImageryUi.frameIndex;
+const stopped = setCwaImageryPlaying(false);
+const stoppedFrame = cwaImageryUi.frameIndex;
+const firstTimerStillActive = timers.has(firstTimer);
+const stoppedButton = {text: buttons[0].textContent, pressed: buttons[0].attrs["aria-pressed"]};
+const restarted = setCwaImageryPlaying(true);
+const secondTimer = cwaImageryUi.playTimer;
+timers.get(secondTimer).callback();
+const frameAfterRestartTick = cwaImageryUi.frameIndex;
+setCwaImageryPlaying(false);
+process.stdout.write(JSON.stringify({
+  started,
+  firstTimer,
+  frameAfterFirstTick,
+  stopped,
+  stoppedFrame,
+  firstTimerStillActive,
+  stoppedButton,
+  restarted,
+  secondTimer,
+  frameAfterRestartTick,
+  finalTimer: cwaImageryUi.playTimer,
+  publishCalls,
+  renderCalls
+}));
+""",
+        )
+    )
+
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["started"]["playing"] is True
+    assert payload["frameAfterFirstTick"] == 1
+    assert payload["stopped"]["playing"] is False
+    assert payload["stoppedFrame"] == 1
+    assert payload["firstTimerStillActive"] is False
+    assert payload["stoppedButton"] == {"text": "Play", "pressed": "false"}
+    assert payload["restarted"]["playing"] is True
+    assert payload["secondTimer"] != payload["firstTimer"]
+    assert payload["frameAfterRestartTick"] == 2
+    assert payload["finalTimer"] is None
+    assert payload["renderCalls"] == 2
+    assert payload["publishCalls"] >= 6
+
+
+def test_architecture_modebar_allows_only_component_local_horizontal_scroll() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    modebar_style = html.split(
+        ".architecture-modebar,", 1
+    )[1].split(".architecture-modebar {", 1)[0]
+    architecture = html.split(
+        "function renderArchitecturePage(force)", 1
+    )[1].split("function renderRuntimeAuditPage", 1)[0]
+
+    assert "overflow-x: auto;" in modebar_style
+    assert "overscroll-behavior-inline: contain;" in modebar_style
+    assert 'data-overflow-contract="horizontal-scroll"' in architecture
+    assert 'role="tablist" aria-label="Route architecture analysis modes"' in architecture
 
 
 def test_dashboard_open_only_reads_connected_preparation_status() -> None:
