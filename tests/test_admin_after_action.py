@@ -952,6 +952,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('data-layer-preset="mcp-review"', response.text)
         self.assertIn('data-layer-preset="route-clean"', response.text)
         self.assertIn('data-layer-preset="debug-replay"', response.text)
+        self.assertIn(
+            '[...layerInputs].filter(input => !input.disabled)',
+            response.text,
+        )
         self.assertIn('data-layer-preset="raster-check"', response.text)
         self.assertIn('class="layer-advanced"', response.text)
         self.assertIn("Advanced layers", response.text)

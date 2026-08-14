@@ -46,6 +46,52 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-08-07 - Resolve Qualification questions Q0016-Q0018
+
+User request:
+
+- Authorize an independent reviewer to perform Qualification for `Q0016`.
+- Render a reasonable, explicitly explained Evidence zero as yellow for `Q0017`.
+- Apply the recommended optional Weather rainfall-overlay fix for `Q0018`.
+
+Implementation:
+
+- Bound all three human decisions to the existing hash-indexed review packet.
+  `Q0016` authorizes read-only independent review only; it does not authorize
+  reviewer writes, runtime effects, or a fabricated verdict.
+- Added a terminal yellow `warning` state to System → Diagnostic. `DASH-030`
+  now returns yellow when every zero carries a typed reason, red when any zero
+  falls back to `fixture_or_projection_omission`, and green only when there are
+  no zeros. The implementation never changes an Evidence count.
+- Changed an absent optional rainfall route projection from an untyped HTTP 404
+  into a cache-only HTTP 200 `not_prepared` response with empty cells and a
+  typed `rainfall_projection_not_prepared` reason. A project that explicitly
+  references a missing projection remains a 422 data-integrity error.
+- Preserved the typed empty reason in the Weather map client and added the
+  behavior to the canonical capability manifest and browser Qualification.
+
+Boundary:
+
+- All Qualification and Diagnostic reads remain candidate-only and read-only.
+- No GET starts preparation, imports data, writes the workspace, creates
+  positive Evidence, sends outbound traffic, or changes runtime safety truth.
+- The independent reviewer remains the only party allowed to issue the
+  Qualification verdict; the operator evidence alone is not `QUALIFIED`.
+
+Verification:
+
+- Focused Dashboard, pre-trip page, rainfall API, and Qualification suites:
+  `136 passed`.
+- Ruff, JavaScript syntax, and diff whitespace checks: passed.
+- Chromium `Diag all`: 37/37 terminal states, `36 passed / 1 warning / 0 failed`;
+  13 typed zero categories, 0 unexplained zeros, 0 POST, and 0 workspace
+  mutation.
+- Chromium Weather map: active native Rudy+TW generation advanced from Z13 to
+  Z14 after 140 successful higher-matrix tile responses.
+- Chromium optional rainfall overlay: HTTP 200, `status=not_prepared`, 0 grid
+  cells, typed empty reason preserved by the page, 0 failed requests, 0 console
+  errors, and 0 workspace mutation.
+
 ### 2026-08-06 - Apply approved internal qualification remediation
 
 User request:
@@ -502,10 +548,11 @@ Implementation:
 - Replaced the stale Dashboard-open connected-preparation POST with the current
   intended status GET. Explicit `Refresh evidence` remains the only Dashboard
   control that starts connected preparation.
-- The status GET idempotently enrolls only the selected workspace in the
-  server-side refresh timer. It returns the existing cache immediately, does
-  not call CWA, GEE or Overpass, and records `nextRunAt`; the timer or the
-  explicit `Refresh evidence` action owns subsequent provider refreshes.
+- The status GET is strictly read-only. It returns the current manager snapshot
+  and never enrolls a timer or writes a workspace. Only explicit
+  `Refresh evidence` or the approved Scout AI weather-decision refresh starts
+  preparation; those paths may schedule the next service-lifetime refresh
+  after their requested run completes.
 
 Diagnostic boundary:
 
@@ -4027,9 +4074,10 @@ Verification:
 
 ## 2026-07-23 - Dashboard connected weather preparation
 
-- Dashboard startup now triggers the local server-side
-  `POST /admin/pretrip/projects/{project_id}/connected-preparation` job and
-  polls its GET status. It no longer relies on a Dashboard default of
+- Superseded behavior note (corrected 2026-08-09): Dashboard startup no longer
+  triggers the local server-side POST. It reads the GET status snapshot only;
+  an operator `Refresh evidence` action or approved Scout AI weather-decision
+  refresh starts the job. The job no longer relies on a Dashboard default of
   `pi-offline + no-network`; connected map-preparation defaults are
   `mac-workstation + explicit-fetch + allow-network-fetch`.
 - The manager loads the local repository `.env` or explicit `SCOUT_ENV_FILE`
@@ -4041,9 +4089,10 @@ Verification:
   workspace-isolated; a global cache environment value is ignored. Existing
   route, terrain, and TEII artifacts remain inputs and are not regenerated on
   every refresh.
-- The job is single-flight and schedules a service-lifetime refresh every ten
-  minutes by default. Repeated Dashboard opens reuse the active/completed job
-  and do not duplicate it. Stopping the Dashboard service cancels its timers.
+- The job is single-flight and, once explicitly started, schedules a
+  service-lifetime refresh every ten minutes by default. Repeated Dashboard
+  opens only inspect the active/completed job and do not create or duplicate a
+  timer. Stopping the Dashboard service cancels existing timers.
 - Queued/running request outcomes are tri-state: request/call fields remain
   `null` with `requestActivityState=in-progress` until observed results exist,
   and the UI shows `in progress` rather than a premature `false`.

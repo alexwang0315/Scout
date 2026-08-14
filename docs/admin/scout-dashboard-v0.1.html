@@ -148,6 +148,10 @@
       padding: 0 6px 8px 18px;
     }
 
+    .nav-section:not([open]) > .nav-subtree {
+      display: none;
+    }
+
     .nav-subtree .nav-section {
       margin: 2px 0;
       border-color: rgba(255, 255, 255, .055);
@@ -948,7 +952,7 @@
 
     .force-row {
       display: grid;
-      grid-template-columns: minmax(190px, .8fr) minmax(250px, 1fr) minmax(240px, 1fr) auto;
+      grid-template-columns: minmax(150px, .8fr) minmax(0, 1fr) minmax(0, 1fr) minmax(108px, .55fr);
       gap: 12px;
       align-items: center;
       padding: 11px 12px;
@@ -968,8 +972,11 @@
     }
 
     .force-row button {
+      width: 100%;
+      min-width: 0;
       padding: 0 10px;
-      white-space: nowrap;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
 
     .label-stack {
@@ -1025,7 +1032,12 @@
     .surface-frame-panel {
       min-height: calc(100vh - 150px);
       display: grid;
-      grid-template-rows: auto minmax(560px, 1fr);
+      grid-template-rows: auto auto minmax(560px, 1fr) auto auto;
+    }
+
+    .surface-frame-panel[data-surface-frame-state="collapsed"] {
+      min-height: 0;
+      grid-template-rows: auto auto auto auto;
     }
 
     .surface-frame-header {
@@ -1057,6 +1069,17 @@
       min-height: 560px;
       border: 0;
       background: var(--bg);
+    }
+
+    .surface-frame[hidden] {
+      display: none;
+    }
+
+    .surface-frame-action-status {
+      display: block;
+      margin: 8px 0;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .route-briefing-layout {
@@ -1514,6 +1537,10 @@
 
     [data-dashboard-map-hint-title] {
       cursor: help;
+    }
+
+    svg [data-dashboard-map-hint-title] {
+      pointer-events: bounding-box;
     }
 
     .architecture-map-surface {
@@ -2437,10 +2464,10 @@
     }
 
     .weather-layer-control strong {
-      overflow: hidden;
       font-size: 12px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     .weather-layer-control small {
@@ -3394,9 +3421,10 @@
 
     .body-index-trend-labels span {
       min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow: visible;
+      overflow-wrap: anywhere;
+      text-overflow: clip;
+      white-space: normal;
       text-transform: none;
     }
 
@@ -3713,9 +3741,11 @@
       font-weight: 900;
       font-style: normal;
       text-transform: uppercase;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      overflow: visible;
+      overflow-wrap: anywhere;
+      text-align: center;
+      text-overflow: clip;
     }
 
     .debug-pill.is-ok { color: #a8e6a6; border-color: rgba(120, 191, 117, .55); background: rgba(120, 191, 117, .12); }
@@ -4820,10 +4850,12 @@
         display: inline-flex;
       }
       .nav {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 4px;
-        overflow: visible;
+        /* qualification-mobile-nav-scroll */
+        display: block;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
         padding: 10px;
       }
       .nav-item,
@@ -5177,10 +5209,24 @@
       color: var(--muted);
     }
 
-    @media (max-width: 920px) {
+    @media (max-width: 1120px) {
       .living-hero,
       .living-gate-grid {
         grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 620px) {
+      [data-living-surface="true"] > .panel-header {
+        /* qualification-living-mobile-header */
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      [data-living-surface="true"] > .panel-header .chip {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
     }
     /* Field Decision Instrument design system.
@@ -5439,6 +5485,27 @@
       color: #dfeeac;
       border-color: var(--accent);
       background: rgba(183, 207, 99, .13);
+    }
+
+    @media (max-width: 1120px) {
+      .field-instrument-theme .route-tabs {
+        /* qualification-six-axis-tabs-visible */
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        overflow: visible;
+      }
+
+      .field-instrument-theme .route-tabs button {
+        width: 100%;
+        min-width: 0;
+        white-space: normal;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .field-instrument-theme .route-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
     .field-instrument-theme .table th {
@@ -5844,9 +5911,24 @@
     }
 
     .architecture-lensbar {
+      /* qualification-architecture-lens-sticky */
+      position: sticky;
+      top: 0;
+      z-index: 16;
       padding: 10px;
       border-bottom: 1px solid var(--line);
-      background: rgba(8, 16, 14, .72);
+      background: rgba(8, 16, 14, .96);
+      backdrop-filter: blur(12px);
+    }
+
+    .architecture-map-frame {
+      overflow: visible;
+    }
+
+    .dashboard-shell:has(.route-architecture-shell),
+    .dashboard-frame:has(.route-architecture-shell) {
+      /* qualification-architecture-sticky-containment */
+      overflow: visible;
     }
 
     .architecture-map-canvas {
@@ -12137,6 +12219,7 @@
 
     function render() {
       destroyNavigationTerrainMapLibre();
+      hideDashboardMapHint();
       const workspace = document.getElementById("workspace");
       const evidence = document.getElementById("dashboardEvidence");
       const contentGrid = document.querySelector(".content-grid");
@@ -12345,7 +12428,7 @@
       const frameHealth = state.surfaceFrameHealth?.[route] || {status: "loading", detail: "Inner surface loading"};
       const frameTone = frameHealth.status === "ready" ? "ok" : frameHealth.status === "failed" ? "bad" : "warn";
       return `
-        <section class="panel surface-frame-panel" data-surface-route="${escapeHtml(route)}">
+        <section class="panel surface-frame-panel" data-surface-route="${escapeHtml(route)}" data-surface-frame-state="visible">
           <div class="surface-frame-header">
             <div>
               <h3>${escapeHtml(title)}</h3>
@@ -12357,9 +12440,10 @@
               <span class="chip warn">same-origin embedded surface</span>
             </div>
           </div>
-          <button type="button" class="surface-frame-skip" data-surface-frame-skip>Skip embedded surface</button>
+          <button type="button" class="surface-frame-skip" data-surface-frame-skip aria-controls="surfaceFrame" aria-expanded="true" aria-pressed="false">Hide embedded surface</button>
           <iframe class="surface-frame" id="surfaceFrame" data-surface-route="${escapeHtml(route)}" title="${escapeHtml(title)}" src="${escapeHtml(src)}" loading="eager"></iframe>
-          <button type="button" class="surface-frame-exit" id="surfaceFrameExit">Continue after embedded surface</button>
+          <output class="surface-frame-action-status" data-surface-frame-action-status role="status" aria-live="polite">Embedded surface visible</output>
+          <button type="button" class="surface-frame-exit" id="surfaceFrameExit">Return to Dashboard navigation</button>
         </section>
       `;
     }
@@ -13057,7 +13141,7 @@
         ? "after current refresh completes"
         : state.connectedPreparation?.nextRunAt
           ? formatDateTime(state.connectedPreparation.nextRunAt)
-          : "pending status read";
+          : "not scheduled until an explicit refresh";
       const lastConnectedRefresh = state.connectedPreparation?.completedAt
         ? formatDateTime(state.connectedPreparation.completedAt)
         : "not yet completed";
@@ -13101,7 +13185,7 @@
                 Only an append-only request record is written by this dashboard. It does not execute the operation or change runtime safety truth. ${requestCount} request${requestCount === 1 ? "" : "s"} recorded${latestRequest ? `; latest ${escapeHtml(latestRequest.operation)} · ${escapeHtml(latestRequest.request_id)}` : ""}. Delete requires an explicit destructive approval outside this dashboard.
               </p>
               <p class="workspace-status">
-                Dashboard startup reads cached evidence only. The current published snapshot stays readable while refresh is running; a validated generation replaces it only after completion. Server refresh runs every ${refreshIntervalMinutes} min; next ${escapeHtml(nextScheduledRefresh)}; last ${escapeHtml(lastConnectedRefresh)}. Cross-process lock: ${escapeHtml(crossProcessLock)}; Recovery journal: ${escapeHtml(recoveryJournalStatus)}; startup recovery: ${escapeHtml(startupRecovery)}. “Refresh evidence” runs Connected Preparation immediately. It may use CWA, GEE and Overpass and update candidate evidence.
+                Dashboard startup and status GETs read cached evidence only and never schedule a writer. The current published snapshot stays readable while refresh is running; a validated generation replaces it only after completion. After an explicit “Refresh evidence” or Scout AI weather refresh, the server may continue every ${refreshIntervalMinutes} min; next ${escapeHtml(nextScheduledRefresh)}; last ${escapeHtml(lastConnectedRefresh)}. Cross-process lock: ${escapeHtml(crossProcessLock)}; Recovery journal: ${escapeHtml(recoveryJournalStatus)}; startup recovery: ${escapeHtml(startupRecovery)}. “Refresh evidence” may use CWA, GEE and Overpass and update candidate evidence.
               </p>
             </div>
           </div>
@@ -18929,7 +19013,7 @@
           data-dashboard-rudy-tile-zoom="${baseZoom}"
           data-dashboard-rudy-tile-key="${escapeHtml(navigationRudyTileKey(normalized, baseZoom))}"
           data-dashboard-map-surface="${escapeHtml(surfaceId)}"
-          ${navigationSurface ? `data-navigation-rudy-tile-layer="true" data-navigation-rudy-tile-zoom="${baseZoom}" data-navigation-rudy-tile-key="${escapeHtml(navigationRudyTileKey(normalized, baseZoom))}"` : ""}
+          ${navigationSurface ? `data-navigation-rudy-tile-layer="true" data-navigation-basemap-layer="rudy-twmap" data-navigation-rudy-tile-zoom="${baseZoom}" data-navigation-rudy-tile-key="${escapeHtml(navigationRudyTileKey(normalized, baseZoom))}"` : ""}
           data-rudy-base-zoom="${baseZoom}"
           data-dashboard-rudy-active-map-zoom="1"
           data-dashboard-rudy-active-map-x="0"
@@ -19558,11 +19642,16 @@
       return mode === "3d" ? sourceZoom : Math.max(5, sourceZoom - 2);
     }
 
-    function renderNavigationTerrainMapLibreHost(snapshot, mode) {
+    function navigationTerrainDemReady(snapshot) {
       const dem = snapshot?.terrain_raster_dem || {};
-      const ready = dem.status === "ready"
+      return dem.status === "ready"
         && Boolean(dem.tile_url_template)
         && Boolean(navigationRudyBounds(dem.bounds_wgs84));
+    }
+
+    function renderNavigationTerrainMapLibreHost(snapshot, mode) {
+      const dem = snapshot?.terrain_raster_dem || {};
+      const ready = navigationTerrainDemReady(snapshot);
       const isTerrain = mode === "3d";
       const evidenceDomain = navigationTerrainEvidenceDomain();
       const rudyOpacity = navigationTerrainRudyOpacity(mode);
@@ -19628,10 +19717,20 @@
       const evidenceDomain = navigationTerrainEvidenceDomain();
       const mesh = snapshot?.terrain_mesh || {};
       const terrainDem = snapshot?.terrain_raster_dem || {};
+      const terrainDemReady = navigationTerrainDemReady(snapshot);
       const mapPane = `
         <div class="navigation-terrain-view-pane" data-navigation-terrain-pane="2d">
-          ${renderNavigationTerrainMapLibreHost(snapshot, "2d")}
-          <span class="navigation-terrain-pane-label">${evidenceDomain === "observed" ? "2D 觀測脈絡 · Rudy+TW" : evidenceDomain === "prior" ? "2D DEM · 學習先驗已揭露" : "2D DEM 地形證據"}</span>
+          ${terrainDemReady
+            ? renderNavigationTerrainMapLibreHost(snapshot, "2d")
+            : renderNavigationWorkspaceMap(
+                snapshot,
+                selectedPoint,
+                selectedStructurePoint,
+                selectedEvent,
+              )}
+          <span class="navigation-terrain-pane-label">${terrainDemReady
+            ? evidenceDomain === "observed" ? "2D 觀測脈絡 · Rudy+TW" : evidenceDomain === "prior" ? "2D DEM · 學習先驗已揭露" : "2D DEM 地形證據"
+            : "2D 向量證據 · Rudy+TW · Terrain RGB 未準備"}</span>
         </div>
       `;
       const terrainPane = `
@@ -20803,6 +20902,15 @@
 
     function renderNavigationWorkspaceLoading(snapshot) {
       const error = state.dataScopeErrors?.navigation_terrain;
+      const displayBounds = dashboardRudyPaddedBounds(
+        snapshot?.orientation_basemap?.bounds_wgs84,
+      );
+      const baseZoom = displayBounds ? navigationRudyBaseZoom(displayBounds) : null;
+      const hasBasemap = Boolean(
+        snapshot?.orientation_basemap?.status === "ready"
+        && displayBounds
+        && Number.isFinite(baseZoom),
+      );
       const preparing = snapshot.status === "preparing";
       const failed = snapshot.status === "failed";
       const notPrepared = ["not_prepared", "stale"].includes(snapshot.status);
@@ -20832,21 +20940,23 @@
             ? (snapshot.summary || "Run explicit pre-trip terrain preparation; opening Dashboard never starts or writes preparation.")
           : (error || "Reading prepared DTM raster, route samples, and review candidates.");
       const mapContent = `
-        <svg viewBox="0 0 1000 392" role="img" aria-label="Navigation terrain evidence ${escapeHtml(stateLabel)}">
+        <svg viewBox="0 0 1000 392" role="img" aria-label="Navigation orientation map; terrain evidence ${escapeHtml(stateLabel)}">
           <rect width="1000" height="392" fill="#101813"></rect>
-          <path d="M0 98 H1000 M0 196 H1000 M0 294 H1000 M250 0 V392 M500 0 V392 M750 0 V392" stroke="rgba(233,234,220,.08)" stroke-width="1" fill="none"></path>
+          ${hasBasemap
+            ? renderNavigationRudyTileLayer(displayBounds, baseZoom)
+            : '<path d="M0 98 H1000 M0 196 H1000 M0 294 H1000 M250 0 V392 M500 0 V392 M750 0 V392" stroke="rgba(233,234,220,.08)" stroke-width="1" fill="none"></path>'}
         </svg>
       `;
       const mapOverlay = `
         <div class="navigation-workspace-map-status" aria-live="polite"><strong>${escapeHtml(title)}</strong>${escapeHtml(detail)}</div>
-        <div class="navigation-workspace-scale">No terrain vectors or tiles are claimed in this state.</div>
+        <div class="navigation-workspace-scale">${hasBasemap ? `Rudy+TW orientation basemap only · z<span data-navigation-rudy-zoom-label>${baseZoom}</span> · ` : ""}No terrain vectors or terrain tiles are claimed in this state.</div>
       `;
       return renderDashboardMapViewport("navigation-workspace-map",
         "Navigation terrain evidence map shell",
         mapContent,
         {
           className: "navigation-workspace-map",
-          attributes: `data-navigation-workspace-map="${stateLabel}" data-navigation-evidence-state="${stateLabel}" data-navigation-basemap-layer="none" data-dashboard-basemap-layer="none" data-dashboard-basemap-policy="rudy-twmap-only"`,
+          attributes: `data-navigation-workspace-map="${stateLabel}" data-navigation-evidence-state="${stateLabel}" data-navigation-basemap-layer="${hasBasemap ? "rudy-twmap" : "none"}" data-dashboard-basemap-layer="${hasBasemap ? "rudy-twmap" : "none"}" data-dashboard-basemap-policy="rudy-twmap-only" data-navigation-tile-zoom="${hasBasemap ? baseZoom : ""}"`,
           overlayHtml: mapOverlay,
           renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
           wheelZoom: false,
@@ -25637,18 +25747,61 @@
       return true;
     }
 
+    function embeddedPretripLayerRenderState(frame, layerId) {
+      const input = embeddedPretripLayerInput(frame, layerId);
+      if (!input) {
+        return {ready: false, enabled: false, renderedItemCount: 0, renderState: "loading"};
+      }
+      let group = null;
+      try {
+        group = frame?.contentDocument?.querySelector(
+          `[data-layer-group="${cssEscape(layerId)}"]`,
+        ) || null;
+      } catch (_error) {
+        group = null;
+      }
+      const enabled = Boolean(input.checked);
+      const renderedItemCount = group?.childElementCount || 0;
+      const visuallyEnabled = Boolean(
+        group
+        && group.getAttribute("data-layer-hidden") !== "true"
+        && !group.classList.contains("is-hidden"),
+      );
+      const renderState = !enabled
+        ? "off"
+        : visuallyEnabled && renderedItemCount > 0
+          ? "rendered"
+          : "empty";
+      return {ready: true, enabled, renderedItemCount, renderState};
+    }
+
     function syncWeatherLayerControls(frame = document.querySelector('[data-weather-cwa-map-frame="true"]')) {
       const nextLayerState = {};
       WEATHER_LAYER_IDS.forEach(layerId => {
-        const input = embeddedPretripLayerInput(frame, layerId);
-        nextLayerState[layerId] = input ? Boolean(input.checked) : state.layerEnabled[layerId] !== false;
+        nextLayerState[layerId] = embeddedPretripLayerRenderState(frame, layerId);
       });
-      state.layerEnabled = {...state.layerEnabled, ...nextLayerState};
+      state.layerEnabled = {
+        ...state.layerEnabled,
+        ...Object.fromEntries(
+          Object.entries(nextLayerState)
+            .filter(([, report]) => report.ready)
+            .map(([layerId, report]) => [layerId, report.enabled]),
+        ),
+      };
       document.querySelectorAll("[data-weather-layer-control]").forEach(button => {
-        const enabled = nextLayerState[button.dataset.weatherLayerControl] !== false;
+        const report = nextLayerState[button.dataset.weatherLayerControl]
+          || {enabled: false, renderedItemCount: 0, renderState: "loading"};
+        const {enabled, renderedItemCount, renderState} = report;
         button.setAttribute("aria-pressed", enabled ? "true" : "false");
+        button.dataset.weatherLayerRenderState = renderState;
+        button.dataset.weatherLayerRenderedCount = String(renderedItemCount);
         const status = button.querySelector("[data-weather-layer-state]");
-        if (status) status.textContent = enabled ? "ON" : "OFF";
+        if (status) {
+          status.textContent = renderState === "rendered" ? "ON"
+            : renderState === "empty" ? "EMPTY"
+              : renderState === "off" ? "OFF"
+                : "LOADING";
+        }
       });
     }
 
@@ -26750,14 +26903,44 @@
       }
       const surfaceFrameSkip = document.querySelector("[data-surface-frame-skip]");
       if (surfaceFrameSkip) {
+        const surfaceFrame = document.getElementById("surfaceFrame");
+        const surfaceFrameExit = document.getElementById("surfaceFrameExit");
+        const actionStatus = document.querySelector("[data-surface-frame-action-status]");
+        const setSurfaceFrameCollapsed = (collapsed) => {
+          if (!surfaceFrame) return;
+          surfaceFrame.closest("[data-surface-frame-state]")?.setAttribute(
+            "data-surface-frame-state",
+            collapsed ? "collapsed" : "visible",
+          );
+          surfaceFrame.hidden = collapsed;
+          surfaceFrame.setAttribute("aria-hidden", collapsed ? "true" : "false");
+          surfaceFrameSkip.setAttribute("aria-expanded", collapsed ? "false" : "true");
+          surfaceFrameSkip.setAttribute("aria-pressed", collapsed ? "true" : "false");
+          surfaceFrameSkip.textContent = collapsed ? "Show embedded surface" : "Hide embedded surface";
+          if (actionStatus) {
+            actionStatus.textContent = collapsed
+              ? "Embedded surface hidden; Dashboard controls remain available"
+              : "Embedded surface visible";
+          }
+        };
         const skipEmbeddedSurface = () => {
-          document.getElementById("surfaceFrameExit")?.focus({preventScroll: true});
+          setSurfaceFrameCollapsed(!surfaceFrame?.hidden);
+          if (surfaceFrame?.hidden) surfaceFrameExit?.focus({preventScroll: true});
         };
         surfaceFrameSkip.addEventListener("click", skipEmbeddedSurface);
         surfaceFrameSkip.addEventListener("keydown", (event) => {
           if (!["Enter", " ", "Spacebar"].includes(event.key)) return;
           event.preventDefault();
           skipEmbeddedSurface();
+        });
+        surfaceFrameExit?.addEventListener("click", () => {
+          const route = surfaceFrame?.dataset.surfaceRoute || state.route;
+          const navigationTarget = document.querySelector(
+            `[data-route="${cssEscape(route)}"]`,
+          );
+          navigationTarget?.focus({preventScroll: false});
+          navigationTarget?.scrollIntoView({block: "nearest"});
+          if (actionStatus) actionStatus.textContent = "Returned focus to Dashboard navigation";
         });
       }
 

@@ -287,6 +287,10 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('data-layer-preset="mcp-review"', html)
         self.assertIn('data-layer-preset="route-clean"', html)
         self.assertIn('data-layer-preset="debug-replay"', html)
+        self.assertIn(
+            'document.querySelectorAll("[data-layer]:not(:disabled)")',
+            html,
+        )
         self.assertIn('data-layer-preset="raster-check"', html)
         self.assertIn('<input type="checkbox" data-layer="imagery"> Imagery', html)
         self.assertIn('<input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW', html)

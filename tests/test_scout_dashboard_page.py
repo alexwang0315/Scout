@@ -53,8 +53,22 @@ def test_navigation_terrain_intelligence_api_projects_bounded_workspace_evidence
     (project_root / "project.json").parent.mkdir(parents=True, exist_ok=True)
     (project_root / "project.json").write_text(
         json.dumps(
-            {
-                "project_id": project_id,
+                {
+                    "project_id": project_id,
+                    "imagery_source_route_bbox_wgs84": {
+                        "west": 121.1,
+                        "south": 24.0,
+                        "east": 121.2,
+                        "north": 24.1,
+                    },
+                    "route": {
+                        "bounds": {
+                            "max_lat": 25.1,
+                            "max_lon": 122.2,
+                            "min_lat": 25.0,
+                            "min_lon": 122.1,
+                        }
+                    },
                 "terrain_visualization_ref": terrain_ref,
                 "terrain_route_samples_ref": samples_ref,
                 "terrain_risk_candidates_ref": risk_ref,
@@ -181,6 +195,23 @@ def test_navigation_terrain_intelligence_api_projects_bounded_workspace_evidence
     assert payload["terrain_raster_dem"]["status"] == "not_prepared"
     assert payload["terrain_raster_dem"]["preparation_required"] is True
     assert payload["terrain_raster_dem"]["boundary"]["runtime_safety_truth"] is False
+    assert payload["orientation_basemap"] == {
+        "status": "ready",
+        "source_id": "happyman_rudy_twmap",
+        "cache_layer_id": "imagery",
+        "bounds_wgs84": {
+            "west": 121.1,
+            "south": 24.0,
+            "east": 121.2,
+            "north": 24.1,
+        },
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "terrain_evidence": False,
+            "workspace_file_mutation_allowed": False,
+        },
+    }
 
 
 def test_navigation_terrain_dem_manifest_and_tile_are_read_only_allowlisted(
@@ -1129,12 +1160,17 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     assert 'operation: operationName' in html
     assert "confirm_record: true" in html
     assert "triggerDashboardConnectedPreparation(\"workspace-operator-refresh\"" in html
-    assert "Dashboard startup reads cached evidence only." in html
+    assert (
+        "Dashboard startup and status GETs read cached evidence only and never "
+        "schedule a writer."
+        in html
+    )
+    assert "After an explicit “Refresh evidence” or Scout AI weather refresh" in html
     assert (
         "The current published snapshot stays readable while refresh is running;"
         in html
     )
-    assert "Refresh evidence” runs Connected Preparation immediately." in html
+    assert "“Refresh evidence” may use CWA, GEE and Overpass" in html
     assert "state.connectedPreparation?.nextRunAt" in html
     assert "preparation.publicationStatus" in html
     assert "preparation.recoveryJournalStatus" in html
@@ -2260,7 +2296,6 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         ("events", "Shadow 事件"),
     ):
         assert f'["{lens}", "{label}"]' in navigation
-
     for feature in (
         "ridge",
         "valley",
@@ -2328,6 +2363,18 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "reference GPX 不自動升格成替代路線" in html
 
 
+def test_navigation_uses_vector_map_when_terrain_rgb_is_not_prepared() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    workbench = html.split(
+        "function renderNavigationTerrainReviewWorkbench", 1
+    )[1].split("function navigationTerrainMapLibreFeatureCollection", 1)[0]
+
+    assert "const terrainDemReady = navigationTerrainDemReady(snapshot);" in workbench
+    assert '? renderNavigationTerrainMapLibreHost(snapshot, "2d")' in workbench
+    assert ": renderNavigationWorkspaceMap(" in workbench
+    assert "2D 向量證據 · Rudy+TW · Terrain RGB 未準備" in workbench
+
+
 def test_navigation_partial_states_preserve_truthful_map_control_shell() -> None:
     html = PAGE.read_text(encoding="utf-8")
     loading_renderer = html.split(
@@ -2338,6 +2385,12 @@ def test_navigation_partial_states_preserve_truthful_map_control_shell() -> None
     assert 'data-navigation-workspace-map="${stateLabel}"' in loading_renderer
     assert 'data-dashboard-basemap-policy="rudy-twmap-only"' in loading_renderer
     assert 'data-navigation-evidence-state="${stateLabel}"' in loading_renderer
+    assert "snapshot?.orientation_basemap?.bounds_wgs84" in loading_renderer
+    assert "snapshot?.orientation_basemap?.status === \"ready\"" in loading_renderer
+    assert "renderNavigationRudyTileLayer(displayBounds, baseZoom)" in loading_renderer
+    assert 'data-navigation-basemap-layer="${hasBasemap ? "rudy-twmap" : "none"}"' in loading_renderer
+    assert "Rudy+TW orientation basemap only" in loading_renderer
+    assert "No terrain vectors or terrain tiles are claimed" in loading_renderer
     assert "No terrain projection has been prepared" in loading_renderer
 
 
@@ -2759,6 +2812,35 @@ def test_all_dashboard_maps_share_hover_hints_and_keyboard_pan_contract() -> Non
         assert "data-dashboard-map-hint-title" in source
         assert "data-dashboard-map-hint-summary" in source
         assert 'tabindex="' in source
+
+
+def test_weather_layer_status_is_bound_to_the_embedded_render_group() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    sync = html.split("function syncWeatherLayerControls", 1)[1].split(
+        "function excludeWeatherLayersFromMapFrame", 1
+    )[0]
+
+    assert "embeddedPretripLayerRenderState" in html
+    assert "renderedItemCount" in sync
+    assert 'renderState === "rendered" ? "ON"' in sync
+    assert 'renderState === "empty" ? "EMPTY"' in sync
+    assert 'button.dataset.weatherLayerRenderState = renderState' in sync
+
+
+def test_surface_debug_frame_controls_have_visible_semantics() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    renderer = html.split("function renderSurfaceFrame", 1)[1].split(
+        "function ensurePretripMapFrame", 1
+    )[0]
+    binder = html.split('const surfaceFrameSkip = document.querySelector', 1)[1].split(
+        'document.querySelectorAll("[data-route]")', 1
+    )[0]
+
+    assert "data-surface-frame-action-status" in renderer
+    assert 'aria-controls="surfaceFrame"' in renderer
+    assert "setSurfaceFrameCollapsed" in binder
+    assert 'surfaceFrameExit?.addEventListener("click"' in binder
+    assert "Returned focus to Dashboard navigation" in binder
 
 
 def test_scout_dashboard_pace_fit_removes_low_information_blocks() -> None:
@@ -4134,7 +4216,7 @@ def test_dashboard_joint_review_information_architecture_and_qa_contract() -> No
     assert 'id="agentAskButton" aria-describedby="agentComposerStatus"' in html
     assert 'data-import-trip-action="preview" aria-describedby="importTripStatus"' in html
     assert 'data-import-trip-action="create" aria-describedby="importTripStatus"' in html
-    assert "Skip embedded surface" in html
+    assert "Hide embedded surface" in html
     assert 'id="surfaceFrameExit"' in html
     assert 'focus({preventScroll: true})' in html
     assert '["Enter", " ", "Spacebar"].includes(event.key)' in html
@@ -4531,6 +4613,61 @@ def test_dashboard_route_context_variants_index_uses_canonical_file_query_links(
     assert '_variant_file_href(item["relative_ref"])' in source
     assert '_variant_file_href("route_context_variant_comparison.md")' in source
     assert '_variant_file_href("route_context_variant_comparison.json")' in source
+
+
+def test_dashboard_approved_qualification_visual_repairs_are_explicit() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    force_row_rule = html.split(".force-row {", 1)[1].split("}", 1)[0]
+    force_button_rule = html.split(".force-row button {", 1)[1].split("}", 1)[0]
+    assert "minmax(0" in force_row_rule
+    assert "min-width: 0" in force_button_rule
+    assert "white-space: normal" in force_button_rule
+
+    weather_label_rule = html.split(".weather-layer-control strong {", 1)[1].split(
+        "}", 1
+    )[0]
+    body_label_rule = html.split(".body-index-trend-labels span {", 1)[1].split(
+        "}", 1
+    )[0]
+    debug_pill_rule = html.split(".debug-pill {", 1)[1].split("}", 1)[0]
+    assert "white-space: normal" in weather_label_rule
+    assert "overflow-wrap: anywhere" in weather_label_rule
+    assert "white-space: normal" in body_label_rule
+    assert "text-overflow: clip" in debug_pill_rule
+    assert "overflow-wrap: anywhere" in debug_pill_rule
+
+    mobile_nav_rule = html.split("/* qualification-mobile-nav-scroll */", 1)[1].split(
+        "}", 1
+    )[0]
+    living_mobile_rule = html.split(
+        "/* qualification-living-mobile-header */", 1
+    )[1].split("}", 1)[0]
+    architecture_containment_rule = html.split(
+        "/* qualification-architecture-sticky-containment */", 1
+    )[1].split("}", 1)[0]
+    assert "display: block" in mobile_nav_rule
+    assert "min-height: 0" in mobile_nav_rule
+    assert "overflow-y: auto" in mobile_nav_rule
+    assert ".nav-section:not([open]) > .nav-subtree" in html
+    assert "flex-direction: column" in living_mobile_rule
+    assert "overflow: visible" in architecture_containment_rule
+
+    debug_table_rule = html.split(".debug-table {", 1)[1].split("}", 1)[0]
+    debug_table_wrap_rule = html.split(".debug-table-wrap {", 1)[1].split("}", 1)[0]
+    assert "min-width: 640px" in debug_table_rule
+    assert "overflow: auto" in debug_table_wrap_rule
+    assert "qualification-debug-table-mobile-readable" not in html
+
+    render_source = html.split("function render() {", 1)[1].split(
+        "function renderOverview", 1
+    )[0]
+    assert "hideDashboardMapHint();" in render_source
+    assert 'data-navigation-basemap-layer="rudy-twmap"' in html
+    assert "pointer-events: bounding-box" in html
+    assert "qualification-six-axis-tabs-visible" in html
+    assert "qualification-mobile-nav-scroll" in html
+    assert "qualification-architecture-lens-sticky" in html
 
 
 def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
