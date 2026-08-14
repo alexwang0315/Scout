@@ -851,6 +851,8 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 4. 選取一個 Segment，核對 fingerprint、map、legend 與 Segment Microscope。
 5. 檢查 retreat-dependency view、candidate graph 與 missing architecture 狀態。
 6. 在行動寬度測試 Spine／Map／Segment 切換與 sticky inspector。
+7. 在 390×844 從 mode bar 初始位置以觸控、滑鼠與鍵盤操作局部水平捲動，
+   確認四個 reading modes 均可到達且不造成頁面級水平溢出。
 
 通過條件：
 
@@ -860,6 +862,9 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
   不捏造 branch、alternative 或 reversibility。
 - Retreat view 只顯示有來源的 candidate edges。
 - 頁面只使用 aggregate candidate evidence，不暴露 raw GPX、私人健康資料或精確時間。
+- Architecture mode bar 允許元件內 `overflow-x: auto`；不要求四個 mode 在行動版
+  首屏同時完整顯示，但 Structure、Demand、Reversibility、Evidence 必須可透過
+  觸控／滑鼠水平捲動與鍵盤焦點到達。此例外不得形成 body／頁面級水平溢出。
 
 證據／結果：
 
@@ -1059,26 +1064,33 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 1. 載入目前 workspace 的 compact project projection。
 2. 建立 Dashboard 現行的 Evidence 群組清單，檢查每個群組顯示的 count。
 3. 另外展開 `Evidence Timeline`，逐一檢查其中每個子類別的 evidence count。
-4. 執行 `DASH-030`，比對紅燈訊息列出的類別與畫面上的 `0` 計數。
+4. 執行 `DASH-030`，比對黃燈／紅燈訊息列出的類別、typed reason 與畫面上的
+   `0` 計數。
 
 通過條件：
 
-- 所有 Evidence 群組的 count 都大於 0。
-- `Evidence Timeline` 內所有子類別的 evidence count 都大於 0。
-- 若存在 count=0，Diagnostic 必須顯示紅燈，並列出可辨識的 tab／群組／
-  子類別名稱；不得只顯示籠統錯誤。
+- 沒有 count=0 時顯示綠燈。
+- 存在 count=0，但每一項都有可辨識的 typed reason（例如來源已查無結果、
+  來源不可用、已準備但無候選，或完成 GPX 尚未匯入）時顯示黃燈，並列出
+  tab／群組／子類別與原因。
+- 任何 count=0 缺乏 typed reason、落入 `fixture_or_projection_omission`，或無法
+  判斷是合理空集合時必須顯示紅燈；不得只顯示籠統錯誤。
+- 不得為取得綠燈而捏造 evidence 或把真實零值改成正數。
 - 檢測只讀取既有 projection，不觸發 preparation、import 或任何 POST。
 
 證據／結果：
 
-- 結果：`FAIL`（2026-08-03，`chilai_nanhua_day1_scoutAI`）
-- 證據：Chromium `Diag all` 完成 36/36，`DASH-030` 紅燈；目前列出
-  5 個 count=0 類別，全程 0 POST。
+- 結果：`WARNING`（2026-08-07，符合 Q0017 的預期黃燈語意）。
+- 證據：Chromium `Diag all` 完成 37/37 terminal states：36 綠、1 黃、0 紅；
+  `DASH-030` 列出 13 個具 typed reason 的 count=0 類別，未解釋零值為 0，
+  全程 0 POST、0 workspace mutation。
+- 歷史證據：2026-08-03 Chromium `DASH-030` 曾顯示紅燈並列出 5 個
+  count=0 類別；此紀錄保留作為語意變更前基準。
 - 重新投影後，修正四個假 0：Overpass Hiking Routes `2`、Water Sources
   `1`、Parking `1`、Peaks `6`。
 - 使用者介面不再只顯示數字 0，而是標示 `source checked · no matches`、
   `prepared · no candidates` 或 `completed GPX not imported`；Diagnostic
-  保留內部零值並連同原因列出。
+  保留內部零值並連同原因列出，合理 typed zero 依 Q0017 顯示黃燈。
 - 缺陷編號：
 - 備註：剩餘項目是已確認的來源空集合或尚未匯入完成 GPX，不代表系統自動
   判定這些類別必須存在真實地物，也不得為了讓計數大於 0 而捏造 evidence。
@@ -1324,7 +1336,9 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
-| 2026-08-06 | 內部 qualification remediation：Weather 的 Fit→第一次 `+` 完成 Z13→Z14 active generation；ready fixture 補齊本地可推導 Evidence 與五份 candidate-only Route Context variants；所有 Evidence 零值加入 typed reason，zero-evidence fixture 改為只讀 200 空投影。DASH-030 仍對任何真實零值維持紅燈。 |
+| 2026-08-14 | Q0038 規格決策：Architecture mode bar 明確允許元件內水平捲動；所有 mode 仍須可達且不得造成頁面級溢出。 |
+| 2026-08-07 | Q0017：DASH-030 將具合理 typed reason 的真實零值改列黃燈；只有無法解釋或 `fixture_or_projection_omission` 的零值列紅燈，且禁止捏造正數。 |
+| 2026-08-06 | 內部 qualification remediation：Weather 的 Fit→第一次 `+` 完成 Z13→Z14 active generation；ready fixture 補齊本地可推導 Evidence 與五份 candidate-only Route Context variants；所有 Evidence 零值加入 typed reason，zero-evidence fixture 改為只讀 200 空投影。 |
 | 2026-08-04 | 新增 DASH-037，禁止 Navigation、Architecture、Weather 在高倍率停用動態換磚；要求 Z13→Z14 與跨 prepared ceiling 的 Z14→Z15 都有同步 UI、active tile 與 Network request 證據。 |
 | 2026-08-03 | Chromium 完成 36/36 Diag all：32 PASS、4 個現況資料／服務 FAIL；DASH-031～036 全數 PASS，且 9/9 Dashboard 地圖完成真實操作回歸，全程 0 POST。 |
 | 2026-08-03 | 新增 DASH-031～036，驗證 Contextual Permission read API、Workbench、Forward Projection、Safety / Emergency 邊界、Evidence lineage 與明確 no-write simulation。 |

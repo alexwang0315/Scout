@@ -35,7 +35,8 @@ jobs:
       - id: qualification
         continue-on-error: true
         env:
-          SCOUT_QUALIFICATION_SKIP_REVIEW: "1"
+          SCOUT_QUALIFICATION_RUNTIME_URL: ${{ vars.SCOUT_QUALIFICATION_RUNTIME_URL }}
+          SCOUT_QUALIFICATION_PROJECT_ID: ${{ vars.SCOUT_QUALIFICATION_PROJECT_ID }}
         run: npm run qualification:check:full
       - if: always()
         uses: actions/upload-artifact@v4
@@ -75,13 +76,11 @@ jobs:
           "${SCOUT_QUALIFICATION_OUTPUT}"
       - id: reviewer
         continue-on-error: true
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SCOUT_QUALIFICATION_REVIEW_MODEL: ${{ vars.SCOUT_QUALIFICATION_REVIEW_MODEL }}
-          SCOUT_QUALIFICATION_ALLOW_EXTERNAL_REVIEW: "1"
-        run: >-
-          ./venv/bin/python -m scripts.qualification.run_independent_review
-          "${SCOUT_QUALIFICATION_OUTPUT}"
+        run: |
+          echo "Official review requires gpt-pro-collaboration in the Codex in-app browser."
+          echo "Attach the hash-bound reviewer-verdict.json and gpt-pro-review-reference.json before enforcement."
+          test -f "${SCOUT_QUALIFICATION_OUTPUT}/reviewer-verdict.json"
+          test -f "${SCOUT_QUALIFICATION_OUTPUT}/gpt-pro-review-reference.json"
       - if: steps.reviewer.outcome == 'success'
         run: >-
           ./venv/bin/python -m scripts.qualification.enforce_review

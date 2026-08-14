@@ -4849,6 +4849,21 @@
       .dashboard-nav-toggle {
         display: inline-flex;
       }
+      /* qualification-mobile-navigation-global-opener */
+      .dashboard-shell.is-page-header-hidden .topbar {
+        display: flex;
+        min-height: 56px;
+        padding: 6px 12px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(8, 16, 14, .96);
+      }
+      .dashboard-shell.is-page-header-hidden .dashboard-frame {
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+      .dashboard-shell.is-page-header-hidden .topbar-title-row h2,
+      .dashboard-shell.is-page-header-hidden .status-strip {
+        display: none;
+      }
       .nav {
         /* qualification-mobile-nav-scroll */
         display: block;
@@ -5619,6 +5634,7 @@
       align-items: center;
       gap: 6px;
       overflow-x: auto;
+      overscroll-behavior-inline: contain;
       scrollbar-width: thin;
     }
 
@@ -20140,6 +20156,21 @@
       return navigationTerrainMapLibreRuntime.modulePromise;
     }
 
+    function configureNavigationTerrainMapLibreKeyboardSurface(map, host, mode) {
+      const canvas = map.getCanvas();
+      const label = host.getAttribute("aria-label") || "Interactive MapLibre terrain map";
+      const shortcuts = host.getAttribute("aria-keyshortcuts") || "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0";
+      host.removeAttribute("tabindex");
+      host.removeAttribute("role");
+      host.removeAttribute("aria-keyshortcuts");
+      canvas.tabIndex = 0;
+      canvas.setAttribute("role", "application");
+      canvas.setAttribute("aria-label", label);
+      canvas.setAttribute("aria-keyshortcuts", shortcuts);
+      canvas.dataset.navigationMaplibreKeyboardSurface = mode;
+      return canvas;
+    }
+
     function fitNavigationTerrainMapLibre(map, dem, mode) {
       const bounds = navigationTerrainMapLibreBounds(dem);
       if (!bounds) return;
@@ -20234,6 +20265,11 @@
             attributionControl: true,
             canvasContextAttributes: {antialias: true},
           });
+          const keyboardSurface = configureNavigationTerrainMapLibreKeyboardSurface(
+            map,
+            host,
+            mode,
+          );
           const entry = {map, mode, host};
           navigationTerrainMapLibreRuntime.maps.push(entry);
           const updateCameraEvidence = () => {
@@ -20299,7 +20335,7 @@
           );
           fitButton?.addEventListener("click", () => {
             fitNavigationTerrainMapLibre(map, dem, mode);
-            host.focus({preventScroll: true});
+            keyboardSurface.focus({preventScroll: true});
           });
         } catch (error) {
           host.dataset.navigationMaplibreStatus = "failed";
@@ -22105,7 +22141,7 @@
       return `
         ${outdoorTabs(force.route)}
         <section class="route-architecture-shell" data-route-architecture-intelligence="true" data-architecture-status="${escapeHtml(snapshot.status || "unavailable")}" data-architecture-selected-bin-id="${escapeHtml(state.architectureSelectedBinId || "")}" data-architecture-selected-node-id="${escapeHtml(state.architectureSelectedPassageNodeId || "")}" data-mobile-view="${escapeHtml(state.architectureMobileView || "spine")}">
-          <div class="architecture-modebar" role="tablist" aria-label="Route architecture analysis modes">
+          <div class="architecture-modebar" role="tablist" aria-label="Route architecture analysis modes" data-overflow-contract="horizontal-scroll">
             ${modeButtons.map(([id, label]) => `<button type="button" role="tab" aria-selected="${state.architectureMode === id ? "true" : "false"}" class="${state.architectureMode === id ? "is-active" : ""}" data-architecture-mode="${id}">${label}</button>`).join("")}
           </div>
           <div class="architecture-mobile-switch" role="tablist" aria-label="Mobile architecture view">

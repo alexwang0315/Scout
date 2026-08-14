@@ -5,16 +5,28 @@ surfaces:
   - id: system-diagnostic
     route: /admin/dashboard#diagnostic
     capabilities:
+      - id: dashboard.shell.runtime_route_navigation
+        criticality: P0
+        status: operational
+        owner: dashboard
+        expected_behavior:
+          - Every rendered Dashboard navigation route can be opened through browser interaction on the selected real runtime project.
+        forbidden_behavior:
+          - A hidden route failure, uncaught page error, or unavailable runtime must not be reported as successful navigation.
+        required_tests: [desktop_all_routes_real_runtime]
+        required_evidence: [ui, network, trace, browser_action_log]
+        authority_boundary: {source: browser, runtime_authority: false}
       - id: dashboard.diagnostic.controls
         criticality: P1
         status: operational
         owner: dashboard
         expected_behavior:
           - Diagnostic appears immediately after Settings.
-          - Diag all and every individual Retest control expose running, passed, and failed states.
+          - Diag all and every individual Retest control expose running, passed, warning, and failed states.
+          - A typed expected zero Evidence state renders a yellow warning while an unexplained zero remains failed.
         forbidden_behavior:
           - One failed case must not suppress the terminal result of another case.
-        required_tests: [desktop_controls, mobile_no_overflow, isolated_case_continuation]
+        required_tests: [desktop_controls, mobile_no_overflow, isolated_case_continuation, typed_zero_warning]
         required_evidence: [ui, trace, video]
         authority_boundary: {source: browser, runtime_authority: false}
       - id: dashboard.diagnostic.read_only
@@ -29,6 +41,61 @@ surfaces:
         required_tests: [dashboard_open_no_write, diag_all_no_write, zero_post_requests]
         required_evidence: [ui, network, server_state, trace]
         authority_boundary: {source: server, runtime_authority: false}
+  - id: all-dashboard-live-browser
+    route: /admin/dashboard#*
+    capabilities:
+      - id: dashboard.browser.complete_control_coverage
+        criticality: P0
+        status: operational
+        owner: qualification
+        expected_behavior:
+          - Every visible interactive control in the main document and rendered embedded frames on every Dashboard route is discovered at runtime and ends as browser-operated or delegated to a passing browser-operated specialist case.
+          - Each ordinary state-changing operation has before/after screenshots plus an observable semantic and pixel change.
+        forbidden_behavior:
+          - Contract-test success, DOM presence, API 200, or a screenshot without browser operation must not count as functional coverage.
+          - An unmapped, unexercised, missing-after-discovery, no-state-change, no-visual-change, or unauthorized-effect control must not be reported as PASS.
+          - A disabled-only control or single-value selector must not be treated as proof that its function works.
+        required_tests: [live_runtime_control_census, browser_before_after_state_change, zero_unmapped_controls]
+        required_evidence: [ui, browser_action_log, control_inventory, screenshots, trace, video]
+        authority_boundary: {source: browser, runtime_authority: false}
+      - id: dashboard.visual.complete_live_rendering
+        criticality: P0
+        status: operational
+        owner: qualification
+        expected_behavior:
+          - Every contracted Dashboard route is rendered and browser-scrolled on desktop and large-mobile profiles with screenshot evidence.
+          - Visible content and controls are sharp, readable, unoccluded, unclipped, non-overlapping, non-broken, and free of unintended horizontal overflow.
+        forbidden_behavior:
+          - CSS blur, broken or upscaled raster content, clipped text, covered controls, overlapping controls, blank rendering, or unreviewed visual states must not be accepted.
+        required_tests: [all_routes_desktop_visual, all_routes_mobile_visual, pixel_sharpness, dom_occlusion_and_clipping]
+        required_evidence: [ui, visual_audit, screenshots, trace, video]
+        authority_boundary: {source: browser, runtime_authority: false}
+      - id: dashboard.maps.all_surface_interactions
+        criticality: P0
+        status: operational
+        owner: maps
+        expected_behavior:
+          - All nine Dashboard map surfaces support Fit, zoom in, zoom out, mouse pan, keyboard pan, and persistent rectangle zoom through browser input.
+          - Embedded maps operate all four visible directional pan buttons and prove the requested direction changed the map view.
+          - Every native map exposes a visible Evidence hover hint and renders vector content plus tiles or an approved single image under the canonical render policy.
+        forbidden_behavior:
+          - A control click without a changed map view, a stretched stale tile matrix, missing content, hidden hint, blurred render, or failed raster request must not pass.
+        required_tests: [all_nine_maps_real_browser_gestures, evidence_hover_hints, map_render_and_pixel_quality]
+        required_evidence: [ui, network, map_interactions, screenshots, trace, video]
+        authority_boundary: {source: browser, runtime_authority: false}
+      - id: dashboard.layers.all_visible_toggle_integrity
+        criticality: P0
+        status: operational
+        owner: maps
+        expected_behavior:
+          - Every pre-trip layer exposed by scout_layer_contract.py and every Weather layer control is toggled through the browser and produces a visible, correctly labelled state change.
+          - Every visible layer preset and CWA product, window, timeline, opacity, and playback control is browser-operated against prepared live data and visibly changes the map.
+          - An enabled layer has a visible non-empty render group containing its tile, vector, point, line, polygon, or approved image content.
+        forbidden_behavior:
+          - A checkbox-only change, empty enabled group, missing expected layer, mismatched ON or OFF label, failed raster response, or visually unchanged map must not pass.
+        required_tests: [canonical_layer_toggle_census, weather_layer_toggle_census, enabled_layer_render_integrity]
+        required_evidence: [ui, network, layer_interactions, screenshots, trace, video]
+        authority_boundary: {source: browser, runtime_authority: false}
   - id: outdoor-navigation
     route: /admin/dashboard#outdoor-navigation
     capabilities:
@@ -56,6 +123,21 @@ surfaces:
         required_tests: [navigation_dynamic_tiles, architecture_dynamic_tiles, weather_dynamic_tiles]
         required_evidence: [ui, network, trace, video]
         authority_boundary: {source: browser, runtime_authority: false}
+  - id: outdoor-weather
+    route: /admin/dashboard#outdoor-weather
+    capabilities:
+      - id: dashboard.weather.optional_rainfall_overlay
+        criticality: P1
+        status: operational
+        owner: weather
+        expected_behavior:
+          - An absent optional rainfall projection returns a typed read-only 200 not_prepared response.
+          - The Weather map client preserves the empty reason and renders zero rainfall grid cells.
+        forbidden_behavior:
+          - A cache-only GET must not start preparation, return an untyped 404, or fabricate rainfall cells.
+        required_tests: [optional_overlay_absent_api, optional_overlay_empty_ui]
+        required_evidence: [ui, network, server_state, trace]
+        authority_boundary: {source: server, runtime_authority: false}
   - id: contextual-permission
     route: /admin/dashboard#outdoor-permission
     capabilities:
@@ -65,7 +147,7 @@ surfaces:
         owner: permission
         expected_behavior:
           - Missing, stale, or incompatible projections render a blocked state with an actionable explanation.
-          - Ready and degraded fixtures remain visibly candidate-only.
+          - Ready and degraded real runtime states remain visibly candidate-only.
         forbidden_behavior:
           - Permission presentation must not authorize departure, retreat, bivy, Safety, Emergency, outbound, or hardware effects.
         required_tests: [ready_candidate_boundary, blocked_missing_seed, stale_baseline]
@@ -88,12 +170,12 @@ surfaces:
         authority_boundary: {source: none, runtime_authority: false}
       - id: qualification.fixture.active_p0_matrix
         criticality: P0
-        status: operational
+        status: sandbox
         owner: qualification
         expected_behavior:
-          - Synthetic fixtures cover ready, degraded, blocked, stale, partial, zero-evidence, and Assistant enabled/disabled states.
+          - Synthetic fixtures may cover ready, degraded, blocked, stale, partial, zero-evidence, and Assistant enabled/disabled states for harness development only.
         forbidden_behavior:
-          - Private workspaces or fixture evidence must not be represented as runtime truth.
+          - Private workspaces or fixture evidence must not be represented as runtime truth, official qualification evidence, confirmed issue evidence, or a trusted baseline.
         required_tests: [fixture_matrix_schema, candidate_boundary, no_write_fixture]
         required_evidence: [manifest, server_state]
         authority_boundary: {source: none, runtime_authority: false}

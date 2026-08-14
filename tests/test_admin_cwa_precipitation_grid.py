@@ -204,6 +204,48 @@ def test_admin_rainfall_grid_manifest_is_cache_only_and_redacted(
     assert freshness_by_kind["qpf_next_1h"] == "stale_data"
 
 
+def test_optional_rainfall_overlay_absence_is_a_typed_empty_response(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _prepare_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        "/admin/pretrip/projects/fixture-route/rainfall-grid-overlay"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["artifactKind"] == "cwa_route_grid_overlay"
+    assert payload["status"] == "not_prepared"
+    assert payload["gridCells"] == []
+    assert payload["products"] == []
+    assert payload["emptyReason"]["code"] == "rainfall_projection_not_prepared"
+    assert payload["cachePolicy"]["upstreamFetchOnRead"] is False
+    assert payload["boundary"]["candidateOnly"] is True
+    assert payload["boundary"]["runtimeSafetyTruth"] is False
+
+
+def test_configured_missing_rainfall_overlay_remains_a_data_error(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _prepare_workspace(tmp_path)
+    project_path = workspace_root / "fixture-route/project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["cwa_rainfall_route_projection_ref"] = (
+        "outputs/environment/cwa/rainfall/missing-route-projection.geojson"
+    )
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        "/admin/pretrip/projects/fixture-route/rainfall-grid-overlay"
+    )
+
+    assert response.status_code == 422
+    assert "configured rainfall route projection is missing" in response.json()["detail"]
+
+
 def test_rainfall_public_manifest_evaluates_product_freshness_at_read_time(
     tmp_path: Path,
 ) -> None:
