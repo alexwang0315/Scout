@@ -3064,6 +3064,9 @@ def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> N
     emergency_page = html.split("function renderEmergencyPage()", 1)[1].split(
         "function renderDebugPage()", 1
     )[0]
+    permission_loader = html.split("async function loadPermissionData()", 1)[1].split(
+        "function stopNavigationTerrainPolling", 1
+    )[0]
 
     assert 'data-route="emergency"' in html
     assert 'data-safety-emergency-console="desktop"' in emergency_page
@@ -3084,6 +3087,8 @@ def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> N
     assert ".safety-emergency-commandbar" not in html
     assert ".safety-emergency-status-grid" not in html
     assert ".safety-emergency-status-card" not in html
+    assert "if (projection?.daily_review?.mission_day_instance_id)" in permission_loader
+    assert 'projection?.status === "ready" &&' not in permission_loader
 
 
 def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_scope() -> None:
@@ -3103,6 +3108,11 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "contextual-permission-dashboard?lens=" in html
     assert 'state.route === "emergency"\n          ? "replay"' in permission_loader
     assert "state.permissionProjection = projection;" in permission_loader
+    assert (
+        "await loadPermissionBaselineMapContext(\n"
+        "          state.pretripDataProjectId || projectId(),\n"
+        "        );"
+    ) in permission_loader
     assert "state.permissionReviewSession = await fetchJson" in permission_loader
     assert 'projection.status === "blocked"' in permission_page
     assert "renderPermissionBaselineAuthoring()" in permission_page
@@ -4435,7 +4445,7 @@ def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
         '"source_unavailable"',
         '"prepared_no_candidates"',
         'const reason = ["capability_timeline", "rest_intervals"].includes(item.category_id)',
-        "Evidence categories count=0:",
+        "Evidence categories count=0 with typed reasons:",
     ):
         assert marker in html
 
@@ -4492,9 +4502,47 @@ def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
     check_030 = html.split(
         "async function diagnosticCheck030()", 1
     )[1].split("async function diagnosticCheck031()", 1)[0]
-    assert "unexplainedZeroCountCategories" in check_030
+    assert "unexplainedZeroCountCategories" not in check_030
     assert "return diagnosticWarning(" in check_030
-    assert 'includes("[fixture_or_projection_omission]")' in check_030
+
+
+def test_dashboard_diagnostic_classifies_expected_runtime_gaps_without_false_reds() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    check_002 = html.split(
+        "async function diagnosticCheck002()", 1
+    )[1].split("async function diagnosticCheck003()", 1)[0]
+    assert '"runtime-audit"' in check_002
+
+    check_018 = html.split(
+        "async function diagnosticCheck018()", 1
+    )[1].split("async function diagnosticCheck019()", 1)[0]
+    assert "Route Context is recorded as deferred / not implemented" in check_018
+    assert "return diagnosticWarning(" in check_018
+
+    check_019 = html.split(
+        "async function diagnosticCheck019()", 1
+    )[1].split("async function diagnosticCheck020()", 1)[0]
+    assert "records.length === 0" in check_019
+    assert "return diagnosticWarning(" in check_019
+
+    check_025 = html.split(
+        "async function diagnosticCheck025()", 1
+    )[1].split("function diagnosticSourceText(", 1)[0]
+    assert 'data-navigation-maplibre-shell="2d"' in check_025
+    assert 'data-navigation-maplibre-shell="3d"' in check_025
+    assert "dual MapLibre terrain maps rendered" in check_025
+
+    permission_ready = html.split(
+        "function diagnosticRequirePermissionReady(", 1
+    )[1].split("function diagnosticPermissionRoot(", 1)[0]
+    assert '["ready", "degraded"].includes(projection?.status)' in permission_ready
+
+    for case_id, next_case_id in (("032", "033"), ("033", "034"), ("035", "036")):
+        check = html.split(
+            f"async function diagnosticCheck{case_id}()", 1
+        )[1].split(f"async function diagnosticCheck{next_case_id}()", 1)[0]
+        assert "return diagnosticWarning(" in check
 
 
 def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() -> None:

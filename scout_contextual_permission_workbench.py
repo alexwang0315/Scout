@@ -7453,6 +7453,11 @@ class ContextualPermissionWorkbench:
             ),
             key=lambda item: float(item["route_distance_m"]),
         )
+        if len(anchor_rows) < 2:
+            raise ContextualPermissionConflict(
+                "baseline_map_anchors_missing",
+                "Reference timing has fewer than two valid ordered route anchors.",
+            )
         route_length_raw = route.get("distance_m") if isinstance(route, dict) else None
         route_length_m = (
             float(route_length_raw)

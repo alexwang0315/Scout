@@ -3670,3 +3670,89 @@ SOP change:
   former timer interval or inspect manager timer state, and confirm zero
   publications. A GET that registers future work is a write-capable action and
   violates the read-only Dashboard contract.
+
+## Run Log: 2026-08-14 Navigation Terrain RGB Targeted Preparation
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Attempt 1:
+
+```text
+Command: ./venv/bin/python navigation_terrain_raster_dem.py --workspace-root /Users/alexwang0315/workspace --project-id chilai_nanhua_day1_scoutAI
+Result: FAIL before manifest or project publication
+Failure point: complete raster-DEM tile selection at default zoom 13
+```
+
+Issue encountered:
+
+1. No zoom-13 tile was fully supported by the prepared 20 m DTM grid.
+   - Symptom: `TerrainDemPreparationError: no fully-supported terrain DEM tiles
+     are available at the requested zoom`.
+   - Cause: the source-supported corridor is narrower than a zoom-13 slippy-map
+     tile in at least one dimension. The producer correctly rejected every
+     tile containing alpha/nodata instead of encoding unsupported cells as
+     plausible elevation.
+   - Workspace effect: none; the failure occurred before the Terrain RGB
+     manifest and `project.json` pointer writes.
+   - Next attempt: use zoom 14 so each candidate tile covers a smaller bounded
+     area, then accept only if the producer still finds a complete rectangular
+     tile block and the runtime serves every allowlisted tile hash unchanged.
+
+Attempt 2:
+
+```text
+Command: ./venv/bin/python navigation_terrain_raster_dem.py --workspace-root /Users/alexwang0315/workspace --project-id chilai_nanhua_day1_scoutAI --zoom 14
+Result: FAIL before manifest or project publication
+Failure point: complete raster-DEM tile selection at zoom 14
+```
+
+Issue encountered:
+
+1. Reducing the candidate tile footprint to zoom 14 was still insufficient.
+   - Symptom: the same `no fully-supported terrain DEM tiles` fail-closed error.
+   - Workspace effect: none; the project hash remained unchanged and no
+     `outputs/navigation/terrain_rgb` directory was created.
+   - Next attempt: inspect the finite-cell mask and per-zoom support ratios
+     before choosing another zoom. Do not keep retrying or relax the no-nodata
+     rule without evidence.
+
+Attempt 3:
+
+```text
+Read-only support audit: PASS
+Grid: 432 x 169 cells
+Finite source cells: 71,825 (98.3796%)
+Zoom 13: 0/6 complete; best support 48.4375%
+Zoom 14: 0/10 complete; best support 96.4844%
+Zoom 15: 14/36 complete; best support 100%
+Command: ./venv/bin/python navigation_terrain_raster_dem.py --workspace-root /Users/alexwang0315/workspace --project-id chilai_nanhua_day1_scoutAI --zoom 15
+Result: PASS
+```
+
+Validation snapshot:
+
+```text
+Manifest: outputs/navigation/terrain_rgb/manifest.json
+Manifest status: ready
+Prepared block: 14 complete zoom-15 Terrain RGB tiles
+Tile hash verification: PASS (14/14)
+Live 9099 manifest endpoint: PASS (HTTP 200, Cache-Control: no-store)
+Live 9099 sampled tile endpoint: PASS (HTTP 200, image/png)
+Sampled tile response/file hash: PASS (8b7269cd4a0e57c5f4e1080895f53e19692038184d2b76fa1377a8d2d75d71d5)
+Navigation projection boundary: candidate_only=true, runtime_safety_truth=false
+Unsupported cells encoded as terrain: false
+Network fetch: none
+Full 23-layer preparation: not run
+```
+
+SOP change:
+
+- Terrain RGB zoom is a coverage choice, not a source-resolution claim. Audit
+  per-zoom alpha support first, choose the lowest zoom that yields a fully
+  supported rectangular block, retain nearest-neighbor encoding, and continue
+  to disclose the 20 m source-cell resolution. Never relax the complete-tile
+  rule merely to make 3D render.

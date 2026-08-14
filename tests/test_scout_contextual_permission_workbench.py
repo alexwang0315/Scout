@@ -888,6 +888,36 @@ def test_baseline_map_context_is_compact_read_only_and_resolves_route_anchors(
     assert not store_root.exists()
 
 
+def test_baseline_map_context_rejects_filtered_empty_anchor_rows_as_typed_gap(
+    tmp_path: Path,
+) -> None:
+    project_root, store_root = _workspace(tmp_path)
+    _add_rich_reference_proposal_sources(project_root)
+    timing_path = project_root / "outputs" / "reference_segment_timing.json"
+    timing = json.loads(timing_path.read_text(encoding="utf-8"))
+    timing["checkpoint_match_quality"] = {
+        key: {
+            field: value
+            for field, value in row.items()
+            if field != "route_distance_m"
+        }
+        for key, row in timing["checkpoint_match_quality"].items()
+    }
+    timing_path.write_text(json.dumps(timing), encoding="utf-8")
+
+    with pytest.raises(ContextualPermissionConflict) as caught:
+        ContextualPermissionWorkbench(
+            project_root=project_root,
+            store_root=store_root,
+            now_factory=lambda: NOW,
+            allow_stale_projection=True,
+        ).baseline_map_context()
+
+    assert caught.value.code == "baseline_map_anchors_missing"
+    assert "valid ordered route anchors" in caught.value.message
+    assert not store_root.exists()
+
+
 def test_reference_gpx_review_requires_exact_compact_acknowledgment_sets(
     tmp_path: Path,
 ) -> None:
