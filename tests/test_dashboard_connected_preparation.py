@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -133,6 +134,15 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
         "antecedent-rain",
     }
     assert status["status"] == "ready"
+    assert status["statusReadSchedulesRefresh"] is False
+    assert status["writerProvenance"] == {
+        "processId": os.getpid(),
+        "threadName": "MainThread",
+        "reason": "test",
+        "triggerKind": "internal",
+        "startedAt": "2026-07-23T03:00:00+00:00",
+        "completedAt": "2026-07-23T03:00:00+00:00",
+    }
     assert status["cwaApiRequestAttempted"] is True
     assert status["externalApiCallsMade"] is True
     assert status["credentialNamesPresent"] == ["CWA_API_KEY"]
@@ -660,6 +670,7 @@ class _FakeConnectedPreparationManager:
             "allowNetworkFetch": True,
             "prepareCwaImagery": True,
             "recurring": True,
+            "nextRunAt": None,
         }
 
     def ensure_scheduled(self, project_id: str) -> dict[str, Any]:
@@ -702,7 +713,7 @@ def test_admin_connected_preparation_api_triggers_background_job(tmp_path: Path)
     assert manager.calls == [("fixture-route", "operator-refresh", False)]
 
 
-def test_admin_connected_preparation_status_only_registers_future_refresh(
+def test_admin_connected_preparation_status_is_read_only_and_does_not_schedule(
     tmp_path: Path,
 ) -> None:
     workspace_root = tmp_path / "workspaces"
@@ -720,9 +731,9 @@ def test_admin_connected_preparation_status_only_registers_future_refresh(
     )
 
     assert status_response.status_code == 200
-    assert status_response.json()["status"] == "idle"
-    assert status_response.json()["nextRunAt"] == "2026-07-23T03:10:00+00:00"
-    assert manager.schedule_calls == ["fixture-route"]
+    assert status_response.json()["status"] == "running"
+    assert status_response.json()["nextRunAt"] is None
+    assert manager.schedule_calls == []
     assert manager.calls == []
     assert manager.workspace_publication.events == [
         ("acquire", "fixture-route"),

@@ -74,8 +74,8 @@ def create_dashboard_connected_preparation_manager(
 class DashboardConnectedPreparationManager:
     """Single-flight connected preparation with a service-lifetime refresh timer.
 
-    Browser reads register a future refresh without fetching providers. Timer
-    ticks and explicit operator requests run preparation on the Mac/server.
+    Status reads are side-effect free. Explicit operator or assistant refreshes
+    may register a future timer after their requested preparation completes.
     """
 
     def __init__(
@@ -262,6 +262,15 @@ class DashboardConnectedPreparationManager:
 
     def _execute(self, project_id: str, *, reason: str) -> dict[str, Any]:
         started_at = self._now()
+        safe_reason = _safe_reason(reason)
+        writer_provenance = {
+            "processId": os.getpid(),
+            "threadName": threading.current_thread().name,
+            "reason": safe_reason,
+            "triggerKind": _trigger_kind(safe_reason),
+            "startedAt": started_at.isoformat(),
+            "completedAt": None,
+        }
         staged_workspace = None
         with self._lock:
             previous = self._states.get(project_id) or self._base_status(project_id)
@@ -272,11 +281,12 @@ class DashboardConnectedPreparationManager:
                 "cwaApiRequestAttempted": None,
                 "externalApiCallsMade": None,
                 "networkCallsMade": None,
-                "reason": _safe_reason(reason),
+                "reason": safe_reason,
                 "startedAt": started_at.isoformat(),
                 "completedAt": None,
                 "lastError": None,
                 "nextRunAt": None,
+                "writerProvenance": writer_provenance,
             }
         try:
             staged_workspace = self.workspace_publication.stage(project_id)
@@ -316,7 +326,7 @@ class DashboardConnectedPreparationManager:
                 **self._base_status(project_id),
                 "status": "busy",
                 "requestActivityState": "waiting-external-preparation",
-                "reason": _safe_reason(reason),
+                "reason": safe_reason,
                 "startedAt": started_at.isoformat(),
                 "completedAt": completed_at.isoformat(),
                 "publicationStatus": "not-published",
@@ -337,7 +347,7 @@ class DashboardConnectedPreparationManager:
                 **self._base_status(project_id),
                 "status": "failed",
                 "requestActivityState": "failed",
-                "reason": _safe_reason(reason),
+                "reason": safe_reason,
                 "startedAt": started_at.isoformat(),
                 "completedAt": completed_at.isoformat(),
                 "publicationStatus": "not-published",
@@ -346,6 +356,15 @@ class DashboardConnectedPreparationManager:
                     "message": "Connected preparation failed; inspect redacted server diagnostics.",
                 },
             }
+        writer_provenance = {
+            **writer_provenance,
+            "completedAt": completed_at.isoformat(),
+        }
+        result = {
+            **result,
+            "statusReadSchedulesRefresh": False,
+            "writerProvenance": writer_provenance,
+        }
         with self._state_changed:
             prior_runs = int((self._states.get(project_id) or {}).get("runCount") or 0)
             self._states[project_id] = {**result, "runCount": prior_runs + 1}
@@ -403,6 +422,10 @@ class DashboardConnectedPreparationManager:
             summary="Connected preparation refresh completed",
         )
         if result.get("publicationStatus") == "published":
+            trigger_kind = str(
+                (result.get("writerProvenance") or {}).get("triggerKind")
+                or "internal"
+            )
             audit.record_workspace_io(
                 operation="write-connected-preparation-publication",
                 workspace_id=project_id,
@@ -412,7 +435,7 @@ class DashboardConnectedPreparationManager:
                 byte_count=None,
                 outcome="succeeded",
                 module="dashboard-connected-preparation",
-                feature="scheduled-refresh",
+                feature=f"connected-preparation:{trigger_kind}",
                 summary="Connected preparation workspace snapshot published",
                 duration_ms=duration_ms,
             )
@@ -688,6 +711,8 @@ class DashboardConnectedPreparationManager:
             "cacheScope": "project_workspace",
             "workspaceCacheRoot": str(cache_root),
             "recurring": True,
+            "recurringEnrollment": "explicit-trigger-or-assistant-refresh-only",
+            "statusReadSchedulesRefresh": False,
             "refreshIntervalSeconds": self.refresh_interval_seconds,
             "requestedLayers": list(CONNECTED_DASHBOARD_LAYERS),
             "providerFetches": ["overpass", "cwa", "gee"],
@@ -714,6 +739,14 @@ class DashboardConnectedPreparationManager:
             "nextRunAt": None,
             "runCount": 0,
             "lastError": None,
+            "writerProvenance": {
+                "processId": None,
+                "threadName": None,
+                "reason": None,
+                "triggerKind": None,
+                "startedAt": None,
+                "completedAt": None,
+            },
             "boundary": {
                 "candidateOnly": True,
                 "runtimeSafetyTruth": False,
@@ -774,6 +807,16 @@ class DashboardConnectedPreparationManager:
 def _safe_reason(reason: str) -> str:
     normalized = str(reason or "operator-refresh").strip()
     return normalized[:80] if normalized else "operator-refresh"
+
+
+def _trigger_kind(reason: str) -> str:
+    if reason == "scheduled-refresh":
+        return "scheduler"
+    if reason in {"operator-refresh", "operator-once"}:
+        return "operator"
+    if reason == "scout-ai-weather-decision":
+        return "assistant"
+    return "internal"
 
 
 def main(argv: list[str] | None = None) -> int:

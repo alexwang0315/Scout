@@ -348,16 +348,18 @@ frame slider and play control remain disabled; the UI must not fabricate an
 animation. Missing or stale route evidence fails closed as `DELAY`, and unknown
 booleans remain `null` rather than reassuring `false`.
 
-Dashboard opening also invokes the local server coordinator through
-`POST .../connected-preparation`. This write endpoint is intentionally separate
-from the cache-only Weather GET: it loads local server credentials, runs the
-provider-backed Overpass/CWA/GEE refresh subset as `mac-workstation +
-explicit-fetch + allow-network-fetch + prepare-cwa-imagery`, and reports progress through
-`GET .../connected-preparation`. The coordinator is single-flight and performs
-a service-lifetime refresh every 600 seconds by default so real radar and
-satellite frames accumulate. Existing route, terrain, and TEII artifacts remain
-sampling/risk inputs without being regenerated. It never runs image/grid
-processing in the browser, Raspberry Pi, or mobile client.
+Dashboard opening and Weather polling call only the cache-only
+`GET .../connected-preparation` snapshot. A GET never enrolls a timer or writes
+the workspace. The local coordinator starts only after an explicit operator
+`POST .../connected-preparation` or an approved Scout AI weather-decision
+refresh. That write path loads local server credentials, runs the provider-
+backed Overpass/CWA/GEE subset as `mac-workstation + explicit-fetch +
+allow-network-fetch + prepare-cwa-imagery`, and reports progress through the
+GET. After an explicit run, the single-flight coordinator may continue a
+service-lifetime refresh every 600 seconds so real radar and satellite frames
+accumulate. Existing route, terrain, and TEII artifacts remain sampling/risk
+inputs without being regenerated. It never runs image/grid processing in the
+browser, Raspberry Pi, or mobile client.
 
 The connected request sets both `run_post_layer_enrichments=false` and
 `run_map_preparation_spec_artifacts=false`. The first skips OCR, Boss, and

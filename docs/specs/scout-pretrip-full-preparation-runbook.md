@@ -454,11 +454,13 @@ Required checks:
 - `outputs/route_weather_lora_alert.json` has `sent=false` and does not invoke
   radio or outbound providers.
 
-### Dashboard-Triggered Connected Preparation And Recurring Frame Collection
+### Explicit Connected Preparation And Recurring Frame Collection
 
-The current local Mac/server Dashboard is approved to start connected
-preparation when `/admin/dashboard` opens. The browser does not fetch provider
-assets itself. It posts to the local coordinator:
+The current local Mac/server Dashboard reads only the current connected-
+preparation snapshot when `/admin/dashboard` opens. The browser does not fetch
+provider assets itself, and a status GET never enrolls a writer. Preparation
+starts only after the operator chooses `Refresh evidence` or Scout AI enters
+the separately approved weather-decision refresh path:
 
 ```text
 POST /admin/pretrip/projects/{project_id}/connected-preparation
@@ -480,8 +482,10 @@ allow_network_fetch=true
 prepare_cwa_imagery=true
 ```
 
-It is single-flight per project and schedules the next service-lifetime refresh
-after 600 seconds by default. Configure the interval with
+It is single-flight per project. After an explicit operator or Scout AI refresh
+completes, it schedules the next service-lifetime refresh after 600 seconds by
+default. A status GET with no prior explicit run leaves `nextRunAt=null`.
+Configure the interval with
 `SCOUT_DASHBOARD_CONNECTED_REFRESH_SECONDS`; values below 60 seconds are
 clamped. Stop the Dashboard service to stop this in-process schedule. This is
 not an OS login item, LaunchAgent, cron entry, or Pi/mobile worker.
@@ -517,7 +521,8 @@ state; the server persists only the sanitized approval audit with
 `rawCoordinatesPersisted=false`.
 
 The 2026-07-23 operator approval covers the Dashboard service-lifetime recurring
-timer described above. It is intentionally not installed as a Login Item,
+timer after an explicit refresh described above. It is intentionally not
+installed as a Login Item,
 LaunchAgent, cron job, Pi worker, or mobile worker; a durable OS-level schedule
 still requires a separate deployment review and approval.
 
@@ -570,9 +575,8 @@ the tool reports `direct_qpf_accumulation_mm` as missing. It must not convert a
 30% probability into millimetres or treat it as zero rain.
 
 A synchronous assistant refresh also installs the coordinator's normal
-`nextRunAt` timer after completion. Without this step, a Dashboard poll can see
-an empty schedule and immediately launch a duplicate full preparation while
-the model is answering.
+`nextRunAt` timer after completion. Dashboard polling is read-only and cannot
+launch a duplicate preparation while the model is answering.
 
 Dashboard connected refresh requests only the provider-backed layers needed to
 refresh Overpass, CWA, and GEE evidence. Existing GPX, route, terrain, and TEII
@@ -3361,6 +3365,20 @@ future from-zero preparation:
      implicitly. Re-run Connected Preparation for the selected workspace, then
      verify both the status `workspaceCacheRoot` and a real imagery asset GET.
 
+5. **Navigation projection fingerprints must include observed-passage inputs**
+   - The Navigation projection now derives a positive-unlabeled terrain-
+     passage prior from `reference_track_display_geometry_ref` and
+     `overpass_vector_evidence_ref` in addition to prepared DEM and route
+     samples.
+   - Both refs must participate in
+     `navigation_terrain_input_fingerprint()`. Otherwise a changed reference
+     GPX or Overpass vector artifact can leave the persisted prior apparently
+     current while the Dashboard serves stale pattern counts.
+   - After changing either source, explicitly compile the persisted Navigation
+     projection and verify that the artifact and `project.json` fingerprints
+     match. Dashboard GET remains read-only and must not hide this dependency
+     behind a synchronous multi-minute rebuild.
+
 The final workspace result was 23/23 preparation layers ready, the repository
 and workspace 32-layer contract gates passed, and the project-specific
 spec-alignment gate passed with zero errors and zero warnings. The UI exposes
@@ -3458,9 +3476,11 @@ Runtime safety truth mutation: NO
 
 ## Run Log: 2026-07-30 Connected Preparation Generation Publication
 
-Dashboard startup remains cache-only. The selected workspace is enrolled in a
-server timer by the read-only Connected Preparation status GET; provider access
-occurs only when that timer runs or an operator uses `Refresh evidence`.
+Dashboard startup remains cache-only. Historical behavior enrolled the selected
+workspace in a server timer from the Connected Preparation status GET. This was
+superseded on 2026-08-09: GET is now side-effect free, and provider access or a
+future timer begins only after an explicit operator or approved Scout AI
+weather refresh.
 
 Scheduled and explicit Connected Preparation now use this publication
 boundary:
@@ -3609,3 +3629,44 @@ The required receipt sequence is:
 
 `needs_semantic_review` is an intentional handoff state, not completion. The
 pipeline is complete only when all four receipts are `pass`.
+
+## Run Log: 2026-08-09 Read-Only Weather Status Writer Leak
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI
+```
+
+Issue encountered:
+
+1. Weather qualification observed workspace generations changing about every
+   ten minutes even though the browser made no connected-preparation POST.
+   - Root cause: the cache-only
+     `GET /admin/pretrip/projects/{project_id}/connected-preparation` endpoint
+     called `ensure_scheduled()`. Merely opening Dashboard, Weather, or
+     Diagnostic therefore registered an in-process timer. The later writer ran
+     inside the same Uvicorn PID on a
+     `scout-connected-preparation-<project_id>` thread with reason
+     `scheduled-refresh`, so process-list inspection did not reveal a separate
+     job.
+   - Fix: the GET now calls `snapshot()` only. It never schedules, fetches, or
+     writes. Explicit operator POST and approved Scout AI weather refresh paths
+     still run preparation and may schedule their next service-lifetime timer
+     after completion.
+   - Provenance: connected-preparation status now reports the actual writer
+     process id, thread name, reason, trigger kind, start time, and completion
+     time. Runtime workspace-I/O audit records use the observed trigger kind
+     instead of labelling every publication `scheduled-refresh`.
+   - Recovery note: a timer already held by an old server process remains live
+     until that manager is stopped. Restart the Dashboard service after
+     deploying this fix, then prove that repeated status GETs leave
+     `nextRunAt=null` and the sealed workspace byte-identical.
+
+SOP change:
+
+- Any status, Diagnostic, or cache-only GET must be tested for delayed effects,
+  not only immediate writes. Seal the workspace, issue the GET, wait beyond the
+  former timer interval or inspect manager timer state, and confirm zero
+  publications. A GET that registers future work is a write-capable action and
+  violates the read-only Dashboard contract.

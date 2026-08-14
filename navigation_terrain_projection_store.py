@@ -37,6 +37,8 @@ NAVIGATION_TERRAIN_PROJECTION_INPUT_REF_KEYS = (
     "historical_route_hypothesis_ref",
     "terrain_expert_annotation_refs",
     "terrain_acceptance_policy_ref",
+    "reference_track_display_geometry_ref",
+    "overpass_vector_evidence_ref",
 )
 
 
@@ -324,12 +326,15 @@ def navigation_terrain_input_fingerprint(
         else:
             refs = []
         if not refs:
-            states.append({"key": key, "ref": None, "size": None, "mtime_ns": None})
+            states.append(
+                {"key": key, "ref": None, "size": None, "content_sha256": None}
+            )
             continue
         for ref_index, ref in enumerate(dict.fromkeys(refs)):
             path = _safe_project_path(root, ref)
             try:
                 stat = path.stat()
+                content_sha256 = _file_sha256(path)
             except OSError:
                 states.append(
                     {
@@ -337,7 +342,7 @@ def navigation_terrain_input_fingerprint(
                         "ref_index": ref_index,
                         "ref": ref,
                         "size": None,
-                        "mtime_ns": None,
+                        "content_sha256": None,
                     }
                 )
                 continue
@@ -347,7 +352,7 @@ def navigation_terrain_input_fingerprint(
                     "ref_index": ref_index,
                     "ref": ref,
                     "size": stat.st_size,
-                    "mtime_ns": stat.st_mtime_ns,
+                    "content_sha256": content_sha256,
                 }
             )
     encoded = json.dumps(
@@ -357,6 +362,14 @@ def navigation_terrain_input_fingerprint(
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _preparing_payload(

@@ -6543,11 +6543,11 @@
     }
 
     function checkedLayerIds() {
-      return new Set([...layerInputs].filter(input => input.checked).map(input => input.dataset.layer));
+      return new Set([...layerInputs].filter(input => !input.disabled && input.checked).map(input => input.dataset.layer));
     }
 
     function availablePresetLayerSet(presetId) {
-      const available = new Set([...layerInputs].map(input => input.dataset.layer));
+      const available = new Set([...layerInputs].filter(input => !input.disabled).map(input => input.dataset.layer));
       return new Set((LAYER_PRESETS[presetId] || []).filter(layer => available.has(layer)));
     }
 
@@ -6570,7 +6570,7 @@
     function applyLayerPreset(presetId) {
       const preset = availablePresetLayerSet(presetId);
       if (!preset.size) return;
-      layerInputs.forEach(input => {
+      [...layerInputs].filter(input => !input.disabled).forEach(input => {
         input.checked = preset.has(input.dataset.layer);
       });
       updateLayers();

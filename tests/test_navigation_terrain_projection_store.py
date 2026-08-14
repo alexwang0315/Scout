@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Callable
@@ -190,3 +191,49 @@ def test_fingerprint_tracks_expert_reference_lists_and_acceptance_policy(
     )
 
     assert first != second
+
+
+def test_fingerprint_tracks_observed_passage_sources(tmp_path: Path) -> None:
+    project_root, project = _project(tmp_path)
+    reference_ref = "outputs/reference_track_display_geometry.json"
+    overpass_ref = "outputs/layers/normalized/overpass_vector_evidence.geojson"
+    project = {
+        **project,
+        "reference_track_display_geometry_ref": reference_ref,
+        "overpass_vector_evidence_ref": overpass_ref,
+    }
+    _write_json(project_root / reference_ref, {"reference_tracks": []})
+    _write_json(project_root / overpass_ref, {"features": []})
+    first = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    _write_json(project_root / overpass_ref, {"features": [{"id": "changed"}]})
+    second = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    assert first != second
+
+
+def test_fingerprint_ignores_mtime_only_refreshes(tmp_path: Path) -> None:
+    project_root, project = _project(tmp_path)
+    source_path = project_root / project["terrain_visualization_ref"]
+    first = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    stat = source_path.stat()
+    os.utime(
+        source_path,
+        ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000),
+    )
+    second = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    assert second == first

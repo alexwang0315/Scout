@@ -315,6 +315,15 @@ def test_pretrip_admin_page_has_read_only_toolbar_and_summary_raw_sample_contrac
     assert "raw_samples" not in html
 
 
+def test_approved_single_image_overlays_do_not_block_vector_evidence_hover():
+    html = PAGE.read_text(encoding="utf-8")
+    create_image_source = html.split(
+        "function createApprovedSingleImage", 1
+    )[1].split("function mapImageConformsToRenderPolicy", 1)[0]
+
+    assert '"pointer-events": "none"' in create_image_source
+
+
 def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     html = PAGE.read_text(encoding="utf-8")
     assistant_script = ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8")
@@ -372,6 +381,10 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert ".layer-menu-panel {\n        position: fixed;\n        top: 120px;\n        left: 12px;\n        right: 12px;\n        width: auto;" in html
     assert "function applyLayerPreset" in html
     assert "function syncLayerPresetButtons" in html
+    assert 'document.querySelectorAll("[data-layer]:not(:disabled)")' in html
+    assert "view.checkpoint_events?.events || []" in html
+    assert 'data-layer-group": "events"' in html
+    assert "combinedHazardCandidates(view)" in html
     assert "function bindLayerMenuDismiss()" in html
     assert "function closeLayerMenus(exceptMenu = null)" in html
     assert "function layerMenuFromEvent(event)" in html
@@ -954,6 +967,15 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "environment_risk_derivative_layers" in html
     assert "environment-risk-derivative" in html
     assert 'type.includes("environment") || type.includes("gee_") || type.includes("cwa_")' in html
+
+
+def test_pretrip_page_preserves_typed_empty_rainfall_overlay_reason() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert '<link rel="icon" href="data:,">' in html
+    assert "async function loadCwaRainfallGridOverlay(view)" in html
+    assert "grid_overlay_status: overlay.status" in html
+    assert "grid_overlay_empty_reason: overlay.emptyReason || null" in html
 
 
 def test_weather_map_preserves_previous_tiles_until_replacement_generation_loads():

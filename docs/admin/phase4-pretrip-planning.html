@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>Scout Phase 4 Pre-Trip Planning</title>
   <style>
     :root {
@@ -663,6 +664,7 @@
     .cwa-rainfall-legend span::before { content: ""; display: block; height: 8px; border-radius: 2px; background: var(--rain-color); border: 1px solid rgba(15,23,42,.16); }
     .cwa-weather-point { fill: #0ea5e9; stroke: #e0f2fe; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
     .cwa-weather-point.weather-warning { fill: #dc2626; stroke: #fff1f2; }
+    .checkpoint-event { fill: #fb923c; stroke: #fff7ed; stroke-width: 1.7; opacity: .94; vector-effect: non-scaling-stroke; }
     .environment-extent { vector-effect: non-scaling-stroke; stroke-width: 2; stroke-dasharray: 10 6; pointer-events: visiblePainted; }
     .environment-extent.soil-moisture { fill: rgba(37, 99, 235, .13); stroke: #2563eb; }
     .environment-extent.antecedent-rain { fill: rgba(15, 118, 110, .12); stroke: #0f766e; }
@@ -2501,6 +2503,7 @@
       if (!MAP_APPROVED_SINGLE_IMAGE_THEMES.has(approvedTheme)) return null;
       return elementFn("image", {
         ...attrs,
+        "pointer-events": "none",
         "data-map-render-kind": "approved-single-image",
         "data-single-image-theme": approvedTheme,
       });
@@ -6620,6 +6623,21 @@
         }
       });
     }
+    function combinedHazardCandidates(view) {
+      const seen = new Set();
+      return [
+        ...(view?.map_candidates?.hazard_candidates || []),
+        ...(view?.overpass_evidence?.hazard_candidates || []),
+      ].filter(candidate => {
+        const id = evidenceSourceId(candidate)
+          || candidate?.hazard?.hazard_id
+          || JSON.stringify(candidate?.hazard?.polygon || []);
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return Array.isArray(candidate?.hazard?.polygon)
+          && candidate.hazard.polygon.length >= 3;
+      });
+    }
     function renderMap(view) {
       const bounds = boundsFor(view);
       const coverageBounds = bounds;
@@ -6897,7 +6915,7 @@
       svg.appendChild(poiGroup);
 
       const hazardGroup = el("g", {"data-layer-group": "hazards"});
-      view.map_candidates.hazard_candidates.forEach(candidate => {
+      combinedHazardCandidates(view).forEach(candidate => {
         const path = el("path", {d: pathFromCoords(bounds, candidate.hazard.polygon) + " Z", class: "hazard"});
         attachEvidence(path, candidate);
         hazardGroup.appendChild(path);
@@ -6942,6 +6960,21 @@
       svg.appendChild(bossGroup);
 
       const eventGroup = el("g", {"data-layer-group": "events"});
+      (view.checkpoint_events?.events || []).forEach(event => {
+        const lat = Number(event?.lat);
+        const lon = Number(event?.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        const [x, y] = project(bounds, lat, lon);
+        const circle = el("circle", {
+          cx: x,
+          cy: y,
+          r: 4.4,
+          class: "checkpoint-event",
+          "data-checkpoint-event-id": event.event_id || event.source_id || "",
+        });
+        attachEvidence(circle, event);
+        eventGroup.appendChild(circle);
+      });
       svg.appendChild(eventGroup);
 
       const weatherApiGroup = el("g", {"data-layer-group": "weather-api"});
@@ -7625,10 +7658,10 @@
       syncLayerPresetButtons();
     }
     function checkedLayerIds() {
-      return new Set([...document.querySelectorAll("[data-layer]")].filter(input => input.checked).map(input => input.dataset.layer));
+      return new Set([...document.querySelectorAll("[data-layer]:not(:disabled)")].filter(input => input.checked).map(input => input.dataset.layer));
     }
     function availablePresetLayerSet(presetId) {
-      const available = new Set([...document.querySelectorAll("[data-layer]")].map(input => input.dataset.layer));
+      const available = new Set([...document.querySelectorAll("[data-layer]:not(:disabled)")].map(input => input.dataset.layer));
       return new Set((LAYER_PRESETS[presetId] || []).filter(layer => available.has(layer)));
     }
     function matchingLayerPresetId() {
@@ -7648,7 +7681,7 @@
     function applyLayerPreset(presetId) {
       const preset = availablePresetLayerSet(presetId);
       if (!preset.size) return;
-      document.querySelectorAll("[data-layer]").forEach(input => {
+      document.querySelectorAll("[data-layer]:not(:disabled)").forEach(input => {
         input.checked = preset.has(input.dataset.layer);
       });
       updateLayers();
@@ -8148,6 +8181,7 @@
             ...cwaQpf,
             grid_cells: gridCells,
             grid_overlay_status: overlay.status || (gridCells.length ? "ready" : "no_coverage"),
+            grid_overlay_empty_reason: overlay.emptyReason || null,
             grid_overlay_boundary: overlay.boundary || {},
           }
         };

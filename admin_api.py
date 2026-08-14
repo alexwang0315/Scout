@@ -4782,6 +4782,7 @@ def create_admin_router(
             )
             payload = {
                 **resolution.payload,
+                "orientation_basemap": _navigation_orientation_basemap(project),
                 "terrain_raster_dem": _navigation_terrain_dem_public_manifest(
                     project_root,
                     project,
@@ -5449,7 +5450,7 @@ def create_admin_router(
                 detail="Connected preparation manager is not configured",
             )
         try:
-            return connected_preparation_manager.ensure_scheduled(project_id)
+            return connected_preparation_manager.snapshot(project_id)
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404,
@@ -8608,11 +8609,28 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
     )
     for key in (
         "admin_surface_projection",
-        "checkpoint_events",
         "route_note_ln_proposals",
         "segment_terrain",
     ):
         view[key] = _compact_summary_payload(view.get(key))
+    view["checkpoint_events"] = _compact_summary_collection_items(
+        view.get("checkpoint_events"),
+        "events",
+        extra_keys=(
+            "event_id",
+            "event_type",
+            "checkpoint_candidate_id",
+            "checkpoint_type",
+            "label",
+            "sequence",
+            "lat",
+            "lon",
+            "elevation_m",
+            "progress_m",
+            "observed_at",
+        ),
+        limit=_COMPACT_MAP_LAYER_ITEM_LIMIT,
+    )
     view["capability_timeline_import"] = _compact_capability_timeline_import(
         view.get("capability_timeline_import")
     )
@@ -9562,6 +9580,69 @@ def _pretrip_workspace_review_log_path(
 
     candidate = project_root / "reviews" / "review_decision_log.json"
     return candidate if candidate.exists() else None
+
+
+def _navigation_orientation_basemap(project: Mapping[str, Any]) -> dict[str, Any]:
+    boundary = {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "terrain_evidence": False,
+        "workspace_file_mutation_allowed": False,
+    }
+    route = project.get("route")
+    route = route if isinstance(route, Mapping) else {}
+    display = route.get("display_geometry")
+    display = display if isinstance(display, Mapping) else {}
+    raw_bounds = next(
+        (
+            candidate
+            for candidate in (
+                project.get("imagery_source_route_bbox_wgs84"),
+                project.get("imagery_bbox_wgs84"),
+                route.get("display_bounds"),
+                route.get("bounds"),
+                route.get("bbox_wgs84"),
+                display.get("bounds"),
+            )
+            if isinstance(candidate, Mapping)
+        ),
+        None,
+    )
+    if raw_bounds is None:
+        return {
+            "status": "unavailable",
+            "source_id": "happyman_rudy_twmap",
+            "cache_layer_id": "imagery",
+            "bounds_wgs84": None,
+            "boundary": boundary,
+        }
+
+    def coordinate(*names: str) -> float:
+        value = next((raw_bounds[name] for name in names if name in raw_bounds), None)
+        return float(value)
+
+    try:
+        bounds = {
+            "west": coordinate("west", "min_lon", "minLon"),
+            "south": coordinate("south", "min_lat", "minLat"),
+            "east": coordinate("east", "max_lon", "maxLon"),
+            "north": coordinate("north", "max_lat", "maxLat"),
+        }
+    except (TypeError, ValueError):
+        bounds = {}
+    valid = (
+        len(bounds) == 4
+        and all(math.isfinite(value) for value in bounds.values())
+        and bounds["east"] > bounds["west"]
+        and bounds["north"] > bounds["south"]
+    )
+    return {
+        "status": "ready" if valid else "unavailable",
+        "source_id": "happyman_rudy_twmap",
+        "cache_layer_id": "imagery",
+        "bounds_wgs84": bounds if valid else None,
+        "boundary": boundary,
+    }
 
 
 def _navigation_terrain_dem_public_manifest(

@@ -586,6 +586,21 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
         }
         for index in range(60)
     ]
+    checkpoint_events = [
+        {
+            "event_id": f"event.{index:03d}",
+            "source_id": f"event.{index:03d}",
+            "event_type": "checkpoint_candidate_reached",
+            "label": f"CP {index:03d}",
+            "sequence": index + 1,
+            "lat": 23.9 + index / 10000,
+            "lon": 121.1 + index / 10000,
+            "progress_m": index * 100,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        for index in range(74)
+    ]
     compact = _compact_pretrip_project_view(
         {
             "project_id": PROJECT_ID,
@@ -600,6 +615,12 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
                 },
             },
             "segments": map_segments,
+            "checkpoint_events": {
+                "event_count": len(checkpoint_events),
+                "events": checkpoint_events,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
             "route_notes": {"candidates": route_note_candidates},
             "overpass_evidence": {
                 "corridor_candidates": overpass_corridors,
@@ -745,6 +766,12 @@ def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
     )
 
     assert len(compact["segments"]) == len(map_segments)
+    assert len(compact["checkpoint_events"]["events"]) == len(checkpoint_events)
+    assert compact["checkpoint_events"]["events"][0]["lat"] == 23.9
+    assert compact["checkpoint_events"]["events"][0]["event_id"] == "event.000"
+    assert compact["checkpoint_events"]["source_events_count"] == len(
+        checkpoint_events
+    )
     segment_geometry = compact["segments"][0]["display_geometry"]
     assert segment_geometry["display_point_count"] == 4
     assert segment_geometry["source_display_point_count"] == len(dense_points)
