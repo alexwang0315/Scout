@@ -19,6 +19,8 @@ from pydantic_ai.capabilities.web_fetch import WebFetch
 from pydantic_ai.capabilities.web_search import WebSearch
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import (
+    CompactionPart,
+    ModelMessagesTypeAdapter,
     ModelResponse,
     NativeToolCallPart,
     NativeToolReturnPart,
@@ -41,7 +43,7 @@ from scout.agents.pydantic_ai_compat import (
 )
 
 
-REQUIRED_VERSION = "2.22.0"
+REQUIRED_VERSION = "2.29.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
@@ -133,11 +135,13 @@ async def run_compatibility_smoke(
 def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("runtime_versions", _offline_runtime_versions),
-        ("v222_capability_contract", _offline_v222_capability_contract),
+        ("v229_capability_contract", _offline_v229_capability_contract),
         ("function_tool_call", _offline_function_tool_call),
         ("structured_output", _offline_structured_output),
         ("mcp_instructions_and_tool", _offline_mcp_instructions),
         ("web_capability_contract", _offline_web_capabilities),
+        ("stream_events_and_compaction", _offline_stream_events_and_compaction),
+        ("agent_web_content_type_guard", _offline_agent_web_content_type_guard),
         ("tool_failed_visible_without_retry", _offline_tool_failed),
         ("model_retry_then_success", _offline_model_retry),
         ("external_cancellation", _offline_cancellation),
@@ -150,6 +154,7 @@ def _live_checks(model: Any) -> list[tuple[str, Callable[[], Any]]]:
         ("live_openrouter_function_tool", lambda: _live_function_tool(model)),
         ("live_openrouter_structured_output", lambda: _live_structured_output(model)),
         ("live_openrouter_mcp", lambda: _live_mcp(model)),
+        ("live_openrouter_stream_events", lambda: _live_stream_events(model)),
         ("live_openrouter_web_search", lambda: _live_web_search(model)),
         ("live_openrouter_web_fetch", lambda: _live_web_fetch(model)),
         ("live_openrouter_tool_failed", lambda: _live_tool_failed(model)),
@@ -188,7 +193,7 @@ def _offline_runtime_versions() -> dict[str, str]:
     return versions
 
 
-def _offline_v222_capability_contract() -> dict[str, Any]:
+def _offline_v229_capability_contract() -> dict[str, Any]:
     from pydantic_ai import RunContext
     from pydantic_ai.mcp import MCPToolset
     from pydantic_ai.toolsets._tool_search import ToolSearchToolset
@@ -214,6 +219,53 @@ def _offline_v222_capability_contract() -> dict[str, Any]:
         "run_context_tool_availability": True,
         "mcp_prefer_tasks_default": mcp_parameters["prefer_tasks"].default,
         "tool_search_max_retries": True,
+    }
+
+
+async def _offline_stream_events_and_compaction() -> dict[str, Any]:
+    agent = Agent(TestModel(), **pydantic_agent_runtime_kwargs())
+    event_types: list[str] = []
+    async with agent.run_stream_events("Return the stream smoke result.") as events:
+        async for event in events:
+            event_types.append(type(event).__name__)
+
+    messages = [ModelResponse(parts=[CompactionPart(content="bounded Scout context")])]
+    encoded = ModelMessagesTypeAdapter.dump_json(messages)
+    decoded = ModelMessagesTypeAdapter.validate_json(encoded)
+    compacted = decoded[0].parts[0]
+
+    _require("FinalResultEvent" in event_types, "stream omitted final result event")
+    _require("AgentRunResultEvent" in event_types, "stream omitted run result event")
+    _require(
+        isinstance(compacted, CompactionPart), "compaction part did not round-trip"
+    )
+    _require(
+        compacted.content == "bounded Scout context",
+        "compaction content changed during serialization",
+    )
+    return {
+        "event_types": event_types,
+        "compaction_round_trip": True,
+    }
+
+
+def _offline_agent_web_content_type_guard() -> dict[str, Any]:
+    from starlette.testclient import TestClient
+
+    client = TestClient(Agent(TestModel()).to_web(), raise_server_exceptions=False)
+    response = client.post(
+        "/api/chat",
+        content="{}",
+        headers={"content-type": "text/plain"},
+    )
+    _require(response.status_code == 415, "non-JSON chat request was not rejected")
+    _require(
+        "application/json" in response.text,
+        "content-type rejection did not explain the JSON requirement",
+    )
+    return {
+        "status_code": response.status_code,
+        "model_request_prevented": True,
     }
 
 
@@ -340,7 +392,10 @@ async def _offline_tool_failed() -> dict[str, Any]:
     trace = _message_trace(result)
     _require(calls == 1, "ToolFailed unexpectedly retried the tool")
     _require(trace["retry_prompt_count"] == 0, "ToolFailed became ModelRetry")
-    _require("candidate evidence unavailable" in trace["tool_return_contents"], "failure was hidden")
+    _require(
+        "candidate evidence unavailable" in trace["tool_return_contents"],
+        "failure was hidden",
+    )
     return trace
 
 
@@ -488,6 +543,34 @@ async def _live_mcp(model: Any) -> dict[str, Any]:
     return {**trace, "output": str(result.output), "instructions_present": True}
 
 
+async def _live_stream_events(model: Any) -> dict[str, Any]:
+    agent = Agent(
+        model,
+        instructions="Return exactly STREAM-OK.",
+        **pydantic_agent_runtime_kwargs(),
+    )
+    event_types: list[str] = []
+    async with agent.run_stream_events(
+        "Produce the streaming compatibility marker.",
+        usage_limits=UsageLimits(request_limit=10, tool_calls_limit=10),
+        model_settings={
+            "temperature": 0,
+            "timeout": DEFAULT_TIMEOUT_SECONDS,
+        },
+    ) as events:
+        async for event in events:
+            event_types.append(type(event).__name__)
+
+    _require("PartDeltaEvent" in event_types, "live stream omitted content deltas")
+    _require(
+        "FinalResultEvent" in event_types, "live stream omitted final result event"
+    )
+    _require(
+        "AgentRunResultEvent" in event_types, "live stream omitted run result event"
+    )
+    return {"event_types": event_types}
+
+
 async def _live_web_search(model: Any) -> dict[str, Any]:
     search = WebSearch(
         native=False,
@@ -508,7 +591,9 @@ async def _live_web_search(model: Any) -> dict[str, Any]:
     result = await _live_run(agent, "Search the web now for the Pydantic AI changelog.")
     trace = _message_trace(result)
     output = str(result.output)
-    _require("scout_web_search" in trace["tool_names"], "local WebSearch was not called")
+    _require(
+        "scout_web_search" in trace["tool_names"], "local WebSearch was not called"
+    )
     _require("pydantic" in output.lower(), "web search output lacks Pydantic result")
     return {**trace, "output": output}
 
@@ -538,7 +623,9 @@ async def _live_web_fetch(model: Any) -> dict[str, Any]:
     )
     trace = _message_trace(result)
     _require("scout_web_fetch" in trace["tool_names"], "local WebFetch was not called")
-    _require("pydantic" in str(result.output).lower(), "WebFetch output lacks page title")
+    _require(
+        "pydantic" in str(result.output).lower(), "WebFetch output lacks page title"
+    )
     return {**trace, "output": str(result.output)}
 
 
@@ -616,9 +703,7 @@ def _message_trace(result: Any) -> dict[str, Any]:
         for part in getattr(message, "parts", ())
     ]
     tool_calls = [
-        part
-        for part in parts
-        if isinstance(part, (ToolCallPart, NativeToolCallPart))
+        part for part in parts if isinstance(part, (ToolCallPart, NativeToolCallPart))
     ]
     native_calls = [part for part in parts if isinstance(part, NativeToolCallPart)]
     native_returns = [part for part in parts if isinstance(part, NativeToolReturnPart)]
@@ -626,9 +711,7 @@ def _message_trace(result: Any) -> dict[str, Any]:
     retries = [part for part in parts if isinstance(part, RetryPromptPart)]
     return {
         "part_types": [type(part).__name__ for part in parts],
-        "tool_names": [
-            str(getattr(part, "tool_name", "")) for part in tool_calls
-        ],
+        "tool_names": [str(getattr(part, "tool_name", "")) for part in tool_calls],
         "tool_call_count": len(tool_calls),
         "tool_return_count": len(tool_returns) + len(native_returns),
         "native_tool_call_count": len(native_calls),

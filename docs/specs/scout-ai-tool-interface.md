@@ -4,17 +4,23 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-08-02
+## Implementation Update 2026-08-14
 
-Scout AI now runs against Pydantic AI v2.22.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.29.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.22.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.29.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
   continuation from executing extra same-turn tools after Scout has produced a
   typed output.
+- The compatibility smoke covers function tools, typed output, MCP, local
+  WebSearch/WebFetch, stream events, compacted history, and the non-JSON
+  `Agent.to_web()` request guard before this pin is promoted to hardware.
+- OpenRouter's native web plugin may complete without exposing a source or tool
+  trace. A successful transport response is not accepted as grounded evidence;
+  Scout keeps the local traced search/fetch path as the OpenRouter default.
 - NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and
   `NVIDIA_API_KEY`. Scout routes it to the OpenAI-compatible NVIDIA endpoint
   while preserving `z-ai/glm-5.2` as the outbound model id.
