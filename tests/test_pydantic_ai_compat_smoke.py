@@ -19,17 +19,19 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
 
     assert report["status"] == "passed"
     assert report["required_version"] == REQUIRED_VERSION
-    assert report["check_count"] == 10
-    assert report["passed_count"] == 10
+    assert report["check_count"] == 12
+    assert report["passed_count"] == 12
     assert report["failed_count"] == 0
     assert report["live_openrouter_requested"] is False
     assert {item["name"] for item in report["checks"]} == {
         "runtime_versions",
-        "v222_capability_contract",
+        "v229_capability_contract",
         "function_tool_call",
         "structured_output",
         "mcp_instructions_and_tool",
         "web_capability_contract",
+        "stream_events_and_compaction",
+        "agent_web_content_type_guard",
         "tool_failed_visible_without_retry",
         "model_retry_then_success",
         "external_cancellation",
@@ -70,9 +72,7 @@ def test_normalizes_openrouter_model_without_changing_vendor_model_id() -> None:
 def test_redacts_provider_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "fixture-secret")
 
-    redacted = _redact_error(
-        "Authorization: Bearer fixture-secret request failed"
-    )
+    redacted = _redact_error("Authorization: Bearer fixture-secret request failed")
 
     assert "fixture-secret" not in redacted
     assert "[REDACTED]" in redacted

@@ -75,7 +75,7 @@ def test_live_runtime_requirements_are_not_added_to_step1_runtime_core() -> None
     step1_requirements = read("requirements.pi.txt")
 
     assert (
-        "pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]==2.22.0"
+        "pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]==2.29.0"
         in live_requirements
     )
     assert "pydantic-ai==1.88.0" not in live_requirements
