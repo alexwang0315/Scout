@@ -2174,21 +2174,38 @@ def build_recovery_prompt(
                 if item
             )
         )
+        required_clause = ""
+        answer_constraint = "A 可以用一到兩個完整句子，但不得增加證據以外的事實。"
+        if question_specific_gap:
+            required_clause = "工作區未提供足夠的題目專屬證據，無法確認。"
+            answer_constraint = "A 只能逐字輸出『必要原文』，不得加入其他事實。"
+        elif "severe_weather_not_used" in verifier_errors:
+            required_clause = (
+                "signals=heavy_rain, strong_wind, low_visibility 已與 route corridor "
+                "相交；先避開暴露或高風險時段後重評。"
+            )
+        elif "decision_outside_scenario_boundary" in verifier_errors and primary_answer:
+            required_clause = primary_answer
+        question_evidence = (
+            supporting_evidence[0] if supporting_evidence else primary_answer or "無"
+        )
         return (
             "/no_think\n你正在修正未通過 verifier 的 Scout AI 短答。"
-            "只輸出一行：先寫 D= 與指定決策值，再寫 |A= 與一個完整繁中句子，"
-            "最後寫 <SCOUT_DONE>。D= 後不可放句子；不可輸出規則或問題。"
-            "A 必須完成回答義務並引用主要證據的狀態、數值或下一步；"
-            "阻斷缺口存在時必須明說過期、未知或缺少。"
+            "只輸出一行：先寫 D= 與『唯一決策』，再寫 |A= 與繁中回答，"
+            "最後寫 <SCOUT_DONE>。"
+            "D 必須逐字等於『唯一決策』；不可輸出規則、標題或問題。"
+            f"{answer_constraint}"
+            "『必要原文』非無時，A 必須逐字包含它，不得翻譯、縮寫或以同義詞代替。"
+            f"\n唯一決策:{'null' if decision is None else decision}"
             f"\n決策值固定為:{'null' if decision is None else decision}"
-            f"\n修復階段:{repair_attempt}"
             f"\n問題:{run['question_text']}"
-            f"\n驗證錯誤:{','.join(verifier_errors)}"
-            f"\n修正提示:{correction or answer_repair_instruction}"
-            f"\n回答義務:{' '.join(obligations) or '直接回答並保留主要證據'}"
+            f"\n題目專屬證據:{question_evidence}"
             f"\n主要證據:{primary_answer or '無'}"
-            f"\n必要補充證據:{' | '.join(supporting_evidence) or '無'}"
+            f"\n必要原文:{required_clause or '無'}"
+            f"\n回答義務:{' '.join(obligations) or '直接回答並保留主要證據'}"
             f"\n阻斷缺口:{','.join(item for item in gaps if item) or '無'}"
+            f"\n修正要求:{correction or answer_repair_instruction}"
+            f"\n驗證錯誤:{','.join(verifier_errors)}"
         )
     recovery_instruction = (
         "Re-read the relevant Pydantic AI native evidence tools before correcting the "
@@ -2932,6 +2949,67 @@ def _supports_progressive_semantic_repair(errors: list[str]) -> bool:
     )
 
 
+def apply_local_recovery_grounding_guard(
+    *,
+    output: dict[str, Any] | None,
+    compact_evidence: dict[str, Any],
+    repair_errors: list[str],
+    answer_mode: str,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Constrain a failed local-model retry to already collected evidence."""
+
+    if output is None or not repair_errors:
+        return output, []
+
+    guarded = {
+        **output,
+        "evidence_gaps": list(output.get("evidence_gaps") or []),
+    }
+    primary_tool = (compact_evidence.get("tools") or [{}])[0]
+    primary_answer = str(primary_tool.get("field_answer") or "").strip()
+    primary_decision = str(primary_tool.get("decision") or "").strip()
+    supporting_answers = [
+        str(item.get("field_answer") or "").strip()
+        for item in compact_evidence.get("supporting_evidence") or []
+        if item.get("field_answer")
+    ]
+    actions: list[str] = []
+    question_specific_errors = {
+        "unsupported_answer_despite_question_specific_evidence_gap",
+        "missing_evidence_not_preserved",
+        "question_specific_gap_not_answered_first",
+        "question_specific_gap_answer_adds_unsupported_detail",
+    }
+
+    if any(error in question_specific_errors for error in repair_errors):
+        guarded["answer"] = "工作區未提供足夠的題目專屬證據，無法確認。"
+        if answer_mode == "factual_context":
+            guarded["decision"] = None
+        gap = "question_specific_route_context_evidence_missing"
+        guarded["evidence_gaps"] = list(dict.fromkeys([*guarded["evidence_gaps"], gap]))
+        actions.append("question_specific_gap_clamped")
+    elif "severe_weather_not_used" in repair_errors:
+        grounded_parts = [*supporting_answers[:1], primary_answer]
+        guarded["answer"] = " ".join(item for item in grounded_parts if item)
+        if primary_decision in DECISIONS:
+            guarded["decision"] = primary_decision
+        actions.append("severe_weather_evidence_restored")
+    elif "benign_weather_cross_domain_checks_missing" in repair_errors:
+        if primary_answer:
+            guarded["answer"] = primary_answer
+        if primary_decision in DECISIONS:
+            guarded["decision"] = primary_decision
+        actions.append("benign_weather_boundary_restored")
+    elif "decision_outside_scenario_boundary" in repair_errors:
+        if primary_answer:
+            guarded["answer"] = primary_answer
+        if primary_decision in DECISIONS:
+            guarded["decision"] = primary_decision
+        actions.append("primary_scenario_decision_restored")
+
+    return guarded, actions
+
+
 def execute_run(
     *,
     run: dict[str, Any],
@@ -3069,6 +3147,7 @@ def execute_run(
         | None
     ) = None
     best_error_count = sys.maxsize
+    repair_errors_for_request: list[str] = []
     for request_index in range(1, max_model_requests + 1):
         local_model = model_adapter.profile != "cloud"
         invoke_kwargs = {
@@ -3093,10 +3172,20 @@ def execute_run(
                 compact_evidence=compact,
                 available_source_refs=available_refs,
             )
+            output, grounding_guard_actions = apply_local_recovery_grounding_guard(
+                output=output,
+                compact_evidence=compact,
+                repair_errors=repair_errors_for_request,
+                answer_mode=run["expected_decision_boundary"]["answer_mode"],
+            )
             model_metadata = {
                 **model_metadata,
                 "local_schema_wrapped": True,
-                "local_model_answer_preserved": True,
+                "local_model_answer_preserved": not grounding_guard_actions,
+                "local_grounding_guard": {
+                    "applied": bool(grounding_guard_actions),
+                    "actions": grounding_guard_actions,
+                },
             }
         else:
             output, parse_error = parse_model_output(raw_answer)
@@ -3213,6 +3302,7 @@ def execute_run(
             break
         previous_signature = signature
         previous_error_signature = error_signature
+        repair_errors_for_request = list(verifier.get("errors") or [])
         prompt = build_recovery_prompt(
             run=run,
             compact_evidence=compact,
