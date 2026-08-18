@@ -10,6 +10,7 @@ from navigation_terrain_coordinates import twd97_to_wgs84
 MAX_TERRAIN_HIERARCHY_EDGES = 240
 MAX_TERRAIN_HIERARCHY_NODES = 500
 MAX_TERRAIN_EDGE_POINTS = 64
+MAX_SADDLE_RELATIONS = 64
 MAX_ROUTE_TERRAIN_EVENTS = 80
 DEFAULT_UNCERTAINTY_HALF_WIDTH_M = 60.0
 
@@ -61,17 +62,65 @@ def normalize_terrain_hierarchy(payload: dict[str, Any]) -> dict[str, Any]:
         coordinates = _normalize_coordinate_line(item.get("coordinates_wgs84"))
         if len(coordinates) < 2:
             continue
+        sampled_coordinates = _evenly_sample(
+            coordinates,
+            MAX_TERRAIN_EDGE_POINTS,
+        )
+        source_support_audit = _normalize_source_support_audit(
+            item.get("source_support_audit")
+        )
+        elevation_profile = [
+            number
+            for number in (
+                _finite_number(value)
+                for value in (
+                    item.get("raw_elevation_profile_m")
+                    if isinstance(item.get("raw_elevation_profile_m"), list)
+                    else []
+                )
+            )
+            if number is not None
+        ]
         edges.append(
             {
                 "id": str(item.get("id") or f"terrain-edge-{len(edges):03d}"),
                 "from": str(item.get("from") or ""),
                 "to": str(item.get("to") or ""),
                 "kind": str(item.get("kind") or "terrain_edge"),
-                "coordinates": _evenly_sample(
-                    coordinates,
-                    MAX_TERRAIN_EDGE_POINTS,
+                "coordinates": sampled_coordinates,
+                "raw_geometry_point_count": len(coordinates),
+                "rendered_geometry_point_count": len(sampled_coordinates),
+                "geometry_generalized_for_display": (
+                    len(sampled_coordinates) < len(coordinates)
                 ),
                 "length_m": _finite_number(item.get("length_m")),
+                "geometry_method": str(item.get("geometry_method") or "unknown")[:120],
+                "maximum_lateral_adjustment_m": _finite_number(
+                    item.get("maximum_lateral_adjustment_m")
+                ),
+                "classification_basis": str(
+                    item.get("classification_basis") or "unknown"
+                )[:160],
+                "backbone_support_ratio": _bounded_ratio(
+                    item.get("backbone_support_ratio")
+                ),
+                "backbone_support_ratio_denominator": str(
+                    item.get("backbone_support_ratio_denominator") or "unknown"
+                )[:80],
+                "source_support_audit": source_support_audit,
+                "elevation_profile_m": _evenly_sample_values(
+                    elevation_profile,
+                    MAX_TERRAIN_EDGE_POINTS,
+                ),
+                "hierarchy_presentation": str(
+                    item.get("hierarchy_presentation") or "contextual_candidate"
+                )[:80],
+                "touches_analysis_boundary": bool(
+                    item.get("touches_analysis_boundary")
+                ),
+                "boundary_censored_hierarchy": bool(
+                    item.get("boundary_censored_hierarchy")
+                ),
                 "watershed_boundary_candidate": bool(
                     item.get("watershed_boundary_candidate")
                 ),
@@ -92,6 +141,41 @@ def normalize_terrain_hierarchy(payload: dict[str, Any]) -> dict[str, Any]:
                 ),
             }
         )
+    rendered_node_ids = {node["id"] for node in nodes}
+    rendered_edge_ids = {edge["id"] for edge in edges}
+    raw_relations = payload.get("saddle_relations", [])
+    if not isinstance(raw_relations, list):
+        raw_relations = []
+    saddle_relations = []
+    for item in raw_relations[:MAX_SADDLE_RELATIONS]:
+        if not isinstance(item, dict):
+            continue
+        saddle_node_id = str(item.get("saddle_node_id") or "")
+        ridge_edge_id = str(item.get("ridge_edge_id") or "")
+        if (
+            not saddle_node_id
+            or not ridge_edge_id
+            or saddle_node_id not in rendered_node_ids
+            or ridge_edge_id not in rendered_edge_ids
+            or item.get("candidate_only") is not True
+            or item.get("runtime_safety_truth") is not False
+        ):
+            continue
+        saddle_relations.append(
+            {
+                "id": str(item.get("id") or f"saddle-relation-{len(saddle_relations):03d}"),
+                "relation_kind": str(
+                    item.get("relation_kind") or "saddle_near_ridge_candidate"
+                ),
+                "saddle_node_id": saddle_node_id,
+                "ridge_edge_id": ridge_edge_id,
+                "distance_m": _finite_number(item.get("distance_m")),
+                "support_radius_m": _finite_number(item.get("support_radius_m")),
+                "source_refs": _normalize_string_refs(item.get("source_refs")),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
     counts = payload.get("counts", {})
     if not isinstance(counts, dict):
         counts = {}
@@ -104,6 +188,7 @@ def normalize_terrain_hierarchy(payload: dict[str, Any]) -> dict[str, Any]:
         "rendered_edge_count": len(edges),
         "nodes": nodes,
         "edges": edges,
+        "saddle_relations": saddle_relations,
         "output_role": "uncertainty_band_visualization",
         "validation_state": "unvalidated",
         "operational_authority": False,
@@ -208,6 +293,7 @@ def empty_terrain_hierarchy(error: str) -> dict[str, Any]:
         "rendered_edge_count": 0,
         "nodes": [],
         "edges": [],
+        "saddle_relations": [],
         "output_role": "uncertainty_band_visualization",
         "validation_state": "unvalidated",
         "operational_authority": False,
@@ -314,6 +400,52 @@ def _bounded_limitations(value: Any) -> list[str]:
     return [str(item) for item in value[:12] if isinstance(item, str)]
 
 
+def _normalize_source_support_audit(value: Any) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        "audit_method": str(source.get("audit_method") or "not_prepared")[:80],
+        "source_chain_cell_count": _nonnegative_int(
+            source.get("source_chain_cell_count")
+        ),
+        "support_envelope_role": str(
+            source.get("support_envelope_role") or "unknown"
+        )[:80],
+        "total_length_m": _finite_number(source.get("total_length_m")),
+        "supported_length_m": _finite_number(source.get("supported_length_m")),
+        "unsupported_length_m": _finite_number(source.get("unsupported_length_m")),
+        "longest_unsupported_run_m": _finite_number(
+            source.get("longest_unsupported_run_m")
+        ),
+        "support_ratio": _bounded_ratio(source.get("support_ratio")),
+        "support_ratio_denominator": str(
+            source.get("support_ratio_denominator") or "unknown"
+        )[:80],
+        "render_displacement_p95_m": _finite_number(
+            source.get("render_displacement_p95_m")
+        ),
+        "render_displacement_max_m": _finite_number(
+            source.get("render_displacement_max_m")
+        ),
+        "render_geometry_within_support_envelope": bool(
+            source.get("render_geometry_within_support_envelope")
+        ),
+        "smoothing_rejected_outside_support": bool(
+            source.get("smoothing_rejected_outside_support")
+        ),
+        "touches_analysis_boundary": bool(
+            source.get("touches_analysis_boundary")
+        ),
+        "component_boundary_censored": bool(
+            source.get("component_boundary_censored")
+        ),
+        "backbone_endpoint_boundary_censored": bool(
+            source.get("backbone_endpoint_boundary_censored")
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
 def _normalize_string_refs(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -334,12 +466,26 @@ def _evenly_sample(
     return [items[index] for index in sorted(indices)]
 
 
+def _evenly_sample_values(items: list[float], limit: int) -> list[float]:
+    if len(items) <= limit:
+        return list(items)
+    indices = {round(index * (len(items) - 1) / (limit - 1)) for index in range(limit)}
+    return [round(float(items[index]), 2) for index in sorted(indices)]
+
+
 def _finite_number(value: Any) -> float | None:
     try:
         number = float(value)
     except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
+
+
+def _bounded_ratio(value: Any) -> float | None:
+    number = _finite_number(value)
+    if number is None:
+        return None
+    return max(0.0, min(1.0, number))
 
 
 def _nonnegative_int(value: Any) -> int:

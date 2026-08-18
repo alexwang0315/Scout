@@ -154,6 +154,12 @@ def test_projection_is_bounded_candidate_only_and_reports_structure_gaps(
         "contours",
         "slope_shading",
     ]
+    assert result["terrain_mesh"]["status"] == "not_prepared"
+    assert result["terrain_mesh"]["boundary"]["visualization_only"] is True
+    assert result["terrain_passage_prior"]["status"] == "not_prepared"
+    assert result["terrain_passage_prior"]["learning_contract"][
+        "osm_absence_semantics"
+    ] == "unknown"
     assert result["route_samples"]["source_count"] == 300
     assert result["route_samples"]["rendered_count"] == MAX_ROUTE_SAMPLE_POINTS
     assert result["route_samples"]["points"][0]["distance_m"] == 0
@@ -195,6 +201,8 @@ def test_projection_returns_explicit_unavailable_without_artifacts(
 
     assert result["status"] == "unavailable"
     assert result["terrain_surface"]["overlays"] == []
+    assert result["terrain_mesh"]["status"] == "not_prepared"
+    assert result["terrain_passage_prior"]["status"] == "not_prepared"
     assert result["route_samples"]["points"] == []
     assert result["risk_candidates"]["points"] == []
     assert result["feature_extraction"]["ridge"]["status"] == "not_prepared"
@@ -236,6 +244,12 @@ def test_projection_bounds_terrain_hierarchy_and_route_events(
                 for point in range(100)
             ],
             "length_m": 2000 + index,
+            "backbone_support_ratio": 0.72,
+            "classification_basis": (
+                "component_weighted_geodesic_backbone_overlap"
+            ),
+            "geometry_method": "subcell_support_constrained_topology_trace.v1",
+            "maximum_lateral_adjustment_m": 7,
             "source_refs": ["terrain-source"],
             "candidate_only": True,
             "runtime_safety_truth": False,
@@ -269,6 +283,19 @@ def test_projection_bounds_terrain_hierarchy_and_route_events(
             },
         ],
         "edges": hierarchy_edges,
+        "saddle_relations": [
+            {
+                "id": "terrain-relation.saddle-ridge.001",
+                "relation_kind": "saddle_near_ridge_candidate",
+                "saddle_node_id": "node-a",
+                "ridge_edge_id": "edge-000",
+                "distance_m": 18,
+                "support_radius_m": 80,
+                "source_refs": ["terrain-source"],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
         "source_refs": ["terrain-source"],
         "boundary": {
             "candidate_only": True,
@@ -372,3 +399,20 @@ def test_projection_bounds_terrain_hierarchy_and_route_events(
         and edge["uncertainty_half_width_m"] >= 60
         for edge in result["terrain_hierarchy"]["edges"]
     )
+    assert result["terrain_hierarchy"]["saddle_relations"] == [
+        {
+            "id": "terrain-relation.saddle-ridge.001",
+            "relation_kind": "saddle_near_ridge_candidate",
+            "saddle_node_id": "node-a",
+            "ridge_edge_id": "edge-000",
+            "distance_m": 18.0,
+            "support_radius_m": 80.0,
+            "source_refs": ["terrain-source"],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    ]
+    assert result["terrain_hierarchy"]["edges"][0]["classification_basis"] == (
+        "component_weighted_geodesic_backbone_overlap"
+    )
+    assert result["terrain_hierarchy"]["edges"][0]["backbone_support_ratio"] == 0.72

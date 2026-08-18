@@ -413,7 +413,12 @@ pipelines:
 - saddle: neighborhood sign change plus an opposite-sign Hessian eigenvalue
   gate, preventing a diagonal ridge from being mislabeled as a saddle;
 - geometry: at most 0.35 cell support-constrained smoothing, retaining raw
-  support points and a minimum candidate-support band of three cells.
+  support points and a minimum candidate-support band of three cells;
+- support audit: every edge exposes an ordered raster support witness,
+  supported/unsupported physical length, longest unsupported run, render
+  displacement, support-envelope containment, and analysis-boundary state.
+  Contextual hierarchy presentation is suppressed when its weighted backbone
+  depends on a censored boundary endpoint.
 
 The graph-diameter label remains a compatibility candidate
 (`main_ridge_candidate`) rather than proof of a named principal divide.
@@ -668,7 +673,8 @@ silently replace the original hypothesis or erase failed alternatives.
 Before productionization:
 
 - add robust raster adapters and official datum grid shifts;
-- add GPX origin/de-duplication checks;
+- extend the implemented direction-invariant GPX/OSM geometry de-duplication
+  with reviewed origin-family identity and copied-track lineage;
 - add georeferencing residual reports;
 - quantify corridor-equivalence and terrain-cost sensitivity;
 - promote the experimental browser lenses and topology projection to a stable
@@ -677,6 +683,9 @@ Before productionization:
 - define privacy retention for P2 exact-location data;
 - evaluate against multiple known historical-route cases;
 - calibrate uncertainty without converting it into a misleading safety score.
+- evaluate any future passage classifier with route-level and region-level
+  holdouts; the current positive-unlabeled descriptive prior trains no
+  classifier and creates no negative labels.
 
 ## 17. Construction slice status
 
@@ -733,10 +742,25 @@ and workbench:
 
 - `navigation_terrain_projection_expert.py` converts the hierarchy and event
   sequence to WGS84 display geometry without exposing the raw DEM or GPX;
+- `navigation_terrain_mesh.py` emits a bounded orthographic review mesh. Every
+  face footprint must be fully supported by prepared DEM cells; source holes
+  remain holes, and tessellation explicitly adds no source resolution;
+- `navigation_terrain_passage_patterns.py` overlays de-duplicated observed GPX,
+  reference GPX, and OSM/Overpass trail vectors with slope, contour-tangent
+  alignment, TPI, relief, and candidate ridge/drainage/saddle proximity. Its
+  result is a sealed positive-unlabeled descriptive prior: OSM absence is
+  `unknown`, Rudy+TW is visual reference only, and feedback into terrain
+  extraction is prohibited;
 - the projection returns at most 240 hierarchy edges, 500 nodes, and 80 ordered
   route-terrain events, with explicit source counts and truncation;
-- the Dashboard draws only muted candidate-support bands by default; exact
-  hierarchy centerlines, glow, and authoritative “main” labels are disabled;
+- the Dashboard defaults to `Terrain Evidence Only`. Rudy+TW, observed GPX,
+  OSM/Overpass context, and the learned prior require an explicit evidence-
+  domain reveal; this prevents observed routes from visually validating the
+  DEM inference that is under review;
+- a synchronized north-up 2D / orthographic 2.5D workbench exposes source
+  spacing, fixed camera metadata, Z exaggeration, local unsaved review state,
+  selected-edge cross-section, support lengths, render displacement, and
+  boundary-censored badges;
 - the event lens is explicitly a developer/QA shadow view. It exposes a neutral
   review hypothesis and strips wrong-way, recovery, and exact crossing-
   distance action language;
