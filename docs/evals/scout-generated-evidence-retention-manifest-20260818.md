@@ -23,6 +23,7 @@ separate, exact-path allowlist approved by the user.
 | `QUARANTINED_RAW` | Supporting captures or intermediate runs | Keep until canonical evidence is sealed, then present an exact cleanup allowlist |
 | `REGENERABLE` | Mutable local Dashboard or editor state | Ignore now; eligible for later approved cleanup |
 | `EVIDENCE_GAP` | A committed document refers to evidence not present in this checkout | Locate or correct the reference before claiming complete preservation |
+| `REMOTE_UNVERIFIED` | A historical execution receipt identifies a remote artifact, but its current storage state and checksum cannot be verified | Keep the reference open until the remote host is reachable and inspected read-only |
 
 ## Sealed retention candidates
 
@@ -55,25 +56,41 @@ must not be presented as browser qualification of the inventory HEAD above.
 | `REGENERABLE` | `outputs/dashboard/` | 89 | 1,120 | Mutable Body Index and living-runtime state; eligible for a later exact-path cleanup approval |
 | `REGENERABLE` | `outputs/.obsidian/` | 4 | 24 | Local editor metadata; eligible for a later exact-path cleanup approval |
 
-## Known evidence gaps
+## Remote artifacts awaiting verification
 
 `docs/evals/scout-ai-targeted-answer-quality-100-aihat2-20260817.md` cites the
-following directories, but neither exists in this checkout at inventory time:
+following directories. Neither exists in this checkout at inventory time:
 
 - `outputs/evals/six_forces_600_total_info_v230-qwen3-targeted100-final-repair-20260817T015113Z/`
 - `outputs/evals/six_forces_600_total_info_v230-qwen3-targeted100-benign-guard-20260817T0205Z/`
 
-Class: `EVIDENCE_GAP`. Locate the original artifacts or update the committed
-evaluation summary with an explicit missing-artifact statement before treating
-that evidence chain as complete.
+Historical execution receipts confirm that both runs completed on `scout.local`
+under this remote root:
+
+`/home/alexwang0315/scout-v214-six-forces-20260723T073059Z/workspace/outputs/evals/`
+
+- The final-repair run reported completion at `2026-08-17T02:06:56Z`.
+- The benign-guard run reported completion at `2026-08-17T02:12:10Z`.
+- Only selected result, summary, and health files were copied temporarily to the
+  Mac for review; those `/tmp` copies are no longer present.
+- On 2026-08-18, SSH to `scout.local:22` timed out and the current artifact
+  directories could not be listed or hashed.
+
+Class: `REMOTE_UNVERIFIED`, not confirmed lost. When the Pi is reachable, inspect
+both directories read-only, calculate directory checksums, and select an
+approved archive destination before copying or deleting anything. Until then,
+the committed evaluation summary describes a historically completed run, not a
+locally reproducible evidence package.
 
 ## Next gate
 
-1. Independently review the two active manual bundles.
-2. Decide an external archive destination for raw screenshots, videos, and
+1. Restore read-only connectivity to `scout.local` and verify the two remote
+   evaluation directories.
+2. Independently review the two active manual bundles.
+3. Decide an external archive destination for raw screenshots, videos, and
    evaluation traces.
-3. Copy only bounded canonical reports and summaries into `docs/evals/`.
-4. Verify copied or archived checksums against this manifest.
-5. Produce an exact retain/archive/delete allowlist for human approval.
+4. Copy only bounded canonical reports and summaries into `docs/evals/`.
+5. Verify copied or archived checksums against this manifest.
+6. Produce an exact retain/archive/delete allowlist for human approval.
 
 No path listed here is approved for deletion yet.
