@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import deque
+import heapq
 import math
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -120,6 +120,11 @@ def build_terrain_hierarchy_from_grid(
         node_id_by_key=node_id_by_key,
     )
     public_nodes = [_public_node(item) for item in nodes]
+    saddle_relations = _link_saddles_to_ridge_candidates(
+        public_nodes,
+        edges,
+        resolution_m=resolution,
+    )
 
     return {
         "schema_version": "scout_navigation_terrain_hierarchy.v1",
@@ -139,6 +144,8 @@ def build_terrain_hierarchy_from_grid(
             ),
             "geometry": "subcell_support_constrained_topology_trace.v1",
             "hierarchy": "ridge_backbone_and_hydrologic_branch_compression.v1",
+            "ridge_backbone": "weighted_geodesic_component_diameter.v1",
+            "saddle_linking": "bounded_point_to_ridge_proximity.v1",
             "analysis_scales_cells": scales,
             "relief_threshold_m": threshold,
             "minimum_component_cells": minimum_component_cells,
@@ -173,6 +180,7 @@ def build_terrain_hierarchy_from_grid(
                 "headwater_node",
                 "drainage_outlet_node",
             ],
+            "terrain_relation_kinds": ["saddle_near_ridge_candidate"],
             "contour_traverse_band_is_ridge": False,
             "terrain_bifurcation_is_route_fork": False,
         },
@@ -186,9 +194,18 @@ def build_terrain_hierarchy_from_grid(
             "drainage_trunk_count": _kind_count(edges, "drainage_trunk"),
             "tributary_count": _kind_count(edges, "tributary"),
             "saddle_count": _kind_count(public_nodes, "saddle_node"),
+            "saddle_relation_count": len(saddle_relations),
+            "boundary_censored_ridge_count": sum(
+                edge.get("hierarchy_presentation")
+                == "suppressed_boundary_censored"
+                for edge in edges
+                if edge.get("kind")
+                in {"main_ridge_candidate", "spur_ridge_candidate"}
+            ),
         },
         "nodes": public_nodes,
         "edges": edges,
+        "saddle_relations": saddle_relations,
         "source_refs": refs,
         "limitations": [
             "DEM morphology does not prove that a trail exists or is walkable.",
@@ -207,6 +224,14 @@ def build_terrain_hierarchy_from_grid(
             (
                 "Contour-compatible traverse bands are a separate route-search "
                 "layer and are not relabeled as ridges."
+            ),
+            (
+                "A saddle-to-ridge proximity relation is a review clue, not a "
+                "route junction or proof of passage."
+            ),
+            (
+                "Contextual main/spur presentation is suppressed when the "
+                "weighted backbone depends on an analysis-boundary endpoint."
             ),
         ],
         "boundary": {
@@ -233,6 +258,7 @@ def _compress_network(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     if not graph:
         return [], []
+    analysis_bbox = _grid_bbox(grid)
     nodes: dict[Cell, dict[str, Any]] = {}
     edge_records: list[dict[str, Any]] = []
     for component_number, component in enumerate(_components(graph), start=1):
@@ -240,7 +266,15 @@ def _compress_network(
             cell: {neighbor for neighbor in graph[cell] if neighbor in component}
             for cell in component
         }
-        backbone_links = _component_backbone_links(component_graph)
+        backbone_links, backbone_endpoints = _component_backbone(component_graph)
+        component_boundary_censored = any(
+            _cell_touches_analysis_boundary(cell, analysis_bbox)
+            for cell in component
+        )
+        backbone_endpoint_boundary_censored = any(
+            _cell_touches_analysis_boundary(cell, analysis_bbox)
+            for cell in backbone_endpoints
+        )
         if network_kind == "drainage":
             incoming_count = {
                 cell: sum(
@@ -368,6 +402,12 @@ def _compress_network(
                         start_cell=path[0],
                         end_cell=path[-1],
                         resolution_m=resolution_m,
+                        backbone_support_ratio=backbone_ratio,
+                        component_boundary_censored=component_boundary_censored,
+                        backbone_endpoint_boundary_censored=(
+                            backbone_endpoint_boundary_censored
+                        ),
+                        analysis_bbox=analysis_bbox,
                     )
                 )
     ranked = sorted(
@@ -451,14 +491,29 @@ def _network_edge(
     start_cell: Cell,
     end_cell: Cell,
     resolution_m: float,
+    backbone_support_ratio: float,
+    component_boundary_censored: bool,
+    backbone_endpoint_boundary_censored: bool,
+    analysis_bbox: Mapping[str, float],
 ) -> dict[str, Any]:
     raw_points = [
         tuple(geometry_by_cell.get(cell, {}).get("point", cell))
         for cell in path
     ]
-    smoothed_points = constrained_smooth_path(
+    candidate_smoothed_points = constrained_smooth_path(
         raw_points,
         resolution_m=resolution_m,
+    )
+    smoothed_points, source_support_audit = _audited_render_path(
+        path,
+        grid,
+        raw_points,
+        candidate_smoothed_points,
+        resolution_m=resolution_m,
+        network_kind=network_kind,
+        analysis_bbox=analysis_bbox,
+        component_boundary_censored=component_boundary_censored,
+        backbone_endpoint_boundary_censored=backbone_endpoint_boundary_censored,
     )
     raw_elevations = [
         round(float(geometry_by_cell.get(cell, {}).get("elevation_m", grid[cell])), 2)
@@ -541,9 +596,264 @@ def _network_edge(
         "classification_basis": (
             "conditioned_mfd_contributing_area_and_stream_order"
             if network_kind == "drainage"
-            else "component_backbone_candidate"
+            else "component_weighted_geodesic_backbone_overlap"
+        ),
+        "backbone_support_ratio": (
+            round(backbone_support_ratio, 4)
+            if network_kind == "ridge"
+            else None
+        ),
+        "backbone_support_ratio_denominator": (
+            "raw_edge_link_count" if network_kind == "ridge" else None
+        ),
+        "source_support_audit": source_support_audit,
+        "hierarchy_presentation": (
+            "suppressed_boundary_censored"
+            if network_kind == "ridge" and backbone_endpoint_boundary_censored
+            else "contextual_candidate"
+        ),
+        "touches_analysis_boundary": source_support_audit[
+            "touches_analysis_boundary"
+        ],
+        "boundary_censored_hierarchy": (
+            network_kind == "ridge" and backbone_endpoint_boundary_censored
         ),
     }
+
+
+def _audited_render_path(
+    path: Sequence[Cell],
+    grid: Mapping[Cell, float],
+    raw_points: Sequence[Cell],
+    candidate_render_points: Sequence[Cell],
+    *,
+    resolution_m: float,
+    network_kind: str,
+    analysis_bbox: Mapping[str, float],
+    component_boundary_censored: bool,
+    backbone_endpoint_boundary_censored: bool,
+) -> tuple[list[Cell], dict[str, Any]]:
+    """Audit source-chain support and fail back to raw geometry if needed."""
+
+    grid_origin = (
+        float(analysis_bbox["min_x"]),
+        float(analysis_bbox["min_y"]),
+    )
+    ordered_source_chain: list[Cell] = []
+    segment_source_chains: list[list[Cell]] = []
+    for start_point, end_point in zip(raw_points, raw_points[1:]):
+        chain = _sample_source_cell_chain(
+            start_point,
+            end_point,
+            grid,
+            resolution_m=resolution_m,
+            origin=grid_origin,
+        )
+        segment_source_chains.append(chain)
+        for cell in chain:
+            if not ordered_source_chain or ordered_source_chain[-1] != cell:
+                ordered_source_chain.append(cell)
+    support_cells = {cell for cell in ordered_source_chain if cell in grid}
+    candidate_within_envelope = _polyline_within_support_envelope(
+        candidate_render_points,
+        support_cells,
+        resolution_m=resolution_m,
+    )
+    render_points = (
+        list(candidate_render_points)
+        if candidate_within_envelope
+        else list(raw_points)
+    )
+    render_within_envelope = _polyline_within_support_envelope(
+        render_points,
+        support_cells,
+        resolution_m=resolution_m,
+    )
+    segment_support: list[tuple[float, bool]] = []
+    for source_chain, start_point, end_point in zip(
+        segment_source_chains,
+        raw_points,
+        raw_points[1:],
+    ):
+        length_m = math.dist(start_point, end_point)
+        supported = (
+            bool(source_chain)
+            and all(cell in grid for cell in source_chain)
+            and _polyline_within_support_envelope(
+                [start_point, end_point],
+                support_cells,
+                resolution_m=resolution_m,
+            )
+        )
+        segment_support.append((length_m, supported))
+    total_length_m = sum(length for length, _supported in segment_support)
+    supported_length_m = sum(
+        length for length, supported in segment_support if supported
+    )
+    unsupported_length_m = max(0.0, total_length_m - supported_length_m)
+    longest_unsupported_run_m = 0.0
+    current_unsupported_run_m = 0.0
+    for length_m, supported in segment_support:
+        if supported:
+            longest_unsupported_run_m = max(
+                longest_unsupported_run_m,
+                current_unsupported_run_m,
+            )
+            current_unsupported_run_m = 0.0
+        else:
+            current_unsupported_run_m += length_m
+    longest_unsupported_run_m = max(
+        longest_unsupported_run_m,
+        current_unsupported_run_m,
+    )
+    displacements = sorted(
+        math.dist(raw, rendered)
+        for raw, rendered in zip(raw_points, render_points)
+    )
+    p95_displacement_m = _quantile(displacements, 0.95)
+    maximum_displacement_m = max(displacements, default=0.0)
+    touches_boundary = any(
+        _cell_touches_analysis_boundary(cell, analysis_bbox)
+        for cell in ordered_source_chain
+    )
+    audit_method = (
+        "ridge_edge_support_audit.v1"
+        if network_kind == "ridge"
+        else "terrain_edge_support_audit.v1"
+    )
+    return render_points, {
+        "audit_method": audit_method,
+        "source_chain_cell_count": len(ordered_source_chain),
+        "support_envelope_role": "union_of_source_cell_footprints",
+        "total_length_m": round(total_length_m, 3),
+        "supported_length_m": round(supported_length_m, 3),
+        "unsupported_length_m": round(unsupported_length_m, 3),
+        "longest_unsupported_run_m": round(longest_unsupported_run_m, 3),
+        "support_ratio": round(
+            supported_length_m / total_length_m if total_length_m else 0.0,
+            4,
+        ),
+        "support_ratio_denominator": "raw_source_chain_length_m",
+        "render_displacement_p95_m": round(p95_displacement_m, 3),
+        "render_displacement_max_m": round(maximum_displacement_m, 3),
+        "render_geometry_within_support_envelope": render_within_envelope,
+        "smoothing_rejected_outside_support": not candidate_within_envelope,
+        "touches_analysis_boundary": touches_boundary,
+        "component_boundary_censored": component_boundary_censored,
+        "backbone_endpoint_boundary_censored": (
+            backbone_endpoint_boundary_censored if network_kind == "ridge" else False
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _sample_source_cell_chain(
+    start: Cell,
+    end: Cell,
+    grid: Mapping[Cell, float],
+    *,
+    resolution_m: float,
+    origin: Cell,
+) -> list[Cell]:
+    if not grid:
+        return []
+    origin_x, origin_y = origin
+    length_m = math.dist(start, end)
+    # Quarter-cell sampling is the deterministic raster supercover witness used
+    # by the render-envelope audit. Half-cell sampling can miss the orthogonal
+    # cell crossed by a sub-cell segment between diagonally adjacent centers.
+    sample_count = max(1, math.ceil(length_m / max(1.0, resolution_m / 4.0)))
+    chain: list[Cell] = []
+    for index in range(sample_count + 1):
+        ratio = index / sample_count
+        x = start[0] + (end[0] - start[0]) * ratio
+        y = start[1] + (end[1] - start[1]) * ratio
+        cell = _cell(
+            origin_x + round((x - origin_x) / resolution_m) * resolution_m,
+            origin_y + round((y - origin_y) / resolution_m) * resolution_m,
+        )
+        if not chain or chain[-1] != cell:
+            chain.append(cell)
+    return chain
+
+
+def _polyline_within_support_envelope(
+    points: Sequence[Cell],
+    support_cells: set[Cell],
+    *,
+    resolution_m: float,
+) -> bool:
+    if not points or not support_cells:
+        return False
+    anchor = (
+        min(cell[0] for cell in support_cells),
+        min(cell[1] for cell in support_cells),
+    )
+    for start, end in zip(points, points[1:]):
+        length_m = math.dist(start, end)
+        sample_count = max(1, math.ceil(length_m / max(1.0, resolution_m / 4.0)))
+        for index in range(sample_count + 1):
+            ratio = index / sample_count
+            point = (
+                start[0] + (end[0] - start[0]) * ratio,
+                start[1] + (end[1] - start[1]) * ratio,
+            )
+            if not _point_inside_support_envelope(
+                point,
+                support_cells,
+                resolution_m=resolution_m,
+                anchor=anchor,
+            ):
+                return False
+    return True
+
+
+def _point_inside_support_envelope(
+    point: Cell,
+    support_cells: set[Cell],
+    *,
+    resolution_m: float,
+    anchor: Cell,
+) -> bool:
+    anchor_x, anchor_y = anchor
+    nearest_x = anchor_x + round((point[0] - anchor_x) / resolution_m) * resolution_m
+    nearest_y = anchor_y + round((point[1] - anchor_y) / resolution_m) * resolution_m
+    half_cell = resolution_m / 2.0 + 1e-6
+    for dx in (-resolution_m, 0.0, resolution_m):
+        for dy in (-resolution_m, 0.0, resolution_m):
+            cell = _cell(nearest_x + dx, nearest_y + dy)
+            if (
+                cell in support_cells
+                and abs(point[0] - cell[0]) <= half_cell
+                and abs(point[1] - cell[1]) <= half_cell
+            ):
+                return True
+    return False
+
+
+def _cell_touches_analysis_boundary(
+    cell: Cell,
+    bbox: Mapping[str, float],
+) -> bool:
+    return (
+        abs(cell[0] - float(bbox["min_x"])) <= 1e-6
+        or abs(cell[0] - float(bbox["max_x"])) <= 1e-6
+        or abs(cell[1] - float(bbox["min_y"])) <= 1e-6
+        or abs(cell[1] - float(bbox["max_y"])) <= 1e-6
+    )
+
+
+def _quantile(values: Sequence[float], ratio: float) -> float:
+    if not values:
+        return 0.0
+    position = max(0.0, min(1.0, ratio)) * (len(values) - 1)
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return float(values[lower])
+    fraction = position - lower
+    return float(values[lower]) * (1.0 - fraction) + float(values[upper]) * fraction
 
 
 def _saddle_nodes(
@@ -722,9 +1032,11 @@ def _public_node(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _component_backbone_links(graph: Mapping[Cell, set[Cell]]) -> set[Link]:
+def _component_backbone(
+    graph: Mapping[Cell, set[Cell]],
+) -> tuple[set[Link], tuple[Cell, ...]]:
     if not graph:
-        return set()
+        return set(), ()
     start = min(graph)
     endpoint, _ = _farthest_with_parent(graph, start)
     opposite, parent = _farthest_with_parent(graph, endpoint)
@@ -734,26 +1046,122 @@ def _component_backbone_links(graph: Mapping[Cell, set[Cell]]) -> set[Link]:
         previous = parent[current]
         links.add(_link(current, previous))
         current = previous
-    return links
+    return links, (endpoint, opposite)
 
 
 def _farthest_with_parent(
     graph: Mapping[Cell, set[Cell]],
     start: Cell,
 ) -> tuple[Cell, dict[Cell, Cell]]:
-    queue = deque([start])
-    distance = {start: 0}
+    queue: list[tuple[float, Cell]] = [(0.0, start)]
+    distance = {start: 0.0}
     parent: dict[Cell, Cell] = {}
     while queue:
-        cell = queue.popleft()
+        current_distance, cell = heapq.heappop(queue)
+        if current_distance > distance[cell] + 1e-9:
+            continue
         for neighbor in sorted(graph[cell]):
-            if neighbor in distance:
+            candidate_distance = current_distance + math.dist(cell, neighbor)
+            previous_distance = distance.get(neighbor)
+            if previous_distance is not None and candidate_distance > previous_distance + 1e-9:
                 continue
-            distance[neighbor] = distance[cell] + 1
+            if (
+                previous_distance is not None
+                and abs(candidate_distance - previous_distance) <= 1e-9
+                and parent.get(neighbor, cell) <= cell
+            ):
+                continue
+            distance[neighbor] = candidate_distance
             parent[neighbor] = cell
-            queue.append(neighbor)
+            heapq.heappush(queue, (candidate_distance, neighbor))
     farthest = max(distance, key=lambda cell: (distance[cell], cell))
     return farthest, parent
+
+
+def _link_saddles_to_ridge_candidates(
+    nodes: Sequence[dict[str, Any]],
+    edges: Sequence[dict[str, Any]],
+    *,
+    resolution_m: float,
+) -> list[dict[str, Any]]:
+    ridge_edges = [
+        edge
+        for edge in edges
+        if edge.get("kind") in {"main_ridge_candidate", "spur_ridge_candidate"}
+    ]
+    support_radius_m = resolution_m * 4.0
+    relations: list[dict[str, Any]] = []
+    for saddle in sorted(
+        (node for node in nodes if node.get("kind") == "saddle_node"),
+        key=lambda item: str(item.get("id")),
+    ):
+        point = (float(saddle["x_twd97"]), float(saddle["y_twd97"]))
+        ranked = sorted(
+            (
+                (_point_to_polyline_distance(point, edge.get("coordinates_twd97")), edge)
+                for edge in ridge_edges
+            ),
+            key=lambda pair: (pair[0], str(pair[1].get("id"))),
+        )
+        for distance_m, edge in ranked[:2]:
+            if not math.isfinite(distance_m) or distance_m > support_radius_m:
+                continue
+            relations.append(
+                {
+                    "id": f"terrain-relation.saddle-ridge.{len(relations) + 1:03d}",
+                    "relation_kind": "saddle_near_ridge_candidate",
+                    "saddle_node_id": saddle["id"],
+                    "ridge_edge_id": edge["id"],
+                    "distance_m": round(distance_m, 2),
+                    "support_radius_m": round(support_radius_m, 2),
+                    "source_refs": list(
+                        dict.fromkeys(
+                            [*saddle.get("source_refs", []), *edge.get("source_refs", [])]
+                        )
+                    ),
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "requires_human_review": True,
+                }
+            )
+    return relations
+
+
+def _point_to_polyline_distance(
+    point: Cell,
+    coordinates: Any,
+) -> float:
+    if not isinstance(coordinates, list) or len(coordinates) < 2:
+        return math.inf
+    points = [
+        (float(item[0]), float(item[1]))
+        for item in coordinates
+        if isinstance(item, (list, tuple))
+        and len(item) >= 2
+        and math.isfinite(float(item[0]))
+        and math.isfinite(float(item[1]))
+    ]
+    if len(points) < 2:
+        return math.inf
+    return min(
+        _point_to_segment_distance(point, start, end)
+        for start, end in zip(points, points[1:])
+    )
+
+
+def _point_to_segment_distance(point: Cell, start: Cell, end: Cell) -> float:
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length_squared = dx * dx + dy * dy
+    if length_squared <= 1e-12:
+        return math.dist(point, start)
+    ratio = (
+        ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy)
+        / length_squared
+    )
+    ratio = min(1.0, max(0.0, ratio))
+    projection = (start[0] + ratio * dx, start[1] + ratio * dy)
+    return math.dist(point, projection)
 
 
 def _components(graph: Mapping[Cell, set[Cell]]) -> list[set[Cell]]:

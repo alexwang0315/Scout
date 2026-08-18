@@ -28,6 +28,17 @@ from navigation_terrain_workspace import (
     route_sample_points,
 )
 from navigation_terrain_validation import build_terrain_validation_receipt
+from navigation_terrain_mesh import (
+    build_bounded_terrain_mesh,
+    empty_bounded_terrain_mesh,
+)
+from navigation_terrain_passage_patterns import (
+    build_terrain_passage_prior,
+    empty_terrain_passage_prior,
+    observed_paths_from_overpass,
+    observed_paths_from_projected_route,
+    observed_paths_from_reference_tracks,
+)
 
 
 NAVIGATION_TERRAIN_SCHEMA_VERSION = "scout_navigation_terrain_intelligence.v1"
@@ -96,6 +107,7 @@ def build_navigation_terrain_projection(
         project,
         inputs,
     )
+    terrain_mesh = _workspace_terrain_mesh_projection(project, inputs)
     source_ledger = _workspace_source_ledger_projection(
         project_root,
         project,
@@ -113,6 +125,12 @@ def build_navigation_terrain_projection(
     )
     terrain_hierarchy = _normalize_terrain_hierarchy(raw_hierarchy)
     route_terrain_events = _normalize_route_terrain_events(raw_route_events)
+    terrain_passage_prior = _workspace_terrain_passage_prior(
+        project_root,
+        project,
+        inputs,
+        raw_hierarchy,
+    )
     terrain_validation = _workspace_terrain_validation(
         project_root,
         project,
@@ -171,6 +189,7 @@ def build_navigation_terrain_projection(
             "overlays": overlays,
             "available_overlay_modes": available_overlay_modes,
         },
+        "terrain_mesh": terrain_mesh,
         "route_samples": {
             "source_count": source_route_sample_count,
             "rendered_count": len(bounded_route_samples),
@@ -230,6 +249,7 @@ def build_navigation_terrain_projection(
         },
         "terrain_structures": workspace_structures,
         "terrain_hierarchy": terrain_hierarchy,
+        "terrain_passage_prior": terrain_passage_prior,
         "route_terrain_events": route_terrain_events,
         "source_ledger": source_ledger,
         "route_topology": route_topology,
@@ -248,6 +268,79 @@ def build_navigation_terrain_projection(
             "human_review_required": True,
         },
     }
+
+
+def _workspace_terrain_mesh_projection(
+    project: dict[str, Any],
+    inputs: _NavigationTerrainInputs,
+) -> dict[str, Any]:
+    if inputs.workspace_grid is None:
+        return empty_bounded_terrain_mesh(
+            inputs.workspace_grid_error or "Workspace DEM grid is not prepared."
+        )
+    refs = [
+        ref
+        for key in ("terrain_visualization_ref", "dtm_coverage_summary_ref")
+        if (ref := _optional_ref(project.get(key))) is not None
+    ]
+    try:
+        return build_bounded_terrain_mesh(
+            inputs.workspace_grid,
+            source_refs=refs,
+        )
+    except ValueError as exc:
+        return empty_bounded_terrain_mesh(str(exc))
+
+
+def _workspace_terrain_passage_prior(
+    project_root: Path,
+    project: dict[str, Any],
+    inputs: _NavigationTerrainInputs,
+    raw_hierarchy: dict[str, Any],
+) -> dict[str, Any]:
+    if inputs.workspace_grid is None:
+        return empty_terrain_passage_prior(
+            inputs.workspace_grid_error or "Workspace DEM grid is not prepared."
+        )
+    route_ref = _optional_ref(project.get("terrain_route_samples_ref"))
+    reference_ref = _optional_ref(project.get("reference_track_display_geometry_ref"))
+    overpass_ref = _optional_ref(project.get("overpass_vector_evidence_ref"))
+    observed_paths = []
+    source_refs = []
+    if route_ref:
+        source_refs.append(route_ref)
+        observed_paths.extend(
+            observed_paths_from_projected_route(
+                inputs.projected_route_points,
+                source_ref=route_ref,
+            )
+        )
+    if reference_ref:
+        source_refs.append(reference_ref)
+        observed_paths.extend(
+            observed_paths_from_reference_tracks(
+                _read_json_ref(project_root, reference_ref),
+                source_ref=reference_ref,
+            )
+        )
+    if overpass_ref:
+        source_refs.append(overpass_ref)
+        observed_paths.extend(
+            observed_paths_from_overpass(
+                _read_json_ref(project_root, overpass_ref),
+                source_ref=overpass_ref,
+                bbox_twd97=inputs.workspace_grid.bbox_twd97,
+            )
+        )
+    terrain_ref = _optional_ref(project.get("terrain_visualization_ref"))
+    if terrain_ref:
+        source_refs.append(terrain_ref)
+    return build_terrain_passage_prior(
+        inputs.workspace_grid,
+        observed_paths=observed_paths,
+        terrain_hierarchy=raw_hierarchy,
+        source_refs=source_refs,
+    )
 
 
 def _workspace_terrain_bundle(

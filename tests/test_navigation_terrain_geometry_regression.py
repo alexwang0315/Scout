@@ -97,6 +97,23 @@ def test_arbitrarily_rotated_ridges_remain_subcell_and_non_quantized() -> None:
         assert result["counts"]["main_ridge_count"] == 1
         assert _lateral_rmse(edge, center, normal) < 4
         assert _quantized_fraction(edge) < 0.25
+        assert edge["classification_basis"] == (
+            "component_weighted_geodesic_backbone_overlap"
+        )
+        assert 0 <= edge["backbone_support_ratio"] <= 1
+        audit = edge["source_support_audit"]
+        assert audit["audit_method"] == "ridge_edge_support_audit.v1"
+        assert audit["source_chain_cell_count"] >= 2
+        assert audit["total_length_m"] > 0
+        assert audit["supported_length_m"] == audit["total_length_m"]
+        assert audit["unsupported_length_m"] == 0
+        assert audit["longest_unsupported_run_m"] == 0
+        assert audit["support_ratio_denominator"] == "raw_source_chain_length_m"
+        assert audit["render_geometry_within_support_envelope"] is True
+        assert edge["hierarchy_presentation"] in {
+            "contextual_candidate",
+            "suppressed_boundary_censored",
+        }
 
 
 def test_ridge_localization_is_stable_across_dem_resolutions() -> None:
@@ -195,6 +212,15 @@ def test_saddle_broad_sharp_flat_and_depression_regressions() -> None:
 
     saddle_result = _hierarchy(saddle, resolution_m=20, threshold_m=2)
     assert saddle_result["counts"]["saddle_count"] == 1
+    assert saddle_result["counts"]["saddle_relation_count"] >= 1
+    assert saddle_result["saddle_relations"]
+    assert all(
+        relation["relation_kind"] == "saddle_near_ridge_candidate"
+        and relation["candidate_only"] is True
+        and relation["runtime_safety_truth"] is False
+        and relation["distance_m"] <= relation["support_radius_m"]
+        for relation in saddle_result["saddle_relations"]
+    )
 
     flat_result = _hierarchy(flat, resolution_m=20, threshold_m=2)
     assert flat_result["status"] == "not_prepared"
