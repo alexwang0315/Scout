@@ -24,6 +24,8 @@ REVIEW_SOURCE_PATHS = (
 BROWSER_OPERATION_EVIDENCE = (
     "browser-action-contract.snapshot.json",
     "browser-control-inventory.json",
+    "browser-control-state-traces.json",
+    "browser-layer-availability-evidence.json",
     "browser-visual-audit.json",
     "browser-map-interactions.json",
     "browser-layer-interactions.json",

@@ -29,10 +29,19 @@ from tests.qualification.contextual_permission_phase1 import (
     load_permission_trace,
     trace_project_effects,
 )
-from tests.test_scout_contextual_permission_workbench_api import NOW, PROJECT_ID, _client
+from tests.test_scout_contextual_permission_workbench_api import (
+    NOW,
+    PROJECT_ID,
+    _client,
+    _isolated_runtime_audit_root,
+)
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "contextual_permission"
+
+
+class _SimulatedProcessLoss(RuntimeError):
+    """Cross the TestClient boundary without terminating its AnyIO worker."""
 
 
 class _WriteAttemptRecorder:
@@ -1341,7 +1350,7 @@ def test_rebuild_durable_write_interruption_blocks_then_rolls_forward_on_restart
         original_write(workbench, path, payload)
         if path.name == "workbench_seed.json" and not interrupted:
             interrupted = True
-            raise SystemExit("qualification simulated process loss")
+            raise _SimulatedProcessLoss("qualification simulated process loss")
 
     monkeypatch.setattr(
         ContextualPermissionWorkbench,
@@ -1349,7 +1358,7 @@ def test_rebuild_durable_write_interruption_blocks_then_rolls_forward_on_restart
         interrupt_after_seed,
     )
     with recorder.transition("projection-rebuild-interrupted"):
-        with pytest.raises((SystemExit, BaseExceptionGroup)):
+        with pytest.raises(_SimulatedProcessLoss):
             client.post(
                 f"/admin/pretrip/projects/{PROJECT_ID}/contextual-permission-dashboard/rebuilds",
                 json=request,
@@ -1365,6 +1374,10 @@ def test_rebuild_durable_write_interruption_blocks_then_rolls_forward_on_restart
             pretrip_workspace_root=workspace_root,
             contextual_permission_store_root=store_root,
             now_factory=lambda: NOW,
+            runtime_audit_root=_isolated_runtime_audit_root(
+                tmp_path,
+                "projection-restart",
+            ),
         )
     )
 
@@ -1499,7 +1512,9 @@ def test_baseline_activation_interruption_blocks_then_rolls_forward_on_restart(
         original_write(workbench, path, payload)
         if path.name == "project.json" and not interrupted:
             interrupted = True
-            raise SystemExit("qualification simulated activation process loss")
+            raise _SimulatedProcessLoss(
+                "qualification simulated activation process loss"
+            )
 
     monkeypatch.setattr(
         ContextualPermissionWorkbench,
@@ -1507,7 +1522,7 @@ def test_baseline_activation_interruption_blocks_then_rolls_forward_on_restart(
         interrupt_after_project_pointer,
     )
     with recorder.transition("baseline-activate-interrupted"):
-        with pytest.raises((SystemExit, BaseExceptionGroup)):
+        with pytest.raises(_SimulatedProcessLoss):
             client.post(f"{prefix}/reviews/accept", json=request)
     monkeypatch.setattr(
         ContextualPermissionWorkbench,
@@ -1521,6 +1536,10 @@ def test_baseline_activation_interruption_blocks_then_rolls_forward_on_restart(
             pretrip_workspace_root=workspace_root,
             contextual_permission_store_root=store_root,
             now_factory=lambda: NOW,
+            runtime_audit_root=_isolated_runtime_audit_root(
+                tmp_path,
+                "baseline-activation-restart",
+            ),
         )
     )
     interrupted_projection = restarted.get(

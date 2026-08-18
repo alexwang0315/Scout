@@ -69,9 +69,12 @@ def test_dashboard_capability_manifest_is_canonical_and_schema_valid() -> None:
         "dashboard.visual.complete_live_rendering",
         "dashboard.maps.all_surface_interactions",
         "dashboard.layers.all_visible_toggle_integrity",
+        "dashboard.layers.weather_hydrology_required_na",
         "dashboard.navigation.partial_data_shell",
         "dashboard.weather.optional_rainfall_overlay",
         "dashboard.maps.dynamic_rudy_tiles",
+        "dashboard.route_context.regeneration_api",
+        "dashboard.debug.hardware_readiness",
         "dashboard.permission.fail_closed",
         "qualification.evidence.integrity",
     ):
@@ -88,7 +91,19 @@ def test_dashboard_capability_manifest_is_canonical_and_schema_valid() -> None:
         for requirement in diagnostic_controls["expected_behavior"]
     )
     assert "typed_zero_warning" in diagnostic_controls["required_tests"]
+    assert any(
+        "startup_connection_status=not_checked" in requirement
+        and "yellow" in requirement
+        for requirement in diagnostic_controls["expected_behavior"]
+    )
+    assert "assistant_not_checked_warning" in diagnostic_controls["required_tests"]
     assert capabilities["qualification.fixture.active_p0_matrix"]["status"] == "sandbox"
+    assert capabilities["dashboard.route_context.regeneration_api"]["status"] == (
+        "not_implemented"
+    )
+    assert capabilities["dashboard.debug.hardware_readiness"]["status"] == (
+        "not_implemented"
+    )
 
 
 def test_browser_action_contract_covers_every_dashboard_route_and_map() -> None:
@@ -135,6 +150,13 @@ def test_browser_action_contract_covers_every_dashboard_route_and_map() -> None:
     assert contract["control_coverage"][
         "delegated_controls_require_passing_specialist_case"
     ] is True
+    assert {
+        "DISABLED_IN_RUNTIME_STATE",
+        "DISAPPEARED_BEFORE_OPERATION",
+        "NONVISIBLE_AFTER_DISCOVERY",
+        "SINGLE_RUNTIME_VALUE",
+        "ROUTE_ABORTED_AFTER_OPERATION_ERROR",
+    }.issubset(set(contract["control_coverage"]["blocking_terminal_states"]))
     assert contract["required_map_content"][
         "all_exposed_layer_controls_must_be_toggled"
     ] is True
@@ -155,6 +177,7 @@ def test_live_browser_runner_has_exhaustive_operation_and_visual_gates() -> None
         "auditAllVisibleControls",
         "discoverVisibleControlsInFrame",
         "inspectAllDashboardMapSurfaces",
+        "inspectNavigationDynamicRudyTiles",
         "prepareMapSurfaceForBrowserOperation",
         "captureMapFailureCheckpoint",
         "inspectCanonicalLayerToggles",
@@ -166,6 +189,8 @@ def test_live_browser_runner_has_exhaustive_operation_and_visual_gates() -> None
         assert required_symbol in source
     for evidence_ref in (
         "browser-control-inventory.json",
+        "browser-control-state-traces.json",
+        "browser-layer-availability-evidence.json",
         "browser-visual-audit.json",
         "browser-map-interactions.json",
         "browser-layer-interactions.json",
@@ -176,6 +201,126 @@ def test_live_browser_runner_has_exhaustive_operation_and_visual_gates() -> None
     assert "canonical-layer-preset" in source
     assert "NO_VISUAL_CHANGE" in source
     assert "contract_tests_are_dashboard_evidence" in source
+
+
+def test_q0057_main_map_weather_layers_enforce_required_visible_na_contract() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert "async function inspectMainMapWeatherLayerAvailability" in source
+    evidence_source = source.split(
+        "async function inspectMainMapWeatherLayerAvailability", 1
+    )[1].split("async function waitForCanonicalEmbeddedMapReady", 1)[0]
+    assert '"antecedent-rain"' in evidence_source
+    assert '"cwa-qpf"' in evidence_source
+    assert '"cwa-weather"' in evidence_source
+    assert '"soil-moisture"' in evidence_source
+    assert '"weather-api"' in evidence_source
+    assert "canonicalLayerRenderState" in evidence_source
+    assert '"REQUIRED_AVAILABLE"' in evidence_source
+    assert '"REQUIRED_NA"' in evidence_source
+    assert "waitForCanonicalEmbeddedMapReady" not in evidence_source
+    assert "const mapFrameBoundaryRaw = await frameHost.evaluate" in evidence_source
+    assert "source: evidenceSafeUrl(mapFrameBoundaryRaw.source)" in evidence_source
+    assert (
+        'await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-weather");'
+        in evidence_source
+    )
+    assert "paired_weather_embedded_state" in evidence_source
+    assert 'required_contract: "weather_hydrology_layer_required"' in evidence_source
+    assert 'normalized_unavailable_state: mainMapAvailability' in evidence_source
+    assert 'unavailable_semantics: "NA"' in evidence_source
+    assert "dashboard_weather_layer_required" in evidence_source
+    assert "dashboard_weather_layer_availability" in evidence_source
+    assert "dashboard_weather_layer_state_text" in evidence_source
+    assert 'frame.locator("#map [data-layer-group]")' in evidence_source
+    assert "record.settled = settled" in evidence_source
+    assert "settledAvailability" in evidence_source
+    assert 'assert(initial.control_visible' in evidence_source
+    assert 'assert(initial.dashboard_weather_layer_required === "true"' in evidence_source
+    assert 'assert(["AVAILABLE", "NA"].includes(mainMapAvailability)' in evidence_source
+    assert "product_behavior_changed: true" in evidence_source
+    assert (
+        'evidence_semantics: "weather_hydrology_required_unavailable_normalized_to_na"'
+        in evidence_source
+    )
+    assert 'id: "runtime-main-map-weather-layer-availability-evidence"' in source
+    count_source = source.split("blocking_layer_gaps:", 1)[1].split(", 0),", 1)[0]
+    assert '"REQUIRED_AVAILABLE"' in count_source
+    assert '"REQUIRED_NA"' in count_source
+
+
+def test_q0063_control_state_evidence_has_a_dedicated_read_only_runtime_case() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert "async function waitForIssue0063TerminalState" in source
+    assert "async function captureIssue0063RouteControlInventory" in source
+    assert "async function inspectIssue0063ControlStateEvidence" in source
+    evidence_source = source.split(
+        "async function inspectIssue0063ControlStateEvidence", 1
+    )[1].split("async function operateVisibleControl", 1)[0]
+    for route in (
+        "outdoor-permission",
+        "runtime-audit",
+        "outdoor-weather",
+        "emergency",
+    ):
+        assert f'"{route}"' in evidence_source
+    assert '"before_reload"' in evidence_source
+    assert '"after_reload"' in evidence_source
+    assert "captureIssue0063RouteControlInventory" in evidence_source
+    assert "runVisibleControlDiscoveryWithTimeout" not in evidence_source
+    assert "recordBrowserAction" in evidence_source
+    assert "beforeReloadWait" in evidence_source
+    assert "afterReloadWait" in evidence_source
+    assert 'kind: "terminal_state_wait"' in source
+    assert 'id: "runtime-q0063-control-state-evidence"' in source
+    assert "product_behavior_changed: false" in evidence_source
+
+
+def test_approved_q0056_q0061_repairs_have_targeted_live_browser_evidence() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert "async function inspectApprovedTargetedRepairEvidence" in source
+    evidence_source = source.split(
+        "async function inspectApprovedTargetedRepairEvidence", 1
+    )[1].split("function attachQualificationPageObservers", 1)[0]
+    assert '"outdoor-navigation"' in evidence_source
+    assert '"outdoor-weather"' in evidence_source
+    assert '"outdoor-permission"' in evidence_source
+    assert '"runtime-audit"' in evidence_source
+    assert "hoverSelectedEvidence" in evidence_source
+    assert "dashboardMapHoverHint" in evidence_source
+    assert 'weatherFrame.locator("#hoverHint")' in evidence_source
+    assert "weatherCwaHintDocument === frame.contentDocument" in evidence_source
+    assert 'rect[data-evidence-type="cwa_weather_environment_evidence"]' in evidence_source
+    assert "headless_hint_observation" in evidence_source
+    assert "product_verdict_allowed: false" in evidence_source
+    assert "navigation_fit_control_non_overlap" in evidence_source
+    assert "font_size_px" in evidence_source
+    assert 'id: "runtime-approved-targeted-repair-evidence"' in source
+    targeted_case = source.split(
+        'id: "runtime-approved-targeted-repair-evidence"', 1
+    )[1].split('id: "debug-live-runtime-read-evidence"', 1)[0]
+    assert "evidenceOnly: true" in targeted_case
+
+
+def test_diagnostic_diag_all_disables_video_before_packet_sealing() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    diagnostic_case = source.split(
+        'id: "diagnostic-diag-all-read-only"', 1
+    )[1].split(
+        'id: "navigation-dynamic-rudy-tiles"', 1
+    )[0]
+
+    assert "recordVideo: false" in diagnostic_case
+
+    mobile_case = source.split(
+        'id: "runtime-approved-mobile-layouts"', 1
+    )[1].split('id: "debug-live-runtime-read-evidence"', 1)[0]
+    assert "living_containment" in mobile_case
+    assert 'page.locator(".living-event").first().waitFor' in mobile_case
+    assert "body_scroll_width" in mobile_case
+    assert "event_overflow_count" in mobile_case
 
 
 def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof() -> None:
@@ -208,10 +353,33 @@ def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof
     assert "route_aborted_after_operation_error" in source
     assert "routePage.close({runBeforeUnload: false})" in source
     assert "const CASE_FINALIZATION_TIMEOUT_MS = 90_000;" in source
+    assert "const ROUTE_TRACE_FINALIZATION_TIMEOUT_MS = 30_000;" in source
     assert "async function runCaseFinalizerWithTimeout(" in source
     assert 'error.code = "CASE_FINALIZATION_TIMEOUT"' in source
+    assert "const CASE_EXECUTION_TIMEOUT_MS = 30 * 60_000;" in source
+    assert "async function runCaseExecutionWithTimeout(" in source
+    assert 'error.code = "CASE_EXECUTION_TIMEOUT"' in source
+    assert "await runCaseExecutionWithTimeout(" in source
+    assert 'status = executionTimedOut ? "BLOCKED" : "FAIL";' in source
+    assert '"case-progress.jsonl"' in source
+    assert '"route_started"' in source
+    assert '"route_completed"' in source
+    assert '"route_failed"' in source
+    assert '"route_trace_stop_started"' in source
+    assert '"route_trace_finalized"' in source
+    assert '"route_trace_finalization_failed"' in source
+    assert "browserContext.tracing.start({screenshots: false, snapshots: false, sources: false})" in source
+    assert '"control_operation_started"' in source
+    assert '"control_operation_completed"' in source
+    assert '"control_refresh_reload_started"' in source
+    assert "[data-navigation-maplibre-fit]" in source
+    assert "visual_quality_status: visualQualityStatus" in source
+    assert "snapshots: false" in source
+    assert "sources: false" in source
+    assert "if (routeTraceError) throw routeTraceError;" not in source
     assert '"trace-stop"' in source
     assert '"context-close"' in source
+    assert 'runCaseFinalizerWithTimeout("browser-close"' in source
     layer_toggle_source = source.split(
         "async function inspectCanonicalLayerToggles", 1
     )[1].split("function attachQualificationPageObservers", 1)[0]
@@ -236,10 +404,189 @@ def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof
         "async function captureVisualCheckpoint", 1
     )[1].split("function workspaceDigest", 1)[0]
     assert visual_checkpoint_source.count("timeout: 60_000") >= 3
+    assert '"visual_checkpoint_screenshot_retry"' in visual_checkpoint_source
+    assert "isTransientControlLocatorError(error)" in visual_checkpoint_source
     assert source.count("observations.controlInventory = inventory;") >= 2
     assert 'locator(":scope > summary")' in source
     assert "fit-before" in source
     assert "evidence-hint-before" in source
+    assert "selectHoverableEvidenceCandidate" in source
+    assert "inspectNavigationMapLibreGestures" in source
+    assert 'surface.id === "navigation-map"' in source
+    assert 'page.keyboard.down("Shift")' in source
+
+
+def test_live_browser_runner_scales_visual_and_control_audits() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    dom_metrics = source.split(
+        "async function collectDomVisualMetrics", 1
+    )[1].split("function visualQualityIssues", 1)[0]
+    checkpoint = source.split(
+        "async function captureVisualCheckpoint", 1
+    )[1].split("function workspaceDigest", 1)[0]
+    discovery = source.split(
+        "async function discoverVisibleControlsInFrame", 1
+    )[1].split("async function discoverVisibleControls", 1)[0]
+
+    assert "viewportInteractive" in dom_metrics
+    assert "overlapGrid" in dom_metrics
+    assert "analysis_duration_ms" in dom_metrics
+    assert "effectiveTextPixelSize" in dom_metrics
+    assert "HTMLCanvasElement" in dom_metrics
+    assert '"visual_checkpoint_started"' in checkpoint
+    assert '"visual_checkpoint_completed"' in checkpoint
+    assert '"visual_checkpoint_dom_completed"' in checkpoint
+    assert "scoutQualificationCompleted" in discovery
+    assert "isMapLibraryControl" in discovery
+
+
+def test_live_browser_runner_accepts_only_browser_observed_raster_provenance() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    native_map = source.split(
+        "async function inspectNativeMapGestures", 1
+    )[1].split("async function inspectNavigationMapLibreGestures", 1)[0]
+
+    assert "browserObservedRasterProvenance" in source
+    assert "resource_entries" in native_map
+    assert "tile_load_state" in native_map
+    assert "browser_observed_raster_provenance_count" in native_map
+
+
+def test_live_browser_runner_handles_dynamic_controls_and_effect_oracles() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    operation = source.split(
+        "async function operateVisibleControl", 1
+    )[1].split("async function runVisibleControlOperationWithTimeout", 1)[0]
+    aggregate = source.split(
+        "const browserCoverageFindings = [", 1
+    )[1].split("const findings = [", 1)[0]
+
+    assert "refreshControlDescriptor" in operation
+    assert "new_visual_issues" in operation
+    assert "baseline_visual_issues" in operation
+    assert "popup_loaded" in operation
+    assert "effect_oracle" in operation
+    assert 'descriptor.tag === "svg"' in operation
+    assert "groupControlCoverageFindings(controlInventory)" in aggregate
+    assert '"OPERATION_ERROR"' in source.split(
+        "function groupControlCoverageFindings", 1
+    )[1].split("function normalizedTelemetryTarget", 1)[0]
+    assert "groupVisualQualityFindings" in source
+    assert 'if (finalizationErrors.length && status === "PASS")' in source
+    assert "captureAvailableCaseScreenshot" in source
+    assert 'item.terminal_state === "OPERATION_ERROR"' in source.split(
+        "blocking_control_gaps:", 1
+    )[1].split("map_surface_results:", 1)[0]
+    assert "classifyUncompletedControl" in source
+    assert "controlCoverageGapRecord" in source
+    assert "product_defect_claimed: false" in source
+    assert "controlStateTraces" in source
+    assert "frame_lifecycle" in source
+    assert "control_discovery_timing" in source
+
+
+def test_browser_runner_preserves_typed_control_coverage_causes() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const base = {{route: "outdoor-permission", identity: "stable-control"}};
+const causes = [
+  "disabled_in_runtime_state",
+  "disappeared_before_operation",
+  "nonvisible_after_discovery",
+  "single_runtime_value",
+  "route_aborted_after_operation_error",
+];
+process.stdout.write(JSON.stringify(Object.fromEntries(
+  causes.map(cause => [cause, runner.controlCoverageGapRecord(base, cause)])
+)));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert {
+        key: value["terminal_state"] for key, value in payload.items()
+    } == {
+        "disabled_in_runtime_state": "DISABLED_IN_RUNTIME_STATE",
+        "disappeared_before_operation": "DISAPPEARED_BEFORE_OPERATION",
+        "nonvisible_after_discovery": "NONVISIBLE_AFTER_DISCOVERY",
+        "single_runtime_value": "SINGLE_RUNTIME_VALUE",
+        "route_aborted_after_operation_error": "ROUTE_ABORTED_AFTER_OPERATION_ERROR",
+    }
+    assert all(value["product_defect_claimed"] is False for value in payload.values())
+    assert all(value["coverage_gap_kind"] for value in payload.values())
+
+
+def test_live_browser_runner_records_typed_layer_availability_and_runtime_evidence() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    layer_state = source.split(
+        "async function canonicalLayerRenderState", 1
+    )[1].split("async function inspectEmbeddedCwaControls", 1)[0]
+    layer_audit = source.split(
+        "async function inspectCanonicalLayerToggles", 1
+    )[1].split("function attachQualificationPageObservers", 1)[0]
+    permission_case = source.split(
+        'id: "permission-live-runtime-boundary"', 1
+    )[1].split('id: "permission-degraded-candidate-boundary"', 1)[0]
+
+    assert "control_disabled" in layer_state
+    assert "control_visible" in layer_state
+    assert "availability_reason" in layer_state
+    assert 'terminal_state: "NOT_EXERCISED"' in layer_audit
+    assert "render_provenance" in layer_audit
+    assert "resource_entries" in layer_audit
+    assert "waitForCanonicalEmbeddedMapReady" in source
+    assert layer_audit.count("await waitForCanonicalEmbeddedMapReady(") >= 3
+    readiness = source.split(
+        "async function waitForCanonicalEmbeddedMapReady", 1
+    )[1].split("async function inspectEmbeddedCwaControls", 1)[0]
+    assert "#dashboardMapLoading" in readiness
+    assert "scoutPretripProjectBridge" in readiness
+    assert "expectedProjectId" in readiness
+    assert source.count('(await menu.getAttribute("open")) === null') >= 3
+    assert '(await advanced.getAttribute("open")) === null' in source
+    assert '!(await menu.getAttribute("open"))' not in source
+    assert '!(await advanced.getAttribute("open"))' not in source
+    assert "embedded_duplicate_layer_menu_not_exposed" in source
+    assert 'terminal_state: "NOT_EXPOSED"' in source
+    assert 'delegated_to: "runtime-all-visible-controls"' in source
+    assert '"OPERATED",\n            "NOT_EXPOSED",\n            "REQUIRED_AVAILABLE",\n            "REQUIRED_NA",' in source
+    assert "waitForFunction" in permission_case
+    assert "observedStateTransitions" in permission_case
+    assert 'fetch("/assistant/status")' in permission_case
+    assert "assistantReadiness" in permission_case
+
+
+def test_live_browser_runner_collects_debug_read_evidence_without_hardware_probe() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    debug_case = source.split(
+        'id: "debug-live-runtime-read-evidence"', 1
+    )[1].split('id: "runtime-all-visible-controls"', 1)[0]
+
+    for endpoint in (
+        "/debug/events?limit=200",
+        "/debug/state",
+        "/debug/messages",
+        "/debug/mobile-wearable/ingress",
+        "/debug/monitoring",
+        "/debug/stream",
+    ):
+        assert endpoint in debug_case
+    assert "/admin/hardware-readiness/context" not in debug_case
+    assert "first_chunk_observed" in debug_case
+    assert "availability_state" in debug_case
+    assert "evidenceOnly: true" in debug_case
+    assert "!definition.evidenceOnly" in source.split(
+        "function buildCapabilityResults", 1
+    )[1].split("function writeJson", 1)[0]
     assert "target_hint_source" in source
     assert 'const captureRoot = page.locator("body")' in source
     assert "assert(layerInteractions.length > 0" in source
@@ -261,6 +608,467 @@ def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof
     assert "debug-mobile-table-after-horizontal-scroll" in source
     assert "result.debug_pills.length > 0" in source
 
+    route_navigation_case = source.split(
+        'id: "runtime-route-navigation"', 1
+    )[1].split('id: "runtime-all-route-visual-states-desktop"', 1)[0]
+    assert "revealThroughClosedDetails" in route_navigation_case
+    assert "scrollIntoViewIfNeeded" in route_navigation_case
+
+    navigation_tiles_case = source.split(
+        'id: "navigation-dynamic-rudy-tiles"', 1
+    )[1].split('id: "architecture-dynamic-rudy-tiles"', 1)[0]
+    assert "inspectNavigationDynamicRudyTiles" in navigation_tiles_case
+
+    navigation_tiles_helper = source.split(
+        "async function inspectNavigationDynamicRudyTiles", 1
+    )[1].split("async function inspectWeatherDynamicMap", 1)[0]
+    assert navigation_tiles_helper.index(
+        "const requestStart = observations.requests.length;"
+    ) < navigation_tiles_helper.index("await openDashboard(")
+
+
+def test_browser_runner_times_out_a_never_resolving_case_body() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+(async () => {{
+  const startedAt = Date.now();
+  try {{
+    await runner.runCaseExecutionWithTimeout(
+      {{ id: "qualification-hanging-test", executionTimeoutMs: 50 }},
+      () => new Promise(() => {{}}),
+    );
+    process.exitCode = 2;
+  }} catch (error) {{
+    process.stdout.write(JSON.stringify({{
+      code: error.code,
+      caseId: error.caseId,
+      timeoutMs: error.timeoutMs,
+      elapsedMs: Date.now() - startedAt,
+    }}));
+  }}
+}})();
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload == {
+        "code": "CASE_EXECUTION_TIMEOUT",
+        "caseId": "qualification-hanging-test",
+        "timeoutMs": 50,
+        "elapsedMs": payload["elapsedMs"],
+    }
+    assert 40 <= payload["elapsedMs"] < 1_000
+
+
+def test_browser_runner_times_out_a_never_resolving_route_trace_stop() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+(async () => {{
+  const startedAt = Date.now();
+  try {{
+    await runner.runCaseFinalizerWithTimeout(
+      "route-trace-stop:test",
+      () => new Promise(() => {{}}),
+      50,
+    );
+    process.exitCode = 2;
+  }} catch (error) {{
+    process.stdout.write(JSON.stringify({{
+      code: error.code,
+      timeoutMs: error.timeoutMs,
+      elapsedMs: Date.now() - startedAt,
+    }}));
+  }}
+}})();
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["code"] == "CASE_FINALIZATION_TIMEOUT"
+    assert payload["timeoutMs"] == 50
+    assert 40 <= payload["elapsedMs"] < 1_000
+
+
+def test_browser_runner_aggregates_repeated_delegated_map_evidence_targets() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const controls = [
+  {{route: "map", context_id: "frame:map", tag: "path", delegated_to: "runtime-all-map-surface-interactions", data_attributes: {{evidenceType: "trail", sourceId: "source-a"}}, identity: "source-a", key: "a", text: ""}},
+  {{route: "map", context_id: "frame:map", tag: "path", delegated_to: "runtime-all-map-surface-interactions", data_attributes: {{evidenceType: "trail", sourceId: "source-b"}}, identity: "source-b", key: "b", text: ""}},
+  {{route: "map", context_id: "frame:map", tag: "circle", delegated_to: "runtime-all-map-surface-interactions", data_attributes: {{evidenceType: "trail", sourceId: "source-c"}}, identity: "source-c", key: "c", text: ""}},
+  {{route: "map", context_id: "frame:map", tag: "button", delegated_to: "runtime-all-map-surface-interactions", data_attributes: {{}}, identity: "zoom", key: "zoom", text: "Zoom"}},
+];
+process.stdout.write(JSON.stringify(runner.aggregateDelegatedMapEvidenceControls(controls)));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert len(payload) == 3
+    path_group = next(item for item in payload if item.get("tag") == "path")
+    assert path_group["aggregate_member_count"] == 2
+    assert path_group["aggregate_source_samples"] == ["source-a", "source-b"]
+    assert "source-a" not in path_group["identity"]
+    assert "sourceId" not in path_group["data_attributes"]
+    assert sum(item.get("aggregate_member_count", 1) for item in payload) == 4
+
+
+def test_browser_runner_samples_dense_repeated_selection_controls() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const controls = Array.from({{length: 9}}, (_unused, index) => ({{
+  route: "outdoor-architecture",
+  context_id: "main",
+  tag: "g",
+  role: "button",
+  aria_label: `bin-${{index}}`,
+  delegated_to: null,
+  disabled: false,
+  data_attributes: {{architectureSelectionSurface: "fingerprint-bin", architectureBinId: `bin-${{index}}`}},
+  identity: `bin-${{index}}`,
+  key: `key-${{index}}`,
+  text: "",
+}}));
+process.stdout.write(JSON.stringify(runner.sampleRepeatedSelectionControls(controls)));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert len(payload) == 3
+    assert [item["aggregate_representative_position"] for item in payload] == [
+        "first",
+        "middle",
+        "last",
+    ]
+    assert all(item["aggregate_member_count"] == 9 for item in payload)
+    assert all(item["aggregate_sampling_policy"] == "first-middle-last" for item in payload)
+    assert payload[0]["aggregate_member_samples"] == ["bin-0", "bin-4", "bin-8"]
+    assert all("architectureBinId" not in item["identity"] for item in payload)
+
+
+def test_browser_runner_separates_delegation_and_visual_warnings_from_operation_state() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const delegated = runner.classifyPassiveControl({{
+  delegated_to: "runtime-all-map-surface-interactions",
+  disabled: true,
+  data_attributes: {{}},
+}});
+const operated = runner.controlOperationTerminalState({{
+  semantic_changed: true,
+  visual_changed: true,
+  popup_loaded: false,
+}});
+const unchanged = runner.controlOperationTerminalState({{
+  semantic_changed: false,
+  visual_changed: false,
+  popup_loaded: false,
+}});
+process.stdout.write(JSON.stringify({{delegated, operated, unchanged}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["delegated"]["terminal_state"] == "DELEGATED"
+    assert payload["operated"] == "OPERATED"
+    assert payload["unchanged"] == "NO_STATE_CHANGE"
+
+
+def test_browser_runner_classifies_only_known_transient_dom_failures_for_one_retry() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(JSON.stringify({{
+  detachedFrame: runner.isTransientFrameDiscoveryError("frame.evaluate: Frame was detached"),
+  detachedElement: runner.isTransientControlLocatorError("Element is not attached to the DOM"),
+  staleLocator: runner.isTransientControlLocatorError(
+    "locator.click: Timeout 30000ms exceeded while waiting for locator('[data-scout-qualification-control-key=key]')"
+  ),
+  ordinaryTimeout: runner.isTransientControlLocatorError("page.goto: Timeout 60000ms exceeded"),
+  productFailure: runner.isTransientFrameDiscoveryError("HTTP 500")
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload == {
+        "detachedFrame": True,
+        "detachedElement": True,
+        "staleLocator": True,
+        "ordinaryTimeout": False,
+        "productFailure": False,
+    }
+
+
+def test_browser_runner_waits_for_a_real_popup_url_before_claiming_success() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(JSON.stringify({{
+  empty: runner.isLoadedPopupUrl(""),
+  blank: runner.isLoadedPopupUrl("about:blank"),
+  dashboardDebug: runner.isLoadedPopupUrl("http://127.0.0.1:9099/admin/debug?projectId=project")
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "empty": False,
+        "blank": False,
+        "dashboardDebug": True,
+    }
+
+
+def test_browser_runner_uses_the_visible_root_for_special_dashboard_routes() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(JSON.stringify({{
+  home: runner.dashboardRouteRootSelector("home"),
+  map: runner.dashboardRouteRootSelector("map"),
+  agent: runner.dashboardRouteRootSelector("agent")
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "home": "#workspace",
+        "map": "#dashboardMap",
+        "agent": "#dashboardAgent",
+    }
+
+
+def test_browser_runner_bounds_embedded_visual_audits_and_avoids_duplicate_video() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert "frame.frameElement()" in source
+    assert '"route-frame-visibility"' in source
+    assert "ROUTE_FRAME_VISIBILITY_TIMEOUT_MS" in source
+    assert "const visibleInViewport = element =>" in source
+    assert "const centerInsideClippingAncestors = element =>" in source
+    assert ".filter(visibleInViewport)" in source
+    assert 'element.closest("details:not([open])")' in source
+    assert "const insideStickyLayer = element =>" in source
+    assert "const isMapInteractionSurface = element =>" in source
+    assert "waitForRouteVisualReadiness(page, route" in source
+    assert source.count("recordVideo: false") >= 4
+
+
+def test_browser_runner_bounds_route_visual_failure_summary() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const audits = Array.from({{length: 30}}, (_unused, index) => ({{
+  route: `route-${{index}}`,
+  error: `route error ${{index}}`,
+  frames: [{{error: `frame error ${{index}}`}}]
+}}));
+const groups = Array.from({{length: 40}}, (_unused, index) => ({{
+  observed_behavior: `visual-${{index}}`,
+  occurrence_count: index + 1,
+  evidence_refs: ["a.png", "b.png", "c.png", "d.png"]
+}}));
+process.stdout.write(JSON.stringify(runner.summarizeRouteVisualAuditFailure(audits, groups)));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["failed_route_count"] == 30
+    assert payload["operational_issue_count"] == 60
+    assert len(payload["operational_issue_samples"]) == 12
+    assert payload["visual_issue_group_count"] == 40
+    assert len(payload["visual_issue_groups"]) == 24
+    assert all(len(item["evidence_refs"]) == 3 for item in payload["visual_issue_groups"])
+
+
+def test_browser_runner_bounds_control_coverage_failure_summary() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const blocking = Array.from({{length: 40}}, (_unused, index) => ({{
+  route: index < 20 ? "map" : "navigation",
+  terminal_state: index % 2 ? "NOT_EXERCISED" : "OPERATION_ERROR",
+  identity: `control-${{index}}`,
+  detail: "bounded-detail",
+}}));
+const summary = runner.summarizeControlCoverageFailure(blocking, [{{
+  observed_behavior: "occluded_controls",
+  occurrence_count: 12,
+  evidence_refs: ["a.png", "b.png", "c.png", "d.png"],
+}}]);
+process.stdout.write(JSON.stringify(summary));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["blocking_control_count"] == 40
+    assert payload["blocking_control_states"] == {
+        "OPERATION_ERROR": 20,
+        "NOT_EXERCISED": 20,
+    }
+    assert len(payload["blocking_control_samples"]) == 12
+    assert payload["visual_issue_group_count"] == 1
+    assert payload["visual_issue_groups"][0]["evidence_refs"] == [
+        "a.png",
+        "b.png",
+        "c.png",
+    ]
+
+
+def test_browser_runner_groups_visual_warnings_by_semantic_root() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const checkpoints = [
+  {{case_id: "controls", id: "a", screenshot: "a.png", issues: ['x:a: low_readability_text=["span:Surface","small:Alpha","label:One","span:Data","small:Beta","label:Two"]']}},
+  {{case_id: "controls", id: "b", screenshot: "b.png", issues: ['x:b: low_readability_text=["span:Changed","small:Gamma","label:Three","span:Other","small:Delta","label:Four"]']}},
+];
+process.stdout.write(JSON.stringify({{
+  roots: checkpoints.map(item => runner.visualIssueRootSignature(item.issues[0])),
+  groups: runner.groupVisualQualityFindings(checkpoints),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["roots"][0] == payload["roots"][1]
+    assert len(payload["groups"]) == 1
+    assert payload["groups"][0]["occurrence_count"] == 2
+    assert payload["groups"][0]["evidence_refs"] == ["a.png", "b.png"]
+    assert len(payload["groups"][0]["example_observed_behaviors"]) == 2
+
+
+def test_browser_runner_groups_control_gaps_and_deduplicates_resource_console_errors() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const controls = Array.from({{length: 12}}, (_unused, index) => ({{
+  case_id: "controls",
+  route: index < 6 ? "map" : "navigation",
+  terminal_state: "NOT_EXERCISED",
+  identity: `control-${{index}}`,
+  detail: "This control was disabled in the selected live runtime state; an executable real state is required before the function can qualify.",
+  before_screenshot: `before-${{index}}.png`,
+  after_screenshot: `after-${{index}}.png`,
+}}));
+const controlGroups = runner.groupControlCoverageFindings(controls);
+const telemetryGroups = runner.groupBrowserTelemetryFindings(
+  [{{case_id: "controls", detail: "Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:9099/debug/state:0:0"}}],
+  [],
+  [{{case_id: "controls", status: 404, url: "http://127.0.0.1:9099/debug/state"}}],
+);
+process.stdout.write(JSON.stringify({{controlGroups, telemetryGroups}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert len(payload["controlGroups"]) == 2
+    assert sorted(item["occurrence_count"] for item in payload["controlGroups"]) == [6, 6]
+    assert all(len(item["control_identity_samples"]) == 5 for item in payload["controlGroups"])
+    assert len(payload["telemetryGroups"]) == 1
+    assert payload["telemetryGroups"][0]["network_occurrence_count"] == 1
+    assert payload["telemetryGroups"][0]["console_occurrence_count"] == 1
+
 
 def test_qualification_policy_blocks_intentional_p0_regression() -> None:
     from scripts.qualification.evaluate_qualification import evaluate_results
@@ -279,6 +1087,14 @@ def test_qualification_policy_blocks_intentional_p0_regression() -> None:
     assert any(
         item["capability_id"] == "qualification.fixture.active_p0_matrix"
         for item in clean["excluded_capabilities"]
+    )
+    assert {
+        item["capability_id"] for item in clean["excluded_capabilities"]
+    }.issuperset(
+        {
+            "dashboard.route_context.regeneration_api",
+            "dashboard.debug.hardware_readiness",
+        }
     )
 
     results["dashboard.diagnostic.read_only"] = "FAIL"
@@ -431,6 +1247,8 @@ def test_reviewer_input_excludes_raw_worktree_patch_and_source_contents(
     for relative in (
         "browser-action-contract.snapshot.json",
         "browser-control-inventory.json",
+        "browser-control-state-traces.json",
+        "browser-layer-availability-evidence.json",
         "browser-visual-audit.json",
         "browser-map-interactions.json",
         "browser-layer-interactions.json",
@@ -462,6 +1280,8 @@ def test_reviewer_input_excludes_raw_worktree_patch_and_source_contents(
     assert set(payload["browser_operation_evidence"]) == {
         "browser-action-contract.snapshot.json",
         "browser-control-inventory.json",
+        "browser-control-state-traces.json",
+        "browser-layer-availability-evidence.json",
         "browser-visual-audit.json",
         "browser-map-interactions.json",
         "browser-layer-interactions.json",
@@ -743,6 +1563,14 @@ def test_browser_runner_isolates_cases_and_captures_failure_evidence() -> None:
     assert "context.tracing.start(" in source
     assert "context.tracing.stop({ path: tracePath })" in source
     assert "recordVideo" in source
+    assert "fs.mkdirSync(caseDirectory, { recursive: true });" in source
+    assert "definition.recordVideo !== false" in source
+    assert 'id: "runtime-all-visible-controls"' in source
+    assert "recordVideo: false" in source
+    assert (
+        'if (element.matches("[data-route]")) '
+        'delegatedTo = "runtime-route-navigation";'
+    ) in source
     assert "for (const definition of caseDefinitions)" in source
     assert "results.push(await runIsolatedCase(" in source
     assert "workspaceDigest" in source
