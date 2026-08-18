@@ -42,8 +42,7 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-
-REQUIRED_VERSION = "2.29.0"
+REQUIRED_VERSION = "2.30.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
@@ -60,7 +59,9 @@ class LiveStructuredSmokeOutput(BaseModel):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run Scout's Pydantic AI offline and OpenRouter compatibility smoke."
+        description=(
+            "Run Scout's Pydantic AI offline and OpenRouter compatibility smoke."
+        )
     )
     parser.add_argument(
         "--live-openrouter",
@@ -135,13 +136,14 @@ async def run_compatibility_smoke(
 def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("runtime_versions", _offline_runtime_versions),
-        ("v229_capability_contract", _offline_v229_capability_contract),
+        ("v230_capability_contract", _offline_v230_capability_contract),
         ("function_tool_call", _offline_function_tool_call),
         ("structured_output", _offline_structured_output),
         ("mcp_instructions_and_tool", _offline_mcp_instructions),
         ("web_capability_contract", _offline_web_capabilities),
         ("stream_events_and_compaction", _offline_stream_events_and_compaction),
         ("agent_web_content_type_guard", _offline_agent_web_content_type_guard),
+        ("agent_web_host_guard", _offline_agent_web_host_guard),
         ("tool_failed_visible_without_retry", _offline_tool_failed),
         ("model_retry_then_success", _offline_model_retry),
         ("external_cancellation", _offline_cancellation),
@@ -193,7 +195,7 @@ def _offline_runtime_versions() -> dict[str, str]:
     return versions
 
 
-def _offline_v229_capability_contract() -> dict[str, Any]:
+def _offline_v230_capability_contract() -> dict[str, Any]:
     from pydantic_ai import RunContext
     from pydantic_ai.mcp import MCPToolset
     from pydantic_ai.toolsets._tool_search import ToolSearchToolset
@@ -201,6 +203,7 @@ def _offline_v229_capability_contract() -> dict[str, Any]:
     limits = UsageLimits(request_limit=10, tool_calls_limit=10)
     mcp_parameters = inspect.signature(MCPToolset).parameters
     tool_search_parameters = inspect.signature(ToolSearchToolset).parameters
+    to_web_parameters = inspect.signature(Agent.to_web).parameters
     _require(
         limits.per_request_input_tokens_limit is None,
         "per-request input token limit must remain disabled",
@@ -214,11 +217,16 @@ def _offline_v229_capability_contract() -> dict[str, Any]:
         "max_retries" in tool_search_parameters,
         "ToolSearchToolset max_retries is unavailable",
     )
+    _require(
+        "allowed_hosts" in to_web_parameters,
+        "Agent.to_web allowed_hosts is unavailable",
+    )
     return {
         "per_request_input_tokens_limit": None,
         "run_context_tool_availability": True,
         "mcp_prefer_tasks_default": mcp_parameters["prefer_tasks"].default,
         "tool_search_max_retries": True,
+        "agent_web_allowed_hosts": True,
     }
 
 
@@ -252,7 +260,10 @@ async def _offline_stream_events_and_compaction() -> dict[str, Any]:
 def _offline_agent_web_content_type_guard() -> dict[str, Any]:
     from starlette.testclient import TestClient
 
-    client = TestClient(Agent(TestModel()).to_web(), raise_server_exceptions=False)
+    client = TestClient(
+        Agent(TestModel()).to_web(allowed_hosts=["testserver"]),
+        raise_server_exceptions=False,
+    )
     response = client.post(
         "/api/chat",
         content="{}",
@@ -265,6 +276,26 @@ def _offline_agent_web_content_type_guard() -> dict[str, Any]:
     )
     return {
         "status_code": response.status_code,
+        "model_request_prevented": True,
+    }
+
+
+def _offline_agent_web_host_guard() -> dict[str, Any]:
+    from starlette.testclient import TestClient
+
+    client = TestClient(Agent(TestModel()).to_web(), raise_server_exceptions=False)
+    response = client.post(
+        "/api/chat",
+        json={"messages": []},
+        headers={"host": "attacker.invalid"},
+    )
+    _require(
+        response.status_code in {400, 403, 421},
+        "untrusted Host header was not rejected",
+    )
+    return {
+        "status_code": response.status_code,
+        "untrusted_host_rejected": True,
         "model_request_prevented": True,
     }
 

@@ -7,7 +7,7 @@ Harness runtime, Monty integration smoke, immutable execution receipt, and
 100-case readiness/live runner are implemented. The runtime remains outside
 the production dependency set.
 
-The host agent facade currently runs on Pydantic AI 2.29.0. L5 keeps its own
+The host agent facade currently runs on Pydantic AI 2.30.0. L5 keeps its own
 optional Harness 0.7.0 and Monty 0.0.18 attestation pins; these are compatible
 surfaces, not a request to downgrade the host facade.
 

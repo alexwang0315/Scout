@@ -126,6 +126,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !cwa_satellite_ingestor.py
 !dashboard_connected_preparation.py
 !dashboard_workspace_operations.py
+!dashboard_workspace_publication.py
 !ingress_observer_supervisor.py
 !hardware_readiness_api.py
 !mobile_wearable_ingress_debug.py
@@ -184,6 +185,9 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !pretrip_workspace_edit.py
 !pretrip_workspace_project.py
 !runtime_artifact_resolution.py
+!runtime_audit_api.py
+!runtime_audit_ledger.py
+!runtime_audit_models.py
 !runtime_debug_log.py
 !radar_motion_estimator.py
 !radar_satellite_risk_extractor.py
@@ -217,6 +221,9 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !scout_gee_integration.py
 !scout_layer_contract.py
 !scout_contextual_permission_tool.py
+!scout_contextual_permission_rudy.py
+!scout_contextual_permission_workbench.py
+!scout_contextual_permission_workbench_api.py
 !scout_cwa_environment_tool.py
 !scout_energy_vitals_tool.py
 !scout_equipment_resource_tool.py

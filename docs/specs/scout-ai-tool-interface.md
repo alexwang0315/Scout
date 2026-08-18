@@ -4,12 +4,12 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-08-14
+## Implementation Update 2026-08-15
 
-Scout AI now runs against Pydantic AI v2.29.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.30.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.29.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.30.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -17,7 +17,15 @@ tracks. Tool execution remains deterministic and read-only by default:
   typed output.
 - The compatibility smoke covers function tools, typed output, MCP, local
   WebSearch/WebFetch, stream events, compacted history, and the non-JSON
-  `Agent.to_web()` request guard before this pin is promoted to hardware.
+  `Agent.to_web()` request guard before this pin is promoted to hardware. The
+  v2.30 smoke also verifies that an untrusted Host header is rejected before a
+  model request, covering the upstream DNS-rebinding fix.
+- Deferred tools must be revealed and their capability loaded before invocation
+  under v2.30. Scout progressive disclosure treats that rejection as a tool
+  availability decision and must not misclassify it as missing evidence.
+- Provider-native OpenRouter search now uses `openrouter:web_search`. Scout's
+  default remains the local traced search/fetch path until native provider
+  citations and tool-call evidence satisfy the grounding gate.
 - OpenRouter's native web plugin may complete without exposing a source or tool
   trace. A successful transport response is not accepted as grounded evidence;
   Scout keeps the local traced search/fetch path as the OpenRouter default.

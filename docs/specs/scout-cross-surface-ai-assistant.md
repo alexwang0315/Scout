@@ -23,8 +23,8 @@ assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
 keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
-2026-08-14 update: Scout AI is the full-capability user entrypoint. Pydantic AI
-provider compatibility targets v2.29.0. The assistant and Mac-local fallback
+2026-08-15 update: Scout AI is the full-capability user entrypoint. Pydantic AI
+provider compatibility targets v2.30.0. The assistant and Mac-local fallback
 paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
 provider for `openrouter:<vendor/model>`. Trusted WebSearch and WebFetch are
@@ -35,7 +35,10 @@ use supported native search. Operators may opt out for lab/CI with
 connector boundary. OpenRouter request settings remain immutable across calls,
 tool-search history remains replayable across provider handoffs, bare MCP
 errors enter the normal recovery ladder, and provider-specific `RequestUsage`
-fields remain available to redacted telemetry.
+fields remain available to redacted telemetry. `Agent.to_web()` Host validation
+remains enabled, and any reviewed LAN hostname must be added through
+`allowed_hosts`; deferred tools must be revealed with their capability before
+they become callable.
 
 This document defines the cross-surface assistant guardrails that now anchor the
 mock provider, bounded context adapters, read-only API, UI shell, opt-in
@@ -284,7 +287,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.29.0;
+- supported runtime family: Pydantic AI v2.30.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;
