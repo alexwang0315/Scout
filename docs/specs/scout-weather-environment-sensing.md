@@ -320,7 +320,11 @@ five Weather / 氣象與水文 layer controls: `soil-moisture`,
 state bridge exposes QPE/QPF selection, rainfall opacity and status,
 radar/satellite product and opacity, 3/6/9/12-hour window, frame, play/pause,
 timestamp, and delay without duplicating projection or image-processing code.
-Dashboard MAP excludes these weather controls. The browser path remains
+Dashboard MAP exposes the same five canonical layer rows as required
+availability controls. Rows with prepared render content are operable and show
+`AVAILABLE`; rows without prepared render content remain visible, are disabled,
+and show `NA`. Six Axis Weather still owns the detailed CWA/GEE product,
+timeline, opacity, playback, and refresh controls. The browser path remains
 cache-only; all fetch, decode, georeference, route sampling, and motion work is
 server-side, while Pi/mobile surfaces consume only prepared display assets and
 compact candidate features.

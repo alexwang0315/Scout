@@ -46,6 +46,55 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-08-17 - Q0057 required weather/hydrology layers and Q0060 compact readability
+
+User decisions:
+
+- `Q0057`: Weather and hydrology layers are required on Main Map. When prepared
+  layer evidence is unavailable, keep the layer visible and render `NA`.
+- `Q0060-READABILITY`: approved for repair.
+
+Implementation:
+
+- Main Map now projects all five canonical weather/hydrology layer rows:
+  `soil-moisture`, `antecedent-rain`, `cwa-qpf`, `cwa-weather`, and
+  `weather-api`. A non-empty prepared render group is labelled `AVAILABLE` and
+  remains operable. A missing or empty prepared group is labelled `NA` and its
+  checkbox is disabled so an empty enabled layer cannot be mistaken for data.
+- Six Axis Weather retains the detailed CWA product, timeline, opacity,
+  playback, and refresh controls. The Main Map rows are the canonical layer
+  availability surface, not a duplicate imagery-processing implementation.
+- Main Map observes renderer child changes and updates `AVAILABLE` / `NA`
+  without starting preparation or fabricating content.
+- The shared compact-readability rule now uses the same field-theme specificity
+  as the former 8px truth-label override, with an 11px, weight-700 floor for
+  the approved compact labels.
+
+Boundary:
+
+- `NA` means required-but-no-prepared-render-evidence. It is not a zero-value
+  measurement, a successful upstream fetch, or runtime safety truth.
+- The five existing layer IDs and the canonical 32-layer contract are
+  unchanged. No fetch, workspace write, outbound effect, or hardware action is
+  added, and the Weather refresh job remains in place.
+
+Verification:
+
+- Four focused Q0057/Q0060/manifest tests, the Dashboard script parse, the
+  Weather playback/bridge tests, and scoped whitespace validation passed.
+- Real-runtime browser evidence on the existing user-started `:9099` instance
+  kept all five required rows visible as guarded `NA` before prepared render
+  evidence settled, then observed all five as enabled, non-empty `AVAILABLE`
+  rows. Evidence root:
+  `0c5f456043163b58c5f98dbc74a7846dd3fca43728a982cd908119ff738169dd`.
+- Visible in-app browser follow-up confirmed the five settled rows had render
+  child counts `5`, `3`, `3`, `3`, and `6`; no browser or qualification run
+  started or restarted the runtime, and no workspace mutation was observed.
+- The focused Q0060 targets render at `11px` / weight `700` without clipping.
+  A later broad all-control visual heuristic still flagged compact Permission
+  copy for independent review; that candidate is not silently converted to a
+  Q0060 failure or pass by this implementation record.
+
 ### 2026-08-07 - Resolve Qualification questions Q0016-Q0018
 
 User request:

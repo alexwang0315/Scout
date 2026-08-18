@@ -26,6 +26,7 @@
       --bad: #d06363;
       --candidate: #8fb7d7;
       --reviewed: #7fc18b;
+      --dashboard-compact-readable-size: 11px;
       --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -323,7 +324,7 @@
 
     .truth-item span {
       color: var(--subtle);
-      font: 800 9px var(--mono);
+      font: 800 var(--dashboard-compact-readable-size)/1.25 var(--mono);
       letter-spacing: .06em;
       text-transform: uppercase;
     }
@@ -4181,7 +4182,7 @@
     .runtime-audit-health-card > span,
     .runtime-audit-coverage-card > span:first-child {
       color: var(--muted);
-      font: 10px/1.2 var(--mono);
+      font: var(--dashboard-compact-readable-size)/1.2 var(--mono);
       letter-spacing: .06em;
       text-transform: uppercase;
     }
@@ -5243,6 +5244,17 @@
         white-space: normal;
         overflow-wrap: anywhere;
       }
+
+      .living-event,
+      .living-event > *,
+      .living-event > div,
+      .living-event > div > * {
+        /* qualification-living-mobile-long-token-containment */
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
     }
     /* Field Decision Instrument design system.
        Derived from scout-six-axis-weather-design.html and shared by every route. */
@@ -5777,7 +5789,7 @@
       max-width: 134px;
       padding: 3px 6px;
       color: #a8b6a8;
-      font: 800 9px/1.15 var(--mono);
+      font: 800 10px/1.15 var(--mono);
       letter-spacing: .07em;
       white-space: nowrap;
       background: rgba(7, 15, 12, .9);
@@ -5853,12 +5865,12 @@
 
     .architecture-passage-place {
       fill: var(--architecture-lichen);
-      font: 700 9px var(--mono);
+      font: 700 10px var(--mono);
     }
 
     .architecture-passage-stat {
       fill: #9ca996;
-      font: 9px var(--mono);
+      font: 10px var(--mono);
     }
 
     .architecture-passage-mode {
@@ -6057,14 +6069,14 @@
 
     .architecture-map-legend-copy strong {
       color: #dfe4d9;
-      font-size: 9px;
+      font-size: 10px;
       line-height: 1.35;
     }
 
     .architecture-map-legend-copy small {
       margin-top: 2px;
       color: #87978d;
-      font-size: 8px;
+      font-size: 10px;
       line-height: 1.35;
     }
 
@@ -6072,7 +6084,7 @@
       justify-content: flex-start;
       flex-wrap: wrap;
       color: #aeb9af;
-      font-size: 9px;
+      font-size: 10px;
     }
 
     .architecture-map-legend-symbol {
@@ -6119,7 +6131,7 @@
 
     .architecture-map-legend-meta {
       margin-top: 7px;
-      font-size: 8px;
+      font-size: 10px;
     }
 
     .architecture-inspector-body {
@@ -6152,7 +6164,7 @@
       border: 1px solid rgba(240, 174, 59, .35);
       color: #f3c87a;
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       background: rgba(240, 174, 59, .07);
     }
 
@@ -6175,7 +6187,7 @@
       margin-bottom: 5px;
       color: var(--subtle);
       font-family: var(--mono);
-      font-size: 8px;
+      font-size: 10px;
       letter-spacing: .08em;
       text-transform: uppercase;
     }
@@ -6245,7 +6257,7 @@
       color: var(--architecture-ivory);
       text-align: center;
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       background: #10221d;
     }
 
@@ -6300,7 +6312,7 @@
       overflow-wrap: anywhere;
       color: var(--muted);
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       line-height: 1.45;
     }
 
@@ -6309,7 +6321,7 @@
       color: var(--architecture-lichen);
       text-align: right;
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       text-transform: uppercase;
     }
 
@@ -6363,7 +6375,7 @@
     }
 
     .architecture-spine-item strong { display: block; font-size: 13px; }
-    .architecture-spine-item small { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+    .architecture-spine-item small { color: var(--muted); font-family: var(--mono); font-size: 10px; }
     .architecture-spine-score { color: var(--architecture-amber); font-family: var(--mono); font-size: 13px; }
 
     .architecture-empty {
@@ -6768,7 +6780,7 @@
     .navigation-terrain-maplibre-fit {
       position: absolute;
       z-index: 9;
-      top: 110px;
+      top: 138px;
       right: 10px;
       min-width: 32px;
       min-height: 32px;
@@ -8217,7 +8229,7 @@
     .permission-eyebrow {
       display: block;
       color: #7f958a;
-      font: 700 9px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+      font: 700 var(--dashboard-compact-readable-size)/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
       letter-spacing: .12em;
       text-transform: uppercase;
     }
@@ -9532,6 +9544,53 @@
       .emergency-confirm-sheet { width: 100%; max-height: 92vh; }
       .permission-simulation-form { grid-template-columns: 1fr; }
       .permission-simulation-form .permission-button { grid-column: auto; }
+    }
+
+    /* qualification-shared-compact-readability */
+    .field-instrument-theme .truth-item > span,
+    .dashboard-map-controls output,
+    .permission-eyebrow,
+    .permission-proposal-stat span,
+    .permission-day-label,
+    .weather-layer-control small,
+    .weather-layer-control [data-weather-layer-state],
+    .navigation-terrain-review-title small,
+    .navigation-terrain-review-controls small,
+    .navigation-terrain-boundary-chips span,
+    .navigation-terrain-view-switch button,
+    .navigation-terrain-z-switch button,
+    .navigation-terrain-domain-switch button,
+    .navigation-terrain-pane-label,
+    .navigation-terrain-maplibre-fit,
+    .navigation-terrain-maplibre-shell .maplibregl-ctrl-attrib,
+    .navigation-terrain-mesh-status,
+    .navigation-terrain-inspector-head small,
+    .navigation-terrain-support-meter small,
+    .navigation-terrain-audit-badges span,
+    .navigation-review-selected small,
+    .navigation-review-selected span,
+    .navigation-review-actions button,
+    .navigation-review-boundary,
+    .navigation-structure-point text,
+    .navigation-terrain-event text,
+    .navigation-workspace-scale,
+    .navigation-feature-gap small,
+    .navigation-feature-gap em,
+    .navigation-event-card b,
+    .navigation-event-card small,
+    .navigation-event-card em,
+    .navigation-evidence-metric small,
+    .navigation-evidence-row small,
+    .navigation-evidence-row em,
+    .navigation-topology-chain span,
+    .navigation-live-metric small,
+    .navigation-detail-step small,
+    .navigation-reading-item em,
+    .runtime-log-index-button small,
+    .runtime-audit-health-card small,
+    .runtime-audit-coverage-card small {
+      font-size: var(--dashboard-compact-readable-size);
+      font-weight: 700;
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -16016,6 +16075,9 @@
         Boolean(agentShell?.matches('[data-agent-query-path="/assistant/query"]') || agentShell?.querySelector('[data-agent-query-path="/assistant/query"]')),
         "Assistant query shell is missing.",
       );
+      if (readiness.level === "not_checked") {
+        return diagnosticWarning(`${readiness.label} · workflow and read-only boundaries verified; bounded connection probe not run`);
+      }
       diagnosticRequire(readiness.level === "ready", `Assistant is not ready: ${readiness.label}.`);
       return `${readiness.label} · read-only boundaries verified`;
     }
@@ -19738,6 +19800,9 @@
             data-dashboard-map-surface="navigation-map"
             data-dashboard-basemap-layer="${evidenceDomain === "observed" ? "rudy-twmap" : "none"}"
             data-dashboard-basemap-policy="rudy-twmap-only"
+            data-dashboard-map-hint-title="${escapeHtml(isTerrain ? "Navigation 3D terrain evidence" : "Navigation 2D terrain evidence")}"
+            data-dashboard-map-hint-summary="${escapeHtml(stateText)}"
+            data-dashboard-map-hint-source="${escapeHtml(sourceLabel)}"
             tabindex="0"
             role="application"
             aria-label="${isTerrain ? "Interactive MapLibre 3D terrain review map" : "Interactive MapLibre 2D terrain evidence map"}"
@@ -22942,6 +23007,11 @@
       const hint = dashboardMapHintNode();
       const title = String(target?.dataset?.dashboardMapHintTitle || "").trim();
       if (!hint || !title) return;
+      const previousTarget = hint.__dashboardMapHintTarget;
+      if (previousTarget && previousTarget !== target
+          && previousTarget.getAttribute?.("aria-describedby") === hint.id) {
+        previousTarget.removeAttribute("aria-describedby");
+      }
       const summary = String(target.dataset.dashboardMapHintSummary || "").trim();
       const titleNode = hint.querySelector("strong");
       const summaryNode = hint.querySelector("span");
@@ -22952,6 +23022,7 @@
       }
       hint.hidden = false;
       hint.dataset.hintSource = target.dataset.dashboardMapHintSource || "evidence";
+      hint.__dashboardMapHintTarget = target;
       target.setAttribute("aria-describedby", hint.id);
       positionDashboardMapHint(event, target);
     }
@@ -22959,25 +23030,54 @@
     function hideDashboardMapHint(target = null) {
       const hint = dashboardMapHintNode();
       if (!hint) return;
+      const describedTarget = target || hint.__dashboardMapHintTarget;
       hint.hidden = true;
       hint.removeAttribute("data-hint-source");
-      if (target?.getAttribute("aria-describedby") === hint.id) {
-        target.removeAttribute("aria-describedby");
+      hint.__dashboardMapHintTarget = null;
+      if (describedTarget?.getAttribute?.("aria-describedby") === hint.id) {
+        describedTarget.removeAttribute("aria-describedby");
       }
     }
 
     function bindDashboardMapHints(root = document) {
-      root.querySelectorAll("[data-dashboard-map-hint-title]").forEach(target => {
-        if (target.dataset.dashboardMapHintBound === "true") return;
-        target.dataset.dashboardMapHintBound = "true";
-        target.addEventListener("pointerenter", event => showDashboardMapHint(event, target));
-        target.addEventListener("pointermove", event => positionDashboardMapHint(event, target));
-        target.addEventListener("pointerleave", () => hideDashboardMapHint(target));
-        target.addEventListener("focus", event => showDashboardMapHint(event, target));
-        target.addEventListener("blur", () => hideDashboardMapHint(target));
-        target.addEventListener("keydown", event => {
-          if (event.key === "Escape") hideDashboardMapHint(target);
-        });
+      root = root?.nodeType === Node.DOCUMENT_NODE
+        ? root
+        : (root?.ownerDocument || document);
+      const bindingMarker = root.documentElement;
+      if (bindingMarker.dataset.dashboardMapHintDelegatedBound === "true") return;
+      bindingMarker.dataset.dashboardMapHintDelegatedBound = "true";
+      const eventTarget = event => (
+        event.target instanceof Element
+          ? event.target.closest("[data-dashboard-map-hint-title]")
+          : null
+      );
+      root.addEventListener("pointerover", event => {
+        const target = eventTarget(event);
+        if (!target || target.contains(event.relatedTarget)) return;
+        showDashboardMapHint(event, target);
+      });
+      root.addEventListener("pointermove", event => {
+        const target = eventTarget(event);
+        if (target) positionDashboardMapHint(event, target);
+      });
+      root.addEventListener("pointerout", event => {
+        const target = eventTarget(event);
+        if (!target || target.contains(event.relatedTarget)) return;
+        hideDashboardMapHint(target);
+      });
+      root.addEventListener("focusin", event => {
+        const target = eventTarget(event);
+        if (target) showDashboardMapHint(event, target);
+      });
+      root.addEventListener("focusout", event => {
+        const target = eventTarget(event);
+        if (!target || target.contains(event.relatedTarget)) return;
+        hideDashboardMapHint(target);
+      });
+      root.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+        const target = eventTarget(event);
+        hideDashboardMapHint(target);
       });
     }
 
@@ -25879,30 +25979,6 @@
       });
     }
 
-    function excludeWeatherLayersFromMapFrame(frame) {
-      let doc;
-      try {
-        doc = frame?.contentDocument;
-      } catch (_error) {
-        return;
-      }
-      if (!doc) return;
-      WEATHER_LAYER_IDS.forEach(layerId => {
-        const input = embeddedPretripLayerInput(frame, layerId);
-        if (!input) return;
-        input.disabled = true;
-        input.closest("label")?.setAttribute("data-dashboard-weather-layer-hidden", "true");
-        setEmbeddedPretripLayerEnabled(frame, layerId, false);
-      });
-      if (frame.dashboardMapWeatherBoundaryDocument === doc) return;
-      frame.dashboardMapWeatherBoundaryDocument = doc;
-      doc.querySelectorAll("[data-layer-preset]").forEach(button => {
-        button.addEventListener("click", () => {
-          window.setTimeout(() => excludeWeatherLayersFromMapFrame(frame), 0);
-        });
-      });
-    }
-
     function weatherCwaMapController(frame = document.querySelector('[data-weather-cwa-map-frame="true"]')) {
       try {
         return frame?.contentWindow?.scoutCwaImageryController || null;
@@ -26033,6 +26109,66 @@
       }
     }
 
+    function bindWeatherCwaEvidenceHints(frame) {
+      let doc;
+      try {
+        doc = frame?.contentDocument;
+      } catch (_error) {
+        return false;
+      }
+      if (!doc?.documentElement || frame.weatherCwaHintDocument === doc) return Boolean(doc);
+      const map = doc.querySelector("#map");
+      const hint = doc.querySelector("#hoverHint");
+      if (!map || !hint) return false;
+
+      const evidenceTarget = value => value?.closest?.("[data-evidence-type]") || null;
+      const move = (event, target) => {
+        const rect = target?.getBoundingClientRect?.();
+        const clientX = Number.isFinite(event?.clientX) ? event.clientX : (rect?.left || 0);
+        const clientY = Number.isFinite(event?.clientY) ? event.clientY : (rect?.top || 0);
+        hint.style.left = `${Math.max(8, Math.min(clientX, (doc.defaultView?.innerWidth || 360) - 340))}px`;
+        hint.style.top = `${Math.max(8, Math.min(clientY, (doc.defaultView?.innerHeight || 240) - 120))}px`;
+      };
+      const reveal = event => {
+        const target = evidenceTarget(event.target);
+        if (!target || !map.contains(target)) return;
+        target.setAttribute("aria-describedby", "hoverHint");
+        if (hint.classList.contains("is-hidden")) {
+          const title = target.getAttribute("aria-label")
+            || target.querySelector?.("title")?.textContent
+            || target.dataset.evidenceType
+            || "Weather map evidence";
+          const source = target.dataset.sourceId
+            || target.dataset.mapKind
+            || "canonical pre-trip evidence";
+          const strong = doc.createElement("strong");
+          const summary = doc.createElement("span");
+          strong.textContent = String(title).replaceAll("_", " ");
+          summary.textContent = `Source: ${source}`;
+          hint.replaceChildren(strong, summary);
+          hint.classList.remove("is-hidden");
+        }
+        move(event, target);
+      };
+      const conceal = event => {
+        const from = evidenceTarget(event.target);
+        const to = evidenceTarget(event.relatedTarget);
+        if (from && from !== to) hint.classList.add("is-hidden");
+      };
+      doc.querySelectorAll("[data-evidence-type]").forEach(target => {
+        if (!target.hasAttribute("aria-describedby")) {
+          target.setAttribute("aria-describedby", "hoverHint");
+        }
+      });
+      doc.addEventListener("pointerover", reveal, true);
+      doc.addEventListener("pointermove", reveal, true);
+      doc.addEventListener("pointerout", conceal, true);
+      doc.addEventListener("focusin", reveal, true);
+      doc.addEventListener("focusout", conceal, true);
+      frame.weatherCwaHintDocument = doc;
+      return true;
+    }
+
     function applyWeatherCwaMapFrame(frame, attempt = 0) {
       if (!frame?.isConnected || state.route !== "outdoor-weather") return;
       try {
@@ -26072,6 +26208,7 @@
           #hoverHint.is-hidden { display:none !important; }
         `;
         doc.querySelector("#map")?.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape");
+        bindWeatherCwaEvidenceHints(frame);
         const childWindow = frame.contentWindow;
         if (childWindow && frame.weatherCwaBridgeWindow !== childWindow) {
           if (frame.weatherCwaBridgeWindow && frame.weatherCwaBridgeHandler) {
@@ -28378,8 +28515,23 @@
             .filters input[type="checkbox"] {
               accent-color: #4cc7df !important;
             }
-            label[data-dashboard-weather-layer-hidden="true"] {
-              display: none !important;
+            label[data-dashboard-weather-layer-required="true"] {
+              display: flex !important;
+              align-items: center !important;
+              gap: 6px !important;
+            }
+            [data-dashboard-weather-layer-state="true"] {
+              margin-left: auto !important;
+              border: 1px solid rgba(245, 182, 47, .55) !important;
+              border-radius: 999px !important;
+              padding: 1px 5px !important;
+              color: #ffd36a !important;
+              font: 800 10px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace !important;
+              letter-spacing: .04em !important;
+            }
+            label[data-dashboard-weather-layer-availability="AVAILABLE"] [data-dashboard-weather-layer-state="true"] {
+              border-color: rgba(83, 207, 139, .55) !important;
+              color: #7ee2aa !important;
             }
             .tool-button,
             .zoom-level,
@@ -28476,7 +28628,7 @@
         doc.querySelector(".layer-menu")?.setAttribute("open", "");
         doc.querySelector(".layer-advanced")?.setAttribute("open", "");
         doc.documentElement.dataset.dashboardMapOnly = "true";
-        excludeWeatherLayersFromMapFrame(frame);
+        projectRequiredWeatherLayersInMapFrame(frame);
         const bridgeReady = adoptPretripMapProjectBridge(frame);
         const hasRenderedMap = Boolean(doc.querySelector("#map[viewBox] [data-layer-group]"));
         if (hasRenderedMap) {
@@ -28505,6 +28657,64 @@
         frame.dataset.mapOnlyReady = "blocked";
         updateDashboardMapLoading("blocked", `The embedded map could not be inspected: ${error.message || error}`);
       }
+    }
+
+    function projectRequiredWeatherLayersInMapFrame(frame) {
+      let doc;
+      try {
+        doc = frame?.contentDocument;
+      } catch (_error) {
+        return;
+      }
+      if (!doc?.documentElement) return;
+      const syncRequiredLayers = () => {
+        WEATHER_LAYER_IDS.forEach(layerId => {
+          const input = embeddedPretripLayerInput(frame, layerId);
+          const label = input?.closest("label") || null;
+          if (!input || !label) return;
+          const group = doc.querySelector(`[data-layer-group="${cssEscape(layerId)}"]`);
+          const available = Boolean(group && group.childElementCount > 0);
+          const availability = available ? "AVAILABLE" : "NA";
+          const availabilityReason = available
+            ? "prepared_layer_evidence"
+            : "no_prepared_layer_evidence";
+          label.removeAttribute("data-dashboard-weather-layer-hidden");
+          label.setAttribute("data-dashboard-weather-layer-required", "true");
+          label.setAttribute("data-dashboard-weather-layer-availability", availability);
+          label.setAttribute("data-dashboard-weather-layer-availability-reason", availabilityReason);
+          input.disabled = !available;
+          if (!available && input.checked) setEmbeddedPretripLayerEnabled(frame, layerId, false);
+          let status = label.querySelector('[data-dashboard-weather-layer-state="true"]');
+          if (!status) {
+            status = doc.createElement("small");
+            status.setAttribute("data-dashboard-weather-layer-state", "true");
+            label.appendChild(status);
+          }
+          status.textContent = "NA";
+          if (available) status.textContent = "AVAILABLE";
+          status.setAttribute(
+            "aria-label",
+            available ? "Prepared layer evidence available" : "Layer required; prepared evidence not available",
+          );
+        });
+      };
+      syncRequiredLayers();
+      if (frame.dashboardMapWeatherRequirementDocument === doc) return;
+      frame.dashboardMapWeatherRequirementDocument = doc;
+      frame.dashboardMapWeatherAvailabilityObserver?.disconnect?.();
+      const map = doc.querySelector("#map");
+      if (map) {
+        frame.dashboardMapWeatherAvailabilityObserver = new MutationObserver(() => {
+          window.setTimeout(syncRequiredLayers, 0);
+        });
+        frame.dashboardMapWeatherAvailabilityObserver.observe(map, {
+          childList: true,
+          subtree: true,
+        });
+      }
+      doc.querySelectorAll("[data-layer-preset]").forEach(button => {
+        button.addEventListener("click", () => window.setTimeout(syncRequiredLayers, 0));
+      });
     }
 
     function projectCounts() {
