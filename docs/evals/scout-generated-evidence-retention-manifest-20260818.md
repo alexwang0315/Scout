@@ -23,13 +23,13 @@ separate, exact-path allowlist approved by the user.
 | `QUARANTINED_RAW` | Supporting captures or intermediate runs | Keep until canonical evidence is sealed, then present an exact cleanup allowlist |
 | `REGENERABLE` | Mutable local Dashboard or editor state | Ignore now; eligible for later approved cleanup |
 | `EVIDENCE_GAP` | A committed document refers to evidence not present in this checkout | Locate or correct the reference before claiming complete preservation |
-| `REMOTE_UNVERIFIED` | A historical execution receipt identifies a remote artifact, but its current storage state and checksum cannot be verified | Keep the reference open until the remote host is reachable and inspected read-only |
+| `REMOTE_VERIFIED` | A remote artifact was inspected read-only and has a recorded directory checksum, but has not been copied to the approved archive | Preserve the remote source until an archived copy passes checksum verification |
 
 ## Sealed retention candidates
 
-Directory digests below are SHA-256 hashes of the concatenated per-file
-`shasum -a 256` lines with paths sorted bytewise. Sizes are allocated KiB at
-inventory time.
+Directory digests below are SHA-256 hashes of concatenated per-file SHA-256
+lines in `hash  ./relative/path` format with paths sorted bytewise. Sizes are
+allocated KiB at inventory or remote-verification time.
 
 | Class | Path | Files | KiB | Directory SHA-256 | Reason |
 |---|---|---:|---:|---|---|
@@ -41,6 +41,8 @@ inventory time.
 | `BASELINE_ARCHIVE` | `outputs/evals/six_forces_600_total_info_v230-qwen3-full1000-20260816T0140Z` | 11 | 97,084 | `4807c6c01cf2fc8d37c967b5eaf9b69827b9ac30da77c653cd8dfd180889110d` | Full 1,000-run Pydantic AI 2.30 baseline |
 | `BASELINE_ARCHIVE` | `outputs/evals/six_forces_600_total_info_v230-qwen3-targeted100-full210-20260816T230052Z` | 10 | 24,904 | `0477b1855ce123de0b0bd2dd0036228acad31d70a4e3fbcb820b45b54f63c343` | Targeted 100-question full-run baseline cited by the committed evaluation summary |
 | `BASELINE_ARCHIVE` | `outputs/evals/six_forces_600_total_info_v230-qwen3-targeted100-repair2-failures-20260817T010444Z` | 10 | 3,952 | `4054872a6b1cab4e692494bc08a2c4037dc77c36d414a790d7bccaab3f9e366d` | Targeted repair evidence cited by the committed evaluation summary |
+| `REMOTE_VERIFIED` | `scout.local:/home/alexwang0315/scout-v214-six-forces-20260723T073059Z/workspace/outputs/evals/six_forces_600_total_info_v230-qwen3-targeted100-final-repair-20260817T015113Z` | 10 | 4,036 | `7681ef9acf68bd7dbcac6f72a7d3fee0cf01a2cda5a91e9c310283dfab1290f7` | Final compatibility repair package; 28 completed runs, 27 verifier passes and 1 verifier failure |
+| `REMOTE_VERIFIED` | `scout.local:/home/alexwang0315/scout-v214-six-forces-20260723T073059Z/workspace/outputs/evals/six_forces_600_total_info_v230-qwen3-targeted100-benign-guard-20260817T0205Z` | 10 | 400 | `b83bc17d7ef2e655c104d37457de9b6f1e4e958c431d69482f9b3b54cd0fdcea` | Focused benign guard package; 3 completed runs and 3 verifier passes |
 
 The two manual bundles attest Dashboard commit
 `446a6eb3182d5adbc683f6c87b88b9332438f80a`; they are historical evidence and
@@ -56,7 +58,7 @@ must not be presented as browser qualification of the inventory HEAD above.
 | `REGENERABLE` | `outputs/dashboard/` | 89 | 1,120 | Mutable Body Index and living-runtime state; eligible for a later exact-path cleanup approval |
 | `REGENERABLE` | `outputs/.obsidian/` | 4 | 24 | Local editor metadata; eligible for a later exact-path cleanup approval |
 
-## Remote artifacts awaiting verification
+## Remote artifacts verified on Pi
 
 `docs/evals/scout-ai-targeted-answer-quality-100-aihat2-20260817.md` cites the
 following directories. Neither exists in this checkout at inventory time:
@@ -73,22 +75,28 @@ under this remote root:
 - The benign-guard run reported completion at `2026-08-17T02:12:10Z`.
 - Only selected result, summary, and health files were copied temporarily to the
   Mac for review; those `/tmp` copies are no longer present.
-- On 2026-08-18, SSH to `scout.local:22` timed out and the current artifact
-  directories could not be listed or hashed.
+- An initial 2026-08-18 SSH check timed out while the Pi was unreachable.
+- At `2026-08-18T16:20:33+08:00`, `scout.local` resolved to `192.168.8.230` and
+  key-authenticated read-only inspection succeeded.
+- Both directories contained ten files. Their sizes and directory checksums are
+  recorded in the sealed-retention table above.
+- Both run manifests retain `candidate_only=true` and
+  `runtime_safety_truth=false`.
+- No evidence file on either host was created, copied, changed, or deleted
+  during verification.
 
-Class: `REMOTE_UNVERIFIED`, not confirmed lost. When the Pi is reachable, inspect
-both directories read-only, calculate directory checksums, and select an
-approved archive destination before copying or deleting anything. Until then,
-the committed evaluation summary describes a historically completed run, not a
-locally reproducible evidence package.
+Class: `REMOTE_VERIFIED`. The evidence is present and hashed on the Pi, but the
+Mac still has no complete archived copy. Preserve the Pi source until an
+approved archive destination receives both directories and reproduces the
+recorded checksums.
 
 ## Next gate
 
-1. Restore read-only connectivity to `scout.local` and verify the two remote
-   evaluation directories.
-2. Independently review the two active manual bundles.
-3. Decide an external archive destination for raw screenshots, videos, and
-   evaluation traces.
+1. Decide an external archive destination for the two verified Pi evaluation
+   directories, screenshots, videos, traces, and other raw evidence.
+2. Copy the two directories without changing the Pi source, then recompute and
+   compare their checksums.
+3. Independently review the two active manual bundles.
 4. Copy only bounded canonical reports and summaries into `docs/evals/`.
 5. Verify copied or archived checksums against this manifest.
 6. Produce an exact retain/archive/delete allowlist for human approval.
