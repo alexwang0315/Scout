@@ -131,6 +131,11 @@
             "enum": [
               "UNMAPPED",
               "MISSING_AFTER_RELOAD",
+              "DISABLED_IN_RUNTIME_STATE",
+              "DISAPPEARED_BEFORE_OPERATION",
+              "NONVISIBLE_AFTER_DISCOVERY",
+              "SINGLE_RUNTIME_VALUE",
+              "ROUTE_ABORTED_AFTER_OPERATION_ERROR",
               "NOT_EXERCISED",
               "NO_STATE_CHANGE",
               "NO_VISUAL_CHANGE",

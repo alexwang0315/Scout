@@ -16,6 +16,13 @@ PROJECT_ID = "permission_api_fixture"
 NOW = datetime(2026, 8, 2, 6, 0, tzinfo=timezone.utc)
 
 
+def _isolated_runtime_audit_root(
+    tmp_path: Path,
+    instance: str = "primary",
+) -> Path:
+    return tmp_path / "runtime_audit" / instance
+
+
 def _explicit_day_end_inputs() -> list[dict[str, str]]:
     return [
         {
@@ -201,6 +208,7 @@ def _client(
         pretrip_workspace_root=workspace_root,
         contextual_permission_store_root=store_root,
         now_factory=lambda: NOW,
+        runtime_audit_root=_isolated_runtime_audit_root(tmp_path),
     )
     return TestClient(app), store_root
 
@@ -584,6 +592,10 @@ def test_missing_seed_is_bounded_blocked_projection_not_server_error(
         create_admin_app(
             pretrip_workspace_root=workspace_root,
             contextual_permission_store_root=tmp_path / "store",
+            runtime_audit_root=_isolated_runtime_audit_root(
+                tmp_path,
+                "missing-seed",
+            ),
         )
     )
 
@@ -598,8 +610,16 @@ def test_missing_seed_is_bounded_blocked_projection_not_server_error(
     assert response.json()["runtime_safety_truth"] is False
 
 
-def test_bundled_fixture_has_deterministic_reference_replay() -> None:
-    client = TestClient(create_admin_app(now_factory=lambda: NOW))
+def test_bundled_fixture_has_deterministic_reference_replay(tmp_path: Path) -> None:
+    client = TestClient(
+        create_admin_app(
+            now_factory=lambda: NOW,
+            runtime_audit_root=_isolated_runtime_audit_root(
+                tmp_path,
+                "bundled-fixture",
+            ),
+        )
+    )
 
     response = client.get(
         "/admin/pretrip/projects/chilai_nanhua_day1/contextual-permission-dashboard?lens=replay"

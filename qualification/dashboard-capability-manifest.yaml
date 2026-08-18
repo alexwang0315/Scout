@@ -24,9 +24,10 @@ surfaces:
           - Diagnostic appears immediately after Settings.
           - Diag all and every individual Retest control expose running, passed, warning, and failed states.
           - A typed expected zero Evidence state renders a yellow warning while an unexplained zero remains failed.
+          - startup_connection_status=not_checked renders yellow while workflow readiness remains a separate fact; red is reserved for an explicit bounded connection-probe failure.
         forbidden_behavior:
           - One failed case must not suppress the terminal result of another case.
-        required_tests: [desktop_controls, mobile_no_overflow, isolated_case_continuation, typed_zero_warning]
+        required_tests: [desktop_controls, mobile_no_overflow, isolated_case_continuation, typed_zero_warning, assistant_not_checked_warning]
         required_evidence: [ui, trace, video]
         authority_boundary: {source: browser, runtime_authority: false}
       - id: dashboard.diagnostic.read_only
@@ -96,6 +97,20 @@ surfaces:
         required_tests: [canonical_layer_toggle_census, weather_layer_toggle_census, enabled_layer_render_integrity]
         required_evidence: [ui, network, layer_interactions, screenshots, trace, video]
         authority_boundary: {source: browser, runtime_authority: false}
+      - id: dashboard.layers.weather_hydrology_required_na
+        criticality: P1
+        status: operational
+        owner: maps
+        expected_behavior:
+          - Main Map visibly lists soil-moisture, antecedent-rain, cwa-qpf, cwa-weather, and weather-api as required weather or hydrology layers.
+          - A layer with prepared render content is operable and labelled AVAILABLE; a layer without prepared render content remains visible, is guarded from empty activation, and is labelled NA.
+          - Six Axis Weather retains the detailed product, time-window, opacity, playback, and refresh controls for those canonical layers.
+        forbidden_behavior:
+          - A required weather or hydrology layer must not be hidden, omitted, reported as available without render content, or rendered as an enabled empty group.
+          - NA must not fabricate evidence, start preparation, stop the Weather refresh job, or change runtime safety truth.
+        required_tests: [main_map_required_weather_layer_visibility, unavailable_layer_na_guard, available_layer_render_integrity]
+        required_evidence: [ui, layer_interactions, screenshots, trace]
+        authority_boundary: {source: browser, runtime_authority: false}
   - id: outdoor-navigation
     route: /admin/dashboard#outdoor-navigation
     capabilities:
@@ -137,6 +152,34 @@ surfaces:
           - A cache-only GET must not start preparation, return an untyped 404, or fabricate rainfall cells.
         required_tests: [optional_overlay_absent_api, optional_overlay_empty_ui]
         required_evidence: [ui, network, server_state, trace]
+        authority_boundary: {source: server, runtime_authority: false}
+  - id: outdoor-route-context
+    route: /admin/dashboard#outdoor-route-context
+    capabilities:
+      - id: dashboard.route_context.regeneration_api
+        criticality: P2
+        status: not_implemented
+        owner: route-context
+        expected_behavior:
+          - Route Context regeneration remains explicitly deferred while the canonical briefing is available as a read-only surface.
+        forbidden_behavior:
+          - A missing regeneration API must not be reported as an operational capability, a passing qualification result, or permission to generate new workspace artifacts.
+        required_tests: [expected_not_implemented_boundary]
+        required_evidence: [ui, network]
+        authority_boundary: {source: server, runtime_authority: false}
+  - id: debug-hardware-readiness
+    route: /admin/dashboard#debug
+    capabilities:
+      - id: dashboard.debug.hardware_readiness
+        criticality: P2
+        status: not_implemented
+        owner: debug
+        expected_behavior:
+          - Hardware-readiness metadata remains explicitly deferred and excluded from operational qualification until its API and presentation are implemented.
+        forbidden_behavior:
+          - A missing hardware-readiness API must not be reported as an operational capability, a passing qualification result, or permission for a hardware effect.
+        required_tests: [expected_not_implemented_boundary]
+        required_evidence: [ui, network]
         authority_boundary: {source: server, runtime_authority: false}
   - id: contextual-permission
     route: /admin/dashboard#outdoor-permission

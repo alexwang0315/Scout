@@ -71,7 +71,7 @@
     "disabled_controls_require_executable_state": true,
     "delegated_controls_require_passing_specialist_case": true,
     "allowed_terminal_states": ["OPERATED", "DELEGATED", "GUARD_VERIFIED"],
-    "blocking_terminal_states": ["UNMAPPED", "MISSING_AFTER_RELOAD", "NOT_EXERCISED", "NO_STATE_CHANGE", "NO_VISUAL_CHANGE", "EFFECT_AUTHORIZATION_REQUIRED"],
+    "blocking_terminal_states": ["UNMAPPED", "MISSING_AFTER_RELOAD", "DISABLED_IN_RUNTIME_STATE", "DISAPPEARED_BEFORE_OPERATION", "NONVISIBLE_AFTER_DISCOVERY", "SINGLE_RUNTIME_VALUE", "ROUTE_ABORTED_AFTER_OPERATION_ERROR", "NOT_EXERCISED", "NO_STATE_CHANGE", "NO_VISUAL_CHANGE", "EFFECT_AUTHORIZATION_REQUIRED"],
     "mutation_actions_require_explicit_authorization": true,
     "browser_local_state_is_not_server_persistence_evidence": true
   },

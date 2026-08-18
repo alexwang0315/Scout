@@ -20,7 +20,12 @@ process.env.NODE_PATH = [process.env.NODE_PATH, bundledNodeModules]
   .join(path.delimiter);
 Module._initPaths();
 
-const { chromium } = require("playwright");
+let chromium = null;
+
+function chromiumLauncher() {
+  if (!chromium) chromium = require("playwright").chromium;
+  return chromium;
+}
 
 const fixtureHarness = process.argv.includes("--fixture-harness");
 const runtimeUrlArgument = process.argv.find(argument => argument.startsWith("--runtime-url="));
@@ -60,28 +65,77 @@ const browserActionContractPath = path.join(
 const CONTROL_OPERATION_TIMEOUT_MS = 90_000;
 const CONTROL_DISCOVERY_TIMEOUT_MS = 90_000;
 const CONTROL_ROUTE_TIMEOUT_MS = 10 * 60_000;
+const CASE_EXECUTION_TIMEOUT_MS = 30 * 60_000;
 const CASE_FINALIZATION_TIMEOUT_MS = 90_000;
+const ROUTE_TRACE_FINALIZATION_TIMEOUT_MS = 30_000;
+const ROUTE_FRAME_VISIBILITY_TIMEOUT_MS = 5_000;
+const CASE_FAILURE_SCREENSHOT_TIMEOUT_MS = 15_000;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function runCaseFinalizerWithTimeout(label, operation) {
+async function runCaseFinalizerWithTimeout(
+  label,
+  operation,
+  timeoutMs = CASE_FINALIZATION_TIMEOUT_MS,
+) {
   let timeoutHandle;
   const timeout = new Promise((_, reject) => {
     timeoutHandle = setTimeout(() => {
       const error = new Error(
-        `${label} exceeded ${CASE_FINALIZATION_TIMEOUT_MS}ms while closing browser evidence.`,
+        `${label} exceeded ${timeoutMs}ms while closing browser evidence.`,
       );
       error.code = "CASE_FINALIZATION_TIMEOUT";
+      error.timeoutMs = timeoutMs;
       reject(error);
-    }, CASE_FINALIZATION_TIMEOUT_MS);
+    }, timeoutMs);
   });
   try {
     return await Promise.race([Promise.resolve().then(operation), timeout]);
   } finally {
     clearTimeout(timeoutHandle);
   }
+}
+
+async function runCaseExecutionWithTimeout(definition, operation) {
+  const caseId = String(definition?.id || "unknown-case");
+  const configuredTimeout = Number(definition?.executionTimeoutMs);
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : CASE_EXECUTION_TIMEOUT_MS;
+  let timeoutHandle;
+  const timeout = new Promise((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      const error = new Error(
+        `${caseId} exceeded ${timeoutMs}ms while executing its browser case body.`,
+      );
+      error.code = "CASE_EXECUTION_TIMEOUT";
+      error.caseId = caseId;
+      error.timeoutMs = timeoutMs;
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([Promise.resolve().then(operation), timeout]);
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
+function appendCaseProgress(observations, event, detail = {}) {
+  const record = {
+    schema: "scout.dashboardQualificationCaseProgress.v1",
+    observed_at: new Date().toISOString(),
+    case_id: observations.caseId,
+    event,
+    ...detail,
+  };
+  fs.appendFileSync(
+    path.join(observations.caseDirectory, "case-progress.jsonl"),
+    `${JSON.stringify(record)}\n`,
+  );
+  return record;
 }
 
 function sha256(value) {
@@ -350,14 +404,52 @@ async function analyzeScreenshotPixels(page, imageBuffer) {
 async function collectDomVisualMetrics(rootLocator) {
   const quality = browserActionContract.visual_quality;
   return rootLocator.evaluate((root, thresholds) => {
+    const analysisStartedAt = performance.now();
     const visible = element => {
+      if (element.closest("[hidden], [aria-hidden='true']")) return false;
+      const closedDetails = element.closest("details:not([open])");
+      if (closedDetails) {
+        const summary = closedDetails.querySelector(":scope > summary");
+        if (!summary || (element !== summary && !summary.contains(element))) return false;
+      }
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
       return style.display !== "none"
         && style.visibility !== "hidden"
         && Number(style.opacity || 1) > 0
+        && element.getClientRects().length > 0
         && rect.width > 0
         && rect.height > 0;
+    };
+    const centerInsideClippingAncestors = element => {
+      const rect = element.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      let current = element.parentElement;
+      while (current) {
+        const style = getComputedStyle(current);
+        const clipsX = ["auto", "scroll", "hidden", "clip"].includes(style.overflowX);
+        const clipsY = ["auto", "scroll", "hidden", "clip"].includes(style.overflowY);
+        if (clipsX || clipsY) {
+          const ancestorRect = current.getBoundingClientRect();
+          if (clipsX && (centerX < ancestorRect.left || centerX > ancestorRect.right)) return false;
+          if (clipsY && (centerY < ancestorRect.top || centerY > ancestorRect.bottom)) return false;
+        }
+        if (current === root) break;
+        current = current.parentElement;
+      }
+      return true;
+    };
+    const visibleInViewport = element => {
+      if (!visible(element)) return false;
+      const rect = element.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      return centerX >= 0
+        && centerX <= innerWidth
+        && centerY >= 0
+        && centerY <= innerHeight
+        && centerInsideClippingAncestors(element);
     };
     const describe = element => {
       const dataKey = Object.keys(element.dataset || {}).sort()[0];
@@ -368,18 +460,30 @@ async function collectDomVisualMetrics(rootLocator) {
         .slice(0, 100);
       return `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}${dataValue ? `[${dataValue}]` : ""}${text ? `:${text}` : ""}`;
     };
-    const all = [...root.querySelectorAll("*")].filter(visible);
+    const all = [...root.querySelectorAll("*")].filter(visibleInViewport);
     const textElements = all.filter(element => {
       if (element instanceof SVGElement && element.tagName.toLowerCase() !== "text") return false;
       return [...element.childNodes].some(child => (
         child.nodeType === Node.TEXT_NODE && String(child.textContent || "").trim()
       ));
     });
-    const activeModal = [...root.querySelectorAll('[role="dialog"][aria-modal="true"]')].find(visible);
+    const activeModal = [...root.querySelectorAll('[role="dialog"][aria-modal="true"]')].find(visibleInViewport);
     const interactionRoot = activeModal || root;
+    const insideStickyLayer = element => {
+      let current = element;
+      while (current && current !== root.parentElement) {
+        const position = getComputedStyle(current).position;
+        if (["sticky", "fixed"].includes(position)) return current;
+        current = current.parentElement;
+      }
+      return null;
+    };
+    const isMapInteractionSurface = element => element.matches(
+      "svg#map, [data-dashboard-map-viewport], [data-dashboard-basemap-layer], .maplibregl-map, .maplibregl-canvas",
+    );
     const interactive = [...interactionRoot.querySelectorAll(
       "button, a[href], input, select, textarea, summary, [role=button], [role=tab], [tabindex]:not([tabindex='-1'])",
-    )].filter(element => visible(element) && !element.disabled && element.getAttribute("aria-disabled") !== "true");
+    )].filter(element => visibleInViewport(element) && !element.disabled && element.getAttribute("aria-disabled") !== "true");
     const blurredElements = all
       .filter(element => {
         const style = getComputedStyle(element);
@@ -390,10 +494,10 @@ async function collectDomVisualMetrics(rootLocator) {
       .filter(element => /blur\(\s*(?!0(?:px)?\s*\))[^)]+\)/i.test(getComputedStyle(element).backdropFilter || ""))
       .map(describe);
     const brokenImages = [...root.querySelectorAll("img")]
-      .filter(element => visible(element) && element.complete && element.naturalWidth === 0)
+      .filter(element => visibleInViewport(element) && element.complete && element.naturalWidth === 0)
       .map(describe);
     const lowResolutionRasters = [...root.querySelectorAll("img, canvas")]
-      .filter(visible)
+      .filter(visibleInViewport)
       .flatMap(element => {
         const rect = element.getBoundingClientRect();
         const sourceWidth = element instanceof HTMLCanvasElement ? element.width : element.naturalWidth;
@@ -421,11 +525,20 @@ async function collectDomVisualMetrics(rootLocator) {
         if (element.classList.contains("sr-only")) return false;
         if (element.closest("[disabled], [aria-disabled='true']")) return false;
         const style = getComputedStyle(element);
-        return Number.parseFloat(style.fontSize) < Number(thresholds.minimum_readable_font_px)
+        const effectiveTextPixelSize = element instanceof SVGElement
+          && element.tagName.toLowerCase() === "text"
+          ? Math.max(Number.parseFloat(style.fontSize), element.getBoundingClientRect().height)
+          : Number.parseFloat(style.fontSize);
+        return effectiveTextPixelSize < Number(thresholds.minimum_readable_font_px)
           || Number(style.opacity || 1) < .55;
       })
       .map(describe);
-    const rectangularControls = interactive.filter(element => !(element instanceof SVGElement));
+    const viewportInteractive = interactive;
+    const rectangularControls = viewportInteractive.filter(element => (
+      !(element instanceof SVGElement)
+      && !(element instanceof HTMLCanvasElement)
+      && !isMapInteractionSurface(element)
+    ));
     const occludedControls = rectangularControls.flatMap(element => {
       const rect = element.getBoundingClientRect();
       const x = Math.max(0, Math.min(innerWidth - 1, rect.left + rect.width / 2));
@@ -433,22 +546,64 @@ async function collectDomVisualMetrics(rootLocator) {
       if (rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) return [];
       const top = document.elementsFromPoint(x, y).find(candidate => getComputedStyle(candidate).pointerEvents !== "none");
       if (!top || top === element || element.contains(top) || top.contains(element)) return [];
+      const coveringStickyLayer = insideStickyLayer(top);
+      const controlStickyLayer = insideStickyLayer(element);
+      if (coveringStickyLayer && coveringStickyLayer !== controlStickyLayer) return [];
+      const coveringMapSurface = top.closest(
+        "svg#map, [data-dashboard-map-viewport], [data-dashboard-basemap-layer], .maplibregl-map, .maplibregl-canvas",
+      );
+      if (
+        coveringMapSurface
+        && element.closest(".layer-menu-panel, .map-controls, .map-toolbar, .toolbar-row, .control-group")
+      ) return [];
       return [{control: describe(element), covering_element: describe(top)}];
     });
     const overlappingControlPairs = [];
-    for (let leftIndex = 0; leftIndex < rectangularControls.length; leftIndex += 1) {
-      const left = rectangularControls[leftIndex];
-      const leftRect = left.getBoundingClientRect();
-      for (let rightIndex = leftIndex + 1; rightIndex < rectangularControls.length; rightIndex += 1) {
-        const right = rectangularControls[rightIndex];
-        if (left.contains(right) || right.contains(left)) continue;
-        const rightRect = right.getBoundingClientRect();
-        const width = Math.max(0, Math.min(leftRect.right, rightRect.right) - Math.max(leftRect.left, rightRect.left));
-        const height = Math.max(0, Math.min(leftRect.bottom, rightRect.bottom) - Math.max(leftRect.top, rightRect.top));
+    const overlapGrid = new Map();
+    const comparedPairs = new Set();
+    const gridCellSize = 96;
+    const controlEntries = rectangularControls.map((element, index) => ({
+      element,
+      index,
+      rect: element.getBoundingClientRect(),
+    }));
+    for (const entry of controlEntries) {
+      const minColumn = Math.floor(Math.max(0, entry.rect.left) / gridCellSize);
+      const maxColumn = Math.floor(Math.max(0, Math.min(innerWidth - 1, entry.rect.right)) / gridCellSize);
+      const minRow = Math.floor(Math.max(0, entry.rect.top) / gridCellSize);
+      const maxRow = Math.floor(Math.max(0, Math.min(innerHeight - 1, entry.rect.bottom)) / gridCellSize);
+      const nearbyIndexes = new Set();
+      for (let row = minRow; row <= maxRow; row += 1) {
+        for (let column = minColumn; column <= maxColumn; column += 1) {
+          const cellKey = `${column}:${row}`;
+          for (const candidateIndex of overlapGrid.get(cellKey) || []) nearbyIndexes.add(candidateIndex);
+        }
+      }
+      for (const candidateIndex of nearbyIndexes) {
+        const pairKey = `${candidateIndex}:${entry.index}`;
+        if (comparedPairs.has(pairKey)) continue;
+        comparedPairs.add(pairKey);
+        const candidate = controlEntries[candidateIndex];
+        if (candidate.element.contains(entry.element) || entry.element.contains(candidate.element)) continue;
+        const candidateStickyLayer = insideStickyLayer(candidate.element);
+        const entryStickyLayer = insideStickyLayer(entry.element);
+        if (Boolean(candidateStickyLayer) !== Boolean(entryStickyLayer)) continue;
+        const width = Math.max(0, Math.min(candidate.rect.right, entry.rect.right) - Math.max(candidate.rect.left, entry.rect.left));
+        const height = Math.max(0, Math.min(candidate.rect.bottom, entry.rect.bottom) - Math.max(candidate.rect.top, entry.rect.top));
         const area = width * height;
-        const smaller = Math.max(1, Math.min(leftRect.width * leftRect.height, rightRect.width * rightRect.height));
+        const smaller = Math.max(1, Math.min(
+          candidate.rect.width * candidate.rect.height,
+          entry.rect.width * entry.rect.height,
+        ));
         if (area > 4 && area / smaller > .08) {
-          overlappingControlPairs.push([describe(left), describe(right)]);
+          overlappingControlPairs.push([describe(candidate.element), describe(entry.element)]);
+        }
+      }
+      for (let row = minRow; row <= maxRow; row += 1) {
+        for (let column = minColumn; column <= maxColumn; column += 1) {
+          const cellKey = `${column}:${row}`;
+          const occupants = overlapGrid.get(cellKey) || [];
+          overlapGrid.set(cellKey, [...occupants, entry.index]);
         }
       }
     }
@@ -464,6 +619,9 @@ async function collectDomVisualMetrics(rootLocator) {
       occluded_controls: occludedControls,
       overlapping_control_pairs: overlappingControlPairs,
       visible_interactive_count: interactive.length,
+      viewport_interactive_count: viewportInteractive.length,
+      overlap_candidate_pair_count: comparedPairs.size,
+      analysis_duration_ms: performance.now() - analysisStartedAt,
       root_width: root.getBoundingClientRect().width,
       root_height: root.getBoundingClientRect().height,
     };
@@ -505,6 +663,77 @@ function visualQualityIssues(checkpoint, label) {
   return issues;
 }
 
+function canonicalVisualIssueSignature(issue) {
+  return String(issue || "")
+    .replace(/^[^:]+:[^:]+:\s*/, "")
+    .replace(/data-scout-qualification-[a-z-]+=[^\]:,}]+/gi, "data-scout-qualification=<dynamic>")
+    .replace(/q-\d+-[a-f0-9]{8}/gi, "q-<dynamic>");
+}
+
+function visualIssueRootSignature(issue) {
+  const canonical = canonicalVisualIssueSignature(issue);
+  const separatorIndex = canonical.indexOf("=");
+  if (separatorIndex < 0) {
+    return canonical
+      .replace(/-?\d+(?:\.\d+)?(?:px)?/gi, "<number>")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  const kind = canonical.slice(0, separatorIndex).trim();
+  const rawPayload = canonical.slice(separatorIndex + 1);
+  let payload;
+  try {
+    payload = JSON.parse(rawPayload);
+  } catch (_error) {
+    return `${kind}=<unparsed>`;
+  }
+  const descriptors = [];
+  const collect = value => {
+    if (typeof value === "string") {
+      descriptors.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(collect);
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.values(value).forEach(collect);
+    }
+  };
+  collect(payload);
+  const selectorFamilies = [...new Set(descriptors.map(descriptor => (
+    String(descriptor)
+      .split(":", 1)[0]
+      .replace(/\[([^\]=]+)=[^\]]*\]/g, "[$1]")
+      .replace(/\[scoutQualification[^\]]*\]/gi, "[scoutQualification]")
+      .trim()
+  )).filter(Boolean))].sort();
+  const count = descriptors.length;
+  const countBucket = count <= 1
+    ? "1"
+    : count <= 5
+      ? "2-5"
+      : count <= 20
+        ? "6-20"
+        : "21+";
+  return `${kind}|selectors=${selectorFamilies.join(",")}|items=${countBucket}`;
+}
+
+function visualIssueDelta(beforeIssues, afterIssues) {
+  const beforeSignatures = new Set((beforeIssues || []).map(canonicalVisualIssueSignature));
+  const afterSignatures = new Set((afterIssues || []).map(canonicalVisualIssueSignature));
+  return {
+    baseline_visual_issues: [...(beforeIssues || [])],
+    new_visual_issues: (afterIssues || []).filter(
+      issue => !beforeSignatures.has(canonicalVisualIssueSignature(issue)),
+    ),
+    resolved_visual_issues: (beforeIssues || []).filter(
+      issue => !afterSignatures.has(canonicalVisualIssueSignature(issue)),
+    ),
+  };
+}
+
 function assertVisualQuality(checkpoint, label) {
   const issues = visualQualityIssues(checkpoint, label);
   assert(issues.length === 0, `Visual quality failed: ${issues.join(" | ")}`);
@@ -512,32 +741,73 @@ function assertVisualQuality(checkpoint, label) {
 }
 
 async function captureVisualCheckpoint(page, locator, observations, group, slug, options = {}) {
+  const checkpointStartedAt = Date.now();
+  appendCaseProgress(observations, "visual_checkpoint_started", {group, slug});
   const target = visualEvidencePath(observations, group, slug);
   const root = options.domRoot || locator || page.locator("body");
   await root.waitFor({ state: "visible", timeout: 60_000 });
-  const buffer = locator
-    ? await locator.screenshot({
-        path: target.absolute,
-        type: "png",
-        animations: "disabled",
-        timeout: 60_000,
-      })
-    : await page.screenshot({
-        path: target.absolute,
-        type: "png",
-        fullPage: options.fullPage !== false,
-        animations: "disabled",
-        timeout: 60_000,
-      });
+  let buffer;
+  if (locator) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        buffer = await locator.screenshot({
+          path: target.absolute,
+          type: "png",
+          animations: "disabled",
+          timeout: 60_000,
+        });
+        break;
+      } catch (error) {
+        if (attempt >= 3 || !isTransientControlLocatorError(error)) throw error;
+        appendCaseProgress(observations, "visual_checkpoint_screenshot_retry", {
+          group,
+          slug,
+          attempt,
+          error: String(error?.message || error),
+        });
+        await page.waitForTimeout(250);
+        await locator.waitFor({state: "visible", timeout: 60_000});
+      }
+    }
+  } else {
+    buffer = await page.screenshot({
+      path: target.absolute,
+      type: "png",
+      fullPage: options.fullPage !== false,
+      animations: "disabled",
+      timeout: 60_000,
+    });
+  }
+  assert(buffer, `Visual checkpoint ${group}/${slug} produced no screenshot buffer.`);
+  appendCaseProgress(observations, "visual_checkpoint_screenshot_completed", {
+    group,
+    slug,
+    screenshot: target.relative,
+  });
+  const pixels = await analyzeScreenshotPixels(page, buffer);
+  appendCaseProgress(observations, "visual_checkpoint_pixels_completed", {group, slug});
+  const dom = await collectDomVisualMetrics(root);
+  appendCaseProgress(observations, "visual_checkpoint_dom_completed", {
+    group,
+    slug,
+    analysis_duration_ms: dom.analysis_duration_ms,
+    viewport_interactive_count: dom.viewport_interactive_count,
+  });
   const checkpoint = {
     id: `${group}:${slug}`,
     screenshot: target.relative,
     screenshot_sha256: sha256(buffer),
-    pixels: await analyzeScreenshotPixels(page, buffer),
-    dom: await collectDomVisualMetrics(root),
+    pixels,
+    dom,
   };
   checkpoint.issues = visualQualityIssues(checkpoint, checkpoint.id);
   observations.visualCheckpoints.push(checkpoint);
+  appendCaseProgress(observations, "visual_checkpoint_completed", {
+    group,
+    slug,
+    duration_ms: Date.now() - checkpointStartedAt,
+    issue_count: checkpoint.issues.length,
+  });
   return checkpoint;
 }
 
@@ -675,6 +945,34 @@ async function openDashboard(page, baseUrl, projectId, route) {
   if (observations) recordBrowserAction(observations, "navigate", `dashboard-route:${route}`);
 }
 
+function dashboardRouteRootSelector(route) {
+  if (route === "map") return "#dashboardMap";
+  if (route === "agent") return "#dashboardAgent";
+  return "#workspace";
+}
+
+async function waitForRouteVisualReadiness(page, route, projectId) {
+  if (route !== "map") return;
+  const iframe = page.locator("#pretripMapFrame");
+  await iframe.waitFor({state: "visible", timeout: 120_000});
+  const deadline = Date.now() + 60_000;
+  let frame = null;
+  while (!frame && Date.now() < deadline) {
+    const handle = await iframe.elementHandle();
+    frame = await handle?.contentFrame() || null;
+    await handle?.dispose().catch(() => undefined);
+    if (!frame) await page.waitForTimeout(100);
+  }
+  assert(frame, "Map route iframe did not attach before visual qualification.");
+  await waitForCanonicalEmbeddedMapReady(
+    page,
+    frame,
+    projectId,
+    "Dashboard Map visual readiness",
+    {waitForDashboardOverlay: true},
+  );
+}
+
 async function revealThroughClosedDetails(page, locator, observations, label) {
   if (!(await locator.count())) return;
   const keys = await locator.first().evaluate((node, targetLabel) => {
@@ -711,12 +1009,15 @@ async function auditAllRouteVisualStates(page, observations, profileId) {
   const visualAudits = [];
   const issues = [];
   for (const route of contractedRoutes) {
+    const issueStart = issues.length;
+    appendCaseProgress(observations, "route_started", {route, profile: profileId});
     try {
       await openDashboard(page, observations.baseUrl, readyProjectId, route);
       await page.waitForFunction(expectedRoute => (
         typeof state !== "undefined" && state.route === expectedRoute
       ), route, {timeout: 60_000});
-      const workspace = page.locator("#workspace");
+      await waitForRouteVisualReadiness(page, route, readyProjectId);
+      const workspace = page.locator(dashboardRouteRootSelector(route));
       await workspace.waitFor({ state: "visible", timeout: 120_000 });
       await page.waitForTimeout(500);
       const workspaceState = await workspace.evaluate(node => ({
@@ -776,8 +1077,31 @@ async function auditAllRouteVisualStates(page, observations, profileId) {
       const frameAudits = [];
       for (const frame of page.frames().filter(candidate => candidate !== page.mainFrame())) {
         try {
+          appendCaseProgress(observations, "route_frame_visibility_started", {
+            route,
+            profile: profileId,
+            frame_index: frameAudits.length,
+            frame_url: evidenceSafeUrl(frame.url()),
+          });
+          const frameHost = await runCaseFinalizerWithTimeout(
+            "route-frame-visibility",
+            () => frame.frameElement(),
+            ROUTE_FRAME_VISIBILITY_TIMEOUT_MS,
+          );
+          const frameHostVisible = await runCaseFinalizerWithTimeout(
+            "route-frame-visibility",
+            () => frameHost.isVisible(),
+            ROUTE_FRAME_VISIBILITY_TIMEOUT_MS,
+          );
+          await frameHost.dispose().catch(() => undefined);
+          if (!frameHostVisible) continue;
           const frameBody = frame.locator("body");
-          if (!(await frameBody.isVisible())) continue;
+          const frameBodyVisible = await runCaseFinalizerWithTimeout(
+            "route-frame-visibility",
+            () => frameBody.isVisible(),
+            ROUTE_FRAME_VISIBILITY_TIMEOUT_MS,
+          );
+          if (!frameBodyVisible) continue;
           const checkpoint = await captureVisualCheckpoint(
             page,
             frameBody,
@@ -802,21 +1126,41 @@ async function auditAllRouteVisualStates(page, observations, profileId) {
         checkpoints,
         frames: frameAudits,
       });
+      appendCaseProgress(observations, "route_completed", {
+        route,
+        profile: profileId,
+        checkpoint_count: checkpoints.length,
+        frame_count: frameAudits.length,
+        issue_count: issues.length - issueStart,
+      });
     } catch (error) {
       const detail = `${route}: ${String(error?.message || error)}`;
       issues.push(detail);
       visualAudits.push({route, profile: profileId, error: detail});
+      appendCaseProgress(observations, "route_failed", {
+        route,
+        profile: profileId,
+        error: detail,
+      });
     }
   }
   observations.routeVisualAudits = visualAudits;
   observations.routeVisualIssues = issues;
-  assert(issues.length === 0, `Route visual audit failures: ${JSON.stringify(issues)}`);
+  const visualIssueGroups = groupVisualQualityFindings(observations.visualCheckpoints);
+  const failureSummary = summarizeRouteVisualAuditFailure(visualAudits, visualIssueGroups);
+  observations.routeVisualIssueGroups = visualIssueGroups;
+  observations.routeVisualFailureSummary = failureSummary;
+  assert(
+    failureSummary.operational_issue_count === 0 && visualIssueGroups.length === 0,
+    `Route visual audit failures: ${JSON.stringify(failureSummary)}`,
+  );
   return {
     profile: profileId,
     contractedRouteCount: contractedRoutes.length,
     auditedRouteCount: visualAudits.filter(audit => !audit.error).length,
     visualAudits,
     issues,
+    visualIssueGroups,
   };
 }
 
@@ -832,6 +1176,128 @@ function controlIdentityIsEffectful(descriptor) {
     .toLowerCase();
   return /(?:^|[-_\s])(save|accept|submit|send|publish|delete|remove|import|upload|prepare|generate|regenerate|rebuild|authorize|approve|reject|execute|install|write|watch|transport|payment|purchase)(?:$|[-_\s])/i.test(value)
     || /(?:^|[-_\s])run(?:$|[-_\s])/i.test(value);
+}
+
+function controlCoverageGapRecord(control, cause, detail = "") {
+  const definitions = {
+    disabled_in_runtime_state: {
+      terminalState: "DISABLED_IN_RUNTIME_STATE",
+      detail: "This control was disabled in the selected live runtime state; an executable real state is required before the function can qualify.",
+    },
+    disappeared_before_operation: {
+      terminalState: "DISAPPEARED_BEFORE_OPERATION",
+      detail: "The control was visible during the route state walk but its stable identity was absent immediately before operation.",
+    },
+    nonvisible_after_discovery: {
+      terminalState: "NONVISIBLE_AFTER_DISCOVERY",
+      detail: "The control changed to a non-visible runtime state before operation.",
+    },
+    single_runtime_value: {
+      terminalState: "SINGLE_RUNTIME_VALUE",
+      detail: "This select exposed only one runtime value; an alternate real value is required before its behavior can qualify.",
+    },
+    route_aborted_after_operation_error: {
+      terminalState: "ROUTE_ABORTED_AFTER_OPERATION_ERROR",
+      detail: "The route audit stopped after an operation error; the remaining control requires a fresh live-runtime qualification.",
+    },
+  };
+  const definition = definitions[cause];
+  assert(definition, `Unknown control coverage gap cause: ${cause}`);
+  return {
+    ...control,
+    terminal_state: definition.terminalState,
+    legacy_terminal_state: "NOT_EXERCISED",
+    coverage_gap_kind: cause,
+    product_defect_claimed: false,
+    detail: detail || definition.detail,
+  };
+}
+
+function classifyPassiveControl(control) {
+  if (control.discovery_error) {
+    return {
+      ...control,
+      terminal_state: "UNMAPPED",
+      detail: `Interactive controls could not be inventoried in ${control.context_id}: ${control.discovery_error}`,
+    };
+  }
+  if (control.delegated_to) return {...control, terminal_state: "DELEGATED"};
+  if (control.disabled) {
+    return controlCoverageGapRecord(control, "disabled_in_runtime_state");
+  }
+  return {
+    ...control,
+    terminal_state: "EFFECT_AUTHORIZATION_REQUIRED",
+    detail: "Persistent, outbound, hardware, preparation, or generation action was not executed by the read-only qualification role.",
+  };
+}
+
+function controlOperationTerminalState(effectOracle) {
+  if (!effectOracle.semantic_changed) return "NO_STATE_CHANGE";
+  if (!effectOracle.visual_changed && effectOracle.popup_loaded !== true) {
+    return "NO_VISUAL_CHANGE";
+  }
+  return "OPERATED";
+}
+
+function isTransientFrameDiscoveryError(error) {
+  return /frame was detached/i.test(String(error?.message || error));
+}
+
+function isTransientControlLocatorError(error) {
+  const detail = String(error?.message || error);
+  return /element is not attached to the dom/i.test(detail)
+    || (
+      /timeout/i.test(detail)
+      && /waiting for locator\(.+data-scout-qualification-control-key/i.test(detail)
+    );
+}
+
+function isLoadedPopupUrl(value) {
+  const raw = String(value?.href || value || "");
+  try {
+    const parsed = new URL(raw);
+    return ["http:", "https:"].includes(parsed.protocol);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function summarizeControlCoverageFailure(blockingControls, visualIssueGroups) {
+  const stateCounts = blockingControls.reduce((counts, control) => ({
+    ...counts,
+    [control.terminal_state]: (counts[control.terminal_state] || 0) + 1,
+  }), {});
+  const routeCounts = blockingControls.reduce((counts, control) => ({
+    ...counts,
+    [control.route || "unassigned"]: (counts[control.route || "unassigned"] || 0) + 1,
+  }), {});
+  const causeCounts = blockingControls.reduce((counts, control) => ({
+    ...counts,
+    [control.coverage_gap_kind || controlGapReason(control)]: (
+      counts[control.coverage_gap_kind || controlGapReason(control)] || 0
+    ) + 1,
+  }), {});
+  return {
+    classification: "qualification_coverage_gap",
+    product_defect_claimed: false,
+    blocking_control_count: blockingControls.length,
+    blocking_control_states: Object.fromEntries(Object.entries(stateCounts).sort()),
+    blocking_control_routes: Object.fromEntries(Object.entries(routeCounts).sort()),
+    blocking_control_causes: Object.fromEntries(Object.entries(causeCounts).sort()),
+    blocking_control_samples: blockingControls.slice(0, 12).map(control => ({
+      route: control.route,
+      terminal_state: control.terminal_state,
+      identity: String(control.identity || "").slice(0, 240),
+      detail: String(control.detail || "").slice(0, 240),
+    })),
+    visual_issue_group_count: visualIssueGroups.length,
+    visual_issue_groups: visualIssueGroups.slice(0, 12).map(group => ({
+      observed_behavior: group.observed_behavior,
+      occurrence_count: group.occurrence_count,
+      evidence_refs: (group.evidence_refs || []).slice(0, 3),
+    })),
+  };
 }
 
 async function frameContextId(page, frame, ordinal) {
@@ -863,9 +1329,135 @@ async function frameContextId(page, frame, ordinal) {
   return `frame:${stableOwner}:${framePath}`;
 }
 
+function aggregateDelegatedMapEvidenceControls(controls) {
+  const grouped = [];
+  const groupIndexes = new Map();
+  const aggregateTags = new Set(["path", "circle", "image"]);
+  for (const control of controls) {
+    const data = control.data_attributes || {};
+    const evidenceType = data.evidenceType || "";
+    const shouldAggregate = (
+      control.delegated_to === "runtime-all-map-surface-interactions"
+      && aggregateTags.has(control.tag)
+      && Boolean(evidenceType)
+    );
+    if (!shouldAggregate) {
+      grouped.push(control);
+      continue;
+    }
+    const canonicalData = Object.fromEntries(
+      ["evidenceType", "mapRenderKind", "singleImageTheme", "terrainOverlayMode"]
+        .filter(key => data[key] !== undefined && data[key] !== "")
+        .map(key => [key, data[key]]),
+    );
+    const groupPayload = {
+      route: control.route,
+      context_id: control.context_id,
+      delegated_to: control.delegated_to,
+      tag: control.tag,
+      data_attributes: canonicalData,
+    };
+    const identity = JSON.stringify(groupPayload);
+    const sourceId = data.sourceId || "";
+    const existingIndex = groupIndexes.get(identity);
+    if (existingIndex !== undefined) {
+      const existing = grouped[existingIndex];
+      const sourceSamples = sourceId && !existing.aggregate_source_samples.includes(sourceId)
+        ? [...existing.aggregate_source_samples, sourceId].slice(0, 3)
+        : existing.aggregate_source_samples;
+      grouped[existingIndex] = {
+        ...existing,
+        aggregate_member_count: existing.aggregate_member_count + 1,
+        aggregate_source_samples: sourceSamples,
+        text: `${evidenceType} (${existing.aggregate_member_count + 1} visible targets)`,
+      };
+      continue;
+    }
+    groupIndexes.set(identity, grouped.length);
+    grouped.push({
+      ...control,
+      identity,
+      key: `q-map-evidence-group-${sha256(identity).slice(0, 12)}`,
+      data_attributes: canonicalData,
+      text: `${evidenceType} (1 visible target)`,
+      aggregate_member_count: 1,
+      aggregate_source_samples: sourceId ? [sourceId] : [],
+    });
+  }
+  return grouped;
+}
+
+function sampleRepeatedSelectionControls(controls) {
+  const families = new Map();
+  controls.forEach((control, index) => {
+    const data = control.data_attributes || {};
+    const selectionSurface = Object.entries(data).find(([key, value]) => (
+      /SelectionSurface$/.test(key) && value !== undefined && value !== ""
+    ));
+    if (!selectionSurface) return;
+    const [selectionKey, selectionValue] = selectionSurface;
+    const familyPayload = {
+      route: control.route,
+      context_id: control.context_id,
+      tag: control.tag,
+      role: control.role,
+      delegated_to: control.delegated_to,
+      disabled: control.disabled,
+      selection_key: selectionKey,
+      selection_value: selectionValue,
+    };
+    const familyIdentity = JSON.stringify(familyPayload);
+    const member = {control, index, familyPayload, familyIdentity};
+    families.set(familyIdentity, [...(families.get(familyIdentity) || []), member]);
+  });
+  const denseFamilyByMemberIndex = new Map();
+  for (const members of families.values()) {
+    if (members.length < 7) continue;
+    for (const member of members) denseFamilyByMemberIndex.set(member.index, members);
+  }
+  const output = [];
+  const emittedFamilies = new Set();
+  controls.forEach((control, index) => {
+    const members = denseFamilyByMemberIndex.get(index);
+    if (!members) {
+      output.push(control);
+      return;
+    }
+    const familyIdentity = members[0].familyIdentity;
+    if (emittedFamilies.has(familyIdentity)) return;
+    emittedFamilies.add(familyIdentity);
+    const middleIndex = Math.floor((members.length - 1) / 2);
+    const representatives = [
+      ["first", members[0]],
+      ["middle", members[middleIndex]],
+      ["last", members[members.length - 1]],
+    ];
+    const memberSamples = representatives.map(([_position, member]) => {
+      const identifier = Object.entries(member.control.data_attributes || {})
+        .find(([key, value]) => /Id$/.test(key) && value !== undefined && value !== "");
+      return identifier ? String(identifier[1]) : member.control.aria_label || member.control.key;
+    });
+    for (const [position, member] of representatives) {
+      const identity = JSON.stringify({
+        ...member.familyPayload,
+        representative_position: position,
+      });
+      output.push({
+        ...member.control,
+        identity,
+        aggregate_member_count: members.length,
+        aggregate_member_samples: memberSamples,
+        aggregate_representative_position: position,
+        aggregate_sampling_policy: "first-middle-last",
+      });
+    }
+  });
+  return output;
+}
+
 async function discoverVisibleControlsInFrame(frame, route, contextId) {
   const selector = browserActionContract.control_coverage.interactive_selector;
-  return frame.evaluate(({interactiveSelector, currentRoute, currentContextId}) => {
+  const controls = await frame.evaluate(({interactiveSelector, currentRoute, currentContextId}) => {
     const nodes = [...document.querySelectorAll(interactiveSelector)];
     const visible = element => {
       const style = getComputedStyle(element);
@@ -891,12 +1483,17 @@ async function discoverVisibleControlsInFrame(frame, route, contextId) {
       return (output >>> 0).toString(16).padStart(8, "0");
     };
     return nodes.flatMap((element, ordinal) => {
+      if (element.dataset.scoutQualificationCompleted === "true") return [];
       if (!visible(element)) return [];
       const dataAttributes = stableData(element);
       const text = String(element.textContent || "").trim().replace(/\s+/g, " ").slice(0, 160);
       let delegatedTo = null;
-      if (element.closest("#dashboardSidebar") && element.matches("[data-route]")) delegatedTo = "runtime-route-navigation";
-      if (element.matches("[data-map-control], [data-dashboard-map-viewport], [data-dashboard-map-hint-title], [data-evidence-type], #map, #zoomIn, #zoomOut, #fitRoute, #panMode, #boxZoomMode, #panUp, #panDown, #panLeft, #panRight")) delegatedTo = "runtime-all-map-surface-interactions";
+      const isMapLibraryControl = Boolean(
+        element.closest(".maplibregl-map, .maplibregl-control-container")
+        || element.matches(".maplibregl-canvas, .maplibregl-ctrl, .maplibregl-ctrl-icon, .maplibregl-ctrl-attrib"),
+      );
+      if (element.matches("[data-route]")) delegatedTo = "runtime-route-navigation";
+      if (isMapLibraryControl || element.matches("[data-map-control], [data-dashboard-map-viewport], [data-dashboard-map-hint-title], [data-evidence-type], [data-navigation-maplibre-fit], #map, #zoomIn, #zoomOut, #fitRoute, #panMode, #boxZoomMode, #panUp, #panDown, #panLeft, #panRight")) delegatedTo = "runtime-all-map-surface-interactions";
       if (element.matches("input[data-layer], [data-weather-layer-control], [data-layer-preset], [data-cwa-rainfall-product], [data-cwa-rainfall-opacity], [data-cwa-imagery-product], [data-cwa-imagery-window], [data-cwa-imagery-timeline], [data-cwa-imagery-opacity], [data-cwa-imagery-play]")) delegatedTo = "runtime-all-layer-toggle-integrity";
       if (element.matches("[data-diagnostic-action]")) delegatedTo = "diagnostic-controls";
       const hasStableIdentityAttributes = Boolean(
@@ -921,6 +1518,7 @@ async function discoverVisibleControlsInFrame(frame, route, contextId) {
       const identity = JSON.stringify(identityPayload);
       const key = `q-${ordinal}-${hash(identity)}`;
       element.dataset.scoutQualificationControlKey = key;
+      if (delegatedTo) element.dataset.scoutQualificationCompleted = "true";
       return [{
         ...identityPayload,
         text,
@@ -939,6 +1537,9 @@ async function discoverVisibleControlsInFrame(frame, route, contextId) {
       }];
     });
   }, {interactiveSelector: selector, currentRoute: route, currentContextId: contextId});
+  return sampleRepeatedSelectionControls(
+    aggregateDelegatedMapEvidenceControls(controls),
+  );
 }
 
 async function discoverVisibleControls(page, route) {
@@ -951,6 +1552,7 @@ async function discoverVisibleControls(page, route) {
       controls.push(...await discoverVisibleControlsInFrame(frame, route, contextId));
     } catch (error) {
       const detail = String(error?.message || error);
+      if (isTransientFrameDiscoveryError(error)) continue;
       const identity = JSON.stringify({route, context_id: contextId, discovery_error: detail});
       controls.push({
         route,
@@ -973,7 +1575,8 @@ async function discoverVisibleControls(page, route) {
   return controls;
 }
 
-async function runVisibleControlDiscoveryWithTimeout(page, route) {
+async function runVisibleControlDiscoveryWithTimeout(page, route, observations = null) {
+  const startedAt = Date.now();
   let timeoutId = null;
   const discovery = discoverVisibleControls(page, route);
   discovery.catch(() => undefined);
@@ -987,7 +1590,31 @@ async function runVisibleControlDiscoveryWithTimeout(page, route) {
     }, CONTROL_DISCOVERY_TIMEOUT_MS);
   });
   try {
-    return await Promise.race([discovery, timeout]);
+    const controls = await Promise.race([discovery, timeout]);
+    if (observations) {
+      observations.controlStateTraces.push({
+        kind: "control_discovery_timing",
+        observed_at: new Date().toISOString(),
+        route,
+        duration_ms: Date.now() - startedAt,
+        discovered_control_count: controls.length,
+        context_count: new Set(controls.map(control => control.context_id)).size,
+      });
+    }
+    return controls;
+  } catch (error) {
+    if (observations) {
+      observations.controlStateTraces.push({
+        kind: "control_discovery_timing",
+        observed_at: new Date().toISOString(),
+        route,
+        duration_ms: Date.now() - startedAt,
+        discovered_control_count: null,
+        error_code: String(error?.code || "CONTROL_DISCOVERY_FAILURE"),
+        error: String(error?.message || error),
+      });
+    }
+    throw error;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
@@ -999,6 +1626,75 @@ async function locateControlContext(page, key) {
     if (await locator.count()) return {frame, locator};
   }
   return null;
+}
+
+async function refreshControlDescriptor(page, route, descriptor) {
+  const current = await locateControlContext(page, descriptor.key);
+  if (current && await current.locator.isVisible()) {
+    return {descriptor, ...current, refreshed: false};
+  }
+  const controls = await discoverVisibleControls(page, route);
+  const refreshedDescriptor = controls.find(control => control.identity === descriptor.identity);
+  if (!refreshedDescriptor) return null;
+  const refreshed = await locateControlContext(page, refreshedDescriptor.key);
+  if (!refreshed || !(await refreshed.locator.isVisible())) return null;
+  return {
+    descriptor: {...descriptor, ...refreshedDescriptor},
+    ...refreshed,
+    refreshed: true,
+  };
+}
+
+async function classifyUncompletedControl(page, route, control, routeAbortedAfterOperationError) {
+  if (routeAbortedAfterOperationError) {
+    return controlCoverageGapRecord(control, "route_aborted_after_operation_error");
+  }
+  const refreshed = await refreshControlDescriptor(page, route, control);
+  if (!refreshed) {
+    return controlCoverageGapRecord(control, "disappeared_before_operation");
+  }
+  const availability = await refreshed.locator.evaluate(node => {
+    const style = getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    return {
+      visible: style.display !== "none"
+        && style.visibility !== "hidden"
+        && Number(style.opacity || 1) > 0
+        && rect.width > 0
+        && rect.height > 0,
+      disabled: Boolean(node.disabled || node.getAttribute("aria-disabled") === "true"),
+    };
+  });
+  if (availability.disabled) {
+    return controlCoverageGapRecord(
+      {...control, ...refreshed.descriptor},
+      "disabled_in_runtime_state",
+    );
+  }
+  if (!availability.visible) {
+    return controlCoverageGapRecord(
+      {...control, ...refreshed.descriptor},
+      "nonvisible_after_discovery",
+    );
+  }
+  return {
+    ...control,
+    ...refreshed.descriptor,
+    terminal_state: "UNMAPPED",
+    coverage_gap_kind: "visible_unresolved_remainder",
+    product_defect_claimed: false,
+    detail: "A stable visible control remained after the state walk without an operation or an explicit delegation.",
+  };
+}
+
+async function markControlCompleted(page, descriptor) {
+  if (descriptor.aggregate_representative_position) return true;
+  const located = await locateControlContext(page, descriptor.key);
+  if (!located) return false;
+  await located.locator.evaluate(node => {
+    node.dataset.scoutQualificationCompleted = "true";
+  }).catch(() => undefined);
+  return true;
 }
 
 async function controlContextRoot(page, frame) {
@@ -1041,6 +1737,271 @@ async function controlSemanticState(page, frame, locator) {
   };
 }
 
+async function captureControlStateTrace(page, observations, route, phase, descriptor = {}) {
+  if (!["outdoor-permission", "runtime-audit", "outdoor-weather", "emergency"].includes(route)) {
+    return null;
+  }
+  let snapshot;
+  try {
+    snapshot = await page.evaluate(currentRoute => {
+      const runtimeState = typeof state === "object" && state ? state : {};
+      const visible = node => {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return style.display !== "none"
+          && style.visibility !== "hidden"
+          && Number(style.opacity || 1) > 0
+          && rect.width > 0
+          && rect.height > 0;
+      };
+      const safeFramePath = frame => {
+        try {
+          return new URL(frame.src, location.href).pathname;
+        } catch (_error) {
+          return "unresolved";
+        }
+      };
+      const common = {
+        visible_interactive_count: [...document.querySelectorAll("button, a[href], input, select, textarea, summary, [role=button], [role=tab]")].filter(visible).length,
+      };
+      if (currentRoute === "outdoor-permission") {
+        return {
+          ...common,
+          permission_data_status: runtimeState.permissionDataStatus || null,
+          selected_node_id: runtimeState.permissionSelectedNodeId || null,
+          projection_status: runtimeState.permissionProjection?.status || null,
+          visible_node_count: [...document.querySelectorAll("[data-permission-node]")].filter(visible).length,
+          refresh_control_count: document.querySelectorAll("[data-permission-refresh]").length,
+          loading_status_count: document.querySelectorAll('.permission-loading[role="status"]').length,
+        };
+      }
+      if (currentRoute === "runtime-audit") {
+        return {
+          ...common,
+          selected_date: runtimeState.runtimeAuditSelectedDate || null,
+          selected_month: runtimeState.runtimeAuditSelectedMonth || null,
+          payload_status: runtimeState.runtimeAuditStatus || runtimeState.runtimeAuditDataStatus || null,
+          selected_day_control: document.querySelector('[data-runtime-audit-day][aria-pressed="true"]')?.dataset.runtimeAuditDay || null,
+          selected_month_control: document.querySelector('[data-runtime-audit-month][aria-pressed="true"]')?.dataset.runtimeAuditMonth || null,
+          rendered_event_count: document.querySelectorAll("[data-runtime-audit-event]").length,
+          rendered_summary_count: document.querySelectorAll("[data-runtime-audit-summary]").length,
+        };
+      }
+      if (currentRoute === "outdoor-weather") {
+        const frames = [...document.querySelectorAll('iframe[data-weather-cwa-map-frame="true"]')];
+        return {
+          ...common,
+          weather_frame_count: frames.length,
+          weather_frames: frames.map(frame => ({
+            connected: frame.isConnected,
+            path: safeFramePath(frame),
+            bridge_state: frame.dataset.weatherCwaFrameState || frame.parentElement?.querySelector("[data-weather-cwa-frame-state]")?.dataset.weatherCwaFrameState || null,
+          })),
+        };
+      }
+      const emergencyRoot = document.querySelector("[data-daily-emergency-review]");
+      return {
+        ...common,
+        emergency_review_state: emergencyRoot?.dataset.dailyEmergencyReview || null,
+        emergency_interactive_count: emergencyRoot
+          ? [...emergencyRoot.querySelectorAll("button, a[href], input, select, textarea, summary, [role=button], [role=tab]")].filter(visible).length
+          : 0,
+      };
+    }, route);
+  } catch (error) {
+    snapshot = {capture_error: String(error?.message || error)};
+  }
+  const record = {
+    kind: "control_state",
+    observed_at: new Date().toISOString(),
+    route,
+    phase,
+    control_identity_sha256: descriptor.identity ? sha256(descriptor.identity) : null,
+    control_key: descriptor.key || null,
+    request_count: observations.requests.length,
+    last_completed_request: observations.requests.at(-1) || null,
+    snapshot,
+  };
+  observations.controlStateTraces.push(record);
+  return record;
+}
+
+async function waitForIssue0063TerminalState(page, observations, route, phase) {
+  const startedAt = Date.now();
+  let terminalObserved = false;
+  let waitError = null;
+  try {
+    await page.waitForFunction(currentRoute => {
+      const runtimeState = typeof state === "object" && state ? state : {};
+      if (currentRoute === "outdoor-permission") {
+        return !["", "idle", "loading"].includes(String(runtimeState.permissionDataStatus || ""));
+      }
+      if (currentRoute === "runtime-audit") {
+        return !["", "idle", "loading"].includes(String(runtimeState.runtimeAuditStatus || ""));
+      }
+      if (currentRoute === "outdoor-weather") {
+        const frameState = document.querySelector("[data-weather-cwa-frame-state]")?.dataset.weatherCwaFrameState || "";
+        return !["", "loading"].includes(frameState);
+      }
+      const emergencyState = document.querySelector("[data-daily-emergency-review]")?.dataset.dailyEmergencyReview || "";
+      return !["", "loading"].includes(emergencyState);
+    }, route, {timeout: 60_000});
+    terminalObserved = true;
+  } catch (error) {
+    waitError = String(error?.message || error);
+  }
+  const record = {
+    kind: "terminal_state_wait",
+    observed_at: new Date().toISOString(),
+    route,
+    phase,
+    terminal_observed: terminalObserved,
+    duration_ms: Date.now() - startedAt,
+    error: waitError,
+  };
+  observations.controlStateTraces.push(record);
+  return record;
+}
+
+async function captureIssue0063RouteControlInventory(page, observations, route, phase) {
+  const startedAt = Date.now();
+  let inventory;
+  try {
+    inventory = await page.evaluate(currentRoute => {
+      const visible = node => {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return style.display !== "none"
+          && style.visibility !== "hidden"
+          && Number(style.opacity || 1) > 0
+          && rect.width > 0
+          && rect.height > 0;
+      };
+      const routeSelectors = {
+        "outdoor-permission": "[data-contextual-permission-workbench]",
+        "runtime-audit": "[data-runtime-audit-page]",
+        "outdoor-weather": "[data-weather-layer-control], [data-weather-cwa-map-frame], [data-weather-cwa-frame-state]",
+        emergency: "[data-daily-emergency-review]",
+      };
+      const selector = routeSelectors[currentRoute];
+      const roots = selector ? [...document.querySelectorAll(selector)] : [];
+      const scopedRoots = roots.length ? roots : [document.body];
+      const interactiveSelector = "button, a[href], input, select, textarea, summary, [role=button], [role=tab]";
+      const controls = scopedRoots.flatMap(root => [
+        ...(root.matches?.(interactiveSelector) ? [root] : []),
+        ...root.querySelectorAll(interactiveSelector),
+      ]);
+      return {
+        root_selector: selector || "body",
+        root_count: roots.length,
+        discovered_control_count: [...new Set(controls)].filter(visible).length,
+        contextual_permission_node_count: document.querySelectorAll("[data-permission-node]").length,
+        runtime_audit_day_count: document.querySelectorAll("[data-runtime-audit-day]").length,
+        weather_layer_control_count: document.querySelectorAll("[data-weather-layer-control]").length,
+        weather_frame_count: document.querySelectorAll("[data-weather-cwa-map-frame]").length,
+        emergency_review_control_count: document.querySelectorAll("[data-daily-emergency-review] button, [data-daily-emergency-review] a[href], [data-daily-emergency-review] [role=tab]").length,
+      };
+    }, route);
+  } catch (error) {
+    inventory = {
+      discovered_control_count: null,
+      capture_error: String(error?.message || error),
+    };
+  }
+  const record = {
+    kind: "control_discovery_timing",
+    observed_at: new Date().toISOString(),
+    route,
+    phase,
+    discovery_strategy: "route_specific_main_document",
+    duration_ms: Date.now() - startedAt,
+    ...inventory,
+  };
+  observations.controlStateTraces.push(record);
+  return record;
+}
+
+async function inspectIssue0063ControlStateEvidence(page, observations) {
+  const routes = [
+    "outdoor-permission",
+    "runtime-audit",
+    "outdoor-weather",
+    "emergency",
+  ];
+  const routeEvidence = [];
+  for (const route of routes) {
+    const startedAt = Date.now();
+    await openDashboard(page, observations.baseUrl, readyProjectId, route);
+    const beforeReloadWait = await waitForIssue0063TerminalState(
+      page,
+      observations,
+      route,
+      "before_reload",
+    );
+    const beforeReload = await captureControlStateTrace(
+      page,
+      observations,
+      route,
+      "before_reload",
+    );
+    const controlsBeforeReload = await captureIssue0063RouteControlInventory(
+      page,
+      observations,
+      route,
+      "before_reload",
+    );
+    await captureControlStateTrace(
+      page,
+      observations,
+      route,
+      "after_discovery_before_reload",
+    );
+    await page.reload({waitUntil: "domcontentloaded", timeout: 60_000});
+    recordBrowserAction(observations, "reload", `dashboard-route:${route}`);
+    await page.locator(`[data-route="${route}"]`).first().waitFor({state: "attached", timeout: 60_000});
+    const afterReloadWait = await waitForIssue0063TerminalState(
+      page,
+      observations,
+      route,
+      "after_reload",
+    );
+    const afterReload = await captureControlStateTrace(
+      page,
+      observations,
+      route,
+      "after_reload",
+    );
+    const controlsAfterReload = await captureIssue0063RouteControlInventory(
+      page,
+      observations,
+      route,
+      "after_reload",
+    );
+    routeEvidence.push({
+      route,
+      duration_ms: Date.now() - startedAt,
+      before_reload_wait: beforeReloadWait,
+      after_reload_wait: afterReloadWait,
+      before_reload: beforeReload,
+      after_reload: afterReload,
+      discovered_before_reload: controlsBeforeReload.discovered_control_count,
+      discovered_after_reload: controlsAfterReload.discovered_control_count,
+    });
+    recordBrowserAction(
+      observations,
+      "observe",
+      `q0063-control-state:${route}`,
+      "evidence_captured",
+    );
+  }
+  assert(routeEvidence.length === routes.length, "Q0063 control-state evidence is incomplete.");
+  return {
+    evidence_only: true,
+    product_behavior_changed: false,
+    routes: routeEvidence,
+  };
+}
+
 async function operateVisibleControl(page, observations, route, descriptor, operationIndex) {
   if (descriptor.discovery_error) {
     return {
@@ -1049,21 +2010,53 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
       detail: `Interactive controls could not be inventoried in ${descriptor.context_id}: ${descriptor.discovery_error}`,
     };
   }
-  const located = await locateControlContext(page, descriptor.key);
-  if (!located || !(await located.locator.isVisible())) {
-    return {...descriptor, terminal_state: "MISSING_AFTER_RELOAD"};
-  }
-  const {frame, locator} = located;
-  await locator.scrollIntoViewIfNeeded();
-  if (descriptor.disabled) {
-    return {
-      ...descriptor,
-      terminal_state: "NOT_EXERCISED",
-      detail: "This control was disabled in the selected live runtime state; an executable real state is required before the function can qualify.",
-    };
-  }
   if (descriptor.delegated_to) {
     return {...descriptor, terminal_state: "DELEGATED"};
+  }
+  let refreshedControl = await refreshControlDescriptor(page, route, descriptor);
+  if (!refreshedControl) {
+    await captureControlStateTrace(
+      page,
+      observations,
+      route,
+      "identity_missing_before_reload",
+      descriptor,
+    );
+    appendCaseProgress(observations, "control_refresh_reload_started", {
+      route,
+      control_key: descriptor.key,
+      control_identity: descriptor.identity,
+    });
+    await openDashboard(page, observations.baseUrl, readyProjectId, route);
+    await page.waitForTimeout(500);
+    await captureControlStateTrace(page, observations, route, "after_route_reload", descriptor);
+    refreshedControl = await refreshControlDescriptor(page, route, descriptor);
+  }
+  if (!refreshedControl) {
+    return {...descriptor, terminal_state: "MISSING_AFTER_RELOAD"};
+  }
+  descriptor = refreshedControl.descriptor;
+  const {frame, locator} = refreshedControl;
+  await locator.scrollIntoViewIfNeeded();
+  const availability = await locator.evaluate(node => {
+    const style = getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    return {
+      visible: style.display !== "none"
+        && style.visibility !== "hidden"
+        && Number(style.opacity || 1) > 0
+        && rect.width > 0
+        && rect.height > 0,
+      disabled: Boolean(node.disabled || node.getAttribute("aria-disabled") === "true"),
+      aria_pressed: node.getAttribute("aria-pressed"),
+      aria_selected: node.getAttribute("aria-selected"),
+    };
+  });
+  if (!availability.visible) {
+    return controlCoverageGapRecord(descriptor, "nonvisible_after_discovery");
+  }
+  if (availability.disabled) {
+    return controlCoverageGapRecord(descriptor, "disabled_in_runtime_state");
   }
   if (controlIdentityIsEffectful(descriptor)) {
     return {
@@ -1072,11 +2065,19 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
       detail: "Persistent, outbound, hardware, preparation, or generation action was not executed by the read-only qualification role.",
     };
   }
-  if (descriptor.role === "tab" && descriptor.aria_selected === "true") {
-    return {...descriptor, terminal_state: "SELECTED_STATE_OBSERVED"};
+  if (
+    (descriptor.role === "tab" && availability.aria_selected === "true")
+    || availability.aria_pressed === "true"
+  ) {
+    return {
+      ...descriptor,
+      terminal_state: "GUARD_VERIFIED",
+      detail: "The control was already in its active guarded state after sibling operations.",
+    };
   }
   const contextRoot = await controlContextRoot(page, frame);
   const before = await controlSemanticState(page, frame, locator);
+  await captureControlStateTrace(page, observations, route, "before_operation", descriptor);
   const beforeCheckpoint = await captureVisualCheckpoint(
     page,
     null,
@@ -1087,6 +2088,7 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
   );
   const requestCountBefore = observations.requests.length;
   let restore = null;
+  let popupEffect = null;
   if (descriptor.tag === "input") {
     if (["checkbox", "radio"].includes(descriptor.type)) {
       await locator.click();
@@ -1113,11 +2115,7 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
     const options = await locator.locator("option").evaluateAll(nodes => nodes.map(node => node.value));
     const alternate = options.find(value => value !== descriptor.value);
     if (alternate === undefined) {
-      return {
-        ...descriptor,
-        terminal_state: "NOT_EXERCISED",
-        detail: "This select exposed only one runtime value; an alternate real value is required before its behavior can qualify.",
-      };
+      return controlCoverageGapRecord(descriptor, "single_runtime_value");
     }
     await locator.selectOption(alternate);
     restore = async () => locator.selectOption(descriptor.value).catch(() => undefined);
@@ -1130,8 +2128,24 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
       await locator.click();
       const popup = await popupPromise;
       if (popup) {
+        await popup.waitForURL(url => isLoadedPopupUrl(url), {timeout: 60_000}).catch(() => undefined);
         await popup.waitForLoadState("domcontentloaded", {timeout: 60_000}).catch(() => undefined);
+        const loadedPopup = isLoadedPopupUrl(popup.url());
+        const popupUrl = (() => {
+          try {
+            const parsed = new URL(popup.url());
+            return `${parsed.origin}${parsed.pathname}`;
+          } catch (_error) {
+            return "unresolved";
+          }
+        })();
+        popupEffect = {
+          popup_loaded: loadedPopup,
+          popup_url: popupUrl,
+        };
         await popup.close();
+      } else {
+        popupEffect = {popup_loaded: false, popup_url: null};
       }
     } else {
       const originalUrl = page.url();
@@ -1149,6 +2163,15 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
         };
       }
     }
+  } else if (
+    descriptor.role === "button"
+    && (
+      descriptor.tag === "svg"
+      || ["g", "circle", "path", "polygon", "polyline", "rect", "line"].includes(descriptor.tag)
+    )
+  ) {
+    await locator.focus();
+    await locator.press("Enter");
   } else {
     await locator.click({timeout: 30_000});
     if (descriptor.data_attributes?.route) {
@@ -1170,6 +2193,7 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
         workspace_signature: await afterRoot.evaluate(node => `${node.innerHTML.length}:${node.textContent.length}`),
         url: page.url(),
       };
+  await captureControlStateTrace(page, observations, route, "after_operation", descriptor);
   const afterCheckpoint = await captureVisualCheckpoint(
     page,
     null,
@@ -1178,18 +2202,33 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
     `${operationIndex}-after`,
     {fullPage: false, domRoot: afterRoot},
   );
+  const requestObserved = observations.requests.length > requestCountBefore;
   const semanticChanged = JSON.stringify(before) !== JSON.stringify(after)
-    || observations.requests.length > requestCountBefore;
+    || requestObserved
+    || popupEffect?.popup_loaded === true;
   const visualChanged = beforeCheckpoint.screenshot_sha256 !== afterCheckpoint.screenshot_sha256;
-  const visualIssues = [...beforeCheckpoint.issues, ...afterCheckpoint.issues];
+  const {
+    baseline_visual_issues,
+    new_visual_issues,
+    resolved_visual_issues,
+  } = visualIssueDelta(beforeCheckpoint.issues, afterCheckpoint.issues);
+  const visualIssueEvidence = {
+    baseline_visual_issues,
+    new_visual_issues,
+    resolved_visual_issues,
+  };
+  const effectOracle = {
+    semantic_changed: semanticChanged,
+    visual_changed: visualChanged,
+    request_observed: requestObserved,
+    popup_loaded: popupEffect?.popup_loaded ?? null,
+    popup_url: popupEffect?.popup_url ?? null,
+  };
   if (restore) await restore();
-  const terminalState = !semanticChanged
-    ? "NO_STATE_CHANGE"
-    : !visualChanged
-      ? "NO_VISUAL_CHANGE"
-      : visualIssues.length
-        ? "VISUAL_QUALITY_FAILURE"
-        : "OPERATED";
+  const terminalState = controlOperationTerminalState(effectOracle);
+  const visualQualityStatus = visualIssueEvidence.new_visual_issues.length
+    ? "WARNING"
+    : "PASS";
   recordBrowserAction(
     observations,
     "operate-control",
@@ -1200,6 +2239,8 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
       after_screenshot: afterCheckpoint.screenshot,
       semantic_changed: semanticChanged,
       visual_changed: visualChanged,
+      visual_quality_status: visualQualityStatus,
+      effect_oracle: effectOracle,
     },
   );
   return {
@@ -1211,7 +2252,10 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
     after_screenshot: afterCheckpoint.screenshot,
     semantic_changed: semanticChanged,
     visual_changed: visualChanged,
-    visual_issues: visualIssues,
+    visual_quality_status: visualQualityStatus,
+    visual_issues: visualIssueEvidence.new_visual_issues,
+    ...visualIssueEvidence,
+    effect_oracle: effectOracle,
   };
 }
 
@@ -1255,17 +2299,32 @@ async function auditAllVisibleControls(page, observations) {
   assert(browserContext, "Visible-control audit requires a live browser context.");
   const routeTraceDirectory = path.join(observations.caseDirectory, "traces");
   fs.mkdirSync(routeTraceDirectory, {recursive: true});
-  const blockingStates = new Set([
-    ...browserActionContract.control_coverage.blocking_terminal_states,
-    "VISUAL_QUALITY_FAILURE",
-  ]);
+  const blockingStates = new Set(
+    browserActionContract.control_coverage.blocking_terminal_states,
+  );
   const allowedStates = new Set(browserActionContract.control_coverage.allowed_terminal_states);
   const routes = browserActionContract.routes.map(item => item.id);
+  let routeTracingAvailable = true;
   for (let routeIndex = 0; routeIndex < routes.length; routeIndex += 1) {
     const route = routes[routeIndex];
     const routeTracePath = path.join(routeTraceDirectory, `${safeCaseId(route)}.zip`);
     let routeTraceError = null;
-    await browserContext.tracing.start({screenshots: true, snapshots: true, sources: true});
+    let routeTraceStarted = false;
+    const routeInventoryStart = inventory.length;
+    appendCaseProgress(observations, "route_started", {route, profile: "control-audit"});
+    if (routeTracingAvailable) {
+      try {
+        await browserContext.tracing.start({screenshots: false, snapshots: false, sources: false});
+        routeTraceStarted = true;
+      } catch (error) {
+        routeTraceError = error;
+        routeTracingAvailable = false;
+        appendCaseProgress(observations, "route_trace_start_failed", {
+          route,
+          error: String(error?.message || error),
+        });
+      }
+    }
     try {
     const routePage = await browserContext.newPage();
     routePage.__scoutQualificationObservations = observations;
@@ -1287,7 +2346,11 @@ async function auditAllVisibleControls(page, observations) {
           error.code = "CONTROL_ROUTE_TIMEOUT";
           throw error;
         }
-        const controls = await runVisibleControlDiscoveryWithTimeout(routePage, route);
+        const controls = await runVisibleControlDiscoveryWithTimeout(
+          routePage,
+          route,
+          observations,
+        );
         controls.forEach(control => discoveredIdentities.set(control.identity, control));
         const passiveControls = controls.filter(control => (
           !completedIdentities.has(control.identity)
@@ -1299,30 +2362,10 @@ async function auditAllVisibleControls(page, observations) {
           )
         ));
         for (const control of passiveControls) {
-          let result;
-          if (control.discovery_error) {
-            result = {
-              ...control,
-              terminal_state: "UNMAPPED",
-              detail: `Interactive controls could not be inventoried in ${control.context_id}: ${control.discovery_error}`,
-            };
-          } else if (control.disabled) {
-            result = {
-              ...control,
-              terminal_state: "NOT_EXERCISED",
-              detail: "This control was disabled in the selected live runtime state; an executable real state is required before the function can qualify.",
-            };
-          } else if (control.delegated_to) {
-            result = {...control, terminal_state: "DELEGATED"};
-          } else {
-            result = {
-              ...control,
-              terminal_state: "EFFECT_AUTHORIZATION_REQUIRED",
-              detail: "Persistent, outbound, hardware, preparation, or generation action was not executed by the read-only qualification role.",
-            };
-          }
+          const result = classifyPassiveControl(control);
           inventory.push(result);
           completedIdentities.add(control.identity);
+          await markControlCompleted(routePage, control);
         }
         if (passiveControls.length) observations.controlInventory = inventory;
         const candidate = controls.find(control => (
@@ -1337,6 +2380,12 @@ async function auditAllVisibleControls(page, observations) {
         }
         operationIndex += 1;
         let result;
+        appendCaseProgress(observations, "control_operation_started", {
+          route,
+          operation_index: operationIndex,
+          control_key: candidate.key,
+          control_identity: candidate.identity,
+        });
         try {
           result = await runVisibleControlOperationWithTimeout(
             routePage,
@@ -1346,6 +2395,31 @@ async function auditAllVisibleControls(page, observations) {
             operationIndex,
           );
         } catch (error) {
+          if (isTransientControlLocatorError(error)) {
+            appendCaseProgress(observations, "control_operation_transient_retry", {
+              route,
+              operation_index: operationIndex,
+              control_key: candidate.key,
+              control_identity: candidate.identity,
+              error: String(error?.message || error),
+            });
+            await openDashboard(routePage, observations.baseUrl, readyProjectId, route);
+            await routePage.waitForTimeout(500);
+            try {
+              result = await runVisibleControlOperationWithTimeout(
+                routePage,
+                observations,
+                route,
+                candidate,
+                operationIndex,
+              );
+            } catch (retryError) {
+              error = retryError;
+            }
+          }
+          if (result) {
+            // A single fresh-route retry recovered an explicitly transient DOM race.
+          } else {
           result = {
             ...candidate,
             terminal_state: "OPERATION_ERROR",
@@ -1358,6 +2432,7 @@ async function auditAllVisibleControls(page, observations) {
             "failed",
             {error: result.detail},
           );
+          }
           if (
             error?.code === "CONTROL_OPERATION_TIMEOUT"
             || /(?:page|target|renderer).*(?:closed|crashed|unresponsive)/i.test(result.detail)
@@ -1368,6 +2443,14 @@ async function auditAllVisibleControls(page, observations) {
         inventory.push(result);
         observations.controlInventory = inventory;
         completedIdentities.add(candidate.identity);
+        appendCaseProgress(observations, "control_operation_completed", {
+          route,
+          operation_index: operationIndex,
+          control_key: candidate.key,
+          control_identity: candidate.identity,
+          terminal_state: result.terminal_state,
+        });
+        await markControlCompleted(routePage, result);
         if (routeAbortedAfterOperationError) break;
         if (["MISSING_AFTER_RELOAD", "OPERATION_ERROR"].includes(result.terminal_state)) {
           try {
@@ -1415,13 +2498,12 @@ async function auditAllVisibleControls(page, observations) {
       }
       for (const [identity, control] of discoveredIdentities) {
         if (completedIdentities.has(identity)) continue;
-        inventory.push({
-          ...control,
-          terminal_state: "NOT_EXERCISED",
-          detail: routeAbortedAfterOperationError
-            ? "route_aborted_after_operation_error: the remaining visible control requires a fresh live-runtime qualification."
-            : "The control was visible during the route state walk but disappeared before browser operation.",
-        });
+        inventory.push(await classifyUncompletedControl(
+          routePage,
+          route,
+          control,
+          routeAbortedAfterOperationError,
+        ));
         observations.controlInventory = inventory;
       }
       if (routeIndex === routes.length - 1) {
@@ -1435,18 +2517,51 @@ async function auditAllVisibleControls(page, observations) {
         routePage.close({runBeforeUnload: false}).catch(() => undefined),
         new Promise(resolve => setTimeout(resolve, 10_000)),
       ]);
+      appendCaseProgress(
+        observations,
+        routeAbortedAfterOperationError ? "route_failed" : "route_completed",
+        {
+          route,
+          profile: "control-audit",
+          control_count: inventory.length - routeInventoryStart,
+        },
+      );
     }
     } finally {
-      try {
-        await browserContext.tracing.stop({path: routeTracePath});
-        observations.segmentedTraces.push(
-          path.relative(observations.outputRoot, routeTracePath),
-        );
-      } catch (error) {
-        routeTraceError = error;
+      if (routeTraceStarted) {
+        appendCaseProgress(observations, "route_trace_stop_started", {route});
+        try {
+          await runCaseFinalizerWithTimeout(
+            `route-trace-stop:${route}`,
+            () => browserContext.tracing.stop({path: routeTracePath}),
+            ROUTE_TRACE_FINALIZATION_TIMEOUT_MS,
+          );
+          observations.segmentedTraces.push(
+            path.relative(observations.outputRoot, routeTracePath),
+          );
+          appendCaseProgress(observations, "route_trace_finalized", {route});
+        } catch (error) {
+          routeTraceError = error;
+          routeTracingAvailable = false;
+          appendCaseProgress(observations, "route_trace_finalization_failed", {
+            route,
+            error: String(error?.message || error),
+          });
+        }
       }
     }
-    if (routeTraceError) throw routeTraceError;
+    if (routeTraceError) {
+      const identity = JSON.stringify({route, route_trace_error: String(routeTraceError)});
+      inventory.push({
+        route,
+        context_id: "qualification-trace",
+        identity,
+        key: `q-route-trace-${sha256(identity).slice(0, 12)}`,
+        terminal_state: "OPERATION_ERROR",
+        detail: `route_trace_finalization_failed: ${String(routeTraceError?.message || routeTraceError)}`,
+      });
+      observations.controlInventory = inventory;
+    }
   }
   const terminalStates = inventory.reduce((counts, item) => ({
     ...counts,
@@ -1456,14 +2571,25 @@ async function auditAllVisibleControls(page, observations) {
     blockingStates.has(item.terminal_state)
     || (!allowedStates.has(item.terminal_state) && item.terminal_state !== "GUARD_VERIFIED")
   ));
+  const visualIssueGroups = groupVisualQualityFindings(observations.visualCheckpoints);
+  const coverageFailureSummary = summarizeControlCoverageFailure(
+    blocking,
+    visualIssueGroups,
+  );
   observations.controlInventory = inventory;
   observations.controlCoverageBlocking = blocking;
-  assert(blocking.length === 0, `Visible control coverage is incomplete: ${JSON.stringify(blocking)}`);
+  observations.controlVisualQualityFindings = visualIssueGroups;
+  observations.controlCoverageFailureSummary = coverageFailureSummary;
+  assert(
+    blocking.length === 0 && visualIssueGroups.length === 0,
+    `Visible control coverage is incomplete: ${JSON.stringify(coverageFailureSummary)}`,
+  );
   return {
     routeCount: browserActionContract.routes.length,
     controlCount: inventory.length,
     terminalStates,
     blocking,
+    visualIssueGroups,
     controlInventory: inventory,
   };
 }
@@ -1498,6 +2624,59 @@ async function waitForHigherMatrix(page, reader, initialMatrix, label) {
   return state;
 }
 
+async function selectHoverableEvidenceCandidate(locator, label) {
+  const candidateIndexes = await locator.evaluateAll(nodes => {
+    const indexes = [];
+    const visible = node => {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && Number(style.opacity || 1) > 0
+        && rect.width > 0
+        && rect.height > 0
+        && rect.bottom > 0
+        && rect.right > 0
+        && rect.top < innerHeight
+        && rect.left < innerWidth;
+    };
+    for (let index = nodes.length - 1; index >= 0 && indexes.length < 16; index -= 1) {
+      const node = nodes[index];
+      if (!visible(node)) continue;
+      const rect = node.getBoundingClientRect();
+      const points = [
+        [.5, .5], [.25, .25], [.75, .75], [.25, .75], [.75, .25],
+        [.5, .25], [.5, .75], [.25, .5], [.75, .5],
+      ];
+      const targetIsTopmost = points.some(([xRatio, yRatio]) => {
+        const x = Math.max(0, Math.min(innerWidth - 1, rect.left + rect.width * xRatio));
+        const y = Math.max(0, Math.min(innerHeight - 1, rect.top + rect.height * yRatio));
+        const hit = document.elementFromPoint(x, y);
+        const owner = hit?.closest?.("[data-dashboard-map-hint-title], [data-evidence-type]") || null;
+        return owner === node || node.contains(owner);
+      });
+      if (targetIsTopmost) indexes.push(index);
+    }
+    return indexes;
+  });
+  assert(candidateIndexes.length > 0, `${label} has no topmost, target-specific hover candidate.`);
+  return candidateIndexes.map(index => locator.nth(index));
+}
+
+async function hoverSelectedEvidence(page, locator, observations, label) {
+  const candidates = await selectHoverableEvidenceCandidate(locator, label);
+  const failures = [];
+  for (const candidate of candidates) {
+    try {
+      const hover = await hoverRenderedEvidence(page, candidate, observations, label);
+      return {locator: candidate, hover};
+    } catch (error) {
+      failures.push(String(error?.message || error));
+    }
+  }
+  throw new Error(`${label} candidate hover attempts failed: ${failures.join(" | ")}`);
+}
+
 async function hoverRenderedEvidence(page, locator, observations, label) {
   const geometry = await locator.evaluate(node => {
     const source = typeof node.getTotalLength === "function"
@@ -1513,13 +2692,13 @@ async function hoverRenderedEvidence(page, locator, observations, label) {
         candidates.push({x: screen.x, y: screen.y});
       }
     }
-    if (!candidates.length) {
-      candidates.push(
-        {x: rect.left + rect.width * .5, y: rect.top + rect.height * .5},
-        {x: rect.left + rect.width * .25, y: rect.top + rect.height * .25},
-        {x: rect.left + rect.width * .75, y: rect.top + rect.height * .75},
-      );
-    }
+    candidates.push(
+      {x: rect.left + rect.width * .5, y: rect.top + rect.height * .5},
+      {x: rect.left + rect.width * .25, y: rect.top + rect.height * .25},
+      {x: rect.left + rect.width * .75, y: rect.top + rect.height * .75},
+      {x: rect.left + rect.width * .25, y: rect.top + rect.height * .75},
+      {x: rect.left + rect.width * .75, y: rect.top + rect.height * .25},
+    );
     return {
       rect: {left: rect.left, top: rect.top},
       candidates,
@@ -1533,11 +2712,18 @@ async function hoverRenderedEvidence(page, locator, observations, label) {
     const pageY = box.y + candidate.y - geometry.rect.top;
     await page.mouse.move(pageX, pageY);
     await page.waitForTimeout(100);
-    const hit = await locator.evaluate((_node, point) => {
+    const hit = await locator.evaluate((node, point) => {
       const element = document.elementFromPoint(point.x, point.y);
       const owner = element?.closest?.("[data-dashboard-map-hint-title], [data-evidence-type]") || null;
+      const targetHit = Boolean(owner && (owner === node || node.contains(owner)));
+      const dashboardHintTarget = node.hasAttribute("data-dashboard-map-hint-title");
       return {
-        evidence_hit: Boolean(owner),
+        evidence_hit: targetHit && (
+          !dashboardHintTarget
+          || node.getAttribute("aria-describedby") === "dashboardMapHoverHint"
+        ),
+        target_hit: targetHit,
+        aria_describedby: node.getAttribute("aria-describedby"),
         evidence_owner: owner
           ? String(owner.getAttribute("data-dashboard-map-hint-title") || owner.getAttribute("data-evidence-type") || owner.tagName)
           : null,
@@ -1551,10 +2737,15 @@ async function hoverRenderedEvidence(page, locator, observations, label) {
         page_x: pageX,
         page_y: pageY,
         evidence_owner: hit.evidence_owner,
+        aria_describedby: hit.aria_describedby,
       });
       return {page_x: pageX, page_y: pageY, evidence_owner: hit.evidence_owner};
     }
-    interceptedBy.push(hit.intercepted_by);
+    interceptedBy.push(
+      hit.target_hit && !hit.evidence_hit
+        ? `${hit.intercepted_by}:missing-target-hint`
+        : hit.intercepted_by,
+    );
   }
   throw new Error(`${label} has no user-hoverable rendered geometry; intercepted by ${[...new Set(interceptedBy)].join(", ")}.`);
 }
@@ -1582,6 +2773,50 @@ async function inspectNativeDynamicMap(page, observations, definition) {
     .filter(request => Number(request.rudyMatrix) > initial.matrix);
   assert(higherRequests.some(request => request.status >= 200 && request.status < 300), `${definition.label} has no successful native tile request above Z${initial.matrix}.`);
   return { initial, advanced, higherRequests };
+}
+
+async function inspectNavigationDynamicRudyTiles(page, observations) {
+  const requestStart = observations.requests.length;
+  await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-navigation");
+  const shell = page.locator('[data-navigation-maplibre-shell="2d"]:visible').first();
+  await shell.waitFor({state: "visible", timeout: 120_000});
+  const host = shell.locator('[data-navigation-maplibre-map="2d"]');
+  await host.waitFor({state: "visible", timeout: 120_000});
+  await page.waitForFunction(() => (
+    document.querySelector('[data-navigation-maplibre-map="2d"]')
+      ?.getAttribute("data-navigation-maplibre-status") === "ready"
+  ), null, {timeout: 120_000});
+  const fit = shell.locator('[data-navigation-maplibre-fit="2d"]');
+  const zoomIn = shell.locator(".maplibregl-ctrl-zoom-in");
+  assert(await fit.isVisible() && await zoomIn.isVisible(), "Navigation MapLibre Fit/zoom controls are incomplete.");
+  await fit.click();
+  recordBrowserAction(observations, "click", "Navigation Map:fit");
+  await page.waitForTimeout(750);
+  const initial = await navigationMapLibreState(host);
+  assert(Number.isInteger(initial.tile_zoom), "Navigation MapLibre has no active Fit tile matrix.");
+  await zoomIn.click();
+  recordBrowserAction(observations, "click", "Navigation Map:zoom-in");
+  const advanced = await waitForHigherMatrix(
+    page,
+    async () => {
+      const state = await navigationMapLibreState(host);
+      return {...state, matrix: state.tile_zoom};
+    },
+    initial.tile_zoom,
+    "Navigation MapLibre",
+  );
+  const higherRequests = observations.requests
+    .slice(requestStart)
+    .filter(request => Number(request.rudyMatrix) > initial.tile_zoom);
+  assert(
+    higherRequests.some(request => request.status >= 200 && request.status < 300),
+    `Navigation MapLibre has no successful native tile request above Z${initial.tile_zoom}.`,
+  );
+  return {
+    initial: {...initial, matrix: initial.tile_zoom},
+    advanced,
+    higherRequests,
+  };
 }
 
 async function inspectWeatherDynamicMap(page, observations) {
@@ -1667,7 +2902,27 @@ async function nativeMapState(viewport) {
       .filter(image => getComputedStyle(image).display !== "none");
     const vectors = [...node.querySelectorAll("svg path, svg polyline, svg polygon, svg circle, svg line")]
       .filter(element => getComputedStyle(element).display !== "none");
+    const safeResourceUrl = value => {
+      try {
+        const parsed = new URL(value, location.href);
+        return `${parsed.origin}${parsed.pathname}`;
+      } catch (_error) {
+        return "unresolved";
+      }
+    };
+    const rawRasterSources = [...tileImages, ...approvedImages]
+      .map(image => image.getAttribute("href") || image.getAttribute("xlink:href") || "")
+      .filter(Boolean);
+    const resourceEntries = performance.getEntriesByType("resource")
+      .filter(entry => rawRasterSources.some(source => entry.name === source || entry.name.endsWith(source)))
+      .slice(-24)
+      .map(entry => ({
+        name: safeResourceUrl(entry.name),
+        duration_ms: entry.duration,
+        transfer_size: entry.transferSize,
+      }));
     return {
+      selector_identity: node.getAttribute("data-dashboard-map-viewport") || node.id || null,
       zoom: Number(node.dataset.mapZoom),
       mode: node.dataset.mapMode || null,
       last_gesture: node.dataset.mapLastGesture || null,
@@ -1679,11 +2934,85 @@ async function nativeMapState(viewport) {
       tile_count: tileImages.length,
       approved_single_image_count: approvedImages.length,
       vector_count: vectors.length,
+      raster_sources: rawRasterSources.map(safeResourceUrl),
+      resource_entries: resourceEntries,
       tile_load_state: node.dataset.dashboardTileLoadState || null,
       width: node.getBoundingClientRect().width,
       height: node.getBoundingClientRect().height,
     };
   });
+}
+
+async function browserObservedRasterProvenance(
+  page,
+  observations,
+  requestStart,
+  states,
+  label,
+) {
+  const successfulResponses = observations.requests
+    .slice(requestStart)
+    .filter(request => Number.isInteger(request.rudyMatrix))
+    .filter(request => request.status >= 200 && request.status < 300);
+  const resourceEntries = states
+    .flatMap(state => state?.resource_entries || [])
+    .filter(entry => entry?.name);
+  const rasterSources = states
+    .flatMap(state => state?.raster_sources || [])
+    .filter(Boolean);
+  const tileLoadStates = states
+    .map(state => state?.tile_load_state)
+    .filter(Boolean);
+  const readyTilesRendered = states.some(state => (
+    state?.tile_load_state === "ready"
+    && Number(state?.tile_count || 0) > 0
+  ));
+  let cacheVerification = null;
+  if (!successfulResponses.length && readyTilesRendered) {
+    const source = resourceEntries[0]?.name || rasterSources[0] || null;
+    if (source) {
+      cacheVerification = await page.evaluate(async resourceUrl => {
+        try {
+          const response = await fetch(resourceUrl, {
+            cache: "force-cache",
+            credentials: "same-origin",
+          });
+          await response.arrayBuffer();
+          return {
+            ok: response.ok,
+            status: response.status,
+            url: response.url,
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            status: null,
+            url: resourceUrl,
+            error: String(error?.message || error),
+          };
+        }
+      }, source);
+      recordBrowserAction(
+        observations,
+        "verify-raster-provenance",
+        label,
+        cacheVerification.ok ? "completed" : "failed",
+        {
+          status: cacheVerification.status,
+          cache_path: true,
+        },
+      );
+    }
+  }
+  const browserObservedCount = successfulResponses.length + (cacheVerification?.ok ? 1 : 0);
+  return {
+    browser_observed_count: browserObservedCount,
+    network_response_count: successfulResponses.length,
+    resource_entries: resourceEntries,
+    raster_sources: rasterSources,
+    tile_load_states: tileLoadStates,
+    cache_verification: cacheVerification,
+  };
 }
 
 async function prepareMapSurfaceForBrowserOperation(page, observations, surface) {
@@ -1825,17 +3154,23 @@ async function inspectNativeMapGestures(page, observations, surface) {
   await viewport.locator('[data-map-control="reset"]').click();
   recordBrowserAction(observations, "click", `${surface.id}:evidence-hover-fit-reset`);
   await page.waitForTimeout(500);
-  const evidenceTarget = viewport.locator("[data-dashboard-map-hint-title]").first();
-  assert(await evidenceTarget.count(), `${surface.id} has no hoverable map evidence.`);
+  const evidenceTargets = viewport.locator("[data-dashboard-map-hint-title]");
+  assert(await evidenceTargets.count(), `${surface.id} has no hoverable map evidence.`);
   await page.evaluate(() => {
     if (typeof hideDashboardMapHint === "function") hideDashboardMapHint();
   });
   const hint = page.locator("#dashboardMapHoverHint");
   assert(await hint.isHidden(), `${surface.id} inherited a visible hint before target hover.`);
-  const targetHintSource = await evidenceTarget.getAttribute("data-dashboard-map-hint-source") || "evidence";
   const hintBeforeCheckpoint = await captureVisualCheckpoint(page, viewport, observations, `maps-${surface.id}`, "evidence-hint-before");
   checkpoints.push(hintBeforeCheckpoint);
-  await hoverRenderedEvidence(page, evidenceTarget, observations, `${surface.id}:evidence-hint`);
+  const selectedEvidence = await hoverSelectedEvidence(
+    page,
+    evidenceTargets,
+    observations,
+    `${surface.id}:evidence-hint`,
+  );
+  const evidenceTarget = selectedEvidence.locator;
+  const targetHintSource = await evidenceTarget.getAttribute("data-dashboard-map-hint-source") || "evidence";
   await page.waitForTimeout(200);
   const hintAfterCheckpoint = await captureVisualCheckpoint(page, viewport, observations, `maps-${surface.id}`, "evidence-hint-after");
   checkpoints.push(hintAfterCheckpoint);
@@ -1846,15 +3181,20 @@ async function inspectNativeMapGestures(page, observations, surface) {
   assert(await evidenceTarget.getAttribute("aria-describedby") === "dashboardMapHoverHint", `${surface.id} hint is not bound to the hovered evidence target.`);
   assert(hintBeforeCheckpoint.screenshot_sha256 !== hintAfterCheckpoint.screenshot_sha256, `${surface.id} hint became semantic-only without visible evidence.`);
 
-  const rasterRequests = observations.requests
-    .slice(requestStart)
-    .filter(request => Number.isInteger(request.rudyMatrix));
+  const rasterProvenance = await browserObservedRasterProvenance(
+    page,
+    observations,
+    requestStart,
+    [initial, fitBefore, fitted, zoomedIn, zoomedOut, panned, keyboardPanned, rectangleZoomed],
+    `${surface.id}:rendered-raster`,
+  );
   assert(
-    rasterRequests.some(request => request.status >= 200 && request.status < 300),
+    rasterProvenance.browser_observed_count > 0,
     `${surface.id} displayed tiles without a successful browser-observed raster request.`,
   );
   const visualIssues = checkpoints.flatMap(checkpoint => checkpoint.issues);
   assert(visualIssues.length === 0, `${surface.id} visual quality failed: ${JSON.stringify(visualIssues)}`);
+  const finalRenderState = await nativeMapState(viewport);
   return {
     surface_id: surface.id,
     route: surface.route,
@@ -1871,23 +3211,212 @@ async function inspectNativeMapGestures(page, observations, surface) {
     rectangle_zoomed: rectangleZoomed,
     hover_hint_visible: true,
     target_hint_source,
-    successful_raster_request_count: rasterRequests.filter(request => request.status >= 200 && request.status < 300).length,
+    successful_raster_request_count: rasterProvenance.network_response_count,
+    browser_observed_raster_provenance_count: rasterProvenance.browser_observed_count,
+    raster_resource_entries: rasterProvenance.resource_entries,
+    raster_tile_load_states: rasterProvenance.tile_load_states,
+    raster_cache_verification: rasterProvenance.cache_verification,
+    final_render_state: finalRenderState,
+    final_screenshot: hintAfterCheckpoint.screenshot,
+    checkpoints,
+  };
+}
+
+async function navigationMapLibreState(host) {
+  return host.evaluate(node => {
+    const canvas = node.querySelector("canvas.maplibregl-canvas");
+    const rect = canvas?.getBoundingClientRect();
+    return {
+      selector_identity: node.getAttribute("data-navigation-maplibre-map"),
+      status: node.dataset.navigationMaplibreStatus || null,
+      zoom: Number(node.dataset.navigationMaplibreZoom),
+      center: node.dataset.navigationMaplibreCenter || null,
+      pitch: Number(node.dataset.navigationMaplibrePitch),
+      bearing: Number(node.dataset.navigationMaplibreBearing),
+      tile_zoom: Number(node.dataset.dashboardTileZoom),
+      basemap_layer: node.dataset.dashboardBasemapLayer || null,
+      basemap_policy: node.dataset.dashboardBasemapPolicy || null,
+      canvas_present: Boolean(canvas),
+      canvas_width: rect?.width || 0,
+      canvas_height: rect?.height || 0,
+    };
+  });
+}
+
+async function inspectNavigationMapLibreGestures(page, observations, surface) {
+  const requestStart = observations.requests.length;
+  await openDashboard(page, observations.baseUrl, readyProjectId, surface.route);
+  const shell = page.locator('[data-navigation-maplibre-shell="2d"]').first();
+  await shell.waitFor({state: "visible", timeout: 120_000});
+  const host = shell.locator('[data-navigation-maplibre-map="2d"]');
+  await host.waitFor({state: "visible", timeout: 120_000});
+  await page.waitForFunction(() => (
+    document.querySelector('[data-navigation-maplibre-map="2d"]')
+      ?.getAttribute("data-navigation-maplibre-status") === "ready"
+  ), null, {timeout: 120_000});
+  const canvas = host.locator("canvas.maplibregl-canvas");
+  await canvas.waitFor({state: "visible", timeout: 60_000});
+  const checkpoints = [];
+  const initial = await navigationMapLibreState(host);
+  assert(initial.canvas_present && initial.canvas_width >= 180 && initial.canvas_height >= 180, "navigation-map MapLibre canvas is not visibly rendered.");
+  assert(initial.basemap_policy === "rudy-twmap-only", "navigation-map MapLibre basemap policy is not Rudy+TW-only.");
+  checkpoints.push(await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "initial"));
+
+  const zoomIn = shell.locator(".maplibregl-ctrl-zoom-in");
+  const zoomOut = shell.locator(".maplibregl-ctrl-zoom-out");
+  const fit = shell.locator('[data-navigation-maplibre-fit="2d"]');
+  assert(await zoomIn.isVisible() && await zoomOut.isVisible() && await fit.isVisible(), "navigation-map MapLibre zoom/Fit controls are incomplete.");
+  await zoomIn.click();
+  await zoomIn.click();
+  recordBrowserAction(observations, "click-sequence", "navigation-map:fit-setup-zoom-in");
+  await page.waitForTimeout(750);
+  const fitBefore = await navigationMapLibreState(host);
+  checkpoints.push(await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "fit-before"));
+  await fit.click();
+  recordBrowserAction(observations, "click", "navigation-map:fit");
+  await page.waitForTimeout(750);
+  const fitted = await navigationMapLibreState(host);
+  checkpoints.push(await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "fit-after"));
+  assert(fitBefore.zoom > fitted.zoom, "navigation-map MapLibre Fit did not restore the fitted extent.");
+
+  await zoomIn.click();
+  recordBrowserAction(observations, "click", "navigation-map:zoom-in");
+  await page.waitForTimeout(750);
+  const zoomedIn = await navigationMapLibreState(host);
+  assert(zoomedIn.zoom > fitted.zoom, "navigation-map MapLibre zoom-in did not increase zoom.");
+  checkpoints.push(await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "zoom-in"));
+  await zoomOut.click();
+  recordBrowserAction(observations, "click", "navigation-map:zoom-out");
+  await page.waitForTimeout(750);
+  const zoomedOut = await navigationMapLibreState(host);
+  assert(zoomedOut.zoom < zoomedIn.zoom, "navigation-map MapLibre zoom-out did not decrease zoom.");
+  checkpoints.push(await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "zoom-out"));
+
+  await zoomIn.click();
+  const panBefore = await navigationMapLibreState(host);
+  const canvasBox = await canvas.boundingBox();
+  assert(canvasBox, "navigation-map MapLibre canvas has no browser bounding box.");
+  await page.mouse.move(canvasBox.x + canvasBox.width * .5, canvasBox.y + canvasBox.height * .5);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + canvasBox.width * .65, canvasBox.y + canvasBox.height * .62, {steps: 8});
+  await page.mouse.up();
+  recordBrowserAction(observations, "mouse-drag", "navigation-map:pan");
+  await page.waitForTimeout(750);
+  const mousePanned = await navigationMapLibreState(host);
+  assert(mousePanned.center !== panBefore.center, "navigation-map MapLibre mouse drag did not pan.");
+  checkpoints.push(await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "mouse-pan"));
+
+  await canvas.focus();
+  const keyboardBefore = await navigationMapLibreState(host);
+  await canvas.press("ArrowRight");
+  recordBrowserAction(observations, "keyboard", "navigation-map:ArrowRight");
+  await page.waitForTimeout(750);
+  const keyboardPanned = await navigationMapLibreState(host);
+  assert(keyboardPanned.center !== keyboardBefore.center, "navigation-map MapLibre keyboard pan did not move.");
+  checkpoints.push(await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "keyboard-pan"));
+
+  await fit.click();
+  await page.waitForTimeout(500);
+  const rectangleBefore = await navigationMapLibreState(host);
+  await page.keyboard.down("Shift");
+  try {
+    await page.mouse.move(canvasBox.x + canvasBox.width * .2, canvasBox.y + canvasBox.height * .2);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox.x + canvasBox.width * .68, canvasBox.y + canvasBox.height * .72, {steps: 10});
+    await page.mouse.up();
+  } finally {
+    await page.keyboard.up("Shift");
+  }
+  recordBrowserAction(observations, "rectangle-drag", "navigation-map:box-zoom");
+  await page.waitForTimeout(1000);
+  const rectangleZoomed = await navigationMapLibreState(host);
+  assert(rectangleZoomed.zoom > rectangleBefore.zoom, "navigation-map MapLibre Shift+drag rectangle zoom did not increase zoom.");
+  checkpoints.push(await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "rectangle-zoom"));
+
+  await fit.click();
+  await page.waitForTimeout(500);
+  const evidenceTargets = shell.locator("[data-dashboard-map-hint-title]");
+  assert(await evidenceTargets.count(), "navigation-map MapLibre surface exposes no hoverable evidence hint target.");
+  const hintBefore = await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "evidence-hint-before");
+  checkpoints.push(hintBefore);
+  const selectedEvidence = await hoverSelectedEvidence(
+    page,
+    evidenceTargets,
+    observations,
+    "navigation-map:evidence-hint",
+  );
+  await page.waitForTimeout(200);
+  const hint = page.locator("#dashboardMapHoverHint");
+  const hintAfter = await captureVisualCheckpoint(page, shell, observations, "maps-navigation-map", "evidence-hint-after");
+  checkpoints.push(hintAfter);
+  assert(await hint.isVisible(), "navigation-map MapLibre evidence hover hint is not visible.");
+  assert(await selectedEvidence.locator.getAttribute("aria-describedby") === "dashboardMapHoverHint", "navigation-map MapLibre hint is not bound to its hovered target.");
+  assert(hintBefore.screenshot_sha256 !== hintAfter.screenshot_sha256, "navigation-map MapLibre hint produced no visible change.");
+
+  const visualIssues = checkpoints.flatMap(checkpoint => checkpoint.issues);
+  assert(visualIssues.length === 0, `navigation-map MapLibre visual quality failed: ${JSON.stringify(visualIssues)}`);
+  const successfulRequests = observations.requests.slice(requestStart).filter(request => (
+    request.status >= 200 && request.status < 300
+  ));
+  return {
+    surface_id: surface.id,
+    route: surface.route,
+    kind: "maplibre-native",
+    gestures: browserActionContract.required_map_gestures,
+    initial,
+    fit_before: fitBefore,
+    fitted,
+    zoomed_in: zoomedIn,
+    zoomed_out: zoomedOut,
+    mouse_panned: mousePanned,
+    keyboard_panned: keyboardPanned,
+    rectangle_zoomed: rectangleZoomed,
+    hover_hint_visible: true,
+    successful_response_count: successfulRequests.length,
+    final_render_state: await navigationMapLibreState(host),
+    final_screenshot: hintAfter.screenshot,
     checkpoints,
   };
 }
 
 async function embeddedMapState(frame) {
-  return frame.locator("#map").evaluate(() => ({
-    zoom: Number(state.zoom),
-    pan_x: Number(state.panX),
-    pan_y: Number(state.panY),
-    mode: state.mapInteractionMode,
-    vector_count: document.querySelectorAll("#map path, #map polyline, #map polygon, #map circle, #map ellipse, #map line, #map rect, #map use").length,
-    tile_count: document.querySelectorAll('#map image[data-map-tile-source], #map image[data-map-render-kind="tile"]').length,
-    approved_single_image_count: document.querySelectorAll('#map image[data-map-render-kind="approved-single-image"]').length,
-    visible_layer_count: [...document.querySelectorAll("#map [data-layer-group]")]
-      .filter(node => node.dataset.layerHidden !== "true" && getComputedStyle(node).display !== "none").length,
-  }));
+  return frame.locator("#map").evaluate(node => {
+    const rasterNodes = [...document.querySelectorAll(
+      '#map image[data-map-tile-source], #map image[data-map-render-kind="tile"], #map image[data-map-render-kind="approved-single-image"]',
+    )];
+    const safeResourceUrl = value => {
+      try {
+        const parsed = new URL(value, location.href);
+        return `${parsed.origin}${parsed.pathname}`;
+      } catch (_error) {
+        return "unresolved";
+      }
+    };
+    const rawRasterSources = rasterNodes
+      .map(image => image.getAttribute("href") || image.getAttribute("xlink:href") || "")
+      .filter(Boolean);
+    return {
+      selector_identity: node.id || "map",
+      zoom: Number(state.zoom),
+      pan_x: Number(state.panX),
+      pan_y: Number(state.panY),
+      mode: state.mapInteractionMode,
+      vector_count: document.querySelectorAll("#map path, #map polyline, #map polygon, #map circle, #map ellipse, #map line, #map rect, #map use").length,
+      tile_count: document.querySelectorAll('#map image[data-map-tile-source], #map image[data-map-render-kind="tile"]').length,
+      approved_single_image_count: document.querySelectorAll('#map image[data-map-render-kind="approved-single-image"]').length,
+      visible_layer_count: [...document.querySelectorAll("#map [data-layer-group]")]
+        .filter(layer => layer.dataset.layerHidden !== "true" && getComputedStyle(layer).display !== "none").length,
+      raster_sources: rawRasterSources.map(safeResourceUrl),
+      resource_entries: performance.getEntriesByType("resource")
+        .filter(entry => rawRasterSources.some(source => entry.name === source || entry.name.endsWith(source)))
+        .slice(-24)
+        .map(entry => ({
+          name: safeResourceUrl(entry.name),
+          duration_ms: entry.duration,
+          transfer_size: entry.transferSize,
+        })),
+    };
+  });
 }
 
 async function inspectEmbeddedMapGestures(page, observations, surface) {
@@ -2021,15 +3550,15 @@ async function inspectEmbeddedMapGestures(page, observations, surface) {
   checkpoints.push(await captureVisualCheckpoint(page, map, observations, `maps-${surface.id}`, "rectangle-zoom"));
 
   await frame.locator("#fitRoute").click();
-  const evidenceTarget = map.locator("[data-evidence-type]").first();
-  assert(await evidenceTarget.count(), `${surface.id} has no hoverable map evidence.`);
+  const evidenceTargets = map.locator("[data-evidence-type]");
+  assert(await evidenceTargets.count(), `${surface.id} has no hoverable map evidence.`);
   const hint = frame.locator("#hoverHint");
   await map.hover({position: {x: 4, y: 4}}).catch(() => undefined);
   await page.waitForTimeout(150);
   assert((await hint.getAttribute("class") || "").includes("is-hidden"), `${surface.id} inherited a visible hint before target hover.`);
   const hintBeforeCheckpoint = await captureVisualCheckpoint(page, map, observations, `maps-${surface.id}`, "evidence-hint-before");
   checkpoints.push(hintBeforeCheckpoint);
-  await hoverRenderedEvidence(page, evidenceTarget, observations, `${surface.id}:evidence-hint`);
+  await hoverSelectedEvidence(page, evidenceTargets, observations, `${surface.id}:evidence-hint`);
   await page.waitForTimeout(200);
   const hintAfterCheckpoint = await captureVisualCheckpoint(page, map, observations, `maps-${surface.id}`, "evidence-hint-after");
   checkpoints.push(hintAfterCheckpoint);
@@ -2046,6 +3575,7 @@ async function inspectEmbeddedMapGestures(page, observations, surface) {
   );
   const visualIssues = checkpoints.flatMap(checkpoint => checkpoint.issues);
   assert(visualIssues.length === 0, `${surface.id} visual quality failed: ${JSON.stringify(visualIssues)}`);
+  const finalRenderState = await embeddedMapState(frame);
   return {
     surface_id: surface.id,
     route: surface.route,
@@ -2062,6 +3592,8 @@ async function inspectEmbeddedMapGestures(page, observations, surface) {
     rectangle_zoomed: rectangleZoomed,
     hover_hint_visible: true,
     successful_raster_request_count: rasterRequests.filter(request => request.status >= 200 && request.status < 300).length,
+    final_render_state: finalRenderState,
+    final_screenshot: hintAfterCheckpoint.screenshot,
     checkpoints,
   };
 }
@@ -2071,9 +3603,11 @@ async function inspectAllDashboardMapSurfaces(page, observations) {
   const failures = [];
   for (const surface of browserActionContract.map_surfaces) {
     try {
-      const result = surface.kind === "native"
-        ? await inspectNativeMapGestures(page, observations, surface)
-        : await inspectEmbeddedMapGestures(page, observations, surface);
+      const result = surface.id === "navigation-map"
+        ? await inspectNavigationMapLibreGestures(page, observations, surface)
+        : surface.kind === "native"
+          ? await inspectNativeMapGestures(page, observations, surface)
+          : await inspectEmbeddedMapGestures(page, observations, surface);
       mapInteractions.push(result);
     } catch (error) {
       const detail = `${surface.id}: ${String(error?.message || error)}`;
@@ -2107,26 +3641,370 @@ async function inspectAllDashboardMapSurfaces(page, observations) {
 async function canonicalLayerRenderState(frame, layerId) {
   return frame.locator("#map").evaluate((node, selectedLayerId) => {
     const input = document.querySelector(`input[data-layer="${CSS.escape(selectedLayerId)}"]`);
+    const controlLabel = input?.closest("label") || null;
     const group = node.querySelector(`[data-layer-group="${CSS.escape(selectedLayerId)}"]`);
     const style = group ? getComputedStyle(group) : null;
+    const inputStyle = input ? getComputedStyle(input) : null;
+    const inputRect = input?.getBoundingClientRect();
+    const controlVisible = Boolean(
+      input
+      && inputStyle.display !== "none"
+      && inputStyle.visibility !== "hidden"
+      && Number(inputStyle.opacity || 1) > 0
+      && inputRect.width > 0
+      && inputRect.height > 0
+    );
+    const controlDisabled = Boolean(input?.disabled || input?.getAttribute("aria-disabled") === "true");
+    const safeResourceUrl = value => {
+      try {
+        const parsed = new URL(value, location.href);
+        return `${parsed.origin}${parsed.pathname}`;
+      } catch (_error) {
+        return "unresolved";
+      }
+    };
+    const rawRasterSources = group
+      ? [...group.querySelectorAll("image, img")]
+        .map(image => image.getAttribute("href") || image.getAttribute("xlink:href") || image.currentSrc || image.src || "")
+        .filter(Boolean)
+      : [];
+    const resourceEntries = performance.getEntriesByType("resource")
+      .filter(entry => rawRasterSources.some(source => entry.name === source || entry.name.endsWith(source)))
+      .slice(-24)
+      .map(entry => ({
+        name: safeResourceUrl(entry.name),
+        duration_ms: entry.duration,
+        transfer_size: entry.transferSize,
+        encoded_body_size: entry.encodedBodySize,
+        decoded_body_size: entry.decodedBodySize,
+      }));
+    const rasterCount = group?.querySelectorAll("image, img").length || 0;
+    const vectorCount = group?.querySelectorAll("path, polyline, polygon, circle, line, rect").length || 0;
+    const snapshot = window.scoutPretripProjectBridge?.getSnapshot?.() || null;
+    const view = snapshot?.view || null;
+    const projectionKey = {
+      "antecedent-rain": "antecedent_rain",
+      "cwa-qpf": "cwa_qpf",
+      "cwa-weather": "cwa_weather",
+      "soil-moisture": "soil_moisture",
+    }[selectedLayerId] || null;
+    const projection = projectionKey && view && typeof view === "object"
+      ? view[projectionKey]
+      : null;
+    const projectedReason = projection && typeof projection === "object"
+      ? (
+        projection.availability_reason
+        || projection.empty_reason
+        || projection.reason
+        || projection.detail_code
+        || null
+      )
+      : null;
     return {
       control_present: Boolean(input),
+      control_disabled: controlDisabled,
+      control_visible: controlVisible,
+      availability_reason: !input
+        ? "control_missing"
+        : controlDisabled
+          ? "control_disabled_in_runtime_state"
+          : !controlVisible
+            ? "control_not_visible_in_runtime_state"
+            : "available",
       checked: Boolean(input?.checked),
       group_present: Boolean(group),
       hidden_attribute: group?.dataset.layerHidden || null,
       visibly_rendered: Boolean(group && style.display !== "none" && style.visibility !== "hidden"),
       child_count: group?.childElementCount || 0,
-      raster_count: group?.querySelectorAll("image").length || 0,
-      vector_count: group?.querySelectorAll("path, polyline, polygon, circle, line, rect").length || 0,
+      raster_count: rasterCount,
+      vector_count: vectorCount,
+      raster_sources: rawRasterSources.map(safeResourceUrl),
+      resource_entries: resourceEntries,
+      control_label: String(controlLabel?.textContent || "").trim().replace(/\s+/g, " "),
+      control_title: controlLabel?.getAttribute("title") || null,
+      dashboard_weather_layer_hidden: controlLabel?.dataset.dashboardWeatherLayerHidden || null,
+      dashboard_weather_layer_required: controlLabel?.dataset.dashboardWeatherLayerRequired || null,
+      dashboard_weather_layer_availability: controlLabel?.dataset.dashboardWeatherLayerAvailability || null,
+      dashboard_weather_layer_availability_reason: controlLabel?.dataset.dashboardWeatherLayerAvailabilityReason || null,
+      dashboard_weather_layer_state_text: String(
+        controlLabel?.querySelector('[data-dashboard-weather-layer-state="true"]')?.textContent || "",
+      ).trim() || null,
+      projected_availability: {
+        bridge_project_id: snapshot?.projectId || null,
+        projection_key: projectionKey,
+        projection_present: Boolean(projection),
+        status: projection?.status || projection?.availability_status || null,
+        typed_reason: projectedReason,
+        typed_reason_present: Boolean(projectedReason),
+        point_count: Array.isArray(projection?.points) ? projection.points.length : null,
+        source_path_present: Boolean(projection?.source_path),
+        bounds_present: Boolean(projection?.bounds || projection?.bbox || projection?.bbox_wgs84),
+      },
+      render_provenance: rasterCount && vectorCount
+        ? "raster_and_vector"
+        : rasterCount
+          ? "raster"
+          : vectorCount
+            ? "vector"
+            : "empty",
     };
   }, layerId);
 }
 
+async function inspectMainMapWeatherLayerAvailability(page, observations) {
+  const layerIds = [
+    "antecedent-rain",
+    "cwa-qpf",
+    "cwa-weather",
+    "soil-moisture",
+    "weather-api",
+  ];
+  const mainMapRecords = [];
+  observations.layerInteractions = mainMapRecords;
+  observations.layerInteractionFailures = [];
+  await openDashboard(page, observations.baseUrl, readyProjectId, "map");
+  const frameSelector = browserActionContract.map_surfaces.find(surface => surface.id === "map").frame_selector;
+  const frameHost = page.locator(frameSelector);
+  const frame = page.frameLocator(frameSelector);
+  await frame.locator("#map").waitFor({state: "visible", timeout: 120_000});
+  await frame.locator("input[data-layer]").first().waitFor({state: "attached", timeout: 120_000});
+  await frame.locator('label[data-dashboard-weather-layer-required="true"]')
+    .first()
+    .waitFor({state: "visible", timeout: 120_000});
+  await page.waitForTimeout(1000);
+  const mapFrameBoundaryRaw = await frameHost.evaluate(node => ({
+    id: node.id || null,
+    title: node.getAttribute("title") || null,
+    source: node.src || node.getAttribute("src") || "",
+  }));
+  const mapFrameBoundary = {
+    ...mapFrameBoundaryRaw,
+    source: evidenceSafeUrl(mapFrameBoundaryRaw.source),
+  };
+  for (const layerId of layerIds) {
+    const initial = await canonicalLayerRenderState(frame, layerId);
+    const mainMapAvailability = initial.dashboard_weather_layer_availability;
+    assert(initial.control_visible, `Main Map required weather layer ${layerId} is not visible.`);
+    assert(initial.dashboard_weather_layer_required === "true",
+      `Main Map weather layer ${layerId} is not marked required.`,
+    );
+    assert(["AVAILABLE", "NA"].includes(mainMapAvailability),
+      `Main Map weather layer ${layerId} has invalid availability ${mainMapAvailability}.`,
+    );
+    assert(
+      initial.dashboard_weather_layer_state_text === mainMapAvailability,
+      `Main Map weather layer ${layerId} state text does not match ${mainMapAvailability}.`,
+    );
+    if (mainMapAvailability === "NA") {
+      assert(initial.control_disabled, `Main Map unavailable weather layer ${layerId} must be guarded.`);
+    }
+    mainMapRecords.push({
+      surface_id: "map",
+      layer_id: layerId,
+      required_contract: "weather_hydrology_layer_required",
+      initial,
+      availability_reason: initial.availability_reason,
+      normalized_unavailable_state: mainMapAvailability,
+      map_frame_boundary: mapFrameBoundary,
+      evidence_semantics: "weather_hydrology_required_unavailable_normalized_to_na",
+      terminal_state: mainMapAvailability === "AVAILABLE" ? "REQUIRED_AVAILABLE" : "REQUIRED_NA",
+    });
+    recordBrowserAction(
+      observations,
+      "observe",
+      `main-map-weather-layer-availability:${layerId}`,
+      initial.availability_reason,
+    );
+  }
+  await frame.locator("#map [data-layer-group]")
+    .first()
+    .waitFor({state: "attached", timeout: 15_000})
+    .catch(() => undefined);
+  await page.waitForTimeout(750);
+  for (const record of mainMapRecords) {
+    const settled = await canonicalLayerRenderState(frame, record.layer_id);
+    const settledAvailability = settled.dashboard_weather_layer_availability;
+    assert(settled.control_visible, `Main Map settled weather layer ${record.layer_id} is not visible.`);
+    assert(settled.dashboard_weather_layer_required === "true",
+      `Main Map settled weather layer ${record.layer_id} is not marked required.`,
+    );
+    assert(["AVAILABLE", "NA"].includes(settledAvailability),
+      `Main Map settled weather layer ${record.layer_id} has invalid availability ${settledAvailability}.`,
+    );
+    assert(settled.dashboard_weather_layer_state_text === settledAvailability,
+      `Main Map settled weather layer ${record.layer_id} state text does not match ${settledAvailability}.`,
+    );
+    if (settledAvailability === "AVAILABLE") {
+      assert(!settled.control_disabled, `Main Map available weather layer ${record.layer_id} must be operable.`);
+      assert(settled.child_count > 0, `Main Map available weather layer ${record.layer_id} has no render content.`);
+    } else {
+      assert(settled.control_disabled, `Main Map unavailable weather layer ${record.layer_id} must be guarded.`);
+    }
+    record.settled = settled;
+    record.normalized_unavailable_state = settledAvailability;
+    record.terminal_state = settledAvailability === "AVAILABLE" ? "REQUIRED_AVAILABLE" : "REQUIRED_NA";
+    recordBrowserAction(
+      observations,
+      "observe",
+      `main-map-weather-layer-settled:${record.layer_id}`,
+      settledAvailability,
+    );
+  }
+  await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-weather");
+  await page.locator("[data-weather-layer-control]").first().waitFor({state: "attached", timeout: 60_000});
+  const weatherFrameSelector = browserActionContract.map_surfaces.find(surface => surface.id === "weather-map").frame_selector;
+  const weatherFrame = page.frameLocator(weatherFrameSelector);
+  await weatherFrame.locator("#map").waitFor({state: "visible", timeout: 120_000});
+  await weatherFrame.locator("input[data-layer]").first().waitFor({state: "attached", timeout: 120_000});
+  await page.waitForTimeout(1500);
+  const records = [];
+  for (const mainMapRecord of mainMapRecords) {
+    const layerId = mainMapRecord.layer_id;
+    const weatherControl = page.locator(`[data-weather-layer-control="${layerId}"]`);
+    const weatherSurfaceControl = await weatherControl.count()
+      ? await weatherControl.first().evaluate(node => ({
+          present: true,
+          visible: Boolean(node.offsetWidth || node.offsetHeight || node.getClientRects().length),
+          disabled: Boolean(node.disabled || node.getAttribute("aria-disabled") === "true"),
+          aria_pressed: node.getAttribute("aria-pressed"),
+          render_state: node.dataset.weatherLayerRenderState || null,
+          rendered_count: node.dataset.weatherLayerRenderedCount || null,
+          state_text: String(node.querySelector("[data-weather-layer-state]")?.textContent || "").trim() || null,
+        }))
+      : {present: false};
+    const pairedWeatherEmbeddedState = await canonicalLayerRenderState(weatherFrame, layerId);
+    records.push({
+      ...mainMapRecord,
+      paired_weather_surface_control: weatherSurfaceControl,
+      paired_weather_embedded_state: pairedWeatherEmbeddedState,
+      paired_weather_normalized_unavailable_state: pairedWeatherEmbeddedState.availability_reason === "available"
+        ? "AVAILABLE"
+        : "NA",
+    });
+    recordBrowserAction(
+      observations,
+      "observe",
+      `weather-surface-layer-availability:${layerId}`,
+      pairedWeatherEmbeddedState.availability_reason,
+    );
+  }
+  observations.layerInteractions = records;
+  assert(records.length === layerIds.length, "Main Map weather-layer availability evidence is incomplete.");
+  assert(records.every(record => record.paired_weather_surface_control.present), "Weather surface controls are missing from paired availability evidence.");
+  return {
+    evidence_only: true,
+    product_behavior_changed: true,
+    required_contract: "weather_hydrology_layer_required",
+    unavailable_semantics: "NA",
+    record_count: records.length,
+    records,
+  };
+}
+
+async function waitForCanonicalEmbeddedMapReady(
+  page,
+  frame,
+  expectedProjectId,
+  label,
+  {waitForDashboardOverlay = false} = {},
+) {
+  if (waitForDashboardOverlay) {
+    const loading = page.locator("#dashboardMapLoading");
+    if (await loading.count()) {
+      await page.waitForFunction(() => {
+        const node = document.querySelector("#dashboardMapLoading");
+        return !node || node.hidden || node.dataset.status === "blocked";
+      }, null, {timeout: 120_000});
+      assert(await loading.isHidden(), `${label} remained blocked before layer interaction.`);
+    }
+  }
+  const deadline = Date.now() + 120_000;
+  let lastState = null;
+  while (Date.now() < deadline) {
+    try {
+      const map = frame.locator("#map[viewBox]");
+      await map.waitFor({state: "visible", timeout: 5_000});
+      lastState = await frame.locator("body").evaluate((node, expected) => {
+        const bridge = node.ownerDocument.defaultView?.scoutPretripProjectBridge;
+        const snapshot = bridge?.getSnapshot?.() || null;
+        return {
+          expected_project_id: expected,
+          bridge_project_id: snapshot?.projectId || null,
+          bridge_view_ready: Boolean(snapshot?.view && typeof snapshot.view === "object"),
+          render_group_count: node.ownerDocument.querySelectorAll("#map[viewBox] [data-layer-group]").length,
+        };
+      }, expectedProjectId);
+      if (
+        lastState.bridge_project_id === expectedProjectId
+        && lastState.bridge_view_ready
+        && lastState.render_group_count > 0
+      ) return lastState;
+    } catch (error) {
+      lastState = {error: String(error?.message || error)};
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`${label} did not reach canonical map readiness: ${JSON.stringify(lastState)}`);
+}
+
 async function inspectEmbeddedCwaControls(page, frame, map, observations) {
   const menu = frame.locator("details.layer-menu");
-  if (!(await menu.getAttribute("open"))) await menu.locator(":scope > summary").click();
+  const unavailable = (controlId, reason) => ({
+    interactions: [{
+      surface_id: "weather-map",
+      control_kind: "cwa-control",
+      control_id: controlId,
+      terminal_state: "NOT_EXERCISED",
+      availability_reason: reason,
+      error: `cwa:${controlId}: ${reason}`,
+    }],
+    failures: [`cwa:${controlId}: ${reason}`],
+  });
+  if (!(await menu.count())) {
+    return unavailable("layer-menu", "layer_menu_missing_in_runtime_state");
+  }
+  if (!(await menu.isVisible())) {
+    const exposedOuterControls = await page.locator(
+      ".weather-cwa-control-deck select, .weather-cwa-control-deck input, .weather-cwa-control-deck button",
+    ).evaluateAll(nodes => nodes.filter(node => {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && Number(style.opacity || 1) > 0
+        && rect.width > 0
+        && rect.height > 0;
+    }).length);
+    if (!exposedOuterControls) {
+      return unavailable("layer-menu", "layer_menu_not_visible_in_runtime_state");
+    }
+    return {
+      interactions: [{
+        surface_id: "weather-map",
+        control_kind: "cwa-control",
+        control_id: "embedded-layer-menu",
+        terminal_state: "NOT_EXPOSED",
+        availability_reason: "embedded_duplicate_layer_menu_not_exposed",
+        delegated_to: "runtime-all-visible-controls",
+        exposed_outer_control_count: exposedOuterControls,
+      }],
+      failures: [],
+    };
+  }
+  const menuSummary = menu.locator(":scope > summary");
+  if ((await menu.getAttribute("open")) === null) {
+    if (!(await menuSummary.isVisible())) return unavailable("layer-menu", "layer_menu_summary_not_actionable");
+    await menuSummary.click({timeout: 5_000});
+  }
   const advanced = frame.locator("details.layer-advanced");
-  if (!(await advanced.getAttribute("open"))) await advanced.locator(":scope > summary").click();
+  if (!(await advanced.count()) || !(await advanced.isVisible())) {
+    return unavailable("advanced-layers", "advanced_layer_controls_not_visible_in_runtime_state");
+  }
+  const advancedSummary = advanced.locator(":scope > summary");
+  if ((await advanced.getAttribute("open")) === null) {
+    if (!(await advancedSummary.isVisible())) return unavailable("advanced-layers", "advanced_layer_summary_not_actionable");
+    await advancedSummary.click({timeout: 5_000});
+  }
   const selector = [
     "[data-cwa-rainfall-product]",
     "[data-cwa-rainfall-opacity]",
@@ -2157,8 +4035,23 @@ async function inspectEmbeddedCwaControls(page, frame, map, observations) {
       .join("-") || `control-${index}`;
     let restore = null;
     try {
-      assert(await control.isVisible(), `${controlId} is not visible after opening Advanced layers.`);
-      assert(!descriptor.disabled, `${controlId} is disabled; the selected live project cannot exercise this function.`);
+      if (!(await control.isVisible()) || descriptor.disabled) {
+        const availabilityReason = descriptor.disabled
+          ? "control_disabled_in_runtime_state"
+          : "control_not_visible_after_opening_advanced_layers";
+        const detail = `cwa:${controlId}: ${availabilityReason}`;
+        failures.push(detail);
+        interactions.push({
+          surface_id: "weather-map",
+          control_kind: "cwa-control",
+          control_id: controlId,
+          descriptor,
+          terminal_state: "NOT_EXERCISED",
+          availability_reason: availabilityReason,
+          error: detail,
+        });
+        continue;
+      }
       const beforeCheckpoint = await captureVisualCheckpoint(page, map, observations, "embedded-cwa-controls", `${controlId}-before`);
       if (descriptor.tag === "select") {
         const alternate = descriptor.options.find(value => value !== descriptor.value);
@@ -2226,8 +4119,15 @@ async function inspectCanonicalLayerToggles(page, observations) {
   let frame = page.frameLocator(frameSelector);
   let map = frame.locator("#map");
   await map.waitFor({state: "visible", timeout: 120_000});
+  await waitForCanonicalEmbeddedMapReady(
+    page,
+    frame,
+    readyProjectId,
+    "canonical preset map",
+    {waitForDashboardOverlay: true},
+  );
   let menu = frame.locator("details.layer-menu");
-  if (!(await menu.getAttribute("open"))) await menu.locator(":scope > summary").click();
+  if ((await menu.getAttribute("open")) === null) await menu.locator(":scope > summary").click();
   const expected = [...observations.expectedLayerIds.pretrip].sort();
   const rendered = (await frame.locator("input[data-layer]").evaluateAll(inputs => inputs.map(input => input.dataset.layer))).sort();
   assert(JSON.stringify(rendered) === JSON.stringify(expected), `Canonical browser layer controls differ from scout_layer_contract.py: ${JSON.stringify({rendered, expected})}`);
@@ -2292,12 +4192,32 @@ async function inspectCanonicalLayerToggles(page, observations) {
   map = frame.locator("#map");
   menu = frame.locator("details.layer-menu");
   await map.waitFor({state: "visible", timeout: 120_000});
-  if (!(await menu.getAttribute("open"))) await menu.locator(":scope > summary").click();
+  await waitForCanonicalEmbeddedMapReady(
+    page,
+    frame,
+    readyProjectId,
+    "canonical individual layer map",
+    {waitForDashboardOverlay: true},
+  );
+  if ((await menu.getAttribute("open")) === null) await menu.locator(":scope > summary").click();
   for (const layerId of expected) {
     try {
       const input = frame.locator(`input[data-layer="${layerId}"]`);
       const initial = await canonicalLayerRenderState(frame, layerId);
       assert(initial.control_present, `${layerId} control is missing.`);
+      if (initial.control_disabled || !initial.control_visible) {
+        const detail = `${layerId}: ${initial.availability_reason}`;
+        failures.push(detail);
+        layerInteractions.push({
+          surface_id: "map",
+          layer_id: layerId,
+          initial,
+          terminal_state: "NOT_EXERCISED",
+          availability_reason: initial.availability_reason,
+          error: detail,
+        });
+        continue;
+      }
       const requestStart = observations.requests.length;
       if (initial.checked) await input.click();
       else await input.click();
@@ -2330,7 +4250,23 @@ async function inspectCanonicalLayerToggles(page, observations) {
       const rasterResponses = observations.requests.slice(requestStart).filter(request => (
         request.status >= 200 && request.status < 300
       ));
-      if (enabled.raster_count > 0) assert(rasterResponses.length > 0, `${layerId} raster appeared without a successful browser-observed response.`);
+      const renderProvenance = {
+        render_kind: enabled.render_provenance,
+        raster_sources: enabled.raster_sources,
+        resource_entries: enabled.resource_entries,
+        new_successful_response_count: rasterResponses.length,
+        observation_kind: rasterResponses.length
+          ? "network_response"
+          : enabled.resource_entries.length
+            ? "browser_resource_timing_or_cache"
+            : "rendered_without_observed_resource",
+      };
+      if (enabled.raster_count > 0) {
+        assert(
+          rasterResponses.length > 0 || enabled.resource_entries.length > 0,
+          `${layerId} raster appeared without successful browser network or resource-timing provenance.`,
+        );
+      }
       assert(onCheckpoint.issues.length === 0, `${layerId} visual quality failed: ${JSON.stringify(onCheckpoint.issues)}`);
       layerInteractions.push({
         surface_id: "map",
@@ -2340,6 +4276,8 @@ async function inspectCanonicalLayerToggles(page, observations) {
         off_state: offState,
         screenshot_on: onCheckpoint.screenshot,
         successful_response_count: rasterResponses.length,
+        render_provenance: renderProvenance,
+        resource_entries: enabled.resource_entries,
         terminal_state: "OPERATED",
       });
     } catch (error) {
@@ -2356,9 +4294,32 @@ async function inspectCanonicalLayerToggles(page, observations) {
   const weatherFrame = page.frameLocator(weatherFrameSelector);
   const weatherMap = weatherFrame.locator("#map");
   await weatherMap.waitFor({state: "visible", timeout: 120_000});
+  await waitForCanonicalEmbeddedMapReady(
+    page,
+    weatherFrame,
+    readyProjectId,
+    "canonical Weather layer map",
+  );
   for (const layerId of weatherLayerIds) {
     try {
       let button = page.locator(`[data-weather-layer-control="${layerId}"]`);
+      const buttonAvailable = await button.isVisible();
+      const buttonDisabled = await button.isDisabled();
+      if (!buttonAvailable || buttonDisabled) {
+        const availabilityReason = buttonDisabled
+          ? "weather_layer_control_disabled_in_runtime_state"
+          : "weather_layer_control_not_visible_in_runtime_state";
+        const detail = `weather:${layerId}: ${availabilityReason}`;
+        failures.push(detail);
+        layerInteractions.push({
+          surface_id: "weather-map",
+          layer_id: layerId,
+          terminal_state: "NOT_EXERCISED",
+          availability_reason: availabilityReason,
+          error: detail,
+        });
+        continue;
+      }
       const initialPressed = await button.getAttribute("aria-pressed");
       let offCheckpoint = null;
       if (initialPressed === "true") {
@@ -2395,6 +4356,12 @@ async function inspectCanonicalLayerToggles(page, observations) {
         toggled_aria_pressed: toggledPressed,
         state_text: stateText,
         enabled,
+        render_provenance: {
+          render_kind: enabled.render_provenance,
+          raster_sources: enabled.raster_sources,
+          resource_entries: enabled.resource_entries,
+        },
+        resource_entries: enabled.resource_entries,
         screenshot_off: offCheckpoint?.screenshot || null,
         screenshot_on: onCheckpoint.screenshot,
         terminal_state: "OPERATED",
@@ -2406,8 +4373,13 @@ async function inspectCanonicalLayerToggles(page, observations) {
     }
   }
   const cwaSetupRestores = [];
+  const cwaSetupFailures = [];
   for (const layerId of ["cwa-qpf", "cwa-weather"]) {
     const button = page.locator(`[data-weather-layer-control="${layerId}"]`);
+    if (!(await button.isVisible()) || await button.isDisabled()) {
+      cwaSetupFailures.push(`cwa:${layerId}: weather_layer_control_not_actionable_for_cwa_setup`);
+      continue;
+    }
     const initiallyEnabled = await button.getAttribute("aria-pressed") === "true";
     cwaSetupRestores.push({button, initiallyEnabled});
     if (!initiallyEnabled) {
@@ -2416,7 +4388,19 @@ async function inspectCanonicalLayerToggles(page, observations) {
       await page.waitForTimeout(1000);
     }
   }
-  const cwaControls = await inspectEmbeddedCwaControls(page, weatherFrame, weatherMap, observations);
+  const cwaControls = cwaSetupFailures.length
+    ? {
+        interactions: cwaSetupFailures.map((detail, index) => ({
+          surface_id: "weather-map",
+          control_kind: "cwa-control",
+          control_id: `setup-${index + 1}`,
+          terminal_state: "NOT_EXERCISED",
+          availability_reason: "weather_layer_control_not_actionable_for_cwa_setup",
+          error: detail,
+        })),
+        failures: cwaSetupFailures,
+      }
+    : await inspectEmbeddedCwaControls(page, weatherFrame, weatherMap, observations);
   for (const {button, initiallyEnabled} of cwaSetupRestores) {
     if (!initiallyEnabled && await button.getAttribute("aria-pressed") === "true") await button.click();
   }
@@ -2436,9 +4420,194 @@ async function inspectCanonicalLayerToggles(page, observations) {
   };
 }
 
+async function inspectApprovedTargetedRepairEvidence(page, observations) {
+  const result = {
+    navigation: {},
+    weather: {},
+    readability: [],
+    product_verdict_allowed: false,
+  };
+  const sampleReadability = async (selector, route, label) => {
+    const locator = page.locator(`${selector}:visible`).first();
+    await locator.waitFor({state: "visible", timeout: 60_000});
+    const sample = await locator.evaluate(node => {
+      const style = getComputedStyle(node);
+      const overflowX = style.overflowX;
+      const overflowY = style.overflowY;
+      return {
+        text: String(node.textContent || "").trim().replace(/\s+/g, " ").slice(0, 160),
+        font_size_px: Number.parseFloat(style.fontSize || "0"),
+        client_width: node.clientWidth,
+        scroll_width: node.scrollWidth,
+        client_height: node.clientHeight,
+        scroll_height: node.scrollHeight,
+        overflow_x: overflowX,
+        overflow_y: overflowY,
+        clipped: (
+          (node.scrollWidth > node.clientWidth + 1 && overflowX === "hidden")
+          || (node.scrollHeight > node.clientHeight + 1 && overflowY === "hidden")
+        ),
+      };
+    });
+    assert(sample.font_size_px >= 10, `${label} remains below 10px: ${JSON.stringify(sample)}`);
+    assert(!sample.clipped, `${label} remains clipped: ${JSON.stringify(sample)}`);
+    const record = {route, selector, label, ...sample};
+    result.readability.push(record);
+    recordBrowserAction(observations, "observe", `compact-readability:${label}`, "completed", record);
+    return record;
+  };
+
+  await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-navigation");
+  const navigationShell = page.locator('[data-navigation-maplibre-shell="2d"]').first();
+  const navigationMap = page.locator('[data-navigation-maplibre-map="2d"][data-dashboard-map-hint-title]').first();
+  await navigationShell.waitFor({state: "visible", timeout: 120_000});
+  await navigationMap.waitFor({state: "visible", timeout: 120_000});
+  await hoverSelectedEvidence(page, navigationMap, observations, "approved-navigation-evidence-hint");
+  const navigationHint = page.locator("#dashboardMapHoverHint");
+  await navigationHint.waitFor({state: "visible", timeout: 10_000});
+  result.navigation.hint = await navigationHint.evaluate(node => ({
+    visible: !node.hidden,
+    text: String(node.textContent || "").trim().replace(/\s+/g, " "),
+    source: node.dataset.hintSource || null,
+  }));
+  assert(result.navigation.hint.visible && result.navigation.hint.text, "Navigation evidence hint did not visibly render.");
+  const fitControl = page.locator('[data-navigation-maplibre-fit="2d"]').first();
+  const mapLibreControls = navigationShell.locator(".maplibregl-ctrl-top-right").first();
+  await fitControl.waitFor({state: "visible", timeout: 60_000});
+  await mapLibreControls.waitFor({state: "visible", timeout: 60_000});
+  const [fitBox, controlsBox] = await Promise.all([fitControl.boundingBox(), mapLibreControls.boundingBox()]);
+  assert(fitBox && controlsBox, "Navigation fit/control geometry is unavailable.");
+  const navigationFitControlNonOverlap = (
+    fitBox.y + fitBox.height <= controlsBox.y
+    || controlsBox.y + controlsBox.height <= fitBox.y
+    || fitBox.x + fitBox.width <= controlsBox.x
+    || controlsBox.x + controlsBox.width <= fitBox.x
+  );
+  result.navigation.navigation_fit_control_non_overlap = navigationFitControlNonOverlap;
+  result.navigation.fit_box = fitBox;
+  result.navigation.maplibre_controls_box = controlsBox;
+  assert(navigationFitControlNonOverlap, `Navigation FIT overlaps MapLibre controls: ${JSON.stringify(result.navigation)}`);
+  await sampleReadability(".navigation-terrain-maplibre-fit", "outdoor-navigation", "navigation-fit");
+  await captureVisualCheckpoint(
+    page,
+    null,
+    observations,
+    "approved-targeted-repairs",
+    "navigation-hint-and-fit",
+    {fullPage: false, domRoot: page.locator("body")},
+  );
+
+  await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-weather");
+  const weatherFrameSelector = browserActionContract.map_surfaces.find(surface => surface.id === "weather-map").frame_selector;
+  const weatherFrame = page.frameLocator(weatherFrameSelector);
+  await weatherFrame.locator("#map").waitFor({state: "visible", timeout: 120_000});
+  const weatherEvidence = weatherFrame.locator('rect[data-evidence-type="cwa_weather_environment_evidence"]');
+  await weatherEvidence.first().waitFor({state: "visible", timeout: 120_000});
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('[data-weather-cwa-map-frame="true"]');
+    return Boolean(frame?.contentDocument && frame.weatherCwaHintDocument === frame.contentDocument);
+  }, null, {timeout: 60_000});
+  const weatherHover = await hoverSelectedEvidence(page, weatherEvidence, observations, "approved-weather-evidence-hint");
+  const weatherHint = weatherFrame.locator("#hoverHint");
+  let weatherHintWaitError = null;
+  try {
+    await weatherHint.waitFor({state: "visible", timeout: 10_000});
+  } catch (error) {
+    weatherHintWaitError = String(error?.message || error);
+  }
+  result.weather.hint = await weatherHint.evaluate(node => ({
+    visible: getComputedStyle(node).display !== "none",
+    text: String(node.textContent || "").trim().replace(/\s+/g, " "),
+  }));
+  result.weather.evidence_owner = weatherHover.hover.evidence_owner;
+  result.weather.headless_hint_observation = result.weather.hint.visible && result.weather.hint.text
+    ? "VISIBLE"
+    : "NOT_OBSERVED_AFTER_BOUND_LISTENER_AND_TARGETED_HOVER";
+  result.weather.headless_hint_wait_error = weatherHintWaitError;
+  recordBrowserAction(
+    observations,
+    "observe",
+    "approved-weather-evidence-hint-visibility",
+    result.weather.headless_hint_observation,
+  );
+  await sampleReadability(".weather-layer-control small", "outdoor-weather", "weather-layer-detail");
+  await captureVisualCheckpoint(
+    page,
+    null,
+    observations,
+    "approved-targeted-repairs",
+    "weather-evidence-hint",
+    {fullPage: false, domRoot: page.locator("body")},
+  );
+
+  await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-permission");
+  await page.waitForFunction(() => !["", "idle", "loading"].includes(String(state?.permissionDataStatus || "")), null, {timeout: 60_000});
+  await sampleReadability(".permission-eyebrow", "outdoor-permission", "permission-eyebrow");
+  await captureVisualCheckpoint(
+    page,
+    null,
+    observations,
+    "approved-targeted-repairs",
+    "permission-readability",
+    {fullPage: false, domRoot: page.locator("body")},
+  );
+
+  await openDashboard(page, observations.baseUrl, readyProjectId, "runtime-audit");
+  await page.waitForFunction(() => !["", "idle", "loading"].includes(String(state?.runtimeAuditStatus || "")), null, {timeout: 60_000});
+  await sampleReadability(".runtime-audit-health-card small", "runtime-audit", "runtime-audit-health");
+  await captureVisualCheckpoint(
+    page,
+    null,
+    observations,
+    "approved-targeted-repairs",
+    "runtime-audit-readability",
+    {fullPage: false, domRoot: page.locator("body")},
+  );
+  return result;
+}
+
 function attachQualificationPageObservers(page, observations) {
   if (page.__scoutQualificationObserversAttached) return;
   page.__scoutQualificationObserversAttached = true;
+  const requestStartedAt = new WeakMap();
+  const dashboardRoute = () => {
+    try {
+      return new URL(page.url()).hash.replace(/^#/, "") || "home";
+    } catch (_error) {
+      return "unresolved";
+    }
+  };
+  const recordFrameLifecycle = async (event, frame) => {
+    const baseRecord = {
+      kind: "frame_lifecycle",
+      observed_at: new Date().toISOString(),
+      route: dashboardRoute(),
+      event,
+      frame_name: frame.name?.() || null,
+      frame_url: evidenceSafeUrl(frame.url?.() || ""),
+      owner: null,
+    };
+    observations.controlStateTraces.push(baseRecord);
+    try {
+      const element = await frame.frameElement();
+      const owner = await element.evaluate(node => ({
+        id: node.id || null,
+        title: node.getAttribute("title") || null,
+        weather_cwa_map_frame: node.dataset.weatherCwaMapFrame || null,
+        emergency_approval_frame: node.dataset.emergencyApprovalFrame || null,
+      }));
+      observations.controlStateTraces.push({
+        ...baseRecord,
+        kind: "frame_lifecycle_owner",
+        owner,
+      });
+    } catch (_error) {
+      // A detached frame cannot expose its former owner; the synchronous lifecycle record remains authoritative.
+    }
+  };
+  page.on("frameattached", frame => { void recordFrameLifecycle("attached", frame); });
+  page.on("framenavigated", frame => { void recordFrameLifecycle("navigated", frame); });
+  page.on("framedetached", frame => { void recordFrameLifecycle("detached", frame); });
   page.on("console", message => {
     if (message.type() !== "error") return;
     const location = message.location();
@@ -2449,6 +4618,7 @@ function attachQualificationPageObservers(page, observations) {
   });
   page.on("pageerror", error => observations.pageErrors.push(error.message));
   page.on("request", request => {
+    requestStartedAt.set(request, Date.now());
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) {
       observations.postRequests.push(`${request.method()} ${evidenceSafeUrl(request.url())}`);
     }
@@ -2456,30 +4626,62 @@ function attachQualificationPageObservers(page, observations) {
   page.on("response", response => {
     const request = response.request();
     const rudyMatrix = rudyMatrixFromUrl(response.url());
-    observations.requests.push({
+    const record = {
+      observed_at: new Date().toISOString(),
       method: request.method(),
       status: response.status(),
       url: evidenceSafeUrl(response.url()),
       rudyMatrix,
-    });
+      resource_type: request.resourceType(),
+      duration_ms: requestStartedAt.has(request) ? Date.now() - requestStartedAt.get(request) : null,
+    };
+    observations.requests.push(record);
+    const route = dashboardRoute();
+    if (["outdoor-permission", "runtime-audit", "outdoor-weather", "emergency"].includes(route)) {
+      observations.controlStateTraces.push({
+        kind: "network_completion",
+        route,
+        ...record,
+      });
+    }
     if (response.status() >= 400) {
       observations.failedResponses.push({ status: response.status(), url: evidenceSafeUrl(response.url()) });
     }
   });
 }
 
+async function captureAvailableCaseScreenshot(context, primaryPage, options) {
+  const candidates = [...new Set([
+    primaryPage,
+    ...context.pages().slice().reverse(),
+  ])].filter(candidate => candidate && !candidate.isClosed());
+  if (!candidates.length) return {captured: false, reason: "no_open_page"};
+  await candidates[0].screenshot(options);
+  return {
+    captured: true,
+    page_url: evidenceSafeUrl(candidates[0].url()),
+  };
+}
+
 async function runIsolatedCase(browser, definition, environment) {
   const caseId = safeCaseId(definition.id);
   const caseDirectory = path.join(environment.outputRoot, "cases", caseId);
+  fs.mkdirSync(caseDirectory, { recursive: true });
   const videoDirectory = path.join(caseDirectory, "videos");
-  fs.mkdirSync(videoDirectory, { recursive: true });
   const tracePath = path.join(caseDirectory, "trace.zip");
   const screenshotPath = path.join(caseDirectory, "final.png");
   const segmentedTraceByRoute = definition.segmentedTraceByRoute === true;
-  const context = await browser.newContext({
+  const contextOptions = {
     viewport: definition.viewport || { width: 1440, height: 1000 },
-    recordVideo: { dir: videoDirectory, size: definition.viewport || { width: 1440, height: 1000 } },
-  });
+  };
+  if (definition.recordVideo !== false) {
+    fs.mkdirSync(videoDirectory, { recursive: true });
+    contextOptions.recordVideo = {
+      dir: videoDirectory,
+      size: definition.viewport || { width: 1440, height: 1000 },
+    };
+  }
+  const context = await browser.newContext(contextOptions);
   if (!segmentedTraceByRoute) {
     await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   }
@@ -2498,6 +4700,7 @@ async function runIsolatedCase(browser, definition, environment) {
     blockedMutationRequests: [],
     failedResponses: [],
     browserActions: [],
+    controlStateTraces: [],
     visualCheckpoints: [],
   };
   Object.defineProperty(observations, "_browserContext", {
@@ -2505,6 +4708,14 @@ async function runIsolatedCase(browser, definition, environment) {
     enumerable: false,
   });
   if (page) page.__scoutQualificationObservations = observations;
+  const configuredExecutionTimeout = Number(definition.executionTimeoutMs);
+  appendCaseProgress(observations, "case_started", {
+    execution_timeout_ms: (
+      Number.isFinite(configuredExecutionTimeout) && configuredExecutionTimeout > 0
+        ? configuredExecutionTimeout
+        : CASE_EXECUTION_TIMEOUT_MS
+    ),
+  });
   await context.route("**/*", async route => {
     const method = route.request().method();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) {
@@ -2524,45 +4735,90 @@ async function runIsolatedCase(browser, definition, environment) {
   let result = null;
   let mutationPaths = [];
   const finalizationErrors = [];
+  let executionTimedOut = false;
   try {
-    result = await definition.run(page, observations);
+    appendCaseProgress(observations, "case_body_started");
+    result = await runCaseExecutionWithTimeout(
+      definition,
+      () => definition.run(page, observations),
+    );
+    appendCaseProgress(observations, "case_body_completed");
     assert(observations.postRequests.length === 0, `unexpected_post_requests: ${observations.postRequests.join(", ")}`);
     const after = workspaceDigest(environment.workspaceRoot);
     mutationPaths = workspaceDiff(before, after);
     if (definition.readOnly !== false && mutationPaths.length) {
       throw new Error(`unexpected_workspace_mutation: ${mutationPaths.join(", ")}`);
     }
-    if (page) await page.screenshot({ path: screenshotPath, type: "png", fullPage: true });
+    await captureAvailableCaseScreenshot(context, page, {
+      path: screenshotPath,
+      type: "png",
+      fullPage: true,
+    });
   } catch (error) {
-    status = "FAIL";
     detail = String(error?.stack || error);
+    executionTimedOut = error?.code === "CASE_EXECUTION_TIMEOUT";
+    status = executionTimedOut ? "BLOCKED" : "FAIL";
+    appendCaseProgress(observations, "case_body_failed", {
+      error_code: String(error?.code || "CASE_BODY_FAILURE"),
+      error: String(error?.message || error),
+      execution_timed_out: executionTimedOut,
+    });
     const after = workspaceDigest(environment.workspaceRoot);
     mutationPaths = workspaceDiff(before, after);
-    if (page) await page.screenshot({ path: screenshotPath, type: "png", fullPage: true }).catch(() => undefined);
+    if (!executionTimedOut) {
+      try {
+        await runCaseFinalizerWithTimeout(
+          "failure-screenshot",
+          () => captureAvailableCaseScreenshot(context, page, {
+            path: screenshotPath,
+            type: "png",
+            fullPage: true,
+            timeout: CASE_FAILURE_SCREENSHOT_TIMEOUT_MS,
+          }),
+        );
+      } catch (screenshotError) {
+        finalizationErrors.push(String(screenshotError?.stack || screenshotError));
+      }
+    }
   } finally {
+    appendCaseProgress(observations, "case_finalization_started");
     try {
       if (!segmentedTraceByRoute) {
         await runCaseFinalizerWithTimeout(
           "trace-stop",
           () => context.tracing.stop({ path: tracePath }),
         );
+        appendCaseProgress(observations, "trace_finalized");
       }
     } catch (error) {
       finalizationErrors.push(String(error?.stack || error));
+      appendCaseProgress(observations, "trace_finalization_failed", {
+        error: String(error?.message || error),
+      });
     } finally {
       try {
         await runCaseFinalizerWithTimeout("context-close", () => context.close());
+        appendCaseProgress(observations, "context_closed");
       } catch (error) {
         finalizationErrors.push(String(error?.stack || error));
+        appendCaseProgress(observations, "context_close_failed", {
+          error: String(error?.message || error),
+        });
       }
     }
   }
+  if (finalizationErrors.length && status === "PASS") status = "FAIL";
   if (finalizationErrors.length) {
-    status = "FAIL";
     const finalizationDetail = `Browser evidence finalization failed: ${finalizationErrors.join(" | ")}`;
     detail = detail === "completed" ? finalizationDetail : `${detail}\n${finalizationDetail}`;
     observations.caseFinalizationErrors = [...finalizationErrors];
   }
+  appendCaseProgress(observations, "case_completed", {
+    status,
+    execution_timed_out: executionTimedOut,
+    mutation_path_count: mutationPaths.length,
+    finalization_error_count: finalizationErrors.length,
+  });
   const traceReferences = segmentedTraceByRoute
     ? (observations.segmentedTraces || []).filter(reference => fs.existsSync(path.join(environment.outputRoot, reference)))
     : (fs.existsSync(tracePath) ? [path.relative(environment.outputRoot, tracePath)] : []);
@@ -2582,6 +4838,10 @@ async function runIsolatedCase(browser, definition, environment) {
       traces: traceReferences,
       screenshot: fs.existsSync(screenshotPath) ? path.relative(environment.outputRoot, screenshotPath) : null,
       video_directory: path.relative(environment.outputRoot, videoDirectory),
+      progress_log: path.relative(
+        environment.outputRoot,
+        path.join(caseDirectory, "case-progress.jsonl"),
+      ),
       visual_checkpoints: observations.visualCheckpoints.map(checkpoint => checkpoint.screenshot),
     },
   };
@@ -2605,7 +4865,9 @@ const caseDefinitions = [
       const visited = [];
       for (const route of routeValues) {
         const control = page.locator(`button.nav-item[data-route="${route}"]`).first();
-        await control.click({ force: true });
+        await revealThroughClosedDetails(page, control, observations, `navigation-route:${route}`);
+        await control.scrollIntoViewIfNeeded();
+        await control.click();
         recordBrowserAction(observations, "click", `navigation-route:${route}`);
         await page.waitForFunction(expectedRoute => typeof state !== "undefined" && state.route === expectedRoute, route, { timeout: 60_000 });
         visited.push({ route, hash: await page.evaluate(() => window.location.hash) });
@@ -2622,7 +4884,9 @@ const caseDefinitions = [
     fullOnly: true,
     liveRuntime: true,
     fixtureEligible: false,
+    executionTimeoutMs: 15 * 60_000,
     viewport: {width: 1440, height: 1000},
+    recordVideo: false,
     run: (page, observations) => auditAllRouteVisualStates(page, observations, "desktop"),
   },
   {
@@ -2633,7 +4897,9 @@ const caseDefinitions = [
     fullOnly: true,
     liveRuntime: true,
     fixtureEligible: false,
+    executionTimeoutMs: 15 * 60_000,
     viewport: {width: 390, height: 844},
+    recordVideo: false,
     run: (page, observations) => auditAllRouteVisualStates(page, observations, "large-mobile"),
   },
   {
@@ -2644,7 +4910,9 @@ const caseDefinitions = [
     fullOnly: true,
     liveRuntime: true,
     fixtureEligible: false,
+    executionTimeoutMs: 15 * 60_000,
     viewport: {width: 390, height: 844},
+    recordVideo: false,
     async run(page, observations) {
       const result = {};
 
@@ -2710,6 +4978,31 @@ const caseDefinitions = [
       assert(
         result.living.first_width >= result.living.header_width * .8,
         `Living mobile heading remains compressed: ${JSON.stringify(result.living)}`,
+      );
+      await page.locator(".living-event").first().waitFor({state: "visible", timeout: 60_000});
+      result.living_containment = await page.evaluate(() => {
+        const events = [...document.querySelectorAll(".living-event")].map(node => ({
+          client_width: node.clientWidth,
+          scroll_width: node.scrollWidth,
+          client_height: node.clientHeight,
+          scroll_height: node.scrollHeight,
+        }));
+        return {
+          body_client_width: document.body.clientWidth,
+          body_scroll_width: document.body.scrollWidth,
+          event_count: events.length,
+          event_overflow_count: events.filter(item => item.scroll_width > item.client_width + 1).length,
+          events,
+        };
+      });
+      assert(
+        result.living_containment.body_scroll_width <= result.living_containment.body_client_width + 1,
+        `Living mobile page overflows horizontally: ${JSON.stringify(result.living_containment)}`,
+      );
+      assert(result.living_containment.event_count > 0, "Living mobile route exposes no event cards to verify.");
+      assert(
+        result.living_containment.event_overflow_count === 0,
+        `Living mobile long tokens overflow event cards: ${JSON.stringify(result.living_containment)}`,
       );
       await captureVisualCheckpoint(
         page,
@@ -2820,6 +5113,130 @@ const caseDefinitions = [
     },
   },
   {
+    id: "runtime-approved-targeted-repair-evidence",
+    capabilityId: "dashboard.visual.complete_live_rendering",
+    criticality: "P1",
+    readOnly: true,
+    evidenceOnly: true,
+    fullOnly: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    executionTimeoutMs: 15 * 60_000,
+    recordVideo: false,
+    run: inspectApprovedTargetedRepairEvidence,
+  },
+  {
+    id: "debug-live-runtime-read-evidence",
+    capabilityId: "dashboard.shell.runtime_route_navigation",
+    criticality: "P1",
+    readOnly: true,
+    evidenceOnly: true,
+    fullOnly: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    async run(page, observations) {
+      await openDashboard(page, observations.baseUrl, readyProjectId, "home");
+      const endpointPaths = [
+        "/debug/events?limit=200",
+        "/debug/state",
+        "/debug/messages",
+        "/debug/mobile-wearable/ingress",
+        "/debug/monitoring",
+      ];
+      const endpoints = await page.evaluate(async paths => Promise.all(paths.map(async endpoint => {
+        try {
+          const response = await fetch(endpoint, {cache: "no-store"});
+          const body = await response.arrayBuffer();
+          return {
+            endpoint,
+            http_status: response.status,
+            content_type: response.headers.get("content-type"),
+            body_byte_count: body.byteLength,
+            availability_state: response.ok ? "available" : "http_error",
+          };
+        } catch (error) {
+          return {
+            endpoint,
+            http_status: null,
+            content_type: null,
+            body_byte_count: null,
+            availability_state: "request_error",
+            error_class: error?.name || "Error",
+          };
+        }
+      })), endpointPaths);
+      const stream = await page.evaluate(async () => {
+        const endpoint = "/debug/stream";
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4_000);
+        try {
+          const response = await fetch(endpoint, {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          const reader = response.body?.getReader?.();
+          let firstChunk = null;
+          if (reader) {
+            firstChunk = await Promise.race([
+              reader.read(),
+              new Promise(resolve => setTimeout(() => resolve(null), 2_000)),
+            ]);
+            await reader.cancel().catch(() => undefined);
+          }
+          return {
+            endpoint,
+            http_status: response.status,
+            content_type: response.headers.get("content-type"),
+            first_chunk_observed: Boolean(
+              response.ok && firstChunk && !firstChunk.done && firstChunk.value?.byteLength
+            ),
+            first_chunk_byte_count: firstChunk?.value?.byteLength || 0,
+            availability_state: response.ok ? "available" : "http_error",
+          };
+        } catch (error) {
+          return {
+            endpoint,
+            http_status: null,
+            content_type: null,
+            first_chunk_observed: false,
+            first_chunk_byte_count: 0,
+            availability_state: error?.name === "AbortError" ? "timed_out_without_chunk" : "request_error",
+            error_class: error?.name || "Error",
+          };
+        } finally {
+          clearTimeout(timer);
+        }
+      });
+      for (const evidence of [...endpoints, stream]) {
+        recordBrowserAction(
+          observations,
+          "observe",
+          `debug-read:${evidence.endpoint}`,
+          evidence.availability_state,
+        );
+      }
+      return {
+        evidence_only: true,
+        hardware_readiness_excluded: true,
+        debug_ui_route_opened: false,
+        endpoints,
+        stream,
+      };
+    },
+  },
+  {
+    id: "runtime-q0063-control-state-evidence",
+    capabilityId: "dashboard.browser.complete_control_coverage",
+    criticality: "P1",
+    readOnly: true,
+    fullOnly: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    executionTimeoutMs: 15 * 60_000,
+    recordVideo: false,
+    run: inspectIssue0063ControlStateEvidence,
+  },
+  {
     id: "runtime-all-visible-controls",
     capabilityId: "dashboard.browser.complete_control_coverage",
     criticality: "P0",
@@ -2827,8 +5244,10 @@ const caseDefinitions = [
     fullOnly: true,
     liveRuntime: true,
     fixtureEligible: false,
+    executionTimeoutMs: 90 * 60_000,
     selfManagedPages: true,
     segmentedTraceByRoute: true,
+    recordVideo: false,
     run: auditAllVisibleControls,
   },
   {
@@ -2839,7 +5258,20 @@ const caseDefinitions = [
     fullOnly: true,
     liveRuntime: true,
     fixtureEligible: false,
+    executionTimeoutMs: 30 * 60_000,
     run: inspectAllDashboardMapSurfaces,
+  },
+  {
+    id: "runtime-main-map-weather-layer-availability-evidence",
+    capabilityId: "dashboard.layers.all_visible_toggle_integrity",
+    criticality: "P1",
+    readOnly: true,
+    fullOnly: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    executionTimeoutMs: 10 * 60_000,
+    recordVideo: false,
+    run: inspectMainMapWeatherLayerAvailability,
   },
   {
     id: "runtime-all-layer-toggle-integrity",
@@ -2849,6 +5281,7 @@ const caseDefinitions = [
     fullOnly: true,
     liveRuntime: true,
     fixtureEligible: false,
+    executionTimeoutMs: 45 * 60_000,
     run: inspectCanonicalLayerToggles,
   },
   {
@@ -2857,6 +5290,7 @@ const caseDefinitions = [
     criticality: "P1",
     readOnly: true,
     liveRuntime: true,
+    executionTimeoutMs: 15 * 60_000,
     async run(page, observations) {
       await openDashboard(page, observations.baseUrl, readyProjectId, "diagnostic");
       const diagnostic = page.locator('[data-diagnostic-page="true"]');
@@ -2933,7 +5367,74 @@ const caseDefinitions = [
       await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-permission");
       const shell = page.locator("[data-contextual-permission-workbench]").first();
       await shell.waitFor({ state: "attached", timeout: 120_000 });
+      await shell.evaluate(node => {
+        const states = [{
+          state: node.getAttribute("data-contextual-permission-workbench"),
+          observed_at_ms: performance.now(),
+        }];
+        window.__scoutQualificationPermissionStates = states;
+        const observer = new MutationObserver(() => {
+          const state = node.getAttribute("data-contextual-permission-workbench");
+          if (states.at(-1)?.state !== state) {
+            states.push({state, observed_at_ms: performance.now()});
+          }
+        });
+        observer.observe(node, {
+          attributes: true,
+          attributeFilter: ["data-contextual-permission-workbench"],
+        });
+        window.__scoutQualificationPermissionObserver = observer;
+      });
+      const runtimeEvidence = await page.evaluate(async selectedProjectId => {
+        const readJson = async response => {
+          try {
+            return await response.json();
+          } catch (_error) {
+            return null;
+          }
+        };
+        const [projectionResponse, assistantResponse] = await Promise.all([
+          fetch(`/admin/pretrip/projects/${encodeURIComponent(selectedProjectId)}/contextual-permission-dashboard`),
+          fetch("/assistant/status"),
+        ]);
+        const [projectionPayload, assistantPayload] = await Promise.all([
+          readJson(projectionResponse),
+          readJson(assistantResponse),
+        ]);
+        return {
+          projection: {status: projectionResponse.status, payload: projectionPayload},
+          assistant: {status: assistantResponse.status, payload: assistantPayload},
+        };
+      }, readyProjectId);
+      let terminalWaitError = null;
+      await page.waitForFunction(() => {
+        const state = document.querySelector("[data-contextual-permission-workbench]")
+          ?.getAttribute("data-contextual-permission-workbench");
+        return ["ready", "degraded", "blocked"].includes(state);
+      }, null, {timeout: 120_000}).catch(error => {
+        terminalWaitError = String(error?.message || error);
+      });
       const state = await shell.getAttribute("data-contextual-permission-workbench");
+      const observedStateTransitions = await page.evaluate(finalState => {
+        window.__scoutQualificationPermissionObserver?.disconnect?.();
+        const transitions = window.__scoutQualificationPermissionStates || [];
+        return transitions.at(-1)?.state === finalState
+          ? transitions
+          : [...transitions, {state: finalState, observed_at_ms: performance.now()}];
+      }, state);
+      const assistantPayload = runtimeEvidence.assistant.payload || {};
+      const assistantReadiness = {
+        http_status: runtimeEvidence.assistant.status,
+        provider: assistantPayload.provider || null,
+        provider_class: assistantPayload.provider_class || null,
+        startup_connection_status: assistantPayload.startup_connection_status || null,
+        read_only: assistantPayload.read_only ?? null,
+        workflow_available: assistantPayload.assistant_workflow?.available ?? null,
+        workflow_status: assistantPayload.assistant_workflow?.status || null,
+        overall_readiness_ok: assistantPayload.assistant_workflow?.overall_readiness_ok ?? null,
+        token_values_exposed: assistantPayload.token_values_exposed ?? null,
+      };
+      assert(!terminalWaitError, `Permission runtime did not reach a typed terminal state: ${terminalWaitError}`);
       assert(["ready", "degraded", "blocked"].includes(state), `Permission runtime state is untyped: ${state}`);
       const candidateOnly = await shell.getAttribute("data-candidate-only");
       if (state !== "blocked") {
@@ -2942,13 +5443,14 @@ const caseDefinitions = [
         assert((await shell.textContent() || "").trim().length > 0, "Blocked Permission state has no explanation.");
       }
       assert(await page.locator("[data-emergency-review-decision]").count() === 0, "Permission exposes Emergency decisions.");
-      const projection = await page.evaluate(async selectedProjectId => {
-        const response = await fetch(`/admin/pretrip/projects/${encodeURIComponent(selectedProjectId)}/contextual-permission-dashboard`);
-        return { status: response.status, payload: await response.json() };
-      }, readyProjectId);
-      recordBrowserAction(observations, "observe", "permission-runtime-state", state);
+      const projection = runtimeEvidence.projection;
+      recordBrowserAction(observations, "observe", "permission-runtime-state", state, {
+        observed_state_transitions: observedStateTransitions,
+        assistant_readiness: assistantReadiness,
+      });
       return {
         state,
+        observedStateTransitions,
         candidateOnly,
         projectionHttpStatus: projection.status,
         projectionStatus: projection.payload?.status || null,
@@ -2957,6 +5459,7 @@ const caseDefinitions = [
         rootBlockerIds: (projection.payload?.rebuild?.blockers || [])
           .filter(blocker => blocker.blocker_kind === "root")
           .map(blocker => blocker.blocker_id),
+        assistantReadiness,
       };
     },
   },
@@ -3154,6 +5657,7 @@ const caseDefinitions = [
     readOnly: true,
     liveRuntime: true,
     fullOnly: true,
+    recordVideo: false,
     async run(page, observations) {
       await openDashboard(page, observations.baseUrl, readyProjectId, "diagnostic");
       await page.locator('[data-diagnostic-action="all"]').click();
@@ -3192,7 +5696,7 @@ const caseDefinitions = [
     readOnly: true,
     liveRuntime: true,
     fullOnly: true,
-    run: (page, observations) => inspectNativeDynamicMap(page, observations, { route: "outdoor-navigation", viewportId: "navigation-workspace-map", label: "Navigation Map" }),
+    run: inspectNavigationDynamicRudyTiles,
   },
   {
     id: "architecture-dynamic-rudy-tiles",
@@ -3220,7 +5724,9 @@ function buildCapabilityResults(definitions, results) {
   const byCase = new Map(results.map(result => [result.id, result]));
   const output = {};
   for (const capabilityId of capabilityIds) {
-    const required = caseDefinitions.filter(definition => definition.capabilityId === capabilityId);
+    const required = caseDefinitions.filter(definition => (
+      definition.capabilityId === capabilityId && !definition.evidenceOnly
+    ));
     if (required.some(definition => !selectedIds.has(definition.id))) {
       output[capabilityId] = "INSUFFICIENT_EVIDENCE";
       continue;
@@ -3244,6 +5750,208 @@ function xmlEscape(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
+}
+
+function groupVisualQualityFindings(checkpoints) {
+  const grouped = new Map();
+  for (const checkpoint of checkpoints) {
+    for (const issue of checkpoint.issues || []) {
+      const canonical = canonicalVisualIssueSignature(issue);
+      const rootSignature = visualIssueRootSignature(issue);
+      const key = `${checkpoint.case_id || "unassigned"}:${rootSignature}`;
+      const current = grouped.get(key) || {
+        finding_kind: "browser_visual_quality_failure",
+        case_id: checkpoint.case_id,
+        observed_behavior: rootSignature,
+        occurrence_count: 0,
+        checkpoint_ids: [],
+        evidence_refs: [],
+        example_observed_behaviors: [],
+        disposition: "AWAITING_GPT_PRO_REVIEW",
+      };
+      grouped.set(key, {
+        ...current,
+        occurrence_count: current.occurrence_count + 1,
+        checkpoint_ids: [...new Set([...current.checkpoint_ids, checkpoint.id].filter(Boolean))],
+        evidence_refs: [...new Set([...current.evidence_refs, checkpoint.screenshot].filter(Boolean))],
+        example_observed_behaviors: [
+          ...new Set([...current.example_observed_behaviors, canonical]),
+        ].slice(0, 3),
+      });
+    }
+  }
+  return [...grouped.values()];
+}
+
+function summarizeRouteVisualAuditFailure(visualAudits, visualIssueGroups) {
+  const operationalIssues = [];
+  for (const audit of visualAudits || []) {
+    if (audit.error) operationalIssues.push(String(audit.error));
+    for (const frame of audit.frames || []) {
+      if (frame.error) operationalIssues.push(String(frame.error));
+    }
+  }
+  return {
+    failed_route_count: (visualAudits || []).filter(audit => audit.error).length,
+    operational_issue_count: operationalIssues.length,
+    operational_issue_samples: operationalIssues.slice(0, 12),
+    visual_issue_group_count: (visualIssueGroups || []).length,
+    visual_issue_groups: (visualIssueGroups || []).slice(0, 24).map(group => ({
+      observed_behavior: group.observed_behavior,
+      occurrence_count: group.occurrence_count,
+      evidence_refs: (group.evidence_refs || []).slice(0, 3),
+    })),
+  };
+}
+
+function controlGapReason(control) {
+  if (control.coverage_gap_kind) return control.coverage_gap_kind;
+  const detail = String(control.detail || "");
+  if (/disabled in the selected live runtime state/i.test(detail)) return "runtime_state_disabled";
+  if (/only one runtime value/i.test(detail)) return "single_runtime_value";
+  if (/changed to a non-visible runtime state/i.test(detail)) return "state_transitioned_nonvisible";
+  if (/route_aborted_after_operation_error/i.test(detail)) return "route_aborted_after_operation_error";
+  if (/timeout|exceeded \d+ms/i.test(detail)) return "operation_timeout";
+  if (/authorization|required before/i.test(detail)) return "authorization_required";
+  if (control.terminal_state === "MISSING_AFTER_RELOAD") return "missing_after_fresh_route_reload";
+  return detail
+    .replace(/q-\d+-[a-f0-9]{8}/gi, "q-<dynamic>")
+    .replace(/\d+(?:\.\d+)?/g, "<number>")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160) || String(control.terminal_state || "unknown").toLowerCase();
+}
+
+function groupControlCoverageFindings(controlInventory) {
+  const blockingStates = new Set([
+    ...browserActionContract.control_coverage.blocking_terminal_states,
+    "OPERATION_ERROR",
+  ]);
+  const grouped = new Map();
+  for (const control of controlInventory) {
+    if (!blockingStates.has(control.terminal_state)) continue;
+    const reason = controlGapReason(control);
+    const key = [
+      control.case_id || "unassigned",
+      control.route || "unassigned",
+      control.terminal_state,
+      reason,
+    ].join(":");
+    const current = grouped.get(key) || {
+      finding_kind: "browser_control_coverage_gap",
+      finding_classification: "qualification_coverage_gap",
+      product_defect_claimed: false,
+      case_id: control.case_id,
+      route: control.route,
+      terminal_state: control.terminal_state,
+      reason,
+      observed_behavior: `${control.route}:${control.terminal_state}:${reason}`,
+      occurrence_count: 0,
+      control_identity_samples: [],
+      detail_samples: [],
+      evidence_refs: [],
+      disposition: "AWAITING_GPT_PRO_REVIEW",
+    };
+    grouped.set(key, {
+      ...current,
+      occurrence_count: current.occurrence_count + 1,
+      control_identity_samples: [
+        ...new Set([...current.control_identity_samples, control.identity].filter(Boolean)),
+      ].slice(0, 5),
+      detail_samples: [
+        ...new Set([...current.detail_samples, control.detail].filter(Boolean)),
+      ].slice(0, 3),
+      evidence_refs: [
+        ...new Set([
+          ...current.evidence_refs,
+          control.before_screenshot,
+          control.after_screenshot,
+        ].filter(Boolean)),
+      ],
+    });
+  }
+  return [...grouped.values()];
+}
+
+function normalizedTelemetryTarget(value) {
+  try {
+    const parsed = new URL(String(value).replace(/:\d+:\d+$/, ""));
+    const queryKeys = [...new Set([...parsed.searchParams.keys()])].sort();
+    return `${parsed.pathname}${queryKeys.length ? `?${queryKeys.join("&")}` : ""}`;
+  } catch (_error) {
+    return String(value || "").slice(0, 240);
+  }
+}
+
+function groupBrowserTelemetryFindings(consoleErrors, pageErrors, failedRequests) {
+  const grouped = new Map();
+  const upsert = (key, seed, field) => {
+    const current = grouped.get(key) || {
+      ...seed,
+      network_occurrence_count: 0,
+      console_occurrence_count: 0,
+      page_occurrence_count: 0,
+      example_details: [],
+      disposition: "AWAITING_GPT_PRO_REVIEW",
+    };
+    grouped.set(key, {
+      ...current,
+      [field]: current[field] + 1,
+      example_details: [
+        ...new Set([...current.example_details, seed.example_detail].filter(Boolean)),
+      ].slice(0, 3),
+    });
+  };
+  for (const item of failedRequests) {
+    const target = normalizedTelemetryTarget(item.url);
+    const key = `${item.case_id}:http:${item.status}:${target}`;
+    upsert(key, {
+      finding_kind: "browser_failed_response",
+      case_id: item.case_id,
+      status: item.status,
+      target,
+      observed_behavior: `HTTP ${item.status}: ${target}`,
+      example_detail: item.url,
+    }, "network_occurrence_count");
+  }
+  for (const item of consoleErrors) {
+    const statusMatch = String(item.detail).match(/status of (\d+)/i);
+    const urlMatch = String(item.detail).match(/@\s+(https?:\/\/\S+?)(?::\d+:\d+)?$/);
+    if (statusMatch && urlMatch) {
+      const status = Number(statusMatch[1]);
+      const target = normalizedTelemetryTarget(urlMatch[1]);
+      const key = `${item.case_id}:http:${status}:${target}`;
+      upsert(key, {
+        finding_kind: "browser_failed_response",
+        case_id: item.case_id,
+        status,
+        target,
+        observed_behavior: `HTTP ${status}: ${target}`,
+        example_detail: item.detail,
+      }, "console_occurrence_count");
+      continue;
+    }
+    const signature = String(item.detail).replace(/\d+(?:\.\d+)?/g, "<number>");
+    upsert(`${item.case_id}:console:${signature}`, {
+      finding_kind: "browser_console_error",
+      case_id: item.case_id,
+      observed_behavior: signature,
+      example_detail: item.detail,
+    }, "console_occurrence_count");
+  }
+  for (const item of pageErrors) {
+    const signature = String(item.detail).replace(/\d+(?:\.\d+)?/g, "<number>");
+    upsert(`${item.case_id}:page:${signature}`, {
+      finding_kind: "browser_page_error",
+      case_id: item.case_id,
+      observed_behavior: signature,
+      example_detail: item.detail,
+    }, "page_occurrence_count");
+  }
+  return [...grouped.values()].map(group => {
+    const {example_detail: _unused, ...result} = group;
+    return result;
+  });
 }
 
 function writeAggregateEvidence(outputRoot, definitions, results, capabilityResults) {
@@ -3274,8 +5982,54 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
   const layerInteractions = results.flatMap(result => (
     result.observations.layerInteractions || result.result?.layerInteractions || []
   ).map(item => ({case_id: result.id, ...item})));
+  const mainMapAvailabilityLayerIds = new Set([
+    "antecedent-rain",
+    "cwa-qpf",
+    "cwa-weather",
+    "soil-moisture",
+    "weather-api",
+  ]);
+  const mainMapAvailabilityEvidence = layerInteractions
+    .filter(item => item.surface_id === "map" && mainMapAvailabilityLayerIds.has(item.layer_id))
+    .map(item => ({
+      case_id: item.case_id,
+      surface_id: item.surface_id,
+      layer_id: item.layer_id,
+      terminal_state: item.terminal_state,
+      availability_reason: item.availability_reason || item.initial?.availability_reason || null,
+      control_present: item.initial?.control_present ?? null,
+      control_disabled: item.initial?.control_disabled ?? null,
+      control_visible: item.initial?.control_visible ?? null,
+      control_label: item.initial?.control_label || null,
+      control_title: item.initial?.control_title || null,
+      dashboard_weather_layer_hidden: item.initial?.dashboard_weather_layer_hidden || null,
+      dashboard_weather_layer_required: item.settled?.dashboard_weather_layer_required
+        || item.initial?.dashboard_weather_layer_required
+        || null,
+      dashboard_weather_layer_availability: item.settled?.dashboard_weather_layer_availability
+        || item.initial?.dashboard_weather_layer_availability
+        || null,
+      dashboard_weather_layer_availability_reason: item.settled?.dashboard_weather_layer_availability_reason
+        || item.initial?.dashboard_weather_layer_availability_reason
+        || null,
+      dashboard_weather_layer_state_text: item.settled?.dashboard_weather_layer_state_text
+        || item.initial?.dashboard_weather_layer_state_text
+        || null,
+      normalized_unavailable_state: item.normalized_unavailable_state || null,
+      rendered_item_count: item.initial?.child_count ?? null,
+      settled_rendered_item_count: item.settled?.child_count ?? null,
+      render_provenance: item.initial?.render_provenance || null,
+      projected_availability: item.initial?.projected_availability || null,
+      map_frame_boundary: item.map_frame_boundary || null,
+      paired_weather_surface_control: item.paired_weather_surface_control || null,
+      paired_weather_embedded_state: item.paired_weather_embedded_state || null,
+      evidence_semantics: item.evidence_semantics || null,
+    }));
   const blockedMutationRequests = results.flatMap(result => (
     result.observations.blockedMutationRequests || []
+  ).map(item => ({case_id: result.id, ...item})));
+  const controlStateTraces = results.flatMap(result => (
+    result.observations.controlStateTraces || []
   ).map(item => ({case_id: result.id, ...item})));
   writeJson(outputRoot, "console-errors.json", {
     schema: "scout.dashboardQualificationConsoleErrors.v1",
@@ -3306,6 +6060,19 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
     zero_unmapped_controls_required: true,
     controls: controlInventory,
   });
+  writeJson(outputRoot, "browser-control-state-traces.json", {
+    schema: "scout.dashboardQualificationControlStateTraces.v1",
+    issue_id: "SCOUT-Q-0063",
+    product_behavior_changed: false,
+    permission_reload_stability: controlStateTraces.filter(item => item.route === "outdoor-permission"),
+    runtime_audit_terminal_content: controlStateTraces.filter(item => item.route === "runtime-audit"),
+    weather_frame_lifecycle: controlStateTraces.filter(item => (
+      item.route === "outdoor-weather" && ["frame_lifecycle", "frame_lifecycle_owner", "control_state", "network_completion"].includes(item.kind)
+    )),
+    emergency_discovery_timing: controlStateTraces.filter(item => (
+      item.route === "emergency" && ["control_discovery_timing", "control_state", "network_completion"].includes(item.kind)
+    )),
+  });
   writeJson(outputRoot, "browser-visual-audit.json", {
     schema: "scout.dashboardQualificationVisualAudit.v1",
     independent_visual_review_required: true,
@@ -3322,6 +6089,17 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
     schema: "scout.dashboardQualificationLayerInteractions.v1",
     all_exposed_layer_controls_must_be_toggled: true,
     interactions: layerInteractions,
+  });
+  writeJson(outputRoot, "browser-layer-availability-evidence.json", {
+    schema: "scout.dashboardQualificationLayerAvailabilityEvidence.v1",
+    issue_id: "SCOUT-Q-0057",
+    product_behavior_changed: false,
+    contract_observation: {
+      all_exposed_layer_controls_must_be_toggled: browserActionContract.required_map_content.all_exposed_layer_controls_must_be_toggled,
+      per_surface_availability_contract_declared: false,
+      interpretation: "Evidence only: hidden or disabled state is not attributed as a product defect without a typed per-surface contract and projected server reason.",
+    },
+    records: mainMapAvailabilityEvidence,
   });
   writeJson(outputRoot, "network/blocked-mutation-requests.json", {
     schema: "scout.dashboardQualificationBlockedMutationRequests.v1",
@@ -3390,46 +6168,14 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
       observed_behavior: result.detail,
       disposition: "AWAITING_HUMAN_REVIEW",
     }));
-  const browserTelemetryFindings = [
-    ...consoleErrors.map(item => ({
-      finding_kind: "browser_console_error",
-      case_id: item.case_id,
-      observed_behavior: item.detail,
-      disposition: "AWAITING_GPT_PRO_REVIEW",
-    })),
-    ...pageErrors.map(item => ({
-      finding_kind: "browser_page_error",
-      case_id: item.case_id,
-      observed_behavior: item.detail,
-      disposition: "AWAITING_GPT_PRO_REVIEW",
-    })),
-    ...failedRequests.map(item => ({
-      finding_kind: "browser_failed_response",
-      case_id: item.case_id,
-      observed_behavior: `HTTP ${item.status}: ${item.url}`,
-      disposition: "AWAITING_GPT_PRO_REVIEW",
-    })),
-  ];
+  const browserTelemetryFindings = groupBrowserTelemetryFindings(
+    consoleErrors,
+    pageErrors,
+    failedRequests,
+  );
   const browserCoverageFindings = [
-    ...controlInventory
-      .filter(item => browserActionContract.control_coverage.blocking_terminal_states.includes(item.terminal_state)
-        || item.terminal_state === "VISUAL_QUALITY_FAILURE")
-      .map(item => ({
-        finding_kind: "browser_control_coverage_gap",
-        case_id: item.case_id,
-        observed_behavior: `${item.route}:${item.identity}:${item.terminal_state}`,
-        evidence_refs: [item.before_screenshot, item.after_screenshot].filter(Boolean),
-        disposition: "AWAITING_GPT_PRO_REVIEW",
-      })),
-    ...visualCheckpoints
-      .filter(item => (item.issues || []).length)
-      .map(item => ({
-        finding_kind: "browser_visual_quality_failure",
-        case_id: item.case_id,
-        observed_behavior: (item.issues || []).join(" | "),
-        evidence_refs: [item.screenshot],
-        disposition: "AWAITING_GPT_PRO_REVIEW",
-      })),
+    ...groupControlCoverageFindings(controlInventory),
+    ...groupVisualQualityFindings(visualCheckpoints),
     ...mapInteractions
       .filter(item => item.error)
       .map(item => ({
@@ -3600,7 +6346,7 @@ async function main() {
     } else {
       await waitForServer(`${baseUrl}/admin/dashboard?projectId=${encodeURIComponent(readyProjectId)}`);
     }
-    browser = await chromium.launch({
+    browser = await chromiumLauncher().launch({
       headless: true,
       ...(browserExecutable ? { executablePath: browserExecutable } : {}),
     });
@@ -3702,7 +6448,8 @@ async function main() {
           .filter(item => item.terminal_state === "DELEGATED").length, 0),
         blocking_control_gaps: results.reduce((count, result) => count + (result.observations.controlInventory || [])
           .filter(item => browserActionContract.control_coverage.blocking_terminal_states.includes(item.terminal_state)
-            || item.terminal_state === "VISUAL_QUALITY_FAILURE").length, 0),
+            || item.terminal_state === "VISUAL_QUALITY_FAILURE"
+            || item.terminal_state === "OPERATION_ERROR").length, 0),
         map_surface_results: results.reduce((count, result) => count + (result.observations.mapInteractions || []).length, 0),
         completed_map_surface_results: results.reduce((count, result) => count + (result.observations.mapInteractions || [])
           .filter(item => !item.error).length, 0),
@@ -3710,7 +6457,12 @@ async function main() {
         operated_layer_results: results.reduce((count, result) => count + (result.observations.layerInteractions || [])
           .filter(item => item.terminal_state === "OPERATED").length, 0),
         blocking_layer_gaps: results.reduce((count, result) => count + (result.observations.layerInteractions || [])
-          .filter(item => item.terminal_state !== "OPERATED").length, 0),
+          .filter(item => ![
+            "OPERATED",
+            "NOT_EXPOSED",
+            "REQUIRED_AVAILABLE",
+            "REQUIRED_NA",
+          ].includes(item.terminal_state)).length, 0),
         visual_checkpoints: results.reduce((count, result) => count + (result.observations.visualCheckpoints || []).length, 0),
       },
       capability_results: capabilityResults,
@@ -3743,7 +6495,14 @@ async function main() {
     const p0Failure = results.some(result => result.criticality === "P0" && result.status !== "PASS");
     if (scope === "full" && p0Failure) process.exitCode = 2;
   } finally {
-    if (browser) await browser.close();
+    if (browser) {
+      try {
+        await runCaseFinalizerWithTimeout("browser-close", () => browser.close());
+      } catch (error) {
+        process.stderr.write(`Browser cleanup failed: ${error.stack || error}\n`);
+        process.exitCode = 1;
+      }
+    }
     if (fixtureHarness) {
       await stopServer(server);
       await stopServer(disabledServer);
@@ -3752,7 +6511,29 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  process.stderr.write(`${error.stack || error}\n`);
-  process.exitCode = 1;
-});
+module.exports = {
+  aggregateDelegatedMapEvidenceControls,
+  classifyPassiveControl,
+  controlCoverageGapRecord,
+  controlOperationTerminalState,
+  dashboardRouteRootSelector,
+  groupBrowserTelemetryFindings,
+  groupControlCoverageFindings,
+  groupVisualQualityFindings,
+  isLoadedPopupUrl,
+  isTransientControlLocatorError,
+  isTransientFrameDiscoveryError,
+  runCaseExecutionWithTimeout,
+  runCaseFinalizerWithTimeout,
+  sampleRepeatedSelectionControls,
+  summarizeRouteVisualAuditFailure,
+  summarizeControlCoverageFailure,
+  visualIssueRootSignature,
+};
+
+if (require.main === module) {
+  main().catch(error => {
+    process.stderr.write(`${error.stack || error}\n`);
+    process.exitCode = 1;
+  });
+}
