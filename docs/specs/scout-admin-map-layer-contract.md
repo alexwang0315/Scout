@@ -236,12 +236,14 @@ The nested imagery controls are required on `/admin/pretrip`, `/admin/debug`,
 and `/admin`. Exploring for Six Axis → Weather reuses the `/admin/pretrip`
 renderer and mirrors the same state through the same-origin
 `scoutCwaImageryController`; it is not a fourth renderer and does not add a
-layer id. Dashboard MAP excludes the five Weather / 氣象與水文 controls so
-weather ownership is not duplicated across pages. The controls remain usable
-on Six Axis Weather when the main CWA layer is enabled and show an explicit
-unavailable state when no prepared manifest exists. Raw cache paths, ETags,
-CWA credentials, and upstream authorization data must not be returned to the
-browser.
+layer id. Dashboard MAP visibly exposes the five canonical Weather / 氣象與水文
+layer rows. A non-empty prepared render group is operable and labelled
+`AVAILABLE`; an absent or empty prepared group remains visible, is guarded from
+empty activation, and is labelled `NA`. Six Axis Weather continues to own the
+detailed product, time-window, opacity, playback, and refresh controls, so the
+Main Map rows do not create a second imagery-processing path. Raw cache paths,
+ETags, CWA credentials, and upstream authorization data must not be returned to
+the browser.
 
 ### CWA Numeric Rainfall Grid Child Products
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import time
 import zipfile
@@ -1902,7 +1903,7 @@ def test_mobile_navigation_route_keeps_visible_global_sidebar_opener() -> None:
     assert "width: 44px;" in html.split(".dashboard-nav-toggle {", 1)[1].split("}", 1)[0]
 
 
-def test_weather_hydrology_controls_are_owned_by_six_axis_weather_not_map() -> None:
+def test_weather_hydrology_layers_are_required_on_main_map_with_na_fallback() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
 
@@ -1941,10 +1942,19 @@ def test_weather_hydrology_controls_are_owned_by_six_axis_weather_not_map() -> N
     assert 'aria-label="Weather and hydrology layer controls"' in weather_renderer
     assert 'data-weather-layer-control="${escapeHtml(layer.id)}"' in weather_renderer
     assert "renderDashboardCwaImageryControls()" not in map_evidence_renderer
-    assert "excludeWeatherLayersFromMapFrame(frame)" in map_frame_adapter
+    assert "projectRequiredWeatherLayersInMapFrame(frame)" in map_frame_adapter
     assert "function setEmbeddedPretripLayerEnabled" in html
     assert "function syncWeatherLayerControls" in html
-    assert "function excludeWeatherLayersFromMapFrame" in html
+    assert "function projectRequiredWeatherLayersInMapFrame" in html
+    assert 'data-dashboard-weather-layer-required' in html
+    assert 'data-dashboard-weather-layer-availability' in html
+    assert 'data-dashboard-weather-layer-state="true"' in html
+    assert 'status.textContent = "NA"' in html
+    assert "const availabilityReason = available" in html
+    assert '"no_prepared_layer_evidence"' in html
+    assert "MutationObserver" in map_frame_adapter
+    assert "excludeWeatherLayersFromMapFrame" not in html
+    assert 'data-dashboard-weather-layer-hidden="true"' not in html
 
     for marker in (
         'data-weather-cwa-product="true"',
@@ -2858,6 +2868,40 @@ def test_all_dashboard_maps_share_hover_hints_and_keyboard_pan_contract() -> Non
         assert "data-dashboard-map-hint-title" in source
         assert "data-dashboard-map-hint-summary" in source
         assert 'tabindex="' in source
+
+
+def test_dashboard_map_hints_use_dynamic_delegated_events() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    binding = html.split("function bindDashboardMapHints(", 1)[1].split(
+        "function normalizeDashboardSingleImageTheme", 1
+    )[0]
+
+    assert 'root.addEventListener("pointerover"' in binding
+    assert 'root.addEventListener("pointermove"' in binding
+    assert 'root.addEventListener("pointerout"' in binding
+    assert 'root.addEventListener("focusin"' in binding
+    assert 'root.addEventListener("focusout"' in binding
+    assert 'root.addEventListener("keydown"' in binding
+    assert 'closest("[data-dashboard-map-hint-title]")' in binding
+    assert "dashboardMapHintDelegatedBound" in binding
+    assert "dashboardMapHintBound" not in binding
+
+
+def test_architecture_dense_labels_meet_dashboard_readability_floor() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    architecture_css = html.split("    .route-architecture-shell {", 1)[1].split(
+        "    .navigation-terrain-shell {", 1
+    )[0]
+    pixel_sizes = [
+        float(value)
+        for value in re.findall(
+            r"font(?:-size)?\s*:\s*[^;{}]*?(\d+(?:\.\d+)?)px",
+            architecture_css,
+        )
+    ]
+
+    assert pixel_sizes
+    assert min(pixel_sizes) >= 10
 
 
 def test_weather_layer_status_is_bound_to_the_embedded_render_group() -> None:
@@ -4895,6 +4939,81 @@ def test_dashboard_approved_qualification_visual_repairs_are_explicit() -> None:
     assert "qualification-six-axis-tabs-visible" in html
     assert "qualification-mobile-nav-scroll" in html
     assert "qualification-architecture-lens-sticky" in html
+
+
+def test_dashboard_q0056_map_hints_and_q0059_navigation_controls_are_explicit() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    navigation_host = html.split(
+        "function renderNavigationTerrainMapLibreHost", 1
+    )[1].split("function renderNavigationTerrainReviewWorkbench", 1)[0]
+    weather_adapter = html.split("function applyWeatherCwaMapFrame", 1)[1].split(
+        "function bindWeatherCwaMapFrame", 1
+    )[0]
+
+    for attribute in (
+        "data-dashboard-map-hint-title",
+        "data-dashboard-map-hint-summary",
+        "data-dashboard-map-hint-source",
+    ):
+        assert attribute in navigation_host
+    assert "bindWeatherCwaEvidenceHints(frame)" in weather_adapter
+    assert "data-evidence-type" in html.split(
+        "function bindWeatherCwaEvidenceHints", 1
+    )[1].split("function applyWeatherCwaMapFrame", 1)[0]
+    assert "pointerover" in html.split(
+        "function bindWeatherCwaEvidenceHints", 1
+    )[1].split("function applyWeatherCwaMapFrame", 1)[0]
+    assert "focusin" in html.split(
+        "function bindWeatherCwaEvidenceHints", 1
+    )[1].split("function applyWeatherCwaMapFrame", 1)[0]
+
+    fit_rule = html.split(".navigation-terrain-maplibre-fit {", 1)[1].split(
+        "}", 1
+    )[0]
+    assert "top: 138px" in fit_rule
+
+
+def test_dashboard_q0058_not_checked_is_warning_but_failed_probe_stays_red() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    diagnostic = html.split("async function diagnosticCheck009()", 1)[1].split(
+        "async function diagnosticCheck010()", 1
+    )[0]
+
+    assert 'readiness.level === "not_checked"' in diagnostic
+    assert "return diagnosticWarning(" in diagnostic
+    assert 'readiness.level === "ready"' in diagnostic
+    assert "Assistant is not ready" in diagnostic
+
+
+def test_dashboard_q0060_shared_readability_and_q0061_living_containment() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    readable_rule = html.split(
+        "/* qualification-shared-compact-readability */", 1
+    )[1].split("}", 1)[0]
+
+    assert "--dashboard-compact-readable-size: 11px" in html
+    for selector in (
+        ".field-instrument-theme .truth-item > span",
+        ".dashboard-map-controls output",
+        ".permission-eyebrow",
+        ".permission-day-label",
+        ".weather-layer-control small",
+        ".navigation-terrain-boundary-chips span",
+        ".runtime-log-index-button small",
+        ".runtime-audit-health-card small",
+    ):
+        assert selector in readable_rule
+    assert "font-size: var(--dashboard-compact-readable-size)" in readable_rule
+    assert "font-weight: 700" in readable_rule
+
+    living_rule = html.split(
+        "/* qualification-living-mobile-long-token-containment */", 1
+    )[1].split("}", 1)[0]
+    assert "min-width: 0" in living_rule
+    assert "max-width: 100%" in living_rule
+    assert "overflow-wrap: anywhere" in living_rule
+    assert "word-break: break-word" in living_rule
+    assert "const LIVING_REFRESH_INTERVAL_MS = 3000" in html
 
 
 def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
