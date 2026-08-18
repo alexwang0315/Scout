@@ -75,6 +75,7 @@ COPY \
     cwa_satellite_ingestor.py \
     dashboard_connected_preparation.py \
     dashboard_workspace_operations.py \
+    dashboard_workspace_publication.py \
     debug_assistant_context.py \
     debug_event_provenance.py \
     debug_api.py \
@@ -174,6 +175,9 @@ COPY \
     route_precipitation_sampler.py \
     route_progress.py \
     runtime_artifact_resolution.py \
+    runtime_audit_api.py \
+    runtime_audit_ledger.py \
+    runtime_audit_models.py \
     runtime_debug_log.py \
     runtime_debug_models.py \
     scout_gnss_hardware_observer.py \
@@ -209,6 +213,9 @@ COPY \
     scout_energy_reserve.py \
     scout_energy_reserve_monitor.py \
     scout_contextual_permission_tool.py \
+    scout_contextual_permission_rudy.py \
+    scout_contextual_permission_workbench.py \
+    scout_contextual_permission_workbench_api.py \
     scout_energy_vitals_tool.py \
     scout_equipment_resource_tool.py \
     scout_ins_dr_trace_tool.py \
@@ -320,6 +327,10 @@ RUN useradd --create-home --uid 1000 scout \
         /data/scout/admin/secrets /data/scout/osm-tiles /data/scout/raster-tiles \
         /data/scout/logs /data/scout/admin/ingress \
     && chown -R scout:scout /data/scout /app
+
+RUN SCOUT_ADMIN_AUTH_REQUIRED=false \
+    SCOUT_INGRESS_OBSERVER_SUPERVISOR_ENABLED=false \
+    python -c "import phase4_admin_runtime"
 
 USER scout
 

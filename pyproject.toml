@@ -10,8 +10,8 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi",
     "pydantic>=2",
-    "pydantic-ai-slim[duckduckgo,openai,openrouter]==2.29.0",
-    "pydantic-evals==2.29.0",
+    "pydantic-ai-slim[duckduckgo,openai,openrouter]==2.30.0",
+    "pydantic-evals==2.30.0",
     "pyyaml",
     "uvicorn",
 ]
@@ -21,7 +21,7 @@ ai-hat-eval = [
     "smbus2==0.5.0",
 ]
 pydantic-ai-smoke = [
-    "pydantic-ai-slim[duckduckgo,mcp,web-fetch]==2.29.0",
+    "pydantic-ai-slim[duckduckgo,mcp,web-fetch]==2.30.0",
 ]
 
 [project.scripts]
