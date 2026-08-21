@@ -37,7 +37,7 @@ jobs:
         env:
           SCOUT_QUALIFICATION_RUNTIME_URL: ${{ vars.SCOUT_QUALIFICATION_RUNTIME_URL }}
           SCOUT_QUALIFICATION_PROJECT_ID: ${{ vars.SCOUT_QUALIFICATION_PROJECT_ID }}
-        run: npm run qualification:check:full
+        run: npm run qualification:check
       - if: always()
         uses: actions/upload-artifact@v4
         with:

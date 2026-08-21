@@ -23,17 +23,27 @@ def evaluate_results(
     manifest: Mapping[str, Any],
     results: Mapping[str, str],
     policy: Mapping[str, Any],
+    *,
+    qualification_scope: str = "guard",
 ) -> dict[str, Any]:
     blocking_states = policy.get("blocking_states") or {}
     blockers: list[dict[str, str]] = []
     normalized_results: dict[str, str] = {}
     excluded_capabilities: list[dict[str, str]] = []
+    included_qualification_states = (
+        {"active", "paused"}
+        if qualification_scope == "legacy-full"
+        else {"active"}
+    )
 
     for surface in manifest.get("surfaces") or []:
         for capability in surface.get("capabilities") or []:
             capability_id = str(capability.get("id") or "")
             criticality = str(capability.get("criticality") or "P2")
             capability_status = str(capability.get("status") or "not_implemented")
+            qualification_state = str(
+                capability.get("qualification_state") or "active"
+            )
             state = str(results.get(capability_id) or "INSUFFICIENT_EVIDENCE")
             if state not in VALID_STATES:
                 state = "INSUFFICIENT_EVIDENCE"
@@ -44,6 +54,19 @@ def evaluate_results(
                         "capability_id": capability_id,
                         "status": capability_status,
                         "reason": "not_an_active_operational_runtime_capability",
+                    }
+                )
+                continue
+            if qualification_state not in included_qualification_states:
+                excluded_capabilities.append(
+                    {
+                        "capability_id": capability_id,
+                        "status": capability_status,
+                        "reason": (
+                            "paused_for_maplibre_boundary_freeze"
+                            if qualification_state == "paused"
+                            else "outside_maplibre_boundary_freeze"
+                        ),
                     }
                 )
                 continue
@@ -64,6 +87,7 @@ def evaluate_results(
     )
     return {
         "schema": "scout.dashboardQualificationEvaluation.v1",
+        "qualification_scope": qualification_scope,
         "machine_verdict": "FAIL" if blockers else "PASS",
         "merge_permitted": not blockers,
         "results": normalized_results,
@@ -77,6 +101,11 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--policy", type=Path, required=True)
+    parser.add_argument(
+        "--scope",
+        choices=("guard", "legacy-full", "smoke"),
+        default="guard",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
@@ -84,7 +113,12 @@ def main() -> int:
     results_payload = json.loads(args.results.read_text(encoding="utf-8"))
     results = results_payload.get("capability_results", results_payload)
     policy = yaml.safe_load(args.policy.read_text(encoding="utf-8"))
-    evaluation = evaluate_results(manifest, results, policy)
+    evaluation = evaluate_results(
+        manifest,
+        results,
+        policy,
+        qualification_scope=args.scope,
+    )
     encoded = json.dumps(evaluation, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

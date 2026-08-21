@@ -49,6 +49,7 @@
         "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$"},
         "criticality": {"enum": ["P0", "P1", "P2"]},
         "status": {"enum": ["operational", "partial", "intent_only", "candidate", "shadow", "sandbox", "not_implemented"]},
+        "qualification_state": {"enum": ["active", "paused", "outside_boundary"]},
         "owner": {"type": "string"},
         "introduced_in_commit": {"type": "string"},
         "expected_behavior": {"$ref": "#/$defs/nonEmptyStringArray"},
