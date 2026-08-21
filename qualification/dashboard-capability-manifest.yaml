@@ -1,6 +1,6 @@
 schema: scout.dashboardCapabilityManifest.v1
-version: 1
-baseline_policy: independently_reviewed_qualified_only
+version: 2
+baseline_policy: maplibre_pre_migration_regression_guard_only
 surfaces:
   - id: system-diagnostic
     route: /admin/dashboard#diagnostic
@@ -8,6 +8,7 @@ surfaces:
       - id: dashboard.shell.runtime_route_navigation
         criticality: P0
         status: operational
+        qualification_state: paused
         owner: dashboard
         expected_behavior:
           - Every rendered Dashboard navigation route can be opened through browser interaction on the selected real runtime project.
@@ -19,6 +20,7 @@ surfaces:
       - id: dashboard.diagnostic.controls
         criticality: P1
         status: operational
+        qualification_state: outside_boundary
         owner: dashboard
         expected_behavior:
           - Diagnostic appears immediately after Settings.
@@ -33,6 +35,7 @@ surfaces:
       - id: dashboard.diagnostic.read_only
         criticality: P0
         status: operational
+        qualification_state: outside_boundary
         owner: dashboard
         expected_behavior:
           - Opening Dashboard and running Diag all leaves the sealed workspace byte-identical.
@@ -45,9 +48,28 @@ surfaces:
   - id: all-dashboard-live-browser
     route: /admin/dashboard#*
     capabilities:
+      - id: dashboard.browser.maplibre_pre_migration_regression_guard
+        criticality: P0
+        status: operational
+        qualification_state: active
+        owner: qualification
+        expected_behavior:
+          - The real Dashboard loads and the configured major routes open through browser interaction on desktop and large-mobile viewports.
+          - The current map fallback exposes a usable renderer surface without requiring an SVG DOM, iframe implementation, or MapLibre canvas implementation.
+          - Canonical layer IDs remain present and one representative read-only layer control can change state and be restored without a fatal browser error.
+          - Timeline and map-rail evidence retain the same non-empty evidence and artifact identity through selection and route transition.
+          - The checked routes have no fatal console or page error, no top-level horizontal overflow, and no new operational or safety authority.
+        forbidden_behavior:
+          - The regression guard must not require future map behavior to expose legacy SVG paths, groups, transforms, or iframe-only selectors.
+          - A candidate evidence selection, read-only layer operation, or browser label must not become runtime safety truth or authorize an operational action.
+          - Passing this guard must not be reported as Dashboard productization, complete map qualification, or Terrain Intelligence qualification.
+        required_tests: [maplibre_pre_migration_guard_desktop, maplibre_pre_migration_guard_large_mobile]
+        required_evidence: [ui, network, browser_action_log, screenshots, trace, layer_id, artifact_id]
+        authority_boundary: {source: browser, runtime_authority: false}
       - id: dashboard.browser.complete_control_coverage
         criticality: P0
         status: operational
+        qualification_state: paused
         owner: qualification
         expected_behavior:
           - Every visible interactive control in the main document and rendered embedded frames on every Dashboard route is discovered at runtime and ends as browser-operated or delegated to a passing browser-operated specialist case.
@@ -62,6 +84,7 @@ surfaces:
       - id: dashboard.visual.complete_live_rendering
         criticality: P0
         status: operational
+        qualification_state: paused
         owner: qualification
         expected_behavior:
           - Every contracted Dashboard route is rendered and browser-scrolled on desktop and large-mobile profiles with screenshot evidence.
@@ -74,6 +97,7 @@ surfaces:
       - id: dashboard.maps.all_surface_interactions
         criticality: P0
         status: operational
+        qualification_state: paused
         owner: maps
         expected_behavior:
           - All nine Dashboard map surfaces support Fit, zoom in, zoom out, mouse pan, keyboard pan, and persistent rectangle zoom through browser input.
@@ -87,6 +111,7 @@ surfaces:
       - id: dashboard.layers.all_visible_toggle_integrity
         criticality: P0
         status: operational
+        qualification_state: paused
         owner: maps
         expected_behavior:
           - Every pre-trip layer exposed by scout_layer_contract.py and every Weather layer control is toggled through the browser and produces a visible, correctly labelled state change.
@@ -100,6 +125,7 @@ surfaces:
       - id: dashboard.layers.weather_hydrology_required_na
         criticality: P1
         status: operational
+        qualification_state: outside_boundary
         owner: maps
         expected_behavior:
           - Main Map visibly lists soil-moisture, antecedent-rain, cwa-qpf, cwa-weather, and weather-api as required weather or hydrology layers.
@@ -117,6 +143,7 @@ surfaces:
       - id: dashboard.navigation.partial_data_shell
         criticality: P0
         status: operational
+        qualification_state: outside_boundary
         owner: navigation
         expected_behavior:
           - Preparing, unavailable, stale, and not-prepared states preserve the canonical map and control shell.
@@ -129,6 +156,7 @@ surfaces:
       - id: dashboard.maps.dynamic_rudy_tiles
         criticality: P0
         status: operational
+        qualification_state: paused
         owner: maps
         expected_behavior:
           - Navigation, Architecture, and Weather advance active Rudy tile matrices after zoom.
@@ -144,6 +172,7 @@ surfaces:
       - id: dashboard.weather.optional_rainfall_overlay
         criticality: P1
         status: operational
+        qualification_state: outside_boundary
         owner: weather
         expected_behavior:
           - An absent optional rainfall projection returns a typed read-only 200 not_prepared response.
@@ -187,12 +216,15 @@ surfaces:
       - id: dashboard.permission.fail_closed
         criticality: P0
         status: operational
+        qualification_state: outside_boundary
         owner: permission
         expected_behavior:
           - Missing, stale, or incompatible projections render a blocked state with an actionable explanation.
           - Ready and degraded real runtime states remain visibly candidate-only.
+          - When a degraded, blocked, or stale runtime state has no actionable refresh, the workbench and qualification evidence report Permission Refresh as TYPED_UNAVAILABLE with a reason instead of waiting for or presenting an ineffective retry.
         forbidden_behavior:
           - Permission presentation must not authorize departure, retreat, bivy, Safety, Emergency, outbound, or hardware effects.
+          - A missing ineffective Refresh control in a typed degraded state must not be converted into a timeout or an operational-failure claim.
         required_tests: [ready_candidate_boundary, blocked_missing_seed, stale_baseline]
         required_evidence: [ui, network, server_state, trace]
         authority_boundary: {source: server, runtime_authority: false}
@@ -202,18 +234,22 @@ surfaces:
       - id: qualification.evidence.integrity
         criticality: P0
         status: operational
+        qualification_state: active
         owner: qualification
         expected_behavior:
           - Every evidence file is SHA-256 indexed and independently verifiable.
           - A changed or missing indexed file fails verification.
+          - Qualification uses one host-level operator lease shared across repository worktrees and may reclaim a lease only when its recorded process is no longer alive.
         forbidden_behavior:
           - Narrative claims must not override machine evidence or hash mismatches.
+          - Two worktrees on the same host user must not collect or seal official qualification evidence concurrently.
         required_tests: [manifest_schema, evidence_tamper, intentional_p0_regression]
         required_evidence: [manifest, server_state]
         authority_boundary: {source: none, runtime_authority: false}
       - id: qualification.fixture.active_p0_matrix
         criticality: P0
         status: sandbox
+        qualification_state: outside_boundary
         owner: qualification
         expected_behavior:
           - Synthetic fixtures may cover ready, degraded, blocked, stale, partial, zero-evidence, and Assistant enabled/disabled states for harness development only.
@@ -225,6 +261,7 @@ surfaces:
       - id: qualification.deterministic_regression_baseline
         criticality: P1
         status: operational
+        qualification_state: active
         owner: qualification
         expected_behavior:
           - Focused Dashboard remediation tests and the configured repository regression baseline pass without skipped failures.

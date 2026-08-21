@@ -48,9 +48,13 @@ const staleProjectId = "qualification_stale";
 const zeroEvidenceProjectId = "qualification_zero_evidence";
 const assistantEnabledProjectId = "qualification_assistant_enabled";
 const assistantDisabledProjectId = "qualification_assistant_disabled";
-const scope = process.argv.includes("--smoke") ? "smoke" : "full";
+const legacyFull = process.argv.includes("--legacy-full");
+const scope = legacyFull ? "legacy-full" : (process.argv.includes("--smoke") ? "smoke" : "guard");
 const quiet = process.argv.includes("--quiet");
 const outputArgument = process.argv.find(argument => argument.startsWith("--output="));
+const preparedOutputRoot = process.argv.includes("--prepared-output-root");
+const controlRouteArgument = process.argv.find(argument => argument.startsWith("--control-route="));
+const requestedControlRoute = controlRouteArgument?.split("=", 2)[1] || null;
 const requestedCaseIds = new Set(
   process.argv
     .filter(argument => argument.startsWith("--case="))
@@ -64,15 +68,35 @@ const browserActionContractPath = path.join(
 );
 const CONTROL_OPERATION_TIMEOUT_MS = 90_000;
 const CONTROL_DISCOVERY_TIMEOUT_MS = 90_000;
+const CONTROL_FRAME_DISCOVERY_TIMEOUT_MS = 10_000;
 const CONTROL_ROUTE_TIMEOUT_MS = 10 * 60_000;
+const CONTROL_ROUTE_STATE_RESET_LIMIT = 32;
 const CASE_EXECUTION_TIMEOUT_MS = 30 * 60_000;
 const CASE_FINALIZATION_TIMEOUT_MS = 90_000;
+const VIDEO_CASE_FINALIZATION_TIMEOUT_MS = 5 * 60_000;
 const ROUTE_TRACE_FINALIZATION_TIMEOUT_MS = 30_000;
 const ROUTE_FRAME_VISIBILITY_TIMEOUT_MS = 5_000;
 const CASE_FAILURE_SCREENSHOT_TIMEOUT_MS = 15_000;
+const MAP_EVIDENCE_GROUP_EXPANSION_ATTEMPTS = 3;
+const CONTROL_TERMINAL_WAIT_ROUTES = new Set([
+  "outdoor-permission",
+  "runtime-audit",
+  "outdoor-weather",
+  "emergency",
+]);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function caseFinalizationTimeoutMs(definition = {}) {
+  const configuredTimeout = Number(definition.finalizationTimeoutMs);
+  if (Number.isFinite(configuredTimeout) && configuredTimeout > 0) {
+    return configuredTimeout;
+  }
+  return definition.recordVideo === false
+    ? CASE_FINALIZATION_TIMEOUT_MS
+    : VIDEO_CASE_FINALIZATION_TIMEOUT_MS;
 }
 
 async function runCaseFinalizerWithTimeout(
@@ -142,10 +166,181 @@ function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+function qualificationLeaseOwnerIsAlive(pid) {
+  const numericPid = Number(pid);
+  if (!Number.isSafeInteger(numericPid) || numericPid <= 0) return false;
+  try {
+    process.kill(numericPid, 0);
+    return true;
+  } catch (error) {
+    return error?.code !== "ESRCH";
+  }
+}
+
+function recoverStaleQualificationLease(resolvedPath) {
+  let staleLease;
+  try {
+    staleLease = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return { recovered: true, stale_lease: null };
+    return { recovered: false, stale_lease: null };
+  }
+  if (qualificationLeaseOwnerIsAlive(staleLease?.pid)) {
+    return { recovered: false, stale_lease: staleLease };
+  }
+  const recoveryPath = `${resolvedPath}.stale-${crypto.randomUUID()}`;
+  try {
+    fs.renameSync(resolvedPath, recoveryPath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return { recovered: true, stale_lease: staleLease };
+    return { recovered: false, stale_lease: staleLease };
+  }
+  try {
+    fs.unlinkSync(recoveryPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  return { recovered: true, stale_lease: staleLease };
+}
+
+function acquireQualificationLease(lockPath, metadata = {}) {
+  const resolvedPath = path.resolve(String(lockPath));
+  const lease = {
+    schema: "scout.dashboardQualificationLease.v1",
+    token: crypto.randomUUID(),
+    pid: process.pid,
+    hostname: os.hostname(),
+    started_at: new Date().toISOString(),
+    ...metadata,
+  };
+  fs.mkdirSync(path.dirname(resolvedPath), { recursive: true, mode: 0o700 });
+  let recoveredStaleLease = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      fs.writeFileSync(
+        resolvedPath,
+        `${JSON.stringify(lease, null, 2)}\n`,
+        { encoding: "utf8", flag: "wx", mode: 0o600 },
+      );
+      return {
+        path: resolvedPath,
+        token: lease.token,
+        recovered_stale_lease: Boolean(recoveredStaleLease),
+        recovered_stale_lease_metadata: recoveredStaleLease,
+      };
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      const recovery = recoverStaleQualificationLease(resolvedPath);
+      if (attempt === 0 && recovery.recovered) {
+        recoveredStaleLease = recovery.stale_lease || { missing_during_recovery: true };
+        continue;
+      }
+      const leaseError = new Error(
+        `Qualification lease is already held: ${resolvedPath}`,
+      );
+      leaseError.code = "QUALIFICATION_LEASE_HELD";
+      leaseError.lockPath = resolvedPath;
+      leaseError.currentLease = recovery.stale_lease;
+      throw leaseError;
+    }
+  }
+  throw new Error(`Qualification lease could not be acquired: ${resolvedPath}`);
+}
+
+function releaseQualificationLease(lease) {
+  if (!lease?.path || !lease?.token) return false;
+  let current;
+  try {
+    current = JSON.parse(fs.readFileSync(lease.path, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+  if (current?.token !== lease.token) return false;
+  fs.unlinkSync(lease.path);
+  return true;
+}
+
+function qualificationRuntimeLeasePath(baseUrl, projectId) {
+  const runtimeKey = sha256(`${baseUrl}\0${projectId}`);
+  return path.join(
+    repoRoot,
+    "artifacts",
+    "qualification",
+    "locks",
+    `runtime-${runtimeKey}.lock`,
+  );
+}
+
+function qualificationHostLeasePath() {
+  const identity = typeof process.getuid === "function"
+    ? `uid-${process.getuid()}`
+    : `user-${sha256(os.userInfo().username).slice(0, 16)}`;
+  return path.join(
+    os.tmpdir(),
+    "scout-dashboard-qualification",
+    identity,
+    "host-operator.lock",
+  );
+}
+
+const PREPARED_OUTPUT_ROOT_ALLOWED_FILES = new Set([
+  "commands/",
+  "commands/focused-pytest.log",
+  "commands/repository-package-pytest.log",
+  "environment.json",
+  "git-diff.patch",
+  "junit-focused.xml",
+  "junit-package.xml",
+  "manifest-validation.json",
+  "manifest.snapshot.yaml",
+]);
+const PREPARED_OUTPUT_ROOT_REQUIRED_FILES = new Set([
+  "commands/focused-pytest.log",
+  "commands/repository-package-pytest.log",
+  "environment.json",
+  "git-diff.patch",
+  "junit-focused.xml",
+  "junit-package.xml",
+  "manifest-validation.json",
+  "manifest.snapshot.yaml",
+]);
+
+function qualificationOutputRootEntries(outputRoot, current = outputRoot) {
+  return fs.readdirSync(current, { withFileTypes: true }).flatMap(entry => {
+    const absolute = path.join(current, entry.name);
+    const relative = path.relative(outputRoot, absolute).split(path.sep).join("/");
+    if (entry.isDirectory()) {
+      return [`${relative}/`, ...qualificationOutputRootEntries(outputRoot, absolute)];
+    }
+    return [relative];
+  });
+}
+
+function assertQualificationOutputRootAvailable(outputRoot, { prepared = false } = {}) {
+  if (!fs.existsSync(outputRoot)) return;
+  if (fs.readdirSync(outputRoot).length === 0) return;
+  if (prepared) {
+    const entries = qualificationOutputRootEntries(outputRoot);
+    const unexpected = entries.filter(
+      entry => !PREPARED_OUTPUT_ROOT_ALLOWED_FILES.has(entry),
+    );
+    const missing = [...PREPARED_OUTPUT_ROOT_REQUIRED_FILES].filter(
+      entry => !entries.includes(entry),
+    );
+    if (unexpected.length === 0 && missing.length === 0) return;
+  }
+  const error = new Error(
+    `Qualification output root must be new or empty: ${outputRoot}`,
+  );
+  error.code = "QUALIFICATION_OUTPUT_ROOT_NOT_EMPTY";
+  throw error;
+}
+
 function loadBrowserActionContract() {
   const contract = JSON.parse(fs.readFileSync(browserActionContractPath, "utf8"));
   assert(
-    contract?.schema === "scout.dashboardBrowserActionContract.v1",
+    contract?.schema === "scout.dashboardBrowserActionContract.v2",
     "Dashboard browser action contract is missing or has the wrong schema.",
   );
   assert(
@@ -157,13 +352,27 @@ function loadBrowserActionContract() {
     "Official qualification must require browser operation.",
   );
   assert(
-    contract?.official_mode?.zero_unmapped_controls_required === true,
-    "Official qualification must fail when a visible control is not mapped.",
+    contract?.official_mode?.qualification_boundary === "maplibre_pre_migration_regression_guard",
+    "Qualification must use the MapLibre pre-migration regression-guard boundary.",
+  );
+  assert(
+    contract?.official_mode?.productization === false,
+    "The MapLibre pre-migration guard must not claim Dashboard productization.",
+  );
+  assert(
+    contract?.regression_guard?.active === true,
+    "The MapLibre pre-migration regression guard is inactive.",
+  );
+  assert(
+    contract?.paused_legacy_map_contract?.active === false,
+    "The legacy SVG/iframe map productization contract must remain paused.",
   );
   return Object.freeze(contract);
 }
 
 const browserActionContract = loadBrowserActionContract();
+const mapLibrePreMigrationGuard = Object.freeze(browserActionContract.regression_guard);
+const legacyMapContract = Object.freeze(browserActionContract.paused_legacy_map_contract);
 
 function loadExpectedPretripLayerIds(python) {
   const result = spawnSync(
@@ -951,7 +1160,7 @@ function dashboardRouteRootSelector(route) {
   return "#workspace";
 }
 
-async function waitForRouteVisualReadiness(page, route, projectId) {
+async function waitForRouteVisualReadiness(page, route, projectId, observations) {
   if (route !== "map") return;
   const iframe = page.locator("#pretripMapFrame");
   await iframe.waitFor({state: "visible", timeout: 120_000});
@@ -969,7 +1178,7 @@ async function waitForRouteVisualReadiness(page, route, projectId) {
     frame,
     projectId,
     "Dashboard Map visual readiness",
-    {waitForDashboardOverlay: true},
+    {waitForDashboardOverlay: true, observations},
   );
 }
 
@@ -1016,7 +1225,7 @@ async function auditAllRouteVisualStates(page, observations, profileId) {
       await page.waitForFunction(expectedRoute => (
         typeof state !== "undefined" && state.route === expectedRoute
       ), route, {timeout: 60_000});
-      await waitForRouteVisualReadiness(page, route, readyProjectId);
+      await waitForRouteVisualReadiness(page, route, readyProjectId, observations);
       const workspace = page.locator(dashboardRouteRootSelector(route));
       await workspace.waitFor({ state: "visible", timeout: 120_000 });
       await page.waitForTimeout(500);
@@ -1165,6 +1374,15 @@ async function auditAllRouteVisualStates(page, observations, profileId) {
 }
 
 function controlIdentityIsEffectful(descriptor) {
+  const navigationReviewDecision = descriptor.data_attributes?.navigationReviewDecision;
+  const navigationReviewTarget = descriptor.data_attributes?.navigationReviewTarget;
+  if (
+    descriptor.route === "outdoor-navigation"
+    && navigationReviewTarget
+    && ["support", "ambiguous", "reject"].includes(navigationReviewDecision)
+  ) {
+    return false;
+  }
   const value = [
     descriptor.id,
     descriptor.text,
@@ -1174,7 +1392,7 @@ function controlIdentityIsEffectful(descriptor) {
     .join(" ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .toLowerCase();
-  return /(?:^|[-_\s])(save|accept|submit|send|publish|delete|remove|import|upload|prepare|generate|regenerate|rebuild|authorize|approve|reject|execute|install|write|watch|transport|payment|purchase)(?:$|[-_\s])/i.test(value)
+  return /(?:^|[-_\s])(save|accept|submit|send|publish|delete|remove|reset|import|upload|prepare|generate|regenerate|rebuild|authorize|approve|reject|execute|install|write|watch|transport|payment|purchase)(?:$|[-_\s])/i.test(value)
     || /(?:^|[-_\s])run(?:$|[-_\s])/i.test(value);
 }
 
@@ -1246,7 +1464,8 @@ function isTransientFrameDiscoveryError(error) {
 
 function isTransientControlLocatorError(error) {
   const detail = String(error?.message || error);
-  return /element is not attached to the dom/i.test(detail)
+  return isTransientFrameDiscoveryError(error)
+    || /element is not attached to the dom/i.test(detail)
     || (
       /timeout/i.test(detail)
       && /waiting for locator\(.+data-scout-qualification-control-key/i.test(detail)
@@ -1387,13 +1606,87 @@ function aggregateDelegatedMapEvidenceControls(controls) {
   return grouped;
 }
 
+function debugAssistantQuestionIntent(question) {
+  const value = String(question || "").trim().replace(/\s+/g, " ").toLowerCase();
+  if (/^why\b.*\bbecome\b.*\bl[0-4]\b.*\bevent\b/.test(value)) return "level-rationale";
+  if (/\bsources?\b.*\bsupport\b|\bsupport\b.*\bsources?\b/.test(value)) return "source-support";
+  if (/\bmissing\b.*\bcontext\b/.test(value)) return "missing-context";
+  return null;
+}
+
+function canonicalizeEphemeralControlIdentity(control) {
+  const navigationDecision = control.route === "outdoor-navigation"
+    ? control.data_attributes?.navigationReviewDecision
+    : null;
+  if (["support", "ambiguous", "reject"].includes(navigationDecision)) {
+    const identity = JSON.stringify({
+      route: control.route,
+      context_id: control.context_id,
+      tag: control.tag,
+      id: control.id,
+      name: control.name,
+      type: control.type,
+      role: control.role,
+      aria_label: `navigation-review:${navigationDecision}`,
+      data_attributes: {navigationReviewDecision: navigationDecision},
+      text: "",
+    });
+    return {
+      ...control,
+      identity,
+      ephemeral_control_family: `navigation-review:${navigationDecision}`,
+    };
+  }
+  const question = control.route === "surface-debug"
+    ? control.data_attributes?.assistantQuestion
+    : null;
+  const intent = debugAssistantQuestionIntent(question);
+  if (!intent) return control;
+  const identity = JSON.stringify({
+    route: control.route,
+    context_id: control.context_id,
+    tag: control.tag,
+    id: control.id,
+    name: control.name,
+    type: control.type,
+    role: control.role,
+    aria_label: `debug-assistant-question:${intent}`,
+    data_attributes: {
+      ...control.data_attributes,
+      assistantQuestion: `intent:${intent}`,
+    },
+    text: "",
+  });
+  return {
+    ...control,
+    identity,
+    ephemeral_control_family: `debug-assistant:${intent}`,
+  };
+}
+
 function sampleRepeatedSelectionControls(controls) {
   const families = new Map();
   controls.forEach((control, index) => {
     const data = control.data_attributes || {};
-    const selectionSurface = Object.entries(data).find(([key, value]) => (
+    const declaredSelectionSurface = Object.entries(data).find(([key, value]) => (
       /SelectionSurface$/.test(key) && value !== undefined && value !== ""
     ));
+    const inferredSelectionSurface = (() => {
+      if (data.navigationTerrainEventId !== undefined && data.navigationTerrainEventId !== "") {
+        return ["navigationTerrainEventSelectionSurface", "navigation-terrain-event"];
+      }
+      if (control.route === "surface-debug" && data.eventId !== undefined && data.eventId !== "") {
+        return ["debugEventSelectionSurface", "debug-event"];
+      }
+      if (control.route === "surface-debug" && data.assistantQuestion !== undefined && data.assistantQuestion !== "") {
+        return ["debugAssistantQuestionSelectionSurface", "debug-assistant-question"];
+      }
+      if (control.route === "runtime-audit" && data.runtimeAuditDay !== undefined && data.runtimeAuditDay !== "") {
+        return ["runtimeAuditDaySelectionSurface", "runtime-audit-day"];
+      }
+      return null;
+    })();
+    const selectionSurface = declaredSelectionSurface || inferredSelectionSurface;
     if (!selectionSurface) return;
     const [selectionKey, selectionValue] = selectionSurface;
     const familyPayload = {
@@ -1434,7 +1727,9 @@ function sampleRepeatedSelectionControls(controls) {
     ];
     const memberSamples = representatives.map(([_position, member]) => {
       const identifier = Object.entries(member.control.data_attributes || {})
-        .find(([key, value]) => /Id$/.test(key) && value !== undefined && value !== "");
+        .find(([key, value]) => (
+          /(?:Id|Day|Question)$/.test(key) && value !== undefined && value !== ""
+        ));
       return identifier ? String(identifier[1]) : member.control.aria_label || member.control.key;
     });
     for (const [position, member] of representatives) {
@@ -1453,6 +1748,100 @@ function sampleRepeatedSelectionControls(controls) {
     }
   });
   return output;
+}
+
+function controlIsDynamicStateSelector(control) {
+  if (control.role === "tab") return true;
+  const selectorKeys = new Set([
+    "architectureMode",
+    "evidenceTab",
+    "eventId",
+    "navigationTerrainEvidenceDomain",
+    "navigationTerrainLens",
+    "navigationTerrainVerticalExaggeration",
+    "navigationTerrainView",
+    "permissionLensSelect",
+    "runtimeAuditDay",
+    "runtimeAuditMonth",
+    "tab",
+    "tabTarget",
+  ]);
+  return Object.keys(control.data_attributes || {}).some(key => (
+    selectorKeys.has(key) || /SelectionSurface$/.test(key)
+  ));
+}
+
+function controlIsRepeatableModalDismissal(control) {
+  if (control.within_modal !== true) return false;
+  const value = [
+    control.text,
+    control.aria_label,
+    ...Object.entries(control.data_attributes || {}).flat(),
+  ]
+    .join(" ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase();
+  return /(?:^|[-_\s])(cancel|close|dismiss)(?:$|[-_\s])/i.test(value);
+}
+
+function permissionControlIsTypedUnavailable(route, state = {}) {
+  if (route !== "outdoor-permission") return false;
+  return [state.permission_data_status, state.projection_status]
+    .map(value => String(value || "").toLowerCase())
+    .includes("degraded");
+}
+
+function selectNextVisibleControlCandidate(controls, completedIdentities) {
+  const candidates = controls.filter(control => (
+    !completedIdentities.has(control.identity)
+    && !(control.role === "tab" && control.aria_selected === "true")
+  ));
+  const ranked = candidates.map((control, index) => {
+    const embedded = Boolean(control.context_id && control.context_id !== "main");
+    const dynamicStateSelector = controlIsDynamicStateSelector(control);
+    const selectorPriority = dynamicStateSelector
+      ? (control.role === "tab" ? 2 : 1)
+      : 0;
+    const priority = control.within_modal === true
+      ? 0
+      : embedded
+        ? 10 + selectorPriority
+        : 20 + selectorPriority;
+    return {control, index, priority};
+  });
+  ranked.sort((left, right) => left.priority - right.priority || left.index - right.index);
+  return ranked[0]?.control || null;
+}
+
+function selectControlAuditRoutes(routes, routeFilter) {
+  if (!routeFilter) return [...routes];
+  const selected = routes.filter(route => route === routeFilter);
+  assert(selected.length === 1, `Unknown control-audit route: ${routeFilter}`);
+  return selected;
+}
+
+async function runControlFrameDiscoveryWithTimeout(label, operation) {
+  let timeoutId = null;
+  const pending = Promise.resolve().then(operation);
+  pending.catch(() => undefined);
+  const timeout = new Promise((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(
+        `${label} exceeded ${CONTROL_FRAME_DISCOVERY_TIMEOUT_MS}ms`,
+      );
+      error.code = "CONTROL_FRAME_DISCOVERY_TIMEOUT";
+      reject(error);
+    }, CONTROL_FRAME_DISCOVERY_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([pending, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function mapControlFramesConcurrently(frames, worker) {
+  return Promise.all(frames.map((frame, index) => worker(frame, index)));
 }
 
 async function discoverVisibleControlsInFrame(frame, route, contextId) {
@@ -1493,7 +1882,7 @@ async function discoverVisibleControlsInFrame(frame, route, contextId) {
         || element.matches(".maplibregl-canvas, .maplibregl-ctrl, .maplibregl-ctrl-icon, .maplibregl-ctrl-attrib"),
       );
       if (element.matches("[data-route]")) delegatedTo = "runtime-route-navigation";
-      if (isMapLibraryControl || element.matches("[data-map-control], [data-dashboard-map-viewport], [data-dashboard-map-hint-title], [data-evidence-type], [data-navigation-maplibre-fit], #map, #zoomIn, #zoomOut, #fitRoute, #panMode, #boxZoomMode, #panUp, #panDown, #panLeft, #panRight")) delegatedTo = "runtime-all-map-surface-interactions";
+      if (isMapLibraryControl || element.matches("[data-map-control], [data-map-interaction-mode], [data-dashboard-map-viewport], [data-dashboard-map-hint-title], [data-evidence-type], [data-navigation-maplibre-fit], #map, #zoomIn, #zoomOut, #fitRoute, #panMode, #boxZoomMode, #panUp, #panDown, #panLeft, #panRight")) delegatedTo = "runtime-all-map-surface-interactions";
       if (element.matches("input[data-layer], [data-weather-layer-control], [data-layer-preset], [data-cwa-rainfall-product], [data-cwa-rainfall-opacity], [data-cwa-imagery-product], [data-cwa-imagery-window], [data-cwa-imagery-timeline], [data-cwa-imagery-opacity], [data-cwa-imagery-play]")) delegatedTo = "runtime-all-layer-toggle-integrity";
       if (element.matches("[data-diagnostic-action]")) delegatedTo = "diagnostic-controls";
       const hasStableIdentityAttributes = Boolean(
@@ -1530,31 +1919,43 @@ async function discoverVisibleControlsInFrame(frame, route, contextId) {
         aria_pressed: element.getAttribute("aria-pressed"),
         aria_selected: element.getAttribute("aria-selected"),
         aria_expanded: element.getAttribute("aria-expanded"),
+        aria_current: element.getAttribute("aria-current"),
         checked: "checked" in element ? Boolean(element.checked) : null,
         value: "value" in element ? String(element.value) : null,
         href: element instanceof HTMLAnchorElement ? element.href : null,
         target: element instanceof HTMLAnchorElement ? element.target : null,
+        within_modal: Boolean(element.closest('[role="dialog"][aria-modal="true"], dialog[open]')),
       }];
     });
   }, {interactiveSelector: selector, currentRoute: route, currentContextId: contextId});
   return sampleRepeatedSelectionControls(
-    aggregateDelegatedMapEvidenceControls(controls),
+    aggregateDelegatedMapEvidenceControls(controls)
+      .map(canonicalizeEphemeralControlIdentity),
   );
 }
 
 async function discoverVisibleControls(page, route) {
-  const controls = [];
   const frames = page.frames();
-  for (let index = 0; index < frames.length; index += 1) {
-    const frame = frames[index];
-    const contextId = await frameContextId(page, frame, index);
+  const frameControls = await mapControlFramesConcurrently(
+    frames,
+    async (frame, index) => {
+    if (frame.isDetached()) return [];
+    if (frame !== page.mainFrame() && !frame.url()) return [];
+    let contextId = `frame:ordinal-${index}:unresolved`;
     try {
-      controls.push(...await discoverVisibleControlsInFrame(frame, route, contextId));
+      contextId = await runControlFrameDiscoveryWithTimeout(
+        `control-frame-context:${route}:${index}`,
+        () => frameContextId(page, frame, index),
+      );
+      return await runControlFrameDiscoveryWithTimeout(
+        `control-frame-discovery:${route}:${contextId}`,
+        () => discoverVisibleControlsInFrame(frame, route, contextId),
+      );
     } catch (error) {
       const detail = String(error?.message || error);
-      if (isTransientFrameDiscoveryError(error)) continue;
+      if (isTransientFrameDiscoveryError(error) || frame.isDetached()) return [];
       const identity = JSON.stringify({route, context_id: contextId, discovery_error: detail});
-      controls.push({
+      return [{
         route,
         context_id: contextId,
         identity,
@@ -1569,10 +1970,11 @@ async function discoverVisibleControls(page, route) {
         delegated_to: null,
         disabled: false,
         discovery_error: detail,
-      });
+      }];
     }
-  }
-  return controls;
+    },
+  );
+  return frameControls.flat();
 }
 
 async function runVisibleControlDiscoveryWithTimeout(page, route, observations = null) {
@@ -1621,9 +2023,30 @@ async function runVisibleControlDiscoveryWithTimeout(page, route, observations =
 }
 
 async function locateControlContext(page, key) {
-  for (const frame of page.frames()) {
-    const locator = frame.locator(`[data-scout-qualification-control-key="${key}"]`).first();
-    if (await locator.count()) return {frame, locator};
+  const frames = page.frames();
+  for (let index = 0; index < frames.length; index += 1) {
+    const frame = frames[index];
+    if (frame.isDetached()) continue;
+    if (frame !== page.mainFrame() && !frame.url()) continue;
+    try {
+      const located = await runControlFrameDiscoveryWithTimeout(
+        `control-locator:${index}`,
+        async () => {
+          const locator = frame.locator(
+            `[data-scout-qualification-control-key="${key}"]`,
+          ).first();
+          return (await locator.count()) ? {frame, locator} : null;
+        },
+      );
+      if (located) return located;
+    } catch (error) {
+      if (
+        isTransientFrameDiscoveryError(error)
+        || error?.code === "CONTROL_FRAME_DISCOVERY_TIMEOUT"
+        || frame.isDetached()
+      ) continue;
+      throw error;
+    }
   }
   return null;
 }
@@ -1688,6 +2111,9 @@ async function classifyUncompletedControl(page, route, control, routeAbortedAfte
 }
 
 async function markControlCompleted(page, descriptor) {
+  if (descriptor.discovery_error || descriptor.key?.startsWith("q-frame-error-")) {
+    return false;
+  }
   if (descriptor.aggregate_representative_position) return true;
   const located = await locateControlContext(page, descriptor.key);
   if (!located) return false;
@@ -1714,6 +2140,7 @@ async function controlSemanticState(page, frame, locator) {
     aria_pressed: node.getAttribute("aria-pressed"),
     aria_selected: node.getAttribute("aria-selected"),
     aria_expanded: node.getAttribute("aria-expanded"),
+    aria_current: node.getAttribute("aria-current"),
     checked: "checked" in node ? Boolean(node.checked) : null,
     value: "value" in node ? String(node.value) : null,
     details_open: node.closest("details")?.open ?? null,
@@ -1721,7 +2148,17 @@ async function controlSemanticState(page, frame, locator) {
   }));
   const contextRoot = await controlContextRoot(page, frame);
   const workspaceSignature = await contextRoot.evaluate(node => {
-    const value = node.outerHTML;
+    const markup = node.outerHTML.replace(/\sdata-scout-qualification-[^=\s]+="[^"]*"/g, "");
+    const form_state = [...node.querySelectorAll("input, textarea, select")].map((element, index) => ({
+      index,
+      tag: element.tagName.toLowerCase(),
+      id: element.id || "",
+      name: element.getAttribute("name") || "",
+      value: "value" in element ? String(element.value) : "",
+      checked: "checked" in element ? Boolean(element.checked) : null,
+      selected_index: "selectedIndex" in element ? Number(element.selectedIndex) : null,
+    }));
+    const value = `${markup}\nform_state=${JSON.stringify(form_state)}`;
     let output = 2166136261;
     for (let index = 0; index < value.length; index += 1) {
       output ^= value.charCodeAt(index);
@@ -1735,6 +2172,17 @@ async function controlSemanticState(page, frame, locator) {
     url: page.url(),
     context_url: frame.url(),
   };
+}
+
+function controlIsAlreadyActive(descriptor, availability) {
+  const ariaCurrent = String(availability.aria_current || "").toLowerCase();
+  return (descriptor.role === "tab" && availability.aria_selected === "true")
+    || availability.aria_pressed === "true"
+    || (Boolean(ariaCurrent) && ariaCurrent !== "false");
+}
+
+function controlRouteRequiresTerminalWait(route) {
+  return CONTROL_TERMINAL_WAIT_ROUTES.has(route);
 }
 
 async function captureControlStateTrace(page, observations, route, phase, descriptor = {}) {
@@ -1950,6 +2398,13 @@ async function inspectIssue0063ControlStateEvidence(page, observations) {
       route,
       "before_reload",
     );
+    await captureVisualCheckpoint(
+      page,
+      page.locator(dashboardRouteRootSelector(route)).first(),
+      observations,
+      `q0063-reload-${route}`,
+      "before-reload",
+    );
     await captureControlStateTrace(
       page,
       observations,
@@ -1977,6 +2432,13 @@ async function inspectIssue0063ControlStateEvidence(page, observations) {
       route,
       "after_reload",
     );
+    await captureVisualCheckpoint(
+      page,
+      page.locator(dashboardRouteRootSelector(route)).first(),
+      observations,
+      `q0063-reload-${route}`,
+      "after-reload",
+    );
     routeEvidence.push({
       route,
       duration_ms: Date.now() - startedAt,
@@ -1999,6 +2461,435 @@ async function inspectIssue0063ControlStateEvidence(page, observations) {
     evidence_only: true,
     product_behavior_changed: false,
     routes: routeEvidence,
+  };
+}
+
+async function inspectRuntimeAuditRequestTimingEvidence(page, observations) {
+  const route = "runtime-audit";
+  const requestTiming = async phase => {
+    const sample = await page.evaluate(async ({path, timeoutMs}) => {
+      const runtimeState = typeof state === "object" && state ? state : {};
+      const selectedDate = runtimeState.runtimeAuditSelectedDate
+        || new Intl.DateTimeFormat("en-CA", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date());
+      const offsetMinutes = Number.isFinite(Number(runtimeState.runtimeAuditUtcOffsetMinutes))
+        ? Number(runtimeState.runtimeAuditUtcOffsetMinutes)
+        : -new Date().getTimezoneOffset();
+      const params = new URLSearchParams({limit: "200"});
+      params.set("date", selectedDate);
+      params.set("utc_offset_minutes", String(offsetMinutes));
+      params.set("include_all", "true");
+      const endpoint = `${path}?${params.toString()}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const startedAt = performance.now();
+      try {
+        const response = await fetch(endpoint, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const body = await response.text();
+        let payload = null;
+        let parseError = null;
+        try {
+          payload = JSON.parse(body);
+        } catch (error) {
+          parseError = String(error?.message || error);
+        }
+        return {
+          endpoint,
+          outcome: response.ok ? "response_ok" : "response_error",
+          http_status: response.status,
+          content_type: response.headers.get("content-type"),
+          duration_ms: Math.round((performance.now() - startedAt) * 1000) / 1000,
+          body_byte_count: new TextEncoder().encode(body).byteLength,
+          payload_status: payload?.status || null,
+          event_count: Array.isArray(payload?.events) ? payload.events.length : null,
+          integrity_verified: payload?.integrity?.verified ?? null,
+          parse_error: parseError,
+        };
+      } catch (error) {
+        return {
+          endpoint,
+          outcome: error?.name === "AbortError" ? "timed_out" : "request_error",
+          http_status: null,
+          duration_ms: Math.round((performance.now() - startedAt) * 1000) / 1000,
+          error_class: error?.name || "Error",
+          error: String(error?.message || error),
+        };
+      } finally {
+        clearTimeout(timer);
+      }
+    }, {path: "/admin/runtime-audit", timeoutMs: 60_000});
+    const record = {
+      kind: "runtime_audit_request_timing",
+      observed_at: new Date().toISOString(),
+      route,
+      phase,
+      ...sample,
+    };
+    observations.controlStateTraces.push(record);
+    recordBrowserAction(
+      observations,
+      "observe",
+      `runtime-audit-request:${phase}`,
+      sample.outcome,
+    );
+    return record;
+  };
+
+  const initialLoadStartedAt = Date.now();
+  await openDashboard(page, observations.baseUrl, readyProjectId, route);
+  const beforeReloadWait = await waitForIssue0063TerminalState(
+    page,
+    observations,
+    route,
+    "before_reload",
+  );
+  const beforeReload = await captureControlStateTrace(
+    page,
+    observations,
+    route,
+    "before_reload",
+  );
+  const initialLoadDurationMs = Date.now() - initialLoadStartedAt;
+  const directBeforeReload = await requestTiming("before_reload");
+  await captureVisualCheckpoint(
+    page,
+    page.locator(dashboardRouteRootSelector(route)).first(),
+    observations,
+    "runtime-audit-request-timing",
+    "before-reload",
+  );
+
+  const reloadStartedAt = Date.now();
+  await page.reload({waitUntil: "domcontentloaded", timeout: 120_000});
+  recordBrowserAction(observations, "reload", `dashboard-route:${route}`);
+  await page.locator(`[data-route="${route}"]`).first().waitFor({
+    state: "attached",
+    timeout: 60_000,
+  });
+  const afterReloadWait = await waitForIssue0063TerminalState(
+    page,
+    observations,
+    route,
+    "after_reload",
+  );
+  const afterReload = await captureControlStateTrace(
+    page,
+    observations,
+    route,
+    "after_reload",
+  );
+  const reloadDurationMs = Date.now() - reloadStartedAt;
+  const directAfterReload = await requestTiming("after_reload");
+  await captureVisualCheckpoint(
+    page,
+    page.locator(dashboardRouteRootSelector(route)).first(),
+    observations,
+    "runtime-audit-request-timing",
+    "after-reload",
+  );
+
+  return {
+    evidence_only: true,
+    product_behavior_changed: false,
+    route,
+    initial_load_duration_ms: initialLoadDurationMs,
+    reload_duration_ms: reloadDurationMs,
+    before_reload_wait: beforeReloadWait,
+    after_reload_wait: afterReloadWait,
+    before_reload: beforeReload,
+    after_reload: afterReload,
+    direct_before_reload: directBeforeReload,
+    direct_after_reload: directAfterReload,
+  };
+}
+
+async function inspectApprovedMoreEvidenceControls(page, observations) {
+  const result = {};
+
+  await openDashboard(
+    page,
+    observations.baseUrl,
+    readyProjectId,
+    "outdoor-navigation",
+  );
+  const navigationTimeline = page.locator(
+    '[data-navigation-terrain-event-timeline="true"]',
+  ).first();
+  await navigationTimeline.waitFor({state: "visible", timeout: 180_000});
+  const navigationEvents = navigationTimeline.locator(
+    '[data-navigation-terrain-event-id]',
+  );
+  const navigationEventCount = await navigationEvents.count();
+  assert(
+    navigationEventCount > 0,
+    "Navigation terrain event controls remain unavailable in the live runtime.",
+  );
+  const navigationEvent = navigationEvents.first();
+  const navigationEventId = await navigationEvent.getAttribute(
+    "data-navigation-terrain-event-id",
+  );
+  assert(navigationEventId, "Navigation terrain event has no stable ID.");
+  await navigationEvent.scrollIntoViewIfNeeded();
+  await captureVisualCheckpoint(
+    page,
+    navigationTimeline,
+    observations,
+    "approved-more-evidence-navigation",
+    "before",
+  );
+  await navigationEvent.click();
+  recordBrowserAction(
+    observations,
+    "click",
+    `navigation-terrain-event:${navigationEventId}`,
+  );
+  await page.waitForFunction(
+    eventId => (
+      typeof state === "object"
+      && state?.navigationSelectedTerrainEventId === eventId
+    ),
+    navigationEventId,
+    {timeout: 60_000},
+  );
+  const selectedNavigationEvent = page.locator(
+    '[data-navigation-terrain-event-selected="true"]',
+  ).first();
+  await selectedNavigationEvent.waitFor({state: "visible", timeout: 60_000});
+  await captureVisualCheckpoint(
+    page,
+    page.locator('[data-navigation-terrain-event-timeline="true"]').first(),
+    observations,
+    "approved-more-evidence-navigation",
+    "after",
+  );
+  result.navigation = {
+    event_count: navigationEventCount,
+    selected_event_id: navigationEventId,
+    selected_state_visible: await selectedNavigationEvent.isVisible(),
+  };
+
+  await openDashboard(
+    page,
+    observations.baseUrl,
+    readyProjectId,
+    "outdoor-permission",
+  );
+  const permissionWait = await waitForIssue0063TerminalState(
+    page,
+    observations,
+    "outdoor-permission",
+    "approved_more_evidence_before_refresh",
+  );
+  assert(
+    permissionWait.terminal_observed,
+    `Permission did not reach a terminal state: ${permissionWait.error || "unknown"}`,
+  );
+  const permissionWorkbench = page.locator(
+    '[data-contextual-permission-workbench]',
+  ).first();
+  await permissionWorkbench.waitFor({state: "visible", timeout: 60_000});
+  const visiblePermissionRefresh = page.locator(
+    '[data-permission-refresh]:visible',
+  );
+  const permissionRefreshCount = await visiblePermissionRefresh.count();
+  await captureVisualCheckpoint(
+    page,
+    permissionWorkbench,
+    observations,
+    "approved-more-evidence-permission-refresh",
+    "before",
+  );
+  if (permissionRefreshCount === 0) {
+    const unavailablePermissionRefresh = await page.evaluate(() => ({
+      available: false,
+      terminal_status: state?.permissionDataStatus || null,
+      projection_status: state?.permissionProjection?.status || null,
+      refresh_control_visible: false,
+      availability_status: "TYPED_UNAVAILABLE",
+      reason: "degraded_typed_unavailable",
+    }));
+    const unavailableStates = new Set(["blocked", "degraded", "stale"]);
+    assert(
+      unavailableStates.has(String(unavailablePermissionRefresh.terminal_status || "").toLowerCase())
+      || unavailableStates.has(String(unavailablePermissionRefresh.projection_status || "").toLowerCase()),
+      "An unavailable Permission Refresh must not be awaited.",
+    );
+    result.permission_refresh = unavailablePermissionRefresh;
+  } else {
+    const permissionRefresh = visiblePermissionRefresh.first();
+    await permissionRefresh.scrollIntoViewIfNeeded();
+    const requestCountBeforeRefresh = observations.requests.length;
+    await permissionRefresh.click();
+    recordBrowserAction(observations, "click", "permission-refresh-packet");
+    await page.waitForFunction(() => (
+      typeof state === "object"
+      && !["", "idle", "loading"].includes(
+        String(state?.permissionDataStatus || ""),
+      )
+    ), null, {timeout: 180_000});
+    const refreshedPermissionWorkbench = page.locator(
+      '[data-contextual-permission-workbench]',
+    ).first();
+    await refreshedPermissionWorkbench.waitFor({state: "visible", timeout: 60_000});
+    await captureVisualCheckpoint(
+      page,
+      refreshedPermissionWorkbench,
+      observations,
+      "approved-more-evidence-permission-refresh",
+      "after",
+    );
+    result.permission_refresh = await page.evaluate(requestCountBefore => ({
+      available: true,
+      terminal_status: state?.permissionDataStatus || null,
+      projection_status: state?.permissionProjection?.status || null,
+      refresh_control_visible: Boolean(
+        document.querySelector('[data-permission-refresh]')?.offsetParent,
+      ),
+      request_count_before: requestCountBefore,
+    }), requestCountBeforeRefresh);
+    result.permission_refresh.request_count_after = observations.requests.length;
+    assert(
+      result.permission_refresh.request_count_after > requestCountBeforeRefresh,
+      "Permission Refresh packet produced no observable GET request.",
+    );
+  }
+
+  await openDashboard(
+    page,
+    observations.baseUrl,
+    readyProjectId,
+    "emergency",
+  );
+  const emergencySidebar = page.locator(".dashboard-sidebar").first();
+  await emergencySidebar.waitFor({state: "visible", timeout: 60_000});
+  result.emergency = [];
+  for (const label of ["Pace Fit", "System"]) {
+    const summary = emergencySidebar.locator("details > summary")
+      .filter({hasText: label})
+      .first();
+    assert(await summary.count(), `Emergency sidebar summary ${label} is missing.`);
+    await revealThroughClosedDetails(
+      page,
+      summary,
+      observations,
+      `emergency-summary:${label}:reveal`,
+    );
+    await summary.scrollIntoViewIfNeeded();
+    const details = summary.locator("xpath=..");
+    const beforeOpen = (await details.getAttribute("open")) !== null;
+    await captureVisualCheckpoint(
+      page,
+      emergencySidebar,
+      observations,
+      "approved-more-evidence-emergency",
+      `${safeCaseId(label)}-before`,
+    );
+    await summary.click();
+    recordBrowserAction(
+      observations,
+      "click",
+      `emergency-summary:${label}`,
+    );
+    const afterOpen = (await details.getAttribute("open")) !== null;
+    assert(
+      afterOpen !== beforeOpen,
+      `Emergency sidebar summary ${label} did not change state.`,
+    );
+    await captureVisualCheckpoint(
+      page,
+      emergencySidebar,
+      observations,
+      "approved-more-evidence-emergency",
+      `${safeCaseId(label)}-after`,
+    );
+    result.emergency.push({label, before_open: beforeOpen, after_open: afterOpen});
+  }
+
+  return {
+    evidence_only: true,
+    effect_gated_controls_operated: false,
+    ...result,
+  };
+}
+
+async function inspectDiagnosticUxTimingEvidence(page, observations) {
+  const caseIds = ["DASH-001", "DASH-003", "DASH-012"];
+  const evidence = [];
+  observations.diagnosticUxEvidence = evidence;
+  for (const caseId of caseIds) {
+    await openDashboard(page, observations.baseUrl, readyProjectId, "diagnostic");
+    const diagnostic = page.locator('[data-diagnostic-page="true"]');
+    await diagnostic.waitFor({state: "visible", timeout: 60_000});
+    const button = page.locator(
+      `[data-diagnostic-action="retest"][data-diagnostic-id="${caseId}"]`,
+    ).first();
+    assert(await button.count(), `Diagnostic ${caseId} retest control is missing.`);
+    await button.scrollIntoViewIfNeeded();
+    const requestStart = observations.requests.length;
+    const startedAt = Date.now();
+    const before = await page.evaluate(selectedCaseId => ({
+      snapshot: window.scoutDashboardDiagnostics?.snapshot?.()?.results?.[selectedCaseId] || null,
+      row_text: String(
+        document.querySelector(`[data-diagnostic-case="${CSS.escape(selectedCaseId)}"]`)?.textContent || "",
+      ).trim().replace(/\s+/g, " ").slice(0, 500),
+    }), caseId);
+    await button.click();
+    recordBrowserAction(observations, "click", `diagnostic-ux-evidence:${caseId}`);
+    let waitError = null;
+    await page.waitForFunction(selectedCaseId => {
+      const result = window.scoutDashboardDiagnostics?.snapshot?.()?.results?.[selectedCaseId];
+      return result && !["idle", "running"].includes(result.status);
+    }, caseId, {timeout: 190_000}).catch(error => {
+      waitError = String(error?.message || error);
+    });
+    const after = await page.evaluate(selectedCaseId => {
+      const result = window.scoutDashboardDiagnostics?.snapshot?.()?.results?.[selectedCaseId] || null;
+      const row = document.querySelector(`[data-diagnostic-case="${CSS.escape(selectedCaseId)}"]`);
+      return {
+        snapshot: result,
+        row_present: Boolean(row),
+        row_status: row?.dataset.diagnosticStatus || row?.getAttribute("data-status") || null,
+        row_text: String(row?.textContent || "").trim().replace(/\s+/g, " ").slice(0, 500),
+      };
+    }, caseId);
+    const record = {
+      issue_id: "DIAG-UX-001",
+      case_id: caseId,
+      started_at: new Date(startedAt).toISOString(),
+      duration_ms: Date.now() - startedAt,
+      before,
+      after,
+      terminal_observed: !waitError,
+      wait_error: waitError,
+      correlated_requests: observations.requests.slice(requestStart),
+    };
+    evidence.push(record);
+    recordBrowserAction(
+      observations,
+      "observe",
+      `diagnostic-ux-evidence:${caseId}`,
+      waitError ? "timed-out" : (after.snapshot?.status || "terminal"),
+      {duration_ms: record.duration_ms},
+    );
+    await captureVisualCheckpoint(
+      page,
+      diagnostic,
+      observations,
+      "diagnostic-ux-more-evidence",
+      caseId.toLowerCase(),
+    );
+  }
+  return {
+    evidence_only: true,
+    product_behavior_changed: false,
+    product_verdict_allowed: false,
+    records: evidence,
   };
 }
 
@@ -2033,6 +2924,22 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
     refreshedControl = await refreshControlDescriptor(page, route, descriptor);
   }
   if (!refreshedControl) {
+    const permissionState = route === "outdoor-permission"
+      ? await page.evaluate(() => ({
+        permission_data_status: state?.permissionDataStatus || null,
+        projection_status: state?.permissionProjection?.status || null,
+      })).catch(() => ({}))
+      : {};
+    if (permissionControlIsTypedUnavailable(route, permissionState)) {
+      return {
+        ...descriptor,
+        terminal_state: "TYPED_UNAVAILABLE",
+        availability_status: "TYPED_UNAVAILABLE",
+        availability_reason: "contextual_permission_degraded",
+        permission_state: permissionState,
+        detail: "The control is intentionally unavailable while Contextual Permission is in a typed degraded state.",
+      };
+    }
     return {...descriptor, terminal_state: "MISSING_AFTER_RELOAD"};
   }
   descriptor = refreshedControl.descriptor;
@@ -2050,6 +2957,7 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
       disabled: Boolean(node.disabled || node.getAttribute("aria-disabled") === "true"),
       aria_pressed: node.getAttribute("aria-pressed"),
       aria_selected: node.getAttribute("aria-selected"),
+      aria_current: node.getAttribute("aria-current"),
     };
   });
   if (!availability.visible) {
@@ -2065,17 +2973,24 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
       detail: "Persistent, outbound, hardware, preparation, or generation action was not executed by the read-only qualification role.",
     };
   }
-  if (
-    (descriptor.role === "tab" && availability.aria_selected === "true")
-    || availability.aria_pressed === "true"
-  ) {
+  if (controlIsAlreadyActive(descriptor, availability)) {
     return {
       ...descriptor,
       terminal_state: "GUARD_VERIFIED",
-      detail: "The control was already in its active guarded state after sibling operations.",
+      detail: "The control was already in its active guarded state after sibling operations or current-item selection.",
     };
   }
   const contextRoot = await controlContextRoot(page, frame);
+  const restoreCurrentControl = async action => {
+    const current = await refreshControlDescriptor(page, route, descriptor);
+    if (!current) return false;
+    try {
+      await action(current.locator);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  };
   const before = await controlSemanticState(page, frame, locator);
   await captureControlStateTrace(page, observations, route, "before_operation", descriptor);
   const beforeCheckpoint = await captureVisualCheckpoint(
@@ -2089,14 +3004,21 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
   const requestCountBefore = observations.requests.length;
   let restore = null;
   let popupEffect = null;
+  const summaryWasOpen = descriptor.tag === "summary"
+    ? await locator.evaluate(node => Boolean(node.parentElement?.matches("details") && node.parentElement.open))
+    : false;
   if (descriptor.tag === "input") {
     if (["checkbox", "radio"].includes(descriptor.type)) {
       await locator.click();
-      restore = async () => locator.click().catch(() => undefined);
+      restore = async () => restoreCurrentControl(
+        current => current.click({timeout: 5_000}),
+      );
     } else if (descriptor.type === "range") {
       const key = await locator.evaluate(node => Number(node.value) < Number(node.max || node.value) ? "ArrowRight" : "ArrowLeft");
       await locator.press(key);
-      restore = async () => locator.press(key === "ArrowRight" ? "ArrowLeft" : "ArrowRight").catch(() => undefined);
+      restore = async () => restoreCurrentControl(
+        current => current.press(key === "ArrowRight" ? "ArrowLeft" : "ArrowRight", {timeout: 5_000}),
+      );
     } else if (descriptor.type === "file") {
       return {...descriptor, terminal_state: "EFFECT_AUTHORIZATION_REQUIRED", detail: "File input requires an explicitly approved real test artifact."};
     } else {
@@ -2105,12 +3027,16 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
         ? await locator.evaluate(node => String(Math.min(Number(node.max || 999999), Math.max(Number(node.min || 0), Number(node.value || 0) + 1))))
         : `${original} qualification-probe`.trim();
       await locator.fill(probe);
-      restore = async () => locator.fill(original).catch(() => undefined);
+      restore = async () => restoreCurrentControl(
+        current => current.fill(original, {timeout: 5_000}),
+      );
     }
   } else if (descriptor.tag === "textarea") {
     const original = descriptor.value || "";
     await locator.fill(`${original} qualification-probe`.trim());
-    restore = async () => locator.fill(original).catch(() => undefined);
+    restore = async () => restoreCurrentControl(
+      current => current.fill(original, {timeout: 5_000}),
+    );
   } else if (descriptor.tag === "select") {
     const options = await locator.locator("option").evaluateAll(nodes => nodes.map(node => node.value));
     const alternate = options.find(value => value !== descriptor.value);
@@ -2118,7 +3044,9 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
       return controlCoverageGapRecord(descriptor, "single_runtime_value");
     }
     await locator.selectOption(alternate);
-    restore = async () => locator.selectOption(descriptor.value).catch(() => undefined);
+    restore = async () => restoreCurrentControl(
+      current => current.selectOption(descriptor.value, {timeout: 5_000}),
+    );
   } else if (descriptor.tag === "a") {
     if (!descriptor.href || /^(?:mailto|tel|javascript):/i.test(descriptor.href)) {
       return {...descriptor, terminal_state: "EFFECT_AUTHORIZATION_REQUIRED", detail: "Non-HTTP browser target requires explicit authorization."};
@@ -2174,6 +3102,12 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
     await locator.press("Enter");
   } else {
     await locator.click({timeout: 30_000});
+    if (descriptor.tag === "summary" && summaryWasOpen) {
+      restore = async () => restoreCurrentControl(async current => {
+        const detailsOpen = await current.evaluate(node => Boolean(node.parentElement?.open));
+        if (!detailsOpen) await current.click({timeout: 5_000});
+      });
+    }
     if (descriptor.data_attributes?.route) {
       restore = async () => {
         await openDashboard(page, observations.baseUrl, readyProjectId, route);
@@ -2182,6 +3116,14 @@ async function operateVisibleControl(page, observations, route, descriptor, oper
     }
   }
   await page.waitForTimeout(500);
+  if (controlRouteRequiresTerminalWait(route)) {
+    await waitForIssue0063TerminalState(
+      page,
+      observations,
+      route,
+      "after_control_operation",
+    );
+  }
   const refreshed = await locateControlContext(page, descriptor.key);
   const afterRoot = refreshed
     ? await controlContextRoot(page, refreshed.frame)
@@ -2300,10 +3242,13 @@ async function auditAllVisibleControls(page, observations) {
   const routeTraceDirectory = path.join(observations.caseDirectory, "traces");
   fs.mkdirSync(routeTraceDirectory, {recursive: true});
   const blockingStates = new Set(
-    browserActionContract.control_coverage.blocking_terminal_states,
+    legacyMapContract.control_coverage.blocking_terminal_states,
   );
-  const allowedStates = new Set(browserActionContract.control_coverage.allowed_terminal_states);
-  const routes = browserActionContract.routes.map(item => item.id);
+  const allowedStates = new Set(legacyMapContract.control_coverage.allowed_terminal_states);
+  const routes = selectControlAuditRoutes(
+    browserActionContract.routes.map(item => item.id),
+    requestedControlRoute,
+  );
   let routeTracingAvailable = true;
   for (let routeIndex = 0; routeIndex < routes.length; routeIndex += 1) {
     const route = routes[routeIndex];
@@ -2333,6 +3278,8 @@ async function auditAllVisibleControls(page, observations) {
     const discoveredIdentities = new Map();
     const deferredSelectedTabs = new Map();
     let operationIndex = 0;
+    let stateResetCount = 0;
+    let lastStateResetCompletedCount = -1;
     let routeAbortedAfterOperationError = false;
     const routeStartedAt = Date.now();
     try {
@@ -2345,6 +3292,14 @@ async function auditAllVisibleControls(page, observations) {
           );
           error.code = "CONTROL_ROUTE_TIMEOUT";
           throw error;
+        }
+        if (controlRouteRequiresTerminalWait(route)) {
+          await waitForIssue0063TerminalState(
+            routePage,
+            observations,
+            route,
+            "before_control_discovery",
+          );
         }
         const controls = await runVisibleControlDiscoveryWithTimeout(
           routePage,
@@ -2368,13 +3323,35 @@ async function auditAllVisibleControls(page, observations) {
           await markControlCompleted(routePage, control);
         }
         if (passiveControls.length) observations.controlInventory = inventory;
-        const candidate = controls.find(control => (
-          !completedIdentities.has(control.identity)
-          && !(control.role === "tab" && control.aria_selected === "true")
-        ));
+        const candidate = selectNextVisibleControlCandidate(
+          controls,
+          completedIdentities,
+        );
         if (!candidate) {
           for (const control of controls.filter(item => item.role === "tab" && item.aria_selected === "true")) {
             if (!completedIdentities.has(control.identity)) deferredSelectedTabs.set(control.identity, control);
+          }
+          const unresolvedControls = [...discoveredIdentities.entries()]
+            .filter(([identity, control]) => (
+              !completedIdentities.has(identity)
+              && !(control.role === "tab" && control.aria_selected === "true")
+            ));
+          if (
+            unresolvedControls.length
+            && stateResetCount < CONTROL_ROUTE_STATE_RESET_LIMIT
+            && completedIdentities.size > lastStateResetCompletedCount
+          ) {
+            lastStateResetCompletedCount = completedIdentities.size;
+            stateResetCount += 1;
+            appendCaseProgress(observations, "control_state_reset_started", {
+              route,
+              reset_index: stateResetCount,
+              completed_control_count: completedIdentities.size,
+              unresolved_control_count: unresolvedControls.length,
+            });
+            await openDashboard(routePage, observations.baseUrl, readyProjectId, route);
+            await routePage.waitForTimeout(500);
+            continue;
           }
           break;
         }
@@ -2442,7 +3419,13 @@ async function auditAllVisibleControls(page, observations) {
         }
         inventory.push(result);
         observations.controlInventory = inventory;
-        completedIdentities.add(candidate.identity);
+        const repeatableModalDismissal = controlIsRepeatableModalDismissal(result);
+        if (repeatableModalDismissal) {
+          discoveredIdentities.delete(candidate.identity);
+          deferredSelectedTabs.delete(candidate.identity);
+        } else {
+          completedIdentities.add(candidate.identity);
+        }
         appendCaseProgress(observations, "control_operation_completed", {
           route,
           operation_index: operationIndex,
@@ -2450,7 +3433,9 @@ async function auditAllVisibleControls(page, observations) {
           control_identity: candidate.identity,
           terminal_state: result.terminal_state,
         });
-        await markControlCompleted(routePage, result);
+        if (!repeatableModalDismissal) {
+          await markControlCompleted(routePage, result);
+        }
         if (routeAbortedAfterOperationError) break;
         if (["MISSING_AFTER_RELOAD", "OPERATION_ERROR"].includes(result.terminal_state)) {
           try {
@@ -2487,6 +3472,7 @@ async function auditAllVisibleControls(page, observations) {
     } finally {
       if (!routeAbortedAfterOperationError) {
         for (const control of deferredSelectedTabs.values()) {
+          if (completedIdentities.has(control.identity)) continue;
           inventory.push({
             ...control,
             terminal_state: "GUARD_VERIFIED",
@@ -3071,7 +4057,7 @@ async function inspectNativeMapGestures(page, observations, surface) {
   const initial = await nativeMapState(viewport);
   checkpoints.push(await captureVisualCheckpoint(page, viewport, observations, `maps-${surface.id}`, "initial"));
   assert(initial.width > 0 && initial.height > 0, `${surface.id} is not visibly rendered.`);
-  assert(initial.render_policy === browserActionContract.required_map_content.render_policy, `${surface.id} render policy is missing.`);
+  assert(initial.render_policy === legacyMapContract.required_map_content.render_policy, `${surface.id} render policy is missing.`);
   assert(initial.render_policy_status === "verified", `${surface.id} render policy is ${initial.render_policy_status}.`);
   assert(initial.blocked_image_count === 0, `${surface.id} contains unapproved single-image map content.`);
   assert(initial.vector_count > 0, `${surface.id} contains no visible vector content.`);
@@ -3200,7 +4186,7 @@ async function inspectNativeMapGestures(page, observations, surface) {
     route: surface.route,
     kind: surface.kind,
     preparation_operations: preparationOperations,
-    gestures: browserActionContract.required_map_gestures,
+    gestures: legacyMapContract.required_map_gestures,
     initial,
     fit_before: fitBefore,
     fitted,
@@ -3362,7 +4348,7 @@ async function inspectNavigationMapLibreGestures(page, observations, surface) {
     surface_id: surface.id,
     route: surface.route,
     kind: "maplibre-native",
-    gestures: browserActionContract.required_map_gestures,
+    gestures: legacyMapContract.required_map_gestures,
     initial,
     fit_before: fitBefore,
     fitted,
@@ -3581,7 +4567,7 @@ async function inspectEmbeddedMapGestures(page, observations, surface) {
     route: surface.route,
     kind: surface.kind,
     preparation_operations: preparationOperations,
-    gestures: browserActionContract.required_map_gestures,
+    gestures: legacyMapContract.required_map_gestures,
     fit_before: fitBefore,
     fitted,
     zoomed_in: zoomedIn,
@@ -3598,10 +4584,286 @@ async function inspectEmbeddedMapGestures(page, observations, surface) {
   };
 }
 
+async function ensureRegressionGuardNavigationVisible(page, control, observations) {
+  const mobile = await page.evaluate(() => window.matchMedia("(max-width: 1120px)").matches);
+  if (!mobile) return;
+  const sidebarOpen = await page.locator("#dashboardSidebar").evaluate(node => node.classList.contains("is-open"));
+  if (sidebarOpen) return;
+  const toggle = page.locator("#dashboardNavToggle:visible, [data-dashboard-nav-toggle]:visible").first();
+  assert(await toggle.count(), "existing_regression:mobile_navigation_toggle_missing");
+  await toggle.click();
+  recordBrowserAction(observations, "click", "regression-guard-navigation-toggle");
+  await page.locator("#dashboardSidebar.is-open").waitFor({state: "visible", timeout: 30_000});
+}
+
+async function enterRegressionGuardRoute(page, route, observations, profileId) {
+  const control = page.locator(`button.nav-item[data-route="${route}"]`).first();
+  await ensureRegressionGuardNavigationVisible(page, control, observations);
+  await revealThroughClosedDetails(page, control, observations, `regression-guard-route:${route}`);
+  await control.scrollIntoViewIfNeeded();
+  await control.click();
+  recordBrowserAction(observations, "click", `regression-guard-route:${route}`);
+  await page.waitForFunction(expectedRoute => (
+    window.location.hash === `#${expectedRoute}`
+    && document.querySelector(`button.nav-item[data-route="${expectedRoute}"]`)?.classList.contains("is-active")
+  ), route, {timeout: 60_000});
+  const root = page.locator(dashboardRouteRootSelector(route));
+  await root.waitFor({state: "visible", timeout: 120_000});
+  const overflow = await page.evaluate(() => ({
+    viewport_width: window.innerWidth,
+    document_client_width: document.documentElement.clientWidth,
+    document_scroll_width: document.documentElement.scrollWidth,
+    body_client_width: document.body.clientWidth,
+    body_scroll_width: document.body.scrollWidth,
+  }));
+  assert(
+    overflow.document_scroll_width <= overflow.document_client_width + 1
+      && overflow.body_scroll_width <= overflow.body_client_width + 1,
+    `horizontal_overflow:${route}:${JSON.stringify(overflow)}`,
+  );
+  const checkpoint = await captureVisualCheckpoint(
+    page,
+    root,
+    observations,
+    `maplibre-pre-migration-${profileId}`,
+    route,
+  );
+  return {route, overflow, screenshot: checkpoint.screenshot};
+}
+
+async function firstRendererNeutralEvidenceIdentity(page, observations) {
+  const groups = page.locator('details[data-evidence-group-context="timeline"]');
+  const count = await groups.count();
+  for (let index = 0; index < Math.min(count, 16); index += 1) {
+    const group = groups.nth(index);
+    if (!(await group.getAttribute("open"))) {
+      await group.locator(":scope > summary").click();
+      recordBrowserAction(observations, "click", `regression-guard-evidence-group:${index}`);
+    }
+    const item = group.locator('[data-map-evidence-source][data-pretrip-source-id]').first();
+    if (!(await item.count())) continue;
+    const identity = await item.evaluate(node => ({
+      selected_evidence: node.getAttribute("data-map-evidence-source") || "",
+      artifact_id: node.getAttribute("data-pretrip-source-id") || "",
+      group_title: node.closest("details")?.getAttribute("data-evidence-group-title") || "",
+      group_tab: node.closest("details")?.getAttribute("data-evidence-group-tab") || "",
+    }));
+    assert(identity.selected_evidence && identity.artifact_id, "evidence_identity_lost:timeline_identity_empty");
+    await item.click();
+    recordBrowserAction(observations, "click", `regression-guard-evidence:${identity.selected_evidence}`);
+    await page.waitForFunction(sourceId => (
+      [...document.querySelectorAll("[data-map-evidence-source]")].some(node => (
+        node.getAttribute("data-map-evidence-source") === sourceId
+        && node.classList.contains("is-selected")
+      ))
+    ), identity.selected_evidence, {timeout: 30_000});
+    return identity;
+  }
+  throw new Error("evidence_identity_lost:no_renderer_neutral_timeline_item");
+}
+
+async function ensureMapEvidenceGroupExpanded(
+  page,
+  groups,
+  groupIndex,
+  observations,
+) {
+  for (let attempt = 0; attempt < MAP_EVIDENCE_GROUP_EXPANSION_ATTEMPTS; attempt += 1) {
+    const group = groups.nth(groupIndex);
+    const expanded = await group.getAttribute("open") !== null;
+    const renderedItemCount = await group.locator("[data-map-evidence-source]").count();
+    if (expanded && renderedItemCount > 0) return group;
+    await group.locator(":scope > summary").click();
+    recordBrowserAction(
+      observations,
+      "click",
+      `regression-guard-map-evidence-group:attempt-${attempt + 1}`,
+    );
+    await page.waitForTimeout(250);
+  }
+  throw new Error("evidence_identity_lost:map_group_could_not_expand");
+}
+
+async function assertMapRailRetainsEvidenceIdentity(page, identity, observations) {
+  const rail = page.locator("#dashboardMapEvidence");
+  await rail.waitFor({state: "visible", timeout: 120_000});
+  const toggle = rail.locator("[data-map-evidence-toggle]").first();
+  if (await toggle.count() && await toggle.getAttribute("aria-expanded") === "false") {
+    await toggle.click();
+    recordBrowserAction(observations, "click", "regression-guard-map-evidence-expand");
+  }
+  const groups = rail.locator('details[data-evidence-group-context="map"]');
+  const groupIndex = await groups.evaluateAll((nodes, expected) => nodes.findIndex(node => (
+    node.getAttribute("data-evidence-group-title") === expected.group_title
+    && node.getAttribute("data-evidence-group-tab") === expected.group_tab
+  )), identity);
+  assert(groupIndex >= 0, "evidence_identity_lost:map_group_missing");
+  await ensureMapEvidenceGroupExpanded(
+    page,
+    groups,
+    groupIndex,
+    observations,
+  );
+  let retained = false;
+  try {
+    await page.waitForFunction(expected => {
+      const group = [...document.querySelectorAll('details[data-evidence-group-context="map"]')]
+        .find(node => (
+          node.getAttribute("data-evidence-group-title") === expected.group_title
+          && node.getAttribute("data-evidence-group-tab") === expected.group_tab
+        ));
+      return [...(group?.querySelectorAll("[data-map-evidence-source]") || [])]
+        .some(node => (
+          node.getAttribute("data-map-evidence-source") === expected.selected_evidence
+          && node.getAttribute("data-pretrip-source-id") === expected.artifact_id
+          && node.classList.contains("is-selected")
+        ));
+    }, identity, {timeout: 30_000});
+    retained = true;
+  } catch (_error) {
+    retained = false;
+  }
+  assert(retained, "evidence_identity_lost:selected_evidence_not_retained_in_map_rail");
+  return {selected_evidence: identity.selected_evidence, artifact_id: identity.artifact_id, highlight_state: "selected"};
+}
+
+async function resolveRendererNeutralMapAdapter(page, shell) {
+  const frameHost = shell.locator('iframe[title*="map" i]').first();
+  if (await frameHost.count()) {
+    let frame = null;
+    const deadline = Date.now() + 120_000;
+    while (!frame && Date.now() < deadline) {
+      const handle = await frameHost.elementHandle();
+      frame = await handle?.contentFrame() || null;
+      await handle?.dispose().catch(() => undefined);
+      if (!frame) await page.waitForTimeout(100);
+    }
+    if (frame) {
+      return {
+        controlPage: frame,
+        renderer: "legacy_fallback_renderer",
+        rendererRoot: frame,
+      };
+    }
+  }
+  const sameDocumentSurface = shell.locator(
+    "[data-map-renderer], [data-map-viewport], canvas, svg, [role=application]",
+  ).first();
+  if (await sameDocumentSurface.count()) {
+    return {
+      controlPage: page,
+      renderer: "same_document_renderer",
+      rendererRoot: shell,
+    };
+  }
+  throw new Error("maplibre_migration_blocker:fallback_map_renderer_unavailable");
+}
+
+async function inspectRendererNeutralFallbackMap(page, observations) {
+  const shell = page.locator('[data-map-mode="pretrip-map-only"]');
+  await shell.waitFor({state: "visible", timeout: 120_000});
+  const adapter = await resolveRendererNeutralMapAdapter(page, shell);
+  const surface = adapter.rendererRoot.locator(
+    "[data-map-renderer], [data-map-viewport], canvas, svg, [role=application]",
+  ).first();
+  await surface.waitFor({state: "visible", timeout: 120_000});
+  const bbox = await surface.boundingBox();
+  assert(
+    bbox && bbox.width >= 160 && bbox.height >= 120,
+    "maplibre_migration_blocker:fallback_map_bbox_unusable",
+  );
+  const layerIds = await adapter.rendererRoot.locator(
+    "[data-layer-id], input[data-layer]",
+  ).evaluateAll(nodes => (
+    [...new Set(nodes.map(node => node.getAttribute("data-layer-id") || node.getAttribute("data-layer")).filter(Boolean))]
+  ));
+  const missingLayerIds = observations.expectedLayerIds.pretrip.filter(layerId => !layerIds.includes(layerId));
+  assert(!missingLayerIds.length, `maplibre_migration_blocker:layer_contract_missing:${missingLayerIds.join(",")}`);
+  const layerControl = adapter.rendererRoot.locator(
+    "input[data-layer]:not(:disabled), input[data-layer-id]:not(:disabled)",
+  ).first();
+  assert(await layerControl.count(), "maplibre_migration_blocker:representative_layer_control_missing");
+  await revealThroughClosedDetails(
+    adapter.controlPage,
+    layerControl,
+    observations,
+    "regression-guard-layer-control",
+  );
+  const layerId = await layerControl.evaluate(node => (
+    node.getAttribute("data-layer-id") || node.getAttribute("data-layer")
+  ));
+  const initialChecked = await layerControl.isChecked();
+  await layerControl.click();
+  assert(await layerControl.isChecked() !== initialChecked, `existing_regression:layer_control_no_state_change:${layerId}`);
+  await layerControl.click();
+  assert(await layerControl.isChecked() === initialChecked, `existing_regression:layer_control_not_restored:${layerId}`);
+  recordBrowserAction(observations, "toggle-and-restore", `regression-guard-layer:${layerId}`);
+  return {
+    renderer: adapter.renderer,
+    bbox,
+    layer_ids: layerIds,
+    representative_layer_id: layerId,
+    restored: true,
+  };
+}
+
+function fatalBrowserErrors(observations) {
+  const fatalPattern = /(?:uncaught|typeerror|referenceerror|syntaxerror|fatal|page crashed)/i;
+  return [
+    ...observations.pageErrors.map(detail => ({kind: "page", detail})),
+    ...observations.consoleErrors
+      .filter(detail => fatalPattern.test(detail))
+      .map(detail => ({kind: "console", detail})),
+  ];
+}
+
+async function inspectMapLibrePreMigrationRegressionGuard(page, observations, profileId) {
+  const rendererNeutralVocabulary = {
+    map_feature: "renderer-visible-surface",
+    layer_id: "canonical-layer-contract",
+    artifact_id: "pretrip-source-identity",
+    bbox: "visible-renderer-bounds",
+    highlight_state: "selected",
+    selected_evidence: "timeline-to-map-rail",
+  };
+  await openDashboard(page, observations.baseUrl, readyProjectId, "home");
+  const dashboardTitle = await page.locator("text=Scout Dashboard").first().textContent();
+  assert(String(dashboardTitle || "").includes("Scout Dashboard"), "existing_regression:dashboard_load_failed");
+  const routeEntries = [];
+  for (const route of mapLibrePreMigrationGuard.major_routes) {
+    routeEntries.push(await enterRegressionGuardRoute(page, route, observations, profileId));
+  }
+
+  await enterRegressionGuardRoute(page, "timeline", observations, profileId);
+  const evidenceIdentity = await firstRendererNeutralEvidenceIdentity(page, observations);
+  await enterRegressionGuardRoute(page, mapLibrePreMigrationGuard.fallback_map_route, observations, profileId);
+  const retainedIdentity = await assertMapRailRetainsEvidenceIdentity(page, evidenceIdentity, observations);
+  const fallbackMap = await inspectRendererNeutralFallbackMap(page, observations);
+  const fatalErrors = fatalBrowserErrors(observations);
+  assert(!fatalErrors.length, `existing_regression:browser_console_fatal:${JSON.stringify(fatalErrors)}`);
+  assert(!observations.postRequests.length, `new_operational_or_safety_authority:${observations.postRequests.join(",")}`);
+
+  return {
+    qualification_boundary: "maplibre_pre_migration_regression_guard",
+    productization: false,
+    profile_id: profileId,
+    required_checks: mapLibrePreMigrationGuard.required_checks,
+    failure_classifications: mapLibrePreMigrationGuard.failure_classifications,
+    renderer_neutral_vocabulary: rendererNeutralVocabulary,
+    route_entries: routeEntries,
+    fallback_map: fallbackMap,
+    evidence_identity: retainedIdentity,
+    fatal_browser_errors: fatalErrors,
+    blocked_mutation_request_count: observations.blockedMutationRequests.length,
+    runtime_safety_truth: false,
+    operational_authority_claimed: false,
+  };
+}
+
 async function inspectAllDashboardMapSurfaces(page, observations) {
   const mapInteractions = [];
   const failures = [];
-  for (const surface of browserActionContract.map_surfaces) {
+  for (const surface of legacyMapContract.map_surfaces) {
     try {
       const result = surface.id === "navigation-map"
         ? await inspectNavigationMapLibreGestures(page, observations, surface)
@@ -3631,7 +4893,7 @@ async function inspectAllDashboardMapSurfaces(page, observations) {
   observations.mapInteractionFailures = failures;
   assert(failures.length === 0, `Dashboard map interaction failures: ${JSON.stringify(failures)}`);
   return {
-    requiredSurfaceCount: browserActionContract.map_surfaces.length,
+    requiredSurfaceCount: legacyMapContract.map_surfaces.length,
     completedSurfaceCount: mapInteractions.filter(result => !result.error).length,
     mapInteractions,
     failures,
@@ -3763,7 +5025,7 @@ async function inspectMainMapWeatherLayerAvailability(page, observations) {
   observations.layerInteractions = mainMapRecords;
   observations.layerInteractionFailures = [];
   await openDashboard(page, observations.baseUrl, readyProjectId, "map");
-  const frameSelector = browserActionContract.map_surfaces.find(surface => surface.id === "map").frame_selector;
+  const frameSelector = legacyMapContract.map_surfaces.find(surface => surface.id === "map").frame_selector;
   const frameHost = page.locator(frameSelector);
   const frame = page.frameLocator(frameSelector);
   await frame.locator("#map").waitFor({state: "visible", timeout: 120_000});
@@ -3852,7 +5114,7 @@ async function inspectMainMapWeatherLayerAvailability(page, observations) {
   }
   await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-weather");
   await page.locator("[data-weather-layer-control]").first().waitFor({state: "attached", timeout: 60_000});
-  const weatherFrameSelector = browserActionContract.map_surfaces.find(surface => surface.id === "weather-map").frame_selector;
+  const weatherFrameSelector = legacyMapContract.map_surfaces.find(surface => surface.id === "weather-map").frame_selector;
   const weatherFrame = page.frameLocator(weatherFrameSelector);
   await weatherFrame.locator("#map").waitFor({state: "visible", timeout: 120_000});
   await weatherFrame.locator("input[data-layer]").first().waitFor({state: "attached", timeout: 120_000});
@@ -3906,15 +5168,97 @@ async function waitForCanonicalEmbeddedMapReady(
   frame,
   expectedProjectId,
   label,
-  {waitForDashboardOverlay = false} = {},
+  {waitForDashboardOverlay = false, observations = null} = {},
 ) {
+  const startedAt = Date.now();
+  const timeline = {
+    issue_id: "LAYER-UX-001",
+    label,
+    expected_project_id: expectedProjectId,
+    wait_for_dashboard_overlay: waitForDashboardOverlay,
+    started_at: new Date(startedAt).toISOString(),
+    snapshots: [],
+  };
+  if (observations) {
+    observations.layerReadinessTimelines ||= [];
+    observations.layerReadinessTimelines.push(timeline);
+  }
+  let lastSnapshotSignature = "";
+  let lastSnapshotAt = 0;
+  const captureReadiness = async phase => {
+    const outer = await page.evaluate(() => {
+      const overlay = document.querySelector("#dashboardMapLoading");
+      const host = document.querySelector("#pretripMapFrame");
+      return {
+        overlay_present: Boolean(overlay),
+        overlay_hidden: overlay ? Boolean(overlay.hidden) : null,
+        overlay_status: overlay?.dataset.status || null,
+        overlay_title: String(document.querySelector("#dashboardMapLoadingTitle")?.textContent || "").trim() || null,
+        overlay_detail: String(document.querySelector("#dashboardMapLoadingDetail")?.textContent || "").trim() || null,
+        frame_map_only_ready: host?.dataset.mapOnlyReady || null,
+        frame_map_only_poll: host?.dataset.mapOnlyPoll || null,
+        frame_started_elapsed_ms: host?.dataset.mapOnlyStartedAt
+          ? Math.max(0, Date.now() - Number(host.dataset.mapOnlyStartedAt))
+          : null,
+        frame_src: host?.getAttribute("src") || null,
+      };
+    });
+    let embedded;
+    try {
+      embedded = await frame.locator("body").evaluate(node => {
+        const bridge = node.ownerDocument.defaultView?.scoutPretripProjectBridge;
+        const snapshot = bridge?.getSnapshot?.() || null;
+        return {
+          document_ready_state: node.ownerDocument.readyState,
+          bridge_project_id: snapshot?.projectId || null,
+          bridge_status: snapshot?.status || null,
+          bridge_view_ready: Boolean(snapshot?.view && typeof snapshot.view === "object"),
+          render_group_count: node.ownerDocument.querySelectorAll("#map[viewBox] [data-layer-group]").length,
+          layer_control_count: node.ownerDocument.querySelectorAll("input[data-layer]").length,
+        };
+      });
+    } catch (error) {
+      embedded = {inspection_error: String(error?.message || error)};
+    }
+    const now = Date.now();
+    const state = {phase, outer, embedded};
+    const {
+      frame_started_elapsed_ms: _elapsedSinceFrameStart,
+      ...stableOuter
+    } = outer;
+    const signature = JSON.stringify({phase, outer: stableOuter, embedded});
+    if (
+      signature !== lastSnapshotSignature
+      || now - lastSnapshotAt >= 2_000
+      || timeline.snapshots.length === 0
+    ) {
+      timeline.snapshots.push({
+        observed_at: new Date(now).toISOString(),
+        elapsed_ms: now - startedAt,
+        ...state,
+      });
+      lastSnapshotSignature = signature;
+      lastSnapshotAt = now;
+    }
+    return state;
+  };
   if (waitForDashboardOverlay) {
     const loading = page.locator("#dashboardMapLoading");
     if (await loading.count()) {
-      await page.waitForFunction(() => {
-        const node = document.querySelector("#dashboardMapLoading");
-        return !node || node.hidden || node.dataset.status === "blocked";
-      }, null, {timeout: 120_000});
+      const overlayDeadline = Date.now() + 120_000;
+      while (Date.now() < overlayDeadline) {
+        const snapshot = await captureReadiness("dashboard-overlay");
+        if (
+          !snapshot.outer.overlay_present
+          || snapshot.outer.overlay_hidden
+          || snapshot.outer.overlay_status === "blocked"
+        ) break;
+        await page.waitForTimeout(250);
+      }
+      if (!(await loading.isHidden())) {
+        timeline.completed_at = new Date().toISOString();
+        timeline.terminal_state = "dashboard-overlay-blocked";
+      }
       assert(await loading.isHidden(), `${label} remained blocked before layer interaction.`);
     }
   }
@@ -3924,26 +5268,31 @@ async function waitForCanonicalEmbeddedMapReady(
     try {
       const map = frame.locator("#map[viewBox]");
       await map.waitFor({state: "visible", timeout: 5_000});
-      lastState = await frame.locator("body").evaluate((node, expected) => {
-        const bridge = node.ownerDocument.defaultView?.scoutPretripProjectBridge;
-        const snapshot = bridge?.getSnapshot?.() || null;
-        return {
-          expected_project_id: expected,
-          bridge_project_id: snapshot?.projectId || null,
-          bridge_view_ready: Boolean(snapshot?.view && typeof snapshot.view === "object"),
-          render_group_count: node.ownerDocument.querySelectorAll("#map[viewBox] [data-layer-group]").length,
-        };
-      }, expectedProjectId);
+      const readiness = await captureReadiness("embedded-map");
+      lastState = {
+        expected_project_id: expectedProjectId,
+        bridge_project_id: readiness.embedded.bridge_project_id,
+        bridge_view_ready: readiness.embedded.bridge_view_ready,
+        render_group_count: readiness.embedded.render_group_count,
+      };
       if (
         lastState.bridge_project_id === expectedProjectId
         && lastState.bridge_view_ready
         && lastState.render_group_count > 0
-      ) return lastState;
+      ) {
+        timeline.completed_at = new Date().toISOString();
+        timeline.terminal_state = "ready";
+        return lastState;
+      }
     } catch (error) {
       lastState = {error: String(error?.message || error)};
+      await captureReadiness("embedded-map-error");
     }
     await page.waitForTimeout(250);
   }
+  timeline.completed_at = new Date().toISOString();
+  timeline.terminal_state = "timeout";
+  timeline.terminal_detail = lastState;
   throw new Error(`${label} did not reach canonical map readiness: ${JSON.stringify(lastState)}`);
 }
 
@@ -4115,7 +5464,7 @@ async function inspectCanonicalLayerToggles(page, observations) {
   observations.layerInteractions = layerInteractions;
   observations.layerInteractionFailures = failures;
   await openDashboard(page, observations.baseUrl, readyProjectId, "map");
-  const frameSelector = browserActionContract.map_surfaces.find(surface => surface.id === "map").frame_selector;
+  const frameSelector = legacyMapContract.map_surfaces.find(surface => surface.id === "map").frame_selector;
   let frame = page.frameLocator(frameSelector);
   let map = frame.locator("#map");
   await map.waitFor({state: "visible", timeout: 120_000});
@@ -4124,7 +5473,7 @@ async function inspectCanonicalLayerToggles(page, observations) {
     frame,
     readyProjectId,
     "canonical preset map",
-    {waitForDashboardOverlay: true},
+    {waitForDashboardOverlay: true, observations},
   );
   let menu = frame.locator("details.layer-menu");
   if ((await menu.getAttribute("open")) === null) await menu.locator(":scope > summary").click();
@@ -4197,7 +5546,7 @@ async function inspectCanonicalLayerToggles(page, observations) {
     frame,
     readyProjectId,
     "canonical individual layer map",
-    {waitForDashboardOverlay: true},
+    {waitForDashboardOverlay: true, observations},
   );
   if ((await menu.getAttribute("open")) === null) await menu.locator(":scope > summary").click();
   for (const layerId of expected) {
@@ -4290,7 +5639,7 @@ async function inspectCanonicalLayerToggles(page, observations) {
   await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-weather");
   const weatherButtons = page.locator("[data-weather-layer-control]");
   const weatherLayerIds = await weatherButtons.evaluateAll(buttons => buttons.map(button => button.dataset.weatherLayerControl));
-  const weatherFrameSelector = browserActionContract.map_surfaces.find(surface => surface.id === "weather-map").frame_selector;
+  const weatherFrameSelector = legacyMapContract.map_surfaces.find(surface => surface.id === "weather-map").frame_selector;
   const weatherFrame = page.frameLocator(weatherFrameSelector);
   const weatherMap = weatherFrame.locator("#map");
   await weatherMap.waitFor({state: "visible", timeout: 120_000});
@@ -4299,6 +5648,7 @@ async function inspectCanonicalLayerToggles(page, observations) {
     weatherFrame,
     readyProjectId,
     "canonical Weather layer map",
+    {observations},
   );
   for (const layerId of weatherLayerIds) {
     try {
@@ -4420,6 +5770,77 @@ async function inspectCanonicalLayerToggles(page, observations) {
   };
 }
 
+const permissionCompactReadabilitySelectors = [
+  ".permission-eyebrow",
+  ".permission-node small",
+  ".permission-node code",
+  ".permission-policy",
+  ".permission-summary-tile span",
+  ".permission-summary-tile small",
+  ".permission-day-map figcaption",
+  ".permission-day-map-source",
+  ".permission-day-location small",
+  ".permission-day-route code",
+  ".permission-day-meta",
+  ".permission-day-evidence",
+  ".permission-simulation-form label",
+];
+const permissionCompactReadabilitySelector = permissionCompactReadabilitySelectors.join(", ");
+
+async function auditPermissionCompactReadability(page) {
+  return page.locator(permissionCompactReadabilitySelector).evaluateAll((nodes, selectors) => {
+    const visible = node => {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && Number(style.opacity || 1) > 0
+        && rect.width > 0
+        && rect.height > 0;
+    };
+    const samples = nodes.filter(visible).map(node => {
+      const style = getComputedStyle(node);
+      return {
+        tag: node.tagName.toLowerCase(),
+        class_name: String(node.className || "").slice(0, 160),
+        matched_selectors: selectors.filter(selector => node.matches(selector)),
+        text: String(node.textContent || "").trim().replace(/\s+/g, " ").slice(0, 160),
+        font_size_px: Number.parseFloat(style.fontSize || "0"),
+        clipped: (
+          (node.scrollWidth > node.clientWidth + 1 && style.overflowX === "hidden")
+          || (node.scrollHeight > node.clientHeight + 1 && style.overflowY === "hidden")
+        ),
+      };
+    });
+    const visibleSelectors = [...new Set(samples.flatMap(sample => sample.matched_selectors))];
+    return {
+      expected_selector_count: selectors.length,
+      visible_selector_count: visibleSelectors.length,
+      visible_selectors: visibleSelectors,
+      not_rendered_selectors: selectors.filter(selector => !visibleSelectors.includes(selector)),
+      sample_count: samples.length,
+      below_10_count: samples.filter(sample => sample.font_size_px < 10).length,
+      clipped_count: samples.filter(sample => sample.clipped).length,
+      min_font_size_px: samples.length
+        ? Math.min(...samples.map(sample => sample.font_size_px))
+        : null,
+      samples,
+    };
+  }, permissionCompactReadabilitySelectors);
+}
+
+function assertPermissionCompactReadability(audit) {
+  assert(audit.sample_count > 0, "Permission compact readability audit found no visible samples.");
+  assert(
+    audit.below_10_count === 0,
+    `Permission compact text remains below 10px: ${JSON.stringify(audit)}`,
+  );
+  assert(
+    audit.clipped_count === 0,
+    `Permission compact text remains clipped: ${JSON.stringify(audit)}`,
+  );
+}
+
 async function inspectApprovedTargetedRepairEvidence(page, observations) {
   const result = {
     navigation: {},
@@ -4498,32 +5919,39 @@ async function inspectApprovedTargetedRepairEvidence(page, observations) {
   );
 
   await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-weather");
-  const weatherFrameSelector = browserActionContract.map_surfaces.find(surface => surface.id === "weather-map").frame_selector;
+  const weatherFrameSelector = legacyMapContract.map_surfaces.find(surface => surface.id === "weather-map").frame_selector;
   const weatherFrame = page.frameLocator(weatherFrameSelector);
   await weatherFrame.locator("#map").waitFor({state: "visible", timeout: 120_000});
   const weatherEvidence = weatherFrame.locator('rect[data-evidence-type="cwa_weather_environment_evidence"]');
-  await weatherEvidence.first().waitFor({state: "visible", timeout: 120_000});
-  await page.waitForFunction(() => {
-    const frame = document.querySelector('[data-weather-cwa-map-frame="true"]');
-    return Boolean(frame?.contentDocument && frame.weatherCwaHintDocument === frame.contentDocument);
-  }, null, {timeout: 60_000});
-  const weatherHover = await hoverSelectedEvidence(page, weatherEvidence, observations, "approved-weather-evidence-hint");
-  const weatherHint = weatherFrame.locator("#hoverHint");
-  let weatherHintWaitError = null;
   try {
-    await weatherHint.waitFor({state: "visible", timeout: 10_000});
+    await weatherEvidence.first().waitFor({state: "visible", timeout: 30_000});
+    await page.waitForFunction(() => {
+      const frame = document.querySelector('[data-weather-cwa-map-frame="true"]');
+      return Boolean(frame?.contentDocument && frame.weatherCwaHintDocument === frame.contentDocument);
+    }, null, {timeout: 60_000});
+    const weatherHover = await hoverSelectedEvidence(page, weatherEvidence, observations, "approved-weather-evidence-hint");
+    const weatherHint = weatherFrame.locator("#hoverHint");
+    let weatherHintWaitError = null;
+    try {
+      await weatherHint.waitFor({state: "visible", timeout: 10_000});
+    } catch (error) {
+      weatherHintWaitError = String(error?.message || error);
+    }
+    result.weather.hint = await weatherHint.evaluate(node => ({
+      visible: getComputedStyle(node).display !== "none",
+      text: String(node.textContent || "").trim().replace(/\s+/g, " "),
+    }));
+    result.weather.evidence_owner = weatherHover.hover.evidence_owner;
+    result.weather.headless_hint_observation = result.weather.hint.visible && result.weather.hint.text
+      ? "VISIBLE"
+      : "NOT_OBSERVED_AFTER_BOUND_LISTENER_AND_TARGETED_HOVER";
+    result.weather.headless_hint_wait_error = weatherHintWaitError;
   } catch (error) {
-    weatherHintWaitError = String(error?.message || error);
+    result.weather.hint = {visible: false, text: ""};
+    result.weather.evidence_owner = null;
+    result.weather.headless_hint_observation = "EVIDENCE_TARGET_NOT_VISIBLE_IN_HEADLESS_BROWSER";
+    result.weather.headless_hint_wait_error = String(error?.message || error);
   }
-  result.weather.hint = await weatherHint.evaluate(node => ({
-    visible: getComputedStyle(node).display !== "none",
-    text: String(node.textContent || "").trim().replace(/\s+/g, " "),
-  }));
-  result.weather.evidence_owner = weatherHover.hover.evidence_owner;
-  result.weather.headless_hint_observation = result.weather.hint.visible && result.weather.hint.text
-    ? "VISIBLE"
-    : "NOT_OBSERVED_AFTER_BOUND_LISTENER_AND_TARGETED_HOVER";
-  result.weather.headless_hint_wait_error = weatherHintWaitError;
   recordBrowserAction(
     observations,
     "observe",
@@ -4543,6 +5971,15 @@ async function inspectApprovedTargetedRepairEvidence(page, observations) {
   await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-permission");
   await page.waitForFunction(() => !["", "idle", "loading"].includes(String(state?.permissionDataStatus || "")), null, {timeout: 60_000});
   await sampleReadability(".permission-eyebrow", "outdoor-permission", "permission-eyebrow");
+  result.permission_compact_readability = await auditPermissionCompactReadability(page);
+  assertPermissionCompactReadability(result.permission_compact_readability);
+  recordBrowserAction(
+    observations,
+    "observe",
+    "compact-readability:permission-all-visible",
+    "completed",
+    result.permission_compact_readability,
+  );
   await captureVisualCheckpoint(
     page,
     null,
@@ -4564,6 +6001,34 @@ async function inspectApprovedTargetedRepairEvidence(page, observations) {
     {fullPage: false, domRoot: page.locator("body")},
   );
   return result;
+}
+
+async function inspectPermissionCompactReadabilityEvidence(page, observations) {
+  await openDashboard(page, observations.baseUrl, readyProjectId, "outdoor-permission");
+  await page.waitForFunction(
+    () => !["", "idle", "loading"].includes(String(state?.permissionDataStatus || "")),
+    null,
+    {timeout: 60_000},
+  );
+  const permissionShell = page.locator(".permission-shell").first();
+  await permissionShell.waitFor({state: "visible", timeout: 60_000});
+  const readability = await auditPermissionCompactReadability(page);
+  assertPermissionCompactReadability(readability);
+  recordBrowserAction(
+    observations,
+    "observe",
+    "compact-readability:permission-all-visible",
+    "completed",
+    readability,
+  );
+  await captureVisualCheckpoint(
+    page,
+    permissionShell,
+    observations,
+    "approved-targeted-repairs",
+    "permission-readability-isolated",
+  );
+  return {readability};
 }
 
 function attachQualificationPageObservers(page, observations) {
@@ -4663,6 +6128,64 @@ async function captureAvailableCaseScreenshot(context, primaryPage, options) {
   };
 }
 
+function collectRecordedPagesBeforeContext(context, observations) {
+  const recordings = context.pages().map((recordedPage, index) => ({
+    index,
+    video: recordedPage.video(),
+  })).filter(recording => recording.video);
+  for (const recording of recordings) {
+    appendCaseProgress(observations, "recorded-page-close-delegated", {
+      page_index: recording.index,
+      strategy: "browser-context-close",
+    });
+  }
+  return recordings;
+}
+
+async function finalizeRecordedVideosAfterContext(
+  recordings,
+  observations,
+  timeoutMs,
+) {
+  const finalized = [];
+  for (const recording of recordings) {
+    const videoPath = await runCaseFinalizerWithTimeout(
+      `recorded-video-finalize:${recording.index}`,
+      () => recording.video.path(),
+      timeoutMs,
+    );
+    const relativePath = path.relative(observations.outputRoot, videoPath);
+    finalized.push(relativePath);
+    appendCaseProgress(observations, "recorded-video-finalized", {
+      page_index: recording.index,
+      video: relativePath,
+      size_bytes: fs.existsSync(videoPath) ? fs.statSync(videoPath).size : null,
+    });
+  }
+  return finalized;
+}
+
+function classifyQualificationFailure(error, definition = {}) {
+  const detail = String(error?.message || error || "").toLowerCase();
+  if (definition.pausedLegacyMapCheck === true) return "old_svg_implementation_detail";
+  if (detail.includes("maplibre_migration_blocker") || detail.includes("evidence_identity_lost")) {
+    return "maplibre_migration_blocker";
+  }
+  if (detail.includes("unexpected_workspace_mutation") || detail.includes("dirty_worktree")) {
+    return "unrelated_dirty_worktree_issue";
+  }
+  if (
+    error?.code === "CASE_EXECUTION_TIMEOUT"
+    || /(?:timeout|timed out|econnrefused|browser executable|runtime unavailable|page crashed)/.test(detail)
+  ) {
+    return "environment_limitation";
+  }
+  if (/(?:svg|iframe|data-layer-group|legacy renderer)/.test(detail)) {
+    return "old_svg_implementation_detail";
+  }
+  return "existing_regression";
+}
+
 async function runIsolatedCase(browser, definition, environment) {
   const caseId = safeCaseId(definition.id);
   const caseDirectory = path.join(environment.outputRoot, "cases", caseId);
@@ -4671,6 +6194,7 @@ async function runIsolatedCase(browser, definition, environment) {
   const tracePath = path.join(caseDirectory, "trace.zip");
   const screenshotPath = path.join(caseDirectory, "final.png");
   const segmentedTraceByRoute = definition.segmentedTraceByRoute === true;
+  const finalizationTimeoutMs = caseFinalizationTimeoutMs(definition);
   const contextOptions = {
     viewport: definition.viewport || { width: 1440, height: 1000 },
   };
@@ -4715,6 +6239,7 @@ async function runIsolatedCase(browser, definition, environment) {
         ? configuredExecutionTimeout
         : CASE_EXECUTION_TIMEOUT_MS
     ),
+    finalization_timeout_ms: finalizationTimeoutMs,
   });
   await context.route("**/*", async route => {
     const method = route.request().method();
@@ -4736,6 +6261,8 @@ async function runIsolatedCase(browser, definition, environment) {
   let mutationPaths = [];
   const finalizationErrors = [];
   let executionTimedOut = false;
+  let failureClassification = null;
+  let recordedPages = [];
   try {
     appendCaseProgress(observations, "case_body_started");
     result = await runCaseExecutionWithTimeout(
@@ -4756,12 +6283,14 @@ async function runIsolatedCase(browser, definition, environment) {
     });
   } catch (error) {
     detail = String(error?.stack || error);
+    failureClassification = classifyQualificationFailure(error, definition);
     executionTimedOut = error?.code === "CASE_EXECUTION_TIMEOUT";
     status = executionTimedOut ? "BLOCKED" : "FAIL";
     appendCaseProgress(observations, "case_body_failed", {
       error_code: String(error?.code || "CASE_BODY_FAILURE"),
       error: String(error?.message || error),
       execution_timed_out: executionTimedOut,
+      failure_classification: failureClassification,
     });
     const after = workspaceDigest(environment.workspaceRoot);
     mutationPaths = workspaceDiff(before, after);
@@ -4787,6 +6316,7 @@ async function runIsolatedCase(browser, definition, environment) {
         await runCaseFinalizerWithTimeout(
           "trace-stop",
           () => context.tracing.stop({ path: tracePath }),
+          finalizationTimeoutMs,
         );
         appendCaseProgress(observations, "trace_finalized");
       }
@@ -4797,7 +6327,21 @@ async function runIsolatedCase(browser, definition, environment) {
       });
     } finally {
       try {
-        await runCaseFinalizerWithTimeout("context-close", () => context.close());
+        if (definition.recordVideo !== false) {
+          recordedPages = collectRecordedPagesBeforeContext(context, observations);
+        }
+      } catch (error) {
+        finalizationErrors.push(String(error?.stack || error));
+        appendCaseProgress(observations, "recorded_video_collection_failed", {
+          error: String(error?.message || error),
+        });
+      }
+      try {
+        await runCaseFinalizerWithTimeout(
+          "context-close",
+          () => context.close(),
+          finalizationTimeoutMs,
+        );
         appendCaseProgress(observations, "context_closed");
       } catch (error) {
         finalizationErrors.push(String(error?.stack || error));
@@ -4805,10 +6349,25 @@ async function runIsolatedCase(browser, definition, environment) {
           error: String(error?.message || error),
         });
       }
+      try {
+        if (definition.recordVideo !== false) {
+          observations.finalizedVideoPaths = await finalizeRecordedVideosAfterContext(
+            recordedPages,
+            observations,
+            finalizationTimeoutMs,
+          );
+        }
+      } catch (error) {
+        finalizationErrors.push(String(error?.stack || error));
+        appendCaseProgress(observations, "recorded_video_finalization_failed", {
+          error: String(error?.message || error),
+        });
+      }
     }
   }
   if (finalizationErrors.length && status === "PASS") status = "FAIL";
   if (finalizationErrors.length) {
+    failureClassification ||= "environment_limitation";
     const finalizationDetail = `Browser evidence finalization failed: ${finalizationErrors.join(" | ")}`;
     detail = detail === "completed" ? finalizationDetail : `${detail}\n${finalizationDetail}`;
     observations.caseFinalizationErrors = [...finalizationErrors];
@@ -4816,6 +6375,7 @@ async function runIsolatedCase(browser, definition, environment) {
   appendCaseProgress(observations, "case_completed", {
     status,
     execution_timed_out: executionTimedOut,
+    failure_classification: failureClassification,
     mutation_path_count: mutationPaths.length,
     finalization_error_count: finalizationErrors.length,
   });
@@ -4829,6 +6389,7 @@ async function runIsolatedCase(browser, definition, environment) {
     status,
     detail,
     result,
+    failure_classification: failureClassification,
     mutation_paths: mutationPaths,
     workspace_before_sha256: before.sha256,
     workspace_after_sha256: workspaceDigest(environment.workspaceRoot).sha256,
@@ -4837,7 +6398,9 @@ async function runIsolatedCase(browser, definition, environment) {
       trace: segmentedTraceByRoute ? null : (traceReferences[0] || null),
       traces: traceReferences,
       screenshot: fs.existsSync(screenshotPath) ? path.relative(environment.outputRoot, screenshotPath) : null,
-      video_directory: path.relative(environment.outputRoot, videoDirectory),
+      video_directory: definition.recordVideo !== false && fs.existsSync(videoDirectory)
+        ? path.relative(environment.outputRoot, videoDirectory)
+        : null,
       progress_log: path.relative(
         environment.outputRoot,
         path.join(caseDirectory, "case-progress.jsonl"),
@@ -4849,11 +6412,40 @@ async function runIsolatedCase(browser, definition, environment) {
 
 const caseDefinitions = [
   {
+    id: "maplibre-pre-migration-guard-desktop",
+    capabilityId: "dashboard.browser.maplibre_pre_migration_regression_guard",
+    criticality: "P0",
+    readOnly: true,
+    preMapLibreGuard: true,
+    smokeEligible: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    viewport: {width: 1440, height: 1000},
+    executionTimeoutMs: 12 * 60_000,
+    recordVideo: false,
+    run: (page, observations) => inspectMapLibrePreMigrationRegressionGuard(page, observations, "desktop"),
+  },
+  {
+    id: "maplibre-pre-migration-guard-large-mobile",
+    capabilityId: "dashboard.browser.maplibre_pre_migration_regression_guard",
+    criticality: "P0",
+    readOnly: true,
+    preMapLibreGuard: true,
+    smokeEligible: false,
+    liveRuntime: true,
+    fixtureEligible: false,
+    viewport: {width: 390, height: 844},
+    executionTimeoutMs: 12 * 60_000,
+    recordVideo: false,
+    run: (page, observations) => inspectMapLibrePreMigrationRegressionGuard(page, observations, "large-mobile"),
+  },
+  {
     id: "runtime-route-navigation",
     capabilityId: "dashboard.shell.runtime_route_navigation",
     criticality: "P0",
     readOnly: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     liveRuntime: true,
     fixtureEligible: false,
     async run(page, observations) {
@@ -4882,6 +6474,7 @@ const caseDefinitions = [
     criticality: "P0",
     readOnly: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     liveRuntime: true,
     fixtureEligible: false,
     executionTimeoutMs: 15 * 60_000,
@@ -4895,6 +6488,7 @@ const caseDefinitions = [
     criticality: "P0",
     readOnly: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     liveRuntime: true,
     fixtureEligible: false,
     executionTimeoutMs: 15 * 60_000,
@@ -4908,6 +6502,7 @@ const caseDefinitions = [
     criticality: "P0",
     readOnly: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     liveRuntime: true,
     fixtureEligible: false,
     executionTimeoutMs: 15 * 60_000,
@@ -4958,6 +6553,76 @@ const caseDefinitions = [
       await diagnosticRoute.click();
       recordBrowserAction(observations, "click", "mobile-sidebar-diagnostic-visible");
       await page.waitForFunction(() => typeof state !== "undefined" && state.route === "diagnostic");
+
+      await openDashboard(page, observations.baseUrl, readyProjectId, "map");
+      await waitForRouteVisualReadiness(page, "map", readyProjectId, observations);
+      const mobileMapFrameHost = page.locator("#pretripMapFrame");
+      const mobileMapEvidence = page.locator("#dashboardMapEvidence");
+      await mobileMapFrameHost.waitFor({state: "visible", timeout: 120_000});
+      await mobileMapEvidence.waitFor({state: "visible", timeout: 60_000});
+      const mobileMapFrame = page.frameLocator("#pretripMapFrame");
+      const mobileEmbeddedMap = mobileMapFrame.locator("#map");
+      const mobileLayerMenu = mobileMapFrame.locator("details.layer-menu");
+      await mobileEmbeddedMap.waitFor({state: "visible", timeout: 120_000});
+      await mobileLayerMenu.waitFor({state: "visible", timeout: 60_000});
+      const mobileMapNav = page.locator("#dashboardMapNavToggle");
+      const mobileLayerSummary = mobileLayerMenu.locator("summary").first();
+      const [mapNavBox, layerSummaryBox] = await Promise.all([
+        mobileMapNav.boundingBox(),
+        mobileLayerSummary.boundingBox(),
+      ]);
+      const mapNavLayerNonOverlap = Boolean(mapNavBox && layerSummaryBox && (
+        mapNavBox.y + mapNavBox.height <= layerSummaryBox.y
+        || layerSummaryBox.y + layerSummaryBox.height <= mapNavBox.y
+        || mapNavBox.x + mapNavBox.width <= layerSummaryBox.x
+        || layerSummaryBox.x + layerSummaryBox.width <= mapNavBox.x
+      ));
+      result.mobile_map_primary_workspace = {
+        map_evidence_collapsed: await mobileMapEvidence.evaluate(node => node.classList.contains("is-collapsed")),
+        layer_menu_open: (await mobileLayerMenu.getAttribute("open")) !== null,
+        map_box: await mobileEmbeddedMap.boundingBox(),
+        evidence_box: await mobileMapEvidence.boundingBox(),
+        map_nav_box: mapNavBox,
+        layer_summary_box: layerSummaryBox,
+        map_nav_layer_non_overlap: mapNavLayerNonOverlap,
+      };
+      assert(
+        result.mobile_map_primary_workspace.map_evidence_collapsed,
+        `Mobile Map Evidence must start collapsed: ${JSON.stringify(result.mobile_map_primary_workspace)}`,
+      );
+      assert(
+        !result.mobile_map_primary_workspace.layer_menu_open,
+        `Mobile Layers must start collapsed: ${JSON.stringify(result.mobile_map_primary_workspace)}`,
+      );
+      assert(
+        result.mobile_map_primary_workspace.map_nav_layer_non_overlap,
+        `Mobile navigation opener obscures the Layers label: ${JSON.stringify(result.mobile_map_primary_workspace)}`,
+      );
+      assert(
+        result.mobile_map_primary_workspace.map_box?.height >= 500,
+        `Mobile primary map workspace is too short: ${JSON.stringify(result.mobile_map_primary_workspace)}`,
+      );
+      assert(
+        result.mobile_map_primary_workspace.evidence_box?.height
+          < result.mobile_map_primary_workspace.map_box.height * .2,
+        `Collapsed Map Evidence still obstructs the map: ${JSON.stringify(result.mobile_map_primary_workspace)}`,
+      );
+      await captureVisualCheckpoint(
+        page,
+        page.locator("#dashboardMap"),
+        observations,
+        "approved-mobile-layouts",
+        "mobile-map-primary-workspace",
+      );
+      const mobileEvidenceToggle = mobileMapEvidence.locator("[data-map-evidence-toggle]");
+      await mobileEvidenceToggle.click();
+      recordBrowserAction(observations, "click", "mobile-map-evidence-expand");
+      assert(
+        !(await mobileMapEvidence.evaluate(node => node.classList.contains("is-collapsed"))),
+        "Mobile Map Evidence did not expand on demand.",
+      );
+      await mobileEvidenceToggle.click();
+      recordBrowserAction(observations, "click", "mobile-map-evidence-collapse");
 
       await openDashboard(page, observations.baseUrl, readyProjectId, "living");
       const livingHeader = page.locator('[data-living-surface="true"] > .panel-header').first();
@@ -5126,6 +6791,32 @@ const caseDefinitions = [
     run: inspectApprovedTargetedRepairEvidence,
   },
   {
+    id: "runtime-permission-compact-readability-evidence",
+    capabilityId: "dashboard.visual.complete_live_rendering",
+    criticality: "P1",
+    readOnly: true,
+    evidenceOnly: true,
+    fullOnly: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    executionTimeoutMs: 3 * 60_000,
+    recordVideo: false,
+    run: inspectPermissionCompactReadabilityEvidence,
+  },
+  {
+    id: "runtime-approved-more-evidence-controls",
+    capabilityId: "dashboard.browser.complete_control_coverage",
+    criticality: "P1",
+    readOnly: true,
+    evidenceOnly: true,
+    fullOnly: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    executionTimeoutMs: 15 * 60_000,
+    recordVideo: false,
+    run: inspectApprovedMoreEvidenceControls,
+  },
+  {
     id: "debug-live-runtime-read-evidence",
     capabilityId: "dashboard.shell.runtime_route_navigation",
     criticality: "P1",
@@ -5237,11 +6928,24 @@ const caseDefinitions = [
     run: inspectIssue0063ControlStateEvidence,
   },
   {
+    id: "runtime-audit-request-timing-evidence",
+    capabilityId: "dashboard.browser.complete_control_coverage",
+    criticality: "P1",
+    readOnly: true,
+    fullOnly: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    executionTimeoutMs: 10 * 60_000,
+    recordVideo: false,
+    run: inspectRuntimeAuditRequestTimingEvidence,
+  },
+  {
     id: "runtime-all-visible-controls",
     capabilityId: "dashboard.browser.complete_control_coverage",
     criticality: "P0",
     readOnly: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     liveRuntime: true,
     fixtureEligible: false,
     executionTimeoutMs: 90 * 60_000,
@@ -5256,9 +6960,13 @@ const caseDefinitions = [
     criticality: "P0",
     readOnly: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     liveRuntime: true,
     fixtureEligible: false,
     executionTimeoutMs: 30 * 60_000,
+    finalizationTimeoutMs: 5 * 60_000,
+    recordVideo: false,
+    evidenceProfile: "trace-plus-per-interaction-visual-checkpoints",
     run: inspectAllDashboardMapSurfaces,
   },
   {
@@ -5267,6 +6975,7 @@ const caseDefinitions = [
     criticality: "P1",
     readOnly: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     liveRuntime: true,
     fixtureEligible: false,
     executionTimeoutMs: 10 * 60_000,
@@ -5279,9 +6988,12 @@ const caseDefinitions = [
     criticality: "P0",
     readOnly: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     liveRuntime: true,
     fixtureEligible: false,
     executionTimeoutMs: 45 * 60_000,
+    recordVideo: false,
+    evidenceProfile: "trace-plus-per-layer-visual-checkpoints",
     run: inspectCanonicalLayerToggles,
   },
   {
@@ -5290,41 +7002,110 @@ const caseDefinitions = [
     criticality: "P1",
     readOnly: true,
     liveRuntime: true,
-    executionTimeoutMs: 15 * 60_000,
+    executionTimeoutMs: 30 * 60_000,
+    recordVideo: false,
     async run(page, observations) {
       await openDashboard(page, observations.baseUrl, readyProjectId, "diagnostic");
       const diagnostic = page.locator('[data-diagnostic-page="true"]');
       await diagnostic.waitFor({ state: "visible", timeout: 60_000 });
-      assert(await page.locator('[data-diagnostic-action="all"]').count() === 1, "Diag all is missing.");
+      const allButton = page.locator('[data-diagnostic-action="all"]');
+      assert(await allButton.count() === 1, "Diag all is missing.");
       const cases = await page.locator("[data-diagnostic-case]").count();
       const retries = await page.locator('[data-diagnostic-action="retest"]').count();
       assert(cases === 37 && retries === 37, `Diagnostic case/retest count is ${cases}/${retries}.`);
+      const caseIds = await page.locator("[data-diagnostic-case]").evaluateAll(nodes => (
+        nodes.map(node => node.getAttribute("data-diagnostic-case")).filter(Boolean)
+      ));
+      const retestIds = await page.locator('[data-diagnostic-action="retest"]').evaluateAll(nodes => (
+        nodes.map(node => node.getAttribute("data-diagnostic-id")).filter(Boolean)
+      ));
+      const uniqueRetestIds = new Set(retestIds);
+      assert(uniqueRetestIds.size === cases, "Diagnostic retest controls do not have 37 unique case IDs.");
+      assert(
+        caseIds.every(caseId => uniqueRetestIds.has(caseId)),
+        "One or more Diagnostic cases have no matching independent retest control.",
+      );
+
+      await allButton.click();
+      recordBrowserAction(observations, "click", "diagnostic-diag-all");
+      await page.waitForFunction(() => {
+        const snapshot = window.scoutDashboardDiagnostics?.snapshot?.();
+        return snapshot
+          && snapshot.summary?.running === 0
+          && snapshot.summary?.idle === 0;
+      }, null, {timeout: 20 * 60_000});
+      const batchSnapshot = await page.evaluate(() => window.scoutDashboardDiagnostics.snapshot());
+      recordBrowserAction(
+        observations,
+        "observe",
+        "diagnostic-diag-all-summary",
+        batchSnapshot.summary.failed ? "failed" : "terminal",
+        {summary: batchSnapshot.summary},
+      );
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        const workspace = document.querySelector("#workspace");
+        if (workspace) workspace.scrollTop = 0;
+      });
+      await page.waitForTimeout(100);
+      await captureVisualCheckpoint(
+        page,
+        null,
+        observations,
+        "diagnostic-controls",
+        "diag-all-terminal",
+        {fullPage: false, domRoot: diagnostic},
+      );
+      assert(
+        batchSnapshot.summary.failed === 0,
+        `Diag all reported failures: ${JSON.stringify(batchSnapshot.summary)}`,
+      );
+
+      const representativeRetestIds = ["DASH-001", "DASH-003", "DASH-012", "DASH-018", "DASH-033", "DASH-037"];
       const individualResults = [];
-      if (!fixtureHarness) {
-        for (let index = 0; index < retries; index += 1) {
-          const button = page.locator('[data-diagnostic-action="retest"]').nth(index);
-          const caseId = await button.getAttribute("data-diagnostic-id");
-          assert(caseId, `Diagnostic retest ${index + 1} has no case ID.`);
-          await button.click();
-          recordBrowserAction(observations, "click", `diagnostic-retest:${caseId}`);
-          await page.waitForFunction(selectedCaseId => {
-            const result = window.scoutDashboardDiagnostics?.snapshot?.()?.results?.[selectedCaseId];
-            return result && !["idle", "running"].includes(result.status);
-          }, caseId, { timeout: 120_000 });
-          const result = await page.evaluate(selectedCaseId => (
-            window.scoutDashboardDiagnostics.snapshot().results[selectedCaseId]
-          ), caseId);
-          individualResults.push({ case_id: caseId, ...result });
-          recordBrowserAction(observations, "observe", `diagnostic-result:${caseId}`, result.status);
-        }
+      for (const caseId of representativeRetestIds) {
+        const button = page.locator(
+          `[data-diagnostic-action="retest"][data-diagnostic-id="${caseId}"]`,
+        );
+        assert(await button.count() === 1, `Diagnostic retest ${caseId} is missing.`);
+        await button.click();
+        recordBrowserAction(observations, "click", `diagnostic-retest:${caseId}`);
+        await page.waitForFunction(selectedCaseId => {
+          const result = window.scoutDashboardDiagnostics?.snapshot?.()?.results?.[selectedCaseId];
+          return result && !["idle", "running"].includes(result.status);
+        }, caseId, { timeout: 190_000 });
+        const result = await page.evaluate(selectedCaseId => (
+          window.scoutDashboardDiagnostics.snapshot().results[selectedCaseId]
+        ), caseId);
+        individualResults.push({ case_id: caseId, ...result });
+        recordBrowserAction(observations, "observe", `diagnostic-result:${caseId}`, result.status);
       }
       const individualFailures = individualResults.filter(result => result.status === "failed");
       assert(
         individualFailures.length === 0,
         `Individual Diagnostic retests reported failures: ${JSON.stringify(individualFailures)}`,
       );
-      return { cases, retries, individualResults };
+      return {
+        cases,
+        retries,
+        batchSummary: batchSnapshot.summary,
+        representativeRetestIds,
+        individualResults,
+      };
     },
+  },
+  {
+    id: "runtime-diagnostic-ux-more-evidence",
+    capabilityId: "dashboard.diagnostic.controls",
+    criticality: "P1",
+    readOnly: true,
+    evidenceOnly: true,
+    fullOnly: true,
+    liveRuntime: true,
+    fixtureEligible: false,
+    executionTimeoutMs: 12 * 60_000,
+    recordVideo: false,
+    run: inspectDiagnosticUxTimingEvidence,
   },
   {
     id: "navigation-partial-read-only-shell",
@@ -5696,6 +7477,7 @@ const caseDefinitions = [
     readOnly: true,
     liveRuntime: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     run: inspectNavigationDynamicRudyTiles,
   },
   {
@@ -5705,6 +7487,7 @@ const caseDefinitions = [
     readOnly: true,
     liveRuntime: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     run: (page, observations) => inspectNativeDynamicMap(page, observations, { route: "outdoor-architecture", viewportId: "architecture-map", label: "Architecture Map" }),
   },
   {
@@ -5714,17 +7497,19 @@ const caseDefinitions = [
     readOnly: true,
     liveRuntime: true,
     fullOnly: true,
+    pausedLegacyMapCheck: true,
     run: inspectWeatherDynamicMap,
   },
 ];
 
-function buildCapabilityResults(definitions, results) {
-  const capabilityIds = [...new Set(caseDefinitions.map(definition => definition.capabilityId))];
+function buildCapabilityResults(definitions, results, includeAllDefinitions = false) {
+  const capabilitySource = includeAllDefinitions ? caseDefinitions : definitions;
+  const capabilityIds = [...new Set(capabilitySource.map(definition => definition.capabilityId))];
   const selectedIds = new Set(definitions.map(definition => definition.id));
   const byCase = new Map(results.map(result => [result.id, result]));
   const output = {};
   for (const capabilityId of capabilityIds) {
-    const required = caseDefinitions.filter(definition => (
+    const required = capabilitySource.filter(definition => (
       definition.capabilityId === capabilityId && !definition.evidenceOnly
     ));
     if (required.some(definition => !selectedIds.has(definition.id))) {
@@ -5733,7 +7518,10 @@ function buildCapabilityResults(definitions, results) {
     }
     output[capabilityId] = required.every(definition => byCase.get(definition.id)?.status === "PASS") ? "PASS" : "FAIL";
   }
-  output["qualification.evidence.integrity"] = "PASS";
+  const evidenceFinalizationFailed = results.some(result => (
+    (result.observations?.caseFinalizationErrors || []).length > 0
+  ));
+  output["qualification.evidence.integrity"] = evidenceFinalizationFailed ? "FAIL" : "PASS";
   return output;
 }
 
@@ -5743,8 +7531,22 @@ function writeJson(outputRoot, relativePath, payload) {
   fs.writeFileSync(target, `${JSON.stringify(payload, null, 2)}\n`);
 }
 
+function xmlSafeText(value) {
+  const withoutAnsi = String(value ?? "")
+    .replace(/\u001B(?:\[[0-?]*[ -/]*[@-~]|[@-_])/g, "");
+  return Array.from(withoutAnsi).filter(character => {
+    const codePoint = character.codePointAt(0);
+    return codePoint === 0x09
+      || codePoint === 0x0a
+      || codePoint === 0x0d
+      || (codePoint >= 0x20 && codePoint <= 0xd7ff)
+      || (codePoint >= 0xe000 && codePoint <= 0xfffd)
+      || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+  }).join("");
+}
+
 function xmlEscape(value) {
-  return String(value || "")
+  return xmlSafeText(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -5824,7 +7626,7 @@ function controlGapReason(control) {
 
 function groupControlCoverageFindings(controlInventory) {
   const blockingStates = new Set([
-    ...browserActionContract.control_coverage.blocking_terminal_states,
+    ...legacyMapContract.control_coverage.blocking_terminal_states,
     "OPERATION_ERROR",
   ]);
   const grouped = new Map();
@@ -5955,6 +7757,7 @@ function groupBrowserTelemetryFindings(consoleErrors, pageErrors, failedRequests
 }
 
 function writeAggregateEvidence(outputRoot, definitions, results, capabilityResults) {
+  const legacyMapChecksSelected = definitions.some(definition => definition.pausedLegacyMapCheck === true);
   const consoleErrors = results.flatMap(result =>
     result.observations.consoleErrors.map(detail => ({ case_id: result.id, detail })),
   );
@@ -6031,6 +7834,12 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
   const controlStateTraces = results.flatMap(result => (
     result.observations.controlStateTraces || []
   ).map(item => ({case_id: result.id, ...item})));
+  const layerReadinessTimelines = results.flatMap(result => (
+    result.observations.layerReadinessTimelines || []
+  ).map(item => ({case_id: result.id, ...item})));
+  const diagnosticUxEvidence = results.flatMap(result => (
+    result.observations.diagnosticUxEvidence || []
+  ).map(item => ({qualification_case_id: result.id, ...item})));
   writeJson(outputRoot, "console-errors.json", {
     schema: "scout.dashboardQualificationConsoleErrors.v1",
     errors: consoleErrors,
@@ -6057,7 +7866,7 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
   writeJson(outputRoot, "browser-control-inventory.json", {
     schema: "scout.dashboardQualificationControlInventory.v1",
     contract_tests_are_dashboard_evidence: false,
-    zero_unmapped_controls_required: true,
+    zero_unmapped_controls_required: browserActionContract.official_mode.zero_unmapped_controls_required,
     controls: controlInventory,
   });
   writeJson(outputRoot, "browser-control-state-traces.json", {
@@ -6081,21 +7890,38 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
   });
   writeJson(outputRoot, "browser-map-interactions.json", {
     schema: "scout.dashboardQualificationMapInteractions.v1",
-    required_surfaces: browserActionContract.map_surfaces,
-    required_gestures: browserActionContract.required_map_gestures,
+    qualification_boundary: browserActionContract.official_mode.qualification_boundary,
+    required_surfaces: legacyMapChecksSelected ? legacyMapContract.map_surfaces : [],
+    required_gestures: legacyMapChecksSelected ? legacyMapContract.required_map_gestures : [],
+    paused_legacy_surfaces: legacyMapChecksSelected ? [] : legacyMapContract.map_surfaces,
     interactions: mapInteractions,
   });
   writeJson(outputRoot, "browser-layer-interactions.json", {
     schema: "scout.dashboardQualificationLayerInteractions.v1",
-    all_exposed_layer_controls_must_be_toggled: true,
+    qualification_boundary: browserActionContract.official_mode.qualification_boundary,
+    all_exposed_layer_controls_must_be_toggled: legacyMapChecksSelected,
+    representative_layer_control_required: !legacyMapChecksSelected,
     interactions: layerInteractions,
+  });
+  writeJson(outputRoot, "browser-layer-readiness-evidence.json", {
+    schema: "scout.dashboardQualificationLayerReadinessEvidence.v1",
+    issue_id: "LAYER-UX-001",
+    product_behavior_changed: false,
+    timelines: layerReadinessTimelines,
+  });
+  writeJson(outputRoot, "browser-diagnostic-ux-evidence.json", {
+    schema: "scout.dashboardQualificationDiagnosticUxEvidence.v1",
+    issue_id: "DIAG-UX-001",
+    product_behavior_changed: false,
+    product_verdict_allowed: false,
+    records: diagnosticUxEvidence,
   });
   writeJson(outputRoot, "browser-layer-availability-evidence.json", {
     schema: "scout.dashboardQualificationLayerAvailabilityEvidence.v1",
     issue_id: "SCOUT-Q-0057",
     product_behavior_changed: false,
     contract_observation: {
-      all_exposed_layer_controls_must_be_toggled: browserActionContract.required_map_content.all_exposed_layer_controls_must_be_toggled,
+      all_exposed_layer_controls_must_be_toggled: legacyMapContract.required_map_content.all_exposed_layer_controls_must_be_toggled,
       per_surface_availability_contract_declared: false,
       interpretation: "Evidence only: hidden or disabled state is not attributed as a product defect without a typed per-surface contract and projected server reason.",
     },
@@ -6109,8 +7935,12 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
     schema: "scout.dashboardQualificationCoverageMap.v1",
     browser_action_contract_sha256: sha256(fs.readFileSync(browserActionContractPath)),
     contract_tests_are_dashboard_evidence: false,
-    required_route_count: browserActionContract.routes.length,
-    required_map_surface_count: browserActionContract.map_surfaces.length,
+    qualification_boundary: browserActionContract.official_mode.qualification_boundary,
+    required_route_count: legacyMapChecksSelected
+      ? browserActionContract.routes.length
+      : mapLibrePreMigrationGuard.major_routes.length,
+    required_map_surface_count: legacyMapChecksSelected ? legacyMapContract.map_surfaces.length : 1,
+    paused_legacy_map_surface_count: legacyMapChecksSelected ? 0 : legacyMapContract.map_surfaces.length,
     observed_control_count: controlInventory.length,
     visual_checkpoint_count: visualCheckpoints.length,
     capability_results: capabilityResults,
@@ -6126,7 +7956,11 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
       .map(definition => ({
         case_id: definition.id,
         capability_id: definition.capabilityId,
-        reason: scope === "smoke" && definition.fullOnly ? "full_scope_only" : "not_selected",
+        reason: definition.pausedLegacyMapCheck
+          ? "paused_until_maplibre_evidence_surface_is_stable"
+          : scope === "smoke" && definition.preMapLibreGuard
+            ? "guard_full_profile_only"
+            : "outside_maplibre_pre_migration_regression_guard",
       })),
   });
   const diagnosticFailures = results
@@ -6265,6 +8099,57 @@ function writeAggregateEvidence(outputRoot, definitions, results, capabilityResu
   }
 }
 
+const EVIDENCE_IMAGE_MEDIA_TYPES = new Map([
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
+  [".png", "image/png"],
+  [".webp", "image/webp"],
+]);
+
+const EVIDENCE_ROOT_CANONICALIZATION = Object.freeze({
+  digest_algorithm: "sha256",
+  encoding: "utf-8",
+  line_format: "{sha256}  {path}\n",
+  sort_key: "path",
+  sort_order: "lexicographic_posix_relative_path",
+});
+
+function detectEvidenceImageMediaType(buffer) {
+  if (buffer.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    return "image/png";
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    buffer.length >= 12
+    && buffer.subarray(0, 4).toString("ascii") === "RIFF"
+    && buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return "application/octet-stream";
+}
+
+function evidenceIndexEntry(outputRoot, absolute, relative) {
+  const bytes = fs.readFileSync(absolute);
+  const entry = { path: relative, sha256: sha256(bytes) };
+  const expectedMediaType = EVIDENCE_IMAGE_MEDIA_TYPES.get(
+    path.extname(relative).toLowerCase(),
+  );
+  if (!expectedMediaType) return entry;
+  const detectedMediaType = detectEvidenceImageMediaType(bytes);
+  if (detectedMediaType !== expectedMediaType) {
+    const error = new Error(
+      `Evidence screenshot media type mismatch: ${relative} is ${detectedMediaType}, expected ${expectedMediaType}`,
+    );
+    error.code = "EVIDENCE_MEDIA_TYPE_MISMATCH";
+    error.evidencePath = path.relative(outputRoot, absolute);
+    throw error;
+  }
+  return { ...entry, media_type: detectedMediaType };
+}
+
 function writeEvidenceIndex(outputRoot) {
   const files = [];
   const walk = directory => {
@@ -6273,16 +8158,20 @@ function writeEvidenceIndex(outputRoot) {
       const relative = path.relative(outputRoot, absolute).split(path.sep).join("/");
       if (entry.isDirectory()) walk(absolute);
       else if (entry.isFile() && relative !== "evidence-index.json") {
-        files.push({ path: relative, sha256: sha256(fs.readFileSync(absolute)) });
+        files.push(evidenceIndexEntry(outputRoot, absolute, relative));
       }
     }
   };
   walk(outputRoot);
-  files.sort((left, right) => left.path.localeCompare(right.path));
+  files.sort((left, right) => Buffer.compare(
+    Buffer.from(left.path, "utf8"),
+    Buffer.from(right.path, "utf8"),
+  ));
   const canonical = files.map(file => `${file.sha256}  ${file.path}\n`).join("");
   const index = {
     schema: "scout.dashboardQualificationEvidenceIndex.v1",
     evidence_root_sha256: sha256(canonical),
+    root_canonicalization: EVIDENCE_ROOT_CANONICALIZATION,
     files,
   };
   fs.writeFileSync(path.join(outputRoot, "evidence-index.json"), `${JSON.stringify(index, null, 2)}\n`);
@@ -6295,6 +8184,22 @@ async function main() {
   const outputRoot = outputArgument
     ? path.resolve(outputArgument.split("=", 2)[1])
     : path.join(repoRoot, "artifacts", "qualification", "runs", runId);
+  const hostLease = acquireQualificationLease(
+    qualificationHostLeasePath(),
+    {
+      scope: "host-operator",
+      repo_root_sha256: sha256(repoRoot),
+      worktree_path_sha256: sha256(repoRoot),
+    },
+  );
+  let outputLease = null;
+  let runtimeLease = null;
+  try {
+  outputLease = acquireQualificationLease(
+    `${outputRoot}.qualification.lock`,
+    { scope: "output-root", output_root_sha256: sha256(outputRoot) },
+  );
+  assertQualificationOutputRootAvailable(outputRoot, { prepared: preparedOutputRoot });
   fs.mkdirSync(outputRoot, { recursive: true });
   const python = process.env.SCOUT_PYTHON || path.join(repoRoot, "venv/bin/python");
   const expectedLayerIds = loadExpectedPretripLayerIds(python);
@@ -6333,6 +8238,13 @@ async function main() {
     });
   } else {
     baseUrl = normalizeRuntimeBaseUrl(configuredRuntimeUrl);
+    runtimeLease = acquireQualificationLease(
+      qualificationRuntimeLeasePath(baseUrl, readyProjectId),
+      {
+        scope: "live-runtime",
+        runtime_key_sha256: sha256(`${baseUrl}\0${readyProjectId}`),
+      },
+    );
     initialRuntimeAttestation = await attestLiveRuntime(baseUrl, readyProjectId, "initial");
     workspaceRoot = initialRuntimeAttestation.workspaceRoot;
   }
@@ -6350,11 +8262,18 @@ async function main() {
       headless: true,
       ...(browserExecutable ? { executablePath: browserExecutable } : {}),
     });
-    const definitions = caseDefinitions.filter(definition =>
-      (scope === "full" || !definition.fullOnly)
-      && (fixtureHarness ? definition.fixtureEligible !== false : definition.liveRuntime === true)
-      && (!requestedCaseIds.size || requestedCaseIds.has(definition.id)),
-    );
+    const definitions = caseDefinitions.filter(definition => {
+      const environmentEligible = fixtureHarness
+        ? definition.fixtureEligible !== false
+        : definition.liveRuntime === true;
+      if (!environmentEligible) return false;
+      if (requestedCaseIds.size) return requestedCaseIds.has(definition.id);
+      if (scope === "guard") return definition.preMapLibreGuard === true;
+      if (scope === "smoke") {
+        return definition.preMapLibreGuard === true && definition.smokeEligible !== false;
+      }
+      return scope === "legacy-full";
+    });
     const results = [];
     for (const definition of caseDefinitions) {
       if (!definitions.includes(definition)) continue;
@@ -6366,6 +8285,11 @@ async function main() {
         expectedLayerIds,
       }));
     }
+    await runCaseFinalizerWithTimeout(
+      "browser-recorder-finalization",
+      () => browser.close(),
+    );
+    browser = null;
     if (!fixtureHarness) {
       const finalRuntimeAttestation = await attestLiveRuntime(baseUrl, readyProjectId, "final");
       const initial = initialRuntimeAttestation.publicEvidence;
@@ -6416,10 +8340,27 @@ async function main() {
         });
       }
     }
-    const capabilityResults = buildCapabilityResults(definitions, results);
+    const capabilityResults = buildCapabilityResults(
+      definitions,
+      results,
+      scope === "legacy-full",
+    );
+    const recorderFinalizedBeforeSeal = results.every(result => (
+      (result.observations?.caseFinalizationErrors || []).length === 0
+    ));
     if (!fixtureHarness && runtimeAttestation?.continuity_verified === false) {
       capabilityResults["dashboard.shell.runtime_route_navigation"] = "FAIL";
     }
+    const legacyMapChecksSelected = definitions.some(definition => definition.pausedLegacyMapCheck === true);
+    const requiredRouteCount = legacyMapChecksSelected
+      ? browserActionContract.routes.length
+      : mapLibrePreMigrationGuard.major_routes.length;
+    const requiredMapSurfaceCount = legacyMapChecksSelected
+      ? legacyMapContract.map_surfaces.length
+      : 1;
+    const requiredMapGesturesPerSurface = legacyMapChecksSelected
+      ? legacyMapContract.required_map_gestures.length
+      : 0;
     const report = {
       schema: "scout.dashboardBrowserQualification.v1",
       commit_sha: commit,
@@ -6434,11 +8375,22 @@ async function main() {
       runner_started_runtime: fixtureHarness,
       official_qualification_eligible: !fixtureHarness && Boolean(runtimeAttestation?.continuity_verified),
       browser_action_contract_sha256: sha256(fs.readFileSync(browserActionContractPath)),
+      recorder_finalized_before_seal: recorderFinalizedBeforeSeal,
       contract_tests_are_dashboard_evidence: false,
+      qualification_boundary: browserActionContract.official_mode.qualification_boundary,
+      productization: false,
+      paused_checks: [
+        "all_visible_control_census",
+        "all_nine_map_six_gesture_matrix",
+        "all_exposed_layer_toggle_matrix",
+        "legacy_svg_iframe_visual_productization",
+      ],
       live_browser_counts: {
-        required_routes: browserActionContract.routes.length,
-        required_map_surfaces: browserActionContract.map_surfaces.length,
-        required_map_gestures_per_surface: browserActionContract.required_map_gestures.length,
+        required_routes: requiredRouteCount,
+        required_map_surfaces: requiredMapSurfaceCount,
+        required_map_gestures_per_surface: requiredMapGesturesPerSurface,
+        paused_legacy_map_surfaces: legacyMapContract.map_surfaces.length,
+        paused_legacy_map_gestures_per_surface: legacyMapContract.required_map_gestures.length,
         discovered_controls: results.reduce((count, result) => count + (result.observations.controlInventory || []).length, 0),
         embedded_frame_controls: results.reduce((count, result) => count + (result.observations.controlInventory || [])
           .filter(item => item.context_id && item.context_id !== "main").length, 0),
@@ -6447,7 +8399,7 @@ async function main() {
         delegated_controls: results.reduce((count, result) => count + (result.observations.controlInventory || [])
           .filter(item => item.terminal_state === "DELEGATED").length, 0),
         blocking_control_gaps: results.reduce((count, result) => count + (result.observations.controlInventory || [])
-          .filter(item => browserActionContract.control_coverage.blocking_terminal_states.includes(item.terminal_state)
+          .filter(item => legacyMapContract.control_coverage.blocking_terminal_states.includes(item.terminal_state)
             || item.terminal_state === "VISUAL_QUALITY_FAILURE"
             || item.terminal_state === "OPERATION_ERROR").length, 0),
         map_surface_results: results.reduce((count, result) => count + (result.observations.mapInteractions || []).length, 0),
@@ -6493,7 +8445,7 @@ async function main() {
       : { ...report, evidence_root_sha256: index.evidence_root_sha256, output_root: outputRoot };
     process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
     const p0Failure = results.some(result => result.criticality === "P0" && result.status !== "PASS");
-    if (scope === "full" && p0Failure) process.exitCode = 2;
+    if (["guard", "legacy-full"].includes(scope) && p0Failure) process.exitCode = 2;
   } finally {
     if (browser) {
       try {
@@ -6509,12 +8461,26 @@ async function main() {
       if (workspaceRoot) fs.rmSync(workspaceRoot, { recursive: true, force: true });
     }
   }
+  } finally {
+    releaseQualificationLease(runtimeLease);
+    releaseQualificationLease(outputLease);
+    releaseQualificationLease(hostLease);
+  }
 }
 
 module.exports = {
+  acquireQualificationLease,
   aggregateDelegatedMapEvidenceControls,
+  assertQualificationOutputRootAvailable,
+  buildCapabilityResults,
+  canonicalizeEphemeralControlIdentity,
+  caseFinalizationTimeoutMs,
   classifyPassiveControl,
   controlCoverageGapRecord,
+  controlIsAlreadyActive,
+  controlIdentityIsEffectful,
+  controlIsRepeatableModalDismissal,
+  controlRouteRequiresTerminalWait,
   controlOperationTerminalState,
   dashboardRouteRootSelector,
   groupBrowserTelemetryFindings,
@@ -6523,12 +8489,22 @@ module.exports = {
   isLoadedPopupUrl,
   isTransientControlLocatorError,
   isTransientFrameDiscoveryError,
+  mapControlFramesConcurrently,
+  markControlCompleted,
+  permissionControlIsTypedUnavailable,
+  qualificationHostLeasePath,
+  qualificationRuntimeLeasePath,
+  releaseQualificationLease,
   runCaseExecutionWithTimeout,
   runCaseFinalizerWithTimeout,
   sampleRepeatedSelectionControls,
+  selectControlAuditRoutes,
+  selectNextVisibleControlCandidate,
   summarizeRouteVisualAuditFailure,
   summarizeControlCoverageFailure,
   visualIssueRootSignature,
+  writeEvidenceIndex,
+  xmlEscape,
 };
 
 if (require.main === module) {

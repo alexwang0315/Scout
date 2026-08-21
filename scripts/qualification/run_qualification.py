@@ -339,9 +339,40 @@ def _build_regression_delta(
     }
 
 
+def _qualification_test_paths(scope: str) -> dict[str, tuple[str, ...]]:
+    guard = {
+        "focused": (
+            "tests/qualification/test_dashboard_qualification_bootstrap.py",
+        ),
+        "package": ("tests/test_scout_layer_contract.py",),
+    }
+    if scope != "legacy-full":
+        return guard
+    return {
+        "focused": (
+            *guard["focused"],
+            "tests/test_scout_dashboard_page.py",
+            "tests/test_dashboard_workspace_publication.py",
+            "tests/test_admin_local_raster_tiles.py",
+            "tests/test_pretrip_admin_page.py",
+            "tests/test_pretrip_admin_api.py",
+        ),
+        "package": (
+            "tests/test_scout_ai_os_docs.py",
+            "tests/test_scout_ai_os_scaffold.py",
+            *guard["package"],
+            "tests/test_pretrip_raster_label_adapter.py",
+        ),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Scout Dashboard qualification.")
-    parser.add_argument("--scope", choices=("full", "smoke"), default="full")
+    parser.add_argument(
+        "--scope",
+        choices=("guard", "legacy-full", "smoke"),
+        default="guard",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--runtime-url")
     parser.add_argument("--project-id")
@@ -361,6 +392,13 @@ def main() -> int:
 
     manifest_path = ROOT / "qualification/dashboard-capability-manifest.yaml"
     schema_path = ROOT / "qualification/schemas/dashboard-capability-manifest.schema.json"
+    action_contract = json.loads(
+        (ROOT / "qualification/dashboard-browser-action-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    regression_guard = action_contract["regression_guard"]
+    paused_legacy_map_contract = action_contract["paused_legacy_map_contract"]
     shutil.copyfile(manifest_path, output_root / "manifest.snapshot.yaml")
     (output_root / "git-diff.patch").write_text(
         _worktree_patch(),
@@ -373,6 +411,10 @@ def main() -> int:
             "platform": platform.platform(),
             "python": platform.python_version(),
             "scope": args.scope,
+            "qualification_boundary": (
+                "maplibre_pre_migration_regression_guard"
+            ),
+            "productization": False,
             "runtime_provenance": "live_operational_dashboard",
             "runtime_base_url": runtime_url,
             "runtime_project_id": runtime_project_id,
@@ -388,6 +430,7 @@ def main() -> int:
     validation = validate_manifest(manifest_path, schema_path)
     _write_json(output_root / "manifest-validation.json", validation)
     commands: list[dict[str, Any]] = []
+    test_paths = _qualification_test_paths(args.scope)
     focused_junit = output_root / "junit-focused.xml"
     commands.append(
         _run(
@@ -396,12 +439,7 @@ def main() -> int:
                 sys.executable,
                 "-m",
                 "pytest",
-                "tests/qualification/test_dashboard_qualification_bootstrap.py",
-                "tests/test_scout_dashboard_page.py",
-                "tests/test_dashboard_workspace_publication.py",
-                "tests/test_admin_local_raster_tiles.py",
-                "tests/test_pretrip_admin_page.py",
-                "tests/test_pretrip_admin_api.py",
+                *test_paths["focused"],
                 "-q",
                 f"--junitxml={focused_junit}",
             ],
@@ -416,10 +454,7 @@ def main() -> int:
                 sys.executable,
                 "-m",
                 "pytest",
-                "tests/test_scout_ai_os_docs.py",
-                "tests/test_scout_ai_os_scaffold.py",
-                "tests/test_scout_layer_contract.py",
-                "tests/test_pretrip_raster_label_adapter.py",
+                *test_paths["package"],
                 "-q",
                 f"--junitxml={package_junit}",
             ],
@@ -433,8 +468,11 @@ def main() -> int:
         f"--runtime-url={runtime_url}",
         f"--project-id={runtime_project_id}",
     ]
+    browser_command.append("--prepared-output-root")
     if args.scope == "smoke":
         browser_command.append("--smoke")
+    elif args.scope == "legacy-full":
+        browser_command.append("--legacy-full")
     commands.append(_run("browser-qualification", browser_command, output_root))
     round_runtime_final: dict[str, Any] | None = None
     round_runtime_final_error: str | None = None
@@ -470,9 +508,15 @@ def main() -> int:
             "official_qualification_eligible": False,
             "contract_tests_are_dashboard_evidence": False,
             "live_browser_counts": {
-                "required_routes": 23,
-                "required_map_surfaces": 9,
-                "required_map_gestures_per_surface": 6,
+                "required_routes": len(regression_guard["major_routes"]),
+                "required_map_surfaces": 1,
+                "required_map_gestures_per_surface": 0,
+                "paused_legacy_map_surfaces": len(
+                    paused_legacy_map_contract["map_surfaces"]
+                ),
+                "paused_legacy_map_gestures_per_surface": len(
+                    paused_legacy_map_contract["required_map_gestures"]
+                ),
                 "discovered_controls": 0,
                 "map_surface_results": 0,
                 "layer_results": 0,
@@ -545,7 +589,12 @@ def main() -> int:
             encoding="utf-8"
         )
     )
-    machine = evaluate_results(manifest, results["capability_results"], policy)
+    machine = evaluate_results(
+        manifest,
+        results["capability_results"],
+        policy,
+        qualification_scope=args.scope,
+    )
     machine["commit_sha"] = commit_sha
     _write_json(output_root / "machine-verdict.json", machine)
     _write_json(

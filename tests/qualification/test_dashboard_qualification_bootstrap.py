@@ -43,6 +43,7 @@ DASHBOARD_HTML = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
 QUALIFICATION_RUNNER = ROOT / "scripts" / "qualification" / "run_qualification.py"
 REVIEW_GATE = ROOT / "scripts" / "qualification" / "enforce_review.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "dashboard-qualification.yml"
+PACKAGE_JSON = ROOT / "package.json"
 QUALIFICATION_SKILL = (
     ROOT / ".agents" / "skills" / "scout-dashboard-qualification" / "SKILL.md"
 )
@@ -62,7 +63,12 @@ def test_dashboard_capability_manifest_is_canonical_and_schema_valid() -> None:
         for surface in manifest["surfaces"]
         for capability in surface["capabilities"]
     }
+    assert manifest["version"] == 2
+    assert manifest["baseline_policy"] == (
+        "maplibre_pre_migration_regression_guard_only"
+    )
     for capability_id in (
+        "dashboard.browser.maplibre_pre_migration_regression_guard",
         "dashboard.diagnostic.read_only",
         "dashboard.shell.runtime_route_navigation",
         "dashboard.browser.complete_control_coverage",
@@ -79,12 +85,39 @@ def test_dashboard_capability_manifest_is_canonical_and_schema_valid() -> None:
         "qualification.evidence.integrity",
     ):
         assert capability_id in capabilities
+
+    integrity = capabilities["qualification.evidence.integrity"]
+    assert any(
+        "host-level operator lease" in statement
+        for statement in integrity["expected_behavior"]
+    )
+    assert any(
+        "Two worktrees" in statement
+        for statement in integrity["forbidden_behavior"]
+    )
     for capability in capabilities.values():
         assert capability["expected_behavior"]
         assert capability["forbidden_behavior"]
         assert capability["required_tests"]
         assert capability["required_evidence"]
         assert capability["authority_boundary"]["runtime_authority"] is False
+    regression_guard = capabilities[
+        "dashboard.browser.maplibre_pre_migration_regression_guard"
+    ]
+    assert regression_guard["status"] == "operational"
+    assert regression_guard["qualification_state"] == "active"
+    assert regression_guard["required_tests"] == [
+        "maplibre_pre_migration_guard_desktop",
+        "maplibre_pre_migration_guard_large_mobile",
+    ]
+    for paused_capability_id in (
+        "dashboard.browser.complete_control_coverage",
+        "dashboard.visual.complete_live_rendering",
+        "dashboard.maps.all_surface_interactions",
+        "dashboard.layers.all_visible_toggle_integrity",
+        "dashboard.maps.dynamic_rudy_tiles",
+    ):
+        assert capabilities[paused_capability_id]["qualification_state"] == "paused"
     diagnostic_controls = capabilities["dashboard.diagnostic.controls"]
     assert any(
         "typed expected zero" in requirement
@@ -106,7 +139,7 @@ def test_dashboard_capability_manifest_is_canonical_and_schema_valid() -> None:
     )
 
 
-def test_browser_action_contract_covers_every_dashboard_route_and_map() -> None:
+def test_browser_action_contract_freezes_maplibre_pre_migration_guard() -> None:
     contract = json.loads(ACTION_CONTRACT.read_text(encoding="utf-8"))
     schema = json.loads(ACTION_CONTRACT_SCHEMA.read_text(encoding="utf-8"))
     html = DASHBOARD_HTML.read_text(encoding="utf-8")
@@ -123,7 +156,56 @@ def test_browser_action_contract_covers_every_dashboard_route_and_map() -> None:
     assert contracted_routes == navigation_routes
     assert len(contracted_routes) == 23
 
-    map_surface_ids = {surface["id"] for surface in contract["map_surfaces"]}
+    assert contract["schema"] == "scout.dashboardBrowserActionContract.v2"
+    assert contract["version"] == 2
+    assert contract["official_mode"]["qualification_boundary"] == (
+        "maplibre_pre_migration_regression_guard"
+    )
+    assert contract["official_mode"]["productization"] is False
+    assert contract["official_mode"]["zero_unmapped_controls_required"] is False
+    assert contract["official_mode"]["zero_unreviewed_visual_states_required"] is False
+
+    guard = contract["regression_guard"]
+    assert guard["active"] is True
+    assert guard["major_routes"] == [
+        "home",
+        "map",
+        "timeline",
+        "outdoor-navigation",
+        "diagnostic",
+    ]
+    assert {
+        route["id"] for route in contract["routes"] if route["guard_state"] == "required"
+    } == set(guard["major_routes"])
+    assert set(guard["required_checks"]) == {
+        "dashboard_load",
+        "major_route_entry",
+        "fallback_map_usable",
+        "layer_contract_present",
+        "evidence_identity_retained",
+        "no_browser_console_fatal_errors",
+        "no_horizontal_overflow",
+        "no_new_operational_or_safety_authority",
+    }
+    assert set(guard["failure_classifications"]) == {
+        "existing_regression",
+        "maplibre_migration_blocker",
+        "old_svg_implementation_detail",
+        "unrelated_dirty_worktree_issue",
+        "environment_limitation",
+    }
+    assert {
+        "map_feature",
+        "layer_id",
+        "artifact_id",
+        "bbox",
+        "highlight_state",
+        "selected_evidence",
+    }.issubset(set(guard["renderer_neutral_terms"]))
+
+    paused_legacy = contract["paused_legacy_map_contract"]
+    assert paused_legacy["active"] is False
+    map_surface_ids = {surface["id"] for surface in paused_legacy["map_surfaces"]}
     assert map_surface_ids == {
         "overview-map",
         "lbs-map",
@@ -135,7 +217,7 @@ def test_browser_action_contract_covers_every_dashboard_route_and_map() -> None:
         "architecture-map",
         "pace-fit-map",
     }
-    assert set(contract["required_map_gestures"]) == {
+    assert set(paused_legacy["required_map_gestures"]) == {
         "fit",
         "zoom_in",
         "zoom_out",
@@ -144,28 +226,70 @@ def test_browser_action_contract_covers_every_dashboard_route_and_map() -> None:
         "rectangle_zoom",
     }
     assert contract["official_mode"]["contract_tests_are_dashboard_evidence"] is False
-    assert contract["official_mode"]["zero_unmapped_controls_required"] is True
     assert contract["control_coverage"]["include_embedded_frames"] is True
-    assert contract["control_coverage"]["disabled_controls_require_executable_state"] is True
+    assert contract["control_coverage"]["all_visible_controls_required"] is False
     assert contract["control_coverage"][
-        "delegated_controls_require_passing_specialist_case"
+        "representative_layer_control_required"
     ] is True
-    assert {
-        "DISABLED_IN_RUNTIME_STATE",
-        "DISAPPEARED_BEFORE_OPERATION",
-        "NONVISIBLE_AFTER_DISCOVERY",
-        "SINGLE_RUNTIME_VALUE",
-        "ROUTE_ABORTED_AFTER_OPERATION_ERROR",
-    }.issubset(set(contract["control_coverage"]["blocking_terminal_states"]))
-    assert contract["required_map_content"][
+    assert paused_legacy["required_map_content"][
         "all_exposed_layer_controls_must_be_toggled"
     ] is True
+    assert "map_surfaces" not in contract
+    assert "required_map_gestures" not in contract
+    assert "required_map_content" not in contract
     assert contract["visual_quality"]["max_occluded_controls"] == 0
     assert contract["visual_quality"]["max_blurred_elements"] == 0
     assert contract["visual_quality"]["max_low_resolution_rasters"] == 0
-    assert contract["visual_quality"][
-        "screenshot_before_after_each_operation"
-    ] is True
+    assert contract["visual_quality"]["full_route_scroll_evidence_required"] is False
+
+
+def test_default_qualification_runs_renderer_neutral_guard_not_legacy_maps() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    package = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    policy = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+
+    assert 'const scope = legacyFull ? "legacy-full"' in source
+    assert 'preMapLibreGuard: true' in source
+    assert 'pausedLegacyMapCheck: true' in source
+    assert "inspectMapLibrePreMigrationRegressionGuard" in source
+    assert "ensureRegressionGuardNavigationVisible" in source
+    assert "ensureMapEvidenceGroupExpanded" in source
+    assert "MAP_EVIDENCE_GROUP_EXPANSION_ATTEMPTS" in source
+    assert "resolveRendererNeutralMapAdapter" in source
+    assert 'renderer: "same_document_renderer"' in source
+    assert "fallback_map_frame_unavailable" not in source
+    assert "input[data-layer-id]" in source
+    assert "observations.expectedLayerIds.pretrip" in source
+    guard_source = source.split(
+        "async function inspectMapLibrePreMigrationRegressionGuard", 1
+    )[1].split("async function inspectAllDashboardMapSurfaces", 1)[0]
+    for renderer_neutral_term in (
+        "map_feature",
+        "layer_id",
+        "artifact_id",
+        "bbox",
+        "highlight_state",
+        "selected_evidence",
+    ):
+        assert renderer_neutral_term in guard_source
+    for old_svg_detail in (
+        "data-layer-group",
+        "svg.querySelector",
+        "path.getTotalLength",
+    ):
+        assert old_svg_detail not in guard_source
+
+    assert package["scripts"]["qualification:check"].endswith("--scope guard")
+    assert package["scripts"]["qualification:check:full"].endswith("--scope guard")
+    assert "npm run qualification:check\n" in workflow
+    assert policy["qualification_boundary"] == (
+        "maplibre_pre_migration_regression_guard"
+    )
+    assert "live_map_gesture_incomplete" in policy["paused_global_blocks"]
+    assert "live_layer_toggle_incomplete" in policy["paused_global_blocks"]
+    assert "fallback_map_unusable" in policy["global_blocks"]
+    assert "new_operational_or_safety_authority" in policy["global_blocks"]
 
 
 def test_live_browser_runner_has_exhaustive_operation_and_visual_gates() -> None:
@@ -277,6 +401,79 @@ def test_q0063_control_state_evidence_has_a_dedicated_read_only_runtime_case() -
     assert "product_behavior_changed: false" in evidence_source
 
 
+def test_runtime_audit_request_timing_has_a_dedicated_live_read_only_case() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert "async function inspectRuntimeAuditRequestTimingEvidence" in source
+    evidence_source = source.split(
+        "async function inspectRuntimeAuditRequestTimingEvidence", 1
+    )[1].split("async function inspectApprovedMoreEvidenceControls", 1)[0]
+    assert '"/admin/runtime-audit"' in evidence_source
+    assert 'kind: "runtime_audit_request_timing"' in evidence_source
+    assert '"before_reload"' in evidence_source
+    assert '"after_reload"' in evidence_source
+    assert "performance.now()" in evidence_source
+    assert 'params.set("include_all", "true")' in evidence_source
+    assert "captureVisualCheckpoint" in evidence_source
+    assert "product_behavior_changed: false" in evidence_source
+    case_source = source.split(
+        'id: "runtime-audit-request-timing-evidence"', 1
+    )[1].split('id: "runtime-all-visible-controls"', 1)[0]
+    assert "readOnly: true" in case_source
+    assert "liveRuntime: true" in case_source
+    assert "fixtureEligible: false" in case_source
+    assert "recordVideo: false" in case_source
+
+
+def test_diagnostic_control_case_uses_real_batch_then_bounded_individual_retests() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    diagnostic_case = source.split(
+        'id: "diagnostic-controls"', 1
+    )[1].split(
+        'id: "runtime-diagnostic-ux-more-evidence"', 1
+    )[0]
+
+    assert "recordVideo: false" in diagnostic_case
+    assert 'recordBrowserAction(observations, "click", "diagnostic-diag-all")' in diagnostic_case
+    assert 'const representativeRetestIds = ["DASH-001", "DASH-003", "DASH-012", "DASH-018", "DASH-033", "DASH-037"]' in diagnostic_case
+    assert "uniqueRetestIds.size === cases" in diagnostic_case
+    assert "batchSnapshot.summary.failed === 0" in diagnostic_case
+    assert "window.scrollTo(0, 0)" in diagnostic_case
+    assert 'workspace.scrollTop = 0' in diagnostic_case
+    assert '{fullPage: false, domRoot: diagnostic}' in diagnostic_case
+    assert "for (let index = 0; index < retries; index += 1)" not in diagnostic_case
+
+
+def test_control_audit_waits_for_dynamic_runtime_routes_to_settle() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(JSON.stringify({{
+  audit: runner.controlRouteRequiresTerminalWait("runtime-audit"),
+  permission: runner.controlRouteRequiresTerminalWait("outdoor-permission"),
+  navigation: runner.controlRouteRequiresTerminalWait("outdoor-navigation"),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "audit": True,
+        "permission": True,
+        "navigation": False,
+    }
+    assert '"before_control_discovery"' in source
+    assert '"after_control_operation"' in source
+
+
 def test_approved_q0056_q0061_repairs_have_targeted_live_browser_evidence() -> None:
     source = BROWSER_RUNNER.read_text(encoding="utf-8")
 
@@ -294,14 +491,69 @@ def test_approved_q0056_q0061_repairs_have_targeted_live_browser_evidence() -> N
     assert "weatherCwaHintDocument === frame.contentDocument" in evidence_source
     assert 'rect[data-evidence-type="cwa_weather_environment_evidence"]' in evidence_source
     assert "headless_hint_observation" in evidence_source
+    assert '"EVIDENCE_TARGET_NOT_VISIBLE_IN_HEADLESS_BROWSER"' in evidence_source
+    assert 'weatherEvidence.first().waitFor({state: "visible", timeout: 30_000})' in evidence_source
     assert "product_verdict_allowed: false" in evidence_source
     assert "navigation_fit_control_non_overlap" in evidence_source
     assert "font_size_px" in evidence_source
+    assert "permission_compact_readability" in evidence_source
+    assert "async function auditPermissionCompactReadability" in source
+    assert "function assertPermissionCompactReadability" in source
+    assert "async function inspectPermissionCompactReadabilityEvidence" in source
+    assert '".permission-node small"' in source
+    assert '".permission-eyebrow"' in source
+    assert '".permission-simulation-form label"' in source
+    assert "below_10_count === 0" in source
+    assert "not_rendered_selectors" in source
     assert 'id: "runtime-approved-targeted-repair-evidence"' in source
     targeted_case = source.split(
         'id: "runtime-approved-targeted-repair-evidence"', 1
+    )[1].split('id: "runtime-permission-compact-readability-evidence"', 1)[0]
+    assert "evidenceOnly: true" in targeted_case
+    permission_case = source.split(
+        'id: "runtime-permission-compact-readability-evidence"', 1
+    )[1].split('id: "runtime-approved-more-evidence-controls"', 1)[0]
+    assert "evidenceOnly: true" in permission_case
+    assert "inspectPermissionCompactReadabilityEvidence" in permission_case
+
+
+def test_approved_more_evidence_controls_have_targeted_live_browser_proof() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert "async function inspectApprovedMoreEvidenceControls" in source
+    evidence_source = source.split(
+        "async function inspectApprovedMoreEvidenceControls", 1
+    )[1].split("function attachQualificationPageObservers", 1)[0]
+    assert '"outdoor-navigation"' in evidence_source
+    assert 'data-navigation-terrain-event-id' in evidence_source
+    assert '"outdoor-permission"' in evidence_source
+    assert "data-permission-refresh" in evidence_source
+    assert "permissionRefreshCount" in evidence_source
+    assert "degraded_typed_unavailable" in evidence_source
+    assert 'availability_status: "TYPED_UNAVAILABLE"' in evidence_source
+    assert "An unavailable Permission Refresh must not be awaited." in evidence_source
+    assert '"emergency"' in evidence_source
+    assert 'for (const label of ["Pace Fit", "System"])' in evidence_source
+    assert "captureVisualCheckpoint" in evidence_source
+    assert "before" in evidence_source
+    assert "after" in evidence_source
+    assert 'id: "runtime-approved-more-evidence-controls"' in source
+    targeted_case = source.split(
+        'id: "runtime-approved-more-evidence-controls"', 1
     )[1].split('id: "debug-live-runtime-read-evidence"', 1)[0]
     assert "evidenceOnly: true" in targeted_case
+    assert "recordVideo: false" in targeted_case
+
+
+def test_q0063_reload_evidence_has_before_and_after_screenshots() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+    evidence_source = source.split(
+        "async function inspectIssue0063ControlStateEvidence", 1
+    )[1].split("async function operateVisibleControl", 1)[0]
+
+    assert '"before-reload"' in evidence_source
+    assert '"after-reload"' in evidence_source
+    assert "captureVisualCheckpoint" in evidence_source
 
 
 def test_diagnostic_diag_all_disables_video_before_packet_sealing() -> None:
@@ -334,6 +586,7 @@ def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof
     assert "const CONTROL_OPERATION_TIMEOUT_MS = 90_000;" in source
     assert "const CONTROL_DISCOVERY_TIMEOUT_MS = 90_000;" in source
     assert "const CONTROL_ROUTE_TIMEOUT_MS = 10 * 60_000;" in source
+    assert "const CONTROL_ROUTE_STATE_RESET_LIMIT = 32;" in source
     assert "async function runVisibleControlOperationWithTimeout(" in source
     assert "async function runVisibleControlDiscoveryWithTimeout(" in source
     assert 'error.code = "CONTROL_OPERATION_TIMEOUT"' in source
@@ -353,6 +606,10 @@ def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof
     assert "route_aborted_after_operation_error" in source
     assert "routePage.close({runBeforeUnload: false})" in source
     assert "const CASE_FINALIZATION_TIMEOUT_MS = 90_000;" in source
+    assert "const VIDEO_CASE_FINALIZATION_TIMEOUT_MS = 5 * 60_000;" in source
+    assert "function caseFinalizationTimeoutMs(definition = {})" in source
+    assert "function collectRecordedPagesBeforeContext(" in source
+    assert "async function finalizeRecordedVideosAfterContext(" in source
     assert "const ROUTE_TRACE_FINALIZATION_TIMEOUT_MS = 30_000;" in source
     assert "async function runCaseFinalizerWithTimeout(" in source
     assert 'error.code = "CASE_FINALIZATION_TIMEOUT"' in source
@@ -372,6 +629,8 @@ def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof
     assert '"control_operation_started"' in source
     assert '"control_operation_completed"' in source
     assert '"control_refresh_reload_started"' in source
+    assert '"control_state_reset_started"' in source
+    assert "descriptor.tag === \"summary\"" in source
     assert "[data-navigation-maplibre-fit]" in source
     assert "visual_quality_status: visualQualityStatus" in source
     assert "snapshots: false" in source
@@ -379,7 +638,10 @@ def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof
     assert "if (routeTraceError) throw routeTraceError;" not in source
     assert '"trace-stop"' in source
     assert '"context-close"' in source
+    assert '"recorded-page-close-delegated"' in source
+    assert '"recorded-video-finalized"' in source
     assert 'runCaseFinalizerWithTimeout("browser-close"' in source
+    assert "const finalizationTimeoutMs = caseFinalizationTimeoutMs(definition);" in source
     layer_toggle_source = source.split(
         "async function inspectCanonicalLayerToggles", 1
     )[1].split("function attachQualificationPageObservers", 1)[0]
@@ -414,6 +676,46 @@ def test_live_browser_runner_preserves_failures_and_target_specific_visual_proof
     assert "inspectNavigationMapLibreGestures" in source
     assert 'surface.id === "navigation-map"' in source
     assert 'page.keyboard.down("Shift")' in source
+
+
+def test_video_finalization_closes_context_before_waiting_for_video_paths() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert "function collectRecordedPagesBeforeContext(" in source
+    assert "async function finalizeRecordedVideosAfterContext(" in source
+    collection_source = source.split(
+        "function collectRecordedPagesBeforeContext", 1
+    )[1].split("async function finalizeRecordedVideosAfterContext", 1)[0]
+    finalization_source = source.split(
+        "async function runIsolatedCase", 1
+    )[1].split("async function main", 1)[0]
+    assert '"recorded-page-close-delegated"' in collection_source
+    assert "recording.page.close({runBeforeUnload: false})" not in finalization_source
+    assert finalization_source.index('"context-close"') < finalization_source.index(
+        "finalizeRecordedVideosAfterContext("
+    )
+
+
+def test_junit_xml_escape_removes_ansi_and_xml_illegal_controls() -> None:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(runner.xmlEscape("\\u001b[31mFAIL\\u001b[0m\\u0000<&"));
+"""
+    completed = subprocess.run(
+        [node, "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert completed.stdout == "FAIL&lt;&amp;"
 
 
 def test_live_browser_runner_scales_visual_and_control_audits() -> None:
@@ -607,6 +909,44 @@ def test_live_browser_runner_collects_debug_read_evidence_without_hardware_probe
     assert "debug-mobile-table" in source
     assert "debug-mobile-table-after-horizontal-scroll" in source
     assert "result.debug_pills.length > 0" in source
+    assert "mobile_map_primary_workspace" in source
+    assert 'waitForRouteVisualReadiness(page, "map", readyProjectId, observations)' in source
+    assert "map_nav_layer_non_overlap" in source
+    assert "map_evidence_collapsed" in source
+    assert "layer_menu_open" in source
+
+    assert 'id: "runtime-diagnostic-ux-more-evidence"' in source
+    assert "diagnosticUxEvidence" in source
+    assert "layerReadinessTimelines" in source
+    assert '"browser-layer-readiness-evidence.json"' in source
+    assert '"browser-diagnostic-ux-evidence.json"' in source
+
+    map_case = source.split(
+        'id: "runtime-all-map-surface-interactions"', 1
+    )[1].split('id: "runtime-main-map-weather-layer-availability-evidence"', 1)[0]
+    assert "recordVideo: false" in map_case
+    assert "finalizationTimeoutMs: 5 * 60_000" in map_case
+    assert 'evidenceProfile: "trace-plus-per-interaction-visual-checkpoints"' in map_case
+
+    layer_case = source.split(
+        'id: "runtime-all-layer-toggle-integrity"', 1
+    )[1].split('id: "diagnostic-controls"', 1)[0]
+    assert "recordVideo: false" in layer_case
+    assert 'evidenceProfile: "trace-plus-per-layer-visual-checkpoints"' in layer_case
+
+    capability_builder = source.split(
+        "function buildCapabilityResults", 1
+    )[1].split("function writeJson", 1)[0]
+    assert "caseFinalizationErrors" in capability_builder
+    assert 'output["qualification.evidence.integrity"] = evidenceFinalizationFailed ? "FAIL" : "PASS";' in capability_builder
+    assert "recorderFinalizedBeforeSeal" in source
+    assert "recorder_finalized_before_seal: recorderFinalizedBeforeSeal" in source
+    assert (
+        "video_directory: definition.recordVideo !== false && fs.existsSync(videoDirectory)"
+        in source
+    )
+    assert "const restoreCurrentControl = async action =>" in source
+    assert "restore = async () => restoreCurrentControl" in source
 
     route_navigation_case = source.split(
         'id: "runtime-route-navigation"', 1
@@ -707,6 +1047,59 @@ const runner = require({json.dumps(str(BROWSER_RUNNER))});
     assert 40 <= payload["elapsedMs"] < 1_000
 
 
+def test_browser_runner_gives_recorded_video_a_longer_bounded_finalization_window() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(JSON.stringify({{
+  noVideo: runner.caseFinalizationTimeoutMs({{recordVideo: false}}),
+  video: runner.caseFinalizationTimeoutMs({{}}),
+  configured: runner.caseFinalizationTimeoutMs({{recordVideo: true, finalizationTimeoutMs: 1234}}),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "noVideo": 90_000,
+        "video": 300_000,
+        "configured": 1_234,
+    }
+
+
+def test_browser_runner_marks_evidence_integrity_failed_when_recorder_did_not_finalize() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const failed = runner.buildCapabilityResults([], [{{
+  observations: {{caseFinalizationErrors: ["context-close timeout"]}},
+}}]);
+const clean = runner.buildCapabilityResults([], [{{observations: {{}}}}]);
+process.stdout.write(JSON.stringify({{
+  failed: failed["qualification.evidence.integrity"],
+  clean: clean["qualification.evidence.integrity"],
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {"failed": "FAIL", "clean": "PASS"}
+
+
 def test_browser_runner_aggregates_repeated_delegated_map_evidence_targets() -> None:
     script = f"""
 const runner = require({json.dumps(str(BROWSER_RUNNER))});
@@ -781,6 +1174,481 @@ process.stdout.write(JSON.stringify(runner.sampleRepeatedSelectionControls(contr
     assert all("architectureBinId" not in item["identity"] for item in payload)
 
 
+def test_browser_runner_samples_dense_navigation_terrain_event_controls() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const controls = Array.from({{length: 80}}, (_unused, index) => ({{
+  route: "outdoor-navigation",
+  context_id: "main",
+  tag: "button",
+  role: "",
+  aria_label: `terrain-event-${{index}}`,
+  delegated_to: null,
+  disabled: false,
+  data_attributes: {{navigationTerrainEventId: `event-${{index}}`}},
+  identity: `event-${{index}}`,
+  key: `event-key-${{index}}`,
+  text: "",
+}}));
+process.stdout.write(JSON.stringify(runner.sampleRepeatedSelectionControls(controls)));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert len(payload) == 3
+    assert [item["aggregate_representative_position"] for item in payload] == [
+        "first",
+        "middle",
+        "last",
+    ]
+    assert all(item["aggregate_member_count"] == 80 for item in payload)
+    assert payload[0]["aggregate_member_samples"] == ["event-0", "event-39", "event-79"]
+    assert all("navigationTerrainEventId" not in item["identity"] for item in payload)
+
+
+def test_browser_runner_samples_dense_debug_event_and_runtime_audit_selectors() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const debugEvents = Array.from({{length: 12}}, (_unused, index) => ({{
+  route: "surface-debug",
+  context_id: "frame:debug",
+  tag: "div",
+  role: "button",
+  aria_label: `debug-event-${{index}}`,
+  delegated_to: null,
+  disabled: false,
+  data_attributes: {{eventId: `event-${{index}}`, eventIndex: String(index), mapRef: "runtime route"}},
+  identity: `debug-event-${{index}}`,
+  key: `debug-event-key-${{index}}`,
+  text: "",
+}}));
+const assistantQuestions = Array.from({{length: 9}}, (_unused, index) => ({{
+  route: "surface-debug",
+  context_id: "frame:debug",
+  tag: "button",
+  role: "",
+  aria_label: `Why did cp.${{index}} become L0?`,
+  delegated_to: null,
+  disabled: false,
+  data_attributes: {{assistantQuestion: `Why did cp.${{index}} become L0?`}},
+  identity: `assistant-question-${{index}}`,
+  key: `assistant-question-key-${{index}}`,
+  text: "Why L2?",
+}}));
+const auditDays = Array.from({{length: 15}}, (_unused, index) => ({{
+  route: "runtime-audit",
+  context_id: "main",
+  tag: "button",
+  role: "",
+  aria_label: "",
+  delegated_to: null,
+  disabled: false,
+  data_attributes: {{runtimeAuditDay: `2026-08-${{String(index + 1).padStart(2, "0")}}`}},
+  identity: `audit-day-${{index}}`,
+  key: `audit-day-key-${{index}}`,
+  text: "",
+}}));
+process.stdout.write(JSON.stringify({{
+  debugEvents: runner.sampleRepeatedSelectionControls(debugEvents),
+  assistantQuestions: runner.sampleRepeatedSelectionControls(assistantQuestions),
+  auditDays: runner.sampleRepeatedSelectionControls(auditDays),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert len(payload["debugEvents"]) == 3
+    assert len(payload["assistantQuestions"]) == 3
+    assert len(payload["auditDays"]) == 3
+    assert payload["debugEvents"][0]["aggregate_member_samples"] == [
+        "event-0",
+        "event-5",
+        "event-11",
+    ]
+    assert payload["auditDays"][0]["aggregate_member_samples"] == [
+        "2026-08-01",
+        "2026-08-08",
+        "2026-08-15",
+    ]
+    assert all("eventId" not in item["identity"] for item in payload["debugEvents"])
+    assert all("2026-08-" not in item["identity"] for item in payload["auditDays"])
+
+
+def test_browser_runner_canonicalizes_ephemeral_debug_assistant_questions_by_intent() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const makeControl = question => ({{
+  route: "surface-debug",
+  context_id: "frame:debug",
+  tag: "button",
+  id: "",
+  name: "",
+  type: "button",
+  role: "",
+  aria_label: question,
+  data_attributes: {{assistantQuestion: question}},
+  text: question,
+  identity: question,
+  key: `raw-${{question}}`,
+}});
+const values = [
+  runner.canonicalizeEphemeralControlIdentity(makeControl("Why did CP2 become an L2 event?")),
+  runner.canonicalizeEphemeralControlIdentity(makeControl("Why did cp.014 become an L0 event?")),
+  runner.canonicalizeEphemeralControlIdentity(makeControl("Which sources support this timeline state?")),
+];
+process.stdout.write(JSON.stringify(values));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    values = json.loads(completed.stdout)
+    assert values[0]["identity"] == values[1]["identity"]
+    assert values[0]["identity"] != values[2]["identity"]
+    assert values[0]["ephemeral_control_family"] == "debug-assistant:level-rationale"
+    assert values[2]["ephemeral_control_family"] == "debug-assistant:source-support"
+    assert values[0]["key"].startswith("raw-")
+
+
+def test_browser_runner_canonicalizes_navigation_review_controls_by_decision() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const makeControl = (decision, target) => ({{
+  route: "outdoor-navigation",
+  context_id: "main",
+  tag: "button",
+  id: "",
+  name: "",
+  type: "button",
+  role: "",
+  aria_label: "",
+  data_attributes: {{navigationReviewDecision: decision, navigationReviewTarget: target}},
+  text: decision,
+  identity: `${{decision}}:${{target}}`,
+  key: `raw-${{decision}}-${{target}}`,
+}});
+const supportA = runner.canonicalizeEphemeralControlIdentity(makeControl("support", "ridge.001"));
+const supportB = runner.canonicalizeEphemeralControlIdentity(makeControl("support", "event.002"));
+const reject = runner.canonicalizeEphemeralControlIdentity(makeControl("reject", "ridge.001"));
+process.stdout.write(JSON.stringify({{
+  sameSupportIdentity: supportA.identity === supportB.identity,
+  differentDecisionIdentity: supportA.identity !== reject.identity,
+  family: reject.ephemeral_control_family,
+  rejectIsEffectful: runner.controlIdentityIsEffectful(reject),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "sameSupportIdentity": True,
+        "differentDecisionIdentity": True,
+        "family": "navigation-review:reject",
+        "rejectIsEffectful": False,
+    }
+
+
+def test_browser_runner_recognizes_aria_current_as_an_active_control_state() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(JSON.stringify({{
+  current: runner.controlIsAlreadyActive({{role: "button"}}, {{aria_current: "true"}}),
+  pressed: runner.controlIsAlreadyActive({{role: "button"}}, {{aria_pressed: "true"}}),
+  selectedTab: runner.controlIsAlreadyActive({{role: "tab"}}, {{aria_selected: "true"}}),
+  inactive: runner.controlIsAlreadyActive({{role: "button"}}, {{aria_current: "false"}}),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "current": True,
+        "pressed": True,
+        "selectedTab": True,
+        "inactive": False,
+    }
+
+
+def test_browser_runner_delegates_generic_map_interaction_surfaces_to_map_qualification() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert "[data-map-interaction-mode]" in source
+    assert 'delegatedTo = "runtime-all-map-surface-interactions"' in source
+
+
+def test_browser_runner_operates_current_state_content_before_switching_state_selector() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const controls = [
+  {{identity: "tab-map", role: "tab", aria_selected: "false", data_attributes: {{evidenceTab: "map_risk"}}}},
+  {{identity: "group-map", role: "", aria_selected: null, data_attributes: {{evidenceGroupTab: "map_risk", evidenceGroupToggle: "true"}}}},
+  {{identity: "terrain-event", role: "", aria_selected: null, data_attributes: {{navigationTerrainEventId: "event-1"}}}},
+];
+const first = runner.selectNextVisibleControlCandidate(controls, new Set());
+const second = runner.selectNextVisibleControlCandidate(controls, new Set(["group-map"]));
+const modalFirst = runner.selectNextVisibleControlCandidate([
+  {{identity: "underlay", role: "", aria_selected: null, within_modal: false, data_attributes: {{}}}},
+  {{identity: "modal-cancel", role: "", aria_selected: null, within_modal: true, data_attributes: {{emergencyFieldConfirmCancel: "true"}}}},
+], new Set());
+const embeddedFirst = runner.selectNextVisibleControlCandidate([
+  {{identity: "main-control", context_id: "main", role: "", aria_selected: null, within_modal: false, data_attributes: {{}}}},
+  {{identity: "frame-tab", context_id: "frame:approval", role: "tab", aria_selected: "false", within_modal: false, data_attributes: {{evidenceTab: "approval"}}}},
+], new Set());
+const assistantBeforeEvent = runner.selectNextVisibleControlCandidate([
+  {{identity: "event", context_id: "frame:debug", role: "button", aria_selected: null, within_modal: false, data_attributes: {{eventId: "event-1"}}}},
+  {{identity: "question", context_id: "frame:debug", role: "", aria_selected: null, within_modal: false, data_attributes: {{assistantQuestion: "What is missing?"}}}},
+], new Set());
+const terrainEventBeforeOuterSelector = runner.selectNextVisibleControlCandidate([
+  {{identity: "outer-selector", context_id: "main", role: "", aria_selected: null, within_modal: false, data_attributes: {{navigationTerrainEvidenceDomain: "prior"}}}},
+  {{identity: "terrain-item", context_id: "main", role: "", aria_selected: null, within_modal: false, data_attributes: {{navigationTerrainEventId: "event-1"}}}},
+], new Set());
+process.stdout.write(JSON.stringify({{
+  first: first.identity,
+  second: second.identity,
+  modalFirst: modalFirst.identity,
+  embeddedFirst: embeddedFirst.identity,
+  assistantBeforeEvent: assistantBeforeEvent.identity,
+  terrainEventBeforeOuterSelector: terrainEventBeforeOuterSelector.identity,
+  repeatableCancel: runner.controlIsRepeatableModalDismissal({{
+    within_modal: true,
+    data_attributes: {{emergencyFieldConfirmCancel: "true"}},
+    text: "Cancel",
+  }}),
+  repeatableSubmit: runner.controlIsRepeatableModalDismissal({{
+    within_modal: true,
+    data_attributes: {{emergencyFieldConfirmSubmit: "true"}},
+    text: "Confirm",
+  }}),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "first": "group-map",
+        "second": "terrain-event",
+        "modalFirst": "modal-cancel",
+        "embeddedFirst": "frame-tab",
+        "assistantBeforeEvent": "question",
+        "terrainEventBeforeOuterSelector": "terrain-item",
+        "repeatableCancel": True,
+        "repeatableSubmit": False,
+    }
+
+
+def test_browser_runner_semantic_signature_tracks_live_form_values_without_harness_markers() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    assert 'replace(/\\sdata-scout-qualification-' in source
+    assert "form_state" in source
+    assert 'value: "value" in element ? String(element.value)' in source
+
+
+def test_browser_runner_treats_reset_controls_as_effectful() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(JSON.stringify({{
+  reset: runner.controlIdentityIsEffectful({{
+    id: "mobileIngressResetButton",
+    text: "歸零",
+    aria_label: "",
+    data_attributes: {{}},
+  }}),
+  refresh: runner.controlIdentityIsEffectful({{
+    id: "refreshButton",
+    text: "Refresh",
+    aria_label: "",
+    data_attributes: {{}},
+  }}),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {"reset": True, "refresh": False}
+
+
+def test_browser_runner_discovers_embedded_frames_with_one_shared_time_window() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+(async () => {{
+  const startedAt = Date.now();
+  const values = await runner.mapControlFramesConcurrently([40, 40, 40], async (delay, index) => {{
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return index;
+  }});
+  process.stdout.write(JSON.stringify({{values, elapsedMs: Date.now() - startedAt}}));
+}})();
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["values"] == [0, 1, 2]
+    assert 30 <= payload["elapsedMs"] < 110
+
+
+def test_browser_runner_does_not_locate_a_synthetic_frame_discovery_error() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+(async () => {{
+  const page = {{frames() {{ throw new Error("must not inspect frames"); }}}};
+  const marked = await runner.markControlCompleted(page, {{
+    key: "q-frame-error-deadbeef",
+    discovery_error: "control-frame-context timed out",
+  }});
+  process.stdout.write(JSON.stringify({{marked}}));
+}})();
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {"marked": False}
+
+
+def test_browser_runner_can_bound_control_debugging_to_one_contracted_route() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const routes = ["home", "emergency", "settings"];
+process.stdout.write(JSON.stringify({{
+  full: runner.selectControlAuditRoutes(routes, null),
+  targeted: runner.selectControlAuditRoutes(routes, "emergency"),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "full": ["home", "emergency", "settings"],
+        "targeted": ["emergency"],
+    }
+
+
+def test_browser_runner_accepts_permission_controls_as_typed_unavailable_only_when_degraded() -> None:
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(JSON.stringify({{
+  degraded: runner.permissionControlIsTypedUnavailable("outdoor-permission", {{
+    permission_data_status: "degraded",
+    projection_status: "degraded",
+  }}),
+  ready: runner.permissionControlIsTypedUnavailable("outdoor-permission", {{
+    permission_data_status: "ready",
+    projection_status: "ready",
+  }}),
+  otherRoute: runner.permissionControlIsTypedUnavailable("outdoor-weather", {{
+    permission_data_status: "degraded",
+    projection_status: "degraded",
+  }}),
+}}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "degraded": True,
+        "ready": False,
+        "otherRoute": False,
+    }
+    action_contract = json.loads(
+        (ROOT / "qualification/dashboard-browser-action-contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert "TYPED_UNAVAILABLE" in action_contract["paused_legacy_map_contract"][
+        "control_coverage"
+    ]["allowed_terminal_states"]
+
+
 def test_browser_runner_separates_delegation_and_visual_warnings_from_operation_state() -> None:
     script = f"""
 const runner = require({json.dumps(str(BROWSER_RUNNER))});
@@ -827,6 +1695,7 @@ process.stdout.write(JSON.stringify({{
   staleLocator: runner.isTransientControlLocatorError(
     "locator.click: Timeout 30000ms exceeded while waiting for locator('[data-scout-qualification-control-key=key]')"
   ),
+  detachedFrameLocator: runner.isTransientControlLocatorError("locator.count: Frame was detached"),
   ordinaryTimeout: runner.isTransientControlLocatorError("page.goto: Timeout 60000ms exceeded"),
   productFailure: runner.isTransientFrameDiscoveryError("HTTP 500")
 }}));
@@ -847,6 +1716,7 @@ process.stdout.write(JSON.stringify({{
         "detachedFrame": True,
         "detachedElement": True,
         "staleLocator": True,
+        "detachedFrameLocator": True,
         "ordinaryTimeout": False,
         "productFailure": False,
     }
@@ -1098,11 +1968,33 @@ def test_qualification_policy_blocks_intentional_p0_regression() -> None:
     )
 
     results["dashboard.diagnostic.read_only"] = "FAIL"
+    outside_boundary = evaluate_results(manifest, results, policy)
+    assert outside_boundary["merge_permitted"] is True
+    assert any(
+        item["capability_id"] == "dashboard.diagnostic.read_only"
+        and item["reason"] == "outside_maplibre_boundary_freeze"
+        for item in outside_boundary["excluded_capabilities"]
+    )
+
+    results["dashboard.browser.maplibre_pre_migration_regression_guard"] = "FAIL"
     regression = evaluate_results(manifest, results, policy)
     assert regression["merge_permitted"] is False
     assert regression["machine_verdict"] == "FAIL"
     assert regression["blockers"][0]["capability_id"] == (
-        "dashboard.diagnostic.read_only"
+        "dashboard.browser.maplibre_pre_migration_regression_guard"
+    )
+
+    results["dashboard.browser.maplibre_pre_migration_regression_guard"] = "PASS"
+    results["dashboard.maps.all_surface_interactions"] = "FAIL"
+    legacy_regression = evaluate_results(
+        manifest,
+        results,
+        policy,
+        qualification_scope="legacy-full",
+    )
+    assert legacy_regression["merge_permitted"] is False
+    assert legacy_regression["blockers"][0]["capability_id"] == (
+        "dashboard.maps.all_surface_interactions"
     )
 
 
@@ -1194,6 +2086,46 @@ def test_evidence_index_rejects_mislabeled_screenshot_bytes(tmp_path: Path) -> N
 
     with pytest.raises(ValueError, match="screenshot media type mismatch"):
         build_index(evidence_root)
+
+
+def test_browser_runner_seals_explicit_canonicalization_and_media_types(
+    tmp_path: Path,
+) -> None:
+    node = shutil.which("node")
+    assert node is not None
+    evidence_root = tmp_path / "evidence"
+    screenshots = evidence_root / "screenshots"
+    screenshots.mkdir(parents=True)
+    (screenshots / "route-home.png").write_bytes(MINIMAL_PNG)
+    (evidence_root / "results.json").write_text("{}", encoding="utf-8")
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const index = runner.writeEvidenceIndex({json.dumps(str(evidence_root))});
+process.stdout.write(JSON.stringify(index));
+"""
+    completed = subprocess.run(
+        [node, "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    index = json.loads(completed.stdout)
+    assert index["root_canonicalization"] == {
+        "digest_algorithm": "sha256",
+        "encoding": "utf-8",
+        "line_format": "{sha256}  {path}\n",
+        "sort_key": "path",
+        "sort_order": "lexicographic_posix_relative_path",
+    }
+    image_entry = next(
+        item for item in index["files"] if item["path"].endswith(".png")
+    )
+    assert image_entry["media_type"] == "image/png"
 
 
 def test_reviewer_input_excludes_raw_worktree_patch_and_source_contents(
@@ -1573,6 +2505,13 @@ def test_browser_runner_isolates_cases_and_captures_failure_evidence() -> None:
     ) in source
     assert "for (const definition of caseDefinitions)" in source
     assert "results.push(await runIsolatedCase(" in source
+    assert "acquireQualificationLease(" in source
+    assert "qualificationRuntimeLeasePath(" in source
+    assert 'leaseError.code = "QUALIFICATION_LEASE_HELD"' in source
+    assert 'error.code = "QUALIFICATION_OUTPUT_ROOT_NOT_EMPTY"' in source
+    assert 'process.argv.includes("--prepared-output-root")' in source
+    assert "PREPARED_OUTPUT_ROOT_ALLOWED_FILES" in source
+    assert "PREPARED_OUTPUT_ROOT_REQUIRED_FILES" in source
     assert "workspaceDigest" in source
     assert "unexpected_workspace_mutation" in source
     assert 'parsed.searchParams.has("TILEMATRIX")' in source
@@ -1593,6 +2532,207 @@ def test_browser_runner_isolates_cases_and_captures_failure_evidence() -> None:
     assert "diagnostic-retest:" in source
     assert "disabledBaseUrl" in source
     assert "function writeAggregateEvidence(" in source
+
+
+def test_qualification_wrapper_explicitly_authorizes_its_prepared_output_root() -> None:
+    source = QUALIFICATION_RUNNER.read_text(encoding="utf-8")
+
+    assert 'browser_command.append("--prepared-output-root")' in source
+
+
+def test_qualification_guard_runs_only_boundary_contract_and_layer_contract() -> None:
+    from scripts.qualification.run_qualification import _qualification_test_paths
+
+    guard = _qualification_test_paths("guard")
+    legacy = _qualification_test_paths("legacy-full")
+
+    assert guard == {
+        "focused": ("tests/qualification/test_dashboard_qualification_bootstrap.py",),
+        "package": ("tests/test_scout_layer_contract.py",),
+    }
+    assert "tests/test_scout_dashboard_page.py" not in guard["focused"]
+    assert "tests/test_pretrip_admin_page.py" not in guard["focused"]
+    assert "tests/test_pretrip_admin_api.py" not in guard["focused"]
+    assert "tests/test_scout_dashboard_page.py" in legacy["focused"]
+    assert "tests/test_pretrip_admin_page.py" in legacy["focused"]
+    assert "tests/test_pretrip_admin_api.py" in legacy["focused"]
+
+
+def test_browser_runner_accepts_only_exact_wrapper_prepared_files(
+    tmp_path: Path,
+) -> None:
+    node = shutil.which("node")
+    assert node is not None
+    output_root = tmp_path / "prepared"
+    (output_root / "commands").mkdir(parents=True)
+    prepared_files = (
+        "commands/focused-pytest.log",
+        "commands/repository-package-pytest.log",
+        "environment.json",
+        "git-diff.patch",
+        "junit-focused.xml",
+        "junit-package.xml",
+        "manifest-validation.json",
+        "manifest.snapshot.yaml",
+    )
+    for relative_path in prepared_files:
+        (output_root / relative_path).write_text("prepared\n", encoding="utf-8")
+    script = f"""
+const fs = require("fs");
+const path = require("path");
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const outputRoot = {json.dumps(str(output_root))};
+runner.assertQualificationOutputRootAvailable(outputRoot, {{prepared: true}});
+fs.writeFileSync(path.join(outputRoot, "results.json"), "{{}}\\n");
+let blocked = null;
+try {{
+  runner.assertQualificationOutputRootAvailable(outputRoot, {{prepared: true}});
+}} catch (error) {{
+  blocked = error.code;
+}}
+process.stdout.write(JSON.stringify({{blocked}}));
+"""
+    completed = subprocess.run(
+        [node, "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "blocked": "QUALIFICATION_OUTPUT_ROOT_NOT_EMPTY"
+    }
+
+
+def test_browser_runner_exclusive_lease_blocks_overlapping_operators(
+    tmp_path: Path,
+) -> None:
+    node = shutil.which("node")
+    assert node is not None
+    lock_path = tmp_path / "runtime.lock"
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const lockPath = {json.dumps(str(lock_path))};
+const first = runner.acquireQualificationLease(lockPath, {{scope: "first"}});
+let blocked = null;
+try {{
+  runner.acquireQualificationLease(lockPath, {{scope: "second"}});
+}} catch (error) {{
+  blocked = error.code;
+}}
+runner.releaseQualificationLease(first);
+const afterRelease = runner.acquireQualificationLease(lockPath, {{scope: "third"}});
+runner.releaseQualificationLease(afterRelease);
+process.stdout.write(JSON.stringify({{blocked, released: !require("fs").existsSync(lockPath)}}));
+"""
+    completed = subprocess.run(
+        [node, "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "blocked": "QUALIFICATION_LEASE_HELD",
+        "released": True,
+    }
+
+
+def test_browser_runner_host_lease_path_is_shared_across_worktrees(
+    tmp_path: Path,
+) -> None:
+    node = shutil.which("node")
+    assert node is not None
+    first_worktree = tmp_path / "first-worktree"
+    second_worktree = tmp_path / "second-worktree"
+    first_worktree.mkdir()
+    second_worktree.mkdir()
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+process.stdout.write(runner.qualificationHostLeasePath());
+"""
+
+    paths = []
+    for worktree in (first_worktree, second_worktree):
+        completed = subprocess.run(
+            [node, "-e", script],
+            cwd=worktree,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=10,
+        )
+        assert completed.returncode == 0, completed.stdout
+        paths.append(completed.stdout)
+
+    assert paths[0] == paths[1]
+    assert "scout-dashboard-qualification" in paths[0]
+    assert "artifacts/qualification" not in paths[0]
+
+
+def test_browser_runner_recovers_a_dead_process_lease(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    assert node is not None
+    lock_path = tmp_path / "stale.lock"
+    lock_path.write_text(
+        json.dumps(
+            {
+                "schema": "scout.dashboardQualificationLease.v1",
+                "token": "stale-token",
+                "pid": 999_999_999,
+                "hostname": "test-host",
+                "started_at": "2000-01-01T00:00:00.000Z",
+                "scope": "host-operator",
+            }
+        ),
+        encoding="utf-8",
+    )
+    script = f"""
+const runner = require({json.dumps(str(BROWSER_RUNNER))});
+const lockPath = {json.dumps(str(lock_path))};
+const lease = runner.acquireQualificationLease(lockPath, {{scope: "fresh"}});
+const stored = JSON.parse(require("fs").readFileSync(lockPath, "utf8"));
+runner.releaseQualificationLease(lease);
+process.stdout.write(JSON.stringify({{
+  recovered: stored.token === lease.token,
+  recovery: lease.recovered_stale_lease === true,
+  released: !require("fs").existsSync(lockPath),
+}}));
+"""
+    completed = subprocess.run(
+        [node, "-e", script],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 0, completed.stdout
+    assert json.loads(completed.stdout) == {
+        "recovered": True,
+        "recovery": True,
+        "released": True,
+    }
+
+
+def test_browser_runner_finalizes_recorders_before_evidence_seal() -> None:
+    source = BROWSER_RUNNER.read_text(encoding="utf-8")
+
+    finalization = source.index('"browser-recorder-finalization"')
+    seal = source.index("const index = writeEvidenceIndex(outputRoot);")
+    assert finalization < seal
+    assert "browser = null;" in source[finalization:seal]
     assert "mapZoomText" in source
     assert "zeroCountCategories" in source
     assert "unexplainedZeroCount" in source

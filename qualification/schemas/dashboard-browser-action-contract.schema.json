@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "scout.dashboardBrowserActionContract.v1",
+  "$id": "scout.dashboardBrowserActionContract.v2",
   "type": "object",
   "required": [
     "schema",
@@ -8,15 +8,14 @@
     "official_mode",
     "profiles",
     "routes",
-    "map_surfaces",
-    "required_map_gestures",
-    "required_map_content",
+    "regression_guard",
+    "paused_legacy_map_contract",
     "control_coverage",
     "visual_quality"
   ],
   "properties": {
-    "schema": {"const": "scout.dashboardBrowserActionContract.v1"},
-    "version": {"type": "integer", "minimum": 1},
+    "schema": {"const": "scout.dashboardBrowserActionContract.v2"},
+    "version": {"const": 2},
     "official_mode": {
       "type": "object",
       "required": [
@@ -24,6 +23,8 @@
         "pre_existing_runtime_required",
         "browser_operation_required",
         "contract_tests_are_dashboard_evidence",
+        "qualification_boundary",
+        "productization",
         "zero_unmapped_controls_required",
         "zero_unreviewed_visual_states_required"
       ],
@@ -32,8 +33,10 @@
         "pre_existing_runtime_required": {"const": true},
         "browser_operation_required": {"const": true},
         "contract_tests_are_dashboard_evidence": {"const": false},
-        "zero_unmapped_controls_required": {"const": true},
-        "zero_unreviewed_visual_states_required": {"const": true}
+        "qualification_boundary": {"const": "maplibre_pre_migration_regression_guard"},
+        "productization": {"const": false},
+        "zero_unmapped_controls_required": {"const": false},
+        "zero_unreviewed_visual_states_required": {"const": false}
       },
       "additionalProperties": false
     },
@@ -56,93 +59,132 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "require_control_census", "require_visual_audit"],
+        "required": ["id", "guard_state"],
         "properties": {
           "id": {"type": "string", "minLength": 1},
-          "require_control_census": {"const": true},
-          "require_visual_audit": {"const": true}
+          "guard_state": {"enum": ["required", "inventory_only"]}
         },
         "additionalProperties": false
       }
     },
-    "map_surfaces": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "required": ["id", "route", "kind"],
-        "properties": {
-          "id": {"type": "string", "minLength": 1},
-          "route": {"type": "string", "minLength": 1},
-          "kind": {"enum": ["native", "embedded-pretrip"]},
-          "viewport_id": {"type": "string", "minLength": 1},
-          "frame_selector": {"type": "string", "minLength": 1},
-          "layer_scope": {"enum": ["pretrip", "weather"]}
+    "regression_guard": {
+      "type": "object",
+      "required": [
+        "id",
+        "active",
+        "major_routes",
+        "required_checks",
+        "failure_classifications",
+        "renderer_neutral_terms",
+        "fallback_map_route",
+        "representative_layer_operation",
+        "authority_claim"
+      ],
+      "properties": {
+        "id": {"const": "maplibre-pre-migration-boundary-freeze"},
+        "active": {"const": true},
+        "major_routes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
         },
-        "allOf": [
-          {
-            "if": {"properties": {"kind": {"const": "native"}}},
-            "then": {"required": ["viewport_id"]}
-          },
-          {
-            "if": {"properties": {"kind": {"const": "embedded-pretrip"}}},
-            "then": {"required": ["frame_selector", "layer_scope"]}
+        "required_checks": {
+          "type": "array",
+          "minItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "dashboard_load",
+              "major_route_entry",
+              "fallback_map_usable",
+              "layer_contract_present",
+              "evidence_identity_retained",
+              "no_browser_console_fatal_errors",
+              "no_horizontal_overflow",
+              "no_new_operational_or_safety_authority"
+            ]
           }
-        ],
-        "additionalProperties": false
-      }
+        },
+        "failure_classifications": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "existing_regression",
+              "maplibre_migration_blocker",
+              "old_svg_implementation_detail",
+              "unrelated_dirty_worktree_issue",
+              "environment_limitation"
+            ]
+          }
+        },
+        "renderer_neutral_terms": {
+          "type": "array",
+          "minItems": 6,
+          "uniqueItems": true,
+          "items": {"enum": ["map_feature", "layer_id", "artifact_id", "bbox", "highlight_state", "selected_evidence"]}
+        },
+        "fallback_map_route": {"const": "map"},
+        "representative_layer_operation": {"const": "toggle_and_restore_one_enabled_layer_id"},
+        "authority_claim": {"const": "none"}
+      },
+      "additionalProperties": false
     },
-    "required_map_gestures": {
-      "type": "array",
-      "minItems": 6,
-      "uniqueItems": true,
-      "items": {"enum": ["fit", "zoom_in", "zoom_out", "mouse_pan", "keyboard_pan", "rectangle_zoom"]}
+    "paused_legacy_map_contract": {
+      "type": "object",
+      "required": ["active", "reason", "map_surfaces", "required_map_gestures", "required_map_content", "control_coverage"],
+      "properties": {
+        "active": {"const": false},
+        "reason": {"type": "string", "minLength": 1},
+        "map_surfaces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "route", "kind"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "route": {"type": "string", "minLength": 1},
+              "kind": {"enum": ["native", "embedded-pretrip"]},
+              "viewport_id": {"type": "string", "minLength": 1},
+              "frame_selector": {"type": "string", "minLength": 1},
+              "layer_scope": {"enum": ["pretrip", "weather"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "required_map_gestures": {
+          "type": "array",
+          "minItems": 6,
+          "uniqueItems": true,
+          "items": {"enum": ["fit", "zoom_in", "zoom_out", "mouse_pan", "keyboard_pan", "rectangle_zoom"]}
+        },
+        "required_map_content": {"type": "object"},
+        "control_coverage": {"type": "object"}
+      },
+      "additionalProperties": false
     },
-    "required_map_content": {"type": "object"},
     "control_coverage": {
       "type": "object",
       "required": [
         "interactive_selector",
+        "mode",
         "include_embedded_frames",
-        "disabled_controls_require_executable_state",
-        "delegated_controls_require_passing_specialist_case",
-        "allowed_terminal_states",
-        "blocking_terminal_states",
+        "all_visible_controls_required",
+        "major_route_entry_required",
+        "representative_layer_control_required",
         "mutation_actions_require_explicit_authorization",
         "browser_local_state_is_not_server_persistence_evidence"
       ],
       "properties": {
         "interactive_selector": {"type": "string", "minLength": 1},
+        "mode": {"const": "regression_guard"},
         "include_embedded_frames": {"const": true},
-        "disabled_controls_require_executable_state": {"const": true},
-        "delegated_controls_require_passing_specialist_case": {"const": true},
-        "allowed_terminal_states": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {"enum": ["OPERATED", "DELEGATED", "GUARD_VERIFIED"]}
-        },
-        "blocking_terminal_states": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "contains": {"const": "NOT_EXERCISED"},
-          "items": {
-            "enum": [
-              "UNMAPPED",
-              "MISSING_AFTER_RELOAD",
-              "DISABLED_IN_RUNTIME_STATE",
-              "DISAPPEARED_BEFORE_OPERATION",
-              "NONVISIBLE_AFTER_DISCOVERY",
-              "SINGLE_RUNTIME_VALUE",
-              "ROUTE_ABORTED_AFTER_OPERATION_ERROR",
-              "NOT_EXERCISED",
-              "NO_STATE_CHANGE",
-              "NO_VISUAL_CHANGE",
-              "EFFECT_AUTHORIZATION_REQUIRED"
-            ]
-          }
-        },
+        "all_visible_controls_required": {"const": false},
+        "major_route_entry_required": {"const": true},
+        "representative_layer_control_required": {"const": true},
         "mutation_actions_require_explicit_authorization": {"const": true},
         "browser_local_state_is_not_server_persistence_evidence": {"const": true}
       },

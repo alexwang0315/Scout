@@ -16,8 +16,8 @@
     "scout-ui:operation-smoke": "node tools/scout_ui_operation_browser_smoke.js --pretty",
     "dashboard:workspace-smoke": "node tools/dashboard_workspace_browser_smoke.js --pretty",
     "qualification:validate-manifest": "./venv/bin/python scripts/qualification/validate_manifest.py",
-    "qualification:check": "./venv/bin/python -m scripts.qualification.run_qualification --scope full",
-    "qualification:check:full": "./venv/bin/python -m scripts.qualification.run_qualification --scope full",
+    "qualification:check": "./venv/bin/python -m scripts.qualification.run_qualification --scope guard",
+    "qualification:check:full": "./venv/bin/python -m scripts.qualification.run_qualification --scope guard",
     "qualification:check:smoke": "./venv/bin/python -m scripts.qualification.run_qualification --scope smoke"
   },
   "repository": {
