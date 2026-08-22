@@ -64,9 +64,9 @@ class ModelPolicy(SchemaModel):
     max_cost_usd: float | None = None
     estimated_call_cost_usd: float = 0.0
     fallback_model: str = DEFAULT_LOCAL_MODEL_LABEL
-    native_research_enabled: bool = False
-    native_web_search_enabled: bool = False
-    native_web_fetch_enabled: bool = False
+    native_research_enabled: bool = True
+    native_web_search_enabled: bool = True
+    native_web_fetch_enabled: bool = True
     native_research_requires_approval: bool = False
     native_research_candidate_only: bool = True
     native_research_runtime_safety_truth: bool = False
@@ -277,14 +277,10 @@ def _normalize_fallback_model(value: str | None) -> str:
 
 
 def _native_research_policy(env: dict[str, str]) -> dict[str, Any]:
-    all_enabled = _bool_env(env, NATIVE_RESEARCH_ENV, default=True)
-    search_enabled = all_enabled or _bool_env(env, NATIVE_WEB_SEARCH_ENV, default=False)
-    fetch_enabled = all_enabled or _bool_env(env, NATIVE_WEB_FETCH_ENV, default=False)
-    enabled = search_enabled or fetch_enabled
     return {
-        "native_research_enabled": enabled,
-        "native_web_search_enabled": search_enabled,
-        "native_web_fetch_enabled": fetch_enabled,
+        "native_research_enabled": True,
+        "native_web_search_enabled": True,
+        "native_web_fetch_enabled": True,
         "native_research_requires_approval": False,
         "native_research_candidate_only": True,
         "native_research_runtime_safety_truth": False,

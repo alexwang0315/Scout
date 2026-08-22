@@ -4,27 +4,41 @@ from pydantic_ai_runtime_compat import (
     pydantic_agent_runtime_kwargs,
     pydantic_ai_runtime_version,
     pydantic_native_research_capabilities,
+    pydantic_native_research_trace,
     pydantic_usage_limits_from_budget,
 )
-from scout.schemas.agent_runtime import AgentRunBudget
 from scout.agents.model_policy import resolve_model_policy
 from scout.agents.pydantic_ai_compat import (
     _normalize_hailo_created_timestamp,
+)
+from scout.agents.pydantic_ai_compat import (
     build_chat_model as build_packaged_chat_model,
+)
+from scout.agents.pydantic_ai_compat import (
     normalize_chat_model_name as normalize_packaged_chat_model_name,
-    pydantic_native_research_capabilities as packaged_native_research_capabilities,
+)
+from scout.agents.pydantic_ai_compat import (
     pydantic_ai_runtime_version as packaged_runtime_version,
+)
+from scout.agents.pydantic_ai_compat import (
+    pydantic_native_research_capabilities as packaged_native_research_capabilities,
+)
+from scout.agents.pydantic_ai_compat import (
     pydantic_usage_limits_from_budget as packaged_usage_limits_from_budget,
 )
+from scout.schemas.agent_runtime import AgentRunBudget
 
 
 def test_pydantic_ai_runtime_version_supports_slim_install() -> None:
-    assert pydantic_ai_runtime_version() == "2.30.0"
+    assert pydantic_ai_runtime_version() == "2.33.0"
     assert packaged_runtime_version() == pydantic_ai_runtime_version()
 
 
 def test_agent_runtime_kwargs_preserve_scout_tool_end_strategy() -> None:
-    assert pydantic_agent_runtime_kwargs() == {"end_strategy": "early"}
+    assert pydantic_agent_runtime_kwargs() == {
+        "end_strategy": "early",
+        "retries": 10,
+    }
 
 
 def test_usage_limits_are_derived_from_scout_agent_budget() -> None:
@@ -189,12 +203,31 @@ def test_native_research_capabilities_are_on_by_default_for_external_models() ->
     for capability in pydantic_native_research_capabilities(policy):
         assert capability.native is False
         assert capability.local is not None
+
+
+def test_legacy_disable_flags_cannot_turn_off_native_research() -> None:
+    policy = resolve_model_policy(
+        "openrouter:z-ai/glm-5.2",
+        env={
+            "SCOUT_AI_OS_NATIVE_RESEARCH": "0",
+            "SCOUT_AI_OS_NATIVE_WEB_SEARCH": "0",
+            "SCOUT_AI_OS_NATIVE_WEB_FETCH": "0",
+        },
+    )
+
+    assert policy.native_research_enabled is True
+    assert policy.native_web_search_enabled is True
+    assert policy.native_web_fetch_enabled is True
+    assert [
+        type(item).__name__
+        for item in packaged_native_research_capabilities(policy)
+    ] == ["WebSearch", "WebFetch"]
     for capability in packaged_native_research_capabilities(policy):
         assert capability.native is False
         assert capability.local is not None
 
 
-def test_native_research_capabilities_skip_local_function_model() -> None:
+def test_native_research_capabilities_are_available_to_local_function_model() -> None:
     policy = resolve_model_policy(
         env={
             "SCOUT_AI_OS_NATIVE_RESEARCH": "1",
@@ -203,8 +236,54 @@ def test_native_research_capabilities_skip_local_function_model() -> None:
 
     assert policy.native_research_enabled is True
     assert policy.model_for_agent is None
-    assert pydantic_native_research_capabilities(policy) == []
-    assert packaged_native_research_capabilities(policy) == []
+    assert [
+        type(item).__name__ for item in pydantic_native_research_capabilities(policy)
+    ] == ["WebSearch", "WebFetch"]
+    assert [
+        type(item).__name__ for item in packaged_native_research_capabilities(policy)
+    ] == ["WebSearch", "WebFetch"]
+
+
+def test_native_research_trace_records_search_and_fetch_without_content() -> None:
+    tool_call_part = type("ToolCallPart", (), {})
+    tool_return_part = type("ToolReturnPart", (), {})
+    search_call = tool_call_part()
+    search_call.tool_name = "scout_web_search"
+    fetch_call = tool_call_part()
+    fetch_call.tool_name = "scout_web_fetch"
+    workspace_call = tool_call_part()
+    workspace_call.tool_name = "search_scout_workspace_evidence"
+    search_return = tool_return_part()
+    search_return.tool_name = "scout_web_search"
+    search_return.content = "sensitive content must not be serialized"
+
+    class Result:
+        @staticmethod
+        def all_messages():
+            message = type("Message", (), {})()
+            message.parts = [
+                search_call,
+                search_return,
+                fetch_call,
+                workspace_call,
+            ]
+            return [message]
+
+    trace = pydantic_native_research_trace(Result())
+
+    assert trace == {
+        "performed": True,
+        "tool_call_count": 3,
+        "tool_return_count": 1,
+        "native_tool_call_count": 0,
+        "web_search_call_count": 1,
+        "web_fetch_call_count": 1,
+        "tool_names": [
+            "scout_web_fetch",
+            "scout_web_search",
+            "search_scout_workspace_evidence",
+        ],
+    }
 
 
 def test_native_research_capabilities_include_web_search_and_fetch() -> None:

@@ -57,7 +57,7 @@ def test_dashboard_fallback_config_uses_the_documented_mac_tunnel_endpoint() -> 
     assert config["local_model"]["base_url"] == "http://127.0.0.1:18000"
     assert config["local_model"]["backend"] == "hailo_ollama"
     assert config["local_model"]["model_name"] == "hailo:qwen3:1.7b"
-    assert config["local_model"]["tool_calling"] == "disabled"
+    assert config["local_model"]["tool_calling"] == "enabled"
     assert "model_settings" not in config["local_model"]
     assert "model_settings" not in config["cloud_model"]
     assert config["connect_on_startup"] is False

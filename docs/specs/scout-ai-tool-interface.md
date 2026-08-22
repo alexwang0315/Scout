@@ -4,12 +4,12 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-08-15
+## Implementation Update 2026-08-22
 
-Scout AI now runs against Pydantic AI v2.30.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.33.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.30.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.33.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -18,14 +18,31 @@ tracks. Tool execution remains deterministic and read-only by default:
 - The compatibility smoke covers function tools, typed output, MCP, local
   WebSearch/WebFetch, stream events, compacted history, and the non-JSON
   `Agent.to_web()` request guard before this pin is promoted to hardware. The
-  v2.30 smoke also verifies that an untrusted Host header is rejected before a
+  v2.32 smoke also verifies that an untrusted Host header is rejected before a
   model request, covering the upstream DNS-rebinding fix.
 - Deferred tools must be revealed and their capability loaded before invocation
-  under v2.30. Scout progressive disclosure treats that rejection as a tool
+  under v2.32. Scout progressive disclosure treats that rejection as a tool
   availability decision and must not misclassify it as missing evidence.
-- Provider-native OpenRouter search now uses `openrouter:web_search`. Scout's
-  default remains the local traced search/fetch path until native provider
-  citations and tool-call evidence satisfy the grounding gate.
+- Provider-native OpenRouter search uses `openrouter:web_search`. Pydantic AI
+  v2.32 preserves returned citations in
+  `ModelResponse.provider_details["annotations"]`; Scout's default remains the
+  local traced search/fetch path when the provider omits auditable citations.
+- The compatibility smoke verifies Instrumentation v6's `tool` role and the
+  legacy v5 role, OpenRouter annotation preservation, and timeout enforcement
+  for blocking synchronous tools. Scout does not opt into instrumentation v6
+  until its trace consumers accept the role change.
+- The v2.33.0 smoke rejects nested synchronous agent runs from framework-managed
+  sync callbacks. Delegated Scout agents must use an async callback and
+  `await agent.run(...)`, avoiding the former deadlock path.
+- Pydantic AI v2.32 uses `httpx2` for compatible clients. Provider smoke must
+  cover OpenRouter/OpenAI-compatible construction without exposing headers or
+  credentials.
+- Pydantic AI v2.32.2 normalizes DeepSeek Responses function-call replay. The
+  v2.33.0 compatibility smoke keeps the OpenRouter/DeepSeek tool replay path in
+  scope so a provider handoff cannot lose tool-call/result pairing.
+- Pydantic AI v2.33.0 supports `anthropic>=1.0.0`; a custom Anthropic provider
+  client must be an `httpx2.AsyncClient`. Scout does not construct or log such
+  a client unless the Anthropic provider is explicitly configured.
 - OpenRouter's native web plugin may complete without exposing a source or tool
   trace. A successful transport response is not accepted as grounded evidence;
   Scout keeps the local traced search/fetch path as the OpenRouter default.
@@ -43,14 +60,23 @@ tracks. Tool execution remains deterministic and read-only by default:
   supplies `openai:<model>`, Scout normalizes it to `openai-chat:<model>` to
   preserve the existing Chat-Completions-like Scout tool/output contract rather
   than silently switching to the OpenAI Responses API behavior.
-- Trusted WebSearch and WebFetch are enabled by default for external
-  provider-backed Scout AI calls. Direct OpenAI Chat may use native search;
+- Trusted WebSearch and WebFetch are always enabled for every Scout AI Pydantic
+  Agent path, including local/AI HAT+2 paths, repair/continuation, evaluation,
+  and L5 planning. Direct OpenAI Chat may use native search;
   OpenRouter/NVIDIA use Scout's bounded DuckDuckGo function tool so the search
   result and URL appear in the deterministic call trace. WebFetch currently
   uses Scout's local URL/domain-validating function tool on all configured
-  providers. Operators may opt out for lab/CI with
-  `SCOUT_AI_OS_NATIVE_RESEARCH=0`, or constrain domains with the native research
-  domain env vars.
+  providers. Legacy disable values such as
+  `SCOUT_AI_OS_NATIVE_RESEARCH=0` are ignored. Models without provider-native
+  tool calling use Scout's server-side adapters. Domain policy may still
+  protect secrets, private-network destinations, and explicit security
+  boundaries.
+- The AI HAT+2 `hailo_ollama` assistant path uses
+  `scout.agents.hailo_native_research`: Hailo selects `scout_web_search` and
+  `scout_web_fetch` actions, while Pydantic AI executes the capabilities and
+  enforces their per-stage 10/10 budget. A fetch URL must be an exact URL from
+  a preceding search result. Only fetched content becomes candidate evidence;
+  search snippets remain discovery metadata.
 - Provider-native MCP remains disabled until a Scout-owned connector boundary
   explicitly enables it. The Mac `pydantic-ai-smoke` optional dependency
   includes MCP and the Pydantic built-in WebFetch extra only for compatibility
@@ -675,6 +701,22 @@ Possible `status` values:
 Future tools should be registered in the registry before they are executable.
 This lets Scout AI explain missing evidence and implementation gaps without
 inventing tool behavior.
+
+### Native Research Availability
+
+`WebSearch` and `WebFetch` are permanent Pydantic AI capabilities for external
+Scout AI models. They remain attached when workspace tools are disabled or
+progressively disclosed; `SCOUT_AI_OS_NATIVE_RESEARCH=0` and equivalent legacy
+disable values are ignored. OpenRouter/NVIDIA use Scout's traced local adapters
+when the provider lacks the native form. Search snippets are discovery output,
+not evidence: a selected URL must be fetched, and any workspace persistence must
+go through a deterministic collector that records URL, timestamp, response hash,
+candidate-only status, and source references.
+
+AI HAT+2 uses server-side tool orchestration when network is reachable and cached
+evidence when it is not. This policy does not grant generated code, secrets,
+private-network destinations, `/safety/*`, outbound transport, or hardware
+control unrestricted network access.
 
 ## Weather / Environment Workspace Tools
 

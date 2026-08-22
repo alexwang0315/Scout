@@ -6,7 +6,6 @@ import os
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
-
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
@@ -33,7 +32,10 @@ def pydantic_ai_runtime_version() -> str:
 def pydantic_agent_runtime_kwargs() -> dict[str, Any]:
     """Return Scout's deterministic defaults for ``pydantic_ai.Agent``."""
 
-    return {"end_strategy": "early"}
+    return {
+        "end_strategy": "early",
+        "retries": 10,
+    }
 
 
 def pydantic_usage_limits_from_budget(
@@ -75,6 +77,30 @@ def pydantic_native_research_capabilities(policy: Any) -> list[Any]:
     )
 
     return packaged_capabilities(policy)
+
+
+def pydantic_native_research_trace(result: Any) -> dict[str, Any]:
+    """Return a content-free audit summary of WebSearch/WebFetch activity."""
+
+    from scout.agents.pydantic_ai_compat import (
+        pydantic_native_research_trace as packaged_trace,
+    )
+
+    return packaged_trace(result)
+
+
+def pydantic_native_research_capabilities_for_model(
+    model_name: str,
+    *,
+    env: dict[str, str] | None = None,
+) -> list[Any]:
+    """Resolve Scout's no-approval research capabilities for one model."""
+
+    from scout.agents.model_policy import resolve_model_policy
+
+    return pydantic_native_research_capabilities(
+        resolve_model_policy(model_name, env=env)
+    )
 
 
 def build_chat_model(

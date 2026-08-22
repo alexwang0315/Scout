@@ -35,7 +35,7 @@ architecture. The implemented core includes:
 - local notification gateway and runtime tick loop;
 - provider-backed agent facades with a local `FunctionModel` default;
 - model policy, timeout/cost SLA gateway, and external-model fallback handling;
-- Pydantic AI v2.30.0 compatibility helpers;
+- Pydantic AI v2.33.0 compatibility helpers;
 - generated capability sandbox verification;
 - FastAPI routes and focused API/runtime tests;
 - Scout AI read-only workspace tool workflow:
@@ -94,7 +94,7 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
-- Pydantic AI v2.30.0 model execution with explicit model policy, OpenRouter and
+- Pydantic AI v2.33.0 model execution with explicit model policy, OpenRouter and
   OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
@@ -304,8 +304,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.30.0
-pydantic-evals == 2.30.0
+pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.33.0
+pydantic-evals == 2.33.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -328,17 +328,17 @@ dbos
 mcp clients
 ```
 
-Pydantic AI v2.30.0 operating rules:
+Pydantic AI v2.33.0 operating rules:
 
 - Scout's package path uses `pydantic-ai-slim` with `duckduckgo`, `openai`, and
   `openrouter` extras for Pi compatibility and grounded local web search.
 - `pydantic_ai.Agent` calls must keep `end_strategy="early"` unless a future
   reviewed design proves that continuing same-turn tool execution cannot
   violate Scout's no-side-effect defaults.
-- Pydantic AI v2.30.0 preserves `end_strategy="early"` for native, prompted,
+- Pydantic AI v2.33.0 preserves `end_strategy="early"` for native, prompted,
   and image outputs. Scout keeps regression coverage on the existing early-stop
   contract instead of adding a compatibility workaround.
-- `RunContext.usage_limits` is available to tools and capabilities in v2.30.0.
+- `RunContext.usage_limits` is available to tools and capabilities in v2.33.0.
   It may be used for telemetry and local preflight decisions, but it does not
   replace Scout's deterministic permission, cost, timeout, or execution gates.
 - `UsageLimits.per_request_input_tokens_limit` must remain unset in Aggressive
@@ -370,7 +370,7 @@ Pydantic AI v2.30.0 operating rules:
 - Deferred tool streaming uses `DeferredToolRequestsEvent` and
   `DeferredToolResultsEvent`; adapters must preserve these events without
   treating their payload as runtime safety truth.
-- Pydantic AI v2.30.0 requires a deferred tool to be revealed and its capability
+- Pydantic AI v2.33.0 requires a deferred tool to be revealed and its capability
   loaded before the tool can be called. Scout progressive disclosure must keep
   reveal state and capability state aligned; a rejected hidden-tool call is a
   correct runtime guard, not missing workspace evidence.
@@ -383,15 +383,22 @@ Pydantic AI v2.30.0 operating rules:
   `OPENAI_API_KEY`. If an operator supplies `openai:<model>`, Scout normalizes
   it to `openai-chat:<model>` to avoid an implicit switch to the OpenAI
   Responses API behavior.
-- Trusted WebSearch and WebFetch capabilities are enabled by default for
-  external provider-backed Scout AI calls. Direct OpenAI Chat may use supported
-  native search. OpenRouter, NVIDIA, and other OpenAI-compatible endpoints use
+- Trusted WebSearch and WebFetch capabilities are always attached to every
+  Scout AI Pydantic Agent path, including cloud, local FunctionModel, AI HAT+2,
+  evaluation, repair, continuation, and L5 planning agents. Direct OpenAI Chat
+  may use supported native search. OpenRouter, NVIDIA, and other OpenAI-compatible endpoints use
   Scout's local DuckDuckGo search adapter so every search has a normal
   `ToolCallPart`/`ToolReturnPart`; current WebFetch always uses Scout's local
   URL/domain-validating adapter because these provider models do not expose
-  native WebFetch. Operators may opt out for lab/CI with
-  `SCOUT_AI_OS_NATIVE_RESEARCH=0`, or constrain domains with the native research
-  domain env vars.
+  native WebFetch. Legacy disable values such as
+  `SCOUT_AI_OS_NATIVE_RESEARCH=0` are ignored: Scout AI paths must retain search
+  and fetch. Models without provider-native tool calling use Scout's server-side
+  adapters. Domain policy may still constrain destinations
+  for secret, private-network, or explicit security boundaries.
+- AI HAT+2 is not a no-tool exception. Its Hailo FunctionModel adapter must let
+  the local model choose Search/Fetch actions, execute them through Pydantic AI,
+  reject URLs that were not returned by Search, and project fetched public
+  content into candidate-only evidence before answer synthesis.
 - Provider-native MCP remains disabled until a separate Scout
   connector/capability and the required Pydantic AI optional dependency are
   reviewed and explicitly enabled.
@@ -405,17 +412,39 @@ Pydantic AI v2.30.0 operating rules:
   construction budget. A provider retry limit is not a substitute for Scout's
   deterministic recovery stages.
 - OpenRouter `AdvisorTool` and OpenAI Responses
-  `WebSearchTool.external_web_access` are available in v2.30.0 but are not
+  `WebSearchTool.external_web_access` are available in v2.33.0 but are not
   enabled merely by upgrading the package; each still passes through Scout
   capability and provider policy.
-- Pydantic AI v2.30.0 maps provider-native OpenRouter search to
+- Pydantic AI v2.33.0 maps provider-native OpenRouter search to
   `openrouter:web_search`. Scout still defaults to its local traced
   WebSearch/WebFetch adapters until the native response contains auditable
   source annotations and tool evidence.
-- An OpenRouter native web-plugin HTTP success is transport evidence only.
-  Without returned source annotations or an auditable native-tool trace, it
-  does not satisfy Scout's evidence sufficiency gate; use the local traced
-  WebSearch/WebFetch adapters for grounded answers.
+- Pydantic AI v2.33.0 preserves OpenRouter web-search citations in
+  `ModelResponse.provider_details["annotations"]`. Scout provenance adapters
+  may consume those annotations when present, but an HTTP success without
+  source annotations or an auditable native-tool trace still does not satisfy
+  the evidence sufficiency gate; use the local traced WebSearch/WebFetch path
+  when the provider omits citations.
+- Route-context generation requires stronger executable evidence than merely
+  attaching capabilities: an accepted live generation records at least one
+  WebSearch and one WebFetch in a content-free trace. Search/fetch content stays
+  candidate-only and never becomes runtime safety truth.
+- Instrumentation v6 emits tool results under the `tool` role. Scout trace
+  consumers must support that role before opting into version 6; version 5
+  compatibility remains covered by the smoke.
+- A timeout configured on a blocking synchronous tool or hook must terminate
+  the active await and surface a retryable timeout to the model. The underlying
+  abandoned thread must never be treated as a successful evidence result.
+- Pydantic AI v2.33.0 rejects nested `Agent.run_sync()` and
+  `Agent.run_stream_sync()` calls from framework-managed synchronous callbacks.
+  Scout delegated agents must use an async callback and `await agent.run(...)`;
+  the compatibility smoke guards against the former deadlock path.
+- Provider replay adapters must discard provider-native tool calls that cannot
+  be paired with a rendered result block rather than forwarding an invalid
+  history to the next provider.
+- Pydantic AI v2.33.0 uses `httpx2` for compatible HTTP clients. Scout provider
+  adapters must be verified with the installed OpenAI/OpenRouter SDK versions
+  and must continue redacting request headers and credentials.
 - `ModelHTTPError.headers` and `retry_after` may inform provider backoff
   telemetry. Headers must be redacted before persistence or display.
 - OpenRouter responses with a null or missing choices payload are treated as a
@@ -427,7 +456,7 @@ Pydantic AI v2.30.0 operating rules:
   execution. This upstream guard does not replace Scout API input validation.
 - `Agent.to_web()` and `clai web` must also reject untrusted Host headers. Any
   deployment reached through a reviewed non-loopback hostname must configure
-  `allowed_hosts` explicitly instead of disabling the v2.30 DNS-rebinding guard.
+  `allowed_hosts` explicitly instead of disabling the v2.32 DNS-rebinding guard.
 - Pydantic AI's built-in URL fetch enforces its upstream download bound. Scout's
   local WebFetch adapter retains its own allowlist, trace, and evidence policy.
 - MCP compatibility is verified against the v2.29 toolset/FastMCP contract;
@@ -847,9 +876,9 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Pydantic AI v2.30.0 Provider Policy
+### 7.6 Pydantic AI v2.33.0 Provider Policy
 
-Scout AI OS uses Pydantic AI v2.30.0 as a typed provider facade, not as an
+Scout AI OS uses Pydantic AI v2.33.0 as a typed provider facade, not as an
 unbounded autonomous runtime.
 
 Provider modes:
@@ -875,9 +904,9 @@ Required provider behavior:
   provider health, fallback, and telemetry;
 - local fallback is allowed for read-only interpretation only;
 - `end_strategy="early"` is required for typed Scout `Agent` calls;
-- native WebSearch and WebFetch are enabled by default for external
-  provider-backed Scout AI calls; `SCOUT_AI_OS_NATIVE_RESEARCH=0` is only a
-  lab/CI opt-out;
+- native WebSearch and WebFetch are always enabled for external provider-backed
+  Scout AI calls; no Scout config, runner, prompt, or workspace-tools switch may
+  remove them;
 - provider-native MCP remains disabled until a reviewed Scout connector
   explicitly enables it.
 
@@ -1014,11 +1043,10 @@ turn totals for system, history, schema, result, input, cache, output, request,
 tool call, retry, repair, selected/executed tools, and budget stop reason.
 Existing response fields must not be removed or renamed.
 
-Provider-native WebSearch/WebFetch remain available to general trusted
-provider calls. The bounded workspace path does not attach them unless a
-future reviewed research ToolCard selects them; this prevents an unrelated
-provider capability from increasing schemas or blocking models that do not
-support the native form.
+WebSearch/WebFetch remain available to general trusted provider calls and the
+bounded workspace path. Progressive disclosure may delay their use, but it may
+not remove them. OpenRouter/NVIDIA and unsupported native providers use Scout's
+local traced adapters so model/provider limitations do not disable research.
 
 The regression and measurement contract is documented in
 `docs/specs/scout-ai-bounded-context-progressive-disclosure.md`.

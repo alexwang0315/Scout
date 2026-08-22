@@ -14,10 +14,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel
-from pydantic_ai import Agent, ModelRetry, ToolFailed, UsageLimits
+from pydantic_ai import Agent, ModelRetry, Tool, ToolFailed, UsageLimits
 from pydantic_ai.capabilities.web_fetch import WebFetch
 from pydantic_ai.capabilities.web_search import WebSearch
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.exceptions import ModelHTTPError, UserError
 from pydantic_ai.messages import (
     CompactionPart,
     ModelMessagesTypeAdapter,
@@ -42,7 +42,7 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-REQUIRED_VERSION = "2.30.0"
+REQUIRED_VERSION = "2.33.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
@@ -136,8 +136,12 @@ async def run_compatibility_smoke(
 def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("runtime_versions", _offline_runtime_versions),
-        ("v230_capability_contract", _offline_v230_capability_contract),
+        ("v232_capability_contract", _offline_v232_capability_contract),
+        ("openrouter_web_search_annotations", _offline_openrouter_annotations),
+        ("instrumentation_v6_tool_role", _offline_instrumentation_v6_tool_role),
         ("function_tool_call", _offline_function_tool_call),
+        ("blocking_sync_tool_timeout", _offline_blocking_sync_tool_timeout),
+        ("nested_sync_agent_run_rejected", _offline_nested_sync_agent_run_rejected),
         ("structured_output", _offline_structured_output),
         ("mcp_instructions_and_tool", _offline_mcp_instructions),
         ("web_capability_contract", _offline_web_capabilities),
@@ -195,7 +199,7 @@ def _offline_runtime_versions() -> dict[str, str]:
     return versions
 
 
-def _offline_v230_capability_contract() -> dict[str, Any]:
+def _offline_v232_capability_contract() -> dict[str, Any]:
     from pydantic_ai import RunContext
     from pydantic_ai.mcp import MCPToolset
     from pydantic_ai.toolsets._tool_search import ToolSearchToolset
@@ -227,6 +231,89 @@ def _offline_v230_capability_contract() -> dict[str, Any]:
         "mcp_prefer_tasks_default": mcp_parameters["prefer_tasks"].default,
         "tool_search_max_retries": True,
         "agent_web_allowed_hosts": True,
+    }
+
+
+def _offline_openrouter_annotations() -> dict[str, Any]:
+    from pydantic_ai.models.openrouter import (
+        OpenRouterModel,
+        OpenRouterProvider,
+        _OpenRouterChatCompletion,
+    )
+
+    source_url = "https://example.com/scout-weather"
+    response = _OpenRouterChatCompletion.model_validate(
+        {
+            "id": "scout-openrouter-annotation-smoke",
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "rain",
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "url_citation": {
+                                    "url": source_url,
+                                    "title": "Scout weather fixture",
+                                    "content": "rain",
+                                    "start_index": 0,
+                                    "end_index": 4,
+                                },
+                            }
+                        ],
+                    },
+                }
+            ],
+            "created": 0,
+            "model": "openai/gpt-4o-mini",
+            "object": "chat.completion",
+            "provider": "fixture-provider",
+        }
+    )
+    model = OpenRouterModel(
+        "openai/gpt-4o-mini",
+        provider=OpenRouterProvider(api_key="-".join(("fixture", "value"))),
+    )
+    mapped = model._process_response(response)
+    provider_details = mapped.provider_details or {}
+    annotations = provider_details.get("annotations") or []
+
+    _require(len(annotations) == 1, "OpenRouter citation annotation was dropped")
+    citation = annotations[0].get("url_citation") or {}
+    _require(citation.get("url") == source_url, "OpenRouter citation URL changed")
+    return {
+        "annotation_count": len(annotations),
+        "annotation_type": annotations[0].get("type"),
+        "source_url": citation.get("url"),
+    }
+
+
+def _offline_instrumentation_v6_tool_role() -> dict[str, Any]:
+    from pydantic_ai.models.instrumented import (
+        InstrumentationSettings,
+        _otel_message_role,
+    )
+
+    tool_return = ToolReturnPart(
+        tool_name="scout_weather_fixture",
+        content={"rain_mm": 12},
+        tool_call_id="scout-tool-call-1",
+    )
+    settings = InstrumentationSettings(version=6)
+    role = _otel_message_role(tool_return, settings.version)
+
+    _require(role == "tool", "instrumentation v6 did not emit the tool role")
+    _require(
+        _otel_message_role(tool_return, 5) == "user",
+        "instrumentation v5 compatibility role changed unexpectedly",
+    )
+    return {
+        "instrumentation_version": settings.version,
+        "tool_return_role": role,
+        "legacy_tool_return_role": "user",
     }
 
 
@@ -323,6 +410,85 @@ async def _offline_function_tool_call() -> dict[str, Any]:
     return trace
 
 
+async def _offline_blocking_sync_tool_timeout() -> dict[str, Any]:
+    from threading import Event
+    from time import monotonic
+
+    release = Event()
+    calls = 0
+
+    def blocking_tool() -> str:
+        """Wait for a release signal longer than the configured tool timeout."""
+
+        nonlocal calls
+        calls += 1
+        release.wait(timeout=1)
+        return "unexpected"
+
+    def model_function(messages: list[object], info: AgentInfo) -> ModelResponse:
+        del info
+        if _has_part(messages, RetryPromptPart):
+            return ModelResponse(parts=[TextPart("timeout observed")])
+        return ModelResponse(parts=[ToolCallPart("blocking_tool", {})])
+
+    agent = Agent(
+        FunctionModel(model_function),
+        tools=[Tool(blocking_tool, timeout=0.05)],
+        **pydantic_agent_runtime_kwargs(),
+    )
+    started_at = monotonic()
+    try:
+        result = await agent.run("Exercise the blocking sync tool timeout.")
+    finally:
+        release.set()
+    elapsed_seconds = monotonic() - started_at
+    trace = _message_trace(result)
+
+    _require(calls == 1, "blocking sync tool was called more than once")
+    _require(trace["retry_prompt_count"] == 1, "sync timeout did not reach the model")
+    _require(result.output == "timeout observed", "sync timeout recovery output mismatch")
+    _require(elapsed_seconds < 0.5, "blocking sync tool ignored its timeout")
+    return {
+        **trace,
+        "elapsed_seconds": round(elapsed_seconds, 4),
+        "timeout_seconds": 0.05,
+    }
+
+
+async def _offline_nested_sync_agent_run_rejected() -> dict[str, Any]:
+    nested_agent = Agent(TestModel())
+
+    def call_nested_agent() -> str:
+        """Exercise the unsupported nested synchronous delegation path."""
+
+        return str(nested_agent.run_sync("Return nested output.").output)
+
+    def model_function(messages: list[object], info: AgentInfo) -> ModelResponse:
+        del messages
+        return ModelResponse(
+            parts=[ToolCallPart(info.function_tools[0].name, {})],
+        )
+
+    outer_agent = Agent(
+        FunctionModel(model_function),
+        tools=[call_nested_agent],
+        **pydantic_agent_runtime_kwargs(),
+    )
+    try:
+        await outer_agent.run("Exercise nested synchronous delegation.")
+    except UserError as exc:
+        message = str(exc)
+        _require(
+            "cannot be used inside a synchronous tool" in message,
+            "nested sync rejection did not include migration guidance",
+        )
+        return {
+            "error_type": type(exc).__name__,
+            "async_delegation_required": True,
+        }
+    raise AssertionError("nested synchronous agent run was not rejected")
+
+
 async def _offline_structured_output() -> dict[str, Any]:
     agent = Agent(
         TestModel(custom_output_args={"status": "ok", "evidence_count": 2}),
@@ -416,7 +582,6 @@ async def _offline_tool_failed() -> dict[str, Any]:
     agent = Agent(
         FunctionModel(model_function),
         tools=[unavailable_tool],
-        retries=10,
         **pydantic_agent_runtime_kwargs(),
     )
     result = await agent.run("Call the unavailable tool once.")
@@ -453,7 +618,6 @@ async def _offline_model_retry() -> dict[str, Any]:
     agent = Agent(
         FunctionModel(model_function),
         tools=[transient_tool],
-        retries=10,
         **pydantic_agent_runtime_kwargs(),
     )
     result = await agent.run("Retry the transient tool.")
@@ -677,7 +841,6 @@ async def _live_tool_failed(model: Any) -> dict[str, Any]:
             "was visible and do not invent a value."
         ),
         tools=[unavailable_candidate],
-        retries=10,
         **pydantic_agent_runtime_kwargs(),
     )
     result = await _live_run(agent, "Inspect the unavailable candidate.")
@@ -706,7 +869,6 @@ async def _live_model_retry(model: Any) -> dict[str, Any]:
             "again, then answer with the recovered value."
         ),
         tools=[transient_candidate],
-        retries=10,
         **pydantic_agent_runtime_kwargs(),
     )
     result = await _live_run(agent, "Read the transient candidate.")

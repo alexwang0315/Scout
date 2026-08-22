@@ -16,7 +16,7 @@
     "backend": "hailo_ollama",
     "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h",
     "token_id": "scout-ai-hat-plus-2-local-ollama",
-    "tool_calling": "disabled"
+    "tool_calling": "enabled"
   },
   "timeout_seconds": 120,
   "max_context_chars": 24000,

@@ -21,6 +21,7 @@ from assistant_pydantic_provider import _serialize_pydantic_result_usage  # noqa
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
     pydantic_result_output,
 )
 from scout_ai_question_eval import evaluate_question  # noqa: E402
@@ -49,7 +50,9 @@ DEFAULT_OUTPUT_DIR = ROOT / "outputs" / "evals" / "workspace_grounded_100_202607
 CLOUD_GROUNDED_SYSTEM_PROMPT = """You are Scout AI's cloud evidence synthesis model.
 Answer in concise Traditional Chinese. The deterministic read-only Scout tools have
 already gathered candidate evidence from the selected workspace. Use only the supplied
-evidence for workspace-specific facts. Never invent names, counts, dates, coordinates,
+evidence for workspace-specific facts. WebSearch and WebFetch remain available for
+current public facts or explicit evidence gaps; fetch a selected source before using
+it and never replace workspace facts with web guesses. Never invent names, counts, dates, coordinates,
 scores, route states, sensor states, or source paths. Explicitly distinguish available
 facts from missing or stale evidence. Do not claim that candidate evidence is runtime
 safety truth. Answer the user's question directly before adding caveats.
@@ -90,6 +93,7 @@ class NvidiaCloudGroundedRunner:
         self.agent = Agent(
             build_chat_model(model_name=model_name, api_key=api_key),
             system_prompt=CLOUD_GROUNDED_SYSTEM_PROMPT,
+            capabilities=pydantic_native_research_capabilities_for_model(model_name),
             **pydantic_agent_runtime_kwargs(),
         )
 

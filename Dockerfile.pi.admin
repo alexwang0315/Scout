@@ -279,6 +279,7 @@ COPY pretrip_*.py ./
 COPY src/scout/ ./scout/
 
 COPY tools/pydantic_ai_cloud_latency_benchmark.py ./tools/
+COPY tools/scout_ai_pydantic_232_local_web_eval.py ./tools/
 COPY tools/pi_grove_led_bar_smoke.py ./tools/
 COPY tools/pi_oled_i2c_smoke.py ./tools/
 COPY tools/pi_sx1303_gateway_smoke.py ./tools/
@@ -302,6 +303,7 @@ COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
 COPY docs/admin/scout-assistant-ui.js ./docs/admin/
 COPY docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md ./docs/specs/
 COPY docs/specs/scout-ai-135-tool-data-workflow-matrix.json ./docs/specs/
+COPY docs/evals/scout-pydantic-ai-232-local-web-20-corpus.json ./docs/evals/
 COPY config/gee_datasets.yaml ./config/gee_datasets.yaml
 COPY tests/test_assistant_skill_router.py ./tests/
 COPY tests/test_pretrip_admin_page.py ./tests/

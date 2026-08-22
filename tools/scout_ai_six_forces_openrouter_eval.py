@@ -28,6 +28,7 @@ from assistant_pydantic_provider import (  # noqa: E402
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
     pydantic_result_output,
 )
 from scout.agents.model_execution import ScoutModelExecutionAdapter  # noqa: E402
@@ -64,7 +65,9 @@ OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1"
 SYSTEM_PROMPT = """You are Scout AI's evidence-grounded answer synthesizer.
 The deterministic Scout runtime exposes complete sanitized evidence cards through
 Pydantic AI native function tools. Call every supplied evidence tool before the final
-answer, use only its returned workspace and scenario evidence, preserve uncertainty,
+answer. WebSearch and WebFetch remain available for current public facts or explicit
+evidence gaps, but may not replace workspace/scenario facts; fetch selected sources
+before using them. Preserve uncertainty,
 and return only the requested JSON. Never invent route facts, sensor state, weather
 state, source references, or safety truth.
 """
@@ -133,16 +136,16 @@ def redact_provider_error(message: str, *, secrets: tuple[str, ...] = ()) -> str
     return redacted[:2000]
 
 
-def require_pydantic_ai_230_or_newer() -> dict[str, str]:
+def require_pydantic_ai_232_or_newer() -> dict[str, str]:
     versions = runtime_package_versions()
     installed = versions.get("pydantic_ai_slim", "not-installed")
     match = re.match(r"^(\d+)\.(\d+)\.(\d+)", installed)
     installed_release = (
         tuple(int(part) for part in match.groups()) if match is not None else ()
     )
-    if installed_release < (2, 30, 0):
+    if installed_release < (2, 32, 0):
         raise RuntimeError(
-            "This eval requires pydantic-ai-slim 2.30.0 or newer; "
+            "This eval requires pydantic-ai-slim 2.32.0 or newer; "
             f"installed version is {installed}."
         )
     return versions
@@ -169,6 +172,9 @@ class OpenRouterModelCaller:
             self.chat_model,
             system_prompt=SYSTEM_PROMPT,
             tools=tools or (),
+            capabilities=pydantic_native_research_capabilities_for_model(
+                self.model_name
+            ),
             **pydantic_agent_runtime_kwargs(),
         )
 
@@ -703,7 +709,7 @@ def run_eval(args: argparse.Namespace) -> Path:
             raise RuntimeError(
                 "OPENROUTER_API_KEY is required because model calls are pending"
             )
-        runtime_versions = require_pydantic_ai_230_or_newer()
+        runtime_versions = require_pydantic_ai_232_or_newer()
     current_time = utc_iso()
     manifest = {
         "artifact_kind": ARTIFACT_KIND,

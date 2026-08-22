@@ -3,7 +3,11 @@ from pydantic_ai import Agent, RunContext
 from pydantic import BaseModel
 from typing import Literal
 from macos_wifi import MacOSWifiWorld
-from pydantic_ai_runtime_compat import build_chat_model, pydantic_agent_runtime_kwargs
+from pydantic_ai_runtime_compat import (
+    build_chat_model,
+    pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
+)
 from scout_env import load_scout_env_files
 
 # 1. 加載環境變量
@@ -11,8 +15,9 @@ load_scout_env_files()
 api_key = os.getenv('OPENROUTER_API_KEY')
 
 # 2. 使用 Pydantic AI v2 OpenRouter provider，不修改全域 OpenAI env。
+model_name = os.getenv("SCOUT_WIFI_AGENT_MODEL", "openrouter:google/gemma-4-31b-it")
 model = build_chat_model(
-    model_name=os.getenv("SCOUT_WIFI_AGENT_MODEL", "openrouter:google/gemma-4-31b-it"),
+    model_name=model_name,
     api_key=api_key,
 )
 
@@ -34,6 +39,7 @@ sos_agent = Agent(
         "策略：分析目前最強訊號 -> 對比趨勢 -> 給出明確移動方向。 "
         "當最強訊號達到 -30dBm 以上時，宣布救援成功。"
     ),
+    capabilities=pydantic_native_research_capabilities_for_model(model_name),
     **pydantic_agent_runtime_kwargs(),
 )
 

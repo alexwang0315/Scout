@@ -9,7 +9,6 @@ from typing import Any
 from scout.agents.model_policy import ModelPolicy
 from scout.schemas.agent_runtime import AgentRunBudget
 
-
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
@@ -64,7 +63,10 @@ def pydantic_ai_runtime_version() -> str:
 
 
 def pydantic_agent_runtime_kwargs() -> dict[str, Any]:
-    return {"end_strategy": "early"}
+    return {
+        "end_strategy": "early",
+        "retries": 10,
+    }
 
 
 def pydantic_usage_limits_from_budget(
@@ -149,6 +151,48 @@ def pydantic_result_output(result: Any) -> Any:
     return getattr(result, "output", getattr(result, "data", result))
 
 
+def pydantic_native_research_trace(result: Any) -> dict[str, Any]:
+    """Return a content-free audit summary of Pydantic AI tool activity."""
+
+    messages = result.all_messages() if callable(getattr(result, "all_messages", None)) else []
+    parts = [
+        part
+        for message in messages
+        for part in getattr(message, "parts", ())
+    ]
+    call_parts = [
+        part
+        for part in parts
+        if type(part).__name__ in {"ToolCallPart", "NativeToolCallPart"}
+    ]
+    return_parts = [
+        part
+        for part in parts
+        if type(part).__name__ in {"ToolReturnPart", "NativeToolReturnPart"}
+    ]
+    tool_names = sorted(
+        {
+            str(getattr(part, "tool_name", "")).strip()
+            for part in call_parts
+            if str(getattr(part, "tool_name", "")).strip()
+        }
+    )
+    folded_names = [name.casefold().replace("-", "_") for name in tool_names]
+    search_count = sum("web_search" in name for name in folded_names)
+    fetch_count = sum("web_fetch" in name for name in folded_names)
+    return {
+        "performed": search_count > 0 or fetch_count > 0,
+        "tool_call_count": len(call_parts),
+        "tool_return_count": len(return_parts),
+        "native_tool_call_count": sum(
+            type(part).__name__ == "NativeToolCallPart" for part in call_parts
+        ),
+        "web_search_call_count": search_count,
+        "web_fetch_call_count": fetch_count,
+        "tool_names": tool_names,
+    }
+
+
 def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
     """Build no-approval native research capabilities for trusted Scout runs.
 
@@ -157,15 +201,10 @@ def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
     preparation step later reviews and materializes them.
     """
 
-    if (
-        not policy.native_research_enabled
-        or getattr(policy.mode, "value", policy.mode) != "external_pydantic_ai"
-    ):
-        return []
-
     capabilities: list[Any] = []
     if policy.native_web_search_enabled:
         from pydantic_ai.capabilities.web_search import WebSearch
+
         from scout.agents.local_web_search import build_local_web_search
 
         if policy.provider == "openai-chat":
@@ -204,6 +243,7 @@ def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
             )
     if policy.native_web_fetch_enabled:
         from pydantic_ai.capabilities.web_fetch import WebFetch
+
         from scout.agents.local_web_fetch import build_local_web_fetch
 
         capabilities.append(

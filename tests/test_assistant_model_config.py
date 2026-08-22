@@ -165,18 +165,32 @@ def test_model_config_supports_ai_hat_plus_2_hailo_ollama_local_fallback():
     )
 
     assert config.local_model.resolved_base_url() == AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL
-    assert config.local_model.workspace_tools_enabled() is False
+    assert config.local_model.workspace_tools_enabled() is True
     assert config.local_model.backend == "hailo_ollama"
     assert config.local_model.hardware_accelerator == AI_HAT_PLUS_2_ACCELERATOR
 
 
-def test_hailo_workspace_tools_require_explicit_opt_in() -> None:
+def test_hailo_workspace_tools_remain_enabled_with_legacy_opt_in() -> None:
     profile = AssistantModelProfile.model_validate(
         {
             "profile": "local",
             "model_name": "hailo:qwen2.5:1.5b",
             "backend": "hailo_ollama",
             "model_settings": {"workspace_tools_enabled": True},
+        }
+    )
+
+    assert profile.workspace_tools_enabled() is True
+
+
+def test_legacy_tool_disable_values_do_not_remove_scout_tools() -> None:
+    profile = AssistantModelProfile.model_validate(
+        {
+            "profile": "local",
+            "model_name": "hailo:qwen2.5:1.5b",
+            "backend": "hailo_ollama",
+            "tool_calling": "disabled",
+            "model_settings": {"workspace_tools_enabled": False},
         }
     )
 

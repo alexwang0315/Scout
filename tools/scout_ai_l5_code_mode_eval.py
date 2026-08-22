@@ -29,6 +29,7 @@ from assistant_pydantic_provider import (  # noqa: E402
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
     pydantic_result_output,
     pydantic_usage_limits_from_budget,
 )
@@ -260,7 +261,11 @@ class L5CodeModeEvalRunner:
             system_prompt=_l5_system_prompt(),
             # CodeMode expands the tool surface first; the final hook then enforces
             # one bounded code phase followed by a no-tool synthesis request.
-            capabilities=[capability, force_code_mode],
+            capabilities=[
+                capability,
+                force_code_mode,
+                *pydantic_native_research_capabilities_for_model(self.model_name),
+            ],
             **pydantic_agent_runtime_kwargs(),
         )
         tool_context.model_arguments_untrusted = True
