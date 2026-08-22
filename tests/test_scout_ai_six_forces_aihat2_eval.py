@@ -2567,9 +2567,9 @@ def test_plain_excerpt_keeps_string_newlines_natural_and_finishes_nearby_sentenc
 def test_runtime_package_versions_attest_pydantic_ai_stack() -> None:
     versions = runtime_package_versions()
 
-    assert versions["pydantic_ai_slim"] == "2.30.0"
-    assert versions["pydantic_evals"] == "2.30.0"
-    assert versions["pydantic_graph"] == "2.30.0"
+    assert versions["pydantic_ai_slim"] == "2.33.0"
+    assert versions["pydantic_evals"] == "2.33.0"
+    assert versions["pydantic_graph"] == "2.33.0"
 
 
 def test_aihat_eval_defaults_to_guided_retry_with_explicit_single_pass_opt_out() -> None:

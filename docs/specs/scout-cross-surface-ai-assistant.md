@@ -23,22 +23,33 @@ assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
 keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
-2026-08-15 update: Scout AI is the full-capability user entrypoint. Pydantic AI
-provider compatibility targets v2.30.0. The assistant and Mac-local fallback
+2026-08-22 update: Scout AI is the full-capability user entrypoint. Pydantic AI
+provider compatibility targets v2.33.0. The assistant and Mac-local fallback
 paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
 provider for `openrouter:<vendor/model>`. Trusted WebSearch and WebFetch are
-enabled by default for external provider-backed Scout AI calls. OpenRouter and
-NVIDIA use Scout's local, traced search/fetch adapters; direct OpenAI Chat may
-use supported native search. Operators may opt out for lab/CI with
-`SCOUT_AI_OS_NATIVE_RESEARCH=0`. Provider-native MCP still requires a reviewed
+always enabled for every Scout AI Pydantic Agent path, including cloud,
+Mac-local, AI HAT+2, repair, continuation, eval, and L5 planning. OpenRouter and
+NVIDIA use Scout's local, traced search/fetch adapters; models without native
+tool calling receive the same server-side adapters. Direct OpenAI Chat may use
+supported native search. Legacy disable values such as
+`SCOUT_AI_OS_NATIVE_RESEARCH=0` are ignored. Provider-native MCP still requires a reviewed
 connector boundary. OpenRouter request settings remain immutable across calls,
 tool-search history remains replayable across provider handoffs, bare MCP
 errors enter the normal recovery ladder, and provider-specific `RequestUsage`
 fields remain available to redacted telemetry. `Agent.to_web()` Host validation
 remains enabled, and any reviewed LAN hostname must be added through
 `allowed_hosts`; deferred tools must be revealed with their capability before
-they become callable.
+they become callable. OpenRouter native-search citations are preserved in
+`provider_details["annotations"]` when supplied, Instrumentation v6 tool-role
+traces require an explicit consumer opt-in, and blocking sync-tool timeouts are
+covered by the compatibility smoke.
+
+The AI HAT+2 `hailo_ollama` path uses a Pydantic AI FunctionModel research
+planner instead of bypassing capabilities. The local model selects the Search
+query and the exact Search-returned URL to Fetch; Pydantic AI owns execution and
+the content-free trace. Fetched pages remain public, read-only candidate
+evidence and never become runtime safety truth.
 
 This document defines the cross-surface assistant guardrails that now anchor the
 mock provider, bounded context adapters, read-only API, UI shell, opt-in
@@ -287,7 +298,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.30.0;
+- supported runtime family: Pydantic AI v2.33.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;
@@ -298,7 +309,9 @@ Current Pydantic AI provider policy:
   `openai-chat:<model>` to avoid an implicit switch to Responses API behavior;
 - `end_strategy="early"` is required for typed Scout assistant calls;
 - WebSearch and WebFetch are on by default for external provider-backed Scout AI
-  calls. `SCOUT_AI_OS_NATIVE_RESEARCH=0` is only a lab/CI opt-out.
+  calls. Legacy disable values such as `SCOUT_AI_OS_NATIVE_RESEARCH=0` are
+  ignored; a runner, prompt, profile, or workspace-tools switch may not remove
+  WebSearch/WebFetch from an external Scout AI run.
 - provider-native MCP remains off unless separately reviewed and permissioned.
 - v2 capability model hooks may participate in model selection, but Scout
   model policy remains authoritative and UI/event adapters must preserve

@@ -37,15 +37,14 @@ class AssistantModelProfile(BaseModel):
         return None
 
     def workspace_tools_enabled(self) -> bool:
-        if self.tool_calling == "disabled":
-            return False
-        configured = self.model_settings.get("workspace_tools_enabled")
-        if isinstance(configured, bool):
-            return configured
-        if self.tool_calling == "enabled":
-            return True
-        if self.backend == "hailo_ollama":
-            return False
+        """Keep Scout's server-side tool orchestration available for every profile.
+
+        Legacy ``disabled`` and ``workspace_tools_enabled=false`` values are
+        accepted for config compatibility but no longer remove tools from Scout
+        AI. A provider that cannot emit native tool calls uses the deterministic
+        runtime adapter instead.
+        """
+
         return True
 
 

@@ -601,7 +601,8 @@ class BoundedAgentRuntime:
                 "Never cite continuation_handle, tool_id, "
                 "or add a source: prefix. Report only missing evidence listed in "
                 "missing_evidence. Candidate evidence is not runtime safety truth. "
-                "Do not use headings or lists. Do not call tools."
+                "Do not use headings or lists. If fresh public evidence is still "
+                "required, WebSearch and WebFetch may be used before answering."
             ),
         }
         prompt = "SCOUT_BOUNDED_SYNTHESIS_V1\n" + _json_dumps(payload)

@@ -1,25 +1,24 @@
 import io
-import socket
+import json
 import shutil
+import socket
 import threading
 import urllib.error
 import urllib.request
-import json
 from pathlib import Path
 
 import pytest
 
 import assistant_pydantic_provider as assistant_provider_module
-
+from assistant_model_config import (
+    AI_HAT_PLUS_2_ACCELERATOR,
+    AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL,
+    AssistantModelConfig,
+)
 from assistant_models import (
     AssistantRuntimePreference,
     AssistantSourceRef,
     ScoutAssistantQuery,
-)
-from assistant_model_config import AssistantModelConfig
-from assistant_model_config import (
-    AI_HAT_PLUS_2_ACCELERATOR,
-    AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL,
 )
 from assistant_offline_fallback_contract import (
     OFFLINE_FALLBACK_PROMPT_ID,
@@ -29,47 +28,44 @@ from assistant_pydantic_provider import (
     CONTEXTUAL_PERMISSION_TOOL_ID,
     CWA_ENVIRONMENT_TOOL_ID,
     ENERGY_VITALS_TOOL_ID,
-    EVIDENCE_FULLTEXT_TOOL_ID,
     EQUIPMENT_RESOURCE_TOOL_ID,
-    FallbackPydanticAIRunner,
+    EVIDENCE_FULLTEXT_TOOL_ID,
     GEE_ENVIRONMENT_TOOL_ID,
     INS_DR_TRACE_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
     MAJOR_POINT_TOOL_ID,
     MAP_PERCEPTION_TOOL_ID,
     MEDIA_LITERACY_TOOL_ID,
-    PydanticAIAssistantProvider,
-    PydanticAIEnvRunner,
+    NAVIGATION_TERRAIN_TOOL_ID,
     PACE_GUARDIAN_TOOL_ID,
     POST_TRIP_REVIEW_TOOL_ID,
-    RISK_SCORE_TOOL_ID,
     REVIEW_GAP_TOOL_ID,
-    ROUTE_READINESS_TOOL_ID,
+    RISK_SCORE_TOOL_ID,
     ROUTE_CONTEXT_TOOL_ID,
+    ROUTE_READINESS_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
     RUNTIME_INGRESS_STATUS_TOOL_ID,
     SAFETY_BOUNDARY_TOOL_ID,
     SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
     TEAM_STATUS_TOOL_ID,
-    ScoutWorkspaceToolContext,
     TERRAIN_SCORE_TOOL_ID,
-    NAVIGATION_TERRAIN_TOOL_ID,
     WORKSPACE_CATALOG_TOOL_ID,
     WORKSPACE_EVIDENCE_TOOL_ID,
+    FallbackPydanticAIRunner,
+    PydanticAIAssistantProvider,
+    PydanticAIEnvRunner,
+    ScoutWorkspaceToolContext,
     build_workspace_tool_prompt,
     create_configured_pydantic_runner,
 )
-
-
 from assistant_skill_router import (
     PRETRIP_CONTEXT_REGISTRY_SOURCE_ID,
     PRETRIP_TOOL_PLANNER_SKILL_ID,
 )
+from scout.schemas.workspace_query import parse_workspace_query_request
 from scout_agent_kb import write_local_evidence_sqlite_index
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
-from scout.schemas.workspace_query import parse_workspace_query_request
-
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = (
@@ -323,7 +319,7 @@ def test_local_runner_has_no_scout_default_token_limit(monkeypatch):
     assert assistant_provider_module.DEFAULT_WORKSPACE_TOOL_LIMIT == 10
 
 
-def test_bounded_runner_without_workspace_tools_disables_native_research(monkeypatch):
+def test_workspace_tool_switch_does_not_disable_native_research(monkeypatch):
     monkeypatch.setattr(
         assistant_provider_module,
         "pydantic_native_research_capabilities",
@@ -336,7 +332,7 @@ def test_bounded_runner_without_workspace_tools_disables_native_research(monkeyp
         workspace_tools_enabled=False,
     )
 
-    assert runner._native_capabilities() == []
+    assert runner._native_capabilities() == ["WebSearch", "WebFetch"]
 
     runner.bounded_agent_runtime_enabled = False
     assert runner._native_capabilities() == ["WebSearch", "WebFetch"]
@@ -640,7 +636,7 @@ def test_bounded_runner_without_workspace_tools_retains_request_limits(monkeypat
 
     assert runner._run_model("bounded prompt", 10) == "bounded answer"
 
-    assert captured["capabilities"] == []
+    assert captured["capabilities"] == ["WebSearch", "WebFetch"]
     usage_limits = captured["usage_limits"]
     assert usage_limits.request_limit == 10
     assert usage_limits.tool_calls_limit == 10
@@ -654,16 +650,46 @@ def test_bounded_runner_without_workspace_tools_retains_request_limits(monkeypat
 def test_bounded_runner_without_workspace_tools_fails_closed_without_evidence(
     monkeypatch,
 ):
+    import pydantic_ai
+
+    class FakeUsage:
+        requests = 1
+        tool_calls = 0
+        input_tokens = 10
+        cache_write_tokens = 0
+        cache_read_tokens = 0
+        output_tokens = 10
+
+    class FakeResult:
+        output = "CP 3 是目前最危險的位置。"
+
+        def usage(self):
+            return FakeUsage()
+
+        def all_messages(self):
+            return []
+
+    class FakeAgent:
+        def __init__(self, _model, **_kwargs):
+            pass
+
+        def tool_plain(self, **_kwargs):
+            return lambda function: function
+
+        def run_sync(self, _prompt, **_kwargs):
+            return FakeResult()
+
     runner = PydanticAIEnvRunner(
         model_name="openrouter:z-ai/glm-5.2",
         base_url="https://openrouter.ai/api/v1",
         profile_name="cloud",
         workspace_tools_enabled=False,
     )
+    monkeypatch.setattr(pydantic_ai, "Agent", FakeAgent)
     monkeypatch.setattr(
-        runner,
-        "_run_model",
-        lambda _prompt, _timeout: "CP 3 是目前最危險的位置。",
+        assistant_provider_module,
+        "build_chat_model",
+        lambda **_kwargs: object(),
     )
     context = ScoutWorkspaceToolContext(
         query=ScoutAssistantQuery(
@@ -745,6 +771,195 @@ def test_hailo_workspace_path_uses_bounded_evidence_without_full_tool_prompt(
     assert runner.last_agent_run_ledger["tool_call_count"] >= 1
     assert runner.last_grounding_verification["passed"] is False
     assert output != "CP 3 是目前最危險的位置。"
+
+
+def test_hailo_workspace_path_runs_model_selected_pydantic_web_research(
+    monkeypatch,
+):
+    from pydantic_ai import RunContext
+    from pydantic_ai.capabilities.web_fetch import WebFetch
+    from pydantic_ai.capabilities.web_search import WebSearch
+
+    prompts: list[str] = []
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        profile_name="local",
+        workspace_tools_enabled=True,
+    )
+
+    async def scout_web_search(
+        _ctx: RunContext[object], query: str
+    ) -> list[dict[str, str]]:
+        assert "奇萊南華" in query
+        return [
+            {
+                "title": "官方步道公告",
+                "url": "https://example.com/notice",
+                "snippet": "discovery only",
+            }
+        ]
+
+    async def scout_web_fetch(
+        _ctx: RunContext[object], url: str
+    ) -> dict[str, object]:
+        assert url == "https://example.com/notice"
+        return {
+            "url": url,
+            "status": 200,
+            "content_type": "text/html",
+            "content": "<main>奇萊南華官方步道公告內容。</main>",
+            "content_hash": "sha256:" + "a" * 64,
+            "fetched_at": "2026-08-21T01:00:00Z",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    monkeypatch.setattr(
+        runner,
+        "_native_capabilities",
+        lambda: [
+            WebSearch(native=False, local=scout_web_search),
+            WebFetch(native=False, local=scout_web_fetch),
+        ],
+    )
+
+    def fake_hailo_chat(
+        prompt,
+        *,
+        system_prompt,
+        max_tokens=None,
+        timeout_seconds=None,
+        input_token_budget=None,
+        semantic_stop_enabled=True,
+    ):
+        del system_prompt, max_tokens, timeout_seconds, input_token_budget
+        prompts.append(prompt)
+        runner.last_hailo_prompt_eval_count = 120
+        runner.last_hailo_eval_count = 24
+        if prompt.startswith("SCOUT_NATIVE_RESEARCH_ACTION_V1"):
+            if '"scout_web_fetch"' in prompt.split("Completed tools:", 1)[-1].split(
+                "Question:", 1
+            )[0]:
+                return '{"action":"finish"}'
+            if '"scout_web_search"' in prompt.split(
+                "Completed tools:", 1
+            )[-1].split("Question:", 1)[0]:
+                return (
+                    '{"action":"web_fetch",'
+                    '"url":"https://example.com/notice"}'
+                )
+            return (
+                '{"action":"web_search",'
+                '"query":"奇萊南華 最新 官方步道公告"}'
+            )
+        assert semantic_stop_enabled is True
+        return "官方步道公告內容已取得。[https://example.com/notice]"
+
+    monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_hailo_chat)
+    context = ScoutWorkspaceToolContext(
+        query=ScoutAssistantQuery(
+            surface="pretrip",
+            question="請上網查奇萊南華最新官方步道公告",
+            project_id="chilai_nanhua_day1",
+        ),
+        sources=[],
+        pretrip_workspace_root=PROJECT_ROOT,
+    )
+
+    runner.run_with_workspace_tools(
+        "bounded prompt",
+        timeout_seconds=10,
+        tool_context=context,
+    )
+
+    trace = runner.last_native_research_trace
+    assert trace["status"] == "completed", trace
+    assert trace["web_search_call_count"] == 1
+    assert trace["web_fetch_call_count"] == 1
+    assert runner.last_native_research_trace["performed"] is True
+    assert runner.last_native_research_trace["planner_actions"] == [
+        "web_search",
+        "web_fetch",
+        "finish",
+    ]
+    assert any(
+        "https://example.com/notice" in card["source_refs"]
+        for card in runner.last_evidence_cards
+    )
+    assert prompts[0].startswith("SCOUT_NATIVE_RESEARCH_ACTION_V1")
+
+
+def test_hailo_direct_runner_keeps_native_research_available(monkeypatch) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.capabilities.web_fetch import WebFetch
+    from pydantic_ai.capabilities.web_search import WebSearch
+
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://127.0.0.1:8000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        profile_name="local",
+    )
+
+    async def scout_web_search(
+        _ctx: RunContext[object], query: str
+    ) -> list[dict[str, str]]:
+        assert query == "最新官方公告"
+        return [{"title": "公告", "url": "https://example.com/notice"}]
+
+    async def scout_web_fetch(
+        _ctx: RunContext[object], url: str
+    ) -> dict[str, object]:
+        return {
+            "url": url,
+            "status": 200,
+            "content_type": "text/plain",
+            "content": "最新官方公告內容",
+            "content_hash": "sha256:" + "b" * 64,
+            "fetched_at": "2026-08-21T01:00:00Z",
+        }
+
+    monkeypatch.setattr(
+        runner,
+        "_native_capabilities",
+        lambda: [
+            WebSearch(native=False, local=scout_web_search),
+            WebFetch(native=False, local=scout_web_fetch),
+        ],
+    )
+
+    def fake_hailo_chat(prompt, **_kwargs):
+        runner.last_hailo_prompt_eval_count = 100
+        runner.last_hailo_eval_count = 20
+        if prompt.startswith("SCOUT_NATIVE_RESEARCH_ACTION_V1"):
+            completed = prompt.split("Completed tools:", 1)[-1].split(
+                "Question:", 1
+            )[0]
+            if "scout_web_fetch" in completed:
+                return '{"action":"finish"}'
+            if "scout_web_search" in completed:
+                return (
+                    '{"action":"web_fetch",'
+                    '"url":"https://example.com/notice"}'
+                )
+            return '{"action":"web_search","query":"最新官方公告"}'
+        return "最新官方公告內容。[https://example.com/notice]"
+
+    monkeypatch.setattr(runner, "_run_hailo_ollama_chat", fake_hailo_chat)
+
+    runner.run("請上網查最新官方公告", timeout_seconds=10)
+
+    trace = runner.last_native_research_trace
+    assert trace["status"] == "completed", trace
+    assert trace["web_search_call_count"] == 1
+    assert trace["web_fetch_call_count"] == 1
+    assert runner.last_evidence_cards[0]["source_refs"] == [
+        "https://example.com/notice"
+    ]
 
 
 def test_hailo_bounded_workspace_continues_after_external_context_full(
@@ -884,6 +1099,8 @@ def test_hailo_grounding_repair_continues_after_context_full(monkeypatch):
         semantic_stop_enabled=True,
     ):
         del system_prompt, max_tokens, timeout_seconds, semantic_stop_enabled
+        if prompt.startswith("SCOUT_NATIVE_RESEARCH_ACTION_V1"):
+            return '{"action":"finish"}'
         prompts.append(prompt)
         runner.last_hailo_input_estimated_tokens = input_token_budget or 1200
         runner.last_hailo_prompt_eval_count = input_token_budget or 1200
@@ -10808,7 +11025,7 @@ def test_configured_runner_marks_ai_hat_plus_2_local_fallback_metadata():
     assert runner.local_backend == "hailo_ollama"
     assert isinstance(runner.fallback_runner, PydanticAIEnvRunner)
     assert runner.fallback_runner.base_url == AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL
-    assert runner.fallback_runner.workspace_tools_enabled is False
+    assert runner.fallback_runner.workspace_tools_enabled is True
     assert runner.fallback_runner.workspace_model_max_tokens is None
 
 

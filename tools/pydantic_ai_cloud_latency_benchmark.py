@@ -28,6 +28,7 @@ from assistant_model_config import (  # noqa: E402
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
     pydantic_result_output,
 )
 
@@ -272,6 +273,9 @@ def _call_pydantic_ai(
         system_prompt=(
             "You are Scout's Pydantic AI runtime health and latency probe. "
             "Answer briefly and do not request secrets."
+        ),
+        capabilities=pydantic_native_research_capabilities_for_model(
+            profile.model_name
         ),
         **pydantic_agent_runtime_kwargs(),
     )

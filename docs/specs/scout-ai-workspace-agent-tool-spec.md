@@ -1109,8 +1109,11 @@ checkout:
   - `nvidia:<model-id>` remains an advanced/internal NVIDIA provider route.
   - `openrouter:<vendor/model>` uses the Pydantic AI OpenRouter provider.
   - `openai:<model>` is normalized to `openai-chat:<model>`.
-  - WebSearch/WebFetch are available by default for external provider-backed
-    Scout AI calls; `SCOUT_AI_OS_NATIVE_RESEARCH=0` is only a lab/CI opt-out.
+  - WebSearch/WebFetch are always available for every Scout AI Pydantic Agent
+    path, including cloud, local/AI HAT+2, repair, continuation, eval, and L5
+    planning; legacy disable values such as `SCOUT_AI_OS_NATIVE_RESEARCH=0` are
+    ignored, including on bounded workspace runs. Local models receive the
+    server-side adapters when provider-native calls are unavailable.
   - Native MCP remains unavailable unless Scout registers a reviewed
     connector/capability.
 

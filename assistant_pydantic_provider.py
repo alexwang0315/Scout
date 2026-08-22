@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
+import asyncio
 import hashlib
+import json
 import os
 import re
 import socket
@@ -9,12 +10,12 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import asdict, dataclass, replace
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from assistant_model_config import (
     AI_HAT_PLUS_2_ACCELERATOR,
@@ -29,24 +30,33 @@ from assistant_models import (
     ScoutAssistantQuery,
     ScoutAssistantResponse,
 )
-from assistant_workspace_total_info import (
-    TOTAL_INFO_SOURCE_ID,
-    public_workspace_total_info_summary,
-)
 from assistant_offline_fallback_contract import (
     OFFLINE_FALLBACK_SCHEMA_VERSION,
     build_offline_fallback_schema_prompt,
     format_offline_fallback_interpretation,
     parse_offline_fallback_interpretation,
 )
+from assistant_workspace_total_info import (
+    TOTAL_INFO_SOURCE_ID,
+    public_workspace_total_info_summary,
+)
 from pydantic_ai_runtime_compat import (
     build_chat_model,
     pydantic_agent_runtime_kwargs,
     pydantic_native_research_capabilities,
+    pydantic_native_research_trace,
     pydantic_result_output,
     pydantic_usage_limits_from_budget,
 )
+from scout.agents.hailo_native_research import (
+    build_hailo_native_research_model,
+    research_tool_return_trace,
+)
 from scout.agents.model_policy import resolve_model_policy
+from scout.agents.web_research_quality import (
+    ResearchQuestionSpec,
+    build_web_evidence_bundle,
+)
 from scout.schemas.agent_runtime import (
     AgentAttemptState,
     AgentAttemptStatus,
@@ -74,16 +84,16 @@ from scout.services.mser_pipeline import (
     compact_pipeline_context,
     mser_enforcement_errors,
 )
+from scout_ai_context_registry import discover_scout_ai_context_sources
 from scout_ai_tool_contracts import (
     ScoutAiToolImplementationStatus,
     ScoutAiToolStatus,
     tool_registry_output,
 )
-from scout_ai_context_registry import discover_scout_ai_context_sources
 from scout_ai_tool_executor import execute_scout_ai_tool
 from scout_ai_tool_planner import plan_scout_ai_tools
-from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
 from scout_contextual_permission_tool import CONTEXTUAL_PERMISSION_TOOL_ID
+from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
 from scout_energy_vitals_tool import ENERGY_VITALS_TOOL_ID
 from scout_equipment_resource_tool import EQUIPMENT_RESOURCE_TOOL_ID
 from scout_gee_environment_tool import GEE_ENVIRONMENT_TOOL_ID
@@ -94,30 +104,29 @@ from scout_media_literacy_tool import MEDIA_LITERACY_TOOL_ID
 from scout_navigation_terrain_tool import NAVIGATION_TERRAIN_TOOL_ID
 from scout_pace_guardian_tool import PACE_GUARDIAN_TOOL_ID
 from scout_post_trip_review_tool import POST_TRIP_REVIEW_TOOL_ID
+from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
 from scout_risk_score_tool import RISK_SCORE_TOOL_ID
 from scout_route_architecture_tool import ROUTE_ARCHITECTURE_TOOL_ID
-from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_route_context_tool import ROUTE_CONTEXT_TOOL_ID
-from scout_review_gap_tool import REVIEW_GAP_TOOL_ID
+from scout_route_readiness_tool import ROUTE_READINESS_TOOL_ID
 from scout_runtime_ingress_status_tool import RUNTIME_INGRESS_STATUS_TOOL_ID
 from scout_safety_boundary_tool import SAFETY_BOUNDARY_TOOL_ID
 from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID
 from scout_team_status_tool import TEAM_STATUS_TOOL_ID
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
+from scout_workspace_query_tool import (
+    WORKSPACE_QUERY_OUTPUT_KIND,
+    WORKSPACE_QUERY_TOOL_ID,
+)
 from scout_workspace_search_tools import (
     EVIDENCE_FULLTEXT_TOOL_ID,
     MAJOR_POINT_TOOL_ID,
     ROUTE_STRUCTURE_TOOL_ID,
     WORKSPACE_CATALOG_TOOL_ID,
 )
-from scout_workspace_query_tool import (
-    WORKSPACE_QUERY_OUTPUT_KIND,
-    WORKSPACE_QUERY_TOOL_ID,
-)
 from skill_registry import load_skill_manifest
 from skill_registry_models import SkillAnswerContract
-
 
 DEFAULT_TIMEOUT_SECONDS: int | None = None
 DEFAULT_MAX_CONTEXT_CHARS: int | None = None
@@ -1907,6 +1916,76 @@ def _response_tool_call_count(response: object) -> int:
         for part in list(getattr(response, "parts", []) or [])
         if type(part).__name__ in {"ToolCallPart", "NativeToolCallPart"}
     )
+
+
+def _merge_native_research_trace(
+    current: dict[str, Any],
+    update: dict[str, Any],
+) -> dict[str, Any]:
+    names = sorted(
+        {
+            str(name)
+            for trace in (current, update)
+            for name in trace.get("tool_names", [])
+            if str(name)
+        }
+    )
+    count_fields = (
+        "tool_call_count",
+        "tool_return_count",
+        "native_tool_call_count",
+        "web_search_call_count",
+        "web_fetch_call_count",
+    )
+    merged = {
+        field: int(current.get(field, 0)) + int(update.get(field, 0))
+        for field in count_fields
+    }
+    return {
+        "performed": bool(current.get("performed") or update.get("performed")),
+        **merged,
+        "tool_names": names,
+    }
+
+
+_HAILO_NATIVE_RESEARCH_TOOL_IDS = frozenset(
+    {
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+        ROUTE_CONTEXT_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+    }
+)
+_HAILO_NATIVE_RESEARCH_QUESTION_PATTERN = re.compile(
+    r"(?:上網|網路|web\s*(?:search|fetch)|live\s*research|"
+    r"最新|即時|今天|明天|預報|警報|特報|公告|封閉|管制|開放|"
+    r"歷史|文化|自然|季節|簡報|briefing)",
+    re.IGNORECASE,
+)
+
+
+def _hailo_question_can_use_native_research(
+    question: str,
+    selected_tool_ids: list[str],
+) -> bool:
+    """Open the local research planner for public-evidence question classes."""
+
+    return bool(
+        _HAILO_NATIVE_RESEARCH_QUESTION_PATTERN.search(question)
+        or _HAILO_NATIVE_RESEARCH_TOOL_IDS.intersection(selected_tool_ids)
+    )
+
+
+def _hailo_research_action_names(raw_rounds: list[dict[str, Any]]) -> list[str]:
+    names: list[str] = []
+    for item in raw_rounds:
+        action = item.get("action")
+        names.append(
+            str(action.get("action") or "invalid")
+            if isinstance(action, dict)
+            else "invalid"
+        )
+    return names
 
 
 def _finalize_agent_run_ledger(
@@ -7730,6 +7809,7 @@ class PydanticAIEnvRunner:
         self.last_workspace_tool_invocations: list[dict[str, object]] = []
         self.last_model_usage: dict[str, int] = {}
         self.last_model_response_metadata: dict[str, str] = {}
+        self.last_native_research_trace: dict[str, Any] = {}
         self.last_agent_run_ledger: dict[str, Any] = {}
         self.last_agent_recovery: dict[str, Any] = {}
         self.last_evidence_cards: list[dict[str, Any]] = []
@@ -7809,6 +7889,7 @@ class PydanticAIEnvRunner:
     def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
         self.last_model_usage = {}
         self.last_model_response_metadata = {}
+        self.last_native_research_trace = {}
         self.last_agent_run_ledger = {}
         self.last_agent_recovery = {}
         self.last_evidence_cards = []
@@ -7843,6 +7924,7 @@ class PydanticAIEnvRunner:
     ) -> str:
         self.last_model_usage = {}
         self.last_model_response_metadata = {}
+        self.last_native_research_trace = {}
         self.last_agent_run_ledger = {}
         self.last_agent_recovery = {}
         self.last_evidence_cards = []
@@ -7927,19 +8009,64 @@ class PydanticAIEnvRunner:
                     timeout_seconds=request_timeout_seconds,
                 )
         if self.backend == "hailo_ollama":
+            research_cards = self._run_hailo_native_research(
+                question=prompt,
+                selected_tool_ids=[],
+                workspace_evidence_cards=[],
+                request_timeout_seconds=request_timeout_seconds,
+            )
+            hailo_prompt = prompt
+            hailo_system_prompt = GLOBAL_ASSISTANT_PROMPT
+            if research_cards and bounded_runtime is not None:
+                hailo_prompt = bounded_runtime.build_no_tool_synthesis_prompt(
+                    question=prompt,
+                    evidence_cards=research_cards,
+                    missing_evidence=[
+                        f"{card.tool_id}:{field}"
+                        for card in research_cards
+                        for field in card.missing_fields
+                    ],
+                )
+                hailo_system_prompt = (
+                    f"{GLOBAL_ASSISTANT_PROMPT}\n{BOUNDED_AGENT_SYSTEM_POLICY}"
+                )
             output = self._run_hailo_ollama_chat(
-                prompt,
-                system_prompt=GLOBAL_ASSISTANT_PROMPT,
+                hailo_prompt,
+                system_prompt=hailo_system_prompt,
                 max_tokens=request_max_tokens if bounded else None,
                 timeout_seconds=request_timeout_seconds,
             )
+            if research_cards and bounded_runtime is not None:
+                output = bounded_runtime.normalize_evidence_citations(
+                    output,
+                    evidence_cards=research_cards,
+                )
+                verification = bounded_runtime.verify_synthesis(
+                    output,
+                    evidence_cards=research_cards,
+                )
+                if not verification.passed:
+                    output = bounded_runtime.attach_verified_source_refs(
+                        output,
+                        evidence_cards=research_cards,
+                    )
+                    verification = bounded_runtime.verify_synthesis(
+                        output,
+                        evidence_cards=research_cards,
+                    )
+                self.last_evidence_cards = [
+                    card.model_dump(mode="json") for card in research_cards
+                ]
+                self.last_grounding_verification = verification.model_dump(
+                    mode="json"
+                )
             if bounded_runtime is not None:
                 input_tokens = self.last_hailo_prompt_eval_count
                 output_tokens = self.last_hailo_eval_count
                 request_record = AgentRequestLedger(
                     request_index=1,
-                    system_chars=len(GLOBAL_ASSISTANT_PROMPT),
-                    user_history_chars=len(prompt),
+                    system_chars=len(hailo_system_prompt),
+                    user_history_chars=len(hailo_prompt),
                     input_tokens=(
                         input_tokens
                         if isinstance(input_tokens, int)
@@ -7987,6 +8114,7 @@ class PydanticAIEnvRunner:
                 bounded_runtime.budget,
             )
         result = agent.run_sync(prompt, **run_kwargs)
+        self.last_native_research_trace = pydantic_native_research_trace(result)
         usage = _serialize_pydantic_result_usage(result)
         self.last_model_usage = usage
         self.last_model_response_metadata = _serialize_pydantic_response_metadata(
@@ -8055,6 +8183,14 @@ class PydanticAIEnvRunner:
         from pydantic_ai.capabilities import Hooks
         from pydantic_ai.messages import ModelRequest, UserPromptPart
 
+        native_capabilities = self._native_capabilities()
+        native_research_tool_names = {
+            "scout_web_search",
+            "scout_web_fetch",
+            "web_search",
+            "web_fetch",
+        }
+
         selected_context_handles = bounded_runtime.context_find(
             " ".join([tool_context.query.question, *selected_tool_ids]),
             top_k=10,
@@ -8104,6 +8240,7 @@ class PydanticAIEnvRunner:
         if (
             not selected_tool_ids
             and not evidence_cards
+            and not native_capabilities
             and not _is_simple_greeting_question(tool_context.query.question)
         ):
             verification = GroundingVerification(
@@ -8152,6 +8289,8 @@ class PydanticAIEnvRunner:
                     stop_reason=progress_state.stop_reason,
                 )
             )
+            if native_capabilities:
+                available_names.update(native_research_tool_names)
             return [
                 tool_def
                 for tool_def in tool_defs
@@ -8334,7 +8473,7 @@ class PydanticAIEnvRunner:
                 api_key=self.api_key,
             ),
             system_prompt=f"{GLOBAL_ASSISTANT_PROMPT}\n{BOUNDED_AGENT_SYSTEM_POLICY}",
-            capabilities=[hooks],
+            capabilities=[hooks, *native_capabilities],
             **pydantic_agent_runtime_kwargs(),
         )
         tool_descriptions = _registered_tool_descriptions()
@@ -9058,6 +9197,10 @@ class PydanticAIEnvRunner:
                 ),
                 usage_limits=pydantic_usage_limits_from_budget(bounded_runtime.budget),
             )
+            self.last_native_research_trace = _merge_native_research_trace(
+                self.last_native_research_trace,
+                pydantic_native_research_trace(result),
+            )
             output = str(pydantic_result_output(result))
             validated_cards = [
                 EvidenceCard.model_validate(card) for card in evidence_cards
@@ -9179,10 +9322,12 @@ class PydanticAIEnvRunner:
                             api_key=self.api_key,
                         ),
                         system_prompt=(
-                            "Repair the answer from the supplied evidence delta only. "
-                            "Do not call tools or add unsupported claims."
+                            "Repair the answer from the supplied evidence delta. "
+                            "WebSearch and WebFetch remain available when a concrete "
+                            "evidence gap requires fresh public research; do not add "
+                            "unsupported claims."
                         ),
-                        capabilities=[repair_hooks],
+                        capabilities=[repair_hooks, *self._native_capabilities()],
                         **pydantic_agent_runtime_kwargs(),
                     )
                     remaining_input = (
@@ -9226,6 +9371,10 @@ class PydanticAIEnvRunner:
                             output_tokens_limit=remaining_output,
                             total_tokens_limit=remaining_total,
                         ),
+                    )
+                    self.last_native_research_trace = _merge_native_research_trace(
+                        self.last_native_research_trace,
+                        pydantic_native_research_trace(result),
                     )
                     output = str(pydantic_result_output(result))
                     output = bounded_runtime.normalize_evidence_citations(
@@ -9518,8 +9667,11 @@ class PydanticAIEnvRunner:
                 ),
                 system_prompt=(
                     "Continue the interrupted Scout answer from the supplied "
-                    "evidence only. Do not call tools or invent facts."
+                    "evidence. WebSearch and WebFetch remain available when a "
+                    "concrete evidence gap requires fresh public research; do not "
+                    "invent facts."
                 ),
+                capabilities=self._native_capabilities(),
                 **pydantic_agent_runtime_kwargs(),
             )
             result = agent.run_sync(
@@ -9530,6 +9682,10 @@ class PydanticAIEnvRunner:
                     workspace_tools=False,
                 ),
                 usage_limits=pydantic_usage_limits_from_budget(continuation.budget),
+            )
+            self.last_native_research_trace = _merge_native_research_trace(
+                self.last_native_research_trace,
+                pydantic_native_research_trace(result),
             )
             output = str(pydantic_result_output(result))
             usage = _serialize_pydantic_result_usage(result)
@@ -9658,6 +9814,118 @@ class PydanticAIEnvRunner:
             "output_tokens": initial_ledger.output_tokens + ledger.output_tokens,
         }
 
+    def _run_hailo_native_research(
+        self,
+        *,
+        question: str,
+        selected_tool_ids: list[str],
+        workspace_evidence_cards: list[EvidenceCard],
+        request_timeout_seconds: int | None,
+    ) -> list[EvidenceCard]:
+        """Collect model-selected public evidence through Pydantic AI capabilities."""
+
+        if not _hailo_question_can_use_native_research(
+            question,
+            selected_tool_ids,
+        ):
+            return []
+        capabilities = self._native_capabilities()
+        if not capabilities:
+            self.last_native_research_trace = {
+                "performed": False,
+                "status": "capabilities_unavailable",
+                "tool_call_count": 0,
+                "tool_return_count": 0,
+                "native_tool_call_count": 0,
+                "web_search_call_count": 0,
+                "web_fetch_call_count": 0,
+                "tool_names": [],
+            }
+            return []
+
+        from pydantic_ai import Agent
+
+        raw_rounds: list[dict[str, Any]] = []
+        workspace_summary = json.dumps(
+            [
+                {
+                    "tool_id": card.tool_id,
+                    "claim_summary": card.claim_summary,
+                    "missing_fields": card.missing_fields,
+                    "source_refs": card.source_refs[:3],
+                }
+                for card in workspace_evidence_cards[:6]
+            ],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+        def invoke_model(action_prompt: str) -> str:
+            return self._run_hailo_ollama_chat(
+                action_prompt,
+                system_prompt=(
+                    "You are Scout AI's AI HAT+2 public-research planner. "
+                    "Return only the requested JSON action."
+                ),
+                max_tokens=None,
+                timeout_seconds=request_timeout_seconds,
+                input_token_budget=HAILO_CONTINUATION_INPUT_TOKENS,
+                semantic_stop_enabled=False,
+            )
+
+        try:
+            research_agent = Agent(
+                build_hailo_native_research_model(
+                    question=question,
+                    invoke_model=invoke_model,
+                    workspace_evidence_summary=workspace_summary,
+                    raw_rounds=raw_rounds,
+                ),
+                capabilities=capabilities,
+                system_prompt=(
+                    "Public research is read-only candidate evidence. Search snippets "
+                    "are discovery only; factual synthesis requires WebFetch output."
+                ),
+                **pydantic_agent_runtime_kwargs(),
+            )
+            result = asyncio.run(
+                research_agent.run(
+                    question,
+                    usage_limits=pydantic_usage_limits_from_budget(AgentRunBudget()),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - workspace evidence can still answer.
+            self.last_native_research_trace = {
+                "performed": False,
+                "status": "error",
+                "error_type": type(exc).__name__,
+                "tool_call_count": 0,
+                "tool_return_count": 0,
+                "native_tool_call_count": 0,
+                "web_search_call_count": 0,
+                "web_fetch_call_count": 0,
+                "tool_names": [],
+                "planner_actions": _hailo_research_action_names(raw_rounds),
+            }
+            return []
+
+        usage = _serialize_pydantic_result_usage(result)
+        trace = pydantic_native_research_trace(result)
+        self.last_native_research_trace = {
+            **trace,
+            "status": "completed",
+            "model_request_count": int(usage.get("requests", 0)),
+            "planner_actions": _hailo_research_action_names(raw_rounds),
+        }
+        bundle = build_web_evidence_bundle(
+            research_tool_return_trace(result),
+            ResearchQuestionSpec(
+                case_id="assistant.hailo.native_research",
+                question=question,
+            ),
+        )
+        return list(bundle.cards)
+
     def _run_hailo_bounded_workspace(
         self,
         *,
@@ -9772,6 +10040,14 @@ class PydanticAIEnvRunner:
                 verification=verification,
             )
             return MISSING_EVIDENCE_FAIL_CLOSED_OUTPUT
+
+        research_cards = self._run_hailo_native_research(
+            question=question,
+            selected_tool_ids=selected_tool_ids,
+            workspace_evidence_cards=evidence_cards,
+            request_timeout_seconds=request_timeout_seconds,
+        )
+        evidence_cards.extend(research_cards)
 
         if not evidence_cards and not _is_simple_greeting_question(question):
             verification = GroundingVerification(
@@ -11017,10 +11293,6 @@ class PydanticAIEnvRunner:
             self.last_raw_model_outputs.append(partial_output)
 
     def _native_capabilities(self) -> list[object]:
-        if self.bounded_agent_runtime_enabled and not self.workspace_tools_enabled:
-            return []
-        if self.profile_name == "local" or _is_local_assistant_base_url(self.base_url):
-            return []
         return pydantic_native_research_capabilities(self.model_policy)
 
 

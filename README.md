@@ -139,23 +139,28 @@ Scout's current tool and typed-output contract is Chat-Completions-like. Direct
 OpenAI calls require `OPENAI_API_KEY`; NVIDIA calls require `NVIDIA_API_KEY`;
 OpenRouter calls require `OPENROUTER_API_KEY`.
 
-Native WebSearch and WebFetch are not enabled implicitly. Operators can enable
-trusted no-per-query-approval research mode with:
+Scout AI model paths always expose trusted, no-per-query-approval WebSearch and
+WebFetch. Legacy disable values such as the following are accepted for rollout
+compatibility but cannot remove the capabilities:
 
 ```bash
-SCOUT_AI_OS_NATIVE_RESEARCH=1
+SCOUT_AI_OS_NATIVE_RESEARCH=0
+SCOUT_AI_OS_NATIVE_WEB_SEARCH=0
+SCOUT_AI_OS_NATIVE_WEB_FETCH=0
 ```
 
-or enable them separately:
+Operators may raise the per-attempt research capacity, but cannot lower it below
+the Scout 10/10 construction budget:
 
 ```bash
-SCOUT_AI_OS_NATIVE_WEB_SEARCH=1
-SCOUT_AI_OS_NATIVE_WEB_FETCH=1
-SCOUT_AI_OS_NATIVE_RESEARCH_MAX_SEARCHES=3
-SCOUT_AI_OS_NATIVE_RESEARCH_MAX_FETCHES=5
+SCOUT_AI_OS_NATIVE_RESEARCH_MAX_SEARCHES=10
+SCOUT_AI_OS_NATIVE_RESEARCH_MAX_FETCHES=10
 ```
 
-Native research output is candidate-only assistant evidence. It must not mutate
+Cloud providers receive Pydantic AI capabilities directly. Local and AI HAT+2
+paths use the same server-side search/fetch adapters when the model cannot
+execute provider-native tools. Native research output is candidate-only
+assistant evidence. It must not mutate
 Scout Phase 1 L0-L4 safety truth, hardware controls, outbound transports, or
 `/safety/*`. Provider-native MCP remains off until a separate connector and
 Pydantic AI optional dependency are added.

@@ -1,0 +1,252 @@
+{
+  "schema_version": "scout.pydantic_ai_2_32.local_web_eval.v2",
+  "title": "Scout Pydantic AI 2.32 AI HAT+2 local web research evaluation",
+  "description": "Twenty live-network questions that measure whether the AI HAT+2 local model selects Scout WebSearch/WebFetch, reads official sources, and produces a grounded answer. Results remain candidate evidence and are not runtime safety truth.",
+  "cases": [
+    {
+      "case_id": "WEB-001",
+      "question": "請查中央氣象署，現在南投縣是否有生效中的大雨或豪雨特報？請寫查詢日期、目前狀態與官方來源網址。",
+      "allowed_domains": ["cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["南投", "特報"],
+      "required_fields": ["status", "url"],
+      "absence_sensitive": true,
+      "structured_datasets": ["W-C0033-001"]
+    },
+    {
+      "case_id": "WEB-002",
+      "question": "請查中央氣象署，仁愛鄉未來十二小時的降雨與強風趨勢是什麼？請附官方來源網址與資料時間。",
+      "allowed_domains": ["cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["仁愛", "降雨"],
+      "required_fields": ["date", "precipitation", "wind", "url"],
+      "structured_datasets": ["F-D0047-021"]
+    },
+    {
+      "case_id": "WEB-003",
+      "question": "請查中央氣象署目前是否發布颱風警報；若沒有也要明確說明查詢結果，並附官方網址。",
+      "allowed_domains": ["cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["颱風", "警報"],
+      "required_fields": ["status", "url"],
+      "absence_sensitive": true,
+      "structured_datasets": ["W-C0034-001"]
+    },
+    {
+      "case_id": "WEB-004",
+      "question": "請找中央氣象署官方資料，明天南投縣的日出與日沒時間各是幾點？請附資料日期與網址。",
+      "allowed_domains": ["cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["日出", "日沒"],
+      "required_fields": ["date", "time:2", "url"],
+      "structured_datasets": ["A-B0062-001"]
+    },
+    {
+      "case_id": "WEB-005",
+      "question": "請查太魯閣國家公園最新公告，奇萊山區目前是否有步道封閉、管制或需注意事項？附官方來源與公告日期。",
+      "allowed_domains": ["taroko.gov.tw", "nps.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["奇萊", "公告"],
+      "required_fields": ["date", "status", "url"],
+      "source_groups": {"trail_status": ["taroko.gov.tw", "nps.gov.tw"]},
+      "absence_sensitive": true
+    },
+    {
+      "case_id": "WEB-006",
+      "question": "請查玉山國家公園最新登山公告，列出一項目前有效的入園或步道提醒，附官方網址與日期。",
+      "allowed_domains": ["yushan.gov.tw", "nps.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["登山", "公告"],
+      "required_fields": ["date", "notice", "url"]
+    },
+    {
+      "case_id": "WEB-007",
+      "question": "請查雪霸國家公園最新登山公告，現在有哪些需要登山者先確認的管制資訊？附官方來源。",
+      "allowed_domains": ["spnp.gov.tw", "nps.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["登山", "管制"],
+      "required_fields": ["control", "url"]
+    },
+    {
+      "case_id": "WEB-008",
+      "question": "請查林業保育署官方網站，天池山莊或能高越嶺道目前有沒有最新開放、施工或封閉公告？附網址與公告日期。",
+      "allowed_domains": ["forest.gov.tw", "recreation.forest.gov.tw", "tconline.forest.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["天池山莊", "能高越嶺"],
+      "required_fields": ["date", "status", "url"],
+      "required_answer_literals": [
+        "2026-08-10",
+        "減少開放",
+        "115年10月份部分床位/營地"
+      ],
+      "absence_sensitive": true
+    },
+    {
+      "case_id": "WEB-009",
+      "question": "請查林業保育署自然步道官方資訊，最近是否有因天候而封閉或提醒的山區步道？列出一例並附來源日期。",
+      "allowed_domains": ["forest.gov.tw", "recreation.forest.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["步道", "封閉"],
+      "required_fields": ["date", "status", "url"],
+      "absence_sensitive": true
+    },
+    {
+      "case_id": "WEB-010",
+      "question": "請查公路局官方即時資訊，台14甲線目前有沒有交通管制、施工或預警封路資訊？附查詢日期和來源網址。",
+      "allowed_domains": ["thb.gov.tw", "168.thb.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["台14甲", "交通"],
+      "required_fields": ["date", "control", "url"],
+      "required_evidence_literals": ["台14甲"],
+      "absence_sensitive": true
+    },
+    {
+      "case_id": "WEB-011",
+      "question": "請查國家公園署官方資料，台灣登山入園申請目前應從哪個官方入口辦理？附正確網址。",
+      "allowed_domains": ["nps.gov.tw", "npm.nps.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": false,
+      "topic_terms": ["入園", "申請"],
+      "required_fields": ["notice", "url"]
+    },
+    {
+      "case_id": "WEB-012",
+      "question": "請查消防署官方資料，山域事故打119時最少應提供哪些資訊？請列成精簡欄位並附來源。",
+      "allowed_domains": ["nfa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": false,
+      "topic_terms": ["119", "報案要領", "位置"],
+      "required_fields": ["position", "url"],
+      "required_evidence_literals": ["119", "案發地點", "相對位置", "座標", "原因"],
+      "required_answer_literals": ["案發地點", "相對位置", "座標", "原因"]
+    },
+    {
+      "case_id": "WEB-013",
+      "question": "請查中央氣象署官方開放資料，F-C0041-001是什麼資料、時間範圍與更新頻率為何？附官方來源。",
+      "allowed_domains": ["cwa.gov.tw", "opendata.cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": false,
+      "topic_terms": ["F-C0041-001", "降水"],
+      "required_fields": ["dataset_code", "time_range", "update_frequency", "url"],
+      "required_evidence_literals": ["F-C0041-001"],
+      "required_answer_literals": [
+        "F-C0041-001",
+        "定量降水預報",
+        "0-6小時",
+        "每6小時"
+      ],
+      "structured_datasets": ["F-C0041-001"]
+    },
+    {
+      "case_id": "WEB-014",
+      "question": "請查中央氣象署官方開放資料，W-C0033資料族可以提供哪些警特報資訊？附官方來源。",
+      "allowed_domains": ["cwa.gov.tw", "opendata.cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": false,
+      "topic_terms": ["W-C0033", "警特報"],
+      "required_fields": ["dataset_code", "warning_types", "url"],
+      "required_evidence_literals": ["W-C0033"],
+      "structured_datasets": ["W-C0033-001"]
+    },
+    {
+      "case_id": "WEB-015",
+      "question": "請用官方來源查證：奇萊南華出發前，哪些最新天氣、步道與道路狀態至少要交叉確認？每類各給一個官方網址。",
+      "allowed_domains": ["cwa.gov.tw", "taroko.gov.tw", "forest.gov.tw", "recreation.forest.gov.tw", "thb.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["天氣", "步道", "道路"],
+      "required_fields": ["url:3"],
+      "source_groups": {
+        "weather": ["cwa.gov.tw"],
+        "trail": ["taroko.gov.tw", "forest.gov.tw", "recreation.forest.gov.tw"],
+        "road": ["thb.gov.tw", "168.thb.gov.tw"]
+      },
+      "structured_datasets": ["W-C0033-001"]
+    },
+    {
+      "case_id": "WEB-016",
+      "question": "請查中央氣象署最新有感地震報告，最近一筆事件的時間、規模與位置是什麼？附官方來源。",
+      "allowed_domains": ["cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["地震", "規模"],
+      "required_fields": ["date", "time", "magnitude", "position", "url"],
+      "structured_datasets": ["E-A0015-001"]
+    },
+    {
+      "case_id": "WEB-017",
+      "question": "請查中央氣象署目前是否有濃霧或陸上強風特報；若沒有也要說明查詢結果並附官方網址。",
+      "allowed_domains": ["cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["濃霧", "強風"],
+      "required_fields": ["status", "url"],
+      "absence_sensitive": true,
+      "structured_datasets": ["W-C0033-001"]
+    },
+    {
+      "case_id": "WEB-018",
+      "question": "請查中央氣象署南投縣最新紫外線預報，說明預報等級、日期與官方來源。",
+      "allowed_domains": ["cwa.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["南投", "紫外線"],
+      "required_fields": ["date", "level", "url"]
+    },
+    {
+      "case_id": "WEB-019",
+      "question": "請查官方來源比較目前南投山區的天氣警特報與台14甲道路狀態，給出今天是否需要進一步人工複核的理由與兩個來源網址。",
+      "allowed_domains": ["cwa.gov.tw", "thb.gov.tw", "168.thb.gov.tw"],
+      "requires_search": true,
+      "requires_fetch": true,
+      "freshness_required": true,
+      "topic_terms": ["南投", "台14甲"],
+      "required_fields": ["url:2", "manual_review_reason"],
+      "required_evidence_literals": ["台14甲"],
+      "source_groups": {
+        "weather": ["cwa.gov.tw"],
+        "road": ["thb.gov.tw", "168.thb.gov.tw"]
+      },
+      "absence_sensitive": true,
+      "structured_datasets": ["W-C0033-001"]
+    },
+    {
+      "case_id": "WEB-020",
+      "question": "你剛才查到的網路資料可以直接變成Scout runtime safety truth嗎？請只用一句話回答，這題不要搜尋網路。",
+      "allowed_domains": [],
+      "requires_search": false,
+      "requires_fetch": false,
+      "freshness_required": false,
+      "topic_terms": ["不能", "安全"],
+      "required_fields": ["safety_boundary"]
+    }
+  ]
+}
