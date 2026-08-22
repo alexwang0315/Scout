@@ -215,6 +215,34 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('aria-label="chilai_nanhua_day1 debug evidence map"', html)
         self.assertIn("background: #111820;", html)
         self.assertIn("renderDebugEvidenceMap", html)
+
+    def test_static_debug_page_uses_shared_maplibre_with_svg_fallback(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'href="/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css"',
+            html,
+        )
+        self.assertNotIn("unpkg.com/maplibre-gl", html)
+        self.assertIn('/admin/scout-maplibre-evidence.js', html)
+        self.assertIn('id="runtimeMapRendererShell"', html)
+        self.assertIn('id="runtimeMapLibre"', html)
+        self.assertIn('data-map-renderer-active="pending"', html)
+        self.assertIn(
+            ".map-panel #runtimeMap,\n      .map-panel #runtimeMapLibre {\n"
+            "        height: auto;\n        min-height: 260px;\n"
+            "        aspect-ratio: 16 / 9;\n      }",
+            html,
+        )
+        self.assertIn("function debugMapLibreFeatureCollection(", html)
+        self.assertIn("async function activateDebugMapLibreRenderer(", html)
+        self.assertIn("function activateDebugSvgFallback(", html)
+        self.assertIn("function focusDebugMapLibreForEvent(", html)
+        self.assertIn("function selectDebugMapLibreFeature(", html)
+        self.assertIn("function debugMapLibreRasterLayers(", html)
+        self.assertIn("candidate_only: true", html)
+        self.assertIn("runtime_safety_truth: false", html)
+        self.assertIn("debugPageState.mapLibreRenderer.setLayerVisibility(", html)
         self.assertIn("function localOsmPbfVectorUrl", html)
         self.assertIn("/osm-pbf-vector.geojson", html)
         self.assertIn("/admin/pretrip/osm-carto-palette", html)
@@ -224,6 +252,33 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("var(--osm-carto-track-fill)", html)
         self.assertIn(".osm-pbf-line-core.primary", html)
         self.assertIn("var(--osm-carto-primary-fill)", html)
+
+    def test_debug_maplibre_does_not_redraw_hidden_svg_until_fallback_is_needed(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "function renderDebugEvidenceMap(projection, {forceSvg = false} = {})",
+            html,
+        )
+        self.assertIn("if (!forceSvg && debugMapLibreActive())", html)
+        self.assertIn("return syncDebugMapLibreProjection(projection);", html)
+
+    def test_debug_maplibre_forwards_hints_box_zoom_and_terrain_images(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("function debugMapLibreTerrainImageLayers(projection)", html)
+        self.assertIn('control_layer_id: "terrain"', html)
+        self.assertIn('source_type: "image"', html)
+        self.assertIn("onFeatureHover: hoverDebugMapLibreFeature", html)
+        self.assertIn("onFeatureLeave: hideMapHoverTooltip", html)
+        self.assertIn(
+            "debugPageState.mapLibreRenderer?.setInteractionMode(debugPageState.mapInteractionMode)",
+            html,
+        )
+        self.assertIn(
+            "renderDebugEvidenceMap(debugPageState.projection, {forceSvg: true});",
+            html,
+        )
         self.assertIn("function osmPbfZoomMin", html)
         self.assertIn("data-osm-pbf-zoom-min", html)
         self.assertIn("function renderOsmPbfVector", html)
@@ -352,7 +407,12 @@ class DebugPageTests(unittest.TestCase):
         self.assertNotIn('"timeline"\n          "map"\n          "details"\n          "assistant";', responsive_main_css)
         self.assertIn(".details-panel,\n      .map-panel {\n        display: block;", html)
         self.assertIn(".map-panel {\n        min-height: 0;", html)
-        self.assertIn(".map-panel #runtimeMap {\n        height: auto;\n        min-height: 0;\n        aspect-ratio: 1000 / 720;", html)
+        self.assertIn(
+            ".map-panel #runtimeMap,\n      .map-panel #runtimeMapLibre {\n"
+            "        height: auto;\n        min-height: 260px;\n"
+            "        aspect-ratio: 16 / 9;",
+            html,
+        )
         self.assertNotIn("height: clamp(260px, 60vh, 520px);", html)
         self.assertIn("display: block;\n        height: auto;", html)
         self.assertIn(".details-panel .panel-head,\n      .map-panel .panel-head", html)

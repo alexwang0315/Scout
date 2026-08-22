@@ -8,6 +8,7 @@ from pretrip_admin_view import build_pretrip_admin_view, load_pretrip_debug_proj
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
+MAPLIBRE_EVIDENCE_SCRIPT = ROOT / "docs" / "admin" / "scout-maplibre-evidence.js"
 
 
 def test_pretrip_admin_page_contains_expected_layout_contract():
@@ -18,6 +19,9 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "height: 100vh;" in html
     assert "max-width: 100vw;" in html
     assert 'src="/admin/scout-assistant-ui.js"' in html
+    assert 'src="/admin/scout-maplibre-evidence.js"' in html
+    assert 'href="/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css"' in html
+    assert "unpkg.com/maplibre-gl" not in html
     assert 'id="readinessStrip"' in html
     assert 'id="energyReserveMonitor"' in html
     assert 'id="energyReserveHeadline"' in html
@@ -45,6 +49,119 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert ".list-controls .control-group-header { display: none; }" in html
     assert "overflow-y: auto;" in html
     assert "overscroll-behavior: contain;" in html
+
+
+def test_pretrip_admin_page_has_reversible_map_renderer_boundary():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert 'id="mapRendererShell"' in html
+    assert 'id="mapLibreEvidenceMap"' in html
+    assert 'id="mapRendererStatus"' in html
+    assert 'data-map-renderer-requested="auto"' in html
+    assert 'data-map-renderer-active="pending"' in html
+    assert 'const MAP_RENDERER_PREFERENCE = requestedMapRendererPreference();' in html
+    assert "function requestedMapRendererPreference()" in html
+    assert "async function initializePretripMapRenderer()" in html
+    assert "function activateSvgMapFallback(" in html
+    assert 'window.ScoutMapLibreEvidence.resolveRenderer' in html
+    assert 'shell.dataset.mapRendererActive = "svg"' in html
+    assert 'shell.dataset.mapRendererState = "degraded"' in html
+    assert "renderMap(state.view || view);" in html
+
+
+def test_maplibre_evidence_adapter_script_exists():
+    script = MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'window.ScoutMapLibreEvidence = Object.freeze({' in script
+    assert "function normalizeRendererPreference(" in script
+    assert "function resolveRenderer(" in script
+    assert 'normalized === "svg"' in script
+    assert 'reason: "webgl_unavailable"' in script
+    assert 'reason: "maplibre_load_failed"' in script
+    assert "function normalizeEvidenceIdentity(" in script
+    assert "function buildEvidenceIndex(" in script
+    assert "function createEvidenceFeature(" in script
+    assert "function createEvidenceFeatureCollection(" in script
+    assert "function createEvidenceStyle(" in script
+    assert 'const EVIDENCE_SOURCE_ID = "scout-evidence"' in script
+    assert '"feature-state", "selected"' in script
+    assert "class MapLibreEvidenceRenderer" in script
+    assert "async function createRenderer(" in script
+    assert "setFeatureCollection(featureCollection)" in script
+    assert "setLayerVisibility(layerId, visible)" in script
+    assert "focus(reference, options = {})" in script
+    assert "fitAll(options = {})" in script
+    assert "fitLayer(layerId, options = {})" in script
+    assert 'throw new Error("candidate_runtime_truth_conflict")' in script
+    assert "identity_status" in script
+
+
+def test_pretrip_maplibre_workbench_uses_existing_controls_and_inspector():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "async function activatePretripMapLibreRenderer(" in html
+    assert "function syncPretripMapLibreEvidence(view)" in html
+    assert "function selectPretripMapLibreFeature(feature)" in html
+    assert "state.mapLibreRenderer.setLayerVisibility(" in html
+    assert 'state.mapLibreRenderer.fitLayer("route", {maxZoom: 15})' in html
+    assert "state.mapLibreRenderer.zoomBy(direction)" in html
+    assert "state.mapLibreRenderer.panBy([x, y])" in html
+    assert "window.scoutPretripMapRendererBridge = Object.freeze({" in html
+    assert "state.mapLibreRenderer?.screenPoint(reference)" in html
+    assert "function focusMapLibreFor(item, options = {})" in html
+    assert "state.mapLibreRenderer.focus(reference" in html
+    assert "state.selected && focusMapLibreFor(state.selected, {preserveZoom: false})" in html
+    assert 'if (state.mapRenderer.active === "maplibre" && state.mapLibreRenderer)' in html
+    assert 'host.dataset.maplibreFeatureCount = String(featureCollection.features.length);' in html
+    assert 'shell.dataset.mapRendererActive = "maplibre"' in html
+    assert "setDetail(item || feature.properties);" in html
+
+
+def test_pretrip_maplibre_does_not_redraw_hidden_svg_until_fallback_is_needed():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function renderMap(view, {forceSvg = false} = {})" in html
+    assert (
+        'if (!forceSvg && state.mapRenderer?.active === "maplibre" '
+        "&& state.mapLibreRenderer)" in html
+    )
+    assert "return syncPretripMapLibreEvidence(view);" in html
+    assert "renderMap(state.view, {forceSvg: true});" in html
+
+
+def test_pretrip_maplibre_reuses_bounded_raster_tile_sources():
+    html = PAGE.read_text(encoding="utf-8")
+    script = MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8")
+
+    assert "function pretripMapLibreRasterLayers(view)" in html
+    assert 'layerId === "rudy-twmap"' in html
+    assert 'layerId === "osm"' in html
+    assert "rasterLayers: pretripMapLibreRasterLayers(state.view)" in html
+    assert "function normalizeRasterLayer(" in script
+    assert 'throw new Error("unsupported_raster_tile_url")' in script
+    assert "rasterLayerStates" in script
+    assert "bindRasterStatus()" in script
+
+
+def test_pretrip_maplibre_binds_mileage_hints_box_zoom_and_terrain_images():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function pretripMapLibreTerrainImageLayers(view)" in html
+    assert 'control_layer_id: "terrain"' in html
+    assert 'source_type: "image"' in html
+    assert "image_coordinates:" in html
+    assert "(view.mileage_tag_alignment?.timeline_items || []).forEach(item =>" in html
+    assert 'append(item, "events", mapLibrePointGeometry(item)' in html
+    assert "hint_summary: hintSummary(item)" in html
+    assert "onFeatureHover: hoverPretripMapLibreFeature" in html
+    assert "onFeatureLeave: hideHint" in html
+    assert "state.mapLibreRenderer?.setInteractionMode(state.mapInteractionMode)" in html
+    focus_contract = html.split("function mapLibreEvidenceRefsForFocus(item)", 1)[1].split(
+        "function focusMapLibreFor", 1
+    )[0]
+    assert focus_contract.index("item.candidate_id") < focus_contract.index(
+        "item.source_id"
+    )
 
 
 def test_pretrip_admin_latest_ui_surfaces_reference_segment_timing():
@@ -249,6 +366,23 @@ def test_pretrip_admin_map_segments_render_from_display_geometry_first():
     assert "item.display_label || item.map_label || item.nearby_group_id" in html
 
 
+def test_pretrip_maplibre_adapter_converts_core_evidence_without_authority_promotion():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function pretripMapLibreFeatureCollection(view)" in html
+    assert "function appendPretripMapLibreFeature(" in html
+    assert "function mapLibreLineGeometryFromSegments(" in html
+    assert "window.ScoutMapLibreEvidence.createEvidenceFeature(" in html
+    assert "window.ScoutMapLibreEvidence.createEvidenceFeatureCollection(features)" in html
+    assert 'append(item, "route", mapLibreLineGeometryFromSegments(' in html
+    assert 'append(checkpoint, "checkpoints", mapLibrePointGeometry(checkpoint));' in html
+    assert 'append(segment, "segments", mapLibreLineGeometryFromSegments(segmentCoordSegments));' in html
+    assert 'append(candidate, "corridors", mapLibreLineGeometry(candidate.corridor.coordinates));' in html
+    assert 'append(segment, "risk-ribbon", mapLibreLineGeometry(segment.coordinates));' in html
+    assert "candidate_only: identity.candidate_only" in html
+    assert "runtime_safety_truth: identity.runtime_safety_truth" in html
+
+
 def test_pretrip_admin_page_has_top_level_readiness_strip_boundary_contract():
     html = PAGE.read_text(encoding="utf-8")
 
@@ -357,6 +491,9 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'data-layer-preset="route-clean"' in html
     assert 'data-layer-preset="debug-replay"' in html
     assert 'data-layer-preset="raster-check"' in html
+    assert ".layer-menu-header small {" in html
+    layer_heading_small = html.split(".layer-menu-header small {", 1)[1].split("}", 1)[0]
+    assert "font-size: 11px;" in layer_heading_small
     assert 'class="layer-advanced"' in html
     assert "Advanced layers" in html
     assert 'data-layer="boss-points" checked> Boss</label>' in html
@@ -367,6 +504,8 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert "width: max-content;\n      max-width: 100%;\n      box-sizing: border-box;" in html
     assert "@media (max-width: 1120px)" in html
     mobile_readiness_css = html.split("@media (max-width: 640px)", 1)[1].split(".layer-menu-panel", 1)[0]
+    assert ".dashboard-map-only .layer-menu { margin-left: 56px; }" in mobile_readiness_css
+    assert 'document.body.classList.toggle("dashboard-map-only", DASHBOARD_MAP_ONLY);' in html
     assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in mobile_readiness_css
     assert 'data-readiness-kind="energy"' in html
     assert "white-space: nowrap;" in mobile_readiness_css
@@ -895,7 +1034,9 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert html.index('data-layer-group": "imagery"') < html.index(
         'data-layer-group": "osm"'
     )
-    render_map_body = html.split("function renderMap(view)", 1)[1].split(
+    render_map_body = html.split(
+        "function renderMap(view, {forceSvg = false} = {})", 1
+    )[1].split(
         "function scheduleTreeClickFocus", 1
     )[0]
     assert render_map_body.index("renderRasterLayer(imageryGroup") < render_map_body.index(
@@ -991,7 +1132,7 @@ def test_weather_map_preserves_previous_tiles_until_replacement_generation_loads
     assert 'image.addEventListener("load"' in raster_swap
     assert 'image.addEventListener("error"' in raster_swap
     assert "rememberRudyMapView" in raster_swap
-    assert "restoreRudyMapViewAfterTileFailure" in raster_refresh
+    assert "retainRudyMapViewAfterTileFailure" in raster_refresh
     assert "RASTER_TILE_SWAP_TIMEOUT_MS" in raster_swap
     assert "if (loadedCount !== images.length) return;" in raster_swap
     assert "group.dataset.pendingTileGenerationKey !== generationKey" in raster_swap
@@ -1005,6 +1146,21 @@ def test_weather_map_preserves_previous_tiles_until_replacement_generation_loads
     assert "imageryGroup.replaceChildren();" not in raster_refresh
     assert "rasterGroup.replaceChildren();" not in raster_refresh
     assert "osmGroup.replaceChildren();" not in raster_refresh
+
+
+def test_weather_map_tile_failure_keeps_the_current_interaction_view() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    failure_handler = html.split(
+        "function retainRudyMapViewAfterTileFailure", 1
+    )[1].split("function markRasterLayerGenerationActive", 1)[0]
+
+    assert "group.dataset.nativeTileFailure = reason;" in failure_handler
+    assert "previous complete tiles retained at current view" in failure_handler
+    assert "state.lastFailedNativeMapZoom = failedZoom;" in failure_handler
+    assert "state.zoom =" not in failure_handler
+    assert "state.panX =" not in failure_handler
+    assert "state.panY =" not in failure_handler
+    assert "applyMapViewport();" not in failure_handler
 
 
 def test_weather_rudy_twmap_uses_scout_cache_proxy_instead_of_direct_wmts():

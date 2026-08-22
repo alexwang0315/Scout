@@ -253,6 +253,50 @@ def test_pretrip_admin_page_serves_static_shell():
     assert "segment-overlay" in response.text
 
 
+def test_maplibre_evidence_adapter_serves_same_origin_script():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/scout-maplibre-evidence.js")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/javascript")
+    assert response.headers["cache-control"] == "no-store"
+    assert "window.ScoutMapLibreEvidence" in response.text
+
+
+def test_maplibre_distribution_assets_serve_same_origin_with_fixed_version():
+    client = TestClient(create_admin_app())
+
+    module_responses = [
+        client.get(f"/admin/vendor/maplibre-gl/6.2.0/{name}")
+        for name in (
+            "maplibre-gl.mjs",
+            "maplibre-gl-shared.mjs",
+            "maplibre-gl-worker.mjs",
+        )
+    ]
+    css_response = client.get(
+        "/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css"
+    )
+
+    for module_response in module_responses:
+        assert module_response.status_code == 200
+        assert module_response.headers["content-type"].startswith(
+            "application/javascript"
+        )
+        assert module_response.headers["cache-control"] == (
+            "public, max-age=31536000, immutable"
+        )
+        assert module_response.text
+    assert "MapLibre GL JS" in module_responses[0].text
+    assert css_response.status_code == 200
+    assert css_response.headers["content-type"].startswith("text/css")
+    assert css_response.headers["cache-control"] == (
+        "public, max-age=31536000, immutable"
+    )
+    assert ".maplibregl-map" in css_response.text
+
+
 def test_debug_admin_page_serves_static_shell():
     client = TestClient(create_admin_app())
 
