@@ -444,6 +444,9 @@
       "checkpoints", "#ad2f45",
       "mcp", "#146c57",
       "boss-points", "#684b9a",
+      "qgis-candidate", "#66589a",
+      "qgis-route", "#8b6914",
+      "qgis-slope", "#247d78",
       "#3e6077",
     ];
   }

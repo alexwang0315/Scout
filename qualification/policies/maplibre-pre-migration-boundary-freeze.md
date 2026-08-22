@@ -6,6 +6,60 @@ Default scope: `guard`
 
 This boundary keeps the current Dashboard usable while MapLibre is introduced. It does not certify the legacy SVG/iframe renderer as the long-term map architecture, and it does not expand product, terrain, preparation, safety, QGIS, or GRASS behavior.
 
+## 2026-08-21 MapLibre construction addendum
+
+Prototype status: `WORKING PROTOTYPE`
+
+Qualification status: focused construction/browser qualification only; `official_qualification_eligible=false`. The historical 9099 guard packet below remains the pre-migration baseline and was not replaced by this development run. A final read-only 9099 smoke was performed, but the long-running process was deliberately not restarted.
+
+The bounded migration now has these executable surfaces:
+
+- Pre-trip Planning defaults to the shared MapLibre renderer when WebGL and the pinned module are available.
+- Runtime Debug uses the same renderer, evidence identity, layer visibility, focus, fit, zoom, pan, raster status, and failure semantics.
+- Dashboard Navigation retains its existing MapLibre 2D/3D terrain workbench and can add QGIS candidate GeoJSON through the shared adapter.
+- `mapRenderer=svg`, WebGL unavailability, module-load failure, and renderer failure retain the existing SVG map as a fail-closed fallback.
+- Active MapLibre updates no longer redraw the hidden full SVG. The SVG is rendered before activation and force-refreshed from current evidence only when fallback is selected or needed.
+- SVG code is intentionally retained for reversibility; it is no longer the default renderer on the migrated Pre-trip and Debug surfaces.
+
+Browser evidence from ephemeral local development runtimes:
+
+| Runtime | State exercised | Result |
+| --- | --- | --- |
+| `127.0.0.1:9111` | Pre-trip and Debug MapLibre, desktop/mobile, raster toggle, evidence focus, SVG fallback | MapLibre ready; no horizontal overflow; candidate evidence identity preserved. |
+| `127.0.0.1:9112` | QGIS fixture connected | Three MapLibre canvases (terrain 2D, terrain 3D, QGIS candidate), rendered fixture evidence, review pending. Fixture is synthetic and non-runtime. |
+| `127.0.0.1:9113` | QGIS disabled with the same workspace-backed terrain project | Dashboard and both terrain MapLibre views remained ready; QGIS execution stayed disabled. |
+| `127.0.0.1:9114` | QGIS configured with an unreachable localhost worker | Typed `UNAVAILABLE`; both terrain MapLibre views remained ready; QGIS execution stayed disabled. |
+| `127.0.0.1:9099` | Existing long-running Dashboard, no restart | Existing terrain 2D/3D MapLibre remained ready at desktop/mobile with QGIS disabled and no overflow. The newly registered shared-adapter route returned 404 because this process predates the route; Pre-trip failed closed to a visible SVG map. |
+
+Observed browser checks:
+
+- Pre-trip mobile canvas: 367 x 284 CSS px at a 390 x 844 viewport, with zero document/body overflow.
+- Debug mobile canvas: 350 x 260 CSS px; desktop canvas: 624 x 693 CSS px; both nonblank.
+- QGIS candidate mobile canvas: 362 x 360 CSS px; rendered visual-evidence image: 362 x 202 CSS px.
+- A 4x CPU-throttled desktop development trace observed LCP 674 ms and CLS 0.00. This is not Raspberry Pi performance evidence.
+- A Timeline/feature selection resolved `cp.050`, updated the inspector, highlighted the stable MapLibre feature identity, and changed map center.
+- A delayed raster event could not overwrite a hidden layer: OSM remained `hidden` after disable and returned to `available` after enable.
+- Pre-trip and Debug hidden SVG payloads remained untouched during active MapLibre updates; an explicit force refresh still rebuilt them for fallback.
+- Focused contract/API/page suite: 270 passed, 0 failed, 0 skipped in 176.16 seconds. JUnit: `artifacts/maplibre-migration/step-11/focused-pytest.xml`.
+- Deterministic canonical layer verifier: `PASS: Scout layer contract (32 layers)`.
+
+Authority invariants remain unchanged:
+
+- `candidate_only=true`
+- `runtime_safety_truth=false`
+- `operational=false`
+- Map rendering or GIS processing success is evidence of execution, not geographic or safety truth.
+- The browser does not connect directly to QGIS MCP, and no arbitrary Python or shell capability is exposed.
+
+Open promotion debt:
+
+- MapLibre JS/CSS currently use a pinned `unpkg.com` URL. Offline/Pi deployment requires reviewed local vendoring or packaging; until then, an unavailable module degrades to SVG.
+- No Raspberry Pi hardware benchmark, thermal/memory soak, offline tile-package qualification, or long-duration browser run was performed.
+- No real QGIS/QGIS MCP process was available. QGIS browser evidence in this run is fixture/synthetic/non-runtime.
+- Several canonical controls remain renderer-compatible boundaries while v0.1 exposes only the bounded vector plus Rudy/OSM raster slice.
+- Independent review and a trusted 9099 runtime attestation are still required for official Dashboard qualification.
+- The existing 9099 process must receive a controlled restart/deployment before `/admin/scout-maplibre-evidence.js` and the migrated Pre-trip/Debug MapLibre path can be qualified there. It was not restarted during this construction run.
+
 ## Preserved checks
 
 | Check | Guard evidence | Blocking interpretation |
@@ -70,17 +124,17 @@ Paused checks are retained for bounded legacy investigation only. They are not a
 - Renderer replacement does not grant operational or safety authority and cannot promote candidate evidence to runtime safety truth.
 - New MapLibre behaviors receive focused tests when their contracts exist; they are not inferred from legacy SVG behavior.
 
-## Remaining risks
+## Remaining risks from the pre-migration guard
 
 - The guard currently proves one live project (`chilai_nanhua_day1_scoutAI`) at two viewports; other projects and viewport classes may differ.
-- The current runtime still uses the legacy fallback renderer, so the same-document adapter path is contract-tested but cannot receive live MapLibre proof until that renderer exists.
-- The current fallback exposes 31 canonical pre-trip layer IDs in the live DOM. The guard proves identity presence and one restored control, not completeness or quality of every layer's data.
+- The historical 9099 runtime below used the legacy fallback renderer. The current development slice has live same-document MapLibre proof; a focused 9099 smoke confirmed existing Dashboard terrain maps and SVG degradation, but the trusted guard has not been rerun after a controlled restart.
+- The renderer still exposes 31 canonical pre-trip layer controls. The focused run proves identity presence and representative toggles, not completeness or quality of every layer's data.
 - A mobile run observed one transient map-loading overlay that blocked a layer-control click and was classified as `environment_limitation`; an immediate bounded retry passed. This remains a reliability signal, not a confirmed product defect.
 - Visual checkpoints can surface observations outside this boundary. For example, Navigation/QGIS candidate-state text may be flagged for readability, but QGIS and full UX qualification are intentionally deferred.
 - Full legacy checks may drift while paused. They must not silently become MapLibre blockers; they should be revised or retired when the MapLibre evidence surface is defined.
 - Independent GPT Pro review remains required before the run can receive a final human-reviewed qualification disposition.
 
-## Current executable evidence
+## Historical pre-migration executable evidence
 
 - Canonical live guard packet: `artifacts/qualification/runs/20260821-maplibre-boundary-freeze-live-r8`
 - Evidence root SHA-256: `f7e29ae803b96a6e2d6cf20105008351f3eac7817e2b9487201b084595ef9e0c`
