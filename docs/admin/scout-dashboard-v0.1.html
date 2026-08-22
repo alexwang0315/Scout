@@ -7085,6 +7085,267 @@
       line-height: 1.45;
     }
 
+    .qgis-analysis-panel,
+    .qgis-visual-review,
+    .qgis-artifact-panel,
+    .qgis-maplibre-preview {
+      border: 1px solid var(--terrain-rule);
+      background: #0b1510;
+      min-width: 0;
+    }
+
+    .qgis-maplibre-preview {
+      margin-top: 12px;
+    }
+
+    .qgis-analysis-panel .navigation-reading-head {
+      flex-wrap: wrap;
+    }
+
+    .qgis-analysis-panel .navigation-reading-head > * {
+      min-width: 0;
+    }
+
+    .qgis-maplibre-preview .navigation-terrain-maplibre-shell,
+    .qgis-maplibre-preview .navigation-terrain-maplibre-map {
+      min-height: 360px;
+    }
+
+    .qgis-maplibre-preview .navigation-terrain-maplibre-state {
+      max-width: min(430px, calc(100% - 92px));
+    }
+
+    .qgis-status-grid,
+    .qgis-artifact-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--terrain-rule);
+      border-top: 1px solid var(--terrain-rule);
+      border-bottom: 1px solid var(--terrain-rule);
+    }
+
+    .qgis-status-grid div,
+    .qgis-artifact-grid div {
+      min-width: 0;
+      padding: 9px;
+      background: #0f1a15;
+    }
+
+    .qgis-status-grid small,
+    .qgis-status-grid strong,
+    .qgis-artifact-grid small,
+    .qgis-artifact-grid strong,
+    .qgis-workflow-summary strong,
+    .qgis-workflow-summary small {
+      display: block;
+    }
+
+    .qgis-status-grid small,
+    .qgis-artifact-grid small {
+      color: #83948b;
+      font: 800 7px var(--mono);
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    .qgis-status-grid strong,
+    .qgis-artifact-grid strong {
+      margin-top: 3px;
+      color: #eef1e5;
+      font-size: 10px;
+      overflow-wrap: anywhere;
+    }
+
+    .qgis-actions,
+    .qgis-layer-toggles,
+    .qgis-artifact-select {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      padding: 10px;
+      border-bottom: 1px solid var(--terrain-rule);
+      background: #0d1713;
+    }
+
+    .qgis-actions button,
+    .qgis-layer-toggles button,
+    .qgis-artifact-select button {
+      min-height: 34px;
+      padding: 7px 9px;
+      border: 1px solid rgba(233, 234, 220, .16);
+      background: #14211b;
+      color: #a9b7ad;
+      font-size: 10px;
+    }
+
+    .qgis-actions button:not(:disabled):hover,
+    .qgis-layer-toggles button:not(:disabled):hover,
+    .qgis-artifact-select button:not(:disabled):hover {
+      border-color: #77d6c6;
+      color: #ecf5f2;
+    }
+
+    .qgis-layer-toggles button[aria-pressed="true"],
+    .qgis-artifact-select button[aria-pressed="true"] {
+      border-color: #f6e27a;
+      color: #fff8ca;
+      box-shadow: inset 0 -2px 0 #f6e27a;
+    }
+
+    .qgis-workflow-summary {
+      display: grid;
+      gap: 6px;
+      padding: 11px;
+      border-bottom: 1px solid var(--terrain-rule);
+    }
+
+    .qgis-workflow-summary strong {
+      color: #e9eadc;
+      font-size: 11px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .qgis-workflow-summary small {
+      color: #8ea096;
+      font-size: 9px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .qgis-workflow-steps {
+      display: grid;
+      gap: 1px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      background: var(--terrain-rule);
+    }
+
+    .qgis-workflow-steps li {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+      padding: 8px 10px;
+      background: #0d1713;
+    }
+
+    .qgis-workflow-steps span {
+      color: #f6e27a;
+      font: 900 13px var(--mono);
+      text-align: center;
+    }
+
+    .qgis-workflow-steps strong,
+    .qgis-workflow-steps small {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .qgis-workflow-steps strong {
+      color: #e8ede2;
+      font-size: 10px;
+    }
+
+    .qgis-workflow-steps small {
+      grid-column: 2;
+      color: #819289;
+      font-size: 8px;
+      line-height: 1.35;
+    }
+
+    .qgis-workflow-steps [data-qgis-step-status="failed"] span {
+      color: #ff8b72;
+    }
+
+    .qgis-boundary-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px;
+      color: #91a399;
+      font-size: 8px;
+      line-height: 1.45;
+    }
+
+    .qgis-boundary-strip strong {
+      padding: 4px 6px;
+      border: 1px solid rgba(246, 226, 122, .28);
+      color: #f6e27a;
+      font: 900 8px var(--mono);
+      letter-spacing: .04em;
+    }
+
+    .qgis-render-frame {
+      aspect-ratio: 16 / 9;
+      width: 100%;
+      min-height: 180px;
+      background: #07100c;
+      border-top: 1px solid var(--terrain-rule);
+      border-bottom: 1px solid var(--terrain-rule);
+      overflow: hidden;
+    }
+
+    .qgis-render-frame img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #07100c;
+    }
+
+    .qgis-render-placeholder {
+      display: grid;
+      place-items: center;
+      min-height: 180px;
+      padding: 18px;
+      color: #889a90;
+      font-size: 11px;
+      background: #07100c;
+      text-align: center;
+    }
+
+    .qgis-render-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 10px;
+    }
+
+    .qgis-render-meta span,
+    .qgis-artifact-note {
+      color: #8b9d93;
+      font-size: 8px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .qgis-render-meta span {
+      padding: 4px 6px;
+      border: 1px solid rgba(233, 234, 220, .11);
+      background: rgba(233, 234, 220, .035);
+    }
+
+    .qgis-artifact-panel h3,
+    .qgis-artifact-panel p {
+      margin: 0;
+      padding: 12px;
+    }
+
+    .qgis-artifact-panel h3 {
+      color: #e9eadc;
+      font-size: 13px;
+    }
+
+    .qgis-artifact-panel p {
+      color: #84968c;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
     .navigation-terrain-map-head,
     .navigation-terrain-detail-head,
     .navigation-reading-head {
@@ -7338,6 +7599,12 @@
       border-radius: 50%;
       background: var(--navigation-event);
     }
+
+    .navigation-terrain-legend [data-navigation-legend-kind="qgis"] strong::before {
+      background: #f6e27a;
+      box-shadow: 0 0 0 2px rgba(119, 214, 198, .35);
+    }
+
     .navigation-workspace-map {
       position: relative;
       overflow: hidden;
@@ -7860,7 +8127,11 @@
       text-align: right;
     }
 
-    .navigation-terrain-side { display: grid; gap: 14px; }
+    .navigation-terrain-side {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+    }
     .navigation-terrain-detail-body { padding: 16px; }
 
     .navigation-feature-kicker {
@@ -8042,7 +8313,9 @@
         border-bottom: 1px solid var(--terrain-rule);
       }
       .navigation-terrain-workspace { grid-template-columns: 1fr; }
-      .navigation-terrain-side { grid-template-columns: 1fr 1fr; }
+      .navigation-terrain-side {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
       .navigation-terrain-evidence-inspector { grid-template-columns: 1fr; }
       .navigation-evidence-workbench { grid-template-columns: 1fr 1fr; }
       .navigation-reading-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -8101,7 +8374,7 @@
       .navigation-feature-gap-grid,
       .navigation-live-metrics { grid-template-columns: 1fr; }
       .navigation-terrain-support-meter { grid-template-columns: 1fr 1fr; }
-      .navigation-terrain-side { grid-template-columns: 1fr; }
+      .navigation-terrain-side { grid-template-columns: minmax(0, 1fr); }
       .navigation-evidence-workbench { grid-template-columns: 1fr; }
       .navigation-reading-list { grid-template-columns: 1fr; }
       .navigation-event-track { grid-auto-columns: minmax(236px, 82vw); }
@@ -9742,6 +10015,7 @@
     <span></span>
   </div>
 
+  <script src="/admin/scout-maplibre-evidence.js"></script>
   <script>
     "use strict";
 
@@ -9753,6 +10027,7 @@
     const FETCH_TIMEOUT_MS = 20000;
     const ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS = 600000;
     const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;
+    const QGIS_SPATIAL_FETCH_TIMEOUT_MS = 45000;
     const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
     const MAP_EVIDENCE_FOCUS_MAX_ATTEMPTS = 45;
     const BODY_INDEX_FETCH_TIMEOUT_MS = 180000;
@@ -9814,6 +10089,7 @@
       body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index"],
       weather: ["home", "outdoor-weather"],
       navigation_terrain: ["outdoor-navigation"],
+      qgis_spatial: ["outdoor-navigation"],
       permission: ["outdoor-permission", "emergency"],
       debug: ["debug"],
       hardware: ["debug"],
@@ -10096,6 +10372,11 @@
       maps: [],
       modulePromise: null,
       synchronizing: false,
+    };
+    const qgisSpatialMapLibreRuntime = {
+      generation: 0,
+      renderer: null,
+      resolution: null,
     };
 
     const WEATHER_LAYER_DEFINITIONS = Object.freeze([
@@ -10470,6 +10751,16 @@
       navigationSelectedHierarchyEdgeId: "",
       navigationTerrainData: null,
       navigationTerrainPollTimer: null,
+      qgisSpatialStatus: null,
+      qgisSpatialCapabilities: null,
+      qgisSpatialWorkflow: null,
+      qgisSpatialArtifacts: [],
+      qgisSpatialBusy: false,
+      qgisSpatialMessage: "",
+      qgisSpatialPollTimer: null,
+      qgisSpatialLayerVisibility: {route: true, slope: true, features: true},
+      qgisSpatialSelectedArtifactId: "",
+      qgisSpatialSelectedFeatureRef: "",
       navigationSelectedLivePointId: "",
       navigationSelectedStructurePointId: "",
       navigationSelectedTerrainEventId: "",
@@ -11412,6 +11703,7 @@
       if (scope === "body") return loadBodyIndexData();
       if (scope === "weather") return loadWeatherData();
       if (scope === "navigation_terrain") return loadNavigationTerrainData();
+      if (scope === "qgis_spatial") return loadQgisSpatialData();
       if (scope === "permission") return loadPermissionData();
       if (scope === "debug") return loadDebugData();
       if (scope === "hardware") return loadHardwareData();
@@ -11612,6 +11904,236 @@
         state.navigationSelectedHierarchyEdgeId = String(firstHierarchyEdge.id);
       }
       return state.navigationTerrainData;
+    }
+
+    function qgisSpatialBasePath(candidateProjectId = projectId()) {
+      return `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/spatial/qgis`;
+    }
+
+    function qgisSpatialWorkflowStorageKey(candidateProjectId = projectId()) {
+      return `scout.qgisSpatialWorkflowRunId.${candidateProjectId}`;
+    }
+
+    function rememberQgisSpatialWorkflow(workflow) {
+      const runId = workflow?.workflow_run_id;
+      if (!runId) return;
+      try {
+        localStorage.setItem(qgisSpatialWorkflowStorageKey(workflow.project_id || projectId()), runId);
+      } catch {
+        // Browser-local persistence is opportunistic; backend state remains canonical.
+      }
+    }
+
+    function rememberedQgisSpatialWorkflowRunId() {
+      try {
+        const value = localStorage.getItem(qgisSpatialWorkflowStorageKey()) || "";
+        return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(value) ? value : "";
+      } catch {
+        return "";
+      }
+    }
+
+    function stopQgisSpatialPolling() {
+      if (!state.qgisSpatialPollTimer) return;
+      window.clearTimeout(state.qgisSpatialPollTimer);
+      state.qgisSpatialPollTimer = null;
+    }
+
+    function scheduleQgisSpatialPolling() {
+      stopQgisSpatialPolling();
+      const workflow = state.qgisSpatialWorkflow;
+      if (!["queued", "running"].includes(workflow?.state)) return;
+      const expectedProjectId = projectId();
+      state.qgisSpatialPollTimer = window.setTimeout(async () => {
+        state.qgisSpatialPollTimer = null;
+        if (projectId() !== expectedProjectId) return;
+        try {
+          await loadQgisSpatialWorkflow(workflow.workflow_run_id);
+          state.qgisSpatialMessage = "";
+        } catch (error) {
+          state.qgisSpatialMessage = `QGIS workflow polling failed · ${String(error?.message || error)}`;
+        } finally {
+          if (state.route === "outdoor-navigation") refreshCurrentDataView();
+          scheduleQgisSpatialPolling();
+        }
+      }, 2500);
+    }
+
+    async function loadQgisSpatialData() {
+      const basePath = qgisSpatialBasePath();
+      const [statusResult, capabilitiesResult] = await Promise.allSettled([
+        fetchJson(`${basePath}/status`, {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS}),
+        fetchJson(`${basePath}/capabilities`, {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS}),
+      ]);
+      if (statusResult.status === "fulfilled") {
+        state.qgisSpatialStatus = statusResult.value;
+      } else {
+        state.qgisSpatialStatus = {
+          schema_version: "scout_qgis_spatial.v0_1",
+          availability: "unavailable",
+          enabled: false,
+          configured: false,
+          reachable: false,
+          backend_degraded: true,
+          fixture_mode: false,
+          warnings: [],
+          errors: [{
+            code: "MCP_UNAVAILABLE",
+            message: String(statusResult.reason?.message || statusResult.reason || "QGIS status unavailable"),
+          }],
+          boundary: {candidate_only: true, runtime_safety_truth: false},
+        };
+      }
+      if (capabilitiesResult.status === "fulfilled") {
+        state.qgisSpatialCapabilities = capabilitiesResult.value;
+      } else {
+        state.qgisSpatialCapabilities = null;
+      }
+      const workflowRunId = state.qgisSpatialWorkflow?.workflow_run_id
+        || rememberedQgisSpatialWorkflowRunId();
+      if (workflowRunId) {
+        try {
+          await loadQgisSpatialWorkflow(workflowRunId);
+        } catch {
+          if (!state.qgisSpatialWorkflow?.workflow_run_id) {
+            try {
+              localStorage.removeItem(qgisSpatialWorkflowStorageKey());
+            } catch {
+              // Ignore localStorage cleanup failures.
+            }
+          }
+          stopQgisSpatialPolling();
+        }
+      }
+      scheduleQgisSpatialPolling();
+      return state.qgisSpatialStatus;
+    }
+
+    async function startQgisSpatialWorkflow(workflowId) {
+      if (state.qgisSpatialBusy) return;
+      const allowedWorkflows = asArray(
+        state.qgisSpatialCapabilities?.workflow_allowlist,
+      );
+      if (!allowedWorkflows.includes(workflowId)) {
+        state.qgisSpatialMessage = `Workflow unavailable · ${workflowId}`;
+        if (state.route === "outdoor-navigation") refreshCurrentDataView();
+        return;
+      }
+      state.qgisSpatialBusy = true;
+      state.qgisSpatialMessage = `Starting ${workflowId}…`;
+      if (state.route === "outdoor-navigation") render();
+      try {
+        const run = await postJson(
+          `${qgisSpatialBasePath()}/workflows`,
+          {
+            workflow_id: workflowId,
+            project_id: projectId(),
+            corridor_m: 250,
+            requested_by: "dashboard_operator",
+          },
+          {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
+        );
+        state.qgisSpatialWorkflow = run;
+        rememberQgisSpatialWorkflow(run);
+        state.qgisSpatialArtifacts = [
+          ...asArray(run.artifacts),
+          ...asArray(run.render_artifacts),
+        ];
+        state.qgisSpatialSelectedArtifactId = state.qgisSpatialArtifacts[0]?.artifact_id || "";
+        state.qgisSpatialMessage = run.state === "failed"
+          ? `Workflow failed · ${run.error?.code || "UNKNOWN"}`
+          : "Workflow recorded · review pending";
+        scheduleQgisSpatialPolling();
+      } catch (error) {
+        state.qgisSpatialMessage = `QGIS workflow unavailable · ${String(error?.message || error)}`;
+      } finally {
+        state.qgisSpatialBusy = false;
+        if (state.route === "outdoor-navigation") refreshCurrentDataView();
+      }
+    }
+
+    async function startQgisTerrainContextPreview() {
+      return startQgisSpatialWorkflow("terrain_context_preview.v1");
+    }
+
+    async function startQgisTerrainFeatureStack() {
+      return startQgisSpatialWorkflow("terrain_feature_stack.v1");
+    }
+
+    async function loadQgisSpatialWorkflow(workflowRunId) {
+      if (!workflowRunId) return null;
+      const run = await fetchJson(
+        `${qgisSpatialBasePath()}/workflows/${encodeURIComponent(workflowRunId)}`,
+        {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
+      );
+      state.qgisSpatialWorkflow = run;
+      rememberQgisSpatialWorkflow(run);
+      state.qgisSpatialArtifacts = [
+        ...asArray(run.artifacts),
+        ...asArray(run.render_artifacts),
+      ];
+      if (!state.qgisSpatialSelectedArtifactId) {
+        state.qgisSpatialSelectedArtifactId = state.qgisSpatialArtifacts[0]?.artifact_id || "";
+      }
+      return run;
+    }
+
+    async function cancelQgisSpatialWorkflow() {
+      const workflowRunId = state.qgisSpatialWorkflow?.workflow_run_id;
+      if (!workflowRunId || state.qgisSpatialBusy) return;
+      state.qgisSpatialBusy = true;
+      try {
+        const run = await postJson(
+          `${qgisSpatialBasePath()}/workflows/${encodeURIComponent(workflowRunId)}/cancel`,
+          {},
+          {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
+        );
+        state.qgisSpatialWorkflow = run;
+        state.qgisSpatialArtifacts = [
+          ...asArray(run.artifacts),
+          ...asArray(run.render_artifacts),
+        ];
+        state.qgisSpatialMessage = run.state === "cancelled"
+          ? "Workflow cancelled · no operational state changed"
+          : `Workflow state unchanged · ${run.state}`;
+      } catch (error) {
+        state.qgisSpatialMessage = `Cancel failed · ${String(error?.message || error)}`;
+      } finally {
+        state.qgisSpatialBusy = false;
+        stopQgisSpatialPolling();
+        if (state.route === "outdoor-navigation") refreshCurrentDataView();
+      }
+    }
+
+    async function reviewQgisSpatialEvidence() {
+      const workflowRunId = state.qgisSpatialWorkflow?.workflow_run_id;
+      if (!workflowRunId || state.qgisSpatialBusy) return;
+      state.qgisSpatialBusy = true;
+      state.qgisSpatialMessage = "Recording evidence review…";
+      if (state.route === "outdoor-navigation") render();
+      try {
+        const run = await postJson(
+          `${qgisSpatialBasePath()}/workflows/${encodeURIComponent(workflowRunId)}/review`,
+          {
+            decision: "reviewed_evidence",
+            reviewed_by: "dashboard_operator",
+            review_note: "QGIS rendered evidence and Scout MapLibre binding inspected.",
+          },
+          {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
+        );
+        state.qgisSpatialWorkflow = run;
+        rememberQgisSpatialWorkflow(run);
+        state.qgisSpatialArtifacts = [
+          ...asArray(run.artifacts),
+          ...asArray(run.render_artifacts),
+        ];
+        state.qgisSpatialMessage = "Evidence review recorded · candidate authority unchanged";
+      } catch (error) {
+        state.qgisSpatialMessage = `Evidence review failed · ${String(error?.message || error)}`;
+      } finally {
+        state.qgisSpatialBusy = false;
+        if (state.route === "outdoor-navigation") refreshCurrentDataView();
+      }
     }
 
     function stopLivingRefresh() {
@@ -12302,6 +12824,7 @@
 
     function render() {
       destroyNavigationTerrainMapLibre();
+      destroyQgisSpatialMapLibre();
       hideDashboardMapHint();
       const workspace = document.getElementById("workspace");
       const evidence = document.getElementById("dashboardEvidence");
@@ -12361,6 +12884,7 @@
       bindRenderedControls();
       if (route === "outdoor-navigation") {
         void initializeNavigationTerrainMapLibre();
+        void initializeQgisSpatialMapLibre();
       }
       if (route === "map") {
         dashboardMap.focus?.({ preventScroll: true });
@@ -19915,6 +20439,164 @@
         .filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
     }
 
+    function qgisSpatialMaplibreFeatures() {
+      const geojson = state.qgisSpatialWorkflow?.maplibre_geojson;
+      const visibility = state.qgisSpatialLayerVisibility || {};
+      return asArray(geojson?.features)
+        .filter(feature => feature?.type === "Feature" && feature?.geometry)
+        .filter(feature => {
+          const kind = String(feature?.properties?.kind || "");
+          if (kind === "qgis_candidate_route") return visibility.route !== false;
+          if (kind === "qgis_slope_candidate") return visibility.slope !== false;
+          if (kind === "qgis_terrain_feature_sample") return visibility.features !== false;
+          return true;
+        })
+        .map(feature => ({
+          ...feature,
+          properties: {
+            ...(feature.properties || {}),
+            candidate_only: true,
+            runtime_safety_truth: false,
+            operational: false,
+            feature_class: feature.properties?.feature_class || "qgis_spatial_candidate",
+            source: "qgis_spatial_workflow",
+          },
+        }));
+    }
+
+    function qgisSpatialMaplibreSourceArtifact() {
+      return asArray(state.qgisSpatialArtifacts).find(
+        artifact => artifact?.artifact_type === "maplibre_geojson",
+      ) || null;
+    }
+
+    function qgisSpatialEvidenceFeatureCollection() {
+      const adapter = window.ScoutMapLibreEvidence;
+      if (!adapter?.createEvidenceFeature || !adapter?.createEvidenceFeatureCollection) {
+        return null;
+      }
+      const workflow = state.qgisSpatialWorkflow || {};
+      const sourceArtifact = qgisSpatialMaplibreSourceArtifact();
+      const features = qgisSpatialMaplibreFeatures().map((feature, ordinal) => {
+        const properties = feature.properties || {};
+        const kind = String(properties.kind || "qgis_spatial_candidate");
+        const layerId = kind === "qgis_candidate_route"
+          ? "qgis-route"
+          : kind === "qgis_terrain_feature_sample"
+            ? "qgis-terrain-samples"
+            : "qgis-slope";
+        return adapter.createEvidenceFeature({
+          ...properties,
+          feature_id: properties.id || feature.id,
+          source_id: properties.source_id || workflow.workflow_run_id,
+          artifact_id: properties.artifact_id || sourceArtifact?.artifact_id,
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+        }, {
+          layerId,
+          ordinal,
+          geometry: feature.geometry,
+          properties: {
+            ...properties,
+            kind,
+            workflow_id: workflow.workflow_id || "terrain_context_preview.v1",
+            workflow_run_id: workflow.workflow_run_id || "",
+            artifact_id: properties.artifact_id || sourceArtifact?.artifact_id || null,
+            fixture: Boolean(properties.fixture || workflow.fixture || sourceArtifact?.fixture),
+            synthetic: Boolean(properties.synthetic || workflow.fixture || sourceArtifact?.fixture),
+            visualization_only: true,
+            adds_source_resolution: false,
+            candidate_only: true,
+            runtime_safety_truth: false,
+            operational: false,
+          },
+        });
+      });
+      return adapter.createEvidenceFeatureCollection(features);
+    }
+
+    function destroyQgisSpatialMapLibre() {
+      qgisSpatialMapLibreRuntime.generation += 1;
+      try {
+        qgisSpatialMapLibreRuntime.renderer?.destroy();
+      } catch (_error) {
+        // A Dashboard render may already have detached the prior map canvas.
+      }
+      qgisSpatialMapLibreRuntime.renderer = null;
+      qgisSpatialMapLibreRuntime.resolution = null;
+    }
+
+    async function initializeQgisSpatialMapLibre() {
+      const host = document.querySelector('[data-scout-maplibre-evidence="qgis"]');
+      if (!host || state.route !== "outdoor-navigation") return;
+      const status = host.parentElement?.querySelector("[data-qgis-maplibre-state]");
+      const adapter = window.ScoutMapLibreEvidence;
+      const featureCollection = qgisSpatialEvidenceFeatureCollection();
+      if (!adapter || !featureCollection?.features?.length) return;
+      const generation = qgisSpatialMapLibreRuntime.generation;
+      const requested = new URLSearchParams(window.location.search).get("mapRenderer") || "auto";
+      const resolution = await adapter.loadRenderer({requested});
+      if (generation !== qgisSpatialMapLibreRuntime.generation) return;
+      qgisSpatialMapLibreRuntime.resolution = resolution;
+      host.dataset.navigationMaplibreStatus = resolution.active === "maplibre"
+        ? "loading"
+        : "degraded";
+      host.dataset.qgisEvidenceRenderer = resolution.active;
+      if (resolution.active !== "maplibre") {
+        if (status) {
+          status.dataset.qgisMaplibreState = "degraded";
+          status.innerHTML = `<strong>INTERACTIVE QGIS PREVIEW DEGRADED</strong>${escapeHtml(resolution.reason)} · QGIS render evidence remains available · review pending · runtime_safety_truth=false`;
+        }
+        return;
+      }
+      try {
+        const renderer = await adapter.createRenderer({
+          maplibregl: resolution.maplibregl,
+          container: host,
+          onFeatureSelect(feature) {
+            const artifactId = String(feature?.properties?.artifact_id || "");
+            state.qgisSpatialSelectedFeatureRef = String(
+              feature?.properties?.identity_key || feature?.id || "",
+            );
+            if (artifactId) state.qgisSpatialSelectedArtifactId = artifactId;
+            window.setTimeout(() => render(), 0);
+          },
+          onStatus(rendererStatus) {
+            host.dataset.navigationMaplibreStatus = rendererStatus.state;
+          },
+        }, featureCollection);
+        if (generation !== qgisSpatialMapLibreRuntime.generation) {
+          renderer.destroy();
+          return;
+        }
+        qgisSpatialMapLibreRuntime.renderer = renderer;
+        if (state.qgisSpatialSelectedFeatureRef) {
+          renderer.focus(state.qgisSpatialSelectedFeatureRef, {fit: false});
+        }
+        const workflow = state.qgisSpatialWorkflow || {};
+        const fixtureMode = Boolean(
+          workflow.fixture
+          || state.qgisSpatialStatus?.fixture_mode
+          || asArray(state.qgisSpatialArtifacts).some(artifact => artifact.fixture),
+        );
+        host.dataset.navigationMaplibreStatus = "ready";
+        host.dataset.qgisCandidateOnly = "true";
+        host.dataset.qgisRuntimeSafetyTruth = "false";
+        host.dataset.qgisOperational = "false";
+        if (status) {
+          status.dataset.qgisMaplibreState = "ready";
+          status.innerHTML = `<strong>SHARED MAPLIBRE QGIS CANDIDATE · READY</strong>${formatInteger(featureCollection.features.length)} candidate features · ${fixtureMode ? "fixture synthetic non-runtime" : "QGIS worker artifact"} · review ${escapeHtml(workflow.visual_review_status || "pending")} · runtime_safety_truth=false`;
+        }
+      } catch (error) {
+        host.dataset.navigationMaplibreStatus = "failed";
+        if (status) {
+          status.dataset.qgisMaplibreState = "failed";
+          status.innerHTML = `<strong>INTERACTIVE QGIS PREVIEW FAILED</strong>${escapeHtml(error?.message || String(error))} · no evidence authority changed`;
+        }
+      }
+    }
+
     function navigationTerrainMapLibreFeatureCollection(snapshot) {
       const features = [];
       asArray(snapshot?.terrain_hierarchy?.edges).forEach(edge => {
@@ -19984,6 +20666,7 @@
           });
         }
       }
+      features.push(...qgisSpatialMaplibreFeatures());
       return {type: "FeatureCollection", features};
     }
 
@@ -20163,6 +20846,52 @@
             "line-color": "#e00067",
             "line-width": lineWidth(4, 7),
             "line-opacity": 1,
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-qgis-slope-candidate",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "qgis_slope_candidate"],
+          paint: {
+            "line-color": "#77d6c6",
+            "line-width": lineWidth(12, 18),
+            "line-opacity": .28,
+            "line-dasharray": [1.2, 1.2],
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-qgis-terrain-feature-samples",
+          type: "circle",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "qgis_terrain_feature_sample"],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], Number(dem.minzoom), 3.5, Number(dem.minzoom) + 3, 6.5],
+            "circle-color": [
+              "match", ["get", "geomorphon_label"],
+              "ridge", "#f6e27a",
+              "peak", "#ff8c5a",
+              "valley", "#47a9c4",
+              "hollow", "#77d6c6",
+              "#f4f7f5",
+            ],
+            "circle-stroke-color": "#07110e",
+            "circle-stroke-width": 1.5,
+            "circle-opacity": .94,
+          },
+        },
+        {
+          id: "scout-qgis-route-candidate",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "qgis_candidate_route"],
+          paint: {
+            "line-color": "#f6e27a",
+            "line-width": lineWidth(4, 7),
+            "line-opacity": .94,
+            "line-dasharray": [2, 1.2],
           },
           layout: {"line-cap": "round", "line-join": "round"},
         },
@@ -21044,6 +21773,261 @@
       `;
     }
 
+    function qgisSpatialStatusTone(availability) {
+      if (availability === "available") return "ok";
+      if (["degraded", "not_configured", "disabled"].includes(availability)) return "warn";
+      if (["unavailable", "error"].includes(availability)) return "bad";
+      return "info";
+    }
+
+    function qgisSpatialWorkflowTone(stateValue) {
+      if (["completed", "review_required"].includes(stateValue)) return "ok";
+      if (["queued", "running"].includes(stateValue)) return "info";
+      if (stateValue === "failed") return "bad";
+      if (stateValue === "cancelled") return "warn";
+      return "warn";
+    }
+
+    function qgisSpatialRenderArtifact() {
+      const workflow = state.qgisSpatialWorkflow || {};
+      return asArray(workflow.render_artifacts).find(artifact => artifact?.artifact_type === "qgis_render_preview")
+        || state.qgisSpatialArtifacts.find(artifact => artifact?.artifact_type === "qgis_render_preview")
+        || null;
+    }
+
+    function qgisSpatialSelectedArtifact() {
+      const artifacts = state.qgisSpatialArtifacts || [];
+      return artifacts.find(artifact => artifact?.artifact_id === state.qgisSpatialSelectedArtifactId)
+        || artifacts[0]
+        || null;
+    }
+
+    function qgisSpatialResolutionLabel(value) {
+      if (!value || typeof value !== "object") return "UNKNOWN";
+      if (value.status) return String(value.status);
+      return Object.entries(value)
+        .map(([key, item]) => `${key}:${item}`)
+        .join(" · ") || "UNKNOWN";
+    }
+
+    function renderQgisWorkflowSteps(workflow) {
+      const fallbackSteps = (
+        workflow?.workflow_id === "terrain_feature_stack.v1"
+          ? [
+              ["input_validation", "Input validation"],
+              ["crs_inspection", "CRS inspection"],
+              ["route_preparation", "Route preparation"],
+              ["dem_loaded", "DEM loaded"],
+              ["capability_discovery", "GRASS capability discovery"],
+              ["slope_aspect_generated", "Slope and aspect generated"],
+              ["geomorphon_generated", "Geomorphon landforms generated"],
+              ["hydrology_generated", "Flow accumulation generated"],
+              ["crs_normalized", "CRS metadata normalized"],
+              ["map_rendered", "Map rendered"],
+              ["evidence_review_pending", "Evidence review pending"],
+            ]
+          : [
+              ["input_validation", "Input validation"],
+              ["crs_inspection", "CRS inspection"],
+              ["route_preparation", "Route preparation"],
+              ["dem_loaded", "DEM loaded"],
+              ["slope_generated", "Slope generated"],
+              ["map_rendered", "Map rendered"],
+              ["evidence_review_pending", "Evidence review pending"],
+            ]
+      ).map(([step_id, label]) => ({step_id, label, status: "pending"}));
+      const steps = asArray(workflow?.steps).length ? asArray(workflow.steps) : fallbackSteps;
+      return `
+        <ol class="qgis-workflow-steps" data-qgis-workflow-steps="true">
+          ${steps.map(step => `
+            <li data-qgis-step-status="${escapeHtml(step.status || "pending")}">
+              <span aria-hidden="true">${step.status === "completed" ? "✓" : step.status === "failed" ? "!" : "○"}</span>
+              <strong>${escapeHtml(step.label || step.step_id || "step")}</strong>
+              <small>${escapeHtml(step.warning || step.error?.code || step.status || "pending")}</small>
+            </li>
+          `).join("")}
+        </ol>
+      `;
+    }
+
+    function renderQgisAnalysisPanel() {
+      const status = state.qgisSpatialStatus || {};
+      const availability = status.availability || "loading";
+      const capabilities = state.qgisSpatialCapabilities || {};
+      const workflow = state.qgisSpatialWorkflow || null;
+      const workflowState = workflow?.state || "not_started";
+      const projectContext = status.project_context || {};
+      const canStart = ["available", "degraded"].includes(availability) && !state.qgisSpatialBusy;
+      const workflowAllowlist = asArray(capabilities.workflow_allowlist);
+      const canStartPreview = canStart && workflowAllowlist.includes("terrain_context_preview.v1");
+      const canStartFeatureStack = canStart && workflowAllowlist.includes("terrain_feature_stack.v1");
+      const canReview = workflowState === "completed"
+        && asArray(workflow?.artifacts).length > 0
+        && asArray(workflow?.render_artifacts).length > 0
+        && workflow?.human_review_status !== "completed"
+        && !state.qgisSpatialBusy;
+      const runId = workflow?.workflow_run_id || "none";
+      const workflowStatus = workflow
+        ? `${workflowState} · processing ${workflow.processing_status || "pending"} · render ${workflow.render_status || "pending"} · review ${workflow.visual_review_status || "pending"}`
+        : "not started";
+      return `
+        <section class="qgis-analysis-panel" data-qgis-spatial-panel="true" data-qgis-availability="${escapeHtml(availability)}">
+          <div class="navigation-reading-head">
+            <div>
+              <h3>GIS Analysis</h3>
+              <p>QGIS is treated as a spatial evidence engine. Results stay candidate-only until human review.</p>
+            </div>
+            <span class="chip ${qgisSpatialStatusTone(availability)}">QGIS Backend · ${escapeHtml(String(availability).toUpperCase())}</span>
+          </div>
+          <div class="qgis-status-grid">
+            <div><small>Configured</small><strong>${String(Boolean(status.configured))}</strong></div>
+            <div><small>Reachable</small><strong>${String(Boolean(status.reachable))}</strong></div>
+            <div><small>QGIS app</small><strong>${String(Boolean(status.qgis_application_available))}</strong></div>
+            <div><small>Bridge</small><strong>${String(Boolean(status.plugin_bridge_available))}</strong></div>
+            <div><small>Project</small><strong>${escapeHtml(projectContext.project_loaded ? (projectContext.project_label || projectId()) : "unavailable")}</strong></div>
+            <div><small>Capabilities</small><strong>${formatInteger(asArray(capabilities.capabilities).length)}</strong></div>
+          </div>
+          <div class="qgis-actions">
+            <button type="button" data-qgis-terrain-preview="true" ${canStartPreview ? "" : "disabled"}>Terrain Context Preview</button>
+            <button type="button" data-qgis-terrain-features="true" ${canStartFeatureStack ? "" : "disabled"}>GRASS Terrain Features</button>
+            <button type="button" data-qgis-cancel-workflow="true" ${["queued", "running"].includes(workflowState) ? "" : "disabled"}>Cancel</button>
+            <button type="button" data-qgis-review-evidence="true" ${canReview ? "" : "disabled"}>Record Evidence Review</button>
+          </div>
+          <div class="qgis-layer-toggles" role="group" aria-label="QGIS candidate layer toggles">
+            <button type="button" data-qgis-layer-toggle="route" aria-pressed="${state.qgisSpatialLayerVisibility?.route === false ? "false" : "true"}">Route</button>
+            <button type="button" data-qgis-layer-toggle="slope" aria-pressed="${state.qgisSpatialLayerVisibility?.slope === false ? "false" : "true"}">Slope coverage</button>
+            <button type="button" data-qgis-layer-toggle="features" aria-pressed="${state.qgisSpatialLayerVisibility?.features === false ? "false" : "true"}">Terrain samples</button>
+          </div>
+          <div class="qgis-workflow-summary">
+            <span class="chip ${qgisSpatialWorkflowTone(workflowState)}">Workflow · ${escapeHtml(String(workflowState).toUpperCase())}</span>
+            <strong>${escapeHtml(workflowStatus)}</strong>
+            <small>${escapeHtml(state.qgisSpatialMessage || `run ${runId}`)}</small>
+          </div>
+          ${renderQgisWorkflowSteps(workflow)}
+          <div class="qgis-boundary-strip">
+            <strong>candidate_only=true</strong>
+            <strong>runtime_safety_truth=false</strong>
+            <strong>operational=false</strong>
+            <span>${status.fixture_mode ? "fixture / synthetic / non-runtime" : "live QGIS requires artifact review"}</span>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderQgisArtifactMetadata() {
+      const artifact = qgisSpatialSelectedArtifact();
+      if (!artifact) {
+        return `
+          <section class="qgis-artifact-panel" data-qgis-artifact-metadata="empty">
+            <h3>QGIS Artifact Metadata</h3>
+            <p>No QGIS spatial artifact has been produced for this workspace view.</p>
+          </section>
+        `;
+      }
+      const artifacts = state.qgisSpatialArtifacts || [];
+      return `
+        <section class="qgis-artifact-panel" data-qgis-artifact-metadata="${escapeHtml(artifact.artifact_id)}">
+          <div class="navigation-terrain-inspector-head"><strong>QGIS Artifact Metadata</strong><small>${escapeHtml(artifact.status || "candidate")}</small></div>
+          <div class="qgis-artifact-select">
+            ${artifacts.map(item => `<button type="button" data-qgis-artifact-select="${escapeHtml(item.artifact_id)}" aria-pressed="${item.artifact_id === artifact.artifact_id ? "true" : "false"}">${escapeHtml(item.artifact_type || "artifact")}</button>`).join("")}
+          </div>
+          <div class="qgis-artifact-grid">
+            <div><small>Artifact ID</small><strong>${escapeHtml(artifact.artifact_id)}</strong></div>
+            <div><small>Hash</small><strong>${escapeHtml((artifact.artifact_hash || "unavailable").slice(0, 18))}</strong></div>
+            <div><small>CRS</small><strong>${escapeHtml(artifact.crs || "UNKNOWN")}</strong></div>
+            <div><small>Source resolution</small><strong>${escapeHtml(qgisSpatialResolutionLabel(artifact.source_resolution))}</strong></div>
+            <div><small>Output resolution</small><strong>${escapeHtml(qgisSpatialResolutionLabel(artifact.output_resolution))}</strong></div>
+            <div><small>Algorithm</small><strong>${escapeHtml(artifact.processing_algorithm || "UNKNOWN")}</strong></div>
+            <div><small>Fixture</small><strong>${String(Boolean(artifact.fixture))}</strong></div>
+            <div><small>Runtime truth</small><strong>${String(Boolean(artifact.runtime_safety_truth))}</strong></div>
+          </div>
+          <p class="qgis-artifact-note">${escapeHtml(asArray(artifact.warnings).join(" · ") || "No artifact warning recorded.")}</p>
+        </section>
+      `;
+    }
+
+    function renderQgisVisualReview() {
+      const workflow = state.qgisSpatialWorkflow;
+      const renderArtifact = qgisSpatialRenderArtifact();
+      if (!workflow || !renderArtifact) {
+        return `
+          <section class="qgis-visual-review" data-qgis-visual-review="pending">
+            <div class="navigation-terrain-inspector-head"><strong>QGIS Visual Review</strong><small>pending</small></div>
+            <div class="qgis-render-placeholder">No QGIS rendered evidence artifact is available yet.</div>
+          </section>
+        `;
+      }
+      const src = `${qgisSpatialBasePath()}/workflows/${encodeURIComponent(workflow.workflow_run_id)}/artifacts/${encodeURIComponent(renderArtifact.artifact_id)}/render?v=${encodeURIComponent((renderArtifact.artifact_hash || "").slice(0, 16))}`;
+      return `
+        <section class="qgis-visual-review" data-qgis-visual-review="ready" data-qgis-render-artifact-id="${escapeHtml(renderArtifact.artifact_id)}">
+          <div class="navigation-terrain-inspector-head"><strong>QGIS Visual Review</strong><small>${escapeHtml(renderArtifact.visual_review_status || workflow.visual_review_status || "pending")}</small></div>
+          <div class="qgis-render-frame">
+            <img src="${src}" alt="QGIS rendered candidate evidence preview">
+          </div>
+          <div class="qgis-render-meta">
+            <span>created ${escapeHtml(renderArtifact.created_at || "unknown")}</span>
+            <span>artifact ${escapeHtml(renderArtifact.artifact_id)}</span>
+            <span>hash ${escapeHtml((renderArtifact.artifact_hash || "unavailable").slice(0, 18))}</span>
+            <span>CRS ${escapeHtml(renderArtifact.crs || "UNKNOWN")}</span>
+            <span>source resolution ${escapeHtml(qgisSpatialResolutionLabel(renderArtifact.source_resolution))}</span>
+            <span>${renderArtifact.fixture ? "fixture synthetic non-runtime" : "live QGIS render artifact"}</span>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderQgisMapLibrePreview() {
+      const featureCount = qgisSpatialMaplibreFeatures().length;
+      if (!featureCount) return "";
+      const workflow = state.qgisSpatialWorkflow || {};
+      const fixtureMode = Boolean(
+        workflow.fixture
+        || state.qgisSpatialStatus?.fixture_mode
+        || asArray(state.qgisSpatialArtifacts).some(artifact => artifact.fixture),
+      );
+      const stateText = `${formatInteger(featureCount)} QGIS candidate features · ${fixtureMode ? "fixture synthetic non-runtime" : "QGIS worker artifact"} · review ${workflow.visual_review_status || "pending"} · candidate_only=true`;
+      return `
+        <section class="qgis-maplibre-preview" data-qgis-maplibre-preview="true">
+          <div class="navigation-terrain-inspector-head">
+            <strong>QGIS MapLibre Candidate Preview</strong>
+            <small>${escapeHtml(workflow.workflow_run_id || "workflow pending")}</small>
+          </div>
+          <div
+            class="navigation-terrain-maplibre-shell"
+            data-navigation-maplibre-shell="qgis"
+            data-navigation-workspace-map="true"
+            data-navigation-terrain-dem-status="not-required-for-qgis-preview"
+          >
+            <div
+              class="navigation-terrain-maplibre-map"
+              data-scout-maplibre-evidence="qgis"
+              data-navigation-maplibre-status="pending"
+              data-dashboard-map-surface="navigation-map"
+              data-dashboard-basemap-layer="none"
+              data-dashboard-basemap-policy="qgis-candidate-only"
+              data-dashboard-map-hint-title="QGIS candidate MapLibre preview"
+              data-dashboard-map-hint-summary="${escapeHtml(stateText)}"
+              data-dashboard-map-hint-source="QGIS spatial workflow candidate artifact"
+              tabindex="0"
+              role="application"
+              aria-label="Interactive MapLibre QGIS candidate evidence map"
+              aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0"
+            ></div>
+            <button
+              type="button"
+              class="navigation-terrain-maplibre-fit"
+              data-qgis-maplibre-fit="true"
+            >FIT</button>
+            <div
+              class="navigation-terrain-maplibre-state"
+              data-qgis-maplibre-state="loading"
+              aria-live="polite"
+            ><strong>MAPLIBRE QGIS CANDIDATE</strong>${escapeHtml(stateText)} · runtime_safety_truth=false</div>
+          </div>
+        </section>
+      `;
+    }
+
     function renderNavigationWorkspaceLoading(snapshot) {
       const error = state.dataScopeErrors?.navigation_terrain;
       const displayBounds = dashboardRudyPaddedBounds(
@@ -21151,6 +22135,7 @@
                         selectedTerrainEvent,
                       )
                     : renderNavigationWorkspaceLoading(snapshot)}
+                ${sourceMode === "workspace" ? renderQgisMapLibrePreview() : ""}
                 <div class="navigation-terrain-legend" aria-label="Terrain map legend">
                 ${sourceMode === "workspace" && evidenceDomain === "observed" ? `
                     <span data-navigation-legend-kind="basemap"><strong>Rudy+TW</strong><br>cached Scout tiles</span>
@@ -21159,6 +22144,7 @@
                     <span data-navigation-legend-kind="drainage"><strong>深藍主谷</strong><br>集水骨幹候選</span>
                     <span data-navigation-legend-kind="tributary"><strong>藍綠支谷</strong><br>連通谷地候選 · 未水文複核</span>
                     <span data-navigation-legend-kind="event"><strong>紅色事件點</strong><br>離線 shadow candidate</span>
+                    <span data-navigation-legend-kind="qgis"><strong>QGIS 候選</strong><br>yellow/teal fixture or worker artifact</span>
                   ` : sourceMode === "workspace" && evidenceDomain === "prior" ? `
                     <span data-navigation-legend-kind="dem"><strong>DEM 地形面</strong><br>20m source support</span>
                     <span data-navigation-legend-kind="ridge"><strong>橘色稜脊</strong><br>DEM-derived candidate</span>
@@ -21178,16 +22164,19 @@
                     <span><strong>珊瑚斜線</strong><br>崩壁／曝露風險</span>
                   `}
                 </div>
+                ${renderQgisVisualReview()}
               </section>
               ${sourceMode === "workspace" && liveReady && evidenceDomain === "observed" ? renderNavigationTerrainEventTimeline(snapshot, selectedTerrainEvent) : ""}
             </div>
             <aside class="navigation-terrain-side">
+              ${renderQgisAnalysisPanel()}
               ${sourceMode === "workspace"
                 ? renderNavigationWorkspaceDetail(snapshot, selectedLivePoint, selectedStructurePoint, selectedTerrainEvent)
                 : renderNavigationTerrainDetail(selected)}
               ${sourceMode === "workspace" && liveReady
                 ? renderNavigationReviewQueue(snapshot, selectedLivePoint, selectedStructurePoint, selectedTerrainEvent)
                 : ""}
+              ${renderQgisArtifactMetadata()}
               <p class="navigation-boundary-note"><strong>判讀邊界：</strong> 等高線與 DEM 能指出「哪裡值得注意」，不能單獨證明步道存在、目前可通行或適合獨攀。Workspace risk candidates 也不能直接命名為崩壁、溪谷或曝露地形；需要來源與人工複核。</p>
             </aside>
           </div>
@@ -27073,6 +28062,41 @@
       });
     }
 
+    function bindQgisSpatialControls() {
+      document.querySelector("[data-qgis-terrain-preview]")?.addEventListener("click", () => {
+        void startQgisTerrainContextPreview();
+      });
+      document.querySelector("[data-qgis-terrain-features]")?.addEventListener("click", () => {
+        void startQgisTerrainFeatureStack();
+      });
+      document.querySelector("[data-qgis-cancel-workflow]")?.addEventListener("click", () => {
+        void cancelQgisSpatialWorkflow();
+      });
+      document.querySelector("[data-qgis-review-evidence]")?.addEventListener("click", () => {
+        void reviewQgisSpatialEvidence();
+      });
+      document.querySelector("[data-qgis-maplibre-fit]")?.addEventListener("click", () => {
+        qgisSpatialMapLibreRuntime.renderer?.fitAll({duration: 240});
+      });
+      document.querySelectorAll("[data-qgis-layer-toggle]").forEach(button => {
+        button.addEventListener("click", () => {
+          const key = button.dataset.qgisLayerToggle || "";
+          if (!["route", "slope", "features"].includes(key)) return;
+          state.qgisSpatialLayerVisibility = {
+            ...(state.qgisSpatialLayerVisibility || {}),
+            [key]: state.qgisSpatialLayerVisibility?.[key] === false,
+          };
+          render();
+        });
+      });
+      document.querySelectorAll("[data-qgis-artifact-select]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.qgisSpatialSelectedArtifactId = button.dataset.qgisArtifactSelect || "";
+          render();
+        });
+      });
+    }
+
     function bindRenderedControls() {
       bindRuntimeAuditControls();
       bindDiagnosticControls();
@@ -27080,6 +28104,7 @@
       bindPermissionControls();
       bindArchitectureControls();
       bindNavigationTerrainControls();
+      bindQgisSpatialControls();
       bindWeatherCwaControls();
       bindDashboardMapViewports();
       bindDashboardMapHints();

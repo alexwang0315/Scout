@@ -74,6 +74,12 @@ from navigation_terrain_raster_dem import (
     load_navigation_terrain_dem_manifest,
     navigation_terrain_dem_tile,
 )
+from qgis_spatial_backend import (
+    QgisSpatialBackend,
+    QgisSpatialBackendError,
+    QgisSpatialNotFound,
+)
+from qgis_spatial_contracts import SpatialAnalysisRequest, SpatialEvidenceReviewRequest
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
     build_pretrip_admin_view,
@@ -2642,6 +2648,10 @@ def create_admin_router(
     resolved_incident_store_path = incident_store_path or _incident_store_from_env()
     resolved_wearable_inventory_root = wearable_inventory_root(_data_root_from_env())
     resolved_now_factory = now_factory or (lambda: datetime.now(timezone.utc))
+    qgis_spatial_backend = QgisSpatialBackend.from_env(
+        runtime_audit=runtime_audit,
+        now_factory=resolved_now_factory,
+    )
 
     @router.get("", response_class=HTMLResponse)
     def admin_page() -> Response:
@@ -4880,6 +4890,306 @@ def create_admin_router(
                 status_code=422,
                 detail="Navigation terrain projection could not be prepared",
             ) from exc
+
+    @router.get("/pretrip/projects/{project_id}/spatial/qgis/status")
+    def pretrip_project_qgis_spatial_status(project_id: str) -> JSONResponse:
+        try:
+            _validate_pretrip_import_project_id(project_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        project_root = _pretrip_project_root_for_read(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        project: dict[str, Any] | None = None
+        if project_root is not None:
+            try:
+                loaded = json.loads(
+                    (project_root / "project.json").read_text(encoding="utf-8")
+                )
+                if isinstance(loaded, dict):
+                    project = loaded
+            except (json.JSONDecodeError, OSError):
+                project = None
+        status = qgis_spatial_backend.status(
+            project_id=project_id,
+            project_root=project_root,
+            project=project,
+        )
+        return JSONResponse(
+            content=status.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.get("/pretrip/projects/{project_id}/spatial/qgis/capabilities")
+    def pretrip_project_qgis_spatial_capabilities(project_id: str) -> JSONResponse:
+        try:
+            _validate_pretrip_import_project_id(project_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        catalog = qgis_spatial_backend.capabilities()
+        return JSONResponse(
+            content=catalog.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.post("/pretrip/projects/{project_id}/spatial/qgis/workflows")
+    def pretrip_project_qgis_spatial_workflow(
+        project_id: str,
+        request: SpatialAnalysisRequest,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(
+                status_code=409,
+                detail="QGIS spatial workflows require a workspace-backed project",
+            )
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+            if not isinstance(project, dict):
+                raise ValueError("project.json must contain an object")
+            run = qgis_spatial_backend.start_workflow(
+                project_id=project_id,
+                project_root=project_root,
+                project=project,
+                request=request,
+            )
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="invalid pre-trip project") from exc
+        except (QgisSpatialBackendError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(
+            status_code=(
+                202
+                if run.state.value in {"queued", "running"}
+                else 201
+            ),
+            content=run.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.get(
+        "/pretrip/projects/{project_id}/spatial/qgis/workflows/{workflow_run_id}"
+    )
+    def pretrip_project_qgis_spatial_workflow_state(
+        project_id: str,
+        workflow_run_id: str,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            run = qgis_spatial_backend.get_run(
+                project_root=project_root,
+                workflow_run_id=workflow_run_id,
+            )
+        except QgisSpatialNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except QgisSpatialBackendError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(
+            content=run.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.post(
+        "/pretrip/projects/{project_id}/spatial/qgis/workflows/{workflow_run_id}/cancel"
+    )
+    def pretrip_project_qgis_spatial_workflow_cancel(
+        project_id: str,
+        workflow_run_id: str,
+        requested_by: str = "dashboard_operator",
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            run = qgis_spatial_backend.cancel_workflow(
+                project_root=project_root,
+                workflow_run_id=workflow_run_id,
+                requested_by=requested_by,
+            )
+        except QgisSpatialNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except QgisSpatialBackendError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(
+            content=run.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.post(
+        "/pretrip/projects/{project_id}/spatial/qgis/workflows/{workflow_run_id}/review"
+    )
+    def pretrip_project_qgis_spatial_workflow_review(
+        project_id: str,
+        workflow_run_id: str,
+        request: SpatialEvidenceReviewRequest,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            run = qgis_spatial_backend.review_evidence(
+                project_root=project_root,
+                workflow_run_id=workflow_run_id,
+                request=request,
+            )
+        except QgisSpatialNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except QgisSpatialBackendError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return JSONResponse(
+            content=run.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.get(
+        "/pretrip/projects/{project_id}/spatial/qgis/workflows/{workflow_run_id}/artifacts"
+    )
+    def pretrip_project_qgis_spatial_workflow_artifacts(
+        project_id: str,
+        workflow_run_id: str,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            artifacts = qgis_spatial_backend.list_artifacts(
+                project_root=project_root,
+                workflow_run_id=workflow_run_id,
+            )
+        except QgisSpatialNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except QgisSpatialBackendError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(
+            content={
+                "schema_version": "scout_qgis_spatial_artifacts.v0_1",
+                "project_id": project_id,
+                "workflow_run_id": workflow_run_id,
+                "artifacts": [artifact.model_dump(mode="json") for artifact in artifacts],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.get(
+        "/pretrip/projects/{project_id}/spatial/qgis/workflows/{workflow_run_id}/artifacts/{artifact_id}"
+    )
+    def pretrip_project_qgis_spatial_artifact_metadata(
+        project_id: str,
+        workflow_run_id: str,
+        artifact_id: str,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            artifact = qgis_spatial_backend.get_artifact(
+                project_root=project_root,
+                workflow_run_id=workflow_run_id,
+                artifact_id=artifact_id,
+            )
+        except QgisSpatialNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except QgisSpatialBackendError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(
+            content=artifact.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.get(
+        "/pretrip/projects/{project_id}/spatial/qgis/workflows/{workflow_run_id}/artifacts/{artifact_id}/render"
+    )
+    def pretrip_project_qgis_spatial_artifact_render(
+        project_id: str,
+        workflow_run_id: str,
+        artifact_id: str,
+    ) -> Response:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            artifact, path = qgis_spatial_backend.artifact_path(
+                project_root=project_root,
+                workflow_run_id=workflow_run_id,
+                artifact_id=artifact_id,
+            )
+        except QgisSpatialNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except QgisSpatialBackendError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return Response(
+            path.read_bytes(),
+            media_type=artifact.media_type,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+                "X-Scout-QGIS-Artifact-Id": artifact.artifact_id,
+                "X-Scout-QGIS-Artifact-Hash": artifact.artifact_hash or "",
+            },
+        )
 
     @router.get("/pretrip/projects/{project_id}/terrain-dem/manifest")
     def pretrip_project_terrain_dem_manifest(project_id: str) -> JSONResponse:

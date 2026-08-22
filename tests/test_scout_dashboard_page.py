@@ -5178,3 +5178,19 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
     assert 'centerMap: focusSurface.startsWith("fingerprint")' in architecture_binding
     assert "routeDistanceM: target.dataset.architectureRouteDistanceM" in architecture_binding
     assert 'data-architecture-route-distance-m="${' in html
+
+
+def test_dashboard_qgis_feature_samples_remain_candidate_only_and_toggleable() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "qgis_terrain_feature_sample" in html
+    assert 'data-qgis-layer-toggle="features"' in html
+    assert 'if (!["route", "slope", "features"].includes(key)) return;' in html
+    assert "scout-qgis-terrain-feature-samples" in html
+    assert 'artifact_id: properties.artifact_id || sourceArtifact?.artifact_id' in html
+    qgis_projection = html.split("function qgisSpatialMaplibreFeatures", 1)[1].split(
+        "function qgisSpatialMaplibreSourceArtifact", 1
+    )[0]
+    assert "candidate_only: true" in qgis_projection
+    assert "runtime_safety_truth: false" in qgis_projection
+    assert "operational: false" in qgis_projection

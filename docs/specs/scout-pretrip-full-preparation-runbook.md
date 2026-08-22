@@ -164,6 +164,57 @@ This is an environment preflight for the current local rebuild. Do not claim a
 complete risk run when `project.json` contains
 `risk_score_generation_error: No module named 'numpy'`.
 
+## Step 0.25: Terrain Benchmark Before Capability Classification
+
+Use the Scout terrain benchmark before promoting a terrain operation into a
+Pi-compatible baseline, Pi-bounded operation, or advanced workstation feature.
+This benchmark records execution cost and input size only. It does not validate
+terrain correctness, route truth, hazard truth, navigability, or safety.
+
+Run on the actual Scout Raspberry Pi when classifying Pi feasibility:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 ./venv/bin/python tools/scout_terrain_benchmark.py \
+  --project-root "$PROJECT_ROOT" \
+  --project-id "$PROJECT_ID" \
+  --iterations 3 \
+  --synthetic-dem-sizes 64,128 \
+  --probe-external-tools \
+  --output "$PROJECT_ROOT/outputs/terrain_benchmark.json"
+```
+
+Valid interpretation:
+
+- `workspace_preparation_metadata` measures reading the existing
+  `project.json`, DTM coverage, segment coverage, terrain visualization, and
+  prepared terrain/risk refs. It does not rerun full layer preparation.
+- `synthetic_python_terrain_kernel` measures the pure Python/NumPy Scout risk
+  engine terrain kernel on synthetic DEM grids. Synthetic results are fixture
+  performance evidence only.
+- `external_tool_capabilities` is a PATH probe for GRASS/GDAL/QGIS commands
+  when requested. The benchmark does not execute those tools.
+- A Mac or other non-Pi run is host evidence only. It must not be used as proof
+  that the same operation is Pi-compatible.
+- Every benchmark report keeps `candidate_only=true`,
+  `runtime_safety_truth=false`, `operational=false`, and `benchmark_only=true`.
+
+Use the resulting artifact to decide the next implementation tier:
+
+```text
+Pi-compatible baseline
+  Small route-corridor preparation and terrain metadata operations that pass on
+  the actual Scout Pi.
+
+Pi-bounded terrain evidence
+  Operations that pass on the actual Scout Pi only under explicit DEM size,
+  corridor, memory, and timeout limits.
+
+Advanced workstation feature
+  Operations that fail, time out, show memory pressure, or were not measured on
+  the actual Scout Pi. QGIS Desktop/QGIS MCP visual review starts in this tier
+  until benchmark evidence proves a narrower Pi-bounded slice.
+```
+
 ## Step 0.5: Standard Durable Evidence Source
 
 The GPX importer can reconstruct GPX-derived candidates, but it does not by
@@ -3756,3 +3807,272 @@ SOP change:
   supported rectangular block, retain nearest-neighbor encoding, and continue
   to disclose the 20 m source-cell resolution. Never relax the complete-tile
   rule merely to make 3D render.
+
+## 2026-08-21 MapLibre and QGIS MCP evidence slice v0.1
+
+This integration is additive and disabled by default. QGIS is a spatial
+evidence engine, never Scout's safety authority. Processing and render success
+do not establish terrain truth, trail existence, passability, legality,
+navigability, or safety.
+
+### Discovered implementation map
+
+| Existing component | Reused | QGIS integration point |
+| --- | --- | --- |
+| `docs/admin/scout-dashboard-v0.1.html` Navigation / Split Review workbench | Yes | Bounded GIS Analysis, artifact metadata, MapLibre candidate preview, and QGIS Visual Review sections |
+| `docs/admin/phase4-pretrip-planning.html` and `phase-3-5-runtime-debug.html` map surfaces | Yes | Same local MapLibre runtime and evidence adapter; no second map architecture |
+| `admin_api.py` FastAPI pre-trip router | Yes | Browser-facing status, capabilities, workflow, cancel, review, artifact metadata, and render routes |
+| `tools/dashboard_workspace_app.py` real-workspace 9099 entrypoint | Yes | Loads QGIS configuration only in the Scout backend process |
+| `navigation_terrain_projection_store.py` | Yes | Route geometry source before the reviewed mission-graph fallback |
+| `normalized/terrain/dtm_coverage_summary.json` | Yes | Bounded DEM source catalog, hashes, and source-resolution metadata |
+| workspace-relative `outputs/` refs and atomic JSON writes | Yes | Persistent workflow identity, candidate artifacts, and reload recovery |
+| `runtime_audit_ledger.py` | Yes | Existing workspace-I/O and terminal background-job audit records |
+| existing candidate-only terrain semantics | Yes | QGIS contracts retain `candidate_only=true`, `runtime_safety_truth=false`, and `operational=false` |
+| existing browser polling pattern | Yes | Queued/running worker state polling and reconnect after reload |
+| connected-preparation manager | No direct reuse | It is preparation-specific rather than a generic durable GIS job API; the bounded worker uses private file-backed run state |
+| existing pytest and Dashboard browser qualification | Yes | Contract, adapter, worker, API, map, disabled/unavailable/fixture, reload, and responsive checks |
+
+### Runtime boundary
+
+```text
+Scout Dashboard
+  -> Scout FastAPI `/admin/pretrip/projects/{project_id}/spatial/qgis/*`
+  -> `QgisSpatialBackend`
+  -> authenticated Scout QGIS Worker
+  -> fixed MCP tool and QGIS Processing algorithm allowlists
+  -> QGIS Agent MCP
+  -> QGIS application/plugin bridge
+  -> candidate artifacts in `outputs/spatial/qgis/{workflow_run_id}/`
+  -> shared MapLibre evidence adapter / QGIS Visual Review
+```
+
+The browser never receives the worker URL or bearer token and never calls MCP.
+The worker has no generic tool-forwarding route. It denies arbitrary Python,
+shell commands, unrestricted filesystem access, plugin installation, implicit
+network acquisition, and algorithms outside the fixed allowlist.
+
+### Configuration
+
+Dashboard/backend configuration:
+
+```text
+SCOUT_QGIS_ENABLED=false
+SCOUT_QGIS_FIXTURE_MODE=false
+SCOUT_QGIS_WORKER_URL=http://127.0.0.1:9876
+SCOUT_QGIS_WORKER_TOKEN=<shared secret of at least 32 characters>
+SCOUT_QGIS_TIMEOUT=5
+SCOUT_QGIS_LOCAL_ENDPOINT_REQUIRED=true
+```
+
+Worker-only configuration:
+
+```text
+SCOUT_QGIS_WORKER_ENABLED=true
+SCOUT_QGIS_WORKER_TOKEN=<same shared secret>
+SCOUT_QGIS_WORKER_ROOT=~/.scout-fusion/qgis-worker
+SCOUT_QGIS_SOURCE_ROOTS=<bounded DEM roots separated by the OS path separator>
+SCOUT_QGIS_WORKER_TIMEOUT=120
+SCOUT_QGIS_WORKER_REQUEST_MAX_BYTES=2097152
+SCOUT_QGIS_MCP_COMMAND_JSON=<JSON string array, never a shell command>
+SCOUT_QGIS_MCP_PYTHONPATH=<optional bounded upstream source path>
+```
+
+Keep the worker and MCP bridge on localhost unless an authenticated Scout
+worker is deliberately deployed on another host. The v0.1 adapter requires
+HTTPS when the localhost-only policy is explicitly disabled.
+
+### Workflow and evidence states
+
+`terrain_context_preview.v1` validates route input, inspects the QGIS session
+and CRS, prepares route geometry, loads bounded DEM inputs, runs the allowlisted
+GDAL slope algorithm, renders the QGIS canvas, and exports candidate artifacts.
+Its independent statuses are:
+
+```text
+processing_status -> render_status -> machine_review_status
+                  -> visual_review_status -> human_review_status
+```
+
+`completed / completed / not_started / pending / pending` is expected before
+review. Recording evidence review changes artifact status to
+`reviewed_evidence`; it does not change candidate, operational, or runtime
+safety authority.
+
+### Qualification and constrained-host benchmark
+
+Reusable preparation-only benchmark:
+
+```text
+python3 tools/qgis_preparation_benchmark.py \
+  --project-root /path/to/workspace/project \
+  --project-id <project_id> \
+  --iterations 3 \
+  --output /path/to/qgis-preparation-benchmark.json
+```
+
+The report must say `qgis_processing_executed=false` and `mcp_invoked=false`.
+It measures only project loading, route resolution, bounded DEM selection and
+hashing, and worker-request serialization. A Mac result is not Raspberry Pi
+evidence.
+
+2026-08-21 observation:
+
+- Mac host: x86_64 Darwin, not Raspberry Pi.
+- Input: 240 route points and 12 reported 20 m DTM sources, 5,505,408 bytes.
+- Three-run preparation total p50: 99.231 ms.
+- DEM selection/hash p50: 18.981 ms.
+- Raspberry Pi result: `UNKNOWN`; `scout.local` resolved, but TCP 22 and
+  BatchMode key SSH both failed with `No route to host`.
+- Real QGIS result on this Mac: MCP 0.4.8 initialized, but the QGIS application
+  and plugin bridge were unavailable. The real workflow failed closed as
+  `QGIS_UNAVAILABLE`; no QGIS-derived artifact was fabricated.
+- Fixture result: completed and browser-reviewed, explicitly marked fixture,
+  synthetic, and non-runtime.
+
+### 2026-08-22 Raspberry Pi 5 full-route DEM cost observation
+
+This observation used the real filtered route and 20 m DTM coverage for
+`dongqing_batongguan_historic_trail_scoutAI`. It is Pi-bounded execution
+evidence only. It does not validate geomorphology, hydrology, terrain risk,
+navigability, or safety.
+
+- Host: Raspberry Pi 5 Model B Rev 1.1, arm64, 8 GB RAM.
+- Route input: one continuous filtered GPX track, 5,649 points; the largest
+  adjacent-point distance was 147 m. This avoided the earlier multi-track
+  ordering failure.
+- Mosaic input: 99 coverage-manifest tiles, 45,283,789 source bytes, true 20 m
+  resolution, EPSG:3826, and a 500 m route-bbox margin.
+- Mosaic output: 1,821 x 1,305 = 2,376,405 cells and 4,912,104 bytes.
+  `gdalwarp` took 1.673 seconds with 84,848 KB maximum RSS. Provenance hashing
+  and mosaic preparation are recorded separately from analysis.
+- Raster validity: 69.17 percent valid pixels and 30.83 percent NoData. White
+  gaps in the QGIS preview are missing source coverage, not flat or safe
+  terrain. Never interpolate these gaps into new spatial evidence silently.
+- Three full processing attempts took 26.547 to 28.065 seconds, with a 26.980
+  second median. The final run with a valid QGIS capture took 28.065 seconds.
+  Ten reported artifacts totalled 123,303,074 bytes. CPU temperature moved
+  from 50.1 C to 52.9 C; swap remained at the already allocated 2 MB.
+- The largest command RSS was 132,656 KB for `gdal_contour`. The 20 m contour
+  GeoJSON took 10.908 seconds and 71,963,162 bytes, so contours dominate this
+  slice's time and retained storage. Do not enable full-resolution contour
+  export by default without a retention or simplification policy.
+- GRASS `r.geomorphon` took 7.475 seconds. `r.watershed` took 2.221 seconds;
+  its output remains unreviewed candidate evidence, including edge-effect and
+  negative-accumulation semantics.
+- The headless QGIS baseline after a clean restart was 458,096 KB RSS plus
+  63,680 KB for Xvfb. After loading the route and slope layers it was 509,024
+  KB plus 63,872 KB for Xvfb, approximately 51 MB incremental QGIS RSS.
+- A long-lived QGIS session retained an older slope layer and produced a blank
+  capture. A clean session then returned no image payload on the first visual
+  review request. The bounded worker now permits one fixed canvas-screenshot
+  fallback and independently parses the PNG. A render passes only when at
+  least 0.1 percent of interior pixels differ materially from the background.
+  The final capture passed with 56,924 content pixels, or 27.7 percent.
+- Valid classification: this exact 2.4-million-cell, 20 m route-bbox workflow
+  is a Pi-bounded terrain-evidence operation. Larger mosaics, finer native DEM,
+  multi-route concurrency, and long-running service reliability remain
+  unmeasured and must not inherit this classification automatically.
+
+Evidence:
+
+```text
+artifacts/pi-gis-benchmark/dongqing.full-route-c500m-20m-20260822.r1/mosaic-preparation-full-route-c500m-v1.json
+artifacts/pi-gis-benchmark/dongqing.full-route-c500m-20m-20260822.r3/benchmark-report.json
+workflow run: dongqing.full-route-c500m-20m-20260822.r3
+QGIS worker run: qgis-worker-20260822T041331167386Z-361fcae6c1
+```
+
+### 2026-08-22 Dongqing DEM completion and full-Taiwan comparison
+
+The operator supplied `/Users/alexwang0315/Downloads/twdem`. The source
+archive checks passed before extraction. These results refine the earlier
+69.17 percent observation: the Hualien-only mosaic already returned a DEM
+value for all 5,649 GPX points. Its gaps affected the surrounding route-bbox
+context, not the route line itself.
+
+- Adding the Nantou county tiles scanned 1,411 headers and selected 146 source
+  records: 99 Hualien and 47 Nantou. Thirteen county-boundary tile IDs occurred
+  in both packages; their `.grd` hashes were identical. The bounded mosaic tool
+  therefore keeps `county:tile_id` source identities and supports repeated
+  `--source-root` arguments. It never trusts manifest paths outside those
+  roots.
+- The selected Hualien plus Nantou transfer was 66,849,489 bytes and took 8.97
+  seconds over the observed local network. Mosaic preparation took 2.221
+  seconds with 92,048 KB maximum RSS. Bbox validity rose to 89.78 percent while
+  GPX-point coverage remained 100 percent.
+- The full-Taiwan archive was 268,985,841 bytes and transferred to the Pi in
+  27.45 seconds. Pi extraction took 6.417 seconds and produced a 756,870,860
+  byte GeoTIFF. Keeping both zip and TIFF uses 1,025,856,701 bytes before
+  route-specific outputs.
+- The full-Taiwan TIFF's embedded CRS did not resolve reliably to EPSG:3826;
+  `gdalsrsinfo` returned only low-confidence ESRI candidates. The same archive's
+  `Metadata.xml` explicitly states `EPSG:3826 (TWD97/121 zone)`. The bounded
+  crop therefore assigns EPSG:3826 from that sidecar and records its hash. Do
+  not infer or silently repair this CRS without the source binding.
+- Cropping the full-Taiwan TIFF to the same 1,821 x 1,305, 20 m, 500 m-margin
+  bbox took 0.410 seconds with 128,864 KB maximum RSS. The 7,060,402-byte
+  output had 100 percent valid bbox pixels and 100 percent valid GPX points.
+  Nearest-neighbour cropping adds no source resolution.
+- The completed full-Taiwan `r6` baseline took 36.510 seconds. After making
+  `operational=false` explicit on the MapLibre collection and both candidate
+  features, final real run `r8` took 36.259 seconds and produced ten reported
+  artifacts totalling 168,854,985 bytes. The largest command RSS was 140,704
+  KB for 20 m contours. CPU moved from 50.1 C to 54.5 C and swap stayed at
+  4 MB. QGIS processing and rendering completed; machine, visual, and human
+  review remain pending.
+- Compared with the Hualien-only `r3`, full bbox validity improved by 30.83
+  percentage points, end-to-end analysis wall time increased by 30.1 percent,
+  and retained artifact bytes increased by 36.9 percent. The larger evidence
+  area, especially contours and geomorphons, is the main recurring cost. The
+  full source transfer/extraction is a first-use deployment cost.
+- Failed `r4` is retained as interruption evidence. GRASS failed because the
+  restarted container had `HOME=/` and could not create `/.grass8`; this was
+  an environment configuration failure, not a Pi resource failure. `r5`,
+  `r6`, and `r8` used the bounded writable `HOME=/tmp/scout-home` and completed.
+- Failed `r7` is also retained. It detected version drift after the current
+  QGIS worker was copied over older Pi-side typed contracts. Synchronizing the
+  worker's two direct contract modules restored import compatibility; `r8`
+  then completed without changing the plugin or tool allowlist.
+
+Deployment interpretation:
+
+1. When roughly 757 MB retained source storage is acceptable, keep the verified
+   full-Taiwan TIFF on the Pi and generate small route-specific crops locally.
+   This delivered complete visual context and the fastest crop in this test.
+2. For constrained transfer/storage, sync only selected county tiles. The UI
+   must preserve visible NoData gaps and report the measured coverage; it must
+   not interpolate them into new evidence.
+3. Full DEM coverage and successful GIS processing remain candidate evidence.
+   They do not prove route existence, terrain interpretation, navigability,
+   legal access, hazard status, or safety.
+
+Evidence:
+
+```text
+artifacts/pi-gis-benchmark/dongqing.full-route-c500m-20m-20260822.r4/dem-source-selection.json
+artifacts/pi-gis-benchmark/dongqing.full-route-c500m-20m-20260822.r5/benchmark-report.json
+artifacts/pi-gis-benchmark/dongqing.full-route-c500m-20m-20260822.r6/full-taiwan-dem-preparation-report.json
+artifacts/pi-gis-benchmark/dongqing.full-route-c500m-20m-20260822.r6/dem-completion-comparison.json
+artifacts/pi-gis-benchmark/dongqing.full-route-c500m-20m-20260822.r6/benchmark-report.json
+artifacts/pi-gis-benchmark/dongqing.full-route-c500m-20m-20260822.r8/benchmark-report.json
+workflow run: dongqing.full-route-c500m-20m-20260822.r8
+QGIS worker run: qgis-worker-20260822T045556830991Z-a57a0470df
+```
+
+Qualification after DEM completion:
+
+- The focused DEM, QGIS worker/backend, preparation, terrain benchmark, and
+  import suite passed `92` tests; one optional upstream-QGIS-source test was
+  skipped because `SCOUT_QGIS_UPSTREAM_SRC` was not configured.
+- Ruff, Python bytecode compilation, scoped diff whitespace checks, and the
+  existing 32-layer contract verifier passed. The verifier reported all 32
+  layers valid for the Dongqing workspace.
+- A separate live host/container probe identified Raspberry Pi 5 Model B Rev
+  1.1 (`aarch64`), QGIS 3.44.13, QGIS Agent MCP plugin 0.4.9, GRASS GIS 8.4.1,
+  and GDAL 3.10.3. The `r8` workflow metadata retains `qgis_version=unavailable`
+  because the MCP snapshot did not report that field; the external probe is not
+  silently substituted into workflow provenance.
+- The `r8` QGIS preview was inspected as candidate visual evidence and passed
+  the deterministic non-blank render check. Dashboard browser qualification
+  was not rerun because this DEM-completion step did not change browser-visible
+  behavior; it remains a separate integration gate.
