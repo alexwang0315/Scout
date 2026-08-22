@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Scout Phase 3.5 Runtime Debug | 2026-06-23 12:13:54 CST</title>
   <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css">
   <style>
     :root {
       --bg: #111417;
@@ -329,6 +330,10 @@
       color: var(--text);
       font-weight: 700;
       letter-spacing: .03em;
+    }
+    .layer-menu-header small {
+      font-size: 11px;
+      line-height: 1.25;
     }
     .layer-preset-row {
       display: grid;
@@ -1064,6 +1069,34 @@
       touch-action: none;
       user-select: none;
     }
+    #runtimeMapLibre {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      min-height: 260px;
+      background: #edf2f6;
+    }
+    #runtimeMapRendererShell[data-map-renderer-active="svg"] #runtimeMapLibre,
+    #runtimeMapRendererShell[data-map-renderer-active="maplibre"] #runtimeMap {
+      display: none;
+    }
+    #runtimeMapRendererStatus {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      z-index: 45;
+      max-width: min(420px, calc(100% - 20px));
+      border: 1px solid rgba(15, 23, 42, .24);
+      border-radius: 6px;
+      padding: 6px 8px;
+      color: #17212b;
+      background: rgba(255, 255, 255, .94);
+      font-size: 11px;
+      line-height: 1.35;
+      pointer-events: none;
+    }
+    #runtimeMapRendererShell[data-map-renderer-state="ready"]:not([data-map-raster-state="loading"]):not([data-map-raster-state="degraded"]) #runtimeMapRendererStatus {
+      display: none;
+    }
     #runtimeMap[data-map-interaction-mode="box"],
     #runtimeMap.is-selecting { cursor: crosshair; }
     #runtimeMap.is-panning { cursor: grabbing; }
@@ -1077,6 +1110,11 @@
     }
 
     .map-panel #runtimeMap {
+      height: 100%;
+      min-height: 0;
+      aspect-ratio: auto;
+    }
+    .map-panel #runtimeMapLibre {
       height: 100%;
       min-height: 0;
       aspect-ratio: auto;
@@ -1835,10 +1873,11 @@
         min-height: 0;
       }
 
-      .map-panel #runtimeMap {
+      .map-panel #runtimeMap,
+      .map-panel #runtimeMapLibre {
         height: auto;
-        min-height: 0;
-        aspect-ratio: 1000 / 720;
+        min-height: 260px;
+        aspect-ratio: 16 / 9;
       }
 
       .layer-menu-panel {
@@ -2341,9 +2380,18 @@
                 </div>
               </div>
             </section>
-            <div class="map-wrap">
+            <div
+              class="map-wrap"
+              id="runtimeMapRendererShell"
+              data-map-renderer-requested="auto"
+              data-map-renderer-active="pending"
+              data-map-renderer-state="loading"
+              data-map-renderer-reason="not_initialized"
+            >
+              <div id="runtimeMapLibre" role="application" aria-label="chilai_nanhua_day1 MapLibre debug evidence map" hidden></div>
               <svg id="runtimeMap" viewBox="0 0 1000 720" role="img" aria-label="chilai_nanhua_day1 debug evidence map">
               </svg>
+              <output id="runtimeMapRendererStatus" role="status" aria-live="polite">Selecting debug map renderer.</output>
             </div>
             <p class="summary" id="selectedEventSummary">Select a timeline node to highlight the related runtime map element.</p>
             <div class="map-legend" aria-label="Runtime map legend">
@@ -2474,6 +2522,7 @@
   </div>
 
   <script src="/admin/scout-assistant-ui.js"></script>
+  <script src="/admin/scout-maplibre-evidence.js"></script>
   <script>
     const DEFAULT_PRETRIP_PROJECT_ID = "chilai_nanhua_day1";
     const PRETRIP_PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";
@@ -2482,6 +2531,13 @@
       : DEFAULT_PRETRIP_PROJECT_ID;
     const PRETRIP_DEBUG_PROJECTION_PATH = `/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection`;
     const PRETRIP_DEBUG_PROJECTION_EVENTS_PATH = `/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection-events`;
+    function requestedDebugMapRenderer() {
+      const requested = new URLSearchParams(window.location.search).get("mapRenderer")
+        || localStorage.getItem("scout.debug.mapRenderer")
+        || "auto";
+      return window.ScoutMapLibreEvidence?.normalizeRendererPreference(requested) || "auto";
+    }
+    const DEBUG_MAP_RENDERER_PREFERENCE = requestedDebugMapRenderer();
     const HARDWARE_READINESS_CONTEXT_PATH = "/admin/hardware-readiness/context";
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
@@ -2566,9 +2622,19 @@
       hoveredMapTarget: null,
       osmPbfVector: null,
       osmPbfVectorStatus: "not_loaded",
-      osmCartoPaletteStatus: "not_loaded"
+      osmCartoPaletteStatus: "not_loaded",
+      mapLibreRenderer: null,
+      mapLibreLoadResult: null,
+      mapRenderer: Object.freeze({
+        requested: DEBUG_MAP_RENDERER_PREFERENCE,
+        active: "pending",
+        state: "loading",
+        reason: "not_initialized"
+      })
     };
     const runtimeMap = document.getElementById("runtimeMap");
+    const runtimeMapLibre = document.getElementById("runtimeMapLibre");
+    const runtimeMapRendererShell = document.getElementById("runtimeMapRendererShell");
     const MAP_LAYER_RANKS = {
       imagery: 0,
       "rudy": 4,
@@ -3295,6 +3361,209 @@
       if (usableSegments.length) return usableSegments;
       return fallbackCoords.length >= 2 ? [fallbackCoords] : [];
     }
+    function debugMapLibreCoordinate(point) {
+      const lon = Number(Array.isArray(point) ? point[0] : point?.lon);
+      const lat = Number(Array.isArray(point) ? point[1] : point?.lat);
+      return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
+    }
+    function debugMapLibreLineGeometry(displayGeometry, fallbackCoords = []) {
+      const lines = coordinateSegments(displayGeometry, fallbackCoords)
+        .map(segment => segment.map(debugMapLibreCoordinate).filter(Boolean))
+        .filter(segment => segment.length >= 2);
+      if (!lines.length) return null;
+      return lines.length === 1
+        ? {type: "LineString", coordinates: lines[0]}
+        : {type: "MultiLineString", coordinates: lines};
+    }
+    function debugMapLibrePolygonGeometry(points = []) {
+      const ring = points.map(debugMapLibreCoordinate).filter(Boolean);
+      if (ring.length < 3) return null;
+      const first = ring[0];
+      const last = ring[ring.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) ring.push([...first]);
+      return {type: "Polygon", coordinates: [ring]};
+    }
+    function debugMapLibrePointGeometry(item = {}) {
+      const coordinate = debugMapLibreCoordinate(item);
+      return coordinate ? {type: "Point", coordinates: coordinate} : null;
+    }
+    function debugMapLibreMapRefs(item = {}, extraRefs = []) {
+      return [...new Set([
+        ...extraRefs,
+        ...(Array.isArray(item.map_refs) ? item.map_refs : []),
+        ...(Array.isArray(item.map_target_ids) ? item.map_target_ids : []),
+        ...(Array.isArray(item.target_ids) ? item.target_ids : []),
+        item.event_id,
+        item.checkpoint_id,
+        item.segment_id,
+        item.candidate_id,
+        item.source_id,
+        item.mcp_id,
+        item.boss_point_id,
+        item.nearby_group_id,
+      ].filter(Boolean))];
+    }
+    function appendDebugMapLibreFeature(features, item, layerId, geometry, extra = {}) {
+      if (!geometry || !window.ScoutMapLibreEvidence) return null;
+      const ordinal = features.length;
+      const safeIdentity = {
+        ...item,
+        candidate_only: true,
+        runtime_safety_truth: false,
+        operational: false,
+      };
+      try {
+        const feature = window.ScoutMapLibreEvidence.createEvidenceFeature(safeIdentity, {
+          layerId,
+          ordinal,
+          geometry,
+          properties: {
+            display_label: pointLabelText(item) || mapFeatureTitle(item),
+            hint_summary: mapFeatureSummary(item),
+            evidence_type: item?.evidence_type || extra.evidence_type || "debug_map_projection",
+            event_id: item?.event_id || extra.event_id || null,
+            checkpoint_id: item?.checkpoint_id || null,
+            segment_id: item?.segment_id || null,
+            mcp_id: item?.mcp_id || null,
+            boss_point_id: item?.boss_point_id || null,
+            nearby_group_id: item?.nearby_group_id || null,
+            map_refs: debugMapLibreMapRefs(item, extra.map_refs || []),
+            source_runtime_safety_truth: item?.runtime_safety_truth === true,
+            source_operational: item?.operational === true,
+            visualization_only: true,
+            adds_source_resolution: false,
+          },
+        });
+        features.push(feature);
+        return feature;
+      } catch (_error) {
+        return null;
+      }
+    }
+    function debugMapLibreFeatureCollection(projection) {
+      const adapter = window.ScoutMapLibreEvidence;
+      if (!adapter || !projection) return null;
+      const features = [];
+      const routeCoords = projection.route?.display_geometry?.coordinates?.length
+        ? projection.route.display_geometry.coordinates
+        : projection.route?.polyline || [];
+      appendDebugMapLibreFeature(
+        features,
+        projection.route || {},
+        "route",
+        debugMapLibreLineGeometry(projection.route?.display_geometry, routeCoords),
+        {map_refs: ["route", "route-progress", "runtime"]},
+      );
+      (projection.reference_tracks?.reference_tracks || []).forEach(track => {
+        appendDebugMapLibreFeature(
+          features,
+          track,
+          "reference-tracks",
+          debugMapLibreLineGeometry(track.display_geometry, track.display_geometry?.coordinates || []),
+          {map_refs: ["reference-tracks"]},
+        );
+      });
+      (projection.segments || []).forEach(segment => {
+        appendDebugMapLibreFeature(
+          features,
+          segment,
+          "segments",
+          debugMapLibreLineGeometry(segment.display_geometry, segment.display_geometry?.coordinates || []),
+          {map_refs: ["segment", "route-progress"]},
+        );
+      });
+      [
+        ...(projection.checkpoints || []),
+        ...(projection.gis_perception_timeline?.checkpoint_candidates || []),
+      ].forEach(checkpoint => {
+        appendDebugMapLibreFeature(
+          features,
+          checkpoint,
+          "checkpoints",
+          debugMapLibrePointGeometry(checkpoint),
+          {map_refs: ["checkpoint", "route-progress"]},
+        );
+      });
+      const lineLayers = [
+        ["corridors", projection.map_candidates?.corridor_candidates || [], item => item.corridor?.coordinates || []],
+        ["overpass", projection.overpass_evidence?.corridor_candidates || [], item => item.corridor?.coordinates || []],
+        ["risk-ribbon", projection.risk_ribbon?.segments || [], item => item.coordinates || []],
+        ["risk-heatmap", projection.risk_heatmap?.segments || [], item => item.coordinates || []],
+        ["risk-delta", projection.risk_delta?.segments || [], item => item.coordinates || []],
+      ];
+      lineLayers.forEach(([layerId, items, coordinatesFor]) => {
+        items.forEach(item => appendDebugMapLibreFeature(
+          features,
+          item,
+          layerId,
+          debugMapLibreLineGeometry(null, coordinatesFor(item)),
+          {map_refs: [layerId]},
+        ));
+      });
+      [
+        ...(projection.overpass_evidence?.hazard_candidates || []),
+        ...(projection.map_candidates?.hazard_candidates || []),
+      ].forEach(candidate => appendDebugMapLibreFeature(
+        features,
+        candidate,
+        "hazards",
+        debugMapLibrePolygonGeometry(candidate.hazard?.polygon || candidate.polygon || []),
+        {map_refs: ["hazard", "overpass"]},
+      ));
+      [
+        ...(projection.overpass_evidence?.poi_candidates || []).map(candidate => ({
+          item: candidate,
+          point: candidate.poi?.coordinate,
+          layerId: "overpass",
+        })),
+        ...(projection.map_candidates?.poi_candidates || []).map(candidate => ({
+          item: candidate,
+          point: candidate.poi?.coordinate,
+          layerId: "pois",
+        })),
+        ...(projection.major_critical_points?.candidates || []).map(candidate => ({
+          item: candidate,
+          point: candidate,
+          layerId: "mcp",
+        })),
+        ...(projection.boss_points?.boss_points || []).map(point => ({
+          item: point,
+          point,
+          layerId: "boss-points",
+        })),
+      ].forEach(({item, point, layerId}) => appendDebugMapLibreFeature(
+        features,
+        item,
+        layerId,
+        debugMapLibrePointGeometry(point),
+        {map_refs: [layerId]},
+      ));
+      [
+        ["risk-score", projection.risk_score?.points || []],
+        ["cwa-qpf", projection.cwa_qpf?.points || []],
+        ["soil-moisture", projection.soil_moisture?.points || []],
+        ["antecedent-rain", projection.antecedent_rain?.points || []],
+        ["cwa-weather", projection.cwa_weather?.points || []],
+      ].forEach(([layerId, items]) => items.forEach(item => appendDebugMapLibreFeature(
+        features,
+        item,
+        layerId,
+        debugMapLibrePointGeometry(item),
+        {map_refs: [layerId]},
+      )));
+      (debugPageState.events || []).forEach(event => {
+        const coordinate = coordinateFromEvent(event);
+        if (!coordinate) return;
+        appendDebugMapLibreFeature(
+          features,
+          event,
+          "events",
+          debugMapLibrePointGeometry(coordinate),
+          {map_refs: mapRefsForEvent(event), event_id: event.event_id},
+        );
+      });
+      return adapter.createEvidenceFeatureCollection(features);
+    }
     function pathFromCoordSegments(bounds, segments) {
       return (segments || [])
         .filter(segment => Array.isArray(segment) && segment.length >= 2)
@@ -3366,6 +3635,286 @@
       const definition = rasterSourceDefinitionFor(resolvedLayerId, layer);
       return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y));
     }
+
+    function debugMapLibreNetworkScope(template) {
+      try {
+        return new URL(template, location.origin).origin === location.origin
+          ? "same_origin"
+          : "explicit_remote";
+      } catch (_error) {
+        return "same_origin";
+      }
+    }
+    function debugMapLibreImageCoordinates(bounds) {
+      const normalized = normalizeRasterBounds(bounds);
+      if (!normalized) return null;
+      return [
+        [normalized.west, normalized.north],
+        [normalized.east, normalized.north],
+        [normalized.east, normalized.south],
+        [normalized.west, normalized.south]
+      ];
+    }
+    function debugMapLibreTerrainImageLayers(projection) {
+      return terrainRasterOverlays(projection).flatMap((overlay, index) => {
+        const imageCoordinates = debugMapLibreImageCoordinates(overlay.bbox_wgs84);
+        if (!imageCoordinates) return [];
+        const mode = String(overlay.mode || `overlay-${index + 1}`)
+          .toLowerCase()
+          .replace(/[^a-z0-9._-]+/g, "-")
+          .replace(/^-+|-+$/g, "") || `overlay-${index + 1}`;
+        const imageUrl = rasterTileCacheBustedUrl(apiUrlTemplate(overlay.runtime_href));
+        return [{
+          layer_id: `terrain-${mode}`,
+          control_layer_id: "terrain",
+          source_id: overlay.source_id || overlay.candidate_id || `terrain.${mode}`,
+          source_type: "image",
+          image_url: imageUrl,
+          image_coordinates: imageCoordinates,
+          opacity: Number(overlay.opacity ?? 0.86),
+          visible: layerInputChecked("terrain") && overlay.default_visible !== false,
+          network_scope: debugMapLibreNetworkScope(imageUrl),
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true,
+          adds_source_resolution: false,
+          source_resolution: overlay.cell_resolution_m == null
+            ? "unavailable"
+            : `${overlay.cell_resolution_m}m`,
+          sha256: overlay.sha256 || null,
+        }];
+      });
+    }
+    function debugMapLibreRasterLayers(projection) {
+      const tileBase = (location.protocol === "file:" ? apiBase() : location.origin).replace(/\/$/, "");
+      const apiTileBase = apiBase().replace(/\/$/, "");
+      const rudyTemplate = `${tileBase}/admin/tiles/imagery/${encodeURIComponent(PRETRIP_PROJECT_ID)}/imagery/{z}/{x}/{y}.png?source_id=happyman_rudy_twmap&native=1`;
+      const osmTemplate = `${apiTileBase}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent`;
+      const tiledLayers = [
+        {
+          layer_id: "rudy-twmap",
+          source_id: "happyman_rudy_twmap",
+          tiles: [rudyTemplate],
+          minzoom: 5,
+          maxzoom: 20,
+          opacity: Number(rasterLayerFor(projection, "rudy-twmap").raster_layer_opacity ?? 0.9),
+          visible: layerInputChecked("rudy-twmap"),
+          network_scope: debugMapLibreNetworkScope(rudyTemplate),
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true,
+          adds_source_resolution: false,
+        },
+        {
+          layer_id: "osm",
+          source_id: "openstreetmap",
+          tiles: [osmTemplate],
+          minzoom: OSM_MIN_ZOOM,
+          maxzoom: OSM_MAX_ZOOM,
+          opacity: 0.86,
+          visible: layerInputChecked("osm"),
+          network_scope: debugMapLibreNetworkScope(osmTemplate),
+          attribution: OSM_ATTRIBUTION,
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true,
+          adds_source_resolution: false,
+        },
+      ];
+      return [...tiledLayers, ...debugMapLibreTerrainImageLayers(projection)];
+    }
+    function setDebugMapRendererState(nextState) {
+      debugPageState.mapRenderer = Object.freeze({...nextState});
+      if (!runtimeMapRendererShell) return debugPageState.mapRenderer;
+      runtimeMapRendererShell.dataset.mapRendererRequested = nextState.requested || DEBUG_MAP_RENDERER_PREFERENCE;
+      runtimeMapRendererShell.dataset.mapRendererActive = nextState.active || "svg";
+      runtimeMapRendererShell.dataset.mapRendererState = nextState.state || "degraded";
+      runtimeMapRendererShell.dataset.mapRendererReason = nextState.reason || "unknown";
+      const output = document.getElementById("runtimeMapRendererStatus");
+      if (output) output.textContent = nextState.detail || nextState.reason || "Debug map renderer unavailable.";
+      return debugPageState.mapRenderer;
+    }
+    function debugMapLibreActive() {
+      return debugPageState.mapRenderer?.active === "maplibre" && Boolean(debugPageState.mapLibreRenderer);
+    }
+    function activateDebugSvgFallback(reason, detail = "") {
+      debugPageState.mapLibreRenderer?.destroy();
+      debugPageState.mapLibreRenderer = null;
+      runtimeMapLibre.hidden = true;
+      runtimeMap.hidden = false;
+      const forced = reason === "forced_svg";
+      const nextState = setDebugMapRendererState({
+        requested: DEBUG_MAP_RENDERER_PREFERENCE,
+        active: "svg",
+        state: forced ? "ready" : "degraded",
+        reason: reason || "maplibre_unavailable",
+        detail: detail || (forced
+          ? "SVG debug map renderer selected."
+          : "MapLibre unavailable; Scout retained the SVG debug map."),
+      });
+      if (debugPageState.projection) {
+        renderDebugEvidenceMap(debugPageState.projection, {forceSvg: true});
+      }
+      return nextState;
+    }
+    function debugMapLibreReferencesForEvent(event) {
+      const payload = event?.payload || {};
+      return [...new Set([
+        event?.event_id,
+        ...(Array.isArray(payload.map_target_ids) ? payload.map_target_ids : []),
+        payload.segment_id,
+        payload.checkpoint_id,
+        payload.candidate_id,
+        payload.source_id,
+        ...mapRefsForEvent(event),
+      ].filter(Boolean))];
+    }
+    function focusDebugMapLibreForEvent(event, options = {}) {
+      if (!debugMapLibreActive() || !event) return false;
+      for (const reference of debugMapLibreReferencesForEvent(event)) {
+        const result = debugPageState.mapLibreRenderer.focus(reference, {
+          fit: options.fit,
+          preserveZoom: options.preserveZoom !== false,
+          maxZoom: 16,
+        });
+        if (result.focused) return true;
+      }
+      return false;
+    }
+    function selectDebugMapLibreFeature(feature) {
+      const properties = feature?.properties || {};
+      const refs = new Set([
+        properties.event_id,
+        properties.source_id,
+        properties.candidate_id,
+        properties.checkpoint_id,
+        properties.segment_id,
+        ...(Array.isArray(properties.map_refs) ? properties.map_refs : []),
+      ].filter(Boolean));
+      const exactEvent = properties.event_id
+        ? debugPageState.events.find(event => event.event_id === properties.event_id)
+        : null;
+      const event = exactEvent || debugPageState.events.find(candidate => (
+        debugMapLibreReferencesForEvent(candidate).some(ref => refs.has(ref))
+      ));
+      if (event) {
+        const index = debugPageState.events.findIndex(candidate => candidate.event_id === event.event_id);
+        selectTimelineNode(event, Math.max(index, 0), {focus: false, expandGroup: true});
+        return;
+      }
+      const targetLabel = properties.display_label || properties.identity_key || "map evidence";
+      document.getElementById("selectedMapTarget").textContent = targetLabel;
+      document.getElementById("selectedEventSummary").textContent = `${properties.evidence_type || "evidence"} | candidate visualization`;
+    }
+    function hoverDebugMapLibreFeature(feature, event) {
+      const properties = feature?.properties || {};
+      const geometryType = String(feature?.geometry?.type || "feature").toLowerCase();
+      const kind = geometryType.includes("point")
+        ? "point"
+        : geometryType.includes("polygon") ? "area" : geometryType.includes("line") ? "line" : "feature";
+      const target = {
+        dataset: {
+          mapFeatureKind: kind,
+          mapHoverTitle: properties.display_label || mapFeatureTitle(properties),
+          mapHoverSummary: properties.hint_summary || mapFeatureSummary(properties),
+        }
+      };
+      const pointerEvent = event?.originalEvent || event;
+      if (pointerEvent) showMapHoverTooltip(target, pointerEvent);
+    }
+    function syncDebugMapLibreProjection(projection = debugPageState.projection) {
+      if (!debugMapLibreActive() || !projection) return null;
+      const featureCollection = debugMapLibreFeatureCollection(projection);
+      if (!featureCollection) return null;
+      debugPageState.mapLibreRenderer.setFeatureCollection(featureCollection);
+      document.querySelectorAll("[data-layer]").forEach(input => {
+        debugPageState.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
+      });
+      return featureCollection;
+    }
+    async function activateDebugMapLibreRenderer(maplibregl, projection) {
+      const adapter = window.ScoutMapLibreEvidence;
+      const featureCollection = debugMapLibreFeatureCollection(projection);
+      if (!adapter || !runtimeMapRendererShell || !runtimeMapLibre || !featureCollection?.features?.length) {
+        return activateDebugSvgFallback("maplibre_activation_context_unavailable");
+      }
+      runtimeMapLibre.hidden = false;
+      runtimeMap.hidden = true;
+      try {
+        debugPageState.mapLibreRenderer?.destroy();
+        debugPageState.mapLibreRenderer = await adapter.createRenderer({
+          maplibregl,
+          container: runtimeMapLibre,
+          rasterLayers: debugMapLibreRasterLayers(projection),
+          timeoutMs: 20000,
+          onFeatureSelect: selectDebugMapLibreFeature,
+          onFeatureHover: hoverDebugMapLibreFeature,
+          onFeatureLeave: hideMapHoverTooltip,
+          onStatus: status => {
+            runtimeMapRendererShell.dataset.mapRendererState = status.state;
+            runtimeMapRendererShell.dataset.mapRendererReason = status.reason;
+          },
+          onRasterStatus: (_status, states) => {
+            const aggregate = runtimeMapLibre.dataset.maplibreRasterState || "configured";
+            runtimeMapRendererShell.dataset.mapRasterState = aggregate;
+            const output = document.getElementById("runtimeMapRendererStatus");
+            if (!output) return;
+            if (aggregate === "degraded") {
+              const degraded = states.filter(item => item.state === "degraded").map(item => item.layer_id);
+              output.textContent = `Raster unavailable: ${degraded.join(", ")}. Debug vector evidence remains available.`;
+            } else if (aggregate === "loading") {
+              output.textContent = "Loading prepared debug raster tiles.";
+            }
+          },
+        }, featureCollection);
+        document.querySelectorAll("[data-layer]").forEach(input => {
+          debugPageState.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
+        });
+        setDebugMapRendererState({
+          requested: DEBUG_MAP_RENDERER_PREFERENCE,
+          active: "maplibre",
+          state: "ready",
+          reason: "evidence_rendered",
+          detail: "MapLibre debug evidence renderer ready.",
+        });
+        runtimeMapRendererShell.dataset.mapRasterState = runtimeMapLibre.dataset.maplibreRasterState || "configured";
+        debugPageState.mapLibreRenderer.resize();
+        if (!focusDebugMapLibreForEvent(selectedMapEvent(), {preserveZoom: false})) {
+          debugPageState.mapLibreRenderer.fitLayer("route", {duration: 0, maxZoom: 15});
+        }
+        return debugPageState.mapLibreRenderer;
+      } catch (error) {
+        return activateDebugSvgFallback("maplibre_render_failed", String(error?.message || error));
+      }
+    }
+    async function initializeDebugMapRenderer(projection = debugPageState.projection) {
+      const adapter = window.ScoutMapLibreEvidence;
+      if (!adapter || !runtimeMapRendererShell || !projection) {
+        return activateDebugSvgFallback("adapter_or_projection_unavailable");
+      }
+      const resolution = adapter.resolveRenderer({
+        requested: DEBUG_MAP_RENDERER_PREFERENCE,
+        webglAvailable: adapter.webglAvailable(),
+      });
+      if (resolution.active === "svg") return activateDebugSvgFallback(resolution.reason);
+      setDebugMapRendererState({...resolution, detail: "Loading MapLibre debug renderer."});
+      const loaded = await adapter.loadRenderer({requested: DEBUG_MAP_RENDERER_PREFERENCE});
+      debugPageState.mapLibreLoadResult = loaded;
+      if (loaded.active !== "maplibre") {
+        return activateDebugSvgFallback(loaded.reason, loaded.error);
+      }
+      return activateDebugMapLibreRenderer(loaded.maplibregl, projection);
+    }
+    window.scoutDebugMapRendererBridge = Object.freeze({
+      getSnapshot: () => debugPageState.mapLibreRenderer?.snapshot?.() || debugPageState.mapRenderer,
+      focusEvent: eventId => {
+        const event = debugPageState.events.find(candidate => candidate.event_id === eventId);
+        return focusDebugMapLibreForEvent(event, {preserveZoom: false});
+      },
+    });
 
     function tileRangeForZoom(bounds, zoom) {
       const maxIndex = (2 ** zoom) - 1;
@@ -3583,7 +4132,8 @@
       if (event.defaultPrevented) return;
       const delta = mapKeyboardPanDelta(event);
       if (event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
-      const mapHasFocus = document.activeElement === runtimeMap || runtimeMap.contains(document.activeElement);
+      const activeMapNode = debugMapLibreActive() ? runtimeMapLibre : runtimeMap;
+      const mapHasFocus = document.activeElement === activeMapNode || activeMapNode.contains(document.activeElement);
       if (!debugPageState.mapKeyboardActive && !mapHasFocus) return;
       if (delta) panMap(delta[0], delta[1]);
       else if (event.key === "+" || event.key === "=") zoomMap(1);
@@ -3594,20 +4144,28 @@
       else if (event.key === "Escape") {
         cancelMapRectangleZoom();
         cancelMapPointerPan();
+        debugPageState.mapLibreRenderer?.cancelRectangleZoom?.();
       } else return;
       event.preventDefault();
     }
     function activateMapKeyboardPan() {
       debugPageState.mapKeyboardActive = true;
-      runtimeMap.focus({preventScroll: true});
+      (debugMapLibreActive() ? runtimeMapLibre : runtimeMap).focus({preventScroll: true});
     }
     function deactivateMapKeyboardPanOutside(event) {
-      if (!runtimeMap.contains(event.target)) debugPageState.mapKeyboardActive = false;
+      if (!runtimeMap.contains(event.target) && !runtimeMapLibre.contains(event.target)) {
+        debugPageState.mapKeyboardActive = false;
+      }
     }
     function updateMapZoomIndicator(extraLabel = "") {
       const node = document.getElementById("zoomLevel");
       if (!node) return;
-      const zoomText = `${debugPageState.zoom.toFixed(2)}x`;
+      const mapLibreZoom = debugMapLibreActive()
+        ? debugPageState.mapLibreRenderer.snapshot().zoom
+        : null;
+      const zoomText = debugMapLibreActive() && Number.isFinite(Number(mapLibreZoom))
+        ? `z${Number(mapLibreZoom).toFixed(1)}`
+        : `${debugPageState.zoom.toFixed(2)}x`;
       node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
       node.title = debugPageState.mapInteractionMode === "box"
         ? "Map zoom; point and rectangle zoom are active."
@@ -3618,6 +4176,8 @@
       cancelMapRectangleZoom();
       cancelMapPointerPan();
       runtimeMap.dataset.mapInteractionMode = debugPageState.mapInteractionMode;
+      runtimeMapLibre.dataset.mapInteractionMode = debugPageState.mapInteractionMode;
+      debugPageState.mapLibreRenderer?.setInteractionMode(debugPageState.mapInteractionMode);
       const panButton = document.getElementById("panMode");
       const boxButton = document.getElementById("boxZoomMode");
       panButton?.classList.toggle("is-active", debugPageState.mapInteractionMode === "pan");
@@ -3703,6 +4263,11 @@
     }
 
     function panMap(dx, dy) {
+      if (debugMapLibreActive()) {
+        debugPageState.mapLibreRenderer.panBy([dx, dy]);
+        window.setTimeout(updateMapZoomIndicator, 220);
+        return;
+      }
       debugPageState.panX += dx / debugPageState.zoom;
       debugPageState.panY += dy / debugPageState.zoom;
       clampMapPan();
@@ -3710,6 +4275,11 @@
     }
 
     function zoomMap(direction) {
+      if (debugMapLibreActive()) {
+        debugPageState.mapLibreRenderer.zoomBy(direction);
+        window.setTimeout(updateMapZoomIndicator, 220);
+        return;
+      }
       const nextZoom = direction > 0 ? debugPageState.zoom * MAP_ZOOM_STEP_FACTOR : debugPageState.zoom / MAP_ZOOM_STEP_FACTOR;
       debugPageState.zoom = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, nextZoom));
       applyMapViewport();
@@ -3717,6 +4287,11 @@
     }
 
     function resetMapView() {
+      if (debugMapLibreActive()) {
+        debugPageState.mapLibreRenderer.fitLayer("route", {duration: 0, maxZoom: 15});
+        window.setTimeout(updateMapZoomIndicator, 60);
+        return;
+      }
       debugPageState.zoom = 1;
       debugPageState.panX = 0;
       debugPageState.panY = 0;
@@ -3854,6 +4429,11 @@
 
     function updateLayers() {
       const layerInputs = [...document.querySelectorAll("[data-layer]")];
+      if (debugMapLibreActive()) {
+        layerInputs.forEach(input => {
+          debugPageState.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
+        });
+      }
       syncRasterBasemapLayers();
       layerInputs.forEach(input => {
         const group = runtimeMap.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
@@ -4105,7 +4685,10 @@
       return true;
     }
 
-    function renderDebugEvidenceMap(projection) {
+    function renderDebugEvidenceMap(projection, {forceSvg = false} = {}) {
+      if (!forceSvg && debugMapLibreActive()) {
+        return syncDebugMapLibreProjection(projection);
+      }
       if (!projection?.route?.bounds) return;
       const bounds = boundsForProjection(projection);
       hideMapHoverTooltip();
@@ -6266,6 +6849,13 @@
     }
 
     function focusMapForEvent(event, options = {}) {
+      if (debugMapLibreActive()) {
+        const focused = focusDebugMapLibreForEvent(event, {
+          preserveZoom: options.preserveZoom !== false,
+        });
+        if (focused) highlightMapForEvent(event);
+        return focused;
+      }
       if (options.label === true) debugPageState.focusedLabelIds = focusedLabelIdsForEvent(event);
       else if (options.label === false) debugPageState.focusedLabelIds = new Set();
       const focused = focusMapBox(mapBoxForEvent(event), event, {preserveZoom: options.preserveZoom !== false});
@@ -6464,6 +7054,10 @@
     }
 
     function highlightMapForEvent(event) {
+      if (debugMapLibreActive()) {
+        if (event) focusDebugMapLibreForEvent(event, {fit: false});
+        else debugPageState.mapLibreRenderer.clearSelection();
+      }
       runtimeMap.querySelectorAll(".map-highlight").forEach((node) => node.classList.remove("map-highlight"));
       const targets = mapTargetsForEvent(event);
       targets.forEach((target) => target.classList.add("map-highlight"));
@@ -6707,6 +7301,7 @@
         renderSelectedDetails(null);
         highlightMapForEvent(null);
       }
+      if (debugMapLibreActive()) syncDebugMapLibreProjection();
     }
 
     async function loadOsmPbfVectorLayer() {
@@ -6802,6 +7397,12 @@
         renderState(resolvedState || {});
         debugPageState.messages = messagePayload.messages || [];
         renderEvents(eventPayload.events || []);
+        if (debugPageState.projection) {
+          if (debugMapLibreActive()) syncDebugMapLibreProjection(debugPageState.projection);
+          else await initializeDebugMapRenderer(debugPageState.projection);
+        } else {
+          activateDebugSvgFallback("projection_unavailable");
+        }
         setText(
           "loadStatus",
           eventResult.projected
@@ -6869,6 +7470,9 @@
       document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
       document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
       runtimeMap.setAttribute("tabindex", "0");
+      runtimeMapLibre.setAttribute("tabindex", "0");
+      runtimeMapLibre.addEventListener("pointerdown", activateMapKeyboardPan);
+      runtimeMapLibre.addEventListener("keydown", handleMapKeyboardPan);
       runtimeMap.addEventListener("pointerdown", activateMapKeyboardPan);
       runtimeMap.addEventListener("keydown", handleMapKeyboardPan);
       document.addEventListener("keydown", handleMapKeyboardPan);

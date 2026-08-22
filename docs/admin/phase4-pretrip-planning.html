@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css">
   <title>Scout Phase 4 Pre-Trip Planning</title>
   <style>
     :root {
@@ -333,6 +334,10 @@
       font-weight: 700;
       letter-spacing: .03em;
     }
+    .layer-menu-header small {
+      font-size: 11px;
+      line-height: 1.25;
+    }
     .layer-preset-row {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -398,6 +403,42 @@
       padding: 10px;
       background: #edf2f6;
       overflow: hidden;
+    }
+    #mapRendererShell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+    }
+    #mapLibreEvidenceMap {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #e9eff4;
+    }
+    #mapRendererShell[data-map-renderer-active="svg"] #mapLibreEvidenceMap,
+    #mapRendererShell[data-map-renderer-active="maplibre"] #map {
+      display: none;
+    }
+    #mapRendererStatus {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      z-index: 5;
+      max-width: min(520px, calc(100% - 24px));
+      padding: 6px 8px;
+      border: 1px solid rgba(23, 32, 42, .2);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, .92);
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.35;
+      pointer-events: none;
+    }
+    #mapRendererShell[data-map-renderer-state="ready"]:not([data-map-raster-state="loading"]):not([data-map-raster-state="degraded"]) #mapRendererStatus {
+      display: none;
     }
     #map {
       display: block;
@@ -1613,6 +1654,7 @@
         text-overflow: clip;
         white-space: normal;
       }
+      .dashboard-map-only .layer-menu { margin-left: 56px; }
       .layer-menu-panel {
         position: fixed;
         top: 120px;
@@ -1780,15 +1822,24 @@
         </div>
       </div>
       <div class="map-wrap">
-        <svg
-          id="map"
-          role="img"
-          aria-label="Scout pre-trip planning evidence map"
-          data-map-render-policy="tile-vector-approved-single-image"
-          data-map-vector-surface="svg"
-          data-map-render-policy-status="pending"
-          data-map-render-policy-blocked-image-count="0"
-        ></svg>
+        <div
+          id="mapRendererShell"
+          data-map-renderer-requested="auto"
+          data-map-renderer-active="pending"
+          data-map-renderer-state="loading"
+        >
+          <div id="mapLibreEvidenceMap" role="application" aria-label="Scout MapLibre pre-trip evidence map" hidden></div>
+          <svg
+            id="map"
+            role="img"
+            aria-label="Scout pre-trip planning evidence map"
+            data-map-render-policy="tile-vector-approved-single-image"
+            data-map-vector-surface="svg"
+            data-map-render-policy-status="pending"
+            data-map-render-policy-blocked-image-count="0"
+          ></svg>
+          <output id="mapRendererStatus" role="status" aria-live="polite">Selecting map renderer.</output>
+        </div>
       </div>
     </main>
 
@@ -2167,6 +2218,7 @@
   <div id="hoverHint" class="hover-hint is-hidden" role="status" aria-live="polite"></div>
 
   <script src="/admin/scout-assistant-ui.js"></script>
+  <script src="/admin/scout-maplibre-evidence.js"></script>
   <script>
     const DEFAULT_PROJECT_ID = "chilai_nanhua_day1";
     const PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";
@@ -2174,6 +2226,14 @@
       ? PROJECT_ID_PARAM
       : DEFAULT_PROJECT_ID;
     const DASHBOARD_MAP_ONLY = new URLSearchParams(window.location.search).get("mapOnly") === "1";
+    document.body.classList.toggle("dashboard-map-only", DASHBOARD_MAP_ONLY);
+    function requestedMapRendererPreference() {
+      const requested = new URLSearchParams(window.location.search).get("mapRenderer")
+        || localStorage.getItem("scout.mapRenderer")
+        || "auto";
+      return window.ScoutMapLibreEvidence?.normalizeRendererPreference(requested) || "svg";
+    }
+    const MAP_RENDERER_PREFERENCE = requestedMapRendererPreference();
     const MAP_WHEEL_ZOOM_ENABLED = new URLSearchParams(window.location.search).get("wheelZoom") !== "0";
     const INITIAL_LAYER_IDS_PARAM = new URLSearchParams(window.location.search).get("initialLayers");
     const INITIAL_LAYER_IDS = INITIAL_LAYER_IDS_PARAM === null
@@ -2285,7 +2345,15 @@
       weatherOverlay: null,
       osmPbfVector: null,
       osmPbfVectorStatus: "not_loaded",
-      osmCartoPaletteStatus: "not_loaded"
+      osmCartoPaletteStatus: "not_loaded",
+      mapRenderer: Object.freeze({
+        requested: MAP_RENDERER_PREFERENCE,
+        active: "pending",
+        state: "loading",
+        reason: "renderer_not_initialized",
+      }),
+      mapLibreRenderer: null,
+      mapLibreLoadResult: null
     };
     let pretripProjectBridgeSnapshot = Object.freeze({
       status: "idle",
@@ -2310,6 +2378,194 @@
       getProjectView: () => pretripProjectBridgeSnapshot.view
     });
     const svg = document.getElementById("map");
+    function setPretripMapRendererState(nextState) {
+      state.mapRenderer = Object.freeze({...nextState});
+      const shell = document.getElementById("mapRendererShell");
+      const status = document.getElementById("mapRendererStatus");
+      if (!shell) return state.mapRenderer;
+      shell.dataset.mapRendererRequested = nextState.requested || MAP_RENDERER_PREFERENCE;
+      shell.dataset.mapRendererActive = nextState.active || "svg";
+      shell.dataset.mapRendererState = nextState.state || "degraded";
+      shell.dataset.mapRendererReason = nextState.reason || "unknown";
+      if (status) status.textContent = nextState.detail || nextState.reason || "Map renderer unavailable.";
+      return state.mapRenderer;
+    }
+    function activateSvgMapFallback(reason, detail = "") {
+      const shell = document.getElementById("mapRendererShell");
+      const mapLibreHost = document.getElementById("mapLibreEvidenceMap");
+      if (shell) {
+        shell.dataset.mapRendererActive = "svg";
+        shell.dataset.mapRendererState = "degraded";
+      }
+      if (mapLibreHost) mapLibreHost.hidden = true;
+      svg.hidden = false;
+      const forced = reason === "forced_svg";
+      const nextState = setPretripMapRendererState({
+        requested: MAP_RENDERER_PREFERENCE,
+        active: "svg",
+        state: forced ? "ready" : "degraded",
+        reason: reason || "maplibre_unavailable",
+        detail: detail || (forced
+          ? "SVG map renderer selected."
+          : "MapLibre unavailable; Scout retained the SVG map renderer."),
+      });
+      if (state.view) renderMap(state.view, {forceSvg: true});
+      return nextState;
+    }
+    function pretripEvidenceForMapLibreFeature(feature) {
+      const properties = feature?.properties || {};
+      const refs = [
+        properties.candidate_id,
+        properties.artifact_id,
+        properties.feature_id,
+        properties.source_id,
+      ].filter(Boolean);
+      return refs.map(ref => findEvidenceBySourceId(state.view, ref)).find(Boolean) || null;
+    }
+    function selectPretripMapLibreFeature(feature) {
+      const item = pretripEvidenceForMapLibreFeature(feature);
+      setDetail(item || feature.properties);
+      if (item) {
+        highlightTreeNode(item, {expand: true});
+        highlightEvidenceTimelineFor(item, {expand: true});
+      }
+    }
+    function hoverPretripMapLibreFeature(feature, event) {
+      const item = pretripEvidenceForMapLibreFeature(feature) || feature?.properties;
+      const pointerEvent = event?.originalEvent || event;
+      if (item && pointerEvent) showHint(pointerEvent, item);
+    }
+    function syncPretripMapLibreEvidence(view) {
+      if (!state.mapLibreRenderer || !view) return null;
+      const featureCollection = pretripMapLibreFeatureCollection(view);
+      state.mapLibreRenderer.setFeatureCollection(featureCollection);
+      document.querySelectorAll("[data-layer]").forEach(input => {
+        state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
+      });
+      const host = document.getElementById("mapLibreEvidenceMap");
+      if (host) host.dataset.maplibreFeatureCount = String(featureCollection.features.length);
+      return featureCollection;
+    }
+    async function activatePretripMapLibreRenderer(maplibregl, view) {
+      const adapter = window.ScoutMapLibreEvidence;
+      const shell = document.getElementById("mapRendererShell");
+      const host = document.getElementById("mapLibreEvidenceMap");
+      if (!adapter || !shell || !host || !view) {
+        return activateSvgMapFallback("maplibre_activation_context_unavailable");
+      }
+      const featureCollection = pretripMapLibreFeatureCollection(view);
+      host.hidden = false;
+      svg.hidden = true;
+      try {
+        state.mapLibreRenderer?.destroy();
+        state.mapLibreRenderer = await adapter.createRenderer({
+          maplibregl,
+          container: host,
+          timeoutMs: 20000,
+          rasterLayers: pretripMapLibreRasterLayers(state.view),
+          onFeatureSelect: selectPretripMapLibreFeature,
+          onFeatureHover: hoverPretripMapLibreFeature,
+          onFeatureLeave: hideHint,
+          onStatus: status => {
+            shell.dataset.mapRendererState = status.state;
+            shell.dataset.mapRendererReason = status.reason;
+          },
+          onRasterStatus: (_status, states) => {
+            const aggregate = host.dataset.maplibreRasterState || "configured";
+            shell.dataset.mapRasterState = aggregate;
+            const statusOutput = document.getElementById("mapRendererStatus");
+            if (!statusOutput) return;
+            if (aggregate === "degraded") {
+              const degraded = states
+                .filter(item => item.state === "degraded")
+                .map(item => item.layer_id);
+              statusOutput.textContent = `Raster unavailable: ${degraded.join(", ")}. Vector evidence remains available.`;
+            } else if (aggregate === "loading") {
+              statusOutput.textContent = "Loading prepared raster tiles.";
+            }
+          },
+        }, featureCollection);
+        document.querySelectorAll("[data-layer]").forEach(input => {
+          state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
+        });
+        host.dataset.maplibreFeatureCount = String(featureCollection.features.length);
+        shell.dataset.mapRendererActive = "maplibre";
+        shell.dataset.mapRendererState = "ready";
+        setPretripMapRendererState({
+          requested: MAP_RENDERER_PREFERENCE,
+          active: "maplibre",
+          state: "ready",
+          reason: "evidence_rendered",
+          detail: "MapLibre evidence renderer ready.",
+        });
+        state.mapLibreRenderer.resize();
+        if (state.selected && focusMapLibreFor(state.selected, {preserveZoom: false})) {
+          selectPretripMapLibreFeature(
+            state.mapLibreRenderer.index.feature(state.mapLibreRenderer.selectedFeatureIds[0]),
+          );
+        } else {
+          state.mapLibreRenderer.fitLayer("route", {duration: 0, maxZoom: 15});
+        }
+        return state.mapLibreRenderer;
+      } catch (error) {
+        state.mapLibreRenderer?.destroy();
+        state.mapLibreRenderer = null;
+        return activateSvgMapFallback("maplibre_render_failed", String(error?.message || error));
+      }
+    }
+    async function initializePretripMapRenderer() {
+      const adapter = window.ScoutMapLibreEvidence;
+      const shell = document.getElementById("mapRendererShell");
+      if (!adapter || !shell) {
+        return activateSvgMapFallback("adapter_unavailable");
+      }
+      const resolution = window.ScoutMapLibreEvidence.resolveRenderer({
+        requested: MAP_RENDERER_PREFERENCE,
+        webglAvailable: adapter.webglAvailable(),
+      });
+      shell.dataset.mapRendererRequested = resolution.requested;
+      if (resolution.active === "svg") {
+        return activateSvgMapFallback(resolution.reason);
+      }
+      setPretripMapRendererState({...resolution, detail: "Loading MapLibre renderer."});
+      const loaded = await adapter.loadRenderer({requested: MAP_RENDERER_PREFERENCE});
+      state.mapLibreLoadResult = loaded;
+      if (loaded.active !== "maplibre") {
+        return activateSvgMapFallback(loaded.reason, loaded.error);
+      }
+      if (!state.view) {
+        return setPretripMapRendererState({
+          requested: MAP_RENDERER_PREFERENCE,
+          active: "svg",
+          state: "loading",
+          reason: "evidence_pending",
+          detail: "MapLibre loaded; waiting for project evidence.",
+        });
+      }
+      return activatePretripMapLibreRenderer(loaded.maplibregl, state.view);
+    }
+    window.scoutPretripMapRendererBridge = Object.freeze({
+      getSnapshot() {
+        return state.mapLibreRenderer?.snapshot() || state.mapRenderer;
+      },
+      focus(reference, options = {}) {
+        if (!state.mapLibreRenderer) {
+          return Object.freeze({focused: false, feature_ids: [], reason: "maplibre_not_active"});
+        }
+        const result = state.mapLibreRenderer.focus(reference, options);
+        const feature = result.feature_ids?.length
+          ? state.mapLibreRenderer.index.feature(result.feature_ids[0])
+          : null;
+        if (feature) selectPretripMapLibreFeature(feature);
+        return result;
+      },
+      fitRoute() {
+        return state.mapLibreRenderer?.fitLayer("route", {maxZoom: 15}) || false;
+      },
+      screenPoint(reference) {
+        return state.mapLibreRenderer?.screenPoint(reference) || null;
+      },
+    });
     const hoverHint = document.getElementById("hoverHint");
     let treeClickFocusTimer = null;
     const MAP_LAYER_RANKS = {
@@ -3025,6 +3281,90 @@
       const definition = rasterSourceDefinitionFor(resolvedLayerId, layer);
       return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y));
     }
+    function mapLibreRasterNetworkScope(template) {
+      if (String(template || "").startsWith("/")) return "same_origin";
+      try {
+        return new URL(template, location.origin).origin === location.origin
+          ? "same_origin"
+          : "explicit_remote";
+      } catch (_error) {
+        return "same_origin";
+      }
+    }
+    function mapLibreImageCoordinates(bounds) {
+      const normalized = normalizeRasterBounds(bounds);
+      if (!normalized) return null;
+      return [
+        [normalized.west, normalized.north],
+        [normalized.east, normalized.north],
+        [normalized.east, normalized.south],
+        [normalized.west, normalized.south]
+      ];
+    }
+    function pretripMapLibreTerrainImageLayers(view) {
+      return terrainRasterOverlays(view).flatMap((overlay, index) => {
+        const imageCoordinates = mapLibreImageCoordinates(overlay.bbox_wgs84);
+        if (!imageCoordinates) return [];
+        const mode = String(overlay.mode || `overlay-${index + 1}`)
+          .toLowerCase()
+          .replace(/[^a-z0-9._-]+/g, "-")
+          .replace(/^-+|-+$/g, "") || `overlay-${index + 1}`;
+        const imageUrl = rasterTileCacheBustedUrl(apiUrlTemplate(overlay.runtime_href));
+        return [{
+          layer_id: `terrain-${mode}`,
+          control_layer_id: "terrain",
+          source_id: overlay.source_id || overlay.candidate_id || `terrain.${mode}`,
+          source_type: "image",
+          image_url: imageUrl,
+          image_coordinates: imageCoordinates,
+          opacity: Number(overlay.opacity ?? 0.86),
+          visible: layerInputChecked("terrain") && overlay.default_visible !== false,
+          network_scope: mapLibreRasterNetworkScope(imageUrl),
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true,
+          adds_source_resolution: false,
+          source_resolution: overlay.cell_resolution_m == null
+            ? "unavailable"
+            : `${overlay.cell_resolution_m}m`,
+          sha256: overlay.sha256 || null,
+        }];
+      });
+    }
+    function pretripMapLibreRasterLayers(view) {
+      const tiledLayers = ["rudy-twmap", "osm"].map(layerId => {
+        const layer = layerId === "osm" ? mapLayerById(view, "osm") : rasterLayerFor(view, layerId);
+        const definition = layerId === "osm"
+          ? null
+          : rasterSourceDefinitionFor(layerId, layer);
+        const template = layerId === "osm"
+          ? osmTileTemplate()
+          : wmtsTileUrl(definition, "{z}", "{x}", "{y}");
+        const range = layerId === "osm"
+          ? {min: OSM_MIN_ZOOM, max: OSM_MAX_ZOOM}
+          : rasterZoomRangeFor(view, layerId);
+        const bounds = layerId === "osm" ? null : rasterBoundsFor(view, layerId);
+        return {
+          layer_id: layerId,
+          source_id: layerId === "osm" ? "openstreetmap" : definition.sourceId,
+          tiles: [template],
+          minzoom: range.min,
+          maxzoom: range.max,
+          bounds: bounds ? [bounds.west, bounds.south, bounds.east, bounds.north] : null,
+          attribution: layerId === "osm" ? OSM_ATTRIBUTION : String(layer.attribution || ""),
+          opacity: layerId === "osm" ? 0.86 : Number(layer.raster_layer_opacity ?? definition.opacity ?? 0.9),
+          visible: layerInputChecked(layerId),
+          network_scope: mapLibreRasterNetworkScope(template),
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true,
+          adds_source_resolution: false,
+        };
+      });
+      return [...tiledLayers, ...pretripMapLibreTerrainImageLayers(view)];
+    }
     function localOsmPbfVectorUrl(view) {
       const layer = mapLayerById(view, "osm");
       if (!layer.local_osm_render_geojson_ref && !layer.local_osm_feature_index_ref) return "";
@@ -3641,7 +3981,8 @@
     }
     function hintTitle(item) {
       if (isBossPoint(item)) return bossDisplayText(item);
-      return item?.label || item?.title || item?.candidate_id || item?.source_id || item?.evidence_type || "evidence";
+      return item?.display_label || item?.map_label || item?.label || item?.title
+        || item?.candidate_id || item?.source_id || item?.evidence_type || "evidence";
     }
     function hintSummary(item) {
       if (isBossPoint(item)) return bossSummaryText(item);
@@ -3661,6 +4002,10 @@
       if (item?.evidence_type === "pretrip_reference_segment_timing") {
         return `${item.counts?.usable_segment_count || 0} segments | ${item.counts?.measurement_count || 0} samples | aggregate only`;
       }
+      if (String(item?.evidence_type || "").includes("mileage_tag")) {
+        return `${item.display_mileage_label || "mileage pending"} | ${item.source_kind || "mileage"} | ${Math.round(item.route_distance_m || 0)}m | ${item.route_projection_status || "projection-review"}`;
+      }
+      if (item?.hint_summary) return String(item.hint_summary);
       if (item?.distance_m) return `${Math.round(item.distance_m)}m | ${item.review_state || item.status || "candidate"}`;
       return item?.source_path || item?.status || "candidate evidence";
     }
@@ -4057,11 +4402,13 @@
         view?.major_critical_points?.candidates || [],
         view?.boss_points?.boss_points || [],
         view?.route_notes?.candidates || [],
+        view?.mileage_tag_alignment?.timeline_items || [],
+        view?.checkpoint_events?.events || [],
         [view?.capability_timeline_import],
         view?.capability_timeline_import?.edges || [],
         view?.review_queue?.items || []
       ];
-      return groups.flat().find(item => evidenceSourceId(item) === sourceId) || null;
+      return groups.flat().find(item => evidenceIdsForPointFocus(item).includes(sourceId)) || null;
     }
     function routeNoteReviewOptionFor(item, view = state.view) {
       if (!item || item.category !== "route_note") return null;
@@ -4197,7 +4544,7 @@
       group.dataset.activeMapPanX = String(snapshot.panX);
       group.dataset.activeMapPanY = String(snapshot.panY);
     }
-    function restoreRudyMapViewAfterTileFailure(group, reason = "load-error") {
+    function retainRudyMapViewAfterTileFailure(group, reason = "load-error") {
       if (group?.dataset?.layerGroup !== "rudy-twmap") return;
       const failedZoom = Math.max(1, Number(state.zoom) || 1);
       const failedTileZoom = chooseRasterZoom(
@@ -4206,14 +4553,8 @@
         RASTER_MAX_TILES,
         "rudy-twmap",
       );
-      const fallbackZoom = Math.max(1, Number(group.dataset.activeMapZoom) || 1);
-      state.zoom = fallbackZoom;
-      state.panX = Number(group.dataset.activeMapPanX) || 0;
-      state.panY = Number(group.dataset.activeMapPanY) || 0;
       group.dataset.nativeTileFailure = reason;
-      clampMapPan();
-      applyMapViewport();
-      updateMapZoomIndicator(`native Z${failedTileZoom} unavailable · previous complete view retained`);
+      updateMapZoomIndicator(`native Z${failedTileZoom} unavailable · previous complete tiles retained at current view`);
       state.lastFailedNativeMapZoom = failedZoom;
     }
     function markRasterLayerGenerationActive(group) {
@@ -4355,7 +4696,7 @@
         replaceRasterLayerWhenReady(rasterGroup, candidate => {
           if (layerInputChecked(layer.layerId)) renderRasterLayer(candidate, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
         }, layer.layerId === "rudy-twmap"
-          ? ({reason}) => restoreRudyMapViewAfterTileFailure(rasterGroup, reason)
+          ? ({reason}) => retainRudyMapViewAfterTileFailure(rasterGroup, reason)
           : null);
       });
       const osmGroup = svg.querySelector('[data-layer-group="osm"]');
@@ -4398,26 +4739,37 @@
       if (event.defaultPrevented) return;
       const delta = mapKeyboardPanDelta(event);
       if (event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
-      const mapHasFocus = document.activeElement === svg || svg.contains(document.activeElement);
+      const mapLibreHost = document.getElementById("mapLibreEvidenceMap");
+      const mapHasFocus = document.activeElement === svg
+        || svg.contains(document.activeElement)
+        || mapLibreHost?.contains(document.activeElement);
       if (!state.mapKeyboardActive && !mapHasFocus) return;
-      if (delta) panMap(delta[0], delta[1]);
-      else if (event.key === "+" || event.key === "=") zoomMap(1);
-      else if (event.key === "-") zoomMap(-1);
-      else if (event.key === "0") resetMapView();
+      if (delta) panActiveMap(delta[0], delta[1]);
+      else if (event.key === "+" || event.key === "=") zoomActiveMap(1);
+      else if (event.key === "-") zoomActiveMap(-1);
+      else if (event.key === "0") fitActiveMap();
       else if (event.key.toLowerCase() === "p") setMapInteractionMode("pan");
       else if (event.key.toLowerCase() === "b") setMapInteractionMode("box");
       else if (event.key === "Escape") {
         cancelMapRectangleZoom();
         cancelMapPointerPan();
+        state.mapLibreRenderer?.cancelRectangleZoom?.();
       } else return;
       event.preventDefault();
     }
     function activateMapKeyboardPan() {
       state.mapKeyboardActive = true;
-      svg.focus({preventScroll: true});
+      if (state.mapRenderer.active === "maplibre") {
+        state.mapLibreRenderer?.map?.getCanvas?.().focus?.({preventScroll: true});
+      } else {
+        svg.focus({preventScroll: true});
+      }
     }
     function deactivateMapKeyboardPanOutside(event) {
-      if (!svg.contains(event.target)) state.mapKeyboardActive = false;
+      const mapLibreHost = document.getElementById("mapLibreEvidenceMap");
+      if (!svg.contains(event.target) && !mapLibreHost?.contains(event.target)) {
+        state.mapKeyboardActive = false;
+      }
     }
     function updateMapZoomIndicator(extraLabel = "") {
       const zoomIn = document.getElementById("zoomIn");
@@ -4426,7 +4778,12 @@
       if (zoomOut) zoomOut.disabled = state.zoom <= MAP_MIN_ZOOM + 0.001;
       const node = document.getElementById("zoomLevel");
       if (!node) return;
-      const zoomText = `${state.zoom.toFixed(2)}x`;
+      const mapLibreZoom = state.mapRenderer.active === "maplibre"
+        ? state.mapLibreRenderer?.snapshot?.().zoom
+        : null;
+      const zoomText = Number.isFinite(Number(mapLibreZoom))
+        ? `z${Number(mapLibreZoom).toFixed(1)}`
+        : `${state.zoom.toFixed(2)}x`;
       node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
       node.title = state.mapInteractionMode === "box"
         ? "Map zoom; point and rectangle zoom are active."
@@ -4437,6 +4794,8 @@
       cancelMapRectangleZoom();
       cancelMapPointerPan();
       svg.dataset.mapInteractionMode = state.mapInteractionMode;
+      document.getElementById("mapLibreEvidenceMap").dataset.mapInteractionMode = state.mapInteractionMode;
+      state.mapLibreRenderer?.setInteractionMode(state.mapInteractionMode);
       const panButton = document.getElementById("panMode");
       const boxButton = document.getElementById("boxZoomMode");
       panButton?.classList.toggle("is-active", state.mapInteractionMode === "pan");
@@ -4551,16 +4910,46 @@
       applyMapViewport();
       highlightMapFor(state.selected);
     }
+    function zoomActiveMap(direction) {
+      if (state.mapRenderer.active === "maplibre" && state.mapLibreRenderer) {
+        return state.mapLibreRenderer.zoomBy(direction);
+      }
+      zoomMap(direction);
+      return true;
+    }
+    function fitActiveMap() {
+      if (state.mapRenderer.active === "maplibre" && state.mapLibreRenderer) {
+        return state.mapLibreRenderer.fitLayer("route", {maxZoom: 15});
+      }
+      resetMapView();
+      return true;
+    }
+    function panActiveMap(x, y) {
+      if (state.mapRenderer.active === "maplibre" && state.mapLibreRenderer) {
+        return state.mapLibreRenderer.panBy([x, y]);
+      }
+      panMap(x, y);
+      return true;
+    }
     function showHint(event, item) {
       hoverHint.innerHTML = `<strong>${hintTitle(item)}</strong><span>${hintSummary(item)}</span>`;
       moveHint(event);
       hoverHint.classList.remove("is-hidden");
     }
     function moveHint(event) {
-      const x = Math.min(event.clientX || 0, window.innerWidth - 340);
-      const y = Math.min(event.clientY || 0, window.innerHeight - 120);
-      hoverHint.style.left = `${x}px`;
-      hoverHint.style.top = `${y}px`;
+      if (!event || !hoverHint) return;
+      const margin = 8;
+      const gap = 12;
+      const width = hoverHint.offsetWidth || 320;
+      const height = hoverHint.offsetHeight || 96;
+      const clientX = Number(event.clientX) || 0;
+      const clientY = Number(event.clientY) || 0;
+      let x = clientX + gap;
+      let y = clientY + gap;
+      if (x + width > window.innerWidth - margin) x = clientX - width - gap;
+      if (y + height > window.innerHeight - margin) y = clientY - height - gap;
+      hoverHint.style.left = `${Math.max(margin, Math.min(x, window.innerWidth - width - margin))}px`;
+      hoverHint.style.top = `${Math.max(margin, Math.min(y, window.innerHeight - height - margin))}px`;
     }
     function hideHint() { hoverHint.classList.add("is-hidden"); }
     function setDetail(item) {
@@ -4679,6 +5068,10 @@
       });
     }
     function highlightMapFor(item) {
+      if (state.mapRenderer.active === "maplibre" && state.mapLibreRenderer) {
+        focusMapLibreFor(item, {fit: false});
+        return;
+      }
       svg.querySelectorAll(".map-highlight").forEach(node => node.classList.remove("map-highlight"));
       const targets = mapTargetsFor(item);
       targets.forEach(node => node.classList.add("map-highlight"));
@@ -5147,9 +5540,45 @@
       applyMapViewport();
       return true;
     }
+    function mapLibreEvidenceRefsForFocus(item) {
+      if (!item) return [];
+      return [...new Set([
+        item.candidate_id,
+        item.map_feature_id,
+        item.feature_id,
+        item.artifact_id,
+        item.checkpoint_id,
+        item.segment_id,
+        item.mcp_id,
+        item.boss_point_id,
+        item.source_id,
+        evidenceSourceId(item),
+        ...(Array.isArray(item.map_target_ids) ? item.map_target_ids : []),
+        ...(Array.isArray(item.target_ids) ? item.target_ids : [])
+      ].filter(Boolean))];
+    }
+    function focusMapLibreFor(item, options = {}) {
+      if (state.mapRenderer.active !== "maplibre" || !state.mapLibreRenderer || !item) return false;
+      const references = mapLibreEvidenceRefsForFocus(item);
+      for (const reference of references) {
+        const result = state.mapLibreRenderer.focus(reference, {
+          fit: options.fit,
+          preserveZoom: options.preserveZoom !== false,
+          padding: 72,
+          maxZoom: isPointFocusItem(item) ? 17 : 16,
+        });
+        if (result.focused) return true;
+      }
+      return false;
+    }
     function focusMapFor(item, options = {}) {
       if (options.label === true) state.focusedLabelIds = focusLabelIdsForItem(item);
       else if (options.label === false) state.focusedLabelIds = new Set();
+      if (state.mapRenderer.active === "maplibre" && state.mapLibreRenderer) {
+        return focusMapLibreFor(item, {
+          preserveZoom: options.preserveZoom !== false,
+        });
+      }
       const focused = focusMapBox(mapBoxFor(item), item, {preserveZoom: options.preserveZoom !== false});
       if (focused) highlightMapFor(item);
       updatePointLabels();
@@ -6638,7 +7067,164 @@
           && candidate.hazard.polygon.length >= 3;
       });
     }
-    function renderMap(view) {
+    function mapLibrePosition(point) {
+      if (Array.isArray(point) && point.length >= 2) {
+        const lon = Number(point[0]);
+        const lat = Number(point[1]);
+        return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
+      }
+      const lat = Number(point?.lat);
+      const lon = Number(point?.lon);
+      return Number.isFinite(lon) && Number.isFinite(lat) ? [lon, lat] : null;
+    }
+    function mapLibrePointGeometry(item) {
+      const coordinate = coordinateFromEvidence(item);
+      return coordinate ? {type: "Point", coordinates: [coordinate.lon, coordinate.lat]} : null;
+    }
+    function mapLibreLineGeometry(points) {
+      const coordinates = (points || []).map(mapLibrePosition).filter(Boolean);
+      return coordinates.length >= 2 ? {type: "LineString", coordinates} : null;
+    }
+    function mapLibreLineGeometryFromSegments(segments) {
+      const coordinates = (segments || [])
+        .map(segment => (segment || []).map(mapLibrePosition).filter(Boolean))
+        .filter(segment => segment.length >= 2);
+      if (!coordinates.length) return null;
+      if (coordinates.length === 1) return {type: "LineString", coordinates: coordinates[0]};
+      return {type: "MultiLineString", coordinates};
+    }
+    function mapLibrePolygonGeometry(points) {
+      const ring = (points || []).map(mapLibrePosition).filter(Boolean);
+      if (ring.length < 3) return null;
+      const first = ring[0];
+      const last = ring[ring.length - 1];
+      const closed = first[0] === last[0] && first[1] === last[1]
+        ? ring
+        : [...ring, first];
+      return {type: "Polygon", coordinates: [closed]};
+    }
+    function appendPretripMapLibreFeature(features, item, layerId, geometry, properties = {}) {
+      if (!geometry) return null;
+      const feature = window.ScoutMapLibreEvidence.createEvidenceFeature(item, {
+        layerId,
+        ordinal: features.length,
+        geometry,
+        properties: {
+          display_label: hintTitle(item),
+          hint_summary: hintSummary(item),
+          evidence_type: item?.evidence_type || item?.feature_type || "map_evidence",
+          review_state: item?.review_state || item?.status || "candidate",
+          ...properties,
+        },
+      });
+      const identity = feature.properties;
+      if (identity.candidate_only && (identity.runtime_safety_truth || identity.operational)) {
+        throw new Error("maplibre_candidate_authority_conflict");
+      }
+      features.push(Object.freeze({
+        ...feature,
+        properties: Object.freeze({
+          ...feature.properties,
+          candidate_only: identity.candidate_only,
+          runtime_safety_truth: identity.runtime_safety_truth,
+          operational: identity.operational,
+        }),
+      }));
+      return feature;
+    }
+    function pretripMapLibreFeatureCollection(view) {
+      const features = [];
+      const append = (item, layerId, geometry, properties = {}) => (
+        appendPretripMapLibreFeature(features, item, layerId, geometry, properties)
+      );
+      const item = view.route;
+      append(item, "route", mapLibreLineGeometryFromSegments(
+        coordinateSegments(view.route.display_geometry, view.route.polyline || [])
+      ));
+      (view.reference_tracks?.reference_tracks || []).forEach(track => {
+        append(track, "reference-tracks", mapLibreLineGeometryFromSegments(
+          coordinateSegments(track.display_geometry, track.display_geometry?.coordinates || [])
+        ));
+      });
+      (view.retreat_routes || []).forEach(retreat => {
+        append(retreat, "retreat", mapLibreLineGeometry([...(view.checkpoints || [])].reverse()));
+      });
+      (view.segments || []).forEach(segment => {
+        let segmentCoordSegments = coordinateSegments(
+          segment.display_geometry,
+          segment.display_geometry?.coordinates || []
+        );
+        if (!segmentCoordSegments.length) {
+          const from = view.checkpoints.find(candidate => candidate.candidate_id === segment.from_candidate_id);
+          const to = view.checkpoints.find(candidate => candidate.candidate_id === segment.to_candidate_id);
+          if (from && to) segmentCoordSegments = [[from, to]];
+        }
+        append(segment, "segments", mapLibreLineGeometryFromSegments(segmentCoordSegments));
+      });
+      (view.checkpoints || []).forEach(checkpoint => {
+        append(checkpoint, "checkpoints", mapLibrePointGeometry(checkpoint));
+      });
+      (view.map_candidates?.corridor_candidates || []).forEach(candidate => {
+        append(candidate, "corridors", mapLibreLineGeometry(candidate.corridor.coordinates));
+      });
+      (view.overpass_evidence?.corridor_candidates || []).forEach(candidate => {
+        append(candidate, "overpass", mapLibreLineGeometry(candidate.corridor.coordinates));
+      });
+      (view.overpass_evidence?.hazard_candidates || []).forEach(candidate => {
+        append(candidate, "overpass", mapLibrePolygonGeometry(candidate.hazard.polygon));
+      });
+      (view.overpass_evidence?.poi_candidates || []).forEach(candidate => {
+        append(candidate, "overpass", mapLibrePointGeometry(candidate));
+      });
+      (view.risk_ribbon?.segments || []).forEach(segment => {
+        append(segment, "risk-ribbon", mapLibreLineGeometry(segment.coordinates));
+      });
+      (view.risk_heatmap?.segments || []).forEach(segment => {
+        append(segment, "risk-heatmap", mapLibreLineGeometry(segment.coordinates));
+      });
+      (view.risk_delta?.segments || []).forEach(segment => {
+        append(segment, "risk-delta", mapLibreLineGeometry(segment.coordinates));
+      });
+      (view.map_candidates?.poi_candidates || []).forEach(candidate => {
+        append(candidate, "pois", mapLibrePointGeometry(candidate));
+      });
+      combinedHazardCandidates(view).forEach(candidate => {
+        append(candidate, "hazards", mapLibrePolygonGeometry(candidate.hazard.polygon));
+      });
+      (view.route_notes?.candidates || []).forEach(candidate => {
+        append(candidate, "route-notes", mapLibrePointGeometry(candidate));
+      });
+      (view.major_critical_points?.candidates || []).forEach(candidate => {
+        append(candidate, "mcp", mapLibrePointGeometry(candidate));
+      });
+      (view.boss_points?.boss_points || []).forEach(candidate => {
+        append(candidate, "boss-points", mapLibrePointGeometry(candidate));
+      });
+      (view.checkpoint_events?.events || []).forEach(event => {
+        append(event, "events", mapLibrePointGeometry(event));
+      });
+      (view.mileage_tag_alignment?.timeline_items || []).forEach(item => {
+        append(item, "events", mapLibrePointGeometry(item), {
+          map_role: "mileage-tag",
+          display_mileage_label: item.display_mileage_label || "",
+          route_distance_m: Number(item.route_distance_m) || 0,
+        });
+      });
+      (view.risk_score?.points || []).forEach(point => {
+        append(point, "risk-score", mapLibrePointGeometry(point));
+      });
+      (view.gis_perception_timeline?.nearby_groups || []).forEach(group => {
+        append(group, "checkpoints", mapLibrePointGeometry(group));
+      });
+      (view.gis_perception_timeline?.checkpoint_candidates || []).forEach(checkpoint => {
+        append(checkpoint, "checkpoints", mapLibrePointGeometry(checkpoint));
+      });
+      return window.ScoutMapLibreEvidence.createEvidenceFeatureCollection(features);
+    }
+    function renderMap(view, {forceSvg = false} = {}) {
+      if (!forceSvg && state.mapRenderer?.active === "maplibre" && state.mapLibreRenderer) {
+        return syncPretripMapLibreEvidence(view);
+      }
       const bounds = boundsFor(view);
       const coverageBounds = bounds;
       svg.setAttribute("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`);
@@ -6985,12 +7571,14 @@
       enforceMapRenderPolicy(svg);
       applyMapViewport();
       highlightMapFor(state.selected);
+      syncPretripMapLibreEvidence(view);
     }
     function scheduleTreeClickFocus(item) {
       window.clearTimeout(treeClickFocusTimer);
       selectEvidence(item);
       treeClickFocusTimer = window.setTimeout(() => {
         const focusOptions = item?.evidence_type === "pretrip_reference_segment_timing_segment"
+          || String(item?.evidence_type || "").includes("mileage_tag")
           ? {label: false, preserveZoom: false}
           : {label: false};
         focusMapFor(item, focusOptions);
@@ -7645,6 +8233,9 @@
         const group = svg.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
         if (group && !input.checked && RASTER_BASEMAP_LAYER_IDS.has(input.dataset.layer)) group.replaceChildren();
         if (group) group.dataset.layerHidden = input.checked ? "false" : "true";
+        if (state.mapLibreRenderer) {
+          state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
+        }
       });
       const summary = document.getElementById("layerEnabledCount");
       if (summary) {
@@ -7724,15 +8315,15 @@
         button.addEventListener("click", () => applyLayerPreset(button.dataset.layerPreset));
       });
       document.querySelectorAll(".tab-button").forEach(button => button.addEventListener("click", () => setActiveTab(button.dataset.tab)));
-      document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
-      document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
-      document.getElementById("fitRoute").addEventListener("click", resetMapView);
+      document.getElementById("zoomIn").addEventListener("click", () => zoomActiveMap(1));
+      document.getElementById("zoomOut").addEventListener("click", () => zoomActiveMap(-1));
+      document.getElementById("fitRoute").addEventListener("click", fitActiveMap);
       document.getElementById("panMode").addEventListener("click", () => setMapInteractionMode("pan"));
       document.getElementById("boxZoomMode").addEventListener("click", () => setMapInteractionMode("box"));
-      document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
-      document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
-      document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
-      document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
+      document.getElementById("panUp").addEventListener("click", () => panActiveMap(0, -70));
+      document.getElementById("panDown").addEventListener("click", () => panActiveMap(0, 70));
+      document.getElementById("panLeft").addEventListener("click", () => panActiveMap(-70, 0));
+      document.getElementById("panRight").addEventListener("click", () => panActiveMap(70, 0));
       svg.setAttribute("tabindex", "0");
       svg.addEventListener("pointerdown", activateMapKeyboardPan);
       svg.addEventListener("keydown", handleMapKeyboardPan);
@@ -8413,6 +9004,7 @@
       bindCwaWeatherImageryControls();
       loadAssistantStatus();
       await reloadProjectView();
+      await initializePretripMapRenderer();
     }
     load().catch(error => {
       publishPretripProjectBridge("degraded", error.message || error);

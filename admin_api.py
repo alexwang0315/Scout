@@ -227,6 +227,22 @@ DEFAULT_EMERGENCY_MOBILE_APPROVAL_PAGE = (
     ROOT / "docs" / "emergency" / "scout-emergency-mobile-approval-v0.html"
 )
 DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
+DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT = (
+    ROOT / "docs" / "admin" / "scout-maplibre-evidence.js"
+)
+DEFAULT_MAPLIBRE_DISTRIBUTION_ROOT = (
+    ROOT / "docs" / "admin" / "vendor" / "maplibre-gl" / "6.2.0"
+)
+DEFAULT_MAPLIBRE_MODULE = DEFAULT_MAPLIBRE_DISTRIBUTION_ROOT / "maplibre-gl.mjs"
+DEFAULT_MAPLIBRE_SHARED_MODULE = (
+    DEFAULT_MAPLIBRE_DISTRIBUTION_ROOT / "maplibre-gl-shared.mjs"
+)
+DEFAULT_MAPLIBRE_WORKER_MODULE = (
+    DEFAULT_MAPLIBRE_DISTRIBUTION_ROOT / "maplibre-gl-worker.mjs"
+)
+DEFAULT_MAPLIBRE_STYLESHEET = (
+    DEFAULT_MAPLIBRE_DISTRIBUTION_ROOT / "maplibre-gl.css"
+)
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.html"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REGENERATION_REF = (
     "outputs/scout_ai/route_context_briefing_regeneration.json"
@@ -2948,6 +2964,71 @@ def create_admin_router(
         return Response(
             DEFAULT_ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8"),
             media_type="application/javascript",
+        )
+
+    @router.get("/scout-maplibre-evidence.js")
+    def maplibre_evidence_script() -> Response:
+        if not DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="MapLibre evidence adapter not found",
+            )
+        return Response(
+            DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/vendor/maplibre-gl/6.2.0/maplibre-gl.mjs")
+    def maplibre_distribution_module() -> Response:
+        if not DEFAULT_MAPLIBRE_MODULE.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Local MapLibre module not found",
+            )
+        return Response(
+            DEFAULT_MAPLIBRE_MODULE.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
+    @router.get("/vendor/maplibre-gl/6.2.0/maplibre-gl-shared.mjs")
+    def maplibre_distribution_shared_module() -> Response:
+        if not DEFAULT_MAPLIBRE_SHARED_MODULE.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Local MapLibre shared module not found",
+            )
+        return Response(
+            DEFAULT_MAPLIBRE_SHARED_MODULE.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
+    @router.get("/vendor/maplibre-gl/6.2.0/maplibre-gl-worker.mjs")
+    def maplibre_distribution_worker_module() -> Response:
+        if not DEFAULT_MAPLIBRE_WORKER_MODULE.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Local MapLibre worker module not found",
+            )
+        return Response(
+            DEFAULT_MAPLIBRE_WORKER_MODULE.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
+    @router.get("/vendor/maplibre-gl/6.2.0/maplibre-gl.css")
+    def maplibre_distribution_stylesheet() -> Response:
+        if not DEFAULT_MAPLIBRE_STYLESHEET.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Local MapLibre stylesheet not found",
+            )
+        return Response(
+            DEFAULT_MAPLIBRE_STYLESHEET.read_text(encoding="utf-8"),
+            media_type="text/css",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
         )
 
     @router.get("/pretrip/osm-carto-palette")

@@ -1556,6 +1556,9 @@ def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> Non
     assert 'data-evidence-tab="${escapeHtml(tab.id)}"' in html
     assert 'rerenderEvidenceContext("timeline", selectedTab);' in html
     assert 'rerenderEvidenceContext("map", selectedTab);' in html
+    assert 'if (state.route !== "map") {' in html
+    assert 'window.location.hash = "map";' in html
+    assert "focusDashboardMapEvidence(sourceId, attempt + 1);" in html
 
 
 def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
@@ -1588,6 +1591,8 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     assert "renderMapEvidenceRail" in html
     assert "Map Evidence" in html
     assert "mapEvidenceCollapsed" in html
+    assert "dashboardMapEvidenceStartsCollapsed" in html
+    assert "mapEvidenceCollapsed: dashboardMapEvidenceStartsCollapsed()," in html
     assert "data-map-evidence-toggle" in html
     assert 'aria-label="${collapsed ? "Expand Map Evidence" : "Collapse Map Evidence"}"' in html
     assert 'rail.classList.toggle("is-collapsed", collapsed);' in html
@@ -1600,14 +1605,22 @@ def test_scout_dashboard_map_tab_uses_pretrip_map_only_surface() -> None:
     )
     assert 'add("map_risk", "Segments", view.segments' in html
     assert "scheduleMapEvidenceFocusRetry" in html
+    assert "const MAP_EVIDENCE_FOCUS_MAX_ATTEMPTS = 45;" in html
     assert "pretripMapHasRenderedTargets" in html
     assert "Loading pre-trip timeline evidence for map focus." in html
     assert "function pretripEvidenceGroupOpen(_group, _index)" in html
     assert "mapWindow.focusMapFor" in html
     assert "mapWindow.selectEvidence" in html
+    assert "mapWindow.scoutPretripMapRendererBridge" in html
+    assert "snapshot.feature_count" in html
+    assert "const hasRenderedMapLibre = mapLibreSnapshot?.state === \"ready\"" in html
+    assert "state.pendingMapEvidenceFocusId === pendingFocusId" in html
     assert "data-map-evidence-source" in html
     assert "data-map-target-ids" in html
     assert 'const mapToolRight = state.mapEvidenceCollapsed ? "14px" : "418px";' in html
+    assert 'const compactMapOnlyLayout = window.matchMedia?.("(max-width: 620px)")?.matches === true;' in html
+    assert 'doc.querySelector(".layer-menu")?.toggleAttribute("open", !compactMapOnlyLayout);' in html
+    assert 'doc.querySelector(".layer-advanced")?.toggleAttribute("open", !compactMapOnlyLayout);' in html
     assert "right: ${mapToolRight} !important;" in html
     assert "dashboardMapOnly" in html
     assert "mapOnlyReady" in html
@@ -2273,7 +2286,9 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "--navigation-event: #d72f20;" in html
     assert '[data-navigation-legend-kind="tributary"]' in html
     assert "navigation-workspace-route-halo" in html
-    assert 'maplibre-gl@6.2.0/dist/maplibre-gl.mjs' in html
+    assert '"/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.mjs"' in html
+    assert 'href="/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css"' in html
+    assert "unpkg.com/maplibre-gl" not in html
     assert 'type: "raster-dem"' in html
     assert 'encoding: "mapbox"' in html
     assert 'scrollZoom: false' in html
@@ -2461,6 +2476,9 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     map_controller = html.split(
         "function createDashboardMapViewportController", 1
     )[1].split("function bindDashboardMapViewports", 1)[0]
+    tile_failure_handler = map_controller.split(
+        "const onRudyTileGenerationFailed", 1
+    )[1].split("const pointInViewport", 1)[0]
     tile_refresh = html.split(
         "function updateDashboardRudyTileLayer", 1
     )[1].split("function updateNavigationRudyTileLayer", 1)[0]
@@ -2549,6 +2567,10 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
         "onRudyTileGenerationFailed)"
         in map_controller
     )
+    assert 'viewport.dataset.dashboardTileLoadState = "native-unavailable-retained-previous";' in tile_failure_handler
+    assert "announce(" in tile_failure_handler
+    assert "viewState =" not in tile_failure_handler
+    assert "apply(" not in tile_failure_handler
     assert "DASHBOARD_RUDY_TILE_SWAP_TIMEOUT_MS" in tile_generation
     assert "if (loadedCount !== candidateImages.length) return;" in tile_generation
     assert "tileLayer.dataset.dashboardRudyPendingTileKey !== tileKey" in tile_generation
@@ -2868,6 +2890,15 @@ def test_all_dashboard_maps_share_hover_hints_and_keyboard_pan_contract() -> Non
         assert "data-dashboard-map-hint-title" in source
         assert "data-dashboard-map-hint-summary" in source
         assert 'tabindex="' in source
+
+
+def test_dashboard_map_evidence_focus_prefers_exact_candidate_before_shared_source() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    focus = html.split("function focusDashboardMapEvidence(sourceId, attempt = 0)", 1)[1].split(
+        "function pretripMapHasRenderedTargets", 1
+    )[0]
+
+    assert focus.index("item.candidate_id") < focus.index("item.source_id")
 
 
 def test_dashboard_map_hints_use_dynamic_delegated_events() -> None:

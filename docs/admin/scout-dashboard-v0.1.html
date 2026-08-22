@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Scout Dashboard v0.1 alpha admin shell">
   <link rel="icon" href="data:">
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.2.0/dist/maplibre-gl.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css">
   <title>Scout Dashboard v0.1</title>
   <style>
     :root {
@@ -9754,6 +9754,7 @@
     const ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS = 600000;
     const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;
     const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
+    const MAP_EVIDENCE_FOCUS_MAX_ATTEMPTS = 45;
     const BODY_INDEX_FETCH_TIMEOUT_MS = 180000;
     const BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index";
     const BODY_INDEX_IMPORT_PATH = "/admin/dashboard/body-index/import";
@@ -10089,7 +10090,7 @@
     const NAVIGATION_RUDY_TILE_SOURCE = DASHBOARD_RUDY_TILE_SOURCE;
     const NAVIGATION_RUDY_VIEWBOX = DASHBOARD_RUDY_VIEWBOX;
     const NAVIGATION_RUDY_INITIAL_TILE_LIMIT = DASHBOARD_RUDY_INITIAL_TILE_LIMIT;
-    const NAVIGATION_MAPLIBRE_MODULE_URL = "https://unpkg.com/maplibre-gl@6.2.0/dist/maplibre-gl.mjs";
+    const NAVIGATION_MAPLIBRE_MODULE_URL = "/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.mjs";
     const navigationTerrainMapLibreRuntime = {
       generation: 0,
       maps: [],
@@ -10313,6 +10314,10 @@
       "runtime-audit",
     ]));
 
+    function dashboardMapEvidenceStartsCollapsed() {
+      return window.matchMedia?.("(max-width: 620px)")?.matches === true;
+    }
+
     const state = {
       route: "home",
       project: null,
@@ -10469,7 +10474,7 @@
       navigationSelectedStructurePointId: "",
       navigationSelectedTerrainEventId: "",
       mapViewportById: {},
-      mapEvidenceCollapsed: false,
+      mapEvidenceCollapsed: dashboardMapEvidenceStartsCollapsed(),
       evidenceDrawerExpandedRoutes: {},
       selectedMapEvidenceSourceId: "",
       pendingMapEvidenceFocusId: "",
@@ -23310,17 +23315,8 @@
       };
 
       const onRudyTileGenerationFailed = (event) => {
-        const fallbackViewState = event.detail?.fallbackViewState;
-        const fallbackZoom = Number(fallbackViewState?.zoom);
-        if (!Number.isFinite(fallbackZoom)) return;
-        viewState = clampedState({
-          ...viewState,
-          zoom: Math.max(1, Math.min(maxZoom, fallbackZoom)),
-          x: Number(fallbackViewState?.x) || 0,
-          y: Number(fallbackViewState?.y) || 0,
-        });
         viewport.dataset.dashboardTileLoadState = "native-unavailable-retained-previous";
-        apply(`Native Rudy+TW Z${event.detail?.effectiveZoom || "?"} tiles are incomplete. The previous complete view was retained.`);
+        announce(`Native Rudy+TW Z${event.detail?.effectiveZoom || "?"} tiles are incomplete. Previous complete tiles remain visible at the current map view.`);
       };
 
       const pointInViewport = (event) => {
@@ -28169,6 +28165,17 @@
     }
 
     function focusDashboardMapEvidence(sourceId, attempt = 0) {
+      if (state.route !== "map") {
+        state.selectedMapEvidenceSourceId = sourceId;
+        state.pendingMapEvidenceFocusId = sourceId;
+        markMapEvidenceSelection(sourceId);
+        clearMapEvidenceFocusRetry(false);
+        window.location.hash = "map";
+        state.mapEvidenceRetryTimer = window.setTimeout(() => {
+          focusDashboardMapEvidence(sourceId, attempt + 1);
+        }, 600);
+        return;
+      }
       if (state.route === "map" && state.project) {
         const groups = pretripEvidenceGroups(state.project || {});
         const sourceGroup = groups.find((group) => asArray(group.items).some((item) => item.sourceId === sourceId));
@@ -28209,12 +28216,39 @@
         if (typeof mapWindow.selectEvidence === "function") {
           mapWindow.selectEvidence(item, { timeline: false, expandEvidenceGroup: false });
         }
-        const focused = Boolean(mapWindow.focusMapFor(item, { label: true, preserveZoom: false }));
+        const bridge = mapWindow.scoutPretripMapRendererBridge;
+        const snapshot = bridge?.getSnapshot?.();
+        const mapLibreReady = snapshot?.state === "ready" && Number(snapshot.feature_count || 0) > 0;
+        let focused = false;
+        if (mapLibreReady) {
+          const references = [
+            item.candidate_id,
+            item.candidate_ref,
+            item.map_feature_id,
+            item.feature_id,
+            item.source_id,
+            item.segment_id,
+            item.checkpoint_id,
+            item.mcp_id,
+            ...(Array.isArray(item.map_target_ids) ? item.map_target_ids : []),
+          ].filter(Boolean);
+          focused = references.some((reference) => bridge.focus(reference, {
+            preserveZoom: false,
+            padding: 72,
+            maxZoom: 17,
+          })?.focused === true);
+        }
+        if (!focused) {
+          focused = Boolean(mapWindow.focusMapFor(item, { label: true, preserveZoom: false }));
+        }
         if (status) {
           if (focused) {
             clearMapEvidenceFocusRetry();
             status.textContent = `Focused map on ${label}.`;
-          } else if (!pretripMapHasRenderedTargets(mapWindow) && attempt < 8) {
+          } else if (
+            !pretripMapHasRenderedTargets(mapWindow)
+            && attempt < MAP_EVIDENCE_FOCUS_MAX_ATTEMPTS
+          ) {
             scheduleMapEvidenceFocusRetry(sourceId, label, attempt);
           } else {
             clearMapEvidenceFocusRetry();
@@ -28228,6 +28262,8 @@
 
     function pretripMapHasRenderedTargets(mapWindow) {
       try {
+        const snapshot = mapWindow?.scoutPretripMapRendererBridge?.getSnapshot?.();
+        if (Number(snapshot?.feature_count || 0) > 0) return true;
         return Boolean(mapWindow?.document?.querySelector("#map [data-source-id]"));
       } catch (_) {
         return false;
@@ -28360,6 +28396,7 @@
           doc.head.appendChild(style);
         }
         const mapToolRight = state.mapEvidenceCollapsed ? "14px" : "418px";
+        const compactMapOnlyLayout = window.matchMedia?.("(max-width: 620px)")?.matches === true;
         style.textContent = `
             html,
             body {
@@ -28625,16 +28662,34 @@
             #hoverHint.is-hidden { display: none !important; }
           `;
         doc.querySelector("#map")?.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowLeft ArrowRight + - 0 P B Escape");
-        doc.querySelector(".layer-menu")?.setAttribute("open", "");
-        doc.querySelector(".layer-advanced")?.setAttribute("open", "");
+        doc.querySelector(".layer-menu")?.toggleAttribute("open", !compactMapOnlyLayout);
+        doc.querySelector(".layer-advanced")?.toggleAttribute("open", !compactMapOnlyLayout);
         doc.documentElement.dataset.dashboardMapOnly = "true";
         projectRequiredWeatherLayersInMapFrame(frame);
         const bridgeReady = adoptPretripMapProjectBridge(frame);
-        const hasRenderedMap = Boolean(doc.querySelector("#map[viewBox] [data-layer-group]"));
+        const mapLibreSnapshot = frame.contentWindow?.scoutPretripMapRendererBridge?.getSnapshot?.();
+        const hasRenderedMapLibre = mapLibreSnapshot?.state === "ready"
+          && Number(mapLibreSnapshot.feature_count || 0) > 0;
+        const hasRenderedMap = hasRenderedMapLibre
+          || Boolean(doc.querySelector("#map[viewBox] [data-layer-group]"));
         if (hasRenderedMap) {
           frame.dataset.mapOnlyReady = "true";
           frame.dataset.mapOnlyPoll = "";
           if (!bridgeReady) updateDashboardMapLoading("base_ready");
+          const pendingFocusId = state.pendingMapEvidenceFocusId;
+          if (
+            hasRenderedMapLibre
+            && pendingFocusId
+            && frame.dataset.mapOnlyFocusDispatch !== pendingFocusId
+          ) {
+            frame.dataset.mapOnlyFocusDispatch = pendingFocusId;
+            window.setTimeout(() => {
+              frame.dataset.mapOnlyFocusDispatch = "";
+              if (state.pendingMapEvidenceFocusId === pendingFocusId) {
+                focusDashboardMapEvidence(pendingFocusId);
+              }
+            }, 0);
+          }
         } else {
           frame.dataset.mapOnlyReady = "loading";
           const startedAt = Number(frame.dataset.mapOnlyStartedAt || Date.now());
